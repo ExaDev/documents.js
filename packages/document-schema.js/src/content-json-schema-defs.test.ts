@@ -54,6 +54,7 @@ import {
   ContentSubpathSchema,
   ContentVectorSchema,
   ContentCellValueSchema,
+  ContentPageFurnitureSchema,
 } from "./content";
 import { CONTENT_DEFS } from "./content-json-schema-defs";
 import {
@@ -123,6 +124,7 @@ import { SourceResidueSchema } from "./source";
 // Comparison strategy: a bare `z.toJSONSchema(SomeSchema)` call, run in isolation, would INLINE every nested schema it encounters (ColorSchema inside ContentRunSchema, AlignmentSchema inside ContentParagraphSchema, etc.) rather than emit the `{ $ref: '#/$defs/X' }` pointers CONTENT_DEFS itself uses -- because those nested schemas aren't registered anywhere. To reproduce the exact cross-reference shape CONTENT_DEFS hand-authors, this test registers the identical set of real schemas under the identical id strings CONTENT_DEFS uses as its own $defs keys, with a `uri` callback matching the `#/$defs/<id>` convention CONTENT_DEFS was written against -- confirmed empirically (see this file's own construction) to make Zod's registry-based multi-schema generation emit exactly that $ref shape for every registered schema referenced from within another. Each per-schema result still carries its own top-level `$schema`/`$id` (since z.toJSONSchema(registry, ...) treats every registered schema as its own standalone root), which CONTENT_DEFS's own nested fragments never have -- those two keys are stripped before comparison, since they're an artefact of testing each fragment as a registry root rather than a real structural difference.
 
 const REGISTERED_SCHEMAS = {
+  ContentPageFurniture: ContentPageFurnitureSchema,
   Color: ColorSchema,
   Box: BoxSchema,
   LayoutFrame: LayoutFrameSchema,

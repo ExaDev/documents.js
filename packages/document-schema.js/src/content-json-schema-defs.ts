@@ -603,10 +603,22 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
         type: "string",
         enum: ["nextPage", "continuous", "evenPage", "oddPage"],
       },
+      headers: { $ref: "#/$defs/ContentPageFurniture" },
+      footers: { $ref: "#/$defs/ContentPageFurniture" },
       source: { $ref: "#/$defs/SourceResidue" },
       kind: { type: "string", const: "section" },
     },
     required: ["pageSize", "margins", "kind"],
+    additionalProperties: false,
+  },
+  // The per-slot page-furniture block flows a ContentSection's headers/footers fields carry (src/content.ts's ContentPageFurnitureSchema). Hand-authored here for the same recursive reason as every other block-array shape: the slots hold ContentBlock, which is the hand-written structural guard in Zod and needs its JSON spelling stated alongside.
+  ContentPageFurniture: {
+    type: "object",
+    properties: {
+      default: { type: "array", items: { $ref: "#/$defs/ContentBlock" } },
+      even: { type: "array", items: { $ref: "#/$defs/ContentBlock" } },
+      first: { type: "array", items: { $ref: "#/$defs/ContentBlock" } },
+    },
     additionalProperties: false,
   },
   SlideDescriptor: {

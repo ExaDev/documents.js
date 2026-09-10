@@ -661,6 +661,14 @@ export const ContentBlockSchema: z.ZodType<ContentBlock, ContentBlock> =
     ContentConstructEndSchema,
   ]);
 
+// One furniture kind's per-slot block flows -- see ContentSectionSchema's own headers/footers comment for the slot vocabulary's format evidence. A slot is absent when the section states no furniture for it: an absent default slot with a present even slot is the even/odd-headers shape, not a gap (ExaDev/documents.js#1128).
+export const ContentPageFurnitureSchema = z.object({
+  default: z.lazy(() => z.array(ContentBlockSchema)).optional(),
+  even: z.lazy(() => z.array(ContentBlockSchema)).optional(),
+  first: z.lazy(() => z.array(ContentBlockSchema)).optional(),
+});
+export type ContentPageFurniture = z.infer<typeof ContentPageFurnitureSchema>;
+
 // A docx section: a run of pages sharing one page size/margins (a w:sectPr boundary starts a new one).
 export const ContentSectionSchema = z.object({
   pageSize: PageSizeSchema,
@@ -670,6 +678,9 @@ export const ContentSectionSchema = z.object({
   breakType: z
     .enum(["nextPage", "continuous", "evenPage", "oddPage"])
     .optional(),
+  // The page furniture this section repeats on its rendered pages -- the block flow a header or footer paints -- in the three-slot vocabulary WordprocessingML itself defines (w:headerReference/w:footerReference's own @w:type values default/even/first, with evenAndOddHeaders gating the even slot). Every page-furniture-carrying format narrows onto it: an ODF master page's style:header/style:header-left pair is default/even, its style:header-first the first slot; a WordPerfect D6 header's own occurrence bits (occurs on odd pages / occurs on even pages) state odd-only -> default, even-only -> even, both -> default. Slot-less decorations the vocabulary cannot state -- a watermark is neither header nor footer and owns no parity -- stay outside it. Section-scoped rather than document-level for the reason breakType is: page furniture belongs to the section that renders it, and a document with two sections may give each its own header.
+  headers: ContentPageFurnitureSchema.optional(),
+  footers: ContentPageFurnitureSchema.optional(),
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts); rides the tree's section descriptor automatically (omit+extend, src/package-node.ts)
 });
 export type ContentSection = z.infer<typeof ContentSectionSchema>;
