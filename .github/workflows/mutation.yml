@@ -1,6 +1,6 @@
 name: Mutation testing
 
-# Repo-wide, sharded, incrementally-cached mutation testing via Stryker. Deliberately not yet a required check (see the ruleset docs / repo-setup skill's stryker-mutation-testing reference): no package here has a measured thresholds.break yet, and stryker.shared.ts's packageStrykerConfig sets none, so this job reports real mutation scores without ever failing the build on them -- the correct default until a real baseline exists to gate against. Promote it once scores are measured and a break threshold is deliberately chosen per package.
+# Repo-wide, sharded, incrementally-cached mutation testing via Stryker. Each package is gated by its own stryker.config.ts break threshold (derived from a completed run's measured baseline -- see stryker.shared.ts's breakThreshold), and the mutation-result job at the bottom aggregates the shards into the one stable check context a branch ruleset can require: a required status check must report on every pull request, and the shard matrix's width varies with the affected set, so no individual shard context can be required without stranding a pull request that produced fewer shards than the ruleset names. Requiredness itself lives in the repository ruleset ("main required checks"), never in this file -- a pull request can only prepare the job the ruleset points at, and the job is only ready to be required once every package completes a green run behind its threshold.
 on:
   pull_request:
   push:
@@ -88,3 +88,28 @@ jobs:
           name: mutation-report-shard-${{ matrix.index }}
           path: packages/*/reports/mutation/mutation.html
           if-no-files-found: ignore
+
+  # The single check context to list as required in the repository ruleset. The mutation-test job above is a matrix whose width the plan job computes per run from the affected package set (three affected packages produce three shards, not eight), so requiring any shard context by name would leave a pull request that produced fewer shards forever waiting on a check that never reports. This job always runs -- `if: always()` keeps it reporting even when planning fails or produces no packages, where the matrix job is skipped -- and derives one conclusion from the outcomes it aggregates, so it is stable across every shard count.
+  mutation-result:
+    name: Mutation testing result
+    needs: [plan, mutation-test]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Aggregate the shard outcomes into one conclusion
+        # A plan failure is a real failure (nothing can be said about the mutation state); a plan that found no affected packages is a pass (nothing to mutate); anything else gates on the matrix's own aggregate result, which is failure when any shard failed (a package fell below its break threshold or its run errored).
+        run: |
+          if [ "${{ needs.plan.result }}" != "success" ]; then
+            echo "::error::Mutation shard planning failed; see the Plan mutation shards job."
+            exit 1
+          fi
+          if [ "${{ needs.plan.outputs.has-packages }}" != "true" ]; then
+            echo "No mutation-affected packages in this change; nothing to gate."
+            exit 0
+          fi
+          if [ "${{ needs.mutation-test.result }}" != "success" ]; then
+            echo "::error::One or more mutation shards failed: a package's score fell below its break threshold, or its run failed."
+            exit 1
+          fi
+          echo "Every mutation shard succeeded."
