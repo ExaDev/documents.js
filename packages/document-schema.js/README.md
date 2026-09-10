@@ -547,7 +547,7 @@ This package also published under the following alternate npm names from the pre
 - [document-schema](https://www.npmjs.com/package/document-schema)
 - [document-model.js](https://www.npmjs.com/package/document-model.js)
 
-**Frozen since the monorepo migration** — see the [root README's release note](../../README.md#releases): the alias republish step was dropped along with GitHub Packages mirroring and SBOM/provenance signing, and nothing today keeps any of the five in sync with `document-schema.js`'s own releases. Tracked in [ExaDev/documents.js#730](https://github.com/ExaDev/documents.js/issues/730).
+**Republished automatically** — the alias's trusted publisher is registered against this repository and workflow (2026-09-10), so every release from the [backfill run](https://github.com/ExaDev/documents.js/actions/runs/34449796133) onward publishes under this name too; the registration evidence is on [ExaDev/documents.js#730](https://github.com/ExaDev/documents.js/issues/730).
 
 ## License
 
