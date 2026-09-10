@@ -27,11 +27,13 @@ function sequenceToUtf16BEHex(codePoints: readonly number[]): string {
   return hex;
 }
 
-// Builds the ToUnicode CMap stream for `codeToSequence`, a character code -> Unicode text mapping (one or more code points per code). Entries are emitted sorted by code, so identical input always produces byte-identical output -- the same determinism guarantee write.ts states for its own object allocation order.
+// Builds the ToUnicode CMap stream for `codeToSequence`, a character code -> Unicode text mapping (one or more code points per code). A glyph mapped to an EMPTY text run draws but represents no characters of its own — a combining mark an ignore-flag ligature skipped over, whose characters belong to the ligature glyph's own destination — so it carries no bfchar at all rather than one with an empty destination, which the bfchar syntax has no meaning for. Entries are emitted sorted by code, so identical input always produces byte-identical output — the same determinism guarantee write.ts states for its own object allocation order.
 export function buildToUnicodeCMap(
   codeToSequence: ReadonlyMap<number, readonly number[]>,
 ): PdfObject {
-  const entries = [...codeToSequence].sort((a, b) => a[0] - b[0]);
+  const entries = [...codeToSequence]
+    .filter(([, sequence]) => sequence.length > 0)
+    .sort((a, b) => a[0] - b[0]);
   const lines: string[] = [
     "/CIDInit /ProcSet findresource begin",
     "12 dict begin",
