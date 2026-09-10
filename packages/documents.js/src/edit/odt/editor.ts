@@ -11,7 +11,7 @@ import {
   readOdfMetadata,
   writeEmbeddedObject,
 } from "odf.js";
-import type { Box } from "document-schema.js";
+import type { Box, DivisionDescriptor } from "document-schema.js";
 import { patchOdfMetadataOnPackage } from "../../metadata/core-patch";
 import { resolveMetadataTimestamps } from "../../model/metadata";
 import { encodeXmlText } from "../../xml/entities";
@@ -39,6 +39,9 @@ export interface OdtBody {
   // A bookmark's two halves as office:text-level siblings bracketing whatever is appended between the two calls -- the one construct shape expressible append-only, since ODF allows text:bookmark-start/text:bookmark-end directly in the body flow around whole blocks. The name travels on both halves, the shape every real producer writes and odf.js's own reader pairs back through.
   appendBookmarkStart(name: string): void;
   appendBookmarkEnd(name: string): void;
+  // A division region: every append between openDivisionRegion and closeRegion lands inside the division's own text:section element -- the block-flow spelling of an ODF division, which LibreOffice itself writes as text:section around the content it groups. The descriptor drives the section's own attributes (text:name, text:protected, and a trailing text:section-source for a linked chapter), mirroring odf.js's own typed writer; the one field not carried is columnCount, which needs the section-style interning that writer's style machinery performs and this editor surface does not have. Regions nest to arbitrary depth.
+  openDivisionRegion(descriptor: DivisionDescriptor): void;
+  closeRegion(): void;
 }
 
 function findContentRoot(pkg: Package): XmlElement {
@@ -75,31 +78,42 @@ function findOfficeText(contentRoot: XmlElement): XmlElement {
 }
 
 class OdtBodyImpl implements OdtBody {
+  // The text:section elements of every division region currently open, innermost last, each with its still-unwritten text:section-source (a linked section's source element follows the section's children in the ODF schema, so it is spliced on at close). Appends target the innermost open section's own children and fall back to office:text when none is open.
+  private readonly openDivisions: {
+    section: XmlElement;
+    linked: DivisionDescriptor["linked"];
+  }[] = [];
+
   constructor(
     private readonly officeText: XmlElement,
     private readonly pkg: Package,
   ) {}
 
+  private containerChildren(): XmlElement["children"] {
+    return (
+      this.openDivisions.at(-1)?.section.children ?? this.officeText.children
+    );
+  }
+
   appendParagraph(init?: ParagraphInit): OdtParagraph {
     const paragraphElement = buildParagraph(this.pkg, init);
-    this.officeText.children.push(paragraphElement);
-    return new OdtParagraph(
-      this.officeText.children,
-      paragraphElement,
-      this.pkg,
-    );
+    const container = this.containerChildren();
+    container.push(paragraphElement);
+    return new OdtParagraph(container, paragraphElement, this.pkg);
   }
 
   appendTable(init: TableInit): OdtTable {
     const tableElement = buildTable(this.pkg, init);
-    this.officeText.children.push(tableElement);
-    return new OdtTable(this.officeText.children, tableElement, this.pkg);
+    const container = this.containerChildren();
+    container.push(tableElement);
+    return new OdtTable(container, tableElement, this.pkg);
   }
 
   appendList(): OdtList {
     const listElement = buildList(this.pkg);
-    this.officeText.children.push(listElement);
-    return new OdtList(this.officeText.children, listElement, this.pkg);
+    const container = this.containerChildren();
+    container.push(listElement);
+    return new OdtList(container, listElement, this.pkg);
   }
 
   // Appends a paragraph whose only content is a real embedded formula: a draw:frame/draw:object referencing a genuine ODF formula sub-document written into this same package (src/odf-package/formula.ts). The odt counterpart to DocxParagraph.appendOfficeMath -- but a whole nested document rather than a different markup vocabulary inline, which is what an embedded ODF object actually is. The paragraph is returned so a caller can style or extend it; src/odf/odt/read.ts recognises a paragraph carrying nothing but a formula frame AS the formula, so leaving it otherwise empty is what makes the write-then-read round trip land on a single formula block rather than a formula beside an empty paragraph.
@@ -108,12 +122,9 @@ class OdtBodyImpl implements OdtBody {
     paragraphElement.children.push(
       insertFormulaFrameMedia(this.pkg, frame, formula),
     );
-    this.officeText.children.push(paragraphElement);
-    return new OdtParagraph(
-      this.officeText.children,
-      paragraphElement,
-      this.pkg,
-    );
+    const container = this.containerChildren();
+    container.push(paragraphElement);
+    return new OdtParagraph(container, paragraphElement, this.pkg);
   }
 
   // Appends a paragraph whose only content is a real embedded sub-document of any non-chart, non-formula kind -- a draw:frame/draw:object referencing a genuine nested "Object N/" package built by odf.js's own writeEmbeddedObject (ExaDev/documents.js#972): wordprocessing, presentation, spreadsheet, or drawing. The name counter is this editor's own, mirroring odf.js's own per-writer numbering, so two objects never share a directory. A formula keeps its dedicated appendFormula (a formula sub-package is structurally its own case, not the generic one), and the chart kind stays a documented gap (#719's quarantined-residue decision).
@@ -125,12 +136,9 @@ class OdtBodyImpl implements OdtBody {
     paragraphElement.children.push(
       writeEmbeddedObject(object, directory, this.pkg),
     );
-    this.officeText.children.push(paragraphElement);
-    return new OdtParagraph(
-      this.officeText.children,
-      paragraphElement,
-      this.pkg,
-    );
+    const container = this.containerChildren();
+    container.push(paragraphElement);
+    return new OdtParagraph(container, paragraphElement, this.pkg);
   }
 
   // Appends a paragraph whose only content is a run of real vector primitives -- draw:rect/draw:ellipse/draw:line/draw:path elements built by src/edit/odg/vector.ts's shared writer, anchored to this one paragraph but positioned against the PAGE (see that module's own buildVectorElement note and style.ts's TEXT_FLOW_ANCHOR_ATTRS for why both halves of that anchoring are needed). The odt counterpart of appendFormula above: a text document has no container for bare geometry, so a paragraph carries it, exactly as one carries an embedded formula object.
@@ -143,12 +151,9 @@ class OdtBodyImpl implements OdtBody {
         buildVectorElement(this.pkg, vector, { textFlowAnchored: true }),
       );
     }
-    this.officeText.children.push(paragraphElement);
-    return new OdtParagraph(
-      this.officeText.children,
-      paragraphElement,
-      this.pkg,
-    );
+    const container = this.containerChildren();
+    container.push(paragraphElement);
+    return new OdtParagraph(container, paragraphElement, this.pkg);
   }
 
   // ODF has no inline "hard page break" content element the way WordprocessingML's w:br/@w:type="page" is (see docx's own DocxBody.appendPageBreak, src/edit/docx/editor.ts) -- a manual page break is exclusively a paragraph-style property (style:paragraph-properties/@fo:break-before="page"), so this inserts an empty paragraph pointed at the shared page-break style (automatic-styles.ts's ensurePageBreakStyleName).
@@ -158,11 +163,11 @@ class OdtBodyImpl implements OdtBody {
       name: "text:style-name",
       value: ensurePageBreakStyleName(this.pkg),
     });
-    this.officeText.children.push(paragraphElement);
+    this.containerChildren().push(paragraphElement);
   }
 
   appendBookmarkStart(name: string): void {
-    this.officeText.children.push({
+    this.containerChildren().push({
       type: "element",
       tag: "text:bookmark-start",
       attributes: [{ name: "text:name", value: encodeXmlText(name) }],
@@ -171,12 +176,60 @@ class OdtBodyImpl implements OdtBody {
   }
 
   appendBookmarkEnd(name: string): void {
-    this.officeText.children.push({
+    this.containerChildren().push({
       type: "element",
       tag: "text:bookmark-end",
       attributes: [{ name: "text:name", value: encodeXmlText(name) }],
       children: [],
     });
+  }
+
+  openDivisionRegion(descriptor: DivisionDescriptor): void {
+    // Mirrors odf.js's own writeOdfDivision (typed/shared/constructs.ts) attribute for attribute, the one deliberately-absent field being columnCount (no section-style interner on this editor surface -- the typed writer is the full-fidelity path for a columned division).
+    const attributes: { name: string; value: string }[] = [];
+    if (descriptor.name !== undefined) {
+      attributes.push({
+        name: "text:name",
+        value: encodeXmlText(descriptor.name),
+      });
+    }
+    if (descriptor.protected === true) {
+      attributes.push({ name: "text:protected", value: "true" });
+    }
+    const section: XmlElement = {
+      type: "element",
+      tag: "text:section",
+      attributes,
+      children: [],
+    };
+    this.containerChildren().push(section);
+    this.openDivisions.push({ section, linked: descriptor.linked });
+  }
+
+  closeRegion(): void {
+    const entry = this.openDivisions.pop();
+    if (entry === undefined) {
+      return;
+    }
+    // A linked section's text:section-source follows the section's own children in the ODF schema, so it could not be appended at open -- the children it trails were not appended yet.
+    if (entry.linked !== undefined) {
+      const sourceAttributes: { name: string; value: string }[] = [
+        { name: "xlink:type", value: "simple" },
+        { name: "xlink:href", value: encodeXmlText(entry.linked.href) },
+      ];
+      if (entry.linked.sectionName !== undefined) {
+        sourceAttributes.push({
+          name: "text:section-name",
+          value: encodeXmlText(entry.linked.sectionName),
+        });
+      }
+      entry.section.children.push({
+        type: "element",
+        tag: "text:section-source",
+        attributes: sourceAttributes,
+        children: [],
+      });
+    }
   }
 }
 

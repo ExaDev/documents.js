@@ -49,7 +49,10 @@ export interface BuildDocxPackageOptions {
 // The block-level construct marker state one build carries: bookmark anchors mint a fresh, document-unique w:id on their start half and hold it open until the matching end, and every opened construct (bookmark or not) is stacked so a dropped construct's own end marker pops the right entry rather than a bookmark's.
 class ConstructMarkerState {
   private nextBookmarkId = 1;
-  private readonly open: { isBookmark: boolean; id: number }[] = [];
+  // One entry per open construct marker, in open order: a bookmark carries its minted w:id, a content control closes the body's SDT region, and a dropped kind balances its own end marker with nothing to close.
+  private readonly open: (
+    { kind: "bookmark"; id: number } | { kind: "region" } | { kind: "dropped" }
+  )[] = [];
 
   openConstruct(
     body: DocxBody,
@@ -59,18 +62,29 @@ class ConstructMarkerState {
     if (detail.kind === "anchor" && detail.anchorType === "bookmark") {
       const id = this.nextBookmarkId;
       this.nextBookmarkId += 1;
-      this.open.push({ isBookmark: true, id });
+      this.open.push({ kind: "bookmark", id });
       body.appendBookmarkStart(id, detail.name);
       return;
     }
-    // Every other construct kind is wrapper-shaped (an SDT, a tracked-change w:ins, a division) or needs machinery this builder has no editor surface for, and is dropped as the README's construct-marker note states -- stacked here so its own end marker still balances.
-    this.open.push({ isBookmark: false, id: -1 });
+    if (detail.kind === "contentControl") {
+      // An SDT region: the blocks between the markers land inside the control's own w:sdtContent, the shape Word itself writes -- round-tripping through ooxml.js's own reader recovers the identical construct pair.
+      this.open.push({ kind: "region" });
+      body.openContentControlRegion(detail);
+      return;
+    }
+    // Every other construct kind is wrapper-shaped through machinery this builder has no editor surface for (a tracked-change w:ins/w:del region, an ODF division with no Word spelling at block scope) or carries no write path at all, and is dropped as the README's construct-marker note states -- stacked here so its own end marker still balances.
+    this.open.push({ kind: "dropped" });
   }
 
   closeConstruct(body: DocxBody): void {
     const entry = this.open.pop();
-    if (entry?.isBookmark) {
+    if (entry === undefined) {
+      return;
+    }
+    if (entry.kind === "bookmark") {
       body.appendBookmarkEnd(entry.id);
+    } else if (entry.kind === "region") {
+      body.closeRegion();
     }
   }
 }

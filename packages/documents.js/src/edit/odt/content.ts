@@ -352,7 +352,12 @@ function appendCellBlock(cell: OdtTableCell, block: ContentBlock): void {
 // A bare image block reaching here (i.e. not already consumed by appendBlocks' own merge-back check above) gets a fresh paragraph of its own -- mirrors buildDocxPackage's own appendBlock 'image' case exactly.
 // The block-level construct marker state one odt build carries: a bookmark anchor opens a text:bookmark-start half under its own name and closes it at the matching end marker, and every opened construct (bookmark or not) is stacked so a dropped construct's own end marker pops the right entry. Every other construct kind is dropped as the README's construct-marker note states -- odf.js's own writeOdtContent writes divisions and index wrappers, but this editor-model builder has no surface for them.
 class ConstructMarkerState {
-  private readonly open: { isBookmark: boolean; name: string }[] = [];
+  // One entry per open construct marker, in open order: a bookmark carries its name, a division closes the body's text:section region, and a dropped kind balances its own end marker with nothing to close.
+  private readonly open: (
+    | { kind: "bookmark"; name: string }
+    | { kind: "region" }
+    | { kind: "dropped" }
+  )[] = [];
 
   openConstruct(
     body: OdtBody,
@@ -360,17 +365,29 @@ class ConstructMarkerState {
   ): void {
     const detail = marker.descriptor;
     if (detail.kind === "anchor" && detail.anchorType === "bookmark") {
-      this.open.push({ isBookmark: true, name: detail.name });
+      this.open.push({ kind: "bookmark", name: detail.name });
       body.appendBookmarkStart(detail.name);
       return;
     }
-    this.open.push({ isBookmark: false, name: "" });
+    if (detail.kind === "division") {
+      // A text:section region: the blocks between the markers land inside the section element, the shape LibreOffice itself writes -- round-tripping through odf.js's own reader recovers the identical construct pair.
+      this.open.push({ kind: "region" });
+      body.openDivisionRegion(detail);
+      return;
+    }
+    // Every other construct kind has no editor-surface spelling here (a field or note anchor that is not block-scoped in this builder's model, a tracked-change range, a wrapper kind ODF spells through machinery this builder does not carry) and is dropped as the README's construct-marker note states -- stacked so its own end marker still balances.
+    this.open.push({ kind: "dropped" });
   }
 
   closeConstruct(body: OdtBody): void {
     const entry = this.open.pop();
-    if (entry?.isBookmark) {
+    if (entry === undefined) {
+      return;
+    }
+    if (entry.kind === "bookmark") {
       body.appendBookmarkEnd(entry.name);
+    } else if (entry.kind === "region") {
+      body.closeRegion();
     }
   }
 }
