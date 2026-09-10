@@ -33,6 +33,54 @@ import {
 // The fusion primitive every content-kind leaf below adds via its own literal `frames?: LayoutFrame[]` field (Zod's discriminated-union/object model needs the field spliced in field-by-field per variant, not layered on generically through this generic type) -- FusedNode<T> names that exact pattern once, for a consumer describing "a content node carrying its own rendered position(s)" in the general case rather than repeating the union of leaf types by hand. A node's own `frames` entries record wherever -- and on however many pages -- its rendered content actually landed, replacing DocumentTree's old two-tree design of correlating a wholly separate LayoutDocument's own positioned items back to their originating ContentDocument node purely by matching sourcePath strings (see src/package.ts). A node with more than one frame appeared in more than one rendered position -- a paragraph's runs wrapping across a page boundary is the common case -- without the content itself needing to be split or duplicated. `frames` is absent on a content-only value that has never been through a layout pass, exactly mirroring how DocumentTree.layout used to be absent for the same reason.
 export type FusedNode<T> = T & { frames?: LayoutFrame[] };
 
+// --- The annotation channel: `origin` and `interpretation`, one field pair on every content node ----------------------------------------------------------------
+//
+// Two independent facts a document consumer needs beside the content itself, neither of which any codec produces. They sit on the same node set as the residue channel (every leaf and container below that carries `source`, plus the formula) minus the sheet rule objects (a validation or conditional-format rule is a constraint, not content -- nothing about it can be the subject of an origin or a model's reading), and they ride the flat/tree boundary the same way `source` does: decompose and flatten embed node objects, so the fields cross untouched and the bijection laws hold over them unchanged.
+//
+// `origin` names WHAT the content is, set by whichever reader knows -- the only layer that can. The motivating case is the two paths one visual object arrives by: a slide's chart is either a native chart part (exact numbers, from the cache) or a pasted screenshot, and to every consumer downstream they look identical. styleId survives round-trip but is format-specific and says nothing for a chart or a diagram; origin is the format-agnostic classification.
+//
+// `interpretation` carries what a MODEL made of the content, attached by the consumer that ran the model -- never by a codec, which stays model-free and offline by the family's own charter. It exists as a field group on the node for the same reason `frames` replaced the two-tree design: a side table keyed by sourcePath was that same shape of problem, and the fix was the same -- put the fact on the thing it is about. Two fields rather than one marked string, because they carry different rights: a TRANSCRIPTION is the document's own words that happen to be in pixels (quotable), a DESCRIPTION is the model's words about the document (referenceable, never quotable); both may be present for one subject, and a flag would let a consumer forget the difference.
+//
+// mechanism rides the transcript alone. A description has no deterministic path -- it is always model-generated prose -- so a mechanism on it would be a constant, and the original 'ocr' | 'vision' spelling conflated WHICH PRODUCT produced the text with whether the text is quotable: a vision model asked to transcribe verbatim is OCR functionally, it just is not reproducible. 'deterministic' | 'model' names the property that actually decides downstream behaviour. confidence is a three-value enum deliberately, not a 0-1 float: a self-reported numeric confidence from a vision model does not calibrate, and a float invites thresholds that look principled and are not.
+
+export const ContentOriginSchema = z.enum([
+  "chart",
+  "diagram",
+  "table",
+  "image",
+  "notes",
+  "body",
+]);
+export type ContentOrigin = z.infer<typeof ContentOriginSchema>;
+
+// A verbatim reading of content whose own words are in pixels -- OCR over a scanned page, a model asked to transcribe a figure's axis labels. mechanism: 'deterministic' for a reproducible reader (re-parsing yields the same text and therefore the same content hash), 'model' for a vision model's reading (handles layout, rotation and handwriting far better, and can produce plausible text that is not there -- which is exactly why the distinction decides whether a sentence may be quoted).
+export const ContentTranscriptSchema = z.object({
+  text: z.string(),
+  confidence: z.enum(["high", "medium", "low"]),
+  mechanism: z.enum(["deterministic", "model"]),
+});
+export type ContentTranscript = z.infer<typeof ContentTranscriptSchema>;
+
+// A model's output about the node it is attached to. transcript and description are independent optionals -- either, both, or neither; the annotation with neither but a `by` is legal but says nothing and is a producer error no schema can usefully reject. `by` records which model produced the fields and when (ISO 8601), for provenance in exactly the reports that cite this content as evidence.
+export const ContentInterpretationSchema = z.object({
+  transcript: ContentTranscriptSchema.optional(),
+  description: z.string().optional(),
+  by: z
+    .object({
+      model: z.string(),
+      at: z.string(), // ISO 8601 timestamp -- a free string, not a parsed date: the schema's job is to carry the value, and formats' own timestamp spellings vary more than one parser should rule on
+    })
+    .optional(),
+});
+export type ContentInterpretation = z.infer<typeof ContentInterpretationSchema>;
+
+// The two annotation fields as one spreadable group, so each node schema below states them with the identical spelling (the CONTENT_EMBEDDED_OBJECT_FIELDS discipline). origin first, interpretation second -- the same order this block documents them in.
+const CONTENT_ANNOTATION_FIELDS = {
+  origin: ContentOriginSchema.optional(), // what this node's content IS, when the reader knows (a table read out of a chart's cached numbers, a shape group that together forms a diagram) -- absent when the reader has nothing to say, which is the common case for ordinary prose
+  interpretation: ContentInterpretationSchema.optional(), // what a model made of this content, attached by the consumer that ran it -- see the annotation-channel block above; no codec reads or writes this field
+};
+export { CONTENT_ANNOTATION_FIELDS };
+
 // The canonical run-level font property vocabulary: the seven formatting properties every text-bearing surface in this model can state about its typeface, defined once here and reused everywhere the same set is needed -- a ContentRun's own inline fields (spread into the schema below), a styles entry's run half (src/definitions.ts wraps this exact shape in a strictObject), and a spreadsheet cell's uniform font (ContentSheetCell.font, via ContentFontSchema below). One shape, three consumers, no drift: a font property added here reaches every surface that carries fonts, and no consumer can grow a private member the others lack -- the identical single-source discipline IMAGE_FORMATS applies to the image format enum further down.
 const RUN_FONT_PROPERTY_SHAPE = {
   bold: z.boolean().optional(),
@@ -58,6 +106,7 @@ export const ContentRunSchema = z.object({
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this run's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
+  ...CONTENT_ANNOTATION_FIELDS,
 });
 export type ContentRun = z.infer<typeof ContentRunSchema>;
 
@@ -139,6 +188,7 @@ export const ContentParagraphSchema = z.object({
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this paragraph's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
+  ...CONTENT_ANNOTATION_FIELDS,
 });
 export type ContentParagraph = z.infer<typeof ContentParagraphSchema>;
 
@@ -223,10 +273,13 @@ export const ContentImageBlockSchema = z.object({
   heightPt: z.number().positive(),
   altText: z.string().optional(),
   original: ContentImageOriginalSchema.optional(), // the source's own compressed bytes for a no-encoder filter (JBIG2, JPEG 2000) -- see ContentImageOriginalSchema above. base64 stays the canonical decoded representation every consumer renders; a same-format writer re-embeds these bytes verbatim instead of re-encoding, and a cross-format consumer ignores the field entirely, since the only writers that can re-embed a JBIG2/JPX stream are the ones whose source format carried it
+  anchorRunIndex: z.number().int().nonnegative().optional(), // for an image a reader LIFTED out of a paragraph's own run stream (media found inside a paragraph's runs, surfaced as its own sibling block because ContentRun has no field to carry it): the index of the run in that sibling paragraph's own runs array whose text the image originally followed. anchorOffset then names the character position within that run's text after which the image sat, so the position becomes recoverable rather than structural -- "the image in paragraph 12, after 'approved by'" instead of adjacency guesswork. The run whose text PRECEDES the image is the one named (an image at the paragraph's very start is (0, 0); one at its end is (last, last.text.length); one between two runs is (i, runs[i].text.length)); the paragraph itself is the sibling block the image was lifted into this list from, associated by adjacency exactly as before. Absent when the image was authored as its own block-level figure (the common case -- position within a paragraph is meaningless for it) or when the lifting reader does not know the position
+  anchorOffset: z.number().int().nonnegative().optional(), // the character position within runs[anchorRunIndex].text after which the image sat -- always present with anchorRunIndex, never alone (the pair is one fact)
   floatPosition: ContentFloatPositionSchema.optional(), // this image's own source-native anchored position (docx w:drawing/wp:anchor; ODF draw:frame) -- absent for an inline image (docx wp:inline; ODF text:anchor-type="as-char"/"char"), which has no anchored position of its own to record, placed in block flow at the point it was encountered instead
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this image's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
+  ...CONTENT_ANNOTATION_FIELDS,
 });
 export type ContentImageBlock = z.infer<typeof ContentImageBlockSchema>;
 
@@ -235,6 +288,7 @@ export const ContentPageBreakSchema = z.object({
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // where this page break actually landed, once a layout pass has fused one in -- see FusedNode above
+  ...CONTENT_ANNOTATION_FIELDS,
 });
 export type ContentPageBreak = z.infer<typeof ContentPageBreakSchema>;
 
@@ -487,6 +541,7 @@ const CONTENT_EMBEDDED_OBJECT_FIELDS = {
   offsetXPt: z.number().optional(),
   offsetYPt: z.number().optional(),
   source: SourceResidueSchema.optional(),
+  ...CONTENT_ANNOTATION_FIELDS,
 };
 
 // Standalone schema for an embedded object on its own, independent of the block-level wrapper below. Annotated with both z.ZodType type parameters for the identical reason MathExpressionSchema is (see that schema's own comment in src/math.ts): this schema has no transform, so Input and Output are genuinely identical, and supplying only Output would leave Input at `unknown` -- invisible to this package's own tests but not to a z.codec() consumer elsewhere in the workspace. Not itself a member of any z.discriminatedUnion (only ContentEmbeddedObjectBlockSchema, its own extended sibling below, is), so annotating it directly carries none of the propValues-widening risk that rules out annotating a union member.
@@ -658,6 +713,7 @@ export const ContentTableCellSchema = z.object({
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this cell's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
+  ...CONTENT_ANNOTATION_FIELDS,
 });
 
 export const ContentTableRowSchema = z.object({
@@ -674,6 +730,7 @@ export const ContentTableSchema = z.object({
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this table's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
+  ...CONTENT_ANNOTATION_FIELDS,
 });
 
 // The real, self-recursive z.discriminatedUnion() ContentBlockSchema's own doc comment (above, where the old z.custom() binding used to live) points to -- placed here, after ContentTableSchema, because this is the first point in the module every one of its seven members already exists as a real binding (ContentTableSchema, defined immediately above, is the last of the seven to become available; ContentParagraphSchema/ContentImageBlockSchema/ContentPageBreakSchema/ContentEmbeddedObjectBlockSchema/ContentConstructStartSchema/ContentConstructEndSchema all sit earlier in the file). Every member is deliberately left unannotated -- the same "annotate only the outer union's own binding, not its members" rule MathExpressionSchema/MathMlNodeSchema already follow, since annotating a member widens it so z.discriminatedUnion (which needs each member's own propValues) rejects the union.
@@ -711,6 +768,7 @@ export const ContentSectionSchema = z.object({
   headers: ContentPageFurnitureSchema.optional(),
   footers: ContentPageFurnitureSchema.optional(),
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts); rides the tree's section descriptor automatically (omit+extend, src/package-node.ts)
+  ...CONTENT_ANNOTATION_FIELDS,
 });
 export type ContentSection = z.infer<typeof ContentSectionSchema>;
 
@@ -729,6 +787,7 @@ export const ContentShapeSchema = z.object({
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this shape's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
+  ...CONTENT_ANNOTATION_FIELDS,
   blocks: z.lazy(() => z.array(ContentBlockSchema)),
 });
 export type ContentShape = z.infer<typeof ContentShapeSchema>;
@@ -738,6 +797,7 @@ export const ContentSlideSchema = z.object({
   shapes: z.array(ContentShapeSchema),
   notes: z.string(),
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts); rides the tree's slide descriptor automatically (omit+extend, src/package-node.ts)
+  ...CONTENT_ANNOTATION_FIELDS,
 });
 export type ContentSlide = z.infer<typeof ContentSlideSchema>;
 
@@ -811,6 +871,7 @@ export const ContentSheetCellSchema = z.object({
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this cell's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
+  ...CONTENT_ANNOTATION_FIELDS,
 });
 export type ContentSheetCell = z.infer<typeof ContentSheetCellSchema>;
 
@@ -1092,6 +1153,7 @@ export const ContentSheetSchema = z.object({
   dataValidations: z.array(ContentSheetDataValidationSchema).optional(),
   conditionalFormats: z.array(ContentSheetConditionalFormatSchema).optional(),
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts); rides the tree's sheet descriptor automatically (omit+extend, src/package-node.ts)
+  ...CONTENT_ANNOTATION_FIELDS,
 });
 export type ContentSheet = z.infer<typeof ContentSheetSchema>;
 
@@ -1202,6 +1264,7 @@ export const ContentVectorSchema = z.discriminatedUnion("kind", [
     sourcePath: z.string().optional(),
     source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
     frames: z.array(LayoutFrameSchema).optional(), // this vector's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
+    ...CONTENT_ANNOTATION_FIELDS,
   }),
   z.object({
     kind: z.literal("ellipse"),
@@ -1215,6 +1278,7 @@ export const ContentVectorSchema = z.discriminatedUnion("kind", [
     sourcePath: z.string().optional(),
     source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
     frames: z.array(LayoutFrameSchema).optional(),
+    ...CONTENT_ANNOTATION_FIELDS,
   }),
   z.object({
     kind: z.literal("line"),
@@ -1225,6 +1289,7 @@ export const ContentVectorSchema = z.discriminatedUnion("kind", [
     sourcePath: z.string().optional(),
     source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
     frames: z.array(LayoutFrameSchema).optional(),
+    ...CONTENT_ANNOTATION_FIELDS,
   }),
   z.object({
     kind: z.literal("path"),
@@ -1240,6 +1305,7 @@ export const ContentVectorSchema = z.discriminatedUnion("kind", [
     sourcePath: z.string().optional(),
     source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
     frames: z.array(LayoutFrameSchema).optional(),
+    ...CONTENT_ANNOTATION_FIELDS,
   }),
 ]);
 export type ContentVector = z.infer<typeof ContentVectorSchema>;
@@ -1250,6 +1316,7 @@ export const ContentDrawPageSchema = z.object({
   shapes: z.array(ContentShapeSchema),
   vectors: z.array(ContentVectorSchema),
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts); rides the tree's draw-page descriptor automatically (omit+extend, src/package-node.ts)
+  ...CONTENT_ANNOTATION_FIELDS,
 });
 export type ContentDrawPage = z.infer<typeof ContentDrawPageSchema>;
 
@@ -1269,6 +1336,7 @@ export const ContentFormulaSchema = z.object({
   provenance: MathProvenanceSchema.optional(),
   // Quarantined residue (src/source.ts) -- opaque text the producing format carries and no other format interprets; the formula document's own node position, since a formula package's single leaf is the formula itself.
   source: SourceResidueSchema.optional(),
+  ...CONTENT_ANNOTATION_FIELDS,
 });
 export type ContentFormula = z.infer<typeof ContentFormulaSchema>;
 
