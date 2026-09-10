@@ -644,4 +644,74 @@ describe("writeOdpContent: shape paint order", () => {
     expect(written.slides[0]!.shapes.map((s) => s.paintOrder)).toEqual([0, 1]);
     expectRoundTrip(document);
   });
+
+  it("round-trips an embedded object frame (a draw:object inside a slide shape)", () => {
+    // The shape-side embedded object: one shape whose single block is an embedded spreadsheet, written through typed/draw/embedded-write.ts's writeEmbeddedObject (the identical machinery odt's body flow uses) and read back through readDrawFrameContent's draw:object branch.
+    const document = documentOf([
+      slide([
+        shape({
+          frame: { xPt: 40, yPt: 30, widthPt: 200, heightPt: 100 },
+          blocks: [
+            {
+              kind: "embeddedObject",
+              objectKind: "spreadsheet",
+              frame: { xPt: 40, yPt: 30, widthPt: 200, heightPt: 100 },
+              document: {
+                kind: "spreadsheet",
+                metadata: {},
+                sheets: [
+                  {
+                    name: "Data",
+                    cells: [
+                      {
+                        row: 0,
+                        column: 0,
+                        value: { kind: "string", value: "cell" },
+                        displayText: "cell",
+                      },
+                    ],
+                    columns: [],
+                    rows: [],
+                    images: [],
+                    printSettings: {
+                      pageSize: PAGE_SIZE_A4,
+                      margins: {
+                        topPt: 36,
+                        rightPt: 36,
+                        bottomPt: 36,
+                        leftPt: 36,
+                      },
+                      gridlines: false,
+                      headers: false,
+                      pageOrder: "downThenOver",
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ]),
+    ]);
+    const reread = roundTrip(document);
+    const embedded = reread.slides[0]!.shapes[0]!.blocks.find(
+      (block) => block.kind === "embeddedObject",
+    );
+    if (embedded?.kind !== "embeddedObject") {
+      throw new Error("expected the shape to carry the embedded object back");
+    }
+    expect(embedded.objectKind).toBe("spreadsheet");
+    expect(embedded.frame).toEqual({
+      xPt: 40,
+      yPt: 30,
+      widthPt: 200,
+      heightPt: 100,
+    });
+    // The sub-document's own content survives (its own write-read canonicalisation is the ods suite's law, not this suite's -- matching the odt embedded test's own assertion scope).
+    if (embedded.document.kind !== "spreadsheet") {
+      throw new Error("expected the embedded spreadsheet document back");
+    }
+    const cell = embedded.document.sheets[0]?.cells[0];
+    expect(cell?.value).toEqual({ kind: "string", value: "cell" });
+  });
 });
