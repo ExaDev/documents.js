@@ -608,26 +608,29 @@ describe("document metadata", () => {
 });
 
 describe("constructs this reader does not lift", () => {
-  // Each of these is recognised by the tokeniser and skipped by the fold, so a document containing it still reads -- and says what it lost rather than passing over it in silence.
+  // Each of these is recognised by the tokeniser and skipped by the fold, so a document containing it still reads -- and says what it lost rather than passing over it in silence. Group 0xD6 no longer appears here: a header or footer function is LIFTED into ContentSection.headers/footers (see the page-furniture describe below), and the watermark subfunction -- the one D6 shape the vocabulary has no slot for -- needs its own subgroup, which the empty-occurrence default of these bare fixtures cannot state.
   it.each([
-    [0xdf, WpdDiagnosticCodes.BoxDropped],
-    [0xd7, WpdDiagnosticCodes.NoteDropped],
-    [0xd6, WpdDiagnosticCodes.HeaderFooterDropped],
-    [0xd5, WpdDiagnosticCodes.CrossReferenceFlattened],
-    [0xde, WpdDiagnosticCodes.MergeCodeDropped],
-  ])("reports group %i through the diagnostic sink", (group, code) => {
-    const { document, diagnostics } = readWithDiagnostics([
-      ...text("before"),
-      ...variableFunction({ group, subgroup: 0x00 }),
-      ...text("after"),
-    ]);
-    expect(
-      paragraphsOf(document)[0]
-        ?.runs.map((run) => run.text)
-        .join(""),
-    ).toBe("beforeafter");
-    expect(
-      diagnostics.filter((diagnostic) => diagnostic.code === code),
-    ).toHaveLength(1);
-  });
+    [0xdf, WpdDiagnosticCodes.BoxDropped, 0x00],
+    [0xd7, WpdDiagnosticCodes.NoteDropped, 0x00],
+    [0xd6, WpdDiagnosticCodes.HeaderFooterDropped, 0x04],
+    [0xd5, WpdDiagnosticCodes.CrossReferenceFlattened, 0x00],
+    [0xde, WpdDiagnosticCodes.MergeCodeDropped, 0x00],
+  ])(
+    "reports group %i through the diagnostic sink",
+    (group, code, subgroup) => {
+      const { document, diagnostics } = readWithDiagnostics([
+        ...text("before"),
+        ...variableFunction({ group, subgroup }),
+        ...text("after"),
+      ]);
+      expect(
+        paragraphsOf(document)[0]
+          ?.runs.map((run) => run.text)
+          .join(""),
+      ).toBe("beforeafter");
+      expect(
+        diagnostics.filter((diagnostic) => diagnostic.code === code),
+      ).toHaveLength(1);
+    },
+  );
 });
