@@ -152,3 +152,21 @@ export {
   Jpeg2000UnsupportedError,
 } from "./image/jpeg2000-errors";
 export { filterScanlines, unfilterScanlines } from "./image/png-filter";
+
+// Rasterisation port (ExaDev/documents.js#1198): the PageRasteriser contract a consumer's canvas implements, plus renderPdfPage, the driver that walks one page's content through the read machinery and drives that rasteriser with device-space draw operations. Deliberately no backend lives in this package -- pdf-raster-cpu is the pure-software reference implementation, and a canvas-owning runtime supplies its own.
+export {
+  renderPdfPage,
+  type PageRasteriser,
+  type RasterDrawOp,
+  type RasterFillRectOp,
+  type RasterFillSpec,
+  type RasterImageOp,
+  type RasterMatrix,
+  type RasterPageGeometry,
+  type RasterPathOp,
+  type RasterPathSegment,
+  type RasterRegionPt,
+  type RasterStrokeSpec,
+  type RasterSubpath,
+  type RenderPdfPageOptions,
+} from "./raster";
