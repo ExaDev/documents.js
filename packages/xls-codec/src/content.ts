@@ -9,6 +9,7 @@ import type {
   ContentCellFill,
   ContentCellValue,
   ContentDocument,
+  ContentFont,
   ContentSheet,
   ContentSheetCell,
   ContentSheetColumn,
@@ -24,6 +25,7 @@ import type {
 import { assembleTree, PAGE_SIZE_LETTER } from "document-schema.js";
 
 import { pageSizeFromSetup } from "./biff/print-setup";
+import { contentFontOf, resolveFontColor } from "./biff/font";
 import {
   BOF_TYPE_WORKSHEET,
   RECORD_FILEPASS,
@@ -655,12 +657,14 @@ function mapCell(
   const background = backgroundOf(globals, cell.xfIndex);
   const borders = bordersOf(globals, cell.xfIndex);
   const { alignment, verticalAlignment } = alignmentOf(globals, cell.xfIndex);
+  const font = fontOf(globals, cell.xfIndex);
   if (
     cell.value.kind === "blank" &&
     background === undefined &&
     borders === undefined &&
     alignment === undefined &&
-    verticalAlignment === undefined
+    verticalAlignment === undefined &&
+    font === undefined
   ) {
     return undefined;
   }
@@ -674,6 +678,9 @@ function mapCell(
   };
   if (formatCode !== undefined) {
     mapped.numberFormatCode = formatCode;
+  }
+  if (font !== undefined) {
+    mapped.font = font;
   }
   if (cell.formula !== undefined) {
     mapped.formula = cell.formula;
@@ -734,6 +741,27 @@ function alignmentOf(
     result.verticalAlignment = format.alignment.vertical;
   }
   return result;
+}
+
+/**
+ * A cell's own font, or undefined when the cell states none of its own: the font its XF's ifnt names, diffed against the workbook's own first font (the Normal style's, entry 0 of the font table) so that only properties the cell genuinely differs in survive -- the same default-omission policy alignmentOf applies to ALCGEN/ALCVBOT and the fill reader to FLSNULL. A cell whose XF resolves to no CellFormat at all, or whose font index resolves past the end of the font table, carries no font, matching every other resolveXOf helper's behaviour for an out-of-range index.
+ */
+function fontOf(
+  globals: WorkbookGlobals,
+  xfIndex: number,
+): ContentFont | undefined {
+  const format = globals.cellFormats[xfIndex];
+  if (format === undefined) {
+    return undefined;
+  }
+  const font = globals.fonts[format.fontIndex];
+  const baseline = globals.fonts[0];
+  if (font === undefined || baseline === undefined) {
+    return undefined;
+  }
+  return contentFontOf(font, baseline, (icv) =>
+    resolveFontColor(icv, globals.palette),
+  );
 }
 
 /** A cell's own resolved per-side borders, or undefined when none of its four sides carry a border this reader resolves (no border at all, or a reserved/unrecognised BorderStyle token, or a colour this package cannot express as a fixed RGB value -- see xf-colors.ts's own resolveBorderEdge). */
