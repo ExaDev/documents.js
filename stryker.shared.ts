@@ -20,6 +20,8 @@ export interface PackageStrykerOptions {
   vitestConfigFile?: string;
   // Whole-dry-run budget in minutes, passed straight through to Stryker's own option of the same name (default 5). Only a package whose INSTRUMENTED unit suite can legitimately approach the default needs this: instrumentation multiplies per-call cost far beyond what the plain or v8-coverage-instrumented suite costs, so a package with one pathologically call-heavy test (pdf-codec's whole-Unicode-range font enumeration is the measured case: ~28s instrumented on a fast local machine, several multiples of that on a GitHub runner) can burn most of the default budget on a single test. Passed by a package only once measured, never speculatively -- the default 5 minutes fits every package whose dry run has actually completed within it.
   dryRunTimeoutMinutes?: number;
+  // Stryker's thresholds.break for this package alone: the mutation score below which stryker exits non-zero and fails the mutation CI job. Derived, never picked -- the rule is documented alongside the thresholds key in packageStrykerConfig below, and a package that has never completed a full mutation run passes nothing and stays ungated until it does (a break guessed without a measured baseline is exactly the magic number this workspace refuses).
+  breakThreshold?: number;
 }
 
 /**
@@ -35,6 +37,7 @@ export function packageStrykerConfig(
     tsconfigFile = "tsconfig.json",
     vitestConfigFile,
     dryRunTimeoutMinutes,
+    breakThreshold,
   } = options;
 
   return {
@@ -57,8 +60,12 @@ export function packageStrykerConfig(
     incremental: true,
     // Static mutants (module-load-time code) can only be killed by a test that fails on IMPORT, so each one re-runs its ENTIRE related suite -- measured directly against document-schema.js: Stryker's own MutantTestPlanner reported 2989 of 5217 mutants (57%) as static, estimated at 92% of the run's total time. Dropping them is what makes a cold run (no incremental cache to restore -- documents.js and pdf-codec, this workspace's two largest packages, will hit this on their very first CI run) finish inside mutation.yml's own job timeout at all. This can only RAISE a package's score (static mutants are disproportionately survived/no-coverage, never killed), so it never needs revisiting once a package's baseline is eventually measured.
     ignoreStatic: true,
-    // high/low colour-code the HTML/clear-text report; deliberately no `break`. No package in this workspace has a measured baseline mutation score yet, and a `break` threshold picked without one would be an arbitrary number rather than a derived one -- exactly the magic-number failure mode to avoid. mutation.yml runs this workspace-wide, sharded and cached, purely to gather real per-package scores; once a package's own baseline is measured, add a `break` to that package's own stryker.config.ts (never here, since a workspace-wide `break` would either be too strict for the workspace's smallest, least-tested package or too lax for its most mature one) and consider promoting the CI job to a required check at that point.
-    thresholds: { high: 80, low: 60 },
+    // high/low colour-code the HTML/clear-text report. `break` is deliberately per-package (a workspace-wide break would be too strict for the least-tested package or too lax for the most mature one) and derived, never picked: take the package's first CI-measured mutation score from mutation.yml's per-shard HTML reports, floor it to whole points, and subtract a noise margin of that package's own Timeout-classified share of its valid mutants, rounded up to whole points with a floor of one. Timeout is the one mutant classification that legitimately flaps between runs -- runner load alone decides whether the same mutant times out (counted detected) or survives -- so that margin keeps even every timeout in a package re-classifying from tripping the break, while a drop beyond it is a real regression. A package whose mutation run has never completed passes no breakThreshold and stays ungated until one does; picking its number without the measurement would be exactly the arbitrary magic number this rule exists to avoid.
+    thresholds: {
+      high: 80,
+      low: 60,
+      ...(breakThreshold === undefined ? {} : { break: breakThreshold }),
+    },
     // dist/coverage/.turbo are build/tooling output Stryker would otherwise copy into every mutant's own sandbox for nothing -- none of it is ever read by a test.
     ignorePatterns: ["dist", "coverage", ".turbo"],
     reporters: ["progress", "clear-text", "html"],
