@@ -1,3 +1,13 @@
+## [2.11.0](https://github.com/ExaDev/documents.js/compare/web%402.10.21...web%402.11.0) (2026-09-10)
+
+### Features
+
+* **web:** ship the editors and .odm tools behind real routes ([4ba68a5](https://github.com/ExaDev/documents.js/commit/4ba68a58ea08a5e12732571f9a67c18f544f61b1))
+
+### Tests
+
+* **web:** assert the editors and .odm nav items navigate to their real routes ([adb4bf1](https://github.com/ExaDev/documents.js/commit/adb4bf1f1c6a56958910f0730a8e3d3834c0e83d)), references [#1096](https://github.com/ExaDev/documents.js/issues/1096)
+
 ## [2.10.21](https://github.com/ExaDev/documents.js/compare/web%402.10.20...web%402.10.21) (2026-09-10)
 
 
