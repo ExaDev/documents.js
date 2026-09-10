@@ -8,6 +8,7 @@
 
 import type { Color } from "document-schema.js";
 import type { LayoutMetadata } from "document-schema.js";
+import type { TextDirection } from "document-schema.js";
 import {
   codepageForFontCharset,
   DEFAULT_CODEPAGE,
@@ -647,6 +648,8 @@ export function readRtfHeader(
     marginBottomTwips: DEFAULT_MARGIN_BOTTOM_TWIPS,
   };
   let metadata: LayoutMetadata = {};
+  // The whole-document scope of the four RTF states text direction at, held separately from `metadata` because the tables sweep below REPLACES that object wholesale when it finds an {\info ...} group -- a direction read here in the properties sweep and folded in immediately would be silently dropped by that replacement. Applied to the returned metadata once both sweeps are done.
+  let direction: TextDirection | undefined;
   let codepage = DEFAULT_CODEPAGE;
   let defaultFontIndex: number | undefined;
   let bodyStartIndex = 0;
@@ -665,6 +668,15 @@ export function readRtfHeader(
     const charsetPage = DOCUMENT_CHARSET_CODEPAGES.get(token.name);
     if (charsetPage !== undefined) {
       codepage = charsetPage;
+      continue;
+    }
+    // The document-level bidirectional pair (RTF 1.9.1, "Bidirectional Controls" under "Document Formatting Properties"): "\rtldoc This document will be formatted to have Arabic-style pagination" / "\ltrdoc This document will have English-style pagination (the default)". Bare on-words, handled before the parameter gate below for exactly that reason; last stated wins, matching how the body reader treats the run- and paragraph-level pairs. (\rtlsect/\ltrsect are deliberately NOT read: they state a section's own column SNAKING direction -- "This section will snake (newspaper style) columns from right to left" -- a page-layout fact ContentSection carries no field for, not the text-direction scope LayoutMetadata.direction names.)
+    if (token.name === "rtldoc") {
+      direction = "rtl";
+      continue;
+    }
+    if (token.name === "ltrdoc") {
+      direction = "ltr";
       continue;
     }
     if (token.param === undefined) {
@@ -788,7 +800,10 @@ export function readRtfHeader(
     lists,
     revisionAuthors,
     page,
-    metadata,
+    metadata: {
+      ...metadata,
+      ...(direction === undefined ? {} : { direction }),
+    },
     bodyStartIndex,
   };
 }
