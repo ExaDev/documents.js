@@ -39,8 +39,18 @@ function styledRun(
   if (style.fontFamily !== undefined) run.fontFamily = style.fontFamily;
   if (style.verticalAlign !== undefined)
     run.verticalAlign = style.verticalAlign;
+  if (style.direction !== undefined) run.direction = style.direction;
   if (hyperlink !== undefined) run.hyperlink = hyperlink;
   return run;
+}
+
+// An inline element's own dir attribute, merged into the inline style exactly like <strong>'s bold: dir is a global XHTML attribute legal on any element, so a <span dir="rtl"> (or a dir on the <b>/<a>/<code> itself) states its content's run-level direction. Only "ltr"/"rtl" map; dir="auto" is resolved at render time from the content's own first strong character, a fact ContentRun.direction's closed two-member vocabulary has no field for, so it is left unmapped rather than guessed.
+function withDirStyle(element: XmlElement, style: InlineStyle): InlineStyle {
+  const dir = attrValue(element, "dir");
+  if (dir === "ltr" || dir === "rtl") {
+    return mergeStyle(style, { direction: dir });
+  }
+  return style;
 }
 
 // Builds the ContentRun[] (plus any run-level footnote/endnote construct extents) for one inline block's own children -- the text and inline-formatting content of a <p>/<h1-6>/<li>/<td>/<dt>/<dd>, walked recursively so nested emphasis (<strong><em>...</em></strong>) composes rather than only the innermost tag winning.
@@ -82,12 +92,14 @@ function appendElement(
     reportInertElementSkip(element.tag, context);
     return;
   }
+  // The element's own dir attribute, merged once here so every case below (and the nested buildInlineRuns calls they make) composes it with the element's own formatting rather than each case needing its own attribute read -- the inline twin of src/xhtml/read.ts's own withDirection threading for block containers.
+  const styled = withDirStyle(element, style);
   switch (element.tag) {
     case "strong":
     case "b":
       appendNested(
         element,
-        mergeStyle(style, { bold: true }),
+        mergeStyle(styled, { bold: true }),
         context,
         runs,
         constructs,
@@ -97,7 +109,7 @@ function appendElement(
     case "i":
       appendNested(
         element,
-        mergeStyle(style, { italic: true }),
+        mergeStyle(styled, { italic: true }),
         context,
         runs,
         constructs,
@@ -106,7 +118,7 @@ function appendElement(
     case "u":
       appendNested(
         element,
-        mergeStyle(style, { underline: true }),
+        mergeStyle(styled, { underline: true }),
         context,
         runs,
         constructs,
@@ -117,7 +129,7 @@ function appendElement(
     case "del":
       appendNested(
         element,
-        mergeStyle(style, { strike: true }),
+        mergeStyle(styled, { strike: true }),
         context,
         runs,
         constructs,
@@ -128,7 +140,7 @@ function appendElement(
     case "samp":
       appendNested(
         element,
-        mergeStyle(style, { fontFamily: MONOSPACE_FONT_FAMILY }),
+        mergeStyle(styled, { fontFamily: MONOSPACE_FONT_FAMILY }),
         context,
         runs,
         constructs,
@@ -139,7 +151,7 @@ function appendElement(
       // The XHTML spellings of exactly the two members ContentRun.verticalAlign carries, so the element's own vertical position rides the run like any other inline formatting -- composing with nested emphasis (<strong>H<sub>2</sub>O</sub></strong>) rather than degrading to plain text the way it did before the schema field existed.
       appendNested(
         element,
-        mergeStyle(style, {
+        mergeStyle(styled, {
           verticalAlign: element.tag === "sup" ? "superscript" : "subscript",
         }),
         context,
@@ -149,19 +161,19 @@ function appendElement(
       return;
     }
     case "br":
-      runs.push(styledRun("\n", style));
+      runs.push(styledRun("\n", styled));
       return;
     case "a": {
-      appendAnchor(element, style, context, runs, constructs);
+      appendAnchor(element, styled, context, runs, constructs);
       return;
     }
     case "img": {
-      appendImageFallback(element, style, context, runs);
+      appendImageFallback(element, styled, context, runs);
       return;
     }
     case "span":
     default:
-      appendNested(element, style, context, runs, constructs);
+      appendNested(element, styled, context, runs, constructs);
   }
 }
 

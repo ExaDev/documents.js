@@ -7,6 +7,7 @@ import type {
   ContentTableRow,
   RunConstructExtent,
   SourceResidue,
+  TextDirection,
 } from "document-schema.js";
 import { clampHeadingLevel } from "document-schema.js";
 import { EpubDiagnosticCodes } from "../diagnostics";
@@ -86,6 +87,8 @@ interface BuildState {
   readonly listItem: ListItemContext | undefined;
   readonly list: ListContext | undefined;
   readonly contentWidthPt: number;
+  // The nearest block-ancestor dir attribute's stated direction, threaded exactly like quoteDepth so every paragraph a descent produces picks it up -- XHTML's dir attribute inherits, so a <div dir="rtl"> governs the paragraphs nested arbitrarily deep inside it until one of them states a dir of its own, which is what withDirection's override-or-inherit rule below reproduces.
+  readonly direction: TextDirection | undefined;
 }
 
 function withQuote(state: BuildState): BuildState {
@@ -95,6 +98,15 @@ function withQuote(state: BuildState): BuildState {
 // A flat additional indent applied to every paragraph a descent produces, on top of quoteDepth's own multiplier -- <dd>'s own DEFINITION_BODY_INDENT_PT offset, threaded through exactly like withQuote threads its own increment, so it reaches every paragraph readContainerChildren builds while descending through a <dd>'s content, not only a single top-level one.
 function withExtraIndent(state: BuildState, pt: number): BuildState {
   return { ...state, extraIndentPt: state.extraIndentPt + pt };
+}
+
+// Threads the element's own dir attribute into the descent's BuildState, reproducing XHTML's own inheritance rule: a stated "ltr"/"rtl" overrides whatever the nearest dir-stating ancestor established, while an absent dir (and dir="auto", whose direction is resolved from the content's own first strong character at render time -- a fact ContentParagraph.direction's closed ltr/rtl vocabulary has no member for) leaves the inherited value standing rather than resetting it.
+function withDirection(state: BuildState, element: XmlElement): BuildState {
+  const dir = attrValue(element, "dir");
+  if (dir === "ltr" || dir === "rtl") {
+    return { ...state, direction: dir };
+  }
+  return state;
 }
 
 function withListItem(
@@ -130,6 +142,9 @@ function decorateParagraph(
       itemId: state.listItem.itemId,
     };
     decorated = { ...decorated, list: membership };
+  }
+  if (state.direction !== undefined) {
+    decorated = { ...decorated, direction: state.direction };
   }
   return decorated;
 }
@@ -310,8 +325,12 @@ export function readXhtmlBody(
     listItem: undefined,
     list: undefined,
     contentWidthPt: options.contentWidthPt,
+    direction: undefined,
   };
-  const blocks = readContainerChildren(body.children, state);
+  const blocks = readContainerChildren(
+    body.children,
+    withDirection(state, body),
+  );
   const source = readStyleResidue(html, context);
   return { blocks, source };
 }
@@ -397,7 +416,8 @@ function readBlockElement(
   state: BuildState,
 ): ContentBlock[] {
   const id = attrValue(element, "id");
-  const blocks = readBlockElementInner(element, state);
+  // Every block-level element's own dir attribute is threaded HERE, once, so each of readBlockElementInner's own cases (a heading, a <p>, a transparent <div>, a <blockquote>, a list, a table, a <pre>) inherits or overrides it through the one BuildState they all share -- withDirection's own override-or-inherit rule is what makes a nested <p dir="ltr"> inside a <div dir="rtl"> win over its ancestor.
+  const blocks = readBlockElementInner(element, withDirection(state, element));
   if (id === undefined) {
     return blocks;
   }
@@ -709,7 +729,7 @@ function readList(element: XmlElement, state: BuildState): ContentBlock[] {
       blocks.push(
         ...readContainerChildren(
           child.children,
-          withListItem(state, previousItem),
+          withListItem(withDirection(state, child), previousItem),
         ),
       );
       continue;
@@ -784,7 +804,9 @@ function readDefinitionListEntries(
     if (child.type === "element" && child.tag === "dt") {
       flushStray();
       // <dt> is Flow content per the HTML Standard: block-level content inside one is real, conformant markup, not something to flatten to a single inline paragraph and lose (ExaDev/documents.js#1023).
-      blocks.push(...readContainerChildren(child.children, state));
+      blocks.push(
+        ...readContainerChildren(child.children, withDirection(state, child)),
+      );
       continue;
     }
     if (child.type === "element" && child.tag === "dd") {
@@ -793,7 +815,10 @@ function readDefinitionListEntries(
       blocks.push(
         ...readContainerChildren(
           child.children,
-          withExtraIndent(state, DEFINITION_BODY_INDENT_PT),
+          withExtraIndent(
+            withDirection(state, child),
+            DEFINITION_BODY_INDENT_PT,
+          ),
         ),
       );
       continue;
@@ -907,7 +932,7 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
           // <td>/<th> are Flow content per the HTML Standard: a <pre>, a nested list, or more than one paragraph is real, conformant markup, not something to flatten and lose (ExaDev/documents.js#1023). An empty or whitespace-only cell produces no blocks at all here, matching readContainerChildren's own empty-segment rule elsewhere, rather than the single bogus empty paragraph a bare buildInlineRuns call used to always produce.
           const cellBlocks = readContainerChildren(
             cellNode.children,
-            state,
+            withDirection(state, cellNode),
             cellStyle,
           );
           const colSpan = positiveIntAttr(cellNode, "colspan");
@@ -951,7 +976,11 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
     columnWidthsPt: new Array<number>(Math.max(columnCount, 1)).fill(width),
   };
   const captionBlocks = captionElements.flatMap((captionElement, index) =>
-    readTableCaption(captionElement, index > 0, state),
+    readTableCaption(
+      captionElement,
+      index > 0,
+      withDirection(state, captionElement),
+    ),
   );
   return [...strayBlocks, ...captionBlocks, table];
 }
