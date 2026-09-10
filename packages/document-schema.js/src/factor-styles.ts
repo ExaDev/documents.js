@@ -148,6 +148,7 @@ export function assembleTree(
       return mint({
         kind: "spreadsheet",
         ...envelope,
+        ...(content.names !== undefined ? { names: content.names } : {}),
         children: content.sheets.map(decomposeSheet),
       });
     case "drawing":

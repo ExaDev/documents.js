@@ -26,6 +26,7 @@ import {
   clampHeadingLevel,
   findConstructMarkerImbalance,
   findRunConstructFault,
+  IMAGE_FORMATS,
   isContentBlock,
   isContentConstructEnd,
   isContentConstructStart,
@@ -139,6 +140,21 @@ describe("isContentBlock", () => {
     expect(isContentBlock(level3)).toBe(true);
   });
 
+  it("accepts every IMAGE_FORMATS member -- the guard and the schema enum read one shared tuple and cannot diverge", () => {
+    // gif/svg were guard-rejected while the enum admitted them (ExaDev/documents.js#1197); the shared IMAGE_FORMATS tuple is what prevents that drift from coming back, and this pins the guard's side of it.
+    for (const format of IMAGE_FORMATS) {
+      expect(
+        isContentBlock({
+          kind: "image",
+          format,
+          base64: "AA==",
+          widthPt: 1,
+          heightPt: 1,
+        }),
+      ).toBe(true);
+    }
+  });
+
   it("rejects a malformed block at every level", () => {
     expect(isContentBlock({ kind: "paragraph", runs: "not-an-array" })).toBe(
       false,
@@ -146,7 +162,7 @@ describe("isContentBlock", () => {
     expect(
       isContentBlock({
         kind: "image",
-        format: "gif",
+        format: "tiff",
         base64: "AA==",
         widthPt: 1,
         heightPt: 1,

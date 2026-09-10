@@ -514,6 +514,15 @@ function corpus(): readonly CorpusEntry[] {
       content: {
         kind: "spreadsheet",
         metadata: {},
+        names: [
+          { name: "Revenue", refersTo: "=Data!$B$2:$B$9" },
+          { name: "Revenue", refersTo: "=Summary!$A$1", scopeSheetIndex: 1 },
+          {
+            name: "_xlnm.Print_Area",
+            refersTo: "Data!$A$1:$B$2",
+            scopeSheetIndex: 0,
+          },
+        ],
         sheets: [
           {
             name: "Data",
