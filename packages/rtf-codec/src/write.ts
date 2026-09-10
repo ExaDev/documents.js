@@ -1023,6 +1023,9 @@ class RtfWriter {
     if (run.italic === true) out += "\\i";
     if (run.underline === true) out += "\\ul";
     if (run.strike === true) out += "\\strike";
+    // The bare on-spellings, not \upN/\dnN: "\super Superscripts text and shrinks point size according to font information" is a rendering instruction exactly matching what ContentRun.verticalAlign's two members state, while "\upN Move up N half-points" asserts a specific half-point offset this content model never carried and would have to invent a number for. The corpus producer confirms the split: LibreOffice's own filter writes \super/\sub for the standard positions and reaches for \upN/\dnN (beside its own {\*\updnpropN} group) only for a custom percentage the field has no room to state.
+    if (run.verticalAlign === "superscript") out += "\\super";
+    else if (run.verticalAlign === "subscript") out += "\\sub";
     const colorIndex = colorIndexOf(run.color, this.tables.colors);
     if (colorIndex !== undefined) {
       out += `\\cf${String(colorIndex)}`;
