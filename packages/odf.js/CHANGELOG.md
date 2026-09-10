@@ -1,3 +1,9 @@
+## [7.24.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.23.2...odf.js%407.24.0) (2026-09-10)
+
+### Features
+
+* **odf.js:** read and write embedded objects in odp and odg shapes ([d9ab9d7](https://github.com/ExaDev/documents.js/commit/d9ab9d7d000bb00f401e1aa4e53b6cd0b400d296))
+
 ## [7.23.2](https://github.com/ExaDev/documents.js/compare/odf.js%407.23.1...odf.js%407.23.2) (2026-09-10)
 
 
