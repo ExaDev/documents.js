@@ -639,6 +639,237 @@ describe("writeDocContent multiple sections", () => {
 });
 
 // ExaDev/documents.js#971: writeDocContent used to throw DocUnsupportedError for every image block. Now a 'png'/'jpeg' inline picture writes a genuine PICFAndOfficeArtData blob into a real Data stream, matching pictures.ts's own read-side byte layout exactly in reverse.
+describe("writeDocContent stories", () => {
+  // writeDocContent's own output read back through readDocContent: the WritableDocContent fields a DocContent carries are the round trip's own subject, so this helper hands the reader's full output shape straight back to the writer rather than rebuilding it.
+  function roundTripStories(
+    input: Parameters<typeof writeDocContent>[0],
+  ): ReturnType<typeof readDocContent> {
+    return readDocContent(writeDocContent(input));
+  }
+
+  function baseDocument(
+    blocks: readonly ContentBlock[],
+  ): Parameters<typeof writeDocContent>[0] {
+    return document(blocks);
+  }
+
+  it("round-trips footnotes, endnotes, and comments as plain-text story bodies", () => {
+    const result = roundTripStories({
+      ...baseDocument([paragraph([{ text: "body" }])]),
+      footnotes: [
+        { id: "1", text: "first footnote" },
+        { id: "2", text: "second footnote" },
+      ],
+      endnotes: [{ id: "1", text: "an endnote" }],
+      comments: [{ id: "1", text: "a comment" }],
+    });
+    expect(result.footnotes).toEqual([
+      { id: "1", text: "first footnote" },
+      { id: "2", text: "second footnote" },
+    ]);
+    expect(result.endnotes).toEqual([{ id: "1", text: "an endnote" }]);
+    expect(result.comments).toEqual([{ id: "1", text: "a comment" }]);
+  });
+
+  it("round-trips a note whose text carries newlines, including a trailing one", () => {
+    // The trailing "\n" is the case the guard spelling exists for: the note's own last (empty) paragraph is a content paragraph, and the writer's separate guard mark beyond it is what lets the reader's guard-drop rule invert the text exactly.
+    const result = roundTripStories({
+      ...baseDocument([paragraph([{ text: "body" }])]),
+      footnotes: [{ id: "1", text: "line one\nline two\n" }],
+    });
+    expect(result.footnotes).toEqual([
+      { id: "1", text: "line one\nline two\n" },
+    ]);
+  });
+
+  it("round-trips an empty note text as an empty story", () => {
+    const result = roundTripStories({
+      ...baseDocument([paragraph([{ text: "body" }])]),
+      footnotes: [{ id: "1", text: "" }],
+    });
+    expect(result.footnotes).toEqual([{ id: "1", text: "" }]);
+  });
+
+  it("writes no subdocument at all for a document that states no stories", () => {
+    const bytes = writeDocContent(
+      baseDocument([paragraph([{ text: "plain" }])]),
+    );
+    const { fib } = readDocStreams(bytes);
+    expect(fib.ccpFtn).toBe(0);
+    expect(fib.ccpHdd).toBe(0);
+    expect(fib.ccpAtn).toBe(0);
+    expect(fib.ccpEdn).toBe(0);
+    const result = readDocContent(bytes);
+    expect(result.footnotes).toEqual([]);
+    expect(result.endnotes).toEqual([]);
+    expect(result.comments).toEqual([]);
+    expect(result.headerFooterStories).toEqual([]);
+  });
+
+  it("round-trips header/footer stories per section and slot, with absent slots staying absent", () => {
+    const result = roundTripStories({
+      kind: "wordprocessing",
+      metadata: {},
+      footnotes: [{ id: "1", text: "a footnote riding along" }],
+      headerFooterStories: [
+        {
+          section: 0,
+          slot: "oddHeader",
+          blocks: [paragraph([{ text: "the odd header" }])],
+        },
+        {
+          section: 1,
+          slot: "oddFooter",
+          blocks: [paragraph([{ text: "second section footer" }])],
+        },
+      ],
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [paragraph([{ text: "section one" }])],
+        },
+        {
+          pageSize: { widthPt: 595, heightPt: 842 },
+          margins: { topPt: 36, rightPt: 36, bottomPt: 36, leftPt: 36 },
+          blocks: [paragraph([{ text: "section two" }])],
+        },
+      ],
+    });
+    expect(result.headerFooterStories).toEqual([
+      {
+        section: 0,
+        slot: "oddHeader",
+        blocks: [{ kind: "paragraph", runs: [{ text: "the odd header" }] }],
+      },
+      {
+        section: 1,
+        slot: "oddFooter",
+        blocks: [
+          { kind: "paragraph", runs: [{ text: "second section footer" }] },
+        ],
+      },
+    ]);
+  });
+
+  it("round-trips a header story carrying a table, through the identical table pipeline the main document uses", () => {
+    const result = roundTripStories({
+      ...baseDocument([paragraph([{ text: "body" }])]),
+      headerFooterStories: [
+        {
+          section: 0,
+          slot: "oddHeader",
+          blocks: [
+            paragraph([{ text: "header intro" }]),
+            {
+              kind: "table",
+              rows: [
+                {
+                  cells: [
+                    { blocks: [paragraph([{ text: "left" }])] },
+                    { blocks: [paragraph([{ text: "right" }])] },
+                  ],
+                },
+              ],
+              columnWidthsPt: [100, 100],
+            },
+          ],
+        },
+      ],
+    });
+    expect(result.headerFooterStories).toHaveLength(1);
+    const story = result.headerFooterStories[0];
+    expect(story?.slot).toBe("oddHeader");
+    expect(story?.blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "header intro" }] },
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              { blocks: [{ kind: "paragraph", runs: [{ text: "left" }] }] },
+              { blocks: [{ kind: "paragraph", runs: [{ text: "right" }] }] },
+            ],
+          },
+        ],
+        columnWidthsPt: [100, 100],
+      },
+    ]);
+  });
+
+  it("round-trips a story whose blocks flatten to nothing as present-but-blank, not as an absent slot", () => {
+    const result = roundTripStories({
+      ...baseDocument([paragraph([{ text: "body" }])]),
+      headerFooterStories: [{ section: 0, slot: "evenFooter", blocks: [] }],
+    });
+    expect(result.headerFooterStories).toEqual([
+      {
+        section: 0,
+        slot: "evenFooter",
+        blocks: [{ kind: "paragraph", runs: [] }],
+      },
+    ]);
+  });
+
+  it("refuses a header/footer story naming a section this document does not have", () => {
+    expect(() =>
+      writeDocContent({
+        ...baseDocument([paragraph([{ text: "body" }])]),
+        headerFooterStories: [
+          {
+            section: 3,
+            slot: "oddHeader",
+            blocks: [paragraph([{ text: "nowhere" }])],
+          },
+        ],
+      }),
+    ).toThrow(DocFormatError);
+  });
+
+  it("refuses two stories for the same section and slot", () => {
+    expect(() =>
+      writeDocContent({
+        ...baseDocument([paragraph([{ text: "body" }])]),
+        headerFooterStories: [
+          {
+            section: 0,
+            slot: "oddHeader",
+            blocks: [paragraph([{ text: "one" }])],
+          },
+          {
+            section: 0,
+            slot: "oddHeader",
+            blocks: [paragraph([{ text: "two" }])],
+          },
+        ],
+      }),
+    ).toThrow(DocFormatError);
+  });
+
+  it("re-writes a full readDocContent output unchanged -- a genuine DocContent assigns straight across", () => {
+    const first = roundTripStories({
+      ...baseDocument([paragraph([{ text: "body" }])]),
+      footnotes: [{ id: "1", text: "note" }],
+      headerFooterStories: [
+        {
+          section: 0,
+          slot: "oddHeader",
+          blocks: [paragraph([{ text: "hdr" }])],
+        },
+      ],
+    });
+    const second = roundTripStories(first);
+    expect(second.footnotes).toEqual(first.footnotes);
+    expect(second.endnotes).toEqual(first.endnotes);
+    expect(second.comments).toEqual(first.comments);
+    expect(second.headerFooterStories).toEqual(first.headerFooterStories);
+    if (first.kind !== "wordprocessing" || second.kind !== "wordprocessing") {
+      throw new Error("a .doc always reads back as a wordprocessing document");
+    }
+    expect(second.sections[0]?.blocks).toEqual(first.sections[0]?.blocks);
+  });
+});
+
 describe("writeDocContent inline pictures", () => {
   function base64Of(bytes: readonly number[]): string {
     return btoa(String.fromCharCode(...bytes));
