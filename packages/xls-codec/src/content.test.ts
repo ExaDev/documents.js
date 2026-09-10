@@ -1499,6 +1499,262 @@ describe("readXlsContent", () => {
     });
   });
 
+  describe("defined names", () => {
+    /** A self-referencing SupBook plus a one-XTI-per-sheet ExternSheet, so a defined name's own PtgArea3d resolves its sheet prefix the way a real workbook's would. */
+    function supportingLinks(sheetCount: number): Uint8Array<ArrayBuffer>[] {
+      return [
+        // SupBook ([MS-XLS] 2.4.271): ctab then cch 0x0401, the self-referencing marker.
+        record(RECORD_SUPBOOK, [...u16(sheetCount), ...u16(0x0401)]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(sheetCount),
+          ...Array.from({ length: sheetCount }, (_unused, index) => [
+            ...u16(0),
+            ...u16(index),
+            ...u16(index),
+          ]).flat(),
+        ]),
+      ];
+    }
+
+    /** The low bytes of an ASCII string, as a compressed (fHighByte = 0) XLUnicodeStringNoCch holds them. */
+    function asciiBytes(text: string): number[] {
+      const out: number[] = [];
+      for (let index = 0; index < text.length; index += 1) {
+        out.push(text.charCodeAt(index));
+      }
+      return out;
+    }
+
+    /** A user-defined Lbl ([MS-XLS] 2.4.150): fBuiltin clear, the name as a compressed XLUnicodeStringNoCch, and the given rgce. */
+    function userLblRecord(
+      name: string,
+      itab: number,
+      rgce: readonly number[],
+    ): Uint8Array<ArrayBuffer> {
+      return record(RECORD_LBL, [
+        ...u16(0x0000), // grbit: a user-defined name, not hidden
+        0x00, // chKey: no macro shortcut key
+        name.length,
+        ...u16(rgce.length),
+        ...u16(0), // reserved3
+        ...u16(itab),
+        ...u32(0), // reserved4 through reserved7
+        0x00, // the Name's own XLUnicodeStringNoCch flags byte: compressed
+        ...asciiBytes(name),
+        ...rgce,
+      ]);
+    }
+
+    /** A built-in Lbl: the single-character Name whose code unit IS the built-in index. */
+    function builtinLblRecord(
+      builtinIndex: number,
+      itab: number,
+      rgce: readonly number[],
+    ): Uint8Array<ArrayBuffer> {
+      return record(RECORD_LBL, [
+        ...u16(0x0020), // fBuiltin
+        0x00,
+        0x01,
+        ...u16(rgce.length),
+        ...u16(0),
+        ...u16(itab),
+        ...u32(0),
+        0x00,
+        builtinIndex,
+        ...rgce,
+      ]);
+    }
+
+    /** PtgArea3d reference class ([MS-XLS] 2.5.198.28): opcode 0x3b, the ixti, then an absolute RgceArea. */
+    function ptgArea3d(
+      ixti: number,
+      area: {
+        rowFirst: number;
+        rowLast: number;
+        columnFirst: number;
+        columnLast: number;
+      },
+    ): number[] {
+      return [
+        0x3b,
+        ...u16(ixti),
+        ...u16(area.rowFirst),
+        ...u16(area.rowLast),
+        ...u16(area.columnFirst),
+        ...u16(area.columnLast),
+      ];
+    }
+
+    it("reads a workbook-scoped user-defined name with its formula text", () => {
+      const bytes = xlsFile(
+        workbookStream({
+          globals: [
+            ...xfTable(0),
+            ...supportingLinks(1),
+            userLblRecord(
+              "SalesData",
+              0,
+              ptgArea3d(0, {
+                rowFirst: 0,
+                rowLast: 1,
+                columnFirst: 0,
+                columnLast: 1,
+              }),
+            ),
+          ],
+          sheets: [{ name: "Sheet1", records: [] }],
+        }),
+      );
+
+      expect(readXlsContent(bytes).names).toEqual([
+        { name: "SalesData", refersTo: "Sheet1!$A$1:$B$2" },
+      ]);
+    });
+
+    it("reads a sheet-scoped name as scopeSheetIndex against the document's own sheets", () => {
+      const bytes = xlsFile(
+        workbookStream({
+          globals: [
+            ...xfTable(0),
+            ...supportingLinks(2),
+            // itab is one-based against the FULL BoundSheet8 collection: 2 names the second sheet, whose position among the document's own sheets is also 1 here.
+            userLblRecord(
+              "LocalRange",
+              2,
+              ptgArea3d(1, {
+                rowFirst: 2,
+                rowLast: 4,
+                columnFirst: 0,
+                columnLast: 0,
+              }),
+            ),
+          ],
+          sheets: [
+            { name: "Sheet1", records: [] },
+            { name: "Sheet2", records: [] },
+          ],
+        }),
+      );
+
+      expect(readXlsContent(bytes).names).toEqual([
+        {
+          name: "LocalRange",
+          refersTo: "Sheet2!$A$3:$A$5",
+          scopeSheetIndex: 1,
+        },
+      ]);
+    });
+
+    it("translates the scope through the worksheet-only filter, dropping a name scoped to a sheet the document does not carry", () => {
+      const bytes = xlsFile(
+        workbookStream({
+          globals: [
+            ...xfTable(0),
+            ...supportingLinks(3),
+            // Scoped to BoundSheet8 position 1, which is a chart sheet the document's own sheets array drops, so the name has no scope the schema can express and is dropped whole.
+            userLblRecord(
+              "ChartName",
+              2,
+              ptgArea3d(1, {
+                rowFirst: 0,
+                rowLast: 0,
+                columnFirst: 0,
+                columnLast: 0,
+              }),
+            ),
+            // Scoped to BoundSheet8 position 2, the second WORKSHEET, which the filter keeps at document position 1.
+            userLblRecord(
+              "SecondSheet",
+              3,
+              ptgArea3d(2, {
+                rowFirst: 0,
+                rowLast: 0,
+                columnFirst: 0,
+                columnLast: 0,
+              }),
+            ),
+          ],
+          sheets: [
+            { name: "Sheet1", records: [] },
+            { name: "Chart1", records: [], sheetType: 0x02 },
+            { name: "Sheet2", records: [] },
+          ],
+        }),
+      );
+
+      expect(readXlsContent(bytes).names).toEqual([
+        {
+          name: "SecondSheet",
+          refersTo: "Sheet2!$A$1:$A$1",
+          scopeSheetIndex: 1,
+        },
+      ]);
+    });
+
+    it("surfaces a non-print built-in under its _xlnm spelling, and leaves the two print built-ins to print settings alone", () => {
+      const area = ptgArea3d(0, {
+        rowFirst: 0,
+        rowLast: 0,
+        columnFirst: 0,
+        columnLast: 2,
+      });
+      const bytes = xlsFile(
+        workbookStream({
+          globals: [
+            ...xfTable(0),
+            ...supportingLinks(1),
+            builtinLblRecord(0x0d, 1, area), // _FilterDatabase
+            builtinLblRecord(0x06, 1, area), // Print_Area -- print-names.ts owns this one
+          ],
+          sheets: [{ name: "Sheet1", records: [] }],
+        }),
+      );
+
+      const content = readXlsContent(bytes);
+      expect(content.names).toEqual([
+        {
+          name: "_xlnm._FilterDatabase",
+          refersTo: "Sheet1!$A$1:$C$1",
+          scopeSheetIndex: 0,
+        },
+      ]);
+      // The print area the built-in carried is not lost -- it lives where the schema models it.
+      expect(content.sheets[0]?.printSettings.printRange).toEqual({
+        startRow: 0,
+        startColumn: 0,
+        endRow: 0,
+        endColumn: 2,
+      });
+    });
+
+    it("states no names field at all for a workbook declaring none", () => {
+      const bytes = xlsFile(
+        workbookStream({
+          globals: xfTable(0),
+          sheets: [{ name: "Sheet1", records: [] }],
+        }),
+      );
+
+      expect("names" in readXlsContent(bytes)).toBe(false);
+    });
+
+    it("skips a name whose rgce resolves to no formula text", () => {
+      // PtgName ([MS-XLS] 2.5.198.80, opcode 0x1a + a name index) is one of the constructs ptg.ts deliberately does not resolve, so a name referring to another name has no refersTo this reader could state honestly.
+      const bytes = xlsFile(
+        workbookStream({
+          globals: [
+            ...xfTable(0),
+            ...supportingLinks(1),
+            userLblRecord("Alias", 0, [0x1a, ...u16(3)]),
+          ],
+          sheets: [{ name: "Sheet1", records: [] }],
+        }),
+      );
+
+      expect(readXlsContent(bytes).names).toBeUndefined();
+    });
+  });
+
   describe("metadata", () => {
     it('reads title/author/dates from a real "\\x05SummaryInformation" stream', () => {
       const bytes = withSummaryInformation(
