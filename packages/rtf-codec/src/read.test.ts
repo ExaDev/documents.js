@@ -200,6 +200,65 @@ describe("character formatting", () => {
       paragraphsOf(`${HEADER}\\pard \\strike struck\\par}`)[0]?.runs ?? [];
     expect(runs[0]?.strike).toBe(true);
   });
+
+  it("reads \\super and \\sub onto verticalAlign, as their own runs beside baseline text", () => {
+    // The shape LibreOffice's own filter writes for the standard positions: a braced on-word around the raised text.
+    const runs =
+      paragraphsOf(`${HEADER}\\pard x{\\super 2} and H{\\sub 2}O\\par}`)[0]
+        ?.runs ?? [];
+    expect(runs.map((run) => run.text)).toEqual(["x", "2", " and H", "2", "O"]);
+    expect(runs.map((run) => run.verticalAlign)).toEqual([
+      undefined,
+      "superscript",
+      undefined,
+      "subscript",
+      undefined,
+    ]);
+  });
+
+  it("reads \\upN and \\dnN by the sign of their half-point offset, with zero restoring the baseline", () => {
+    // "\upN Move up N half-points (default is 6)" -- bare means the default raise, a negative moves down into the other family (\dn-3 raises by the mirror argument), and zero is no move at all. The doubled spaces after a parameterised word are the delimiter space plus a real text space, the same convention the \b0 fixture above uses.
+    const runs =
+      paragraphsOf(
+        `${HEADER}\\pard \\up raised\\up0  base\\dn3  lowered\\dn-3  raised again\\dn0  base again\\par}`,
+      )[0]?.runs ?? [];
+    expect(runs.map((run) => run.text)).toEqual([
+      "raised",
+      " base",
+      " lowered",
+      " raised again",
+      " base again",
+    ]);
+    expect(runs.map((run) => run.verticalAlign)).toEqual([
+      "superscript",
+      undefined,
+      "subscript",
+      "superscript",
+      undefined,
+    ]);
+  });
+
+  it("reads \\nosupersub as the off-spelling for both families", () => {
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\super up\\nosupersub  base\\par}`)[0]
+        ?.runs ?? [];
+    expect(runs[0]?.verticalAlign).toBe("superscript");
+    expect(runs[1]?.verticalAlign).toBeUndefined();
+  });
+
+  it("turns verticalAlign off at the group boundary and at \\plain, like every other character property", () => {
+    const runs =
+      paragraphsOf(
+        `${HEADER}\\pard before {\\super inside} after\\plain \\super gone\\plain  back\\par}`,
+      )[0]?.runs ?? [];
+    expect(runs.map((run) => run.verticalAlign)).toEqual([
+      undefined,
+      "superscript",
+      undefined,
+      "superscript",
+      undefined,
+    ]);
+  });
 });
 
 describe("text, escapes, and Unicode", () => {

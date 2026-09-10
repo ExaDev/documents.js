@@ -204,6 +204,25 @@ describe("body constructs", () => {
     expect(out).toContain("\\sl360\\slmult1");
   });
 
+  it("writes verticalAlign as the \\super/\\sub on-spellings", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [
+            { text: "x" },
+            { text: "2", verticalAlign: "superscript" },
+            { text: " and H" },
+            { text: "2", verticalAlign: "subscript" },
+            { text: "O" },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("{\\super 2}");
+    expect(out).toContain("{\\sub 2}");
+  });
+
   it("writes a hyperlink run as the HYPERLINK field production", () => {
     const out = write(
       wordprocessing([
@@ -1792,6 +1811,33 @@ describe("round trip through this package's own reader", () => {
   function roundTrip(document: ContentDocument): ContentDocument {
     return readRtfContent(writeRtfContent(document)).document;
   }
+
+  it("preserves verticalAlign through the \\super/\\sub on-spellings", () => {
+    // sizePt stated explicitly because the written form always states font size (RTF has no sizeless run), so the read-back carries it.
+    const document = wordprocessing([
+      {
+        kind: "paragraph",
+        runs: [
+          { text: "x", sizePt: 12 },
+          { text: "2", verticalAlign: "superscript", sizePt: 12 },
+          { text: " and H", sizePt: 12 },
+          { text: "2", verticalAlign: "subscript", sizePt: 12 },
+          { text: "O", sizePt: 12 },
+        ],
+      },
+    ]);
+    const back = roundTrip(document);
+    const section =
+      back.kind === "wordprocessing" ? back.sections[0] : undefined;
+    const paragraph = section?.blocks[0];
+    expect(paragraph?.kind === "paragraph" ? paragraph.runs : []).toEqual(
+      document.kind === "wordprocessing"
+        ? document.sections[0]?.blocks[0]?.kind === "paragraph"
+          ? document.sections[0].blocks[0].runs
+          : []
+        : [],
+    );
+  });
 
   it("preserves paragraph text and character formatting", () => {
     const document = wordprocessing([
