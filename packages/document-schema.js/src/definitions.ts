@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { ColorSchema } from "./color";
 import {
   ContentListMembershipSchema,
   type ContentParagraph,
   type ContentRun,
+  RUN_FONT_PROPERTY_SHAPE,
 } from "./content";
 import { AlignmentSchema } from "./style";
 
@@ -25,16 +25,8 @@ export type StyleParagraphProperties = z.infer<
   typeof StyleParagraphPropertiesSchema
 >;
 
-// The run half of a style entry: the canonical ContentRun direct formatting properties. sizePt is the real field name (ContentRunSchema's own) -- the issue text's "fontPt" was a typo, corrected in its errata comment. Same strictness and the same ban-list reasoning as StyleParagraphPropertiesSchema above.
-export const StyleRunPropertiesSchema = z.strictObject({
-  bold: z.boolean().optional(),
-  italic: z.boolean().optional(),
-  underline: z.boolean().optional(),
-  strike: z.boolean().optional(),
-  fontFamily: z.string().optional(),
-  sizePt: z.number().positive().optional(),
-  color: ColorSchema.optional(),
-});
+// The run half of a style entry: the canonical ContentRun direct formatting properties, spelled by the one shared RUN_FONT_PROPERTY_SHAPE (src/content.ts) so a styles entry, a run, and a spreadsheet cell font can never drift apart -- sizePt is the real field name (ContentRunSchema's own) -- the issue text's "fontPt" was a typo, corrected in its errata comment. Same strictness and the same ban-list reasoning as StyleParagraphPropertiesSchema above: strictObject REJECTS a smuggled extra key instead of silently stripping it.
+export const StyleRunPropertiesSchema = z.strictObject(RUN_FONT_PROPERTY_SHAPE);
 export type StyleRunProperties = z.infer<typeof StyleRunPropertiesSchema>;
 
 // One styles-table entry: resolved canonical properties only, split by the level they apply at. Never a basedOn graph inside the table (the entry is a dictionary value, not a program -- resolution is one overlay chain computed by the consumer, see resolveStyleChain below), never frames/sourcePath/styleId (the two strict sub-objects above are the entire legal field set, so the ban list holds no matter how the entry is constructed).

@@ -33,8 +33,8 @@ import {
 // The fusion primitive every content-kind leaf below adds via its own literal `frames?: LayoutFrame[]` field (Zod's discriminated-union/object model needs the field spliced in field-by-field per variant, not layered on generically through this generic type) -- FusedNode<T> names that exact pattern once, for a consumer describing "a content node carrying its own rendered position(s)" in the general case rather than repeating the union of leaf types by hand. A node's own `frames` entries record wherever -- and on however many pages -- its rendered content actually landed, replacing DocumentTree's old two-tree design of correlating a wholly separate LayoutDocument's own positioned items back to their originating ContentDocument node purely by matching sourcePath strings (see src/package.ts). A node with more than one frame appeared in more than one rendered position -- a paragraph's runs wrapping across a page boundary is the common case -- without the content itself needing to be split or duplicated. `frames` is absent on a content-only value that has never been through a layout pass, exactly mirroring how DocumentTree.layout used to be absent for the same reason.
 export type FusedNode<T> = T & { frames?: LayoutFrame[] };
 
-export const ContentRunSchema = z.object({
-  text: z.string(),
+// The canonical run-level font property vocabulary: the seven formatting properties every text-bearing surface in this model can state about its typeface, defined once here and reused everywhere the same set is needed -- a ContentRun's own inline fields (spread into the schema below), a styles entry's run half (src/definitions.ts wraps this exact shape in a strictObject), and a spreadsheet cell's uniform font (ContentSheetCell.font, via ContentFontSchema below). One shape, three consumers, no drift: a font property added here reaches every surface that carries fonts, and no consumer can grow a private member the others lack -- the identical single-source discipline IMAGE_FORMATS applies to the image format enum further down.
+const RUN_FONT_PROPERTY_SHAPE = {
   bold: z.boolean().optional(),
   italic: z.boolean().optional(),
   underline: z.boolean().optional(),
@@ -42,6 +42,16 @@ export const ContentRunSchema = z.object({
   fontFamily: z.string().optional(),
   sizePt: z.number().positive().optional(),
   color: ColorSchema.optional(),
+} as const;
+export { RUN_FONT_PROPERTY_SHAPE };
+
+// A standalone font descriptor: exactly the run font vocabulary above, carried where a font is stated without a run of text to sit on inline -- a spreadsheet cell whose formatting is uniform (ContentSheetCell.font). A ContentRun states the identical properties inline instead of nesting one of these; a hypothetical other consumer (a theme, a default) reuses this schema rather than restating the set.
+export const ContentFontSchema = z.object(RUN_FONT_PROPERTY_SHAPE);
+export type ContentFont = z.infer<typeof ContentFontSchema>;
+
+export const ContentRunSchema = z.object({
+  text: z.string(),
+  ...RUN_FONT_PROPERTY_SHAPE,
   hyperlink: z.string().optional(), // resolved external URI
   verticalAlign: z.enum(["superscript", "subscript"]).optional(), // absent means baseline
   direction: TextDirectionSchema.optional(), // RTF's own \rtlch/\ltrch scope -- the run-level of the four this format states direction at (see ContentParagraph.direction, ContentTableRow.direction, LayoutMetadata.direction for the other three)
@@ -187,13 +197,32 @@ export const ContentFloatPositionSchema = z.object({
 });
 export type ContentFloatPosition = z.infer<typeof ContentFloatPositionSchema>;
 
+// The closed image-format vocabulary, stated once so the schema enum, the runtime type guard (isContentBlock below), and every consumer that needs to enumerate the set read one tuple rather than three hand-kept lists -- the guard admitting only png/jpeg while the enum accepted png/jpeg/svg/gif was exactly the drift this single source exists to make impossible, caught on ExaDev/documents.js#1197 after the two lists had already diverged once. svg/gif carry the enum's own documented degradation contract (see the format field's comment): a codec whose reader cannot decode one of the members degrades to alt text with a diagnostic rather than being forced to adopt it.
+export const IMAGE_FORMATS = ["png", "jpeg", "svg", "gif"] as const;
+export type ImageFormat = (typeof IMAGE_FORMATS)[number];
+
+function isImageFormat(value: unknown): value is ImageFormat {
+  return (
+    typeof value === "string" && IMAGE_FORMATS.includes(value as ImageFormat)
+  );
+}
+
+// The source's own compressed bytes for an image filter this family has no encoder for -- JBIG2 (ITU-T T.88) and JPEG 2000 (ISO/IEC 15444-1). pdf-codec decodes both for real on read, but its writer can only re-emit such an image by re-encoding the decoded pixels through a filter it does have an encoder for, since a hand-written JBIG2 encoder is research-grade symbol-dictionary design and a JPEG 2000 encoder is the full EBCOT/wavelet stack -- so a pdf-to-pdf round trip through this model was lossy for exactly these two filters. Carrying the original stream beside the canonical decoded representation lets a same-format writer re-embed it verbatim (zero generation loss), while every other consumer keeps reading `base64`, which stays the always-decodable canonical. Deliberately never set for a filter this family can already encode: a jpeg IS its own compressed bytes (format: 'jpeg' already passes through verbatim in both directions), and flate/ccitt are re-encoded from pixels losslessly (pdf-codec's bilevel writer even prefers CCITT G4 by size), so an original for those would be a second spelling of data the writer can already reproduce. jbig2GlobalsBase64 carries the image's /JBIG2Globals stream when the source had one -- without it, a symbol-dictionary-carrying JBIG2 stream cannot decode, so verbatim re-embedding without the globals would produce a file no viewer can render.
+export const ContentImageOriginalSchema = z.object({
+  filter: z.enum(["jbig2", "jpeg2000"]),
+  base64: z.string(),
+  jbig2GlobalsBase64: z.string().optional(),
+});
+export type ContentImageOriginal = z.infer<typeof ContentImageOriginalSchema>;
+
 export const ContentImageBlockSchema = z.object({
   kind: z.literal("image"),
-  format: z.enum(["png", "jpeg", "svg", "gif"]), // svg/gif added for epub's own manifest image kinds; a codec whose reader cannot yet decode one of the four degrades to alt text with a diagnostic exactly as it did before this field existed, rather than being forced to adopt them the moment they exist here
+  format: z.enum(IMAGE_FORMATS), // svg/gif added for epub's own manifest image kinds; a codec whose reader cannot yet decode one of the four degrades to alt text with a diagnostic exactly as it did before this field existed, rather than being forced to adopt them the moment they exist here
   base64: z.string(),
   widthPt: z.number().positive(),
   heightPt: z.number().positive(),
   altText: z.string().optional(),
+  original: ContentImageOriginalSchema.optional(), // the source's own compressed bytes for a no-encoder filter (JBIG2, JPEG 2000) -- see ContentImageOriginalSchema above. base64 stays the canonical decoded representation every consumer renders; a same-format writer re-embeds these bytes verbatim instead of re-encoding, and a cross-format consumer ignores the field entirely, since the only writers that can re-embed a JBIG2/JPX stream are the ones whose source format carried it
   floatPosition: ContentFloatPositionSchema.optional(), // this image's own source-native anchored position (docx w:drawing/wp:anchor; ODF draw:frame) -- absent for an inline image (docx wp:inline; ODF text:anchor-type="as-char"/"char"), which has no anchored position of its own to record, placed in block flow at the point it was encountered instead
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
@@ -410,7 +439,7 @@ export function isContentBlock(value: unknown): value is ContentBlock {
   }
   if (kind === "image") {
     return (
-      (value.format === "png" || value.format === "jpeg") &&
+      isImageFormat(value.format) &&
       typeof value.base64 === "string" &&
       typeof value.widthPt === "number" &&
       typeof value.heightPt === "number"
@@ -770,6 +799,7 @@ export const ContentSheetCellSchema = z.object({
   displayText: z.string(),
   // The producer's own raw number-format code (xlsx numFmtId's own format string, e.g. "0.00%", "$#,##0.00", "yyyy-mm-dd") -- the literal pattern `value.kind`'s percentage/currency/date/time/dateTime classification was derived FROM, kept alongside that classification rather than replacing it: two cells both classified 'percentage' can carry different display precision ("0%" vs "0.00%"), a fact the classification alone discards and a lossless-capture consumer may still want. Absent for a cell with no producer-declared format at all (xlsx's own General, ODF's own unstyled default), not a fabricated empty string.
   numberFormatCode: z.string().optional(),
+  font: ContentFontSchema.optional(), // the cell's own font, for the common case of uniformly formatted cell text -- a real sheet states exactly one font per cell ([MS-XLS] XF's font index, xlsx's cell xf, ODF's resolved cell style), so uniform is the rule and mixed the exception. runs stays the channel for genuinely mixed inline formatting; when both are present a run's own property wins over the cell font for that run, the identical innermost-wins overlay discipline style resolution applies (the cell font sits one level below its runs' own properties, where a resolved style's run half already sits). Absent means the cell carries no font of its own -- the format's default -- never an implicit empty font
   runs: z.array(ContentRunSchema).optional(), // the rare case of genuinely mixed inline formatting within one cell's text; absent when the cell's formatting is uniform
   colSpan: z.number().int().positive().optional(),
   rowSpan: z.number().int().positive().optional(),
@@ -1249,6 +1279,14 @@ export const contentDocumentSharedFields = {
   symbolTable: SymbolTableSchema.optional(),
 };
 
+// A workbook-level defined name (xlsx workbook.xml's definedNames/definedName, [MS-XLS] DEFINEDNAME, ODF table:named-expressions/table:named-expression): a name bound to a range or formula, which a sheet's own formulas then reference by name. refersTo is carried verbatim in whatever syntax the source format used -- Excel's own formula language has no closed grammar this package could parse without a general formula engine, the identical reasoning ContentSheetCell.formula and the dataValidation formulas already record -- so a same-format writer re-emits it unchanged and a cross-format consumer treats it as opaque text. scopeSheetIndex names the sheet a sheet-local name belongs to (a 0-based index into the spreadsheet document's own sheets array, the model's own identity for a sheet object); absent means workbook-global. Two entries may share one name across different scopes, exactly as xlsx and BIFF8 themselves allow -- which is also why these are an array on the document rather than a record keyed by name.
+export const ContentDefinedNameSchema = z.object({
+  name: z.string(),
+  refersTo: z.string(),
+  scopeSheetIndex: z.number().int().nonnegative().optional(),
+});
+export type ContentDefinedName = z.infer<typeof ContentDefinedNameSchema>;
+
 export const ContentDocumentSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("wordprocessing"),
@@ -1267,6 +1305,7 @@ export const ContentDocumentSchema = z.discriminatedUnion("kind", [
     metadata: LayoutMetadataSchema,
     ...contentDocumentSharedFields,
     sheets: z.array(ContentSheetSchema),
+    names: z.array(ContentDefinedNameSchema).optional(), // workbook-level defined names -- see ContentDefinedNameSchema above. Workbook-level rather than sheet-level because that is where every source format states them (xlsx workbook.xml, BIFF8's workbook-stream DEFINEDNAME records, ODF's table:named-expressions beside the body), and a name's own scopeSheetIndex is what binds a sheet-local one to its sheet
   }),
   z.object({
     kind: z.literal("drawing"),

@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { contentDocumentSharedFields, ContentFormulaSchema } from "./content";
+import {
+  ContentDefinedNameSchema,
+  contentDocumentSharedFields,
+  ContentFormulaSchema,
+} from "./content";
 import { DefinitionsTableSchema, StylesTableSchema } from "./definitions";
 import { PageSizeSchema } from "./geometry";
 import { LayoutMetadataSchema } from "./metadata";
@@ -45,6 +49,7 @@ export const DocumentTreeSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("spreadsheet"),
     ...packageEnvelopeFields,
+    names: z.array(ContentDefinedNameSchema).optional(), // the workbook-level defined names of the flat spreadsheet document (src/content.ts's ContentDefinedNameSchema), riding the root rather than any sheet group because they are workbook-scope facts -- assembleTree splices them out of the content and flattenTree splices them back, so the bijection laws hold over them unchanged
     children: z.array(SheetGroupSchema),
   }),
   z.object({
