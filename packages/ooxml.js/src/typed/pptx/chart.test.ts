@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { XmlElement } from "../../model/node";
-import { readChartResidue } from "./chart";
+import { el, txt } from "../../xml/fragment";
+import { readChartResidue, readChartTable } from "./chart";
 
 function chartRoot(): XmlElement {
   return {
@@ -27,5 +28,60 @@ describe("readChartResidue", () => {
     const second = readChartResidue(chartRoot(), "xlsx");
     expect(second).not.toBe(first);
     expect(second.xml).toBe(first.xml);
+  });
+});
+
+// One bar chart with a single series, its category labels and values in the caches PowerPoint writes
+// beside the data reference.
+function barChartRoot(): XmlElement {
+  const cachedPoint = (idx: string, value: string) =>
+    el("c:pt", { idx }, [el("c:v", {}, [txt(value)])]);
+  return el("c:chartSpace", {}, [
+    el("c:chart", {}, [
+      el("c:plotArea", {}, [
+        el("c:barChart", {}, [
+          el("c:ser", {}, [
+            el("c:tx", {}, [
+              el("c:strRef", {}, [
+                el("c:strCache", {}, [cachedPoint("0", "FY26")]),
+              ]),
+            ]),
+            el("c:cat", {}, [
+              el("c:strRef", {}, [
+                el("c:strCache", {}, [
+                  cachedPoint("0", "EMEA"),
+                  cachedPoint("1", "APAC"),
+                ]),
+              ]),
+            ]),
+            el("c:val", {}, [
+              el("c:numRef", {}, [
+                el("c:numCache", {}, [
+                  cachedPoint("0", "42"),
+                  cachedPoint("1", "51"),
+                ]),
+              ]),
+            ]),
+          ]),
+        ]),
+      ]),
+    ]),
+  ]);
+}
+
+describe("readChartTable", () => {
+  it('marks the table it produces as origin "chart"', () => {
+    // A ContentTable is a native table, a chart's cached data, or a spreadsheet range, and a consumer
+    // holding one cannot otherwise tell which. It matters: a chart's cached numbers are exact and
+    // quotable, where a vision reading of the same chart would be approximate -- so the two have to be
+    // distinguishable by something other than a consumer's guess.
+    const table = readChartTable(barChartRoot(), {
+      xPt: 0,
+      yPt: 0,
+      widthPt: 400,
+      heightPt: 300,
+    });
+
+    expect(table?.origin).toBe("chart");
   });
 });
