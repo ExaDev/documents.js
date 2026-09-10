@@ -51,8 +51,10 @@ export interface DocSpec {
   readonly sectionGrpprl?: readonly number[];
   /** Multiple sections' own Sepx grpprls, one per section in document order -- overrides `sectionGrpprl`. Section boundaries are derived from where `paragraphs` themselves place a SECTION_MARK terminator (`mark: SECTION_MARK`): this array must carry exactly one more entry than the number of SECTION_MARK-terminated paragraphs NOT marked `pageBreak`, matching [MS-DOC] 2.8.26's own "an end-of-section character MUST be the final character in the text range of all but the last section" -- a `pageBreak`-marked 0x000C opens no section, per PlcfSed.aCP's own manual-page-break rule. */
   readonly sections?: readonly (readonly number[])[];
-  /** The footnote document's own stories, one per footnote reference in document order -- an empty story (`[]`) is a genuinely empty one, per [MS-DOC]'s own "the beginning CP has the same value as the next CP"; a non-empty one gets its own trailing guard paragraph mark appended automatically ("not considered part of the story contents", the Headers page's own words, restated for PlcffndTxt by that structure's own page). Absent produces no footnote document at all (ccpFtn 0, no PlcffndTxt). */
+  /** The footnote document's own stories, one per footnote reference in document order -- an empty story (`[]`) is a genuinely empty one, per [MS-DOC]'s own "the beginning CP has the same value as the next CP"; a non-empty one gets its own trailing guard paragraph mark appended automatically ("not considered part of the story contents", the Headers page's own words, restated for PlcffndTxt by that structure's own page) unless `bareNoteStories` asks for the no-guard spelling. Absent produces no footnote document at all (ccpFtn 0, no PlcffndTxt). */
   readonly footnotes?: readonly (readonly DocParagraphSpec[])[];
+  /** Writes note stories (footnotes/endnotes/comments) WITHOUT the separate trailing guard paragraph -- the spelling a real producer writes (confirmed against a LibreOffice-authored .doc: a single-paragraph footnote story ends at its own content paragraph's mark, with the subdocument's one extra trailing mark beyond the last story), where the guard spelling instead ends each story with a second, empty paragraph of its own. Both spellings must read identically, which is exactly what subdocument.ts's endsWithGuardParagraph exists to guarantee. */
+  readonly bareNoteStories?: boolean;
   /** The endnote document's own stories -- the identical shape and guard-mark handling as `footnotes`, for PlcfendTxt. */
   readonly endnotes?: readonly (readonly DocParagraphSpec[])[];
   /** The comment (annotation) document's own stories -- the identical shape and guard-mark handling as `footnotes`, for PlcfandTxt. */
@@ -119,17 +121,20 @@ function appendParagraphs(
   }
 }
 
-// Appends one document-stream range's own stories onto the accumulator -- shared by footnotes/endnotes/comments (each story a plain paragraph list) and headerFooterStories (already flat, one entry per fixed Plcfhdd slot) -- and returns that range's own boundary plex keys (PlcffndTxt/PlcfandTxt/PlcfendTxt/Plcfhdd's own aCP), local to the range's own start rather than the whole document, matching what each of those structures states as its own CPs. A non-empty story gets its own trailing guard paragraph mark, [MS-DOC]'s own "not considered part of the story contents" -- an empty one (`[]`) gets neither content nor a guard, matching "the beginning CP has the same value as the next CP".
+// Appends one document-stream range's own stories onto the accumulator -- shared by footnotes/endnotes/comments (each story a plain paragraph list) and headerFooterStories (already flat, one entry per fixed Plcfhdd slot) -- and returns that range's own boundary plex keys (PlcffndTxt/PlcfandTxt/PlcfendTxt/Plcfhdd's own aCP), local to the range's own start rather than the whole document, matching what each of those structures states as its own CPs. A non-empty story gets its own trailing guard paragraph mark, [MS-DOC]'s own "not considered part of the story contents" -- an empty one (`[]`) gets neither content nor a guard, matching "the beginning CP has the same value as the next CP". `bareStories` skips the guard append, spelling each story as ending at its own final content mark the way a real producer writes note stories (DocSpec.bareNoteStories).
 function appendSubdocument(
   acc: ParagraphAccumulator,
   stories: readonly (readonly DocParagraphSpec[])[],
+  bareStories: boolean,
 ): number[] {
   const subdocStart = acc.text.length;
   const keys: number[] = [0];
   for (const story of stories) {
     if (story.length > 0) {
       appendParagraphs(acc, story);
-      appendParagraphs(acc, [{ runs: [] }]);
+      if (!bareStories) {
+        appendParagraphs(acc, [{ runs: [] }]);
+      }
     }
     keys.push(acc.text.length - subdocStart);
   }
@@ -150,25 +155,25 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
   const footnoteKeys =
     spec.footnotes === undefined
       ? undefined
-      : appendSubdocument(acc, spec.footnotes);
+      : appendSubdocument(acc, spec.footnotes, spec.bareNoteStories === true);
   const ccpFtn = acc.text.length - ccpText;
 
   const headerFooterKeys =
     spec.headerFooterStories === undefined
       ? undefined
-      : appendSubdocument(acc, spec.headerFooterStories);
+      : appendSubdocument(acc, spec.headerFooterStories, false);
   const ccpHdd = acc.text.length - ccpText - ccpFtn;
 
   const commentKeys =
     spec.comments === undefined
       ? undefined
-      : appendSubdocument(acc, spec.comments);
+      : appendSubdocument(acc, spec.comments, spec.bareNoteStories === true);
   const ccpAtn = acc.text.length - ccpText - ccpFtn - ccpHdd;
 
   const endnoteKeys =
     spec.endnotes === undefined
       ? undefined
-      : appendSubdocument(acc, spec.endnotes);
+      : appendSubdocument(acc, spec.endnotes, spec.bareNoteStories === true);
   const ccpEdn = acc.text.length - ccpText - ccpFtn - ccpHdd - ccpAtn;
 
   const { text, paragraphs, runRanges } = acc;
