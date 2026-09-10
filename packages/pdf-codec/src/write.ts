@@ -328,12 +328,14 @@ function preparePngImage(
   if (compress && raw.channels === 1 && raw.alpha === undefined) {
     const bilevel = packBilevel(raw);
     if (bilevel !== undefined) {
+      // Flate first, and G4 under Flate's own byte count as an abort budget: the moment the G4 stream grows past the size it is being compared against, it can no longer win and the encoder stops -- an adversarial bilevel image (a checkerboard, G4's worst case) otherwise makes the encoder emit a losing multi-megabyte candidate in full before the caller discards it.
+      const flate = deflate(raw.data);
       const g4 = encodeCcittFax(bilevel, {
         columns: raw.width,
         rows: raw.height,
+        maxBytes: flate.length,
       });
-      const flate = deflate(raw.data);
-      if (g4.length < flate.length) {
+      if (g4 !== undefined) {
         return {
           dict: pdfDict(
             new Map<string, PdfObject>([

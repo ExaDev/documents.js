@@ -51,6 +51,10 @@ class BitWriter {
   private current = 0;
   private used = 0;
 
+  get byteLength(): number {
+    return this.bytes.length;
+  }
+
   writeBits(bits: string): void {
     for (const char of bits) {
       this.current = (this.current << 1) | (char === "1" ? 1 : 0);
@@ -108,14 +112,16 @@ function changingElements(
 export interface EncodeCcittFaxOptions {
   readonly columns: number;
   readonly rows: number;
+  // The encode-abort budget: the moment the emitted stream grows past this many bytes the encoder stops and answers undefined, because the caller is comparing against a rival encoding of that size and G4 can no longer win. Without it, an adversarial bilevel image (a checkerboard -- G4's worst case, where every run is 1 pixel and codes horizontally) makes the encoder emit a losing multi-megabyte candidate in full before the caller discards it.
+  readonly maxBytes?: number;
 }
 
 // Encodes a packed 1-bpp bitmap (the decoder's own output layout) as a pure two-dimensional T.6 stream. The caller hands the geometry explicitly rather than deriving it from the bitmap because a PDF image's /Columns and /Rows are the authority the decoder will be given on the way back.
 export function encodeCcittFax(
   bitmap: Uint8Array,
   options: EncodeCcittFaxOptions,
-): Uint8Array<ArrayBuffer> {
-  const { columns, rows } = options;
+): Uint8Array<ArrayBuffer> | undefined {
+  const { columns, rows, maxBytes } = options;
   if (columns <= 0 || rows <= 0) {
     return new Uint8Array(0);
   }
@@ -135,6 +141,9 @@ export function encodeCcittFax(
     let a0 = -1;
     let white = true;
     while (a0 < columns) {
+      if (maxBytes !== undefined && writer.byteLength > maxBytes) {
+        return undefined;
+      }
       const a1 = cur(ci);
       const a2 = cur(ci + 1);
       // Advance the reference index past everything at or left of a0 (a0 only moves right, so this is monotone).
