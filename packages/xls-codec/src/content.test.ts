@@ -20,6 +20,7 @@ import {
   BOF_TYPE_WORKSHEET,
   RECORD_BLANK,
   RECORD_BOF,
+  RECORD_FONT,
   RECORD_BOOLERR,
   RECORD_BOUNDSHEET8,
   RECORD_CF,
@@ -209,6 +210,60 @@ function xfTableWithDecoration(
       ...u16(formatId),
       ...u16(0),
       ...cellXfTrailer(decoration),
+    ]),
+  ];
+}
+
+/** A Font record ([MS-XLS] 2.4.122) with an uncompressed fontName -- the record's own "fontName.fHighByte MUST equal 1" rule -- for a test driving the per-cell font reader. Every field left absent carries the spec's own default shape (Arial at 10pt/200 twips, no flags, Automatic colour, normal weight, no underline). */
+function fontRecord(options: {
+  name?: string;
+  heightTwips?: number;
+  bold?: boolean;
+  italic?: boolean;
+  strikeout?: boolean;
+  underline?: boolean;
+  colorIcv?: number;
+}): Uint8Array<ArrayBuffer> {
+  const name = options.name ?? "Arial";
+  const nameBytes: number[] = [name.length, 0x01];
+  for (let index = 0; index < name.length; index += 1) {
+    const code = name.charCodeAt(index);
+    nameBytes.push(code & 0xff, code >> 8);
+  }
+  return record(RECORD_FONT, [
+    ...u16(options.heightTwips ?? 200),
+    ...u16((options.italic ? 0x0002 : 0) | (options.strikeout ? 0x0008 : 0)),
+    ...u16(options.colorIcv ?? 0x7fff),
+    ...u16(options.bold ? 700 : 400),
+    ...u16(0), // sss: normal script
+    options.underline ? 0x01 : 0x00,
+    0x02, // bFamily: Swiss, Arial's own classification
+    0x00, // bCharSet: ANSI
+    0, // unused3
+    ...nameBytes,
+  ]);
+}
+
+/** As xfTable, but the single cell XF this builds references the given font index rather than font 0 -- for a test exercising per-cell fonts. */
+function xfTableWithFont(
+  fontIndex: number,
+  formatId: number,
+): Uint8Array<ArrayBuffer>[] {
+  const styles = Array.from({ length: 15 }, () =>
+    record(RECORD_XF, [
+      ...u16(0),
+      ...u16(0),
+      ...u16(0x0004),
+      ...cellXfTrailer(),
+    ]),
+  );
+  return [
+    ...styles,
+    record(RECORD_XF, [
+      ...u16(fontIndex),
+      ...u16(formatId),
+      ...u16(0),
+      ...cellXfTrailer(),
     ]),
   ];
 }
@@ -1336,6 +1391,111 @@ describe("readXlsContent", () => {
         kind: "solid",
         color: { r: 1, g: 128 / 255, b: 0 },
       });
+    });
+  });
+
+  describe("cell fonts", () => {
+    it("reads a cell's own font as the properties that differ from the workbook's default font", () => {
+      // Font 0 is the workbook's Normal font (Arial, 10pt, no flags, Automatic colour); font 1 differs from it in every property ContentSheetCell.font carries, so the cell resolves to one ContentFont naming each difference and restating nothing the default already settles.
+      const bytes = xlsFile(
+        workbookStream({
+          globals: [
+            fontRecord({}),
+            fontRecord({
+              name: "Courier New",
+              heightTwips: 240,
+              bold: true,
+              italic: true,
+              strikeout: true,
+              underline: true,
+              colorIcv: 10,
+            }),
+            ...xfTableWithFont(1, 0),
+          ],
+          sheets: [
+            {
+              name: "Sheet1",
+              records: [record(RECORD_NUMBER, [...cell(0, 0, 15), ...f64(1)])],
+            },
+          ],
+        }),
+      );
+
+      expect(readXlsContent(bytes).sheets[0]?.cells[0]?.font).toEqual({
+        bold: true,
+        italic: true,
+        underline: true,
+        strike: true,
+        fontFamily: "Courier New",
+        sizePt: 12,
+        // icv 10 is the default palette's own duplicate of Red, exactly as the fill tests resolve it.
+        color: { r: 1, g: 0, b: 0 },
+      });
+    });
+
+    it("states no font for a cell whose XF resolves to the workbook's own default font", () => {
+      // BIFF8 gives a cell no way to say "no font", only an index into the font table -- a cell naming entry 0, the Normal style's font, is stating the default, which the schema models as the field being absent rather than a restated copy of it.
+      const bytes = xlsFile(
+        workbookStream({
+          globals: [fontRecord({}), ...xfTableWithFont(0, 0)],
+          sheets: [
+            {
+              name: "Sheet1",
+              records: [record(RECORD_NUMBER, [...cell(0, 0, 15), ...f64(1)])],
+            },
+          ],
+        }),
+      );
+
+      expect(readXlsContent(bytes).sheets[0]?.cells[0]?.font).toBeUndefined();
+    });
+
+    it("keeps a Blank cell whose only formatting is a font that differs from the default", () => {
+      const bytes = xlsFile(
+        workbookStream({
+          globals: [
+            fontRecord({}),
+            fontRecord({ bold: true }),
+            ...xfTableWithFont(1, 0),
+          ],
+          sheets: [
+            {
+              name: "Sheet1",
+              records: [record(RECORD_BLANK, cell(3, 4, 15))],
+            },
+          ],
+        }),
+      );
+
+      const cells = readXlsContent(bytes).sheets[0]?.cells ?? [];
+      expect(cells).toHaveLength(1);
+      expect(cells[0]).toMatchObject({
+        row: 3,
+        column: 4,
+        value: { kind: "empty" },
+        font: { bold: true },
+      });
+    });
+
+    it("still drops a Blank cell whose font differs from the default only in a colour this reader cannot resolve", () => {
+      // The cell font's icv (Automatic, 0x7FFF) differs from the default's (icv 10), but Automatic has no fixed RGB triple to resolve to, so the diff yields an empty font -- equivalent to no font at all, the same way a reserved FillPattern value resolves to no background. With no other formatting, the Blank has nothing left to show and stays dropped.
+      const bytes = xlsFile(
+        workbookStream({
+          globals: [
+            fontRecord({ colorIcv: 10 }),
+            fontRecord({}),
+            ...xfTableWithFont(1, 0),
+          ],
+          sheets: [
+            {
+              name: "Sheet1",
+              records: [record(RECORD_BLANK, cell(3, 4, 15))],
+            },
+          ],
+        }),
+      );
+
+      expect(readXlsContent(bytes).sheets[0]?.cells).toHaveLength(0);
     });
   });
 
