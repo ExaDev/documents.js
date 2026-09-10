@@ -167,7 +167,7 @@ describe("every EpubDiagnosticCodes entry is reachable from real input", () => {
     expect(codes.has(EpubDiagnosticCodes.METADATA_FIELD_UNMAPPED)).toBe(true);
   });
 
-  it("IMAGE_UNRESOLVED / ELEMENT_UNMAPPED / STYLE_RESIDUE / LINK_TARGET_EXTERNAL_ONLY fire from XHTML content", () => {
+  it("IMAGE_UNRESOLVED / STYLE_RESIDUE / LINK_TARGET_EXTERNAL_ONLY fire from XHTML content", () => {
     const { sink, codes } = collect();
     readXhtmlBody(
       '<html xmlns:epub="urn"><head><style>p{color:red}</style></head><body><p>x<sup>2</sup></p><p><img src="missing.png" alt="a"/></p><p><a href="chapter2.xhtml">next</a></p></body></html>',
@@ -179,7 +179,6 @@ describe("every EpubDiagnosticCodes entry is reachable from real input", () => {
       },
     );
     expect(codes.has(EpubDiagnosticCodes.IMAGE_UNRESOLVED)).toBe(true);
-    expect(codes.has(EpubDiagnosticCodes.ELEMENT_UNMAPPED)).toBe(true);
     expect(codes.has(EpubDiagnosticCodes.STYLE_RESIDUE)).toBe(true);
     expect(codes.has(EpubDiagnosticCodes.LINK_TARGET_EXTERNAL_ONLY)).toBe(true);
   });
@@ -341,6 +340,36 @@ describe("every EpubDiagnosticCodes entry is reachable from real input", () => {
     expect(codes.has(EpubDiagnosticCodes.FOOTNOTE_TARGET_UNRESOLVED)).toBe(
       true,
     );
+  });
+
+  it("ELEMENT_UNMAPPED fires for an embeddedObject block the writer has no XHTML spelling for", () => {
+    const { sink, codes } = collect();
+    writeEpubContent(
+      {
+        kind: "wordprocessing",
+        metadata: {},
+        sections: [
+          {
+            pageSize: { widthPt: 595.28, heightPt: 841.89 },
+            margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+            blocks: [
+              {
+                kind: "embeddedObject",
+                objectKind: "wordprocessing",
+                frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+                document: {
+                  kind: "wordprocessing",
+                  metadata: {},
+                  sections: [],
+                },
+              },
+            ],
+          },
+        ],
+      },
+      { sink },
+    );
+    expect(codes.has(EpubDiagnosticCodes.ELEMENT_UNMAPPED)).toBe(true);
   });
 
   it("CONSTRUCT_UNREPRESENTED fires for a construct kind the writer has no XHTML spelling for", () => {

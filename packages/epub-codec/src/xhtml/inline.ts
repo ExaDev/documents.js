@@ -37,6 +37,8 @@ function styledRun(
   if (style.underline === true) run.underline = true;
   if (style.strike === true) run.strike = true;
   if (style.fontFamily !== undefined) run.fontFamily = style.fontFamily;
+  if (style.verticalAlign !== undefined)
+    run.verticalAlign = style.verticalAlign;
   if (hyperlink !== undefined) run.hyperlink = hyperlink;
   return run;
 }
@@ -134,14 +136,16 @@ function appendElement(
       return;
     case "sub":
     case "sup": {
-      // document-schema.js's ContentRun carries no subscript/superscript field at all -- a genuine, family-wide schema gap (no sibling codec has ever needed one; docx's own w:vertAlign has no reader anywhere in this workspace either), not something specific to this package. The text survives; the vertical-position styling does not.
-      context.sink({
-        code: EpubDiagnosticCodes.ELEMENT_UNMAPPED,
-        severity: "info",
-        message: `<${element.tag}> has no document-schema.js run-level field to carry its vertical position; the text is kept, the styling is not`,
-        href: context.sourceHref,
-      });
-      appendNested(element, style, context, runs, constructs);
+      // The XHTML spellings of exactly the two members ContentRun.verticalAlign carries, so the element's own vertical position rides the run like any other inline formatting -- composing with nested emphasis (<strong>H<sub>2</sub>O</sub></strong>) rather than degrading to plain text the way it did before the schema field existed.
+      appendNested(
+        element,
+        mergeStyle(style, {
+          verticalAlign: element.tag === "sup" ? "superscript" : "subscript",
+        }),
+        context,
+        runs,
+        constructs,
+      );
       return;
     }
     case "br":
@@ -161,7 +165,7 @@ function appendElement(
   }
 }
 
-// appendElement is buildInlineRuns's own per-node dispatch, and buildInlineRuns is called from every container that hands its children straight to run-building with no block-splitting step of its own first: a heading's own children directly, and every readContainerChildren-routed container's own inline segments between block-level siblings (a <p>'s, a <figcaption>'s, a <dt>'s/<dd>'s, a table cell's, a <caption>'s -- all via src/xhtml/read.ts, ExaDev/documents.js#1023 having moved the latter four off a bare buildInlineRuns call). Only readContainerChildren ever splits a direct-child <img> out into its own ContentImageBlock (see that module's own <p>-with-a-direct-<img> gotcha) -- everywhere else this case fires, an <img> sitting several levels deep inside a <span>/<a> (nested inside any container, readContainerChildren-routed or not), appendElement's recursion has already committed to producing a flat ContentRun[] with no block list to insert a sibling image block into. Rather than let the image vanish the way falling through to appendNested (which recurses into a childless <img> and yields nothing) would, this degrades it to its alt text -- the same honest degrade-with-diagnostic policy this file already applies to <sub>/<sup> and src/xhtml/read.ts's own readImage applies to an unresolved or unsupported-format image.
+// appendElement is buildInlineRuns's own per-node dispatch, and buildInlineRuns is called from every container that hands its children straight to run-building with no block-splitting step of its own first: a heading's own children directly, and every readContainerChildren-routed container's own inline segments between block-level siblings (a <p>'s, a <figcaption>'s, a <dt>'s/<dd>'s, a table cell's, a <caption>'s -- all via src/xhtml/read.ts, ExaDev/documents.js#1023 having moved the latter four off a bare buildInlineRuns call). Only readContainerChildren ever splits a direct-child <img> out into its own ContentImageBlock (see that module's own <p>-with-a-direct-<img> gotcha) -- everywhere else this case fires, an <img> sitting several levels deep inside a <span>/<a> (nested inside any container, readContainerChildren-routed or not), appendElement's recursion has already committed to producing a flat ContentRun[] with no block list to insert a sibling image block into. Rather than let the image vanish the way falling through to appendNested (which recurses into a childless <img> and yields nothing) would, this degrades it to its alt text -- the same honest degrade-with-diagnostic policy src/xhtml/read.ts's own readImage applies to an unresolved or unsupported-format image.
 function appendImageFallback(
   element: XmlElement,
   style: InlineStyle,
