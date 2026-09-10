@@ -65,7 +65,9 @@
     "_test:workers": "vitest run --config vitest.workers.config.ts",
     "test:smoke": "turbo run _test:smoke",
     "_test:smoke": "vitest run --project smoke",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:corpus": "turbo run _test:corpus",
+    "_test:corpus": "vitest run --project corpus"
   },
   "keywords": [
     "doc",

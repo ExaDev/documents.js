@@ -8,9 +8,9 @@ import {
   slice,
 } from "./bytes";
 
-// Inline pictures, [MS-DOC] "Pictures": a picture character (U+0001, sprmCFSpec applied) names its own data through sprmCPicLocation, a signed 32-bit offset into the Data stream where a PICFAndOfficeArtData structure lives -- a PICF (68 bytes: type/size/border information) followed, for every producer this reader has seen, by a real OfficeArtInlineSpContainer ([MS-ODRAW] 2.2.15) regardless of PICF.mfpf.mm's own value, since [MS-DOC] states the `picture` field itself as that container's type. There is no simpler, non-OfficeArt path even for the plainest bitmap.
+// Inline pictures, [MS-DOC] "Pictures": a picture character (U+0001, sprmCFSpec applied) names its own data through sprmCPicLocation, a signed 32-bit offset into the Data stream where a PICFAndOfficeArtData structure lives -- a PICF (68 bytes: type/size/border information) followed by the picture's OfficeArt container chain. Word wraps the blip in an OfficeArtInlineSpContainer ([MS-ODRAW] 2.2.15); LibreOffice (verified against a real LibreOffice-produced corpus file) wraps it in a SpgrContainer with a property table and no InlineSp wrapper at all -- so the reader walks container headers forward from PICF's end until the blip's own record type appears, tolerating either producer's wrapper shape without looking inside any of them. There is no simpler, non-OfficeArt path even for the plainest bitmap.
 //
-// This reads exactly as much of that container as the common case needs: OfficeArtInlineSpContainer.shape (an OfficeArtSpContainer, [MS-ODRAW] 2.2.14) is skipped whole by its own record header's recLen, and the first entry of `rgfb` immediately after it -- an OfficeArtBStoreContainerFileBlock, in practice a single OfficeArtBlip record for one inline picture with no separate blip-store indirection -- is read directly. Only the two raster formats document-schema.js's ContentImageBlock can hold losslessly (OfficeArtBlipJPEG 0xF01D, OfficeArtBlipPNG 0xF01E) are decoded; every other blip kind (WMF/EMF/PICT metafiles, a raw DIB with no format this schema names, TIFF) is a genuinely different structure -- a metafile blip carries a further OfficeArtMetafileHeader and, for WMF/EMF, DEFLATE-compressed payload bytes; a DIB has no ContentImageBlock format token to hold it under at all without re-encoding pixels this package has no image codec to perform -- so those return undefined here rather than being mis-decoded, the identical "genuinely unimplemented, not approximated" convention the rest of this package's own scope table already follows for floating drawn objects (PlcfSpa/OfficeArt shapes generally) and text boxes, which this module does not attempt at all.
+// This reads exactly as much of that chain as the common case needs: the validated blip record the locator lands on is read directly -- in practice a single OfficeArtBlip record for one inline picture with no separate blip-store indirection -- and every wrapper container before it is skipped without being parsed at all. Only the two raster formats document-schema.js's ContentImageBlock can hold losslessly (OfficeArtBlipJPEG 0xF01D, OfficeArtBlipPNG 0xF01E) are decoded; every other blip kind (WMF/EMF/PICT metafiles, a raw DIB with no format this schema names, TIFF) is a genuinely different structure -- a metafile blip carries a further OfficeArtMetafileHeader and, for WMF/EMF, DEFLATE-compressed payload bytes; a DIB has no ContentImageBlock format token to hold it under at all without re-encoding pixels this package has no image codec to perform -- so those return undefined here rather than being mis-decoded, the identical "genuinely unimplemented, not approximated" convention the rest of this package's own scope table already follows for floating drawn objects (PlcfSpa/OfficeArt shapes generally) and text boxes, which this module does not attempt at all.
 
 const PICF_SIZE = 68;
 const PICF_MM_OFFSET = 6;
@@ -74,11 +74,12 @@ export function readInlinePicture(
     cursor += 1 + cchPicName;
   }
 
-  // OfficeArtInlineSpContainer.shape: an OfficeArtSpContainer, skipped whole by its own record header's recLen -- this reader has no need to look inside it (the shape's own fill/line/position properties, not the picture's own bytes).
-  const shapeHeader = readRecordHeader(dataStream, cursor);
-  cursor += RECORD_HEADER_SIZE + shapeHeader.recLen;
-
-  const blipHeader = readRecordHeader(dataStream, cursor);
+  // Locating the blip: the containers between PICF and the blip are wrapper shapes this reader has no need to look inside, and producers disagree on the nesting -- Word writes InlineSpContainer > SpContainer > blip, while LibreOffice (confirmed against a real LibreOffice-produced .doc corpus file, 2026-09-10) emits a chain whose container lengths do not walk to the blip (its property-table record's recLen spans past the blip entirely), so header-walking mis-parses it. The robust spelling-independent locator: scan forward from PICF's end for a record header whose type is a known blip, whose instance names a known rgbUid count, whose length stays inside the Data stream, and whose payload actually begins with that format's own file signature -- a validated blip, not merely a well-formed header. The signature check is what makes a false positive on wrapper bytes effectively impossible: no container prefix preceding a real blip starts with a PNG or JPEG signature at exactly the uid-and-tag-derived offset.
+  const found = findBlipRecord(dataStream, cursor);
+  if (found === undefined) {
+    return undefined;
+  }
+  const { header: blipHeader, offset: blipOffset } = found;
   const format = blipFormat(blipHeader.recType);
   if (format === undefined) return undefined;
 
@@ -89,7 +90,8 @@ export function readInlinePicture(
       : undefined;
   if (uidBytes === undefined) return undefined;
 
-  const blipDataStart = cursor + RECORD_HEADER_SIZE + uidBytes + BLIP_TAG_SIZE;
+  const blipDataStart =
+    blipOffset + RECORD_HEADER_SIZE + uidBytes + BLIP_TAG_SIZE;
   const blipDataLength = blipHeader.recLen - uidBytes - BLIP_TAG_SIZE;
   const blipBytes = slice(
     dataStream,
@@ -116,4 +118,56 @@ function blipFormat(recType: number): "jpeg" | "png" | undefined {
     default:
       return undefined;
   }
+}
+
+// The PNG and JPEG file signatures, the one-byte-prefix form OfficeArtBlip carries them under (rgbUid, then the one-byte tag, then raw file bytes).
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47];
+const JPEG_SIGNATURE = [0xff, 0xd8];
+
+function payloadHasSignature(
+  data: Uint8Array,
+  start: number,
+  signature: readonly number[],
+): boolean {
+  for (const [i, byte] of signature.entries()) {
+    if (data[start + i] !== byte) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** A record header at a known offset, the validated-blip scan's answer. */
+interface FoundBlip {
+  readonly header: RecordHeader;
+  readonly offset: number;
+}
+
+/** Scans forward from `from` for a validated blip record (see readInlinePicture's own locating note) -- every candidate header of a blip type must also carry a known rgbUid instance count, a length inside the stream, and payload bytes starting with its format's own file signature. */
+function findBlipRecord(data: Uint8Array, from: number): FoundBlip | undefined {
+  for (let at = from; at + RECORD_HEADER_SIZE <= data.length; at++) {
+    const header = readRecordHeader(data, at);
+    const format = blipFormat(header.recType);
+    if (format === undefined) {
+      continue;
+    }
+    const uidBytes = ONE_UID_INSTANCES.has(header.recInstance)
+      ? 16
+      : TWO_UID_INSTANCES.has(header.recInstance)
+        ? 32
+        : undefined;
+    if (uidBytes === undefined) {
+      continue;
+    }
+    const payloadStart = at + RECORD_HEADER_SIZE + uidBytes + BLIP_TAG_SIZE;
+    const signature = format === "png" ? PNG_SIGNATURE : JPEG_SIGNATURE;
+    if (
+      header.recLen > uidBytes + BLIP_TAG_SIZE &&
+      payloadStart + signature.length <= data.length &&
+      payloadHasSignature(data, payloadStart, signature)
+    ) {
+      return { header, offset: at };
+    }
+  }
+  return undefined;
 }

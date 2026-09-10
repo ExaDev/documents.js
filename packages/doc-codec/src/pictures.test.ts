@@ -7,7 +7,8 @@ import { INLINE_PICTURE } from "./text/special";
 
 describe("readDocContent inline pictures", () => {
   it("reads an inline picture's own PNG bytes and its size from PICMID's dxaGoal/dyaGoal", () => {
-    const pngBytes = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    // Signature-led, as every real PNG blip's payload begins ([MS-ODRAW]'s OfficeArtBlipPNG carries raw file bytes); the reader validates the signature when locating the blip.
+    const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4, 5]);
     const picLocation = 0x40;
     const { dataStreamBytes, picLocationGrpprl } = buildInlinePictureBytes(
       picLocation,
@@ -46,7 +47,7 @@ describe("readDocContent inline pictures", () => {
   });
 
   it("splits a paragraph carrying real text around an inline picture into separate blocks", () => {
-    const pngBytes = new Uint8Array([9, 9, 9]);
+    const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9, 9, 9]);
     const picLocation = 0x40;
     const { dataStreamBytes, picLocationGrpprl } = buildInlinePictureBytes(
       picLocation,
