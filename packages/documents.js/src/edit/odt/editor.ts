@@ -8,10 +8,15 @@ import type { Package, XmlElement } from "odf.js";
 import {
   decodePackage,
   encodePackage,
+  odfIndexWrapperTag,
   readOdfMetadata,
   writeEmbeddedObject,
 } from "odf.js";
-import type { Box, DivisionDescriptor } from "document-schema.js";
+import type {
+  Box,
+  ContentControlDescriptor,
+  DivisionDescriptor,
+} from "document-schema.js";
 import { patchOdfMetadataOnPackage } from "../../metadata/core-patch";
 import { resolveMetadataTimestamps } from "../../model/metadata";
 import { encodeXmlText } from "../../xml/entities";
@@ -41,6 +46,8 @@ export interface OdtBody {
   appendBookmarkEnd(name: string): void;
   // A division region: every append between openDivisionRegion and closeRegion lands inside the division's own text:section element -- the block-flow spelling of an ODF division, which LibreOffice itself writes as text:section around the content it groups. The descriptor drives the section's own attributes (text:name, text:protected, and a trailing text:section-source for a linked chapter), mirroring odf.js's own typed writer; the one field not carried is columnCount, which needs the section-style interning that writer's style machinery performs and this editor surface does not have. Regions nest to arbitrary depth.
   openDivisionRegion(descriptor: DivisionDescriptor): void;
+  // An index-wrapper region (text:table-of-content or one of its six siblings around the extent's own text:index-body). Answers false when the descriptor's *-source residue names no recognisable wrapper -- there is then no fact saying which of the seven to write.
+  openIndexRegion(descriptor: ContentControlDescriptor): boolean;
   closeRegion(): void;
 }
 
@@ -79,8 +86,8 @@ function findOfficeText(contentRoot: XmlElement): XmlElement {
 
 class OdtBodyImpl implements OdtBody {
   // The text:section elements of every division region currently open, innermost last, each with its still-unwritten text:section-source (a linked section's source element follows the section's children in the ODF schema, so it is spliced on at close). Appends target the innermost open section's own children and fall back to office:text when none is open.
-  private readonly openDivisions: {
-    section: XmlElement;
+  private readonly openRegions: {
+    container: XmlElement;
     linked: DivisionDescriptor["linked"];
   }[] = [];
 
@@ -91,7 +98,7 @@ class OdtBodyImpl implements OdtBody {
 
   private containerChildren(): XmlElement["children"] {
     return (
-      this.openDivisions.at(-1)?.section.children ?? this.officeText.children
+      this.openRegions.at(-1)?.container.children ?? this.officeText.children
     );
   }
 
@@ -203,11 +210,46 @@ class OdtBodyImpl implements OdtBody {
       children: [],
     };
     this.containerChildren().push(section);
-    this.openDivisions.push({ section, linked: descriptor.linked });
+    this.openRegions.push({ container: section, linked: descriptor.linked });
+  }
+
+  openIndexRegion(descriptor: ContentControlDescriptor): boolean {
+    // An index wrapper region: the blocks between the markers land inside the wrapper's own text:index-body, mirroring odf.js's writeOdfIndexWrapper element for element (text:name when the descriptor carries a tag, a BARE *-source child the ODF schema requires every real wrapper to carry, and the index-body the appends target). The wrapper TAG itself -- which of the seven ODF index wrappers this is -- is recoverable only from the descriptor's *-source residue (odfIndexWrapperTag's own rule), so a descriptor without one has no fact naming the wrapper and answers false, which the caller treats as a refusal.
+    let tag: string;
+    try {
+      tag = odfIndexWrapperTag(descriptor);
+    } catch {
+      return false;
+    }
+    const attributes: { name: string; value: string }[] = [];
+    if (descriptor.tag !== undefined) {
+      attributes.push({
+        name: "text:name",
+        value: encodeXmlText(descriptor.tag),
+      });
+    }
+    const indexBody: XmlElement = {
+      type: "element",
+      tag: "text:index-body",
+      attributes: [],
+      children: [],
+    };
+    const wrapper: XmlElement = {
+      type: "element",
+      tag,
+      attributes,
+      children: [
+        { type: "element", tag: `${tag}-source`, attributes: [], children: [] },
+        indexBody,
+      ],
+    };
+    this.containerChildren().push(wrapper);
+    this.openRegions.push({ container: indexBody, linked: undefined });
+    return true;
   }
 
   closeRegion(): void {
-    const entry = this.openDivisions.pop();
+    const entry = this.openRegions.pop();
     if (entry === undefined) {
       return;
     }
@@ -223,7 +265,7 @@ class OdtBodyImpl implements OdtBody {
           value: encodeXmlText(entry.linked.sectionName),
         });
       }
-      entry.section.children.push({
+      entry.container.children.push({
         type: "element",
         tag: "text:section-source",
         attributes: sourceAttributes,

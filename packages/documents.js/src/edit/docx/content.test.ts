@@ -504,6 +504,133 @@ describe("buildDocxPackage", () => {
     expect(insideText).not.toContain("outside");
   });
 
+  it("round-trips a tracked-change construct pair through a real w:del region, with delText spelling", () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "constructStart",
+            descriptor: {
+              kind: "provenance",
+              change: "deletion",
+              author: "A. N. Author",
+              dateIso: "2026-09-10T10:00:00Z",
+            },
+          },
+          { kind: "paragraph", runs: [{ text: "gone in this revision" }] },
+          { kind: "constructEnd" },
+          { kind: "paragraph", runs: [{ text: "still here" }] },
+        ],
+      },
+    ]);
+    const rereadDoc = readDocxContent(buildDocxPackage(content));
+    if (rereadDoc.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const marker = rereadDoc.sections[0]!.blocks[0];
+    if (marker?.kind !== "constructStart") {
+      throw new Error("expected the first block to be the construct marker");
+    }
+    expect(marker.descriptor).toEqual({
+      kind: "provenance",
+      change: "deletion",
+      author: "A. N. Author",
+      dateIso: "2026-09-10T10:00:00Z",
+    });
+
+    // The deleted paragraph is genuinely inside the w:del, its runs spell w:delText, and the live paragraph stays outside with plain w:t.
+    const pkg = buildDocxPackage(content);
+    const documentRoot = rootElement(pkg.parts["word/document.xml"]);
+    if (documentRoot === undefined) {
+      throw new Error("expected a word/document.xml root element");
+    }
+    const dels = descendants(documentRoot, "w:del");
+    expect(dels).toHaveLength(1);
+    expect(textContent(dels[0]!)).toContain("gone in this revision");
+    expect(
+      dels[0]!.children.some((c) => c.type === "element" && c.tag === "w:p"),
+    ).toBe(true);
+    expect(descendants(dels[0]!, "w:delText")).toHaveLength(1);
+    expect(descendants(dels[0]!, "w:t")).toHaveLength(0);
+    const liveTexts = descendants(documentRoot, "w:t");
+    expect(liveTexts.some((t) => textContent(t) === "still here")).toBe(true);
+  });
+
+  it("round-trips an insertion region as w:ins with author and date", () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "constructStart",
+            descriptor: { kind: "provenance", change: "insertion" },
+          },
+          { kind: "paragraph", runs: [{ text: "newly added" }] },
+          { kind: "constructEnd" },
+        ],
+      },
+    ]);
+    const rereadDoc = readDocxContent(buildDocxPackage(content));
+    if (rereadDoc.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const marker = rereadDoc.sections[0]!.blocks[0];
+    if (marker?.kind !== "constructStart") {
+      throw new Error("expected the first block to be the construct marker");
+    }
+    // An author/date-free insertion reads back with exactly the fields the source stated -- no invented author, no minted date.
+    expect(marker.descriptor).toEqual({
+      kind: "provenance",
+      change: "insertion",
+    });
+    const pkg = buildDocxPackage(content);
+    const documentRoot = rootElement(pkg.parts["word/document.xml"]);
+    if (documentRoot === undefined) {
+      throw new Error("expected a word/document.xml root element");
+    }
+    const insElements = descendants(documentRoot, "w:ins");
+    expect(insElements).toHaveLength(1);
+    expect(textContent(insElements[0]!)).toContain("newly added");
+    // An insertion's runs stay plain w:t -- only deletions and move-froms re-spell.
+    expect(descendants(insElements[0]!, "w:t")).toHaveLength(1);
+    expect(descendants(insElements[0]!, "w:delText")).toHaveLength(0);
+  });
+
+  it("drops a formatChange pair by name rather than half-writing it", () => {
+    // formatChange has no block-level element (its Word spellings are property-layer w:rPrChange/w:pPrChange), so the pair restores nothing on read and the written document carries no wrapper for it.
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "constructStart",
+            descriptor: { kind: "provenance", change: "formatChange" },
+          },
+          { kind: "paragraph", runs: [{ text: "reformatted" }] },
+          { kind: "constructEnd" },
+        ],
+      },
+    ]);
+    const pkg = buildDocxPackage(content);
+    const documentRoot = rootElement(pkg.parts["word/document.xml"]);
+    if (documentRoot === undefined) {
+      throw new Error("expected a word/document.xml root element");
+    }
+    for (const tag of ["w:ins", "w:del", "w:moveFrom", "w:moveTo"]) {
+      expect(descendants(documentRoot, tag)).toHaveLength(0);
+    }
+    // The paragraph itself still writes -- dropping the pair is not dropping the content it bracketed.
+    expect(
+      descendants(documentRoot, "w:t").some(
+        (t) => textContent(t) === "reformatted",
+      ),
+    ).toBe(true);
+  });
+
   it("round-trips nested contentControl regions and a checkbox control's state", () => {
     const content = wordDoc([
       {
