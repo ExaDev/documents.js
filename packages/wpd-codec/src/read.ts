@@ -249,6 +249,7 @@ interface ReaderState {
   // The page furniture a D6 function has filled so far, per kind, keyed by the shared vocabulary's slots. A second function claiming a slot a first already filled is reported rather than overwritten -- WordPerfect's own A/B two-slot-per-kind mechanism is a shape the one-flow-per-slot vocabulary does not carry.
   readonly headers: ContentPageFurniture;
   readonly footers: ContentPageFurniture;
+  readonly watermarks: ContentPageFurniture;
   readonly furnitureFilled: Set<string>;
   // The note reference a D7 On function opened, or undefined when none is currently open. Abandoned at a paragraph boundary exactly like a merge FIELD, for the identical run-index reason.
   openNote:
@@ -982,7 +983,7 @@ function applyCharacterGroup(
 }
 
 // FIELD On opens a run-scoped extent at the run boundary it sits at; FIELD Off closes it and tags the runs in between as a FieldDescriptor construct, `instruction` being exactly the field-code text that flowed through as ordinary characters between the two -- so a merge field's own displayed spelling is both kept as real run content (a template genuinely shows its own field codes, not a merged result) and tagged as a placeholder rather than typed prose. Every other merge subfunction still reports through the diagnostic sink, unchanged.
-// Lifts a D6 header/footer function's body into the section's page furniture: the claim (which kind, which slot) comes from stream/furniture.ts's own subgroup + occurrence-byte reading, the body from the General WP Text packet the function's first prefix ID names -- folded through the identical tokeniser and fold the main document area uses, exactly as a box's own text content is. A watermark, a function whose claim narrows onto nothing, an unresolvable packet, or a second function claiming a slot a first already filled stays reported rather than guessed at.
+// Lifts a D6 header, footer, or watermark function's body into the section's page furniture: the claim (which kind, which slot) comes from stream/furniture.ts's own subgroup + occurrence-byte reading, the body from the General WP Text packet the function's first prefix ID names -- folded through the identical tokeniser and fold the main document area uses, exactly as a box's own text content is. A watermark is page furniture with a parity like the other two (its occurrence bits narrow onto the same slots) and lands in ContentSection.watermarks, its own field beside the headers/footers pair -- it is painted behind the body on every page it occurs on, not banded at a page edge. A function whose claim narrows onto nothing (suppressed on both parities in its own file), an unresolvable packet, or a second function claiming a slot a first already filled stays reported rather than guessed at.
 function applyHeaderFooterGroup(
   state: ReaderState,
   token: Extract<WpdToken, { kind: "variableFunction" }>,
@@ -991,15 +992,6 @@ function applyHeaderFooterGroup(
 ): void {
   const claim = readFurnitureClaim(token.subgroup, token.nonDeletable);
   if (claim === "none") {
-    return;
-  }
-  if (claim === "watermark") {
-    reportOnce(
-      state,
-      sink,
-      WpdDiagnosticCodes.HeaderFooterDropped,
-      "This document declares a watermark, which is neither a header nor a footer and owns no parity -- the shared page-furniture vocabulary has no slot for one.",
-    );
     return;
   }
   const slotKey = `${claim.kind}:${claim.slot}`;
@@ -1017,7 +1009,12 @@ function applyHeaderFooterGroup(
     return;
   }
   state.furnitureFilled.add(slotKey);
-  const furniture = claim.kind === "header" ? state.headers : state.footers;
+  const furniture =
+    claim.kind === "header"
+      ? state.headers
+      : claim.kind === "footer"
+        ? state.footers
+        : state.watermarks;
   furniture[claim.slot] = blocks;
 }
 
@@ -1038,7 +1035,7 @@ function furnitureBodyBlocks(
       state,
       sink,
       WpdDiagnosticCodes.HeaderFooterDropped,
-      "This document declares a header or footer whose body packet this reader could not resolve; it was not lifted.",
+      "This document declares a header, footer, or watermark whose body packet this reader could not resolve; it was not lifted.",
     );
     return undefined;
   }
@@ -1048,7 +1045,7 @@ function furnitureBodyBlocks(
       state,
       sink,
       WpdDiagnosticCodes.HeaderFooterDropped,
-      "This document declares a header or footer whose body packet this reader could not read; it was not lifted.",
+      "This document declares a header, footer, or watermark whose body packet this reader could not read; it was not lifted.",
     );
     return undefined;
   }
@@ -1495,6 +1492,7 @@ interface FoldResult {
   readonly page: PageState;
   readonly headers: ContentPageFurniture;
   readonly footers: ContentPageFurniture;
+  readonly watermarks: ContentPageFurniture;
   readonly notes: readonly WpdNoteDefinition[];
   readonly oleObjects: readonly WpdOleObject[];
 }
@@ -1569,6 +1567,7 @@ function foldTokens(
     openMergeFieldStartRun: undefined,
     headers: {},
     footers: {},
+    watermarks: {},
     furnitureFilled: new Set(),
     openNote: undefined,
     notes: [],
@@ -1594,6 +1593,7 @@ function foldTokens(
     page: state.page,
     headers: state.headers,
     footers: state.footers,
+    watermarks: state.watermarks,
     notes: state.notes,
     oleObjects: state.oleObjects,
   };
@@ -1620,11 +1620,8 @@ export function readWpdContent(
     container.documentAreaOffset,
     container.documentAreaEnd,
   );
-  const { blocks, page, headers, footers, notes, oleObjects } = foldTokens(
-    tokens,
-    container,
-    sink,
-  );
+  const { blocks, page, headers, footers, watermarks, notes, oleObjects } =
+    foldTokens(tokens, container, sink);
   // The note bodies' real home is the tree form's definitions table, which the flat form cannot reach -- readWpd carries them. Each still-borne body says so here rather than passing in silence; the anchor itself is in the blocks.
   for (const note of notes) {
     sink({
@@ -1656,6 +1653,7 @@ export function readWpdContent(
         },
         ...(Object.keys(headers).length > 0 ? { headers } : {}),
         ...(Object.keys(footers).length > 0 ? { footers } : {}),
+        ...(Object.keys(watermarks).length > 0 ? { watermarks } : {}),
         blocks,
       },
     ],
@@ -1700,6 +1698,9 @@ export function readWpd(
           : {}),
         ...(Object.keys(flatRest.footers).length > 0
           ? { footers: flatRest.footers }
+          : {}),
+        ...(Object.keys(flatRest.watermarks).length > 0
+          ? { watermarks: flatRest.watermarks }
           : {}),
         blocks: flatRest.blocks,
       },

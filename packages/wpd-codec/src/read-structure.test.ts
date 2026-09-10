@@ -608,11 +608,10 @@ describe("document metadata", () => {
 });
 
 describe("constructs this reader does not lift", () => {
-  // Each of these is recognised by the tokeniser and skipped by the fold, so a document containing it still reads -- and says what it lost rather than passing over it in silence. Group 0xD6 no longer appears here: a header or footer function is LIFTED into ContentSection.headers/footers (see the page-furniture describe below), and the watermark subfunction -- the one D6 shape the vocabulary has no slot for -- needs its own subgroup, which the empty-occurrence default of these bare fixtures cannot state.
+  // Each of these is recognised by the tokeniser and skipped by the fold, so a document containing it still reads -- and says what it lost rather than passing over it in silence. Group 0xD6 no longer appears here: a header, footer, or watermark function is LIFTED into ContentSection.headers/footers/watermarks (see the page-furniture describe below), and a function whose occurrence bits claim neither parity is suppressed in its own file and lifts nothing with nothing to report.
   it.each([
     [0xdf, WpdDiagnosticCodes.BoxDropped, 0x00],
     [0xd7, WpdDiagnosticCodes.NoteDropped, 0x00],
-    [0xd6, WpdDiagnosticCodes.HeaderFooterDropped, 0x04],
     [0xd5, WpdDiagnosticCodes.CrossReferenceFlattened, 0x00],
     [0xde, WpdDiagnosticCodes.MergeCodeDropped, 0x00],
   ])(
