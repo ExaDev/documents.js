@@ -379,6 +379,80 @@ describe("readDocContent", () => {
     ).toEqual(["second section"]);
   });
 
+  it("reads a manual page break -- a 0x000C where no section ends -- as a pageBreak block after the paragraph it terminates", () => {
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "before the break" }],
+            mark: SECTION_MARK,
+            pageBreak: true,
+          },
+          { runs: [{ text: "after the break" }] },
+        ],
+        // One section only: the page break's 0x000C opens no section boundary, which is exactly what distinguishes it from the end-of-section character of the identical value ([MS-DOC]'s own PlcfSed.aCP text: "An end-of-section character (0x0C) which occurs at a CP and which is not the last character in a section specifies a manual page break").
+        sectionGrpprl: SECTION_GEOMETRY,
+      }),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error("a .doc always reads back as a wordprocessing document");
+    }
+    expect(document.sections).toHaveLength(1);
+    expect(document.sections[0]?.blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "before the break" }] },
+      { kind: "pageBreak" },
+      { kind: "paragraph", runs: [{ text: "after the break" }] },
+    ]);
+  });
+
+  it("reads a manual page break and a genuine section boundary in the same document without conflating the two", () => {
+    // A second geometry, deliberately different from SECTION_GEOMETRY in every field, so the two sections' own properties prove the boundary landed where the real section mark is, not where the page break is.
+    const SECOND_GEOMETRY = [0x1f, 0xb0, 0x40, 0x1f, 0x20, 0xb0, 0xa0, 0x27];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          { runs: [{ text: "one" }], mark: SECTION_MARK, pageBreak: true },
+          { runs: [{ text: "two" }], mark: SECTION_MARK },
+          { runs: [{ text: "three" }] },
+        ],
+        sections: [SECTION_GEOMETRY, SECOND_GEOMETRY],
+      }),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error("a .doc always reads back as a wordprocessing document");
+    }
+    expect(document.sections).toHaveLength(2);
+    // The first 0x000C is a page break (no PlcfSed boundary follows it), so its paragraph carries the break block and stays inside section one; the second is the real end of section one, which never gains a break block of its own.
+    expect(document.sections[0]?.blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "one" }] },
+      { kind: "pageBreak" },
+      { kind: "paragraph", runs: [{ text: "two" }] },
+    ]);
+    expect(document.sections[1]?.blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "three" }] },
+    ]);
+  });
+
+  it("reads an empty paragraph terminated by a manual page break as [empty paragraph, pageBreak], the shape a break with no preceding text has", () => {
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          { runs: [], mark: SECTION_MARK, pageBreak: true },
+          { runs: [{ text: "following" }] },
+        ],
+        sectionGrpprl: SECTION_GEOMETRY,
+      }),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error("a .doc always reads back as a wordprocessing document");
+    }
+    expect(document.sections[0]?.blocks).toEqual([
+      { kind: "paragraph", runs: [] },
+      { kind: "pageBreak" },
+      { kind: "paragraph", runs: [{ text: "following" }] },
+    ]);
+  });
+
   it("reads footnotes, endnotes, and comments as plain text, one story per subdocument", () => {
     const document = readDocContent(
       buildDoc({
