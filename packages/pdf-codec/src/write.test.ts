@@ -1,5 +1,5 @@
-import { encodePng } from "byte-codec";
-import { bytesToBase64 } from "./util/base64";
+import { decodePng, encodePng } from "byte-codec";
+import { base64ToBytes, bytesToBase64 } from "./util/base64";
 import { describe, expect, it } from "vitest";
 import type {
   LayoutDocument,
@@ -381,6 +381,102 @@ describe("writePdf: images", () => {
     expect(text).toContain("/Width 3");
     expect(text).toContain("/Height 2");
     expect(text).toContain("/ColorSpace /DeviceRGB");
+  });
+
+  it("writes a bilevel image as CCITT Group 4 when that is smaller than Flate, and reads it back (#975)", async () => {
+    // A diagonal edge: every row shifts the black/white boundary one pixel right, so each row codes as two vertical-mode offsets against the previous one -- the vertically coherent shape CCITT Group 4 exists for (a real scan's edges and text baselines behave exactly this way). Decorrelated noise would instead be deflate's own best case, which is what the pick-the-smaller rule protects onto Flate.
+    const width = 96;
+    const height = 96;
+    const data = new Uint8Array(width * height);
+    for (let y = 0; y < height; y++) {
+      const edge = 20 + (y % 56);
+      for (let x = 0; x < width; x++) {
+        data[y * width + x] = x < edge ? 255 : 0;
+      }
+    }
+    const bytes = encodePng({ width, height, channels: 1, data });
+    const doc = docWithPages(
+      [
+        {
+          widthPt: 100,
+          heightPt: 100,
+          items: [
+            {
+              kind: "image",
+              imageId: "scan",
+              xPt: 0,
+              yPt: 0,
+              widthPt: 50,
+              heightPt: 50,
+            },
+          ],
+        },
+      ],
+      {
+        scan: {
+          format: "png",
+          base64: bytesToBase64(bytes),
+          widthPx: width,
+          heightPx: height,
+        },
+      },
+    );
+    // compress defaults to true -- G4 is compression, so it sits behind the same option as Flate; the dictionary entries stay plain ASCII either way, only streams are flated.
+    const out = writePdf(doc);
+    const text = new TextDecoder("latin1").decode(out);
+    expect(text).toContain("/CCITTFaxDecode");
+    expect(text).toContain("/K -1");
+    expect(text).toContain("/BitsPerComponent 1");
+    // ...and the package's own reader decodes the G4 stream back to pixels: the recovered asset is a PNG whose samples equal the original checkerboard exactly.
+    const { readPdf } = await import("./read");
+    const reread = readPdf(out);
+    const imageItem = reread.pages[0]!.items.find(
+      (item): item is Extract<LayoutItem, { kind: "image" }> =>
+        item.kind === "image",
+    );
+    expect(imageItem).toBeDefined();
+    const asset = reread.images[imageItem!.imageId];
+    expect(asset?.format).toBe("png");
+    const recovered = decodePng(base64ToBytes(asset!.base64));
+    expect(recovered.width).toBe(width);
+    expect(recovered.height).toBe(height);
+    expect(Array.from(recovered.data)).toEqual(Array.from(data));
+  });
+
+  it("keeps Flate for a genuinely greyscale image and for a bilevel image with a soft mask", () => {
+    // Greyscale intermediate values have no G4 spelling; a soft mask would need its own separate stream, so both stay on the ordinary path.
+    const grey = new Uint8Array(new ArrayBuffer(4 * 4)).fill(128);
+    const greyDoc = docWithPages(
+      [
+        {
+          widthPt: 100,
+          heightPt: 100,
+          items: [
+            {
+              kind: "image",
+              imageId: "g",
+              xPt: 0,
+              yPt: 0,
+              widthPt: 50,
+              heightPt: 50,
+            },
+          ],
+        },
+      ],
+      {
+        g: {
+          format: "png",
+          base64: bytesToBase64(
+            encodePng({ width: 4, height: 4, channels: 1, data: grey }),
+          ),
+          widthPx: 4,
+          heightPx: 4,
+        },
+      },
+    );
+    const greyText = new TextDecoder("latin1").decode(writePdf(greyDoc));
+    expect(greyText).toContain("/FlateDecode");
+    expect(greyText).not.toContain("/CCITTFaxDecode");
   });
 
   it("throws when a LayoutImage references an imageId missing from the images registry", () => {

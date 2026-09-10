@@ -9,6 +9,7 @@ import {
   encryptIndirectObject,
 } from "./encrypt-write";
 import { readJpegInfo } from "./image/jpeg-info";
+import { encodeCcittFax } from "./image/ccitt-encode";
 import { decodePng } from "./image/png-decode";
 import type { LayoutFont, PositionedFormula } from "document-schema.js";
 import type {
@@ -44,6 +45,7 @@ import { createFontMeasurer } from "./measure";
 import type { PdfDict, PdfObject } from "./objects";
 import {
   pdfArray,
+  pdfBool,
   pdfDict,
   pdfHexString,
   pdfName,
@@ -293,12 +295,79 @@ function pngImageDict(
   return pdfDict(entries);
 }
 
+// A bilevel (every sample 0 or 255) 8-bit grayscale decode re-packed to the 1-bit-per-pixel layout the CCITT encoder consumes: 255 -> 1 (white), 0 -> 0 (black), MSB first, rows padded to whole bytes. Undefined when any sample is intermediate -- a genuinely greyscale image has no G4 spelling and stays on the Flate path.
+function packBilevel(raw: {
+  readonly width: number;
+  readonly height: number;
+  readonly data: Uint8Array;
+}): Uint8Array | undefined {
+  const rowBytes = (raw.width + 7) >> 3;
+  const packed = new Uint8Array(rowBytes * raw.height);
+  for (let y = 0; y < raw.height; y++) {
+    for (let x = 0; x < raw.width; x++) {
+      const sample = raw.data[y * raw.width + x] ?? 0;
+      if (sample !== 0 && sample !== 255) {
+        return undefined;
+      }
+      if (sample === 255) {
+        const index = y * rowBytes + (x >> 3);
+        packed[index] = (packed[index] ?? 0) | (0x80 >> (x & 7));
+      }
+    }
+  }
+  return packed;
+}
+
 function preparePngImage(
   bytes: Uint8Array<ArrayBuffer>,
   compress: boolean,
 ): PreparedImage {
   const raw = decodePng(bytes);
   const colorSpace = raw.channels === 1 ? "DeviceGray" : "DeviceRGB";
+  // A bilevel grayscale image with no soft mask is the exact shape CCITT Group 4 was built for (a fax or a 1-bit scan): when the G4 encoding comes out smaller than Flate over the same pixels -- which for real bilevel content it does by an order of magnitude -- the image is written as /CCITTFaxDecode with K -1, recovering the compression a scanned-document source originally carried instead of regressing it to Flate (#975). Whichever encoding is smaller wins, deterministically, so noise-heavy bilevel images where Flate happens to win keep it.
+  if (compress && raw.channels === 1 && raw.alpha === undefined) {
+    const bilevel = packBilevel(raw);
+    if (bilevel !== undefined) {
+      const g4 = encodeCcittFax(bilevel, {
+        columns: raw.width,
+        rows: raw.height,
+      });
+      const flate = deflate(raw.data);
+      if (g4.length < flate.length) {
+        return {
+          dict: pdfDict(
+            new Map<string, PdfObject>([
+              ["Type", pdfName("XObject")],
+              ["Subtype", pdfName("Image")],
+              ["Width", pdfNum(raw.width)],
+              ["Height", pdfNum(raw.height)],
+              ["ColorSpace", pdfName("DeviceGray")],
+              ["BitsPerComponent", pdfNum(1)],
+              ["Filter", pdfName("CCITTFaxDecode")],
+              [
+                "DecodeParms",
+                pdfDict(
+                  new Map<string, PdfObject>([
+                    ["K", pdfNum(-1)],
+                    ["Columns", pdfNum(raw.width)],
+                    ["Rows", pdfNum(raw.height)],
+                    ["BlackIs1", pdfBool(false)],
+                  ]),
+                ),
+              ],
+            ]),
+          ),
+          raw: g4,
+          alpha: undefined,
+        };
+      }
+      return {
+        dict: pngImageDict(raw.width, raw.height, colorSpace, true),
+        raw: flate,
+        alpha: undefined,
+      };
+    }
+  }
   const dict = pngImageDict(raw.width, raw.height, colorSpace, compress);
   const data = compress ? deflate(raw.data) : raw.data;
   const alpha =
