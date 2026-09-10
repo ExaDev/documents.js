@@ -748,7 +748,7 @@ export function writePdf(
     layerNumByName.set(layer.name, nextObjNum++);
   }
 
-  // #967: the AcroForm field tree. One object per field (terminal or group); a terminal field with more than one widget spends one further object per widget beyond the first (widgets after the first are separate /Subtype /Widget kids, while a single widget merges into the field dict itself -- the merged-field/widget spelling the reader's own comment names).
+  // #967: the AcroForm field tree. One object per field (terminal or group); a terminal field with more than one widget spends one further object per WIDGET (each is a separate /Subtype /Widget kid and must be an indirect object of its own, because a page's /Annots array references the same annotation object the field's /Kids does — the spelling Acrobat's own files carry, per ISO 32000-1 12.5.1's rule that an annotation appears in the /Annots array of exactly the one page it is associated with). A single-widget field still merges the widget into the field dict itself — the merged-field/widget spelling the reader's own comment names — with that one dict serving as its page's /Annots entry.
   const formObjectNums: number[] = [];
   const countFieldObjects = (fields: readonly LayoutFormField[]): number => {
     let n = 0;
@@ -756,7 +756,7 @@ export function writePdf(
       n +=
         1 +
         (field.fieldType !== "group" && field.widgets.length > 1
-          ? field.widgets.length - 1
+          ? field.widgets.length
           : 0) +
         countFieldObjects(field.children);
     }
@@ -774,7 +774,7 @@ export function writePdf(
       if (field.fieldType !== "group" && field.widgets.length > 1) {
         formExtraWidgetNums.set(
           field,
-          field.widgets.slice(1).map(() => formObjectNums[formNumCursor++]!),
+          field.widgets.map(() => formObjectNums[formNumCursor++]!),
         );
       }
       claimFormNums(field.children);
@@ -1011,7 +1011,19 @@ export function writePdf(
     });
   }
 
-  // #967: the AcroForm field tree. A terminal field's FIRST widget merges into the field dict itself (/Subtype /Widget /Rect /P alongside /FT and friends); further widgets are separate widget-kid objects under /Kids, and a group is a bare /T + /Kids node. Fully-qualified names decompose back into the /T chain: a root field carries its whole name, a nested field carries the segment beyond its parent's, exactly the join the reader re-applies (ISO 32000-1 12.7.3.2).
+  // #967: the AcroForm field tree. A terminal field's FIRST widget merges into the field dict itself (/Subtype /Widget /Rect /P alongside /FT and friends) when it is the field's only one; a multi-widget field keeps every widget as a separate widget-kid object under /Kids, each also referenced from its page's /Annots. A group is a bare /T + /Kids node. Fully-qualified names decompose back into the /T chain: a root field carries its whole name, a nested field carries the segment beyond its parent's, exactly the join the reader re-applies (ISO 32000-1 12.7.3.2). Each widget's page /Annots entry, gathered during emission in field order: the merged field dict itself for a single-widget field (it IS the annotation), the widget kid object for the others. A viewer that renders only page-level /Annots — and the spec's own presentation model points it there (ISO 32000-1 12.5.1) — sees every widget without knowing the AcroForm tree at all.
+  const widgetAnnotsByPage = new Map<number, PdfObject[]>();
+  const noteWidgetAnnot = (
+    widget: LayoutFormField["widgets"][number],
+    ref: PdfObject,
+  ): void => {
+    const existing = widgetAnnotsByPage.get(widget.pageIndex);
+    if (existing === undefined) {
+      widgetAnnotsByPage.set(widget.pageIndex, [ref]);
+    } else {
+      existing.push(ref);
+    }
+  };
   const widgetRectArray = (
     widget: LayoutFormField["widgets"][number],
   ): PdfObject =>
@@ -1125,16 +1137,21 @@ export function writePdf(
             "P",
             pdfRef(pageAllocs[firstWidget.pageIndex]!.pageNum, 0),
           ]);
+          // The merged field dict is the annotation: its page /Annots entry references this very object, not a copy of it.
+          noteWidgetAnnot(firstWidget, pdfRef(formNumOf(field), 0));
         } else if (field.widgets.length > 1 && firstWidget !== undefined) {
-          // The first widget is inline inside /Kids (no object of its own); each further widget is one of the extra objects the allocation walk reserved.
+          // Every widget is one of the extra objects the allocation walk reserved, referenced from /Kids and from its page's /Annots alike — the same annotation object in both places, never a copy.
           const extraNums = formExtraWidgetNums.get(field) ?? [];
           entries.push([
             "Kids",
-            pdfArray([
-              widgetDict(firstWidget),
-              ...extraNums.map((num) => pdfRef(num, 0)),
-            ]),
+            pdfArray(extraNums.map((num) => pdfRef(num, 0))),
           ]);
+          for (const [index, num] of extraNums.entries()) {
+            const widget = field.widgets[index];
+            if (widget !== undefined) {
+              noteWidgetAnnot(widget, pdfRef(num, 0));
+            }
+          }
         }
       }
       objects.push({
@@ -1143,8 +1160,10 @@ export function writePdf(
       });
       const extraNums = formExtraWidgetNums.get(field) ?? [];
       for (const [index, num] of extraNums.entries()) {
-        const widget = field.widgets[index + 1]!;
-        objects.push({ num, value: widgetDict(widget) });
+        const widget = field.widgets[index];
+        if (widget !== undefined) {
+          objects.push({ num, value: widgetDict(widget) });
+        }
       }
       emitFormFieldObjects(field.children, field.name);
     }
@@ -1474,6 +1493,8 @@ export function writePdf(
     if (page.notes !== undefined && page.notes.length > 0) {
       annots.push(buildNotesAnnotDict(page.notes));
     }
+    // The page's form-field widgets, in field order: riding /Annots alongside the links and notes so a viewer that never walks the AcroForm tree still renders them. These are references to the very objects the field tree owns, not copies — annotations.ts's own /Annots walk skips /Subtype /Widget for exactly this reason.
+    annots.push(...(widgetAnnotsByPage.get(pageIndex) ?? []));
 
     const pageEntries = new Map<string, PdfObject>([
       ["Type", pdfName("Page")],
