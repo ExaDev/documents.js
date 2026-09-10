@@ -104,6 +104,48 @@ describe("writeXhtmlBody", () => {
     expect(roundTrip(blocks)).toEqual(blocks);
   });
 
+  it("writes and re-reads a paragraph's and a run's direction", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        direction: "rtl",
+        runs: [{ text: "a", direction: "rtl" }, { text: "b" }],
+      },
+      {
+        kind: "paragraph",
+        headingLevel: 2,
+        direction: "ltr",
+        runs: [{ text: "h" }],
+      },
+      {
+        kind: "paragraph",
+        preformatted: true,
+        direction: "rtl",
+        runs: [{ text: "code", fontFamily: "Courier New" }],
+      },
+    ];
+    const xml = write(blocks);
+    expect(xml).toContain('<p dir="rtl">');
+    expect(xml).toContain('<span dir="rtl">a</span>');
+    expect(xml).toContain('<h2 dir="ltr">');
+    expect(xml).toContain('<pre dir="rtl">');
+    expect(roundTrip(blocks)).toEqual(blocks);
+  });
+
+  it("wraps a direction-carrying list item's anchor paragraph in its own <p dir>, rather than dropping the direction on unwrapped inline nodes", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        direction: "rtl",
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+        runs: [{ text: "item text" }],
+      },
+    ];
+    const xml = write(blocks);
+    expect(xml).toContain('<li><p dir="rtl">item text</p></li>');
+    expect(roundTrip(blocks)).toEqual(blocks);
+  });
+
   it("writes and re-reads a hyperlink", () => {
     const blocks: ContentBlock[] = [
       {

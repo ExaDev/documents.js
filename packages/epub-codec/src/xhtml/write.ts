@@ -126,7 +126,7 @@ function writeHeading(
   const level = Math.min(6, Math.max(1, group.node.headingLevel));
   return element(
     `h${String(level)}`,
-    {},
+    directionAttrs(group.node),
     writeRunsToNodes(group.node.runs, group.node.constructs, context),
   );
 }
@@ -272,6 +272,11 @@ function isHorizontalRuleParagraph(paragraph: ContentParagraph): boolean {
   );
 }
 
+// The dir attribute a paragraph's own direction states -- XHTML's global attribute, the same spelling on every container this writer emits it on (<p>, <h1-6>, <pre>, and a <p> wrapper forced inside an <li>). A paragraph carrying no direction writes no dir at all, matching the field's own "absent means unstated" contract.
+function directionAttrs(paragraph: ContentParagraph): Record<string, string> {
+  return paragraph.direction === undefined ? {} : { dir: paragraph.direction };
+}
+
 function writePreElement(
   paragraph: ContentParagraph,
   context: XhtmlWriteContext,
@@ -280,7 +285,7 @@ function writePreElement(
     paragraph.codeLanguage === undefined
       ? {}
       : { class: `language-${paragraph.codeLanguage}` };
-  return element("pre", {}, [
+  return element("pre", directionAttrs(paragraph), [
     element(
       "code",
       codeAttrs,
@@ -301,7 +306,7 @@ function writeParagraph(
   }
   return element(
     "p",
-    {},
+    directionAttrs(paragraph),
     writeRunsToNodes(paragraph.runs, paragraph.constructs, context),
   );
 }
@@ -325,7 +330,10 @@ function writeParagraphAsEmbeddedNodes(
     paragraph.constructs,
     context,
   );
-  return wrapOrdinaryInParagraph ? [element("p", {}, runNodes)] : runNodes;
+  // A direction-carrying paragraph forces the same <p dir="..."> wrapper a later-in-group entry already gets: bare inline nodes have no element to carry the attribute, so leaving the first entry unwrapped would drop its direction even though every other shape of the same paragraph round-trips it.
+  return wrapOrdinaryInParagraph || paragraph.direction !== undefined
+    ? [element("p", directionAttrs(paragraph), runNodes)]
+    : runNodes;
 }
 
 // A run-level extent this writer renders as its own <a>: either document-schema.js's own AnchorTypeSchema "footnote" member, or a `link` construct whose target is internal (the run-level twin of the block-scoped bookmark construct group above -- see src/xhtml/inline.ts's appendAnchor for where this package's own reader produces one). Only these two are recognised -- a run-level construct extent whose anchorType is anything else (a bookmark, endnote, or comment range that ooxml.js's own docx reader can and does emit at run scope, e.g. runRangeMarkerExtents in src/typed/docx/constructs.ts) has no established EPUB spelling this reader's own read side already understands: this package's own reader never produces one of those from real EPUB content today, so inventing one here would be an unverified new write-only shape rather than a round-trippable convention. Reported through CONSTRUCT_UNREPRESENTED (reportUnhandledAnchorExtents below) rather than silently dropped -- the fix ExaDev/documents.js#1025 itself names as the acceptable alternative to full representation.
@@ -512,6 +520,10 @@ function writeRunNodes(run: ContentRun): XmlNode[] {
   });
   if (nodes.length === 0) {
     nodes = [text("")];
+  }
+  // A run-level direction rides the global dir attribute on its own <span>, innermost of the wrappers: no other run wrapper is guaranteed to exist (a plain-text run has none), and dir is legal on the span itself -- the inverse of src/xhtml/inline.ts's own withDirStyle, which reads the attribute off any inline element the same way.
+  if (run.direction !== undefined) {
+    nodes = [element("span", { dir: run.direction }, nodes)];
   }
   if (run.fontFamily === MONOSPACE_FONT_FAMILY) {
     nodes = [element("code", {}, nodes)];

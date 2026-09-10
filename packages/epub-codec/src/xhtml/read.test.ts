@@ -131,6 +131,22 @@ describe("paragraphs and inline styling", () => {
     expect(sink).not.toHaveBeenCalled();
   });
 
+  it("maps an inline dir attribute onto ContentRun.direction, leaving an unmarked sibling run unstated", () => {
+    const blocks = read(
+      body('<p>plain <span dir="rtl">rtl words</span> after</p>'),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [
+          { text: "plain " },
+          { text: "rtl words", direction: "rtl" },
+          { text: " after" },
+        ],
+      },
+    ]);
+  });
+
   it("maps <br> to a run holding a literal newline", () => {
     const blocks = read(body("<p>a<br/>b</p>"));
     expect(blocks).toEqual([
@@ -2163,6 +2179,61 @@ describe("div/section passthrough", () => {
   it("reads a div's children transparently", () => {
     const blocks = read(body("<div><p>inside</p></div>"));
     expect(blocks).toEqual([{ kind: "paragraph", runs: [{ text: "inside" }] }]);
+  });
+});
+
+describe("text direction (the dir attribute)", () => {
+  it("maps a block container's own dir onto every paragraph it produces", () => {
+    const blocks = read(
+      body(
+        '<p dir="rtl">one</p><h2 dir="ltr">two</h2><pre dir="rtl">three</pre>',
+      ),
+    );
+    expect(
+      blocks.map((b) => (b.kind === "paragraph" ? b.direction : undefined)),
+    ).toEqual(["rtl", "ltr", "rtl"]);
+  });
+
+  it("inherits a container's dir into arbitrarily nested paragraphs, with the nearest stated dir winning", () => {
+    // XHTML's dir attribute inherits: a <div dir="rtl"> governs its descendants until one states a dir of its own.
+    const blocks = read(
+      body(
+        '<div dir="rtl"><p>inherited</p><p dir="ltr">overridden</p>' +
+          "<div><section><p>still inherited</p></section></div></div>" +
+          "<p>outside</p>",
+      ),
+    );
+    expect(
+      blocks.map((b) => (b.kind === "paragraph" ? b.direction : undefined)),
+    ).toEqual(["rtl", "ltr", "rtl", undefined]);
+  });
+
+  it("carries the dir of an li, a dt/dd, and a table cell onto their own paragraphs", () => {
+    const blocks = read(
+      body(
+        '<ul><li dir="rtl">item</li></ul>' +
+          '<dl><dt dir="rtl">term</dt><dd dir="ltr">definition</dd></dl>',
+      ),
+    );
+    expect(
+      blocks.map((b) => (b.kind === "paragraph" ? b.direction : undefined)),
+    ).toEqual(["rtl", "rtl", "ltr"]);
+    const table = read(
+      body('<table><tr><td dir="rtl">cell</td></tr></table>'),
+    ).find((b) => b.kind === "table");
+    if (table === undefined) {
+      throw new Error("expected a table block");
+    }
+    const cellParagraph = table.rows[0]?.cells[0]?.blocks[0];
+    expect(
+      cellParagraph?.kind === "paragraph" ? cellParagraph.direction : undefined,
+    ).toBe("rtl");
+  });
+
+  it('leaves dir="auto" unmapped rather than guessing a direction for it', () => {
+    // dir="auto" resolves at render time from the content's own first strong character -- a fact ContentParagraph.direction's closed ltr/rtl vocabulary has no member for.
+    const blocks = read(body('<p dir="auto">words</p>'));
+    expect(blocks[0]).toEqual({ kind: "paragraph", runs: [{ text: "words" }] });
   });
 });
 
