@@ -28,7 +28,7 @@ import {
 
 // A worksheet's drawing layer (xl/drawings/drawingN.xml, reached through the worksheet's own relationships): the xlsx counterpart of pptx's chart/SmartArt/OLE readers. A chart graphic frame's cached series/category model is read through the SAME chart reader the pptx side uses (readChartTable), and lands as a ContentEmbeddedObject with objectKind 'chart' -- the one member that names what the frame held rather than a ContentDocument kind, carrying the cached model as a small spreadsheet document (one sheet whose cells are that table), because a sheet is the honest document-granularity spelling of tabular data and a xlsx sheet has no block flow to host a table block the way a pptx shape does. A picture (xdr:pic) resolves its a:blip through the drawing part's own relationships to the sniffed media bytes and lands as a ContentSheetImage -- the same blip-resolution contract as the pptx picture reader, anchor fields and frame resolved through the same grid geometry the chart row uses.
 //
-// Scope: all three anchor spellings a drawing part carries (charts and pictures), every spelling resolving to one placement shape -- a from-marker positions a two-cell or one-cell anchor through the same grid geometry, with the frame's size the to-marker difference (two-cell) or the anchor's own xdr:ext (one-cell, Excel's "Move, but don't size with cells" spelling for inserted pictures); an absoluteAnchor's page-absolute xdr:pos is re-based into the cell-relative anchor vocabulary through that same geometry's inverse (the nearest-cell landing #776 decides on, rather than a schema extension -- the geometry is a bijection between cell-plus-offset and absolute position, and the frame keeps the absolute position verbatim, so the re-basing loses nothing). Real-producer verification is outstanding: the fixtures this is built against are hand-built ECMA-376 markup, the corpus gate the construct inventory itself states.
+// Scope: all three anchor spellings a drawing part carries (charts and pictures), every spelling resolving to one placement shape -- a from-marker positions a two-cell or one-cell anchor through the same grid geometry, with the frame's size the producer's own transform extent when the anchor child states one (real producers' exact-EMU authority -- the grid's to-marker difference is the fallback, and the two genuinely disagree wherever declared column widths ride xlsx's approximate character units) (two-cell) or the anchor's own xdr:ext (one-cell, Excel's "Move, but don't size with cells" spelling for inserted pictures); an absoluteAnchor's page-absolute xdr:pos is re-based into the cell-relative anchor vocabulary through that same geometry's inverse (the nearest-cell landing #776 decides on, rather than a schema extension -- the geometry is a bijection between cell-plus-offset and absolute position, and the frame keeps the absolute position verbatim, so the re-basing loses nothing). Real-producer verification exists for the anchor spellings a real producer emits: pnpm test:corpus runs the gitignored LibreOffice-produced Calc corpus (scripts/generate-xlsx-drawing-corpus.mjs), whose genuine twoCellAnchor editAs="oneCell" output verified the anchor resolution and exposed that a oneCell-anchored picture's frame must come from the producer's own transform extent (the to-marker difference disagrees by the character-unit column-width approximation underneath) -- the readChildTransformExtEmu/editAs rule below. What stays hand-built-only: xdr:absoluteAnchor, because Calc's export normalises every drawing to twoCellAnchor spellings and no accessible producer here emits one.
 
 const CHART_GRAPHIC_URI =
   "http://schemas.openxmlformats.org/drawingml/2006/chart";
@@ -218,6 +218,31 @@ function readAnchorExtEmu(
   return { cxEmu: numericAttr(ext, "cx"), cyEmu: numericAttr(ext, "cy") };
 }
 
+// The anchor child's own DrawingML transform extent (xdr:pic/xdr:sp/xdr:graphicFrame > xdr:spPr > a:xfrm > a:ext, cx/cy EMU) -- the frame size the producer itself states, in exact EMU, rather than the to-marker difference the grid geometry derives. Real producers write both (Calc and Word alike), and the two disagree wherever the worksheet's declared column widths are stated in xlsx's approximate character units: the producer's own EMU is the authority for the frame's size, exactly as the one-cell and absolute spellings already treat their xdr:ext.
+function readChildTransformExtEmu(
+  anchor: XmlElement,
+): { readonly cxEmu: number; readonly cyEmu: number } | undefined {
+  for (const child of anchor.children) {
+    if (child.type !== "element") {
+      continue;
+    }
+    const spPr = childrenWithTag(child, "xdr:spPr")[0];
+    if (spPr === undefined) {
+      continue;
+    }
+    const xfrm = childrenWithTag(spPr, "a:xfrm")[0];
+    if (xfrm === undefined) {
+      continue;
+    }
+    const ext = childrenWithTag(xfrm, "a:ext")[0];
+    if (ext === undefined) {
+      continue;
+    }
+    return { cxEmu: numericAttr(ext, "cx"), cyEmu: numericAttr(ext, "cy") };
+  }
+  return undefined;
+}
+
 // One anchor's placement: a two-cell anchor is positioned by its from-marker and sized by the to-marker difference, a one-cell anchor by its from-marker and its own xdr:ext, an absolute anchor by its page-absolute xdr:pos (re-based into the cell anchor vocabulary through the grid geometry's own inverse, since ContentSheetImage and ContentEmbeddedObject anchor cell-relatively) and its own xdr:ext. Undefined when the anchor's own geometry is malformed (a missing marker, pos, or ext), which skips the anchor the way the walk always has.
 function readAnchorPlacement(
   anchor: XmlElement,
@@ -231,11 +256,21 @@ function readAnchorPlacement(
     }
     const xPt = geometry.xPt(from.column, from.colOffEmu);
     const yPt = geometry.yPt(from.row, from.rowOffEmu);
+    // editAs governs which size statement is the semantic one: "oneCell" means move-but-not-size-with-cells, so the shape's own transform extent is the frame (the to-marker is Calc's spelling habit for it and disagrees with the character-unit column widths underneath -- verified against real producer output); "twoCell" (also ECMA's default) means the frame IS the to-marker difference, resizing with the grid, so the grid rules; "absolute" sizes independently of both.
+    const editAs = attr(anchor, "editAs") ?? "twoCell";
+    const childExt =
+      editAs === "oneCell" ? readChildTransformExtEmu(anchor) : undefined;
     return {
       xPt,
       yPt,
-      widthPt: geometry.xPt(to.column, to.colOffEmu) - xPt,
-      heightPt: geometry.yPt(to.row, to.rowOffEmu) - yPt,
+      widthPt:
+        childExt !== undefined
+          ? emuToPt(childExt.cxEmu)
+          : geometry.xPt(to.column, to.colOffEmu) - xPt,
+      heightPt:
+        childExt !== undefined
+          ? emuToPt(childExt.cyEmu)
+          : geometry.yPt(to.row, to.rowOffEmu) - yPt,
       anchorRow: from.row,
       anchorColumn: from.column,
       offsetXPt: emuToPt(from.colOffEmu),
