@@ -22,9 +22,6 @@ const NS =
   'xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" ' +
   'xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"';
 
-// Points per centimetre, the unit bridge between the fods authoring below and the pt-valued expectations the corpus test asserts.
-const PT_PER_CM = 72 / 2.54;
-
 // One fixture: the anchor cell (row/column indices), the frame's cm size, and the sheet's own declared column widths (cm) and row heights (cm) the anchor geometry resolves against.
 const FIXTURES = [
   {
