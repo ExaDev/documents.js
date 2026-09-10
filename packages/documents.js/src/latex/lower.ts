@@ -222,29 +222,33 @@ function lowerNodeList(
     diagnose(context, "latex/operator-unmapped", detail);
     return unparsed(detail);
   }
-  const [firstSegment = [], ...restSegments] = segments;
-  if (operators.length === 0) {
-    return lowerTerm(firstSegment, context);
+  const wrapped: FoldSegment[] = segments.map((nodes) => ({
+    nodes,
+    negated: false,
+  }));
+  const normalised = normaliseUnaryMinus(operators, wrapped);
+  const [firstSegment, ...restSegments] = normalised.segments;
+  if (firstSegment === undefined) {
+    // Normalisation consumed every segment as unary-minus carriers with nothing left to negate -- an operators-only sequence with no operand at all.
+    diagnose(
+      context,
+      "latex/operator-placement-unparsed",
+      spanOfNodes(context, present),
+    );
+    return unparsed(spanOfNodes(context, present));
+  }
+  if (normalised.operators.length === 0) {
+    // No operator survived normalisation: a lone segment (possibly negated) is the whole sequence.
+    return lowerFoldSegment(firstSegment, context);
   }
   const detail = spanOfNodes(context, present);
-  if (firstSegment.length === 0) {
-    const leading = operators[0];
-    const secondSegment = restSegments[0] ?? [];
-    if (leading !== SUBTRACT_OPERATOR || secondSegment.length === 0) {
-      diagnose(context, "latex/operator-placement-unparsed", detail);
-      return unparsed(detail);
-    }
-    return fold(
-      app(UNARY_MINUS_OPERATOR, [lowerTerm(secondSegment, context)]),
-      operators.slice(1),
-      restSegments.slice(1),
-      context,
-      detail,
-    );
+  if (firstSegment.nodes.length === 0) {
+    diagnose(context, "latex/operator-placement-unparsed", detail);
+    return unparsed(detail);
   }
   return fold(
-    lowerTerm(firstSegment, context),
-    operators,
+    lowerFoldSegment(firstSegment, context),
+    normalised.operators,
     restSegments,
     context,
     detail,
@@ -279,29 +283,63 @@ const RELATION_OPERATORS: ReadonlySet<string> = new Set(
   Object.values(RELATION_ATOM_OPERATORS),
 );
 
+// One operand segment in fold's input, carrying whether a preceding unary minus makes the segment's folded operand negate: a subtract operator whose FOLLOWING segment is empty (`T = -0.36`, `a + -b`, a leading `-x`) is not a binary subtraction at all -- the minus is the sign of the segment after the empty one. The normalisation pass below rewrites that shape into a subtract-free operator list with the flag set, so fold and foldArithmetic only ever see real binary operators and one flag per segment.
+interface FoldSegment {
+  readonly nodes: readonly TemmlNode[];
+  readonly negated: boolean;
+}
+
+// Rewrites every empty-segment-with-a-subtract-after-it into a negation flag on the segment following the subtract (parity-counted, so `a = --b` negates twice), leaving any other empty segment (a genuine placement error, like `a = = b`) for fold's own diagnostic. This generalises the leading-minus-only reading the walk used to special-case: `T = -0.36` degraded the ENTIRE equality under the old spelling, because the empty segment sat after a relation rather than at the head of the sequence -- found by the generated at-scale worked-example corpus (12% of its first run), whose negative stated answers are textbook-ordinary.
+function normaliseUnaryMinus(
+  operators: readonly string[],
+  segments: readonly FoldSegment[],
+): { operators: string[]; segments: FoldSegment[] } {
+  const outOperators: string[] = [];
+  const outSegments: FoldSegment[] = [];
+  let pendingNegate = false;
+  let skipOperator = false;
+  for (const [index, segment] of segments.entries()) {
+    if (index > 0 && !skipOperator) {
+      const operator = operators[index - 1];
+      if (operator !== undefined) {
+        outOperators.push(operator);
+      }
+    }
+    skipOperator = false;
+    if (segment.nodes.length === 0 && operators[index] === SUBTRACT_OPERATOR) {
+      pendingNegate = !pendingNegate;
+      skipOperator = true;
+      continue;
+    }
+    outSegments.push({ nodes: segment.nodes, negated: pendingNegate });
+    pendingNegate = false;
+  }
+  return { operators: outOperators, segments: outSegments };
+}
+
 // Standard mathematical convention binds a relation (=, <, \leq, ...) looser than every arithmetic operator, regardless of which side of the relation the arithmetic sits on: `c = a + b` and `a + b = c` both read as eq(add(a,b), c), never add(eq(...), ...) or add(..., eq(...)). A single flat left-to-right fold over the mixed operator list cannot express that -- it folds whichever operator comes first in source order, so `F = m \times a` (relation before arithmetic) folded eq before multiply and produced multiply(eq(F,m), a), a tree with no sound mathematical reading (multiplying an equation by a value). fold instead runs two tiers: foldArithmetic resolves every maximal run of consecutive arithmetic operators into one operand first (unchanged left-to-right arithmetic behaviour within a run), and only then folds those operands together with the relation operators between them, left to right -- so arithmetic always binds first no matter which side of a relation it sits on.
 function fold(
   first: MathExpression,
   operators: readonly string[],
-  segments: readonly TemmlNode[][],
+  segments: readonly FoldSegment[],
   context: LoweringContext,
   detail: string,
 ): MathExpression {
   let runFirst = first;
   let runOperators: string[] = [];
-  let runSegments: TemmlNode[][] = [];
+  let runSegments: FoldSegment[] = [];
   const operands: MathExpression[] = [];
   const relations: string[] = [];
 
   for (let index = 0; index < operators.length; index += 1) {
     const operator = operators[index];
-    const segmentNodes = segments[index];
-    if (operator === undefined || segmentNodes === undefined) {
+    const segment = segments[index];
+    if (operator === undefined || segment === undefined) {
       throw new Error(
         "operator and segment lists diverged while folding a lowered sequence",
       );
     }
-    if (segmentNodes.length === 0) {
+    if (segment.nodes.length === 0) {
       diagnose(context, "latex/operator-placement-unparsed", detail);
       return unparsed(detail);
     }
@@ -310,13 +348,13 @@ function fold(
         foldArithmetic(runFirst, runOperators, runSegments, context),
       );
       relations.push(operator);
-      runFirst = lowerTerm(segmentNodes, context);
+      runFirst = lowerFoldSegment(segment, context);
       runOperators = [];
       runSegments = [];
       continue;
     }
     runOperators.push(operator);
-    runSegments.push(segmentNodes);
+    runSegments.push(segment);
   }
   operands.push(foldArithmetic(runFirst, runOperators, runSegments, context));
 
@@ -341,21 +379,30 @@ function fold(
 function foldArithmetic(
   first: MathExpression,
   operators: readonly string[],
-  segments: readonly TemmlNode[][],
+  segments: readonly FoldSegment[],
   context: LoweringContext,
 ): MathExpression {
   let folded = first;
   for (let index = 0; index < operators.length; index += 1) {
     const operator = operators[index];
-    const segmentNodes = segments[index];
-    if (operator === undefined || segmentNodes === undefined) {
+    const segment = segments[index];
+    if (operator === undefined || segment === undefined) {
       throw new Error(
         "operator and segment lists diverged while folding an arithmetic run",
       );
     }
-    folded = app(operator, [folded, lowerTerm(segmentNodes, context)]);
+    folded = app(operator, [folded, lowerFoldSegment(segment, context)]);
   }
   return folded;
+}
+
+// One segment's folded operand, with the unary-minus flag normalisation attached (negate wraps the folded term, never the raw nodes -- negation is an operation on the lowered value).
+function lowerFoldSegment(
+  segment: FoldSegment,
+  context: LoweringContext,
+): MathExpression {
+  const folded = lowerTerm(segment.nodes, context);
+  return segment.negated ? app(UNARY_MINUS_OPERATOR, [folded]) : folded;
 }
 
 // A run of nodes with no binary/relation operator inside: binders and named functions consume the rest of the run, digit runs fold into one numeric literal, and ANY remaining adjacency degrades to one `unparsed` node -- the juxtaposition rule. Juxtaposition is where the issue draws the line between mechanical and context-starved: `mc^2`, `f(x)`, `2(x+1)` all have multiplication AND function application as defensible readings, and LaTeX notation cannot say which, so the run stays visible data with a diagnostic instead of becoming a guess.
