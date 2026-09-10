@@ -2,6 +2,7 @@ import type { Alignment, Color } from "document-schema.js";
 
 import { writeBofData } from "../biff/bof-writer";
 import { RecordBuilder } from "../biff/builder";
+import { writeFontRecord, type XfFontFields } from "../biff/font";
 import {
   BOF_TYPE_WORKBOOK,
   RECORD_BOF,
@@ -19,7 +20,6 @@ import {
 import type { XfDecorationFields } from "../biff/xf-colors";
 import {
   writeCellXfRecord,
-  writeFontRecord,
   writeFormatRecord,
   writePaletteRecord,
   writeStyleRecord,
@@ -29,13 +29,10 @@ import { writePrintNameRecords, type PrintNamePlanEntry } from "./print-names";
 
 // The workbook globals substream ([MS-XLS] 2.1.7.20.3), write side: everything belonging to the workbook rather than to one sheet -- the font, format, and cell-style/cell-format XF tables every cell's own formatting resolves through, the shared string table, and the BoundSheet8 entry naming each sheet's own substream. Grouped and ordered to satisfy [MS-XLS] 2.1.7.20.3's own FORMATTING production (Font*, Format*, XFS, STYLES) ahead of the BoundSheet8 entries and the closing EOF -- see this package's README for exactly which globals-substream records this writer emits and which it deliberately omits (Window1, CodePage, the interface/calc-state record family, and so on: real content, not UI or interoperability bookkeeping).
 //
-// Only one font is ever written ([MS-XLS] 2.4.122, index 0): this package's own reader never maps a cell's font (see xls-codec's README, "Cell decoration"), so a font table with more than one entry would be unverifiable by round trip and every cell XF this writer emits references font 0.
+// The font table always opens with the Normal font (biff/font.ts's NORMAL_FONT_FIELDS) at index 0, and grows one entry per distinct cell font the workbook's cells actually state -- the write-side mirror of the reader's own diff against entry 0, so a cell carrying no font of its own references index 0 exactly as a read-back cell with no font field does.
 
 const GENERAL_FORMAT_ID = 0;
 const NORMAL_FONT_INDEX = 0;
-const NORMAL_FONT_NAME = "Arial";
-/** Excel 97-2003's own Normal-style default: 10pt, in twips (dyHeight's own unit, [MS-XLS] 2.4.122). */
-const NORMAL_FONT_HEIGHT_TWIPS = 200;
 
 /** [MS-XLS] "BuiltInStyle" istyBuiltIn values (ECMA-376 Part 1 18.8.7's cellStyle builtinId table): 0 Normal, 1 RowLevel, 2 ColLevel -- the only three this writer emits, since it never groups rows/columns into an outline. */
 const BUILTIN_STYLE_NORMAL = 0x00;
@@ -67,9 +64,10 @@ const BUILTIN_STYLES: readonly BuiltinStyle[] = [
 /** [MS-XLS] 2.1.7.20.3's own XFS production requires at least sixteen XF records before any cell can reference one: BUILTIN_STYLES.length built-in cell styles, then at least one cell XF -- the "General, no declared format" one every workbook needs unconditionally, written immediately after them. Derived from BUILTIN_STYLES's own length rather than restated as a literal, so the two can never drift apart. */
 export const GENERAL_CELL_XF_INDEX = BUILTIN_STYLES.length;
 
-/** One cell XF beyond the implicit General one at GENERAL_CELL_XF_INDEX: the number-format identifier it displays through, the cell's own horizontal/vertical alignment (general/bottom, this writer's own defaults, when omitted), and -- when the cell it serves carries a background or borders -- the fill/border fields its CellXF payload packs. Undefined decoration writes the same undecorated defaults this writer always wrote before decoration existed. */
+/** One cell XF beyond the implicit General one at GENERAL_CELL_XF_INDEX: the number-format identifier it displays through, the font-table index its cell's own font resolves to (0, the Normal font, for a cell stating none), the cell's own horizontal/vertical alignment (general/bottom, this writer's own defaults, when omitted), and -- when the cell it serves carries a background or borders -- the fill/border fields its CellXF payload packs. Undefined decoration writes the same undecorated defaults this writer always wrote before decoration existed. */
 export interface CellXfPlanEntry {
   readonly formatId: number;
+  readonly fontIndex: number;
   readonly alignment?: Alignment;
   readonly verticalAlignment?: "top" | "middle" | "bottom";
   readonly decoration?: XfDecorationFields;
@@ -77,6 +75,8 @@ export interface CellXfPlanEntry {
 
 export interface WorkbookGlobalsPlan {
   readonly sheetNames: readonly string[];
+  /** The workbook's font table, in the order its Font records are written: entry 0 is always the Normal font (a cell stating no font of its own references it), and every later entry is one distinct cell font the workbook's cells actually state -- write.ts's own font-interning pass assigns those. */
+  readonly fonts: readonly XfFontFields[];
   /** Custom number-format codes needing their own Format record, each with the identifier already assigned to it (always >= 164, [MS-XLS] 2.4.126's own custom-identifier floor). A code equal to one of the built-in table's own strings needs no Format record here -- number-format.ts's BUILTIN_NUMBER_FORMATS already covers ids 0-49 for both this package's reader and any other. */
   readonly customFormats: readonly {
     readonly id: number;
@@ -163,7 +163,9 @@ export function buildWorkbookGlobals(
   };
 
   push(writeRecord(RECORD_BOF, writeBofData(BOF_TYPE_WORKBOOK)));
-  push(writeFontRecord(NORMAL_FONT_NAME, NORMAL_FONT_HEIGHT_TWIPS));
+  for (const fields of plan.fonts) {
+    push(writeFontRecord(fields));
+  }
 
   for (const code of plan.customFormats) {
     push(writeFormatRecord(code.id, code.code));
@@ -187,7 +189,7 @@ export function buildWorkbookGlobals(
   for (const entry of plan.cellXfEntries) {
     push(
       writeCellXfRecord({
-        fontIndex: NORMAL_FONT_INDEX,
+        fontIndex: entry.fontIndex,
         formatId: entry.formatId,
         alignment: entry.alignment,
         verticalAlignment: entry.verticalAlignment,

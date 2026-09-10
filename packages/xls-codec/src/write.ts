@@ -23,6 +23,11 @@ import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
 
 import { BiffWriteError } from "./biff/write-errors";
 import {
+  NORMAL_FONT_FIELDS,
+  xfFontFieldsOf,
+  type XfFontFields,
+} from "./biff/font";
+import {
   BORDER_STYLE_NONE,
   borderStyleTokenFor,
   DEFAULT_PALETTE_HEX_TO_ICV,
@@ -57,9 +62,9 @@ import { cellCarriesFormatting, writesCellRecord } from "./written-cells";
 
 // The BIFF8 write path: a ContentDocument (or DocumentTree) of kind 'spreadsheet' back to real .xls bytes -- a genuine [MS-XLS] Workbook stream wrapped in a genuine [MS-CFB] compound file via archive-codec's writeCompoundFile. The counterpart of content.ts's readXlsContent/readXls, and of ooxml.js's own writeXlsx.
 //
-// Three things are workbook-wide rather than per-sheet, so they are resolved in one pass over every sheet before any record is written: the number-format table (a cell's own numberFormatCode, or a representative default for its value kind when absent, maps onto a shared BIFF8 format identifier the same code reuses everywhere it appears), the colour table (every distinct background/border colour a cell uses, resolved to an icv against the fixed default palette or, when a colour genuinely isn't in it, a real Palette record this pass mints), and the shared string table (every distinct string value, in first-encountered order, referenced by index from a LabelSst cell in any sheet). A fourth pass, buildCellXfPlan, then interns the (number format, alignment, decoration) TRIPLE every cell resolves to into its own cell XF index -- two cells sharing all three share one XF record, mirroring how ooxml.js's own CellFormatTable dedupes an xlsx <xf> on the identical (format, decoration) pair, widened here by one more axis. Building each of these once and threading the result into every sheet's own writer is what keeps two cells in different sheets sharing the identical string, format, alignment, or decoration from minting redundant table entries.
+// Three things are workbook-wide rather than per-sheet, so they are resolved in one pass over every sheet before any record is written: the number-format table (a cell's own numberFormatCode, or a representative default for its value kind when absent, maps onto a shared BIFF8 format identifier the same code reuses everywhere it appears), the colour table (every distinct background, border, and font colour a cell uses, resolved to an icv against the fixed default palette or, when a colour genuinely isn't in it, a real Palette record this pass mints), and the shared string table (every distinct string value, in first-encountered order, referenced by index from a LabelSst cell in any sheet). Two further passes intern the cell-format axes: buildFontPlan gives each distinct cell font its own font-table entry, then buildCellXfPlan interns the (number format, font, alignment, decoration) tuple every cell resolves to into its own cell XF index -- two cells sharing all four share one XF record, mirroring how ooxml.js's own CellFormatTable dedupes an xlsx <xf> on the identical (format, decoration) pair, widened here by two more axes. Building each of these once and threading the result into every sheet's own writer is what keeps two cells in different sheets sharing the identical string, format, font, alignment, or decoration from minting redundant table entries.
 //
-// See this package's README for the writer's own scope: what it covers (numeric/percentage/currency/date/time/dateTime/boolean/error/string cell values, merged ranges, row heights, column widths, custom and built-in number formats, cell background fill and per-side borders, and cell alignment) and what it deliberately does not (formulas, per-cell fonts, images, comments, data validation, conditional formatting, print settings, and a long tail of BIFF8 records that carry UI/interoperability state rather than document content).
+// See this package's README for the writer's own scope: what it covers (every cell value kind, merged ranges, row/column geometry, number formats, a cell's own font, fill, borders, and alignment, same-sheet formulas, comments, data validation, conditional formats, print settings, metadata) and what it deliberately does not (the formula constructs outside the same-sheet vocabulary, images and embedded objects, and a long tail of BIFF8 records that carry UI/interoperability state rather than document content).
 
 const WORKBOOK_STREAM_NAME = "Workbook";
 
@@ -219,6 +224,7 @@ function buildPalettePlan(sheets: readonly ContentSheet[]): PalettePlan {
         continue;
       }
       recordFill(cell.background);
+      record(cell.font?.color);
       record(cell.borders?.left?.color);
       record(cell.borders?.right?.color);
       record(cell.borders?.top?.color);
@@ -371,14 +377,15 @@ function resolveDecorationForCell(
   };
 }
 
-/** A deterministic signature for one cell XF's own (formatId, alignment, verticalAlignment, decoration) tuple, so two cells sharing all four share one XF record -- the interning key buildCellXfPlan below dedupes on, mirroring how CellFormatTable in ooxml.js's typed/xlsx/styles.ts dedupes an <xf> on (number format, decoration) together rather than on format alone, widened here by the cell's own alignment. */
+/** A deterministic signature for one cell XF's own (formatId, fontIndex, alignment, verticalAlignment, decoration) tuple, so two cells sharing all five share one XF record -- the interning key buildCellXfPlan below dedupes on, mirroring how CellFormatTable in ooxml.js's typed/xlsx/styles.ts dedupes an <xf> on (number format, decoration) together rather than on format alone, widened here by the cell's own font and alignment. */
 function signatureOfCellXf(
   formatId: number,
+  fontIndex: number,
   alignment: Alignment | undefined,
   verticalAlignment: "top" | "middle" | "bottom" | undefined,
   decoration: XfDecorationFields | undefined,
 ): string {
-  let signature = `f${formatId}|a${alignment ?? ""}|v${verticalAlignment ?? ""}`;
+  let signature = `f${formatId}|n${fontIndex}|a${alignment ?? ""}|v${verticalAlignment ?? ""}`;
   if (decoration === undefined) {
     return signature;
   }
@@ -391,13 +398,73 @@ function signatureOfCellXf(
   return signature;
 }
 
+interface FontPlan {
+  /** The workbook's font table in write order: entry 0 is the Normal font, every later entry one distinct cell font, exactly as globals-writer.ts writes the records. */
+  readonly fontEntries: readonly XfFontFields[];
+  /** The font-table index a cell's own font resolves to -- 0 (the Normal font) for a cell stating none, so the index this returns and the font-entry interning above can never disagree about what "no font" means. */
+  readonly fontIndexForCell: (cell: ContentSheetCell) => number;
+}
+
+/** A deterministic signature for one font-table entry, the interning key below dedupes on -- name, height, the four flags, and the colour index, since those are the whole record as far as this package's reader is concerned. */
+function signatureOfFont(fields: XfFontFields): string {
+  return (
+    `${fields.name}|${fields.heightTwips}|` +
+    `${fields.bold ? 1 : 0}${fields.italic ? 1 : 0}${fields.strikeout ? 1 : 0}${fields.underline ? 1 : 0}` +
+    `|${fields.colorIcv}`
+  );
+}
+
+/**
+ * Scans every sheet's cells once, interning each distinct cell font into its own font-table entry: the Normal font is always entry 0 (every style XF and the implicit General cell XF reference it, whether or not any cell states a font of its own), and each distinct ContentFont the workbook's cells resolve to mints one further entry the first time it is seen. A ContentFont that normalises back to the Normal font's own fields -- absent, empty, or restating only default values -- resolves to entry 0 and mints nothing, the write-side mirror of the reader's own diff against entry 0.
+ */
+function buildFontPlan(
+  sheets: readonly ContentSheet[],
+  palettePlan: PalettePlan,
+): FontPlan {
+  const fontEntries: XfFontFields[] = [NORMAL_FONT_FIELDS];
+  const indexBySignature = new Map<string, number>([
+    [signatureOfFont(NORMAL_FONT_FIELDS), 0],
+  ]);
+  const fieldsOf = (cell: ContentSheetCell): XfFontFields =>
+    xfFontFieldsOf(cell.font, palettePlan.icvOf);
+
+  for (const sheet of sheets) {
+    for (const cell of sheet.cells) {
+      // The same predicate every other workbook-wide pass applies, so a font is never interned for a cell that then writes no record naming it.
+      if (!writesCellRecord(cell)) {
+        continue;
+      }
+      const fields = fieldsOf(cell);
+      const signature = signatureOfFont(fields);
+      if (indexBySignature.has(signature)) {
+        continue;
+      }
+      indexBySignature.set(signature, fontEntries.length);
+      fontEntries.push(fields);
+    }
+  }
+
+  return {
+    fontEntries,
+    fontIndexForCell: (cell: ContentSheetCell): number => {
+      const index = indexBySignature.get(signatureOfFont(fieldsOf(cell)));
+      if (index === undefined) {
+        throw new BiffWriteError(
+          `internal error: the cell at row ${cell.row}, column ${cell.column} resolves to a font the workbook-wide font scan never saw -- the writer's own "does this cell get a record" predicate and its font-interning pass disagree about this cell`,
+        );
+      }
+      return index;
+    },
+  };
+}
+
 interface CellXfPlan {
   readonly cellXfEntries: readonly CellXfPlanEntry[];
   readonly xfIndexForCell: (cell: ContentSheetCell) => number;
 }
 
 /**
- * Scans every sheet's cells once, interning each distinct (number format, decoration) combination into its own cell XF index -- a cell with General formatting and no decoration resolves to the workbook's own implicit GENERAL_CELL_XF_INDEX with no new XF record at all, exactly as before; every other combination mints one XF record the first time it is seen and is reused by every later cell sharing it.
+ * Scans every sheet's cells once, interning each distinct (number format, font, alignment, decoration) combination into its own cell XF index -- a cell with General formatting, the Normal font, and no decoration resolves to the workbook's own implicit GENERAL_CELL_XF_INDEX with no new XF record at all, exactly as before; every other combination mints one XF record the first time it is seen and is reused by every later cell sharing it.
  *
  * The returned xfIndexForCell only ever LOOKS UP -- it cannot mint an entry, and refuses a signature this scan never saw. buildWorkbookGlobals is handed cellXfEntries before any sheet's records are built, so an entry minted later than this scan would be one no XF record was written for, and the cell record naming its index would point past the end of the workbook's XF table. Nothing about the resulting bytes says so: a reader resolves that index to whatever XF happens to sit there, or to none, and the cell's format is silently wrong either way. Refusing the lookup is the only place that divergence can still be caught.
  */
@@ -405,11 +472,12 @@ function buildCellXfPlan(
   sheets: readonly ContentSheet[],
   formatPlan: FormatPlan,
   palettePlan: PalettePlan,
+  fontPlan: FontPlan,
 ): CellXfPlan {
   const cellXfEntries: CellXfPlanEntry[] = [];
   const xfIndexBySignature = new Map<string, number>([
     [
-      signatureOfCellXf(GENERAL_FORMAT_ID, undefined, undefined, undefined),
+      signatureOfCellXf(GENERAL_FORMAT_ID, 0, undefined, undefined, undefined),
       GENERAL_CELL_XF_INDEX,
     ],
   ]);
@@ -418,6 +486,7 @@ function buildCellXfPlan(
   const signatureOf = (cell: ContentSheetCell): string =>
     signatureOfCellXf(
       formatPlan.formatIdOf(formatCodeForCell(cell)),
+      fontPlan.fontIndexForCell(cell),
       cell.alignment,
       cell.verticalAlignment,
       resolveDecorationForCell(cell, palettePlan.icvOf),
@@ -429,9 +498,11 @@ function buildCellXfPlan(
         continue;
       }
       const formatId = formatPlan.formatIdOf(formatCodeForCell(cell));
+      const fontIndex = fontPlan.fontIndexForCell(cell);
       const decoration = resolveDecorationForCell(cell, palettePlan.icvOf);
       const signature = signatureOfCellXf(
         formatId,
+        fontIndex,
         cell.alignment,
         cell.verticalAlignment,
         decoration,
@@ -443,6 +514,7 @@ function buildCellXfPlan(
       nextXfIndex += 1;
       cellXfEntries.push({
         formatId,
+        fontIndex,
         alignment: cell.alignment,
         verticalAlignment: cell.verticalAlignment,
         decoration,
@@ -558,10 +630,17 @@ function buildWorkbookStream(
   const formatPlan = buildFormatPlan(content.sheets);
   const sstPlan = buildSstPlan(content.sheets);
   const palettePlan = buildPalettePlan(content.sheets);
-  const cellXfPlan = buildCellXfPlan(content.sheets, formatPlan, palettePlan);
+  const fontPlan = buildFontPlan(content.sheets, palettePlan);
+  const cellXfPlan = buildCellXfPlan(
+    content.sheets,
+    formatPlan,
+    palettePlan,
+    fontPlan,
+  );
 
   const globalsPlan: WorkbookGlobalsPlan = {
     sheetNames: content.sheets.map((sheet) => sheet.name),
+    fonts: fontPlan.fontEntries,
     customFormats: formatPlan.customFormats,
     cellXfEntries: cellXfPlan.cellXfEntries,
     sharedStrings: sstPlan.strings,
