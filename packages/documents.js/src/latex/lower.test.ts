@@ -177,6 +177,37 @@ describe("lowerLatex mechanical rules", () => {
       },
     },
     {
+      // A minus after a relation signs the FOLLOWING operand, the same unary reading as a leading minus -- found by the generated worked-example corpus, where every negative stated answer degraded its whole equality under the leading-only spelling.
+      latex: "T = -0.36",
+      expected: {
+        kind: "app",
+        operator: "math:eq",
+        args: [
+          { kind: "sym", id: "symbols:T" },
+          {
+            kind: "app",
+            operator: "math:negate",
+            args: [{ kind: "num", numerator: "9", denominator: "25" }],
+          },
+        ],
+      },
+    },
+    {
+      latex: "a + -b",
+      expected: {
+        kind: "app",
+        operator: "math:add",
+        args: [
+          { kind: "sym", id: "symbols:a" },
+          {
+            kind: "app",
+            operator: "math:negate",
+            args: [{ kind: "sym", id: "symbols:b" }],
+          },
+        ],
+      },
+    },
+    {
       latex: "-x + y",
       expected: {
         kind: "app",
