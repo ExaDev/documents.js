@@ -1,3 +1,9 @@
+## [7.23.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.22.0...odf.js%407.23.0) (2026-09-10)
+
+### Features
+
+* **odf.js:** write run-level construct extents in table cells and shape text ([487af6e](https://github.com/ExaDev/documents.js/commit/487af6e36a51b865a9d6749e9c234ffaf9535d8f))
+
 ## [7.22.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.21.0...odf.js%407.22.0) (2026-09-09)
 
 ### Features
