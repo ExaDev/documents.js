@@ -24,6 +24,11 @@ import { decodeXmlText } from "../../xml/entities";
 import { base64ToBytes } from "../../util/base64";
 import { sniffImageFormat } from "../../image/sniff";
 import {
+  readDrawObjectReference,
+  readEmbeddedObjectDocument,
+} from "./embedded";
+import type { OdfResidueFormat } from "../shared/constructs";
+import {
   findNamedStylePartElement,
   resolveStyleElementChain,
 } from "../shared/cascade";
@@ -190,7 +195,7 @@ export function readDrawImageBlock(
   return block;
 }
 
-// A draw:frame's content is exactly one of table:table, draw:text-box, or draw:image (verified against real LibreOffice output) -- table:table is checked FIRST because a real saved presentation table frame also carries a sibling draw:image (an .svm fallback preview LibreOffice writes for consumers that can't render a real table), which must not be mistaken for the frame's own image content.
+// A draw:frame's content is exactly one of table:table, draw:text-box, draw:image, or draw:object (an embedded sub-document, read only when the caller opts in through embeddedFormat -- verified against real LibreOffice output) -- an embedded draw:object is checked FIRST (a real embedding frame also carries a sibling draw:image, the ObjectReplacements/ preview, which must not be mistaken for the frame's own image content), then table:table (a real saved presentation table frame carries a sibling .svm fallback preview for the identical reason).
 //
 // ODP LIST MEMBERSHIP -- minted numId, not the numId-less { level } shape: document-schema.js 3.3.0 made ContentListMembership.numId optional precisely so a reader whose source carries NO list identity could emit the honest minimal { level } (ooxml.js's pptx reader, whose a:pPr/@lvl is a bare depth attribute on the paragraph with no list element behind it -- a fabricated numId there would be a lie in the data). A slide text box is not that case: draw:text-box's own content model is exactly (text:p | text:list)*, and its text:list elements are the IDENTICAL structural containers the odt reader walks in office:text -- a slide can carry two of them (two bullet bodies in one text box, or one list in each of two frames), and a consumer grouping list paragraphs apart (rendering separate <ul>/<ol> elements, nesting an outline per list) must be able to tell them apart. The deciding criterion is exactly that: whether the source carries genuine list identity a consumer needs for grouping separate lists apart. ODP's text:list elements pass it, so this reader mints a per-encounter numId through the SAME shared machinery (typed/shared/list.ts: mintOdfListNumId/readOdfListParagraphs, including the ordered:/bullet: kind prefix) the odt reader uses -- emitting { level } alone would discard a real, source-grounded fact, not avoid a fabrication.
 function readDrawFrameContent(
@@ -198,7 +203,29 @@ function readDrawFrameContent(
   frameBox: Box,
   pkg: Package,
   listIdState: OdfListIdState,
+  embeddedFormat: OdfResidueFormat | undefined,
 ): ContentBlock[] {
+  // An embedded object's draw:object is checked BEFORE every other content, exactly as odt's anchored-frame reader and ods's cell-anchored reader already order it: a real embedding frame ALSO carries a sibling draw:image (the ObjectReplacements/ preview) that must not be mistaken for the frame's own picture content. Opt-in through embeddedFormat rather than unconditional, because ods calls readDrawFrame for its anchored frames and resolves the reference itself through its own cell-anchored path -- an unconditional branch here would hand ods a second, differently-shaped copy of the same object.
+  if (embeddedFormat !== undefined) {
+    const reference = readDrawObjectReference(frame, pkg);
+    if (reference !== undefined) {
+      const { document, residue } = readEmbeddedObjectDocument(
+        reference,
+        frameBox,
+        embeddedFormat,
+      );
+      const embeddedBlock: ContentBlock = {
+        kind: "embeddedObject",
+        objectKind: reference.objectKind,
+        document,
+        frame: frameBox,
+      };
+      if (residue !== undefined) {
+        embeddedBlock.source = residue;
+      }
+      return [embeddedBlock];
+    }
+  }
   const table = childrenWithTag(frame, "table:table")[0];
   if (table !== undefined) {
     return [readOdfTable(table, pkg, listIdState)];
@@ -239,6 +266,7 @@ export function readDrawFrame(
   pkg: Package,
   listIdState: OdfListIdState = { next: 1 },
   flowPositioning = false,
+  embeddedFormat?: OdfResidueFormat,
 ): ContentShape | undefined {
   const ownGeometry =
     resolveOdfShapeGeometry(frame) ??
@@ -252,7 +280,13 @@ export function readDrawFrame(
     frame: geometry.frame,
     rotationDeg: geometry.rotationDeg,
     ...readFrameInsets(frame, pkg),
-    blocks: readDrawFrameContent(frame, geometry.frame, pkg, listIdState),
+    blocks: readDrawFrameContent(
+      frame,
+      geometry.frame,
+      pkg,
+      listIdState,
+      embeddedFormat,
+    ),
   };
 }
 
@@ -301,7 +335,14 @@ export function walkDrawShapes(
     }
     if (node.tag === "draw:frame") {
       const zIndex = paintOrderKey(node, indexState);
-      const shape = readDrawFrame(node, groupFunctions, pkg, listIdState);
+      const shape = readDrawFrame(
+        node,
+        groupFunctions,
+        pkg,
+        listIdState,
+        false,
+        "odp",
+      );
       if (shape !== undefined) {
         out.push({ ...shape, paintOrder: zIndex });
       }
@@ -1172,7 +1213,14 @@ function walkDrawPageContent(
     }
     if (node.tag === "draw:frame") {
       const zIndex = paintOrderKey(node, indexState);
-      const shape = readDrawFrame(node, groupFunctions, pkg);
+      const shape = readDrawFrame(
+        node,
+        groupFunctions,
+        pkg,
+        undefined,
+        false,
+        "odg",
+      );
       if (shape !== undefined) {
         shapesOut.push({ value: { ...shape, paintOrder: zIndex }, zIndex });
       }
