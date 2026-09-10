@@ -1,3 +1,15 @@
+## [4.8.62](https://github.com/ExaDev/documents.js/compare/document-mcp%404.8.61...document-mcp%404.8.62) (2026-09-10)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.9.0
+- Updated odf.js to 7.24.3
+- Updated document-outline.js to 3.6.13
+- Updated wpd-codec to 3.4.4
+- Updated documents.js to 7.18.3
+- Updated document-compute.js to 1.4.5
+
 ## [4.8.61](https://github.com/ExaDev/documents.js/compare/document-mcp%404.8.60...document-mcp%404.8.61) (2026-09-10)
 
 

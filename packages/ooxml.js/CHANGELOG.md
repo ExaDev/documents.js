@@ -1,3 +1,15 @@
+## [8.11.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.10.3...ooxml.js%408.11.0) (2026-09-10)
+
+### Features
+
+* **ooxml.js:** associate a docx Caption paragraph with the figure it describes ([fd7811e](https://github.com/ExaDev/documents.js/commit/fd7811e59fe16ce9f2104387e1fcf2920ec9d60a)), references [#1197](https://github.com/ExaDev/documents.js/issues/1197)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.9.0
+- Updated archive-codec to 1.10.6
+
 ## [8.10.3](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.10.2...ooxml.js%408.10.3) (2026-09-10)
 
 
