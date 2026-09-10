@@ -1107,6 +1107,94 @@ describe("writeXlsContent", () => {
     });
   });
 
+  describe("defined names written", () => {
+    it("round-trips a workbook-scoped and a sheet-scoped named range", () => {
+      const bytes = writeXlsContent({
+        ...document([
+          sheet("Sheet1", [cell(0, 0, { kind: "number", value: 1 })]),
+          sheet("Sheet2", [cell(1, 2, { kind: "number", value: 2 })]),
+        ]),
+        names: [
+          { name: "SalesData", refersTo: "Sheet1!$A$1:$B$2" },
+          { name: "LocalRange", refersTo: "Sheet2!$C$2", scopeSheetIndex: 1 },
+        ],
+      });
+      expect(readXlsContent(bytes).names).toEqual([
+        { name: "SalesData", refersTo: "Sheet1!$A$1:$B$2" },
+        {
+          name: "LocalRange",
+          refersTo: "Sheet2!$C$2:$C$2",
+          scopeSheetIndex: 1,
+        },
+      ]);
+    });
+
+    it("round-trips a relative reference and a quoted sheet name, each preserving its own spelling", () => {
+      const bytes = writeXlsContent({
+        ...document([sheet("My Sheet", []), sheet("Other", [])]),
+        names: [
+          // A relative coordinate is genuine formula semantics, not a display detail, so the $ markers survive verbatim through the ColRelU relative bits.
+          { name: "Rel", refersTo: "'My Sheet'!A1:B2" },
+          { name: "Abs", refersTo: "Other!$A$1" },
+        ],
+      });
+      expect(readXlsContent(bytes).names).toEqual([
+        { name: "Rel", refersTo: "'My Sheet'!A1:B2" },
+        { name: "Abs", refersTo: "Other!$A$1:$A$1" },
+      ]);
+    });
+
+    it("round-trips a non-print built-in under its single-character built-in encoding", () => {
+      const bytes = writeXlsContent({
+        ...document([sheet("Sheet1", [])]),
+        names: [
+          {
+            name: "_xlnm._FilterDatabase",
+            refersTo: "Sheet1!$A$1:$C$1",
+            scopeSheetIndex: 0,
+          },
+        ],
+      });
+      expect(readXlsContent(bytes).names).toEqual([
+        {
+          name: "_xlnm._FilterDatabase",
+          refersTo: "Sheet1!$A$1:$C$1",
+          scopeSheetIndex: 0,
+        },
+      ]);
+    });
+
+    it("refuses a refersTo outside the sheet-qualified reference vocabulary", () => {
+      expect(() =>
+        writeXlsContent({
+          ...document([sheet("Sheet1", [])]),
+          names: [{ name: "Total", refersTo: "SUM(Sheet1!$A$1:$A$9)" }],
+        }),
+      ).toThrow(BiffWriteError);
+      expect(() =>
+        writeXlsContent({
+          ...document([sheet("Sheet1", [])]),
+          names: [{ name: "Missing", refersTo: "Sheet9!$A$1" }],
+        }),
+      ).toThrow(BiffWriteError);
+    });
+
+    it("refuses the two print built-ins and a name shaped like a cell reference", () => {
+      expect(() =>
+        writeXlsContent({
+          ...document([sheet("Sheet1", [])]),
+          names: [{ name: "_xlnm.Print_Area", refersTo: "Sheet1!$A$1:$B$2" }],
+        }),
+      ).toThrow(BiffWriteError);
+      expect(() =>
+        writeXlsContent({
+          ...document([sheet("Sheet1", [])]),
+          names: [{ name: "A1", refersTo: "Sheet1!$A$1" }],
+        }),
+      ).toThrow(BiffWriteError);
+    });
+  });
+
   describe("metadata", () => {
     it('round-trips title/subject/author/keywords/dates through a real "\\x05SummaryInformation" stream', () => {
       const input: XlsContentDocument = {
@@ -1365,7 +1453,7 @@ describe("print settings", () => {
   });
 
   it("writes no defined name at all for a workbook declaring no print range or band", () => {
-    // The SupBook and ExternSheet a print name's own 3D reference resolves through exist only to serve one, so a workbook needing none stays as minimal as it was before print settings were written.
+    // The SupBook and ExternSheet a defined name's own 3D reference resolves through exist only to serve one -- a print name or a document-level name alike -- so a workbook needing none stays as minimal as it was before either was written.
     const bytes = writeXlsContent(
       document([sheet("Plain", [cell(0, 0, { kind: "number", value: 1 })])]),
     );
