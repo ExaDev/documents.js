@@ -1,3 +1,9 @@
+## [4.12.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.11.1...xls-codec%404.12.0) (2026-09-10)
+
+### Features
+
+* **xls-codec:** write data validations and cellIs conditional formats ([dbc0e59](https://github.com/ExaDev/documents.js/commit/dbc0e593125390179a219750d6d8242fd1a3e70d))
+
 ## [4.11.1](https://github.com/ExaDev/documents.js/compare/xls-codec%404.11.0...xls-codec%404.11.1) (2026-09-08)
 
 
