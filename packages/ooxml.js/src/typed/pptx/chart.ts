@@ -130,6 +130,7 @@ export function readChartTable(
   const columnWidthPt = frame.widthPt / (series.length + 1);
   return {
     kind: "table",
+    origin: "chart",
     rows,
     columnWidthsPt: Array.from(
       { length: series.length + 1 },

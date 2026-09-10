@@ -29,7 +29,7 @@ function diagramTextParagraphs(
         runs.push({ text: "\n" });
       }
     }
-    return { kind: "paragraph", runs };
+    return { kind: "paragraph", origin: "diagram", runs };
   });
 }
 
