@@ -1,3 +1,16 @@
+## [3.4.0](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.3.0...wpd-codec%403.4.0) (2026-09-10)
+
+### Features
+
+* **wpd-codec:** lift image boxes carrying PNG or JPEG payloads ([79da2f3](https://github.com/ExaDev/documents.js/commit/79da2f37044137b11948aebff47f4fde1e8a4d32))
+* **wpd-codec:** lift page furniture and note bodies ([42d133c](https://github.com/ExaDev/documents.js/commit/42d133c6df99de7ab87d9f05156b031b8f405ce7))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.6.0
+- Updated archive-codec to 1.10.2
+
 ## [3.3.0](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.2.2...wpd-codec%403.3.0) (2026-09-09)
 
 ### Features
