@@ -2452,6 +2452,19 @@ describe("table cell formatting", () => {
       blocks: [{ kind: "paragraph", runs: [{ text: "A", sizePt: 12 }] }],
     });
   });
+
+  it("reads the \\clvertalt/\\clvertalc/\\clvertalb <cellalign> member onto ContentTableCell.verticalAlign, with the stated default collapsing into absence", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\clvertalt\\cellx1440\\clvertalc\\cellx2880\\clvertalb\\cellx4320` +
+        "\\pard\\intbl top\\cell\\pard\\intbl middle\\cell\\pard\\intbl bottom\\cell\\row\\pard x\\par}",
+    );
+    // \clvertalt is the spec's own default ("Text is top-aligned in cell (the default)"), and the field's absence already means top, so the word carries nothing the absence doesn't -- the same collapse the reader applies to \sbkpage against ContentSection.breakType.
+    expect(table.rows[0]?.cells.map((cell) => cell.verticalAlign)).toEqual([
+      undefined,
+      "center",
+      "bottom",
+    ]);
+  });
 });
 
 describe("the tree-form entry point", () => {

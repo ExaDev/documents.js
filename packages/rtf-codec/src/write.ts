@@ -1114,6 +1114,9 @@ class RtfWriter {
       // A continuation column states only that it is merged into the one before it; the borders and shading belong to the anchor, and restating them here would double-draw the merged cell's own edges.
       return `${out}\\clmrg\\cellx${String(rightTwips)}`;
     }
+    // The <cellalign> member, in the production's own place among the <celldef>'s members (before the <celltop>/<cellleft>/... border sides). Only the two non-default members are written: \clvertalt is the spec's own stated default ("Text is top-aligned in cell (the default)") and ContentTableCell.verticalAlign's absence already means top, so neither a 'top' value nor an absent one restates it -- the identical choice the reader makes for the word on the way in.
+    if (cell.verticalAlign === "center") out += "\\clvertalc";
+    else if (cell.verticalAlign === "bottom") out += "\\clvertalb";
     const borders = cell.borders;
     if (borders !== undefined) {
       for (const side of CELL_BORDER_ORDER) {
