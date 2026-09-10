@@ -287,6 +287,8 @@ interface CharacterState {
   fontIndex: number | undefined;
   sizeHalfPoints: number;
   colorIndex: number | undefined;
+  // Vertical text position, from the two on-spellings and two offset-spellings RTF states it at (\super/\sub and \upN/\dnN -- RTF 1.9.1, "Font (Character) Formatting Properties"), narrowed onto ContentRun.verticalAlign's two members. Absent means baseline, the same absence the schema field itself carries.
+  verticalAlign: "superscript" | "subscript" | undefined;
   // The <chrev> production, which is a character property like every field above it and so is scoped to the group the same way.
   revision: RevisionState;
 }
@@ -450,6 +452,7 @@ function defaultCharacterState(): CharacterState {
     fontIndex: undefined,
     sizeHalfPoints: DEFAULT_FONT_SIZE_HALF_POINTS,
     colorIndex: undefined,
+    verticalAlign: undefined,
     revision: NO_REVISION,
   };
 }
@@ -510,6 +513,7 @@ function runKey(
       ? ""
       : `${String(color.r)},${String(color.g)},${String(color.b)}`,
     hyperlink ?? "",
+    char.verticalAlign ?? "",
     // A revision boundary is a run boundary: two stretches of text differing only in who inserted them are two runs, because the extent that names the insertion has to start and end somewhere.
     JSON.stringify(char.revision),
   ].join("|");
@@ -1422,6 +1426,9 @@ function buildRunFields(
     ...{ sizePt: halfPointsToPoints(char.sizeHalfPoints) },
     ...(color === undefined ? {} : { color }),
     ...(hyperlink === undefined ? {} : { hyperlink }),
+    ...(char.verticalAlign === undefined
+      ? {}
+      : { verticalAlign: char.verticalAlign }),
   };
 }
 
@@ -2190,6 +2197,34 @@ function applyCharacterControlWord(
       return true;
     case "uc":
       if (param !== undefined && param >= 0) state.uc = param;
+      return true;
+    // RTF 1.9.1, "Font (Character) Formatting Properties": "\super Superscripts text and shrinks point size according to font information." / "\sub Subscripts text ...". Both are bare on-words -- neither carries the asterisk that section's own preamble gives the words that "can be turned off by appending 0" (\b*, \ul*, ...), so a parameter is not consulted here: the off-spelling the spec itself names is \nosupersub below, and a group's closing brace or \plain turns the property off the same way every other character property here does.
+    case "super":
+      state.char.verticalAlign = "superscript";
+      return true;
+    case "sub":
+      state.char.verticalAlign = "subscript";
+      return true;
+    // "\upN Move up N half-points (default is 6)." / "\dnN Move down N half-points (default is 6)." -- the offset spellings, where the sign decides the family and zero restores the baseline (a move of no half-points is no move at all, so \up0/\dn0 state baseline as explicitly as their absence does). A negative \upN genuinely moves text down and a negative \dnN up, so each crosses onto the other's member rather than being clamped to its own; the "default is 6" makes a bare occurrence a real raise/lower, matching the way applyFormFieldControlWord's own Value-word defaults work.
+    case "up":
+      state.char.verticalAlign =
+        param === undefined || param > 0
+          ? "superscript"
+          : param < 0
+            ? "subscript"
+            : undefined;
+      return true;
+    case "dn":
+      state.char.verticalAlign =
+        param === undefined || param > 0
+          ? "subscript"
+          : param < 0
+            ? "superscript"
+            : undefined;
+      return true;
+    // "\nosupersub Turns off superscripting or subscripting." -- the one off-spelling the spec names for the property, spanning both the \super/\sub and \upN/\dnN families.
+    case "nosupersub":
+      state.char.verticalAlign = undefined;
       return true;
     // The <chrev> production. Each writes the revision half of the character state, which rides the group stack with the rest of it.
     case "revised":
