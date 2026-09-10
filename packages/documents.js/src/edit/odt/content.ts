@@ -375,6 +375,13 @@ class ConstructMarkerState {
       body.openDivisionRegion(detail);
       return;
     }
+    if (detail.kind === "contentControl" && detail.controlType === "index") {
+      // An index-wrapper region (text:table-of-content or a sibling): only when the descriptor's *-source residue names which of the seven wrappers to write -- a residue-less index descriptor (e.g. one built by hand, or the docx TOC-gallery spelling) carries no such fact and stays dropped below.
+      if (body.openIndexRegion(detail)) {
+        this.open.push({ kind: "region" });
+        return;
+      }
+    }
     // Every other construct kind has no editor-surface spelling here (a field or note anchor that is not block-scoped in this builder's model, a tracked-change range, a wrapper kind ODF spells through machinery this builder does not carry) and is dropped as the README's construct-marker note states -- stacked so its own end marker still balances.
     this.open.push({ kind: "dropped" });
   }

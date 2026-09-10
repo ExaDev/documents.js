@@ -72,6 +72,11 @@ class ConstructMarkerState {
       body.openContentControlRegion(detail);
       return;
     }
+    if (detail.kind === "provenance" && body.openProvenanceRegion(detail)) {
+      // A tracked-change region: the blocks between the markers land inside the change's own w:ins/w:del/w:moveFrom/w:moveTo element, with the deletion spellings re-spelling their runs' text w:delText on close. formatChange falls through to the dropped stack below -- it has no block-level element to open.
+      this.open.push({ kind: "region" });
+      return;
+    }
     // Every other construct kind is wrapper-shaped through machinery this builder has no editor surface for (a tracked-change w:ins/w:del region, an ODF division with no Word spelling at block scope) or carries no write path at all, and is dropped as the README's construct-marker note states -- stacked here so its own end marker still balances.
     this.open.push({ kind: "dropped" });
   }
