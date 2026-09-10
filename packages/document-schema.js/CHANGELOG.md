@@ -1,3 +1,9 @@
+## [7.7.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.6.1...document-schema.js%407.7.0) (2026-09-10)
+
+### Features
+
+* **document-schema.js:** carry per-cell fonts, defined names, and verbatim no-encoder image bytes ([5b1a681](https://github.com/ExaDev/documents.js/commit/5b1a681ab2d425ce5c0822ff254f3b0618d54dee))
+
 ## [7.6.1](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.6.0...document-schema.js%407.6.1) (2026-09-10)
 
 ### Documentation
