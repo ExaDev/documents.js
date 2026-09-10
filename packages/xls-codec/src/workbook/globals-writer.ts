@@ -25,6 +25,10 @@ import {
   writeStyleRecord,
   writeStyleXfRecord,
 } from "../biff/xf-writer";
+import {
+  writeDefinedNameRecords,
+  type DefinedNamePlanEntry,
+} from "./defined-names";
 import { writePrintNameRecords, type PrintNamePlanEntry } from "./print-names";
 
 // The workbook globals substream ([MS-XLS] 2.1.7.20.3), write side: everything belonging to the workbook rather than to one sheet -- the font, format, and cell-style/cell-format XF tables every cell's own formatting resolves through, the shared string table, and the BoundSheet8 entry naming each sheet's own substream. Grouped and ordered to satisfy [MS-XLS] 2.1.7.20.3's own FORMATTING production (Font*, Format*, XFS, STYLES) ahead of the BoundSheet8 entries and the closing EOF -- see this package's README for exactly which globals-substream records this writer emits and which it deliberately omits (Window1, CodePage, the interface/calc-state record family, and so on: real content, not UI or interoperability bookkeeping).
@@ -90,8 +94,10 @@ export interface WorkbookGlobalsPlan {
   readonly sharedStringTotalCount: number;
   /** The workbook's own custom colour table (56 entries, icv 8 first), when write.ts's own palette-interning pass decided the workbook needs one -- undefined when every decoration colour the workbook's cells use already matches the fixed default table, in which case no Palette record is written at all and those colours resolve through the default table instead ([MS-XLS] "Icv"'s own documented fallback). */
   readonly paletteColors?: readonly Color[];
-  /** The built-in Print_Area/Print_Titles defined names the workbook's sheets declare, one Lbl record each. Empty when no sheet declares a print range or a repeated header band, in which case no SupBook, ExternSheet, or Lbl record is written at all -- exactly like Palette above, a workbook that needs none stays as minimal as it always was. */
+  /** The built-in Print_Area/Print_Titles defined names the workbook's sheets declare, one Lbl record each. Empty when no sheet declares a print range or a repeated header band -- see the SupBook/ExternSheet note below for what that and `definedNames` both empty means. */
   readonly printNames: readonly PrintNamePlanEntry[];
+  /** The document-level defined names the workbook declares, one Lbl record each, from workbook/defined-names.ts's own compile of the document's names array. */
+  readonly definedNames: readonly DefinedNamePlanEntry[];
 }
 
 export interface WorkbookGlobalsBuild {
@@ -222,11 +228,14 @@ export function buildWorkbookGlobals(
     push(writeBoundSheet8Placeholder(name));
   }
 
-  // [MS-XLS] 2.1.7.20.3's own WORKBOOKCONTENT production places `*SUPBOOK *LBL` between the BoundSheet8 entries and SHAREDSTRINGS, with `SUPBOOK = SupBook [*ExternName *(XCT *CRN)] [ExternSheet] *Continue` -- so the supporting link and its ExternSheet come first, then the defined names whose 3D references resolve through it. Written only when there is a print name to write: a workbook with no print range and no repeated header band needs no defined name, and therefore no supporting link for one to reference.
-  if (plan.printNames.length > 0) {
+  // [MS-XLS] 2.1.7.20.3's own WORKBOOKCONTENT production places `*SUPBOOK *LBL` between the BoundSheet8 entries and SHAREDSTRINGS, with `SUPBOOK = SupBook [*ExternName *(XCT *CRN)] [ExternSheet] *Continue` -- so the supporting link and its ExternSheet come first, then the defined names whose 3D references resolve through it. Written only when there is a defined name of either kind to write (a print name or a document-level one): a workbook with none needs no supporting link for anything to reference, and stays as minimal as it always was.
+  if (plan.printNames.length > 0 || plan.definedNames.length > 0) {
     push(writeSupBookRecord(plan.sheetNames.length));
     push(writeExternSheetRecord(plan.sheetNames.length));
     for (const record of writePrintNameRecords(plan.printNames)) {
+      push(record);
+    }
+    for (const record of writeDefinedNameRecords(plan.definedNames)) {
       push(record);
     }
   }
