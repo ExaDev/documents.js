@@ -1,3 +1,9 @@
+## [7.6.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.5.1...document-schema.js%407.6.0) (2026-09-10)
+
+### Features
+
+* **document-schema.js:** give sections page-furniture slots for headers and footers ([c9acf39](https://github.com/ExaDev/documents.js/commit/c9acf39dd2b222d43667232b2691e818a5c4cae7))
+
 ## [7.5.1](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.5.0...document-schema.js%407.5.1) (2026-09-08)
 
 ### Documentation
