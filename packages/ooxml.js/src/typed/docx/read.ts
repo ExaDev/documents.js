@@ -62,6 +62,7 @@ import {
   NumberingDefinitionSchema,
   readNumberingDefinitions,
 } from "./numbering";
+import { associateFigureCaptions } from "./figure-captions";
 import { readCellShading } from "./shading";
 import type {
   ConstructExtent,
@@ -1561,7 +1562,7 @@ function readBlockScope(
 ): ContentBlock[] {
   const state = newFlowState();
   collectFlowNodes(nodes, ctx, state, carryDeletions);
-  return insertConstructMarkers(state.blocks, [
+  return insertConstructMarkers(associateFigureCaptions(state.blocks), [
     ...state.extents,
     ...resolveRangeMarkerExtents(state.rangeMarkerEvents),
   ]);
@@ -1661,7 +1662,10 @@ function readSections(
       pageSize,
       margins,
       ...(breakType === undefined ? {} : { breakType }),
-      blocks: insertConstructMarkers(state.blocks.slice(from, to), contained),
+      blocks: insertConstructMarkers(
+        associateFigureCaptions(state.blocks.slice(from, to)),
+        contained,
+      ),
     };
   }
 
