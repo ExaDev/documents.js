@@ -438,6 +438,28 @@ function corpus(): readonly CorpusEntry[] {
       },
     },
     {
+      name: "wordprocessing section carrying page furniture in every slot (ExaDev/documents.js#1128)",
+      content: {
+        kind: "wordprocessing",
+        metadata: {},
+        sections: [
+          {
+            ...SECTION_GEOMETRY,
+            headers: {
+              default: [paragraph("header default")],
+              even: [paragraph("header even")],
+              first: [paragraph("header first")],
+            },
+            footers: {
+              default: [paragraph("footer default")],
+              even: [paragraph("footer even")],
+            },
+            blocks: [paragraph("body")],
+          },
+        ],
+      },
+    },
+    {
       name: "presentation with several shapes, list nesting inside each, and a heading-styled leaf",
       content: {
         kind: "presentation",
