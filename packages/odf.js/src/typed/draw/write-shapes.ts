@@ -1,6 +1,7 @@
 import type {
   Box,
   ContentBlock,
+  ContentEmbeddedObjectBlock,
   ContentImageBlock,
   ContentParagraph,
   ContentShape,
@@ -32,10 +33,11 @@ import {
   type ListPlanState,
   type OdfListEntry,
 } from "../shared/list";
+import { writeEmbeddedObject } from "./embedded-write";
 
 // The write-side mirror of typed/draw/shapes.ts's own readDrawFrame/walkDrawShapes: one ContentShape -> the draw:frame element those functions read back, shared between odp (typed/odp/write.ts, the first caller) and odg (typed/odg/write.ts), exactly as the read side's own shapes.ts is shared between readOdp and readOdg (see typed/odg/read.ts's own FACTORING DECISION note for why the split sits here). What differs between the two formats on the write side -- a slide's presentation:notes, a drawing page's own vector primitives -- stays in each format's own write.ts (or, for the vectors, in this directory's own typed/draw/write-vectors.ts); this module owns only the one thing genuinely identical between them: turning a ContentShape into a real draw:frame, and stating the canonical form reading one back produces.
 //
-// THE ONE HARD CONSTRAINT THIS MODULE IS BUILT AROUND: a draw:frame's content is exactly ONE of table:table, draw:text-box, or draw:image (readDrawFrameContent's own top-of-file note, verified against real LibreOffice output) -- never a mix, and never more than one. planShapeContent below is the single place that decides which of the three a shape's own `blocks` array maps to, refusing by name (rather than silently dropping) any combination ODF has no spelling for.
+// THE ONE HARD CONSTRAINT THIS MODULE IS BUILT AROUND: a draw:frame's content is exactly ONE of table:table, draw:text-box, draw:image, or draw:object (readDrawFrameContent's own top-of-file note, verified against real LibreOffice output) -- never a mix, and never more than one. planShapeContent below is the single place that decides which of the four a shape's own `blocks` array maps to, refusing by name (rather than silently dropping) any combination ODF has no spelling for.
 
 function unsupportedShapeContent(what: string): Error {
   return new Error(
@@ -47,14 +49,18 @@ function unsupportedShapeContent(what: string): Error {
 export type ShapeContentPlan =
   | { readonly kind: "text"; readonly paragraphs: readonly ContentParagraph[] }
   | { readonly kind: "table"; readonly table: ContentTable }
-  | { readonly kind: "image"; readonly image: ContentImageBlock };
+  | { readonly kind: "image"; readonly image: ContentImageBlock }
+  | {
+      readonly kind: "embedded";
+      readonly object: ContentEmbeddedObjectBlock;
+    };
 
 // Validates and discriminates a shape's `blocks` into the one content kind its draw:frame will carry, canonicalising any paragraph-level list membership onto the SAME ListPlanState (typed/shared/list.ts) the caller threads across whatever scope its own format requires (odp threads one state across the whole presentation and odg one across the whole drawing, each matching its own reader's threading -- this function does not decide that, it only ever reads the state it is given). Force-closes the plan's currently open run FIRST, unconditionally: a list can never structurally span two shapes (each is its own draw:text-box), so a caller must never see the previous shape's run silently continue into this one even if their raw numIds happen to coincide.
 //
 // Refusals, each by name rather than a silent drop:
 // - a table or an image found ALONGSIDE any other block (only a shape whose blocks are ALL paragraphs, or whose blocks are EXACTLY one table, or EXACTLY one image, has a real draw:frame spelling);
 // - a page break (no ODF spelling inside a shape's own text -- draw:text-box has no page concept at all);
-// - an embedded object (the odp/odg readers have no draw:object frame recovery path -- readDrawFrameContent reads table:table/draw:text-box/draw:image only -- so writing one would be silent loss, and the shape-side gap is reader-side before it is writer-side) or a construct boundary marker (the text-box walk reads (text:p | text:list)* only, so block-scope markers inside a shape have no read path either);
+// - an embedded object found ALONGSIDE any other block (an embedding frame carries exactly the one draw:object, mirroring the exactly-one rule a table or an image frame already follows -- a lone embedded object IS writable, through typed/draw/embedded-write.ts's writeEmbeddedObject, and reads back through readDrawFrameContent's own draw:object branch) or a construct boundary marker (the text-box walk reads (text:p | text:list)* only, so block-scope markers inside a shape have no read path either);
 // - a heading (a shape's own draw:text-box content model is (text:p | text:list)* with no text:h at all -- readDrawFrameContent's own text-box walk only ever looks for those two tags, so a text:h written here would be silently invisible on the way back in, not merely unusual).
 export function planShapeContent(
   blocks: readonly ContentBlock[],
@@ -70,6 +76,9 @@ export function planShapeContent(
     }
     if (only.kind === "image") {
       return { kind: "image", image: only };
+    }
+    if (only.kind === "embeddedObject") {
+      return { kind: "embedded", object: only };
     }
   }
 
@@ -91,7 +100,9 @@ export function planShapeContent(
       );
     }
     if (block.kind === "embeddedObject") {
-      throw unsupportedShapeContent("an embedded object");
+      throw unsupportedShapeContent(
+        "an embedded object alongside other content (an embedding frame carries exactly the one draw:object)",
+      );
     }
     if (block.kind === "constructStart" || block.kind === "constructEnd") {
       throw unsupportedShapeContent("a construct boundary marker");
@@ -135,6 +146,7 @@ export interface DrawShapeWriteState {
   nextImage: number;
   nextTable: number;
   nextListStyle: number;
+  nextEmbeddedObject: number;
   readonly listStyleByKind: Map<"ordered" | "bullet", string>;
 }
 
@@ -156,6 +168,7 @@ export function createDrawShapeWriteState(
     nextImage: 1,
     nextTable: 1,
     nextListStyle: 1,
+    nextEmbeddedObject: 1,
     listStyleByKind: new Map(),
   };
 }
@@ -381,7 +394,15 @@ export function writeDrawFrame(
       ? [writeOdfTable(content.table, tableWriteContext(state))]
       : content.kind === "image"
         ? writeShapeImage(content.image, state)
-        : [writeShapeTextBox(content.paragraphs, state)];
+        : content.kind === "embedded"
+          ? [
+              writeEmbeddedObject(
+                content.object,
+                `Object ${state.nextEmbeddedObject++}`,
+                state.pkg,
+              ),
+            ]
+          : [writeShapeTextBox(content.paragraphs, state)];
 
   return el("draw:frame", attributes, children);
 }
@@ -423,9 +444,11 @@ export function canonicalDrawShape(
               heightPt: shape.frame.heightPt,
             },
           ]
-        : content.paragraphs.map((paragraph) =>
-            canonicalParagraph(paragraph, paragraph.list?.numId, true),
-          );
+        : content.kind === "embedded"
+          ? [{ ...content.object, frame: shape.frame }]
+          : content.paragraphs.map((paragraph) =>
+              canonicalParagraph(paragraph, paragraph.list?.numId, true),
+            );
   const canonical: ContentShape & { paintOrder: number } = {
     frame: shape.frame,
     insetLeftPt: shape.insetLeftPt,

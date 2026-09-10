@@ -335,6 +335,12 @@ export {
   writeEmbeddedObjectPackage,
 } from "./typed/draw/embedded-write";
 
+// The index-wrapper element builders (typed/shared/constructs.ts): the write-side inverse of the odt reader's index-wrapper recovery, exported so documents.js's odt editor can open a real text:table-of-content-style region for an index contentControl construct pair (ExaDev/documents.js#1190).
+export {
+  odfIndexWrapperTag,
+  writeOdfIndexWrapper,
+} from "./typed/shared/constructs";
+
 export { readOdm } from "./typed/odm/read";
 
 // The master-document WRITER, the inverse of readOdm: one top-level text:section per chapter, each carrying its external-file reference exactly as the reader's own real-LibreOffice verification transcribed it.
