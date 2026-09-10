@@ -6,12 +6,14 @@ import {
   RECORD_BOUNDSHEET8,
   RECORD_DATE1904,
   RECORD_EXTERNSHEET,
+  RECORD_FONT,
   RECORD_FORMAT,
   RECORD_PALETTE,
   RECORD_SST,
   RECORD_SUPBOOK,
   RECORD_XF,
 } from "../biff/record-types";
+import { readFontRecord, type XfFontFields } from "../biff/font";
 import { BiffFormatError } from "../biff/records";
 import {
   readRichExtendedString,
@@ -69,6 +71,10 @@ export interface WorkbookGlobals {
   readonly sharedStrings: readonly string[];
   /** The XF table, indexed by a cell's own ixfe. */
   readonly cellFormats: readonly CellFormat[];
+  /**
+   * The font table, indexed by an XF record's own ifnt ([MS-XLS] 2.4.122). Entry 0 is the Normal style's font -- the workbook's own default, which content.ts diffs each cell's font against to decide which of its properties the cell genuinely states (a cell has no way to say "no font", only an index into this table, so entry 0 is what "the format's default" concretely means here).
+   */
+  readonly fonts: readonly XfFontFields[];
   /** Number-format codes by identifier: the file's own Format records laid over the built-in table. */
   readonly numberFormats: ReadonlyMap<number, string>;
   /** Whether serials count from the 1904 epoch rather than the 1900 one ([MS-XLS] 2.4.77). */
@@ -109,6 +115,7 @@ export function readWorkbookGlobals(
 ): WorkbookGlobals {
   const sheets: SheetEntry[] = [];
   const cellFormats: CellFormat[] = [];
+  const fonts: XfFontFields[] = [];
   const customFormats = new Map<number, string>();
   // SupBook records ([MS-XLS] 2.4.271) precede the single EXTERNSHEET record that resolves against them, but this reader does not lean on that ordering: every SupBook is collected here, in arrival order, and EXTERNSHEET is resolved against the finished collection once the whole substream has been walked.
   const supBooks: SupBookInfo[] = [];
@@ -132,6 +139,9 @@ export function readWorkbookGlobals(
       }
       case RECORD_XF:
         cellFormats.push(readCellFormat(record));
+        break;
+      case RECORD_FONT:
+        fonts.push(readFontRecord(record));
         break;
       case RECORD_DATE1904:
         date1904 = readDate1904(record);
@@ -164,6 +174,7 @@ export function readWorkbookGlobals(
     sheets,
     sharedStrings,
     cellFormats,
+    fonts,
     numberFormats,
     date1904,
     sheetRanges,
