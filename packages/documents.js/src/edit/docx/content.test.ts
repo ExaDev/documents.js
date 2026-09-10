@@ -442,6 +442,124 @@ describe("buildDocxPackage", () => {
     expect(tags.indexOf("w:bookmarkEnd")).toBeGreaterThan(tags.indexOf("w:p"));
   });
 
+  it("round-trips a contentControl construct pair through a real w:sdt region", () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "constructStart",
+            descriptor: {
+              kind: "contentControl",
+              controlType: "dropDown",
+              tag: "region",
+              alias: "Region picker",
+              options: ["North", "South"],
+              lock: "content",
+            },
+          },
+          { kind: "paragraph", runs: [{ text: "inside the control" }] },
+          { kind: "constructEnd" },
+          { kind: "paragraph", runs: [{ text: "outside" }] },
+        ],
+      },
+    ]);
+    const rereadDoc = readDocxContent(buildDocxPackage(content));
+    if (rereadDoc.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+
+    const kinds = rereadDoc.sections[0]!.blocks.map((block) => block.kind);
+    expect(kinds).toEqual([
+      "constructStart",
+      "paragraph",
+      "constructEnd",
+      "paragraph",
+    ]);
+    const marker = rereadDoc.sections[0]!.blocks[0];
+    if (marker?.kind !== "constructStart") {
+      throw new Error("expected the first block to be the construct marker");
+    }
+    expect(marker.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "dropDown",
+      tag: "region",
+      alias: "Region picker",
+      options: ["North", "South"],
+      lock: "content",
+    });
+    // The bracketed paragraph is genuinely INSIDE the control: its w:p lives under w:sdtContent, and the outside paragraph stays a direct body child.
+    const pkg = buildDocxPackage(content);
+    const documentRoot = rootElement(pkg.parts["word/document.xml"]);
+    if (documentRoot === undefined) {
+      throw new Error("expected a word/document.xml root element");
+    }
+    const sdts = descendants(documentRoot, "w:sdt");
+    expect(sdts).toHaveLength(1);
+    const insideText = textContent(
+      childrenWithTag(sdts[0]!, "w:sdtContent")[0]!,
+    );
+    expect(insideText).toContain("inside the control");
+    expect(insideText).not.toContain("outside");
+  });
+
+  it("round-trips nested contentControl regions and a checkbox control's state", () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "constructStart",
+            descriptor: { kind: "contentControl", controlType: "richText" },
+          },
+          { kind: "paragraph", runs: [{ text: "outer" }] },
+          {
+            kind: "constructStart",
+            descriptor: {
+              kind: "contentControl",
+              controlType: "checkbox",
+              checked: true,
+            },
+          },
+          { kind: "paragraph", runs: [{ text: "inner" }] },
+          { kind: "constructEnd" },
+          { kind: "constructEnd" },
+        ],
+      },
+    ]);
+    const rereadDoc = readDocxContent(buildDocxPackage(content));
+    if (rereadDoc.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+
+    const kinds = rereadDoc.sections[0]!.blocks.map((block) => block.kind);
+    expect(kinds).toEqual([
+      "constructStart",
+      "paragraph",
+      "constructStart",
+      "paragraph",
+      "constructEnd",
+      "constructEnd",
+    ]);
+    const blocks = rereadDoc.sections[0]!.blocks;
+    const outer = blocks[0];
+    const inner = blocks[2];
+    if (outer?.kind !== "constructStart" || inner?.kind !== "constructStart") {
+      throw new Error("expected nested construct markers");
+    }
+    expect(outer.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "richText",
+    });
+    expect(inner.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "checkbox",
+      checked: true,
+    });
+  });
+
   it("drops a non-bookmark construct marker without disturbing an enclosing bookmark's pairing", () => {
     const content = wordDoc([
       {
