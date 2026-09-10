@@ -966,6 +966,147 @@ describe("writeXlsContent", () => {
     ).toThrow(BiffWriteError);
   });
 
+  describe("per-cell fonts", () => {
+    it("round-trips a workbook mixing several distinct cell fonts with plain cells", () => {
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            // A cell stating no font of its own -- it must read back with no font field, referencing the Normal font's own table entry rather than restating it.
+            cell(0, 0, { kind: "string", value: "plain" }),
+            cell(
+              0,
+              1,
+              { kind: "string", value: "bold" },
+              { font: { bold: true } },
+            ),
+            cell(
+              0,
+              2,
+              { kind: "string", value: "italic small" },
+              { font: { italic: true, sizePt: 8 } },
+            ),
+            cell(
+              0,
+              3,
+              { kind: "string", value: "typed" },
+              {
+                font: {
+                  fontFamily: "Courier New",
+                  underline: true,
+                  strike: true,
+                  color: { r: 1, g: 0, b: 0 },
+                },
+              },
+            ),
+          ]),
+        ]),
+      );
+      const content = readXlsContent(bytes);
+      expect(findCell(content, 0, 0, 0)?.font).toBeUndefined();
+      expect(findCell(content, 0, 0, 1)?.font).toEqual({ bold: true });
+      expect(findCell(content, 0, 0, 2)?.font).toEqual({
+        italic: true,
+        sizePt: 8,
+      });
+      // icv 10 is the default palette's own duplicate of Red, which is what a { r: 1, g: 0, b: 0 } colour resolves to without forcing a Palette record -- the identical quantisation the fill round trips already pin.
+      expect(findCell(content, 0, 0, 3)?.font).toEqual({
+        fontFamily: "Courier New",
+        underline: true,
+        strike: true,
+        color: { r: 1, g: 0, b: 0 },
+      });
+    });
+
+    it("shares one font-table entry between two cells stating the same font, in either sheet", () => {
+      const bytes = writeXlsContent(
+        document([
+          sheet("First", [
+            cell(0, 0, { kind: "number", value: 1 }, { font: { bold: true } }),
+          ]),
+          sheet("Second", [
+            cell(0, 0, { kind: "number", value: 2 }, { font: { bold: true } }),
+          ]),
+        ]),
+      );
+      const content = readXlsContent(bytes);
+      expect(findCell(content, 0, 0, 0)?.font).toEqual({ bold: true });
+      expect(findCell(content, 1, 0, 0)?.font).toEqual({ bold: true });
+    });
+
+    it("round-trips a font combined with a fill on the same cell, through the XF the two share", () => {
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(
+              0,
+              0,
+              { kind: "string", value: "loud" },
+              {
+                font: { bold: true },
+                background: { kind: "solid", color: { r: 1, g: 0, b: 0 } },
+              },
+            ),
+          ]),
+        ]),
+      );
+      const readBack = findCell(readXlsContent(bytes), 0, 0, 0);
+      expect(readBack?.font).toEqual({ bold: true });
+      expect(readBack?.background).toEqual({
+        kind: "solid",
+        color: { r: 1, g: 0, b: 0 },
+      });
+    });
+
+    it("round-trips an empty cell whose only formatting is a font, as the Blank record that font earns", () => {
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(0, 0, { kind: "empty" }, { font: { bold: true } }),
+          ]),
+        ]),
+      );
+      const readBack = findCell(readXlsContent(bytes), 0, 0, 0);
+      expect(readBack?.value).toEqual({ kind: "empty" });
+      expect(readBack?.font).toEqual({ bold: true });
+    });
+
+    it("writes no font of a cell's own for a ContentFont that merely restates the Normal font's values", () => {
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(0, 0, { kind: "number", value: 1 }, { font: {} }),
+            cell(
+              0,
+              1,
+              { kind: "number", value: 2 },
+              { font: { bold: false, fontFamily: "Arial", sizePt: 10 } },
+            ),
+          ]),
+        ]),
+      );
+      const content = readXlsContent(bytes);
+      expect(findCell(content, 0, 0, 0)?.font).toBeUndefined();
+      expect(findCell(content, 0, 0, 1)?.font).toBeUndefined();
+    });
+
+    it("refuses a font height outside dyHeight's own 20-8191 twip range", () => {
+      expect(() =>
+        writeXlsContent(
+          document([
+            sheet("Sheet1", [
+              cell(
+                0,
+                0,
+                { kind: "number", value: 1 },
+                { font: { sizePt: 0.5 } },
+              ),
+            ]),
+          ]),
+        ),
+      ).toThrow(BiffWriteError);
+    });
+  });
+
   describe("metadata", () => {
     it('round-trips title/subject/author/keywords/dates through a real "\\x05SummaryInformation" stream', () => {
       const input: XlsContentDocument = {

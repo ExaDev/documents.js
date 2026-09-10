@@ -2,18 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import { BlockCursor } from "./cursor";
 import {
-  RECORD_FONT,
   RECORD_FORMAT,
   RECORD_PALETTE,
   RECORD_STYLE,
   RECORD_XF,
 } from "./record-types";
 import { readRecords } from "./records";
-import { readShortXLUnicodeString, readXLUnicodeString } from "./strings";
+import { readXLUnicodeString } from "./strings";
 import { readLongRgbColor, unpackXfDecoration } from "./xf-colors";
 import {
   writeCellXfRecord,
-  writeFontRecord,
   writeFormatRecord,
   writePaletteRecord,
   writeStyleRecord,
@@ -157,28 +155,6 @@ describe("writeStyleRecord", () => {
     expect((ixfeWord >>> 15) & 0x1).toBe(1); // fBuiltIn
     expect(data[2]).toBe(0x01); // istyBuiltIn
     expect(data[3]).toBe(0x03); // iLevel
-  });
-});
-
-describe("writeFontRecord", () => {
-  it("writes a genuine Font record whose name round-trips through this package's own reader", () => {
-    const record = writeFontRecord("Arial", 200);
-    const [parsed] = readRecords(record);
-    expect(parsed?.type).toBe(RECORD_FONT);
-    const data = parsed?.data ?? new Uint8Array(0);
-    expect(u16At(data, 0)).toBe(200); // dyHeight
-    const cursor = new BlockCursor([data]);
-    cursor.skip(14); // dyHeight(2) grbit(2) icv(2) bls(2) sss(2) uls(1) bFamily(1) bCharSet(1) unused3(1)
-    expect(readShortXLUnicodeString(cursor)).toBe("Arial");
-  });
-
-  it("always writes fHighByte=1 for the font name, per [MS-XLS] 2.4.122's own unconditional requirement", () => {
-    const record = writeFontRecord("Arial", 200);
-    const [parsed] = readRecords(record);
-    const data = parsed?.data ?? new Uint8Array(0);
-    // The name field starts at offset 9 (dyHeight 2 + grbit 2 + icv 2 + bls 2 + sss 2 -- wait, recompute: dyHeight(2) grbit(2) icv(2) bls(2) sss(2) uls(1) bFamily(1) bCharSet(1) unused3(1) = 14 bytes prefix, then cch(1) flags(1).
-    const flagsOffset = 14 + 1;
-    expect(data[flagsOffset]).toBe(0x01);
   });
 });
 

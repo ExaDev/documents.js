@@ -1,6 +1,5 @@
 import { RecordBuilder } from "./builder";
 import {
-  RECORD_FONT,
   RECORD_FORMAT,
   RECORD_PALETTE,
   RECORD_STYLE,
@@ -8,7 +7,6 @@ import {
 } from "./record-types";
 import { writeRecord } from "./record-writer";
 import { writeXLUnicodeString } from "./string-writer";
-import { BiffWriteError } from "./write-errors";
 import {
   horizAlignTokenFor,
   longRgbBytesOf,
@@ -18,9 +16,9 @@ import {
 } from "./xf-colors";
 import type { Alignment, Color } from "document-schema.js";
 
-// The formatting record family this writer emits: Font ([MS-XLS] 2.4.122), Format ([MS-XLS] 2.4.126), XF ([MS-XLS] 2.4.353) with its trailing CellXF ([MS-XLS] 2.4.353's own "Data" field, fStyle=0) or StyleXF (fStyle=1) payload, Style ([MS-XLS] 2.4.269), and Palette ([MS-XLS] 2.4.188).
+// The formatting record family this writer emits: Format ([MS-XLS] 2.4.126), XF ([MS-XLS] 2.4.353) with its trailing CellXF ([MS-XLS] 2.4.353's own "Data" field, fStyle=0) or StyleXF (fStyle=1) payload, Style ([MS-XLS] 2.4.269), and Palette ([MS-XLS] 2.4.188). The Font record lives next door in biff/font.ts, beside its own reader, so the one layout has the one home.
 //
-// A cell XF's own fill/border decoration and horizontal/vertical alignment are modelled from document-schema.js's ContentSheetCell.background/borders/alignment/verticalAlignment: this writer's own reader reads a cell's CellXF payload back in full (workbook/globals.ts's readCellFormat), so both round-trip -- see xls-codec's README, "Cell decoration" and "Cell alignment". A per-cell font remains out of scope (the reader still does not read one back, and ContentSheetCell has no field for it), so every CellXF/StyleXF field below still defaults to the same spec-legal, undecorated values for anything writeCellXfRecord's caller does not supply: general alignment, bottom vertical alignment, no border, no fill -- exactly what a genuinely undecorated Excel-written cell also carries. The bit-level packing of the trailing payload's leading alignment word and its border/fill words lives in xf-colors.ts, shared with workbook/globals.ts's own unpacking of the identical layout on read.
+// A cell XF's own fill/border decoration and horizontal/vertical alignment are modelled from document-schema.js's ContentSheetCell.background/borders/alignment/verticalAlignment, and its font index from ContentSheetCell.font through the font table globals-writer.ts builds: this writer's own reader reads all of them back in full (workbook/globals.ts's readCellFormat, biff/font.ts's readFontRecord), so each round-trips -- see xls-codec's README, "Cell decoration" and "Cell alignment". Every CellXF/StyleXF field below still defaults to the same spec-legal, undecorated values for anything writeCellXfRecord's caller does not supply: general alignment, bottom vertical alignment, no border, no fill -- exactly what a genuinely undecorated Excel-written cell also carries. The bit-level packing of the trailing payload's leading alignment word and its border/fill words lives in xf-colors.ts, shared with workbook/globals.ts's own unpacking of the identical layout on read.
 
 /** Packs the shared trot/indent/fJustLast/fShrinkToFit/iReadOrder word every CellXF and StyleXF opens with, at whatever alc/alcV tokens the caller resolved (xf-colors.ts's horizAlignTokenFor/vertAlignTokenFor -- ALC_GENERAL(0)/ALCV_BOTTOM(2) for a caller passing neither, the identical bytes this word always carried before alignment was modelled). fWrap=0, fJustLast=0, trot=0, cIndent=0, fShrinkToFit=0, reserved1=0, iReadOrder=0: this writer never sets any of them, since ContentSheetCell has no field for wrap/rotation/indent/shrink-to-fit/reading-order. Returns the low 24 bits (alc..iReadOrder); the caller ORs in whatever the next 8 bits mean for its own shape (CellXF's fAtr* flags, or StyleXF's all-zero unused byte). */
 function packAlignmentPrefix(alc: number, alcV: number): number {
@@ -162,48 +160,6 @@ export function writeStyleRecord(options: {
     .u8(options.iLevel)
     .build();
   return writeRecord(RECORD_STYLE, data);
-}
-
-/** Font ([MS-XLS] 2.4.122): height in twips, colour/weight/script/underline defaults for an undecorated font, then the name as a ShortXLUnicodeString whose fHighByte MUST be 1 per the spec regardless of the name's own content ("The fontName.fHighByte field MUST equal 1") -- unlike every other ShortXLUnicodeString this package writes, so it is encoded uncompressed here directly rather than through writeShortXLUnicodeString, whose auto-compression would otherwise write 1-byte-per-character data under a flags byte that has to claim 2 bytes each. */
-const FONT_FLAG_ITALIC_ETC = 0x0000; // fItalic/fStrikeOut/fOutline/fShadow/fCondense/fExtend all clear
-const FONT_COLOUR_AUTOMATIC = 0x7fff; // icv's own "Automatic"/System Window Text special value
-const FONT_WEIGHT_NORMAL = 400;
-const FONT_SCRIPT_NORMAL = 0x0000;
-const FONT_UNDERLINE_NONE = 0x00;
-const FONT_FAMILY_SWISS = 0x02; // Arial's own family classification
-const FONT_CHARSET_ANSI = 0x00;
-
-/** Forces the uncompressed (fHighByte=1) ShortXLUnicodeString encoding a font name MUST use, writing every character as a full 16-bit code unit regardless of whether a narrower encoding would also fit. */
-function writeFontNameString(name: string): Uint8Array<ArrayBuffer> {
-  const builder = new RecordBuilder().u8(name.length).u8(0x01);
-  for (let index = 0; index < name.length; index += 1) {
-    builder.u16(name.charCodeAt(index));
-  }
-  return builder.build();
-}
-
-export function writeFontRecord(
-  name: string,
-  heightTwips: number,
-): Uint8Array<ArrayBuffer> {
-  if (name.length > 0xff) {
-    throw new BiffWriteError(
-      `font name ${JSON.stringify(name)} is ${name.length} UTF-16 code units, above the 255 a ShortXLUnicodeString cch can hold`,
-    );
-  }
-  const data = new RecordBuilder()
-    .u16(heightTwips)
-    .u16(FONT_FLAG_ITALIC_ETC)
-    .u16(FONT_COLOUR_AUTOMATIC)
-    .u16(FONT_WEIGHT_NORMAL)
-    .u16(FONT_SCRIPT_NORMAL)
-    .u8(FONT_UNDERLINE_NONE)
-    .u8(FONT_FAMILY_SWISS)
-    .u8(FONT_CHARSET_ANSI)
-    .u8(0) // unused3
-    .bytes(writeFontNameString(name))
-    .build();
-  return writeRecord(RECORD_FONT, data);
 }
 
 /** Format ([MS-XLS] 2.4.126): a two-byte identifier then the format code as an XLUnicodeString. */
