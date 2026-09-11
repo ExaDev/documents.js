@@ -1,3 +1,17 @@
+## [7.20.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.19.1...documents.js%407.20.0) (2026-09-11)
+
+### Features
+
+* **documents.js:** wire ppt-codec's OLE-embedding ports to real codecs ([f5c161c](https://github.com/ExaDev/documents.js/commit/f5c161c91cbd68452a8b6cba40dc4ebdb816ee9d))
+
+
+### Dependencies
+
+- Updated pdf-codec to 4.8.0
+- Updated doc-codec to 2.10.0
+- Updated ppt-codec to 1.7.0
+- Updated xls-codec to 4.15.0
+
 ## [7.19.1](https://github.com/ExaDev/documents.js/compare/documents.js%407.19.0...documents.js%407.19.1) (2026-09-11)
 
 

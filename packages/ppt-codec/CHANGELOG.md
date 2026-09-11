@@ -1,3 +1,15 @@
+## [1.7.0](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.6.0...ppt-codec%401.7.0) (2026-09-11)
+
+### Features
+
+* **ppt-codec:** let a caller opt into throwing on an unwritable block ([505e1a9](https://github.com/ExaDev/documents.js/commit/505e1a98618943f115b49445f601322e1ae7d6f3))
+* **ppt-codec:** read and write per-shape text insets and OLE-embedded objects ([e73cdcc](https://github.com/ExaDev/documents.js/commit/e73cdccd6a205b912b32361aedef64f4f7539fae))
+
+### Documentation
+
+* **ppt-codec:** describe per-shape insets and OLE-embedding support ([83e8835](https://github.com/ExaDev/documents.js/commit/83e8835fbe8cba426e4534598f0b1aadadd001e2))
+* **ppt-codec:** describe the onUnwritableBlock throw-vs-drop option ([d8aaaaf](https://github.com/ExaDev/documents.js/commit/d8aaaaf432f4118a3c8ea948ae5b00f927ccd731))
+
 ## [1.6.0](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.5.0...ppt-codec%401.6.0) (2026-09-11)
 
 ### Features

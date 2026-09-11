@@ -1,3 +1,22 @@
+## [2.10.0](https://github.com/ExaDev/documents.js/compare/doc-codec%402.9.0...doc-codec%402.10.0) (2026-09-11)
+
+### Features
+
+* **doc-codec:** add a genuine Word-produced corpus alongside the LibreOffice one ([59206e8](https://github.com/ExaDev/documents.js/commit/59206e8ebdcea6bdf3a578530caa1f558d153826))
+* **doc-codec:** follow sprmPHugePapx into the Data stream ([8335020](https://github.com/ExaDev/documents.js/commit/8335020039a605cfe5e2ae69f21be982c746fa18))
+
+### Bug Fixes
+
+* **doc-codec:** drop the unused readFileSync import in fetch-word-corpus.mjs ([5498c49](https://github.com/ExaDev/documents.js/commit/5498c4957422b288bc1866129ac9959b7eeede02))
+* **doc-codec:** normalise a Plcfhdd's out-of-specification placeholder CPs ([e34c1c5](https://github.com/ExaDev/documents.js/commit/e34c1c5cd452f98e96a9d8d73218add666e2c938))
+* **doc-codec:** read an in-table run with no row mark as plain paragraphs ([1ee07a3](https://github.com/ExaDev/documents.js/commit/1ee07a37b9d3551e40a70bbc96a9ea56ac526ba1))
+* **doc-codec:** read an out-of-table LVLF.nfc as decimal, not a refusal ([ba79898](https://github.com/ExaDev/documents.js/commit/ba79898f8d7e43de266d6a53a757811159151bfe))
+
+### Documentation
+
+* **doc-codec:** describe the genuine-Word corpus and what it fixed ([750dde6](https://github.com/ExaDev/documents.js/commit/750dde6411d206fb4aa63c34778a70bd7afd4adb))
+* **doc-codec:** pad the sprmPTableProps README table row to match prettier's column width ([dbb6a69](https://github.com/ExaDev/documents.js/commit/dbb6a6901cc916a3088a9bb134ee019c3bf8f795))
+
 ## [2.9.0](https://github.com/ExaDev/documents.js/compare/doc-codec%402.8.6...doc-codec%402.9.0) (2026-09-11)
 
 ### Features
