@@ -72,6 +72,7 @@
     "semantic-release": "25.0.9",
     "semver": "7.8.5",
     "syncpack": "15.3.3",
+    "tsdown": "0.22.14",
     "turbo": "2.10.8",
     "typescript": "6.0.3",
     "typescript-eslint": "8.66.0",
