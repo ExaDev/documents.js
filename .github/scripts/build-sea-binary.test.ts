@@ -13,15 +13,18 @@ describe("mainFormatFor", () => {
 });
 
 describe("binaryFileName", () => {
-  it("qualifies every platform with a distinct, human-readable label, appending .exe only on win32", () => {
-    expect(binaryFileName("document-rest", "win32")).toBe(
-      "document-rest-windows.exe",
+  it("qualifies every (platform, arch) pair with a distinct, human-readable name, appending .exe only on win32", () => {
+    expect(binaryFileName("document-rest", "win32", "x64")).toBe(
+      "document-rest-windows-x64.exe",
     );
-    expect(binaryFileName("document-rest", "darwin")).toBe(
-      "document-rest-macos",
+    expect(binaryFileName("document-rest", "darwin", "arm64")).toBe(
+      "document-rest-macos-arm64",
     );
-    expect(binaryFileName("document-rest", "linux")).toBe(
-      "document-rest-linux",
+    expect(binaryFileName("document-rest", "darwin", "x64")).toBe(
+      "document-rest-macos-x64",
+    );
+    expect(binaryFileName("document-rest", "linux", "x64")).toBe(
+      "document-rest-linux-x64",
     );
   });
 });
