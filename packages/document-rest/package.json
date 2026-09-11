@@ -58,7 +58,7 @@
     "_typecheck": "tsc --noEmit",
     "_typecheck:attw": "attw --pack",
     "test": "turbo run _test",
-    "_test": "vitest run",
+    "_test": "vitest run --project unit",
     "test:watch": "vitest",
     "test:coverage": "turbo run _test:coverage",
     "_test:coverage": "vitest run --coverage",
