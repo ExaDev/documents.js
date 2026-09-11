@@ -1379,6 +1379,13 @@ describe("readPptxContent: chart graphic frames", () => {
     expect(cellText(table, 0, 2)).toBe("Cost");
   });
 
+  it("marks the cached-model table origin: 'chart' -- a chart's numbers, not an authored data table", () => {
+    const doc = readPptxContent(chartFixturePackage());
+    const chartShape = doc.slides[0]?.shapes.find((s) => s.name === "Chart 1");
+    const table = asTable(chartShape?.blocks[0]);
+    expect(table.origin).toBe("chart");
+  });
+
   it("reads one row per category index, in index order, with each series' cached value in its own column", () => {
     const doc = readPptxContent(chartFixturePackage());
     const chartShape = doc.slides[0]?.shapes.find((s) => s.name === "Chart 1");
@@ -1589,6 +1596,14 @@ describe("readPptxContent: SmartArt graphic frames", () => {
       "Cost",
       "Assistant",
     ]);
+  });
+
+  it("marks the shape origin: 'diagram' -- the diagram's own node text, not freeform slide prose", () => {
+    const doc = readPptxContent(smartArtFixturePackage());
+    const diagramShape = doc.slides[0]?.shapes.find(
+      (s) => s.name === "Diagram 1",
+    );
+    expect(diagramShape?.origin).toBe("diagram");
   });
 
   it("keeps the frame's geometry with empty content when the data model relationship resolves to no readable part", () => {
