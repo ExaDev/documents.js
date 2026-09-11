@@ -27,6 +27,7 @@ import {
   loadMathFont,
   writePdf,
 } from "pdf-codec";
+import { base64ToBytes } from "ooxml.js";
 import { flipY } from "../model/geometry";
 import { convertVector } from "../layout/drawing";
 import { NOMINAL_CELL_TEXT_SIZE_PT } from "../layout/sheets";
@@ -482,7 +483,18 @@ function packageToLayout(pkg: DocumentTree): {
     heightPt: page.heightPt,
     items: [],
   }));
-  const fonts = createFontRegistry({});
+  // The tree's own embedded font faces (document-schema.js's tree-only `fonts` table, spliced by whichever construction site read a package that embedded them) feed the rebuild's registry as sourceFonts, so a rebuild renders through the document's real faces rather than vendored substitutes and the standard 14 -- the one layer of the original package a tree previously could not carry (ExaDev/documents.js#1192). An empty or absent table keeps the identical registry construction a tree without embedded fonts always had, byte-for-byte.
+  const fonts =
+    pkg.fonts !== undefined && pkg.fonts.length > 0
+      ? createFontRegistry({
+          sourceFonts: pkg.fonts.map((face) => ({
+            family: face.family,
+            bold: face.bold,
+            italic: face.italic,
+            bytes: requireArrayBufferBytes(base64ToBytes(face.base64)),
+          })),
+        })
+      : createFontRegistry({});
   const state: FrameWalkState = {
     pages,
     images: {},
