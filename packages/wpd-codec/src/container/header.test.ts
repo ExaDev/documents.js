@@ -10,7 +10,7 @@ import {
   GENERIC_HEADER_SIZE,
   genericHeaderBytes,
 } from "../test-support/generic-header";
-import { readFileHeader } from "./header";
+import { hasWordPerfectFileId, readFileHeader } from "./header";
 
 // A minimal conforming 16-byte header, assembled field by field from the SDK's own "File Header Format" table rather than copied from a real file, so each assertion below points at one named field.
 function headerBytes(
@@ -45,6 +45,24 @@ function headerBytes(
   return bytes;
 }
 
+describe("hasWordPerfectFileId", () => {
+  it("is true for the exact file ID", () => {
+    expect(hasWordPerfectFileId(new Uint8Array([0xff, 0x57, 0x50, 0x43]))).toBe(
+      true,
+    );
+  });
+
+  it("is false when only a prefix of the file ID matches", () => {
+    expect(hasWordPerfectFileId(new Uint8Array([0xff, 0x57, 0, 0]))).toBe(
+      false,
+    );
+  });
+
+  it("is false for an empty buffer", () => {
+    expect(hasWordPerfectFileId(new Uint8Array(0))).toBe(false);
+  });
+});
+
 describe("readFileHeader", () => {
   it("reads every field of the SDK's own generic header example", () => {
     const header = readFileHeader(genericHeaderBytes());
@@ -62,14 +80,19 @@ describe("readFileHeader", () => {
   });
 
   it("rejects a file whose first four bytes are not the -1,'WPC' file ID", () => {
-    expect(() =>
-      readFileHeader(headerBytes({ id: [0x50, 0x4b, 0x03, 0x04] })),
-    ).toThrow(WpdNotAWordPerfectFileError);
+    const bytes = headerBytes({ id: [0x50, 0x4b, 0x03, 0x04] });
+    expect(() => readFileHeader(bytes)).toThrow(WpdNotAWordPerfectFileError);
+    expect(() => readFileHeader(bytes)).toThrow(
+      'Expected the WordPerfect file ID FF 57 50 43 (-1,"WPC") at offset 0, found 50 4b 03 04.',
+    );
   });
 
   it("rejects an encrypted document rather than returning an unreadable header", () => {
     expect(() => readFileHeader(headerBytes({ encryption: 1 }))).toThrow(
       WpdEncryptedDocumentError,
+    );
+    expect(() => readFileHeader(headerBytes({ encryption: 1 }))).toThrow(
+      'This document is encrypted (encryption word 1); nothing beyond the file header is intelligible without the password. Pass { password } to read it -- the standard ("original") encryption mode is supported, and a non-matching password throws WpdWrongPasswordError.',
     );
   });
 
@@ -77,17 +100,26 @@ describe("readFileHeader", () => {
     expect(() => readFileHeader(headerBytes({ majorVersion: 0 }))).toThrow(
       WpdUnsupportedVersionError,
     );
+    expect(() => readFileHeader(headerBytes({ majorVersion: 0 }))).toThrow(
+      "Major version 0 is outside the WordPerfect 6.x-X6 lineage (major version 2), the one generation this reader covers.",
+    );
   });
 
   it("rejects a non-document WordPerfect file, such as a printer resource file", () => {
     expect(() => readFileHeader(headerBytes({ fileType: 0x10 }))).toThrow(
       WpdUnsupportedVersionError,
     );
+    expect(() => readFileHeader(headerBytes({ fileType: 0x10 }))).toThrow(
+      "File type 16 is not a WordPerfect document (expected 10 or 36).",
+    );
   });
 
   it("rejects a file from another Corel product", () => {
     expect(() => readFileHeader(headerBytes({ productType: 3 }))).toThrow(
       WpdUnsupportedVersionError,
+    );
+    expect(() => readFileHeader(headerBytes({ productType: 3 }))).toThrow(
+      "Product type 3 is not WordPerfect (1); this file was produced by a different Corel product.",
     );
   });
 });

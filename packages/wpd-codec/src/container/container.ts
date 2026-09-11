@@ -99,6 +99,7 @@ function documentAreaEnd(
   header: WpdFileHeader,
 ): number {
   const { fileSize, documentAreaOffset } = header;
+  // Stryker disable next-line EqualityOperator: <= vs < only disagree when fileSize === bytes.length exactly, and at that exact point the two branches return the same number (fileSize and bytes.length are equal), so no input can ever observe which comparison ran.
   if (fileSize > documentAreaOffset && fileSize <= bytes.length) {
     return fileSize;
   }
@@ -115,13 +116,10 @@ export function openWpdDocument(
     oleObjectStreams,
   } = unwrapContainer(toArrayBufferBacked(input));
   const header = readFileHeader(wrapped, options);
-  // An empty-string password means no password (the identical normalisation readFileHeader applies), so both gates below see one consistent value.
-  const suppliedPassword =
-    options.password === "" ? undefined : options.password;
-  // An encrypted document's index area, packet data, and document area are all beyond the fixed header and therefore all ciphertext; decrypting the whole buffer in one pass here means every downstream reader (the prefix walker, the tokeniser) parses plaintext with no encryption awareness of its own. A password supplied for an unencrypted document never reaches this branch -- the header word gates it -- and is harmlessly ignored, mirroring every other codec here.
+  // No separate empty-string normalisation is needed here: readFileHeader above already applies the identical "" -> no password rule and throws WpdEncryptedDocumentError before this line is reached for any encrypted document given an empty-string password, so by the time header.encryption !== 0 is true, options.password is already known to be a defined, non-empty string. An encrypted document's index area, packet data, and document area are all beyond the fixed header and therefore all ciphertext; decrypting the whole buffer in one pass here means every downstream reader (the prefix walker, the tokeniser) parses plaintext with no encryption awareness of its own. A password supplied for an unencrypted document never reaches this branch -- the header word gates it -- and is harmlessly ignored, mirroring every other codec here.
   const bytes =
-    header.encryption !== 0 && suppliedPassword !== undefined
-      ? decryptWpdDocument(wrapped, header, suppliedPassword)
+    header.encryption !== 0 && options.password !== undefined
+      ? decryptWpdDocument(wrapped, header, options.password)
       : wrapped;
   const packets = readPrefixPackets(bytes, header);
   return {
