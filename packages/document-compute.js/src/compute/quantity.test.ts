@@ -61,6 +61,17 @@ describe("addQuantities / subtractQuantities", () => {
     }
     expect(caught).toBeInstanceOf(IncompatibleDimensionsError);
     expect((caught as IncompatibleDimensionsError).operation).toBe("math:add");
+
+    let subtractCaught: unknown;
+    try {
+      subtractQuantities(metres, seconds);
+    } catch (error) {
+      subtractCaught = error;
+    }
+    expect(subtractCaught).toBeInstanceOf(IncompatibleDimensionsError);
+    expect((subtractCaught as IncompatibleDimensionsError).operation).toBe(
+      "math:subtract",
+    );
   });
 });
 
@@ -81,9 +92,20 @@ describe("multiplyQuantities / divideQuantities", () => {
     );
   });
 
-  it("throws DivisionByZeroError on division by a zero magnitude", () => {
+  it("throws DivisionByZeroError on division by a zero magnitude, naming the operation and dividend", () => {
     expect(() => divideQuantities(quantity(5, {}), quantity(0, {}))).toThrow(
       DivisionByZeroError,
+    );
+    let caught: unknown;
+    try {
+      divideQuantities(quantity(5, {}), quantity(0, {}));
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(DivisionByZeroError);
+    expect((caught as DivisionByZeroError).operation).toBe("math:divide");
+    expect((caught as DivisionByZeroError).message).toBe(
+      "'math:divide': division by zero (divisor magnitude is exactly zero (dividend magnitude 5)).",
     );
   });
 });
@@ -106,22 +128,45 @@ describe("powQuantity", () => {
     );
   });
 
+  it("raises a dimensionless base to a non-integer power without ever reaching the dimensioned-base integer check", () => {
+    // exponent.magnitude = 0.5 is not an integer -- if the dimensionless-base early return (isDimensionless(base.dimension)) were skipped or its condition flipped, this would fall through to `!Number.isInteger(exponent.magnitude)` and wrongly throw IncompatibleDimensionsError instead of returning 2.
+    expect(powQuantity(quantity(4, {}), quantity(0.5, {}))).toEqual(
+      quantity(2, {}),
+    );
+  });
+
   it("raises a dimensioned base to an integer power, scaling every exponent", () => {
     expect(powQuantity(quantity(2, { length: 1 }), quantity(3, {}))).toEqual(
       quantity(8, { length: 3 }),
     );
   });
 
-  it("rejects a dimensioned base raised to a non-integer power", () => {
-    expect(() =>
-      powQuantity(quantity(4, { length: 1 }), quantity(0.5, {})),
-    ).toThrow(IncompatibleDimensionsError);
+  it("rejects a dimensioned exponent, naming the operation and the required-dimensionless detail", () => {
+    let caught: unknown;
+    try {
+      powQuantity(quantity(2, {}), quantity(2, { length: 1 }));
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(IncompatibleDimensionsError);
+    expect((caught as IncompatibleDimensionsError).operation).toBe("math:pow");
+    expect((caught as IncompatibleDimensionsError).message).toBe(
+      "'math:pow' requires compatible dimensions, got length^1 and dimensionless (the exponent must be dimensionless).",
+    );
   });
 
-  it("rejects a dimensioned exponent", () => {
-    expect(() =>
-      powQuantity(quantity(2, {}), quantity(2, { length: 1 })),
-    ).toThrow(IncompatibleDimensionsError);
+  it("rejects a dimensioned base raised to a non-integer power, naming the operation and the integer-power detail", () => {
+    let caught: unknown;
+    try {
+      powQuantity(quantity(4, { length: 1 }), quantity(0.5, {}));
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(IncompatibleDimensionsError);
+    expect((caught as IncompatibleDimensionsError).operation).toBe("math:pow");
+    expect((caught as IncompatibleDimensionsError).message).toBe(
+      "'math:pow' requires compatible dimensions, got length^1 and dimensionless (a dimensioned base can only be raised to an integer power).",
+    );
   });
 });
 
@@ -132,14 +177,36 @@ describe("sqrtQuantity", () => {
     );
   });
 
-  it("rejects a dimension with an odd exponent", () => {
-    expect(() => sqrtQuantity(quantity(4, { length: 1 }))).toThrow(
-      IncompatibleDimensionsError,
+  it("accepts a zero magnitude rather than treating it as negative", () => {
+    expect(sqrtQuantity(quantity(0, {}))).toEqual(quantity(0, {}));
+  });
+
+  it("rejects a dimension with an odd exponent, naming the operation and the even-exponent detail", () => {
+    let caught: unknown;
+    try {
+      sqrtQuantity(quantity(4, { length: 1 }));
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(IncompatibleDimensionsError);
+    expect((caught as IncompatibleDimensionsError).operation).toBe("math:sqrt");
+    expect((caught as IncompatibleDimensionsError).message).toBe(
+      "'math:sqrt' requires compatible dimensions, got length^1 and dimensionless (every exponent must be even for the dimension to have an exact square root).",
     );
   });
 
-  it("rejects a negative magnitude", () => {
-    expect(() => sqrtQuantity(quantity(-1, {}))).toThrow(NumericDomainError);
+  it("rejects a negative magnitude, naming the operation and the actual magnitude", () => {
+    let caught: unknown;
+    try {
+      sqrtQuantity(quantity(-1, {}));
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(NumericDomainError);
+    expect((caught as NumericDomainError).operation).toBe("math:sqrt");
+    expect((caught as NumericDomainError).message).toBe(
+      "'math:sqrt': magnitude must be non-negative, got -1.",
+    );
   });
 });
 
@@ -151,9 +218,41 @@ describe("trigonometric quantities", () => {
     expect(cosQuantity(quantity(0, {})).dimension).toEqual({});
   });
 
-  it("reject a dimensioned argument", () => {
-    expect(() => cosQuantity(quantity(1, { length: 1 }))).toThrow(
-      IncompatibleDimensionsError,
+  it("reject a dimensioned argument, each naming its own operator", () => {
+    let sinCaught: unknown;
+    try {
+      sinQuantity(quantity(1, { length: 1 }));
+    } catch (error) {
+      sinCaught = error;
+    }
+    expect(sinCaught).toBeInstanceOf(IncompatibleDimensionsError);
+    expect((sinCaught as IncompatibleDimensionsError).operation).toBe(
+      "math:sin",
+    );
+
+    let cosCaught: unknown;
+    try {
+      cosQuantity(quantity(1, { length: 1 }));
+    } catch (error) {
+      cosCaught = error;
+    }
+    expect(cosCaught).toBeInstanceOf(IncompatibleDimensionsError);
+    expect((cosCaught as IncompatibleDimensionsError).operation).toBe(
+      "math:cos",
+    );
+
+    let tanCaught: unknown;
+    try {
+      tanQuantity(quantity(1, { length: 1 }));
+    } catch (error) {
+      tanCaught = error;
+    }
+    expect(tanCaught).toBeInstanceOf(IncompatibleDimensionsError);
+    expect((tanCaught as IncompatibleDimensionsError).operation).toBe(
+      "math:tan",
+    );
+    expect((tanCaught as IncompatibleDimensionsError).message).toBe(
+      "'math:tan' requires compatible dimensions, got length^1 and dimensionless (trigonometric functions take a dimensionless (radian) argument).",
     );
   });
 });

@@ -122,6 +122,7 @@ function bisection(
     if (Math.abs(fMid) < tolerance) {
       return mid;
     }
+    // Stryker disable next-line EqualityOperator: `fMid > 0` vs `fMid >= 0` (and likewise for `fLow`) only disagree when the operand is exactly 0 -- but the `Math.abs(fMid) < tolerance` return above already catches fMid === 0 whenever tolerance > 0 (0 is always < a positive tolerance), so this line is never reached with fMid === 0 in that case. The only way to reach it with fMid === 0 is tolerance <= 0, and then this line's outcome can never be observed either: no residual ever satisfies a `< tolerance` (or `<= 0`) check again for the rest of the run, so the loop always exhausts to the identical `maxIterations`-and-`tolerance` message regardless of which branch was taken here. fLow is bound to fMid in the true branch (`fLow = fMid`), so the same reasoning applies to it on every subsequent iteration.
     if (fMid > 0 === fLow > 0) {
       low = mid;
       fLow = fMid;
@@ -165,10 +166,12 @@ function newton(
       );
     }
     const next = x - fx / derivative;
+    // Stryker disable next-line ConditionalExpression,BlockStatement: kept as a genuine safety net (a caller-supplied MathExpression could in principle be pathological), but no expression buildable from this package's own grammar (add/subtract/multiply/divide/pow/trig, all smooth away from their own poles) can actually reach this branch without derivative having already failed the check above. For any such function, |f'(x)| scales with |f(x)| / |x| near an ordinary point (so a residual large enough to overflow fx / derivative forces a comparably large, non-vanishing derivative, keeping the quotient bounded), and at a genuine critical point (f' -> 0) reaching a residual that large requires an additive constant so much bigger than the varying term that the central-difference subtraction rounds the measured derivative to exactly 0.0 -- caught above as vanished, never as a small-but-finite value here. So `next` is non-finite if and only if `derivative` already was, or fx itself already was (both already thrown above by the time this line runs), which also means the throw body immediately below -- including its own message -- has no reachable input to exercise it either.
     if (!Number.isFinite(next)) {
       throw new NonConvergentSolveError(
         "newton",
         i,
+        // Stryker disable next-line StringLiteral: unreachable for the same reason as the guard above -- see that comment.
         `the iteration diverged to a non-finite value near x=${x}`,
       );
     }

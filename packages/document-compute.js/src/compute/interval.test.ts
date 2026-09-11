@@ -16,6 +16,9 @@ describe("interval constructor and schema", () => {
   it("accepts min <= max and rejects min > max", () => {
     expect(() => interval(1, 2)).not.toThrow();
     expect(() => interval(2, 1)).toThrow(RangeError);
+    expect(() => interval(2, 1)).toThrow(
+      "interval: min (2) must not exceed max (1)",
+    );
     expect(
       IntervalSchema.safeParse({
         kind: "interval",
@@ -54,10 +57,31 @@ describe("addIntervals / subtractIntervals", () => {
     );
   });
 
-  it("throws IncompatibleDimensionsError on a dimension mismatch", () => {
-    expect(() =>
-      addIntervals(interval(1, 2, { length: 1 }), interval(1, 2, { time: 1 })),
-    ).toThrow(IncompatibleDimensionsError);
+  it("throws IncompatibleDimensionsError on a dimension mismatch, naming its own operation", () => {
+    let addCaught: unknown;
+    try {
+      addIntervals(interval(1, 2, { length: 1 }), interval(1, 2, { time: 1 }));
+    } catch (error) {
+      addCaught = error;
+    }
+    expect(addCaught).toBeInstanceOf(IncompatibleDimensionsError);
+    expect((addCaught as IncompatibleDimensionsError).operation).toBe(
+      "math:add",
+    );
+
+    let subtractCaught: unknown;
+    try {
+      subtractIntervals(
+        interval(1, 2, { length: 1 }),
+        interval(1, 2, { time: 1 }),
+      );
+    } catch (error) {
+      subtractCaught = error;
+    }
+    expect(subtractCaught).toBeInstanceOf(IncompatibleDimensionsError);
+    expect((subtractCaught as IncompatibleDimensionsError).operation).toBe(
+      "math:subtract",
+    );
   });
 });
 
@@ -112,12 +136,28 @@ describe("divideIntervals", () => {
     expect(result.max).toBeCloseTo(-4 / 3, 12);
   });
 
-  it("throws DivisionByZeroError when the divisor interval contains zero", () => {
+  it("throws DivisionByZeroError when the divisor interval contains zero, naming the operation and the exact divisor bounds", () => {
     expect(() => divideIntervals(interval(1, 2), interval(-1, 1))).toThrow(
       DivisionByZeroError,
     );
     expect(() => divideIntervals(interval(1, 2), interval(0, 1))).toThrow(
       DivisionByZeroError,
+    );
+    // A divisor that only touches zero at its own upper bound (max === 0, not min) -- distinguishes b.max >= 0 from a mutated b.max > 0, which would wrongly let this divisor through undetected.
+    expect(() => divideIntervals(interval(1, 2), interval(-2, 0))).toThrow(
+      DivisionByZeroError,
+    );
+
+    let caught: unknown;
+    try {
+      divideIntervals(interval(1, 2), interval(-1, 1));
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(DivisionByZeroError);
+    expect((caught as DivisionByZeroError).operation).toBe("math:divide");
+    expect((caught as DivisionByZeroError).message).toBe(
+      "'math:divide': division by zero (divisor interval [-1, 1] contains zero).",
     );
   });
 });

@@ -17,25 +17,27 @@ export function toRational(value: ExactRational): Rational {
   };
 }
 
+// Only ever called from reduce() below with (num, den) where den is already sign-normalised to be strictly positive (reduce's own `sign` calculation guarantees d * sign > 0 whenever d !== 0, which reduce has already checked by the time it calls gcd) -- so b is never negative here, and this is a plain non-negative-b Euclidean gcd, not a general-purpose one. a can still be negative (num carries the numerator's sign), so it alone needs the absolute-value step.
 function gcd(a: bigint, b: bigint): bigint {
+  // Stryker disable next-line EqualityOperator: BigInt has no negative zero (-0n === 0n), so at a === 0n both `<` and `<=` take a branch that evaluates to the same value (0n via -a, or 0n via a) -- the operators are behaviourally identical at every input, not just the ones exercised by a test.
   let x = a < 0n ? -a : a;
-  let y = b < 0n ? -b : b;
+  let y = b;
   while (y !== 0n) {
     [x, y] = [y, x % y];
   }
-  return x === 0n ? 1n : x;
+  return x;
 }
 
-// Reduces to lowest terms and canonicalises to document-schema.js's own spelling (ExactRationalSchema in that package's src/math.ts): '0'/'1' for zero, otherwise the sign carried on the numerator and a strictly positive denominator with no leading zeros -- which a reduced BigInt's decimal .toString() already produces.
+// Reduces to lowest terms and canonicalises to document-schema.js's own spelling (ExactRationalSchema in that package's src/math.ts): '0'/'1' for zero, otherwise the sign carried on the numerator and a strictly positive denominator with no leading zeros -- which a reduced BigInt's decimal .toString() already produces. There is no n === 0n fast path: gcd(0n, den) is den itself (standard Euclidean identity), so the general path below already reduces 0/den to 0/1 on its own, for either sign of den, without a special case.
 function reduce(n: bigint, d: bigint): Rational {
   if (d === 0n) {
     throw new RangeError("rational.ts: denominator must not be zero");
   }
-  if (n === 0n) {
-    return { n: 0n, d: 1n };
-  }
+  // Stryker disable next-line EqualityOperator: d === 0n has already thrown above, so d < 0n and d <= 0n are never distinguishable here -- both take the same branch for every reachable d.
   const sign = d < 0n ? -1n : 1n;
+  // Stryker disable next-line ArithmeticOperator: sign is always exactly 1n or -1n, and BigInt division by either value is bit-identical to multiplication by it (n / 1n === n / 1n === n * 1n, and n / -1n === -n === n * -1n) -- `*` and `/` are indistinguishable here for every reachable sign value.
   const num = n * sign;
+  // Stryker disable next-line ArithmeticOperator: same reasoning as the line above -- sign is always exactly +-1n.
   const den = d * sign;
   const g = gcd(num, den);
   return { n: num / g, d: den / g };

@@ -55,6 +55,9 @@ describe("dimensions", () => {
   it("throws when scaling would not land on an integer exponent", () => {
     // length^1 has no square root dimension: 1 * 0.5 = 0.5 is not representable.
     expect(() => scaleDimension({ length: 1 }, 0.5)).toThrow(RangeError);
+    expect(() => scaleDimension({ length: 1 }, 0.5)).toThrow(
+      "dimensions.ts: scaling 'length' by 0.5 does not land on an integer exponent",
+    );
   });
 
   it("renders a human-readable dimension string in SI base order", () => {
