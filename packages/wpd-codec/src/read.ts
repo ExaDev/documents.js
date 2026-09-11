@@ -112,11 +112,14 @@ import {
 import { readTableFormula } from "./stream/formula";
 import { scanImagePayload } from "./stream/image";
 import {
+  PACKET_TYPE_GRAPHICS_CACHED_FILE_DATA,
   PACKET_TYPE_GRAPHICS_FILENAME,
+  readGraphicsChildIds,
   readOleObject,
   type WpdOleObject,
 } from "./stream/ole";
 import { tabEffectFor, TAB_GROUP } from "./stream/tab";
+import { decodeWpgGraphic, type WpgDecode } from "./stream/wpg";
 import { tokeniseDocumentArea, type WpdToken } from "./stream/tokenise";
 
 // -- Document area to ContentDocument --
@@ -1191,6 +1194,36 @@ function plainTextOf(blocks: readonly ContentBlock[]): string {
 }
 
 // Lifts a box's own text, linked-text, or equation content, per stream/box.ts's own function-level override walk: a box's real content is ALWAYS named there (never its template), as the prefix ID of a General WP Text packet (type 0x08) whose own text blocks are this format's ordinary function-code stream -- readable through the identical tokeniser and fold the main document area uses. A box the override walk cannot resolve real content or a trustworthy frame for, or whose content type is image/OLE/presentation/other (this reader has no decoder for any of those payload shapes), stays reported through the diagnostic sink rather than guessed at.
+//
+// A box's WPG vector graphic: the Graphics Filename packet's 0x6F (Graphics Cached File Data) children each carry a whole graphics file's bytes ("Contains WPG cached file contents"), and the first child whose bytes decode as a WPG graphic wins. The graphic's own Text Data records are WP document streams, folded here through the identical tokeniser and fold the main document area uses -- the same fold a box's WP-text content and a header body take.
+function decodeBoxWpg(
+  container: WpdDocumentContainer,
+  graphicsPacket: Parameters<typeof readGraphicsChildIds>[0],
+  sink: WpdDiagnosticSink,
+): WpgDecode | undefined {
+  const childIds = readGraphicsChildIds(graphicsPacket);
+  if (childIds === undefined) {
+    return undefined;
+  }
+  for (const childId of childIds) {
+    const child = packetByPrefixId(container.packets, childId);
+    if (child?.packetType !== PACKET_TYPE_GRAPHICS_CACHED_FILE_DATA) {
+      continue;
+    }
+    const decoded = decodeWpgGraphic(child.bytes, {
+      foldTextData: (documentArea) =>
+        foldTokens(
+          tokeniseDocumentArea(documentArea, 0, documentArea.length),
+          container,
+          sink,
+        ).blocks,
+    });
+    if (decoded !== undefined) {
+      return decoded;
+    }
+  }
+  return undefined;
+}
 function applyBoxGroup(
   state: ReaderState,
   token: Extract<WpdToken, { kind: "variableFunction" }>,
@@ -1230,6 +1263,63 @@ function applyBoxGroup(
       if (ole !== undefined) {
         // The bytes are recovered but the flat ContentDocument has nowhere to put them -- the same split a note body takes. The frame is deliberately not required here: an attachment entry names bytes, it places nothing.
         state.oleObjects.push(ole);
+        return;
+      }
+      const wpg =
+        imagePacket?.packetType === PACKET_TYPE_GRAPHICS_FILENAME
+          ? decodeBoxWpg(container, imagePacket, sink)
+          : undefined;
+      if (wpg !== undefined) {
+        if (wpg.status === "refused") {
+          sink({
+            code: WpdDiagnosticCodes.WpgRecordsUndecoded,
+            message:
+              wpg.reason === "wpg1"
+                ? "This document embeds a WPG 1.0 vector graphic, whose type-and-length record vocabulary predates the framed WPG 2.x stream this reader decodes, so it was not lifted."
+                : wpg.reason === "encrypted"
+                  ? "This document embeds an encrypted WPG vector graphic, which this reader does not decrypt, so it was not lifted."
+                  : "This document embeds a WPG graphic whose record stream this reader could not walk (no well-formed Start WPG record), so it was not lifted.",
+          });
+          return;
+        }
+        if (boxContent.frame === undefined) {
+          reportOnce(
+            state,
+            sink,
+            WpdDiagnosticCodes.BoxFrameUnresolved,
+            "This document contains a box whose content this reader could read, but whose function-level override states no width and height this reader can trust, so its content was not lifted.",
+          );
+          return;
+        }
+        if (wpg.skippedRecords.length > 0) {
+          sink({
+            code: WpdDiagnosticCodes.WpgRecordsUndecoded,
+            message: `This document embeds a WPG vector graphic that partially decoded; the following record types were skipped: ${wpg.skippedRecords.join(", ")}.`,
+          });
+        }
+        // The decoded graphic rides as a nested one-page drawing document -- ContentEmbeddedObject's own 'drawing' objectKind, the shape this schema defines for exactly "a document of one kind nested at a frame inside a document of another", with the box's own frame placing it in the flow.
+        flushParagraphIfContent(state, sink);
+        targetBlocks(state).push({
+          kind: "embeddedObject",
+          objectKind: "drawing",
+          frame: {
+            xPt: boxContent.frame.xPt,
+            yPt: boxContent.frame.yPt,
+            widthPt: boxContent.frame.widthPt,
+            heightPt: boxContent.frame.heightPt,
+          },
+          document: {
+            kind: "drawing",
+            metadata: {},
+            pages: [
+              {
+                size: wpg.sizePt,
+                shapes: [...wpg.shapes],
+                vectors: [...wpg.vectors],
+              },
+            ],
+          },
+        });
         return;
       }
       reportOnce(
