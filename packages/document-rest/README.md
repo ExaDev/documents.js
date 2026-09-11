@@ -22,6 +22,16 @@ This binds a plain `node:http` listener to `127.0.0.1` (loopback only) on the gi
 
 Every release also attaches a Node [single-executable application](https://nodejs.org/api/single-executable-applications.html) build for Linux (x64 and arm64), Windows (x64 and arm64), and macOS (Apple Silicon and Intel) to that release's own GitHub Release assets — the entire server and its dependencies embedded in one file, needing no Node.js install or `npx` at all. For the "a caller with no Node runtime of its own" case this package exists for in the first place, this removes the last Node dependency too: download the asset matching your platform from the package's tag on the [Releases page](https://github.com/ExaDev/documents.js/releases), run it directly (`chmod +x` on Linux/macOS first), and it takes the identical `--port` flag.
 
+### Container image
+
+Every release also publishes a multi-arch (`linux/amd64` + `linux/arm64`) container image to GitHub Container Registry, wrapping the identical standalone binary above on a minimal [distroless](https://github.com/GoogleContainerTools/distroless) base rather than a Node install:
+
+```sh
+docker run -p 3100:3100 ghcr.io/exadev/documents.js:VERSION --port 3100
+```
+
+Replace `VERSION` with the package's own exact release version (e.g. `1.2.0`) — matching the version-pinned convention every other artifact in this repository uses, this image is never published under a loose major/minor tag such as `1` or `1.2`, though `latest` does track the newest release. The image binds to `0.0.0.0` inside the container regardless of `--port`, so `-p <host>:<container>` is all that's needed to reach it; see the security note above about this listener having no authentication of its own — publishing the container's port makes it reachable by anything that can reach the host, so put a reverse proxy or firewall in front of it before exposing it beyond your own machine.
+
 ## API
 
 **`GET /`** lists every available operation:
