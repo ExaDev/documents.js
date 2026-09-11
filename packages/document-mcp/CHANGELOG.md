@@ -1,3 +1,10 @@
+## [4.14.0](https://github.com/ExaDev/documents.js/compare/document-mcp%404.13.0...document-mcp%404.14.0) (2026-09-11)
+
+### Features
+
+* **ci:** publish document-rest and document-mcp as GHCR container images ([8cf783b](https://github.com/ExaDev/documents.js/commit/8cf783b6087f78319276e317401c2106c1aca8d0))
+* **document-mcp:** add a --host flag, defaulting to loopback ([3542429](https://github.com/ExaDev/documents.js/commit/35424296d985f76792c9f01cb33ab16a553a7b98))
+
 ## [4.13.0](https://github.com/ExaDev/documents.js/compare/document-mcp%404.12.0...document-mcp%404.13.0) (2026-09-11)
 
 ### Features
