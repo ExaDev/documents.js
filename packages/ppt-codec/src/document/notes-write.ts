@@ -1,5 +1,9 @@
 import type { ContentShape, PageSize } from "document-schema.js";
-import { writeSlideDrawing } from "../drawing/shapes-write";
+import {
+  type DrawingWriteContext,
+  type DrawingWritten,
+  writeSlideDrawing,
+} from "../drawing/shapes-write";
 import {
   DEFAULT_INSET_LEFT_RIGHT_PT,
   DEFAULT_INSET_TOP_BOTTOM_PT,
@@ -57,16 +61,24 @@ export function writeNotesAtom(slideIdRef: number): Uint8Array<ArrayBuffer> {
   );
 }
 
-// [MS-PPT] 2.5.6 states a NotesContainer's children in order: the NotesAtom, the drawing, then a slideSchemeColorSchemeAtom that -- unlike the slideNameAtom and slideProgTagsContainer after it -- the grammar does not mark optional. It is written rather than omitted because the two records have to agree: 2.5.6 makes the notes master's scheme apply "if notesAtom.slideFlags.fMasterScheme is set", and writeNotesAtom leaves that bit clear (no notes master exists to inherit from), so a notes slide carrying no scheme of its own would state that it uses a scheme it does not have.
+// [MS-PPT] 2.5.6 states a NotesContainer's children in order: the NotesAtom, the drawing, then a slideSchemeColorSchemeAtom that -- unlike the slideNameAtom and slideProgTagsContainer after it -- the grammar does not mark optional. It is written rather than omitted because the two records have to agree: 2.5.6 makes the notes master's scheme apply "if notesAtom.slideFlags.fMasterScheme is set", and writeNotesAtom leaves that bit clear (no notes master exists to inherit from), so a notes slide carrying no scheme of its own would state that it uses a scheme it does not have. The drawing counts ride out alongside the bytes, since each notes drawing is one of the drawings the document-wide OfficeArtFDGG aggregates.
 export function writeNotesContainer(
   slideIdRef: number,
   notes: string,
   notesPageSize: PageSize,
-  fontIndexOf: (family: string) => number,
-): Uint8Array<ArrayBuffer> {
-  return writeContainer(RT_Notes, [
-    writeNotesAtom(slideIdRef),
-    writeSlideDrawing([notesBodyShape(notes, notesPageSize)], fontIndexOf),
-    writeSlideSchemeColorSchemeAtom(),
-  ]);
+  context: DrawingWriteContext,
+): DrawingWritten {
+  const drawing = writeSlideDrawing(
+    [{ shape: notesBodyShape(notes, notesPageSize), clientData: undefined }],
+    context,
+  );
+  return {
+    bytes: writeContainer(RT_Notes, [
+      writeNotesAtom(slideIdRef),
+      drawing.bytes,
+      writeSlideSchemeColorSchemeAtom(),
+    ]),
+    shapeCount: drawing.shapeCount,
+    maxSpid: drawing.maxSpid,
+  };
 }

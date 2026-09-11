@@ -1,16 +1,21 @@
 import { readCompoundFile } from "archive-codec";
+import { encodePng } from "byte-codec";
 import {
   ContentDocumentSchema,
   DocumentTreeSchema,
   type ContentDocument,
+  type ContentImageBlock,
+  type ContentShape,
   type ContentSlide,
   assembleTree,
   flattenTree,
 } from "document-schema.js";
 import { describe, expect, it } from "vitest";
+import { bytesToBase64 } from "./base64";
 import { readNotesContainerAtom } from "./document/notes";
 import { readNotesListWithText } from "./document/notes-list";
 import { readSlideListWithText } from "./document/slide-list";
+import { type PptDiagnostic, PptDiagnosticCodes } from "./diagnostics";
 import { PptUnsupportedContentError } from "./errors";
 import { readPptContent, readPpt } from "./read";
 import {
@@ -20,7 +25,11 @@ import {
   readRecordSequence,
 } from "./record/tree";
 import {
+  OfficeArtBStoreContainer,
+  OfficeArtDggContainer,
+  OfficeArtFDGGBlock,
   RT_ColorSchemeAtom,
+  RT_DrawingGroup,
   RT_Notes,
   RT_SlideListWithText,
   SLIDE_LIST_INSTANCE_NOTES,
@@ -560,7 +569,7 @@ describe("writePptContent / readPptContent round trip", () => {
     expect(slides).toEqual([]);
   });
 
-  it("silently drops a block kind this writer does not represent, keeping the paragraphs around it", () => {
+  it("drops a block kind this writer does not represent, keeping the paragraphs around it and naming the drop through the diagnostic sink", () => {
     const document = {
       metadata: {},
       slides: [
@@ -574,13 +583,7 @@ describe("writePptContent / readPptContent round trip", () => {
               insetBottomPt: 0,
               blocks: [
                 { kind: "paragraph" as const, runs: [{ text: "Before" }] },
-                {
-                  kind: "image" as const,
-                  format: "png" as const,
-                  base64: "",
-                  widthPt: 10,
-                  heightPt: 10,
-                },
+                { kind: "pageBreak" as const },
                 { kind: "paragraph" as const, runs: [{ text: "After" }] },
               ],
             },
@@ -589,10 +592,23 @@ describe("writePptContent / readPptContent round trip", () => {
       ],
     };
 
-    const { slides } = readPptContent(writePptContent(document));
+    const diagnostics: PptDiagnostic[] = [];
+    const { slides } = readPptContent(
+      writePptContent(document, {
+        sink: (diagnostic) => diagnostics.push(diagnostic),
+      }),
+    );
     expect(slides[0]?.shapes[0]?.blocks).toEqual([
       { kind: "paragraph", runs: [{ text: "Before" }] },
       { kind: "paragraph", runs: [{ text: "After" }] },
+    ]);
+    expect(diagnostics).toEqual([
+      {
+        code: PptDiagnosticCodes.BLOCK_DROPPED,
+        severity: "warning",
+        message:
+          "slide 1: a 'pageBreak' block is dropped; this writer produces no [MS-PPT] spelling for it",
+      },
     ]);
   });
 
@@ -605,6 +621,343 @@ describe("writePptContent / readPptContent round trip", () => {
       ],
     };
     expect(() => writePptContent(document)).toThrow(PptUnsupportedContentError);
+  });
+
+  describe("pictures and rotation", () => {
+    const PNG = encodePng({
+      width: 1,
+      height: 1,
+      channels: 3,
+      data: new Uint8Array([0x11, 0x22, 0x33]),
+    });
+    const OTHER_PNG = encodePng({
+      width: 1,
+      height: 1,
+      channels: 3,
+      data: new Uint8Array([0x44, 0x55, 0x66]),
+    });
+    const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+
+    function pictureShape(
+      image: { format: "png" | "jpeg"; bytes: Uint8Array<ArrayBuffer> },
+      rotationDeg?: number,
+    ): ContentShape {
+      return {
+        frame: { xPt: 40, yPt: 60, widthPt: 200, heightPt: 150 },
+        ...(rotationDeg === undefined ? {} : { rotationDeg }),
+        insetLeftPt: 0,
+        insetTopPt: 0,
+        insetRightPt: 0,
+        insetBottomPt: 0,
+        blocks: [
+          {
+            kind: "image",
+            format: image.format,
+            base64: bytesToBase64(image.bytes),
+            widthPt: 200,
+            heightPt: 150,
+          },
+        ],
+      };
+    }
+
+    it("round-trips a picture through the document's blip store, sized to its frame", () => {
+      const { slides } = readPptContent(
+        writePptContent({
+          metadata: {},
+          slides: [
+            slide({
+              shapes: [
+                pictureShape({ format: "png", bytes: PNG }),
+                pictureShape({ format: "jpeg", bytes: JPEG }, 45),
+              ],
+            }),
+          ],
+        }),
+      );
+      expect(slides[0]?.shapes[0]).toEqual({
+        frame: { xPt: 40, yPt: 60, widthPt: 200, heightPt: 150 },
+        insetLeftPt: 0,
+        insetTopPt: 0,
+        insetRightPt: 0,
+        insetBottomPt: 0,
+        blocks: [
+          {
+            kind: "image",
+            format: "png",
+            base64: bytesToBase64(PNG),
+            widthPt: 200,
+            heightPt: 150,
+          },
+        ],
+      });
+    });
+
+    it("round-trips a rotated shape's rotationDeg through its property table", () => {
+      const { slides } = readPptContent(
+        writePptContent({
+          metadata: {},
+          slides: [
+            slide({
+              shapes: [
+                pictureShape({ format: "jpeg", bytes: JPEG }, 45),
+                {
+                  frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+                  rotationDeg: 270,
+                  insetLeftPt: 0.1 * 72,
+                  insetTopPt: 0.05 * 72,
+                  insetRightPt: 0.1 * 72,
+                  insetBottomPt: 0.05 * 72,
+                  blocks: [{ kind: "paragraph", runs: [{ text: "tilted" }] }],
+                },
+              ],
+            }),
+          ],
+        }),
+      );
+      expect(slides[0]?.shapes[0]?.rotationDeg).toBe(45);
+      expect(slides[0]?.shapes[1]?.rotationDeg).toBe(270);
+    });
+
+    it("writes one store entry for an image shown on several slides, so every showing reads back", () => {
+      const { slides } = readPptContent(
+        writePptContent({
+          metadata: {},
+          slides: [
+            slide({ shapes: [pictureShape({ format: "png", bytes: PNG })] }),
+            slide({
+              shapes: [
+                pictureShape({ format: "png", bytes: PNG }),
+                pictureShape({ format: "png", bytes: OTHER_PNG }),
+              ],
+            }),
+          ],
+        }),
+      );
+      const secondSlideImages = slides[1]?.shapes
+        .map((shape) => shape.blocks.find((block) => block.kind === "image"))
+        .filter((block): block is ContentImageBlock => block !== undefined);
+      expect(secondSlideImages).toHaveLength(2);
+      expect(secondSlideImages?.[0]?.base64).toBe(bytesToBase64(PNG));
+      expect(secondSlideImages?.[1]?.base64).toBe(bytesToBase64(OTHER_PNG));
+      // The identical PNG on slide 1 reads back there too -- a shared store entry, not a copy per slide.
+      const firstSlideImage = slides[0]?.shapes[0]?.blocks.find(
+        (block): block is ContentImageBlock => block.kind === "image",
+      );
+      expect(firstSlideImage?.base64).toBe(bytesToBase64(PNG));
+    });
+
+    it("drops an image whose format has no MSOBLIPTYPE token here, naming it through the diagnostic sink", () => {
+      const diagnostics: PptDiagnostic[] = [];
+      const { slides } = readPptContent(
+        writePptContent(
+          {
+            metadata: {},
+            slides: [
+              slide({
+                shapes: [
+                  {
+                    frame: {
+                      xPt: 0,
+                      yPt: 0,
+                      widthPt: 100,
+                      heightPt: 100,
+                    },
+                    insetLeftPt: 0,
+                    insetTopPt: 0,
+                    insetRightPt: 0,
+                    insetBottomPt: 0,
+                    blocks: [
+                      {
+                        kind: "image",
+                        format: "svg",
+                        base64: "eyJub3RoaW5nIjo",
+                        widthPt: 100,
+                        heightPt: 100,
+                      },
+                      { kind: "paragraph", runs: [{ text: "kept" }] },
+                    ],
+                  },
+                ],
+              }),
+            ],
+          },
+          { sink: (diagnostic) => diagnostics.push(diagnostic) },
+        ),
+      );
+      expect(slides[0]?.shapes[0]?.blocks).toEqual([
+        { kind: "paragraph", runs: [{ text: "kept" }] },
+      ]);
+      expect(diagnostics).toEqual([
+        {
+          code: PptDiagnosticCodes.IMAGE_DROPPED,
+          severity: "warning",
+          message:
+            "slide 1: an image block in format 'svg' is dropped; MSOBLIPTYPE gives this writer a blip record for PNG and JPEG only",
+        },
+      ]);
+    });
+
+    it("drops a second image on one shape, whose single blip reference the first image consumed", () => {
+      const diagnostics: PptDiagnostic[] = [];
+      const { slides } = readPptContent(
+        writePptContent(
+          {
+            metadata: {},
+            slides: [
+              slide({
+                shapes: [
+                  {
+                    frame: {
+                      xPt: 0,
+                      yPt: 0,
+                      widthPt: 100,
+                      heightPt: 100,
+                    },
+                    insetLeftPt: 0,
+                    insetTopPt: 0,
+                    insetRightPt: 0,
+                    insetBottomPt: 0,
+                    blocks: [
+                      {
+                        kind: "image",
+                        format: "png",
+                        base64: bytesToBase64(PNG),
+                        widthPt: 100,
+                        heightPt: 100,
+                      },
+                      {
+                        kind: "image",
+                        format: "jpeg",
+                        base64: bytesToBase64(JPEG),
+                        widthPt: 100,
+                        heightPt: 100,
+                      },
+                    ],
+                  },
+                ],
+              }),
+            ],
+          },
+          { sink: (diagnostic) => diagnostics.push(diagnostic) },
+        ),
+      );
+      const images = slides[0]?.shapes[0]?.blocks.filter(
+        (block): block is ContentImageBlock => block.kind === "image",
+      );
+      expect(images).toHaveLength(1);
+      expect(images?.[0]?.base64).toBe(bytesToBase64(PNG));
+      expect(diagnostics).toEqual([
+        {
+          code: PptDiagnosticCodes.IMAGE_DROPPED,
+          severity: "warning",
+          message:
+            "slide 1: a second image block is dropped; a shape carries exactly one blip-store reference, and an earlier image already consumed it",
+        },
+      ]);
+    });
+  });
+
+  describe("the document-wide drawing group", () => {
+    // The OfficeArtFDGG's own four count fields ([MS-ODRAW] 2.2.47): spidMax, cidcl, cspSaved, cdgSaved, in order.
+    function fdggFields(
+      streamBytes: Uint8Array<ArrayBuffer>,
+    ): [number, number, number, number] {
+      const document = requireRecord(
+        topLevelRecords(streamBytes)[0],
+        "document container",
+      );
+      const drawingGroup = requireRecord(
+        childRecords(document).find(
+          (record) => record.header.recType === RT_DrawingGroup,
+        ),
+        "drawing group container",
+      );
+      const dgg = requireRecord(
+        childRecords(drawingGroup).find(
+          (record) => record.header.recType === OfficeArtDggContainer,
+        ),
+        "OfficeArtDggContainer",
+      );
+      const fdgg = requireRecord(
+        childRecords(dgg).find(
+          (record) => record.header.recType === OfficeArtFDGGBlock,
+        ),
+        "OfficeArtFDGGBlock",
+      );
+      const view = new DataView(
+        fdgg.data.buffer,
+        fdgg.data.byteOffset,
+        fdgg.data.byteLength,
+      );
+      return [
+        view.getUint32(0, true),
+        view.getUint32(4, true),
+        view.getUint32(8, true),
+        view.getUint32(12, true),
+      ];
+    }
+
+    it("states shape, drawing and identifier counts derived from the drawings actually written", () => {
+      const { powerPointDocumentStream } = writePptStreams({
+        metadata: {},
+        slides: [
+          slide({
+            shapes: [
+              {
+                frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+                insetLeftPt: 0,
+                insetTopPt: 0,
+                insetRightPt: 0,
+                insetBottomPt: 0,
+                blocks: [{ kind: "paragraph", runs: [{ text: "one" }] }],
+              },
+              {
+                frame: { xPt: 0, yPt: 120, widthPt: 100, heightPt: 100 },
+                insetLeftPt: 0,
+                insetTopPt: 0,
+                insetRightPt: 0,
+                insetBottomPt: 0,
+                blocks: [{ kind: "paragraph", runs: [{ text: "two" }] }],
+              },
+            ],
+            notes: "with notes",
+          }),
+        ],
+      });
+      // The master's drawing carries its patriarch and five placeholders (spids 1..6), the slide's its patriarch and two shapes (spids 1..4), the notes slide's its patriarch and one body (spids 1..2): eleven shape containers across three drawings, and 6 the highest identifier any of them minted.
+      expect(fdggFields(powerPointDocumentStream)).toEqual([6, 2, 11, 3]);
+    });
+
+    it("still states a drawing group for a picture-free document, with no blip store in it", () => {
+      const { powerPointDocumentStream } = writePptStreams({
+        metadata: {},
+        slides: [slide()],
+      });
+      // The master's six shapes and the slide drawing's lone patriarch: seven containers, two drawings, spidMax 6.
+      expect(fdggFields(powerPointDocumentStream)).toEqual([6, 2, 7, 2]);
+      const document = requireRecord(
+        topLevelRecords(powerPointDocumentStream)[0],
+        "document container",
+      );
+      const drawingGroup = requireRecord(
+        childRecords(document).find(
+          (record) => record.header.recType === RT_DrawingGroup,
+        ),
+        "drawing group container",
+      );
+      const dgg = requireRecord(
+        childRecords(drawingGroup).find(
+          (record) => record.header.recType === OfficeArtDggContainer,
+        ),
+        "OfficeArtDggContainer",
+      );
+      expect(
+        childRecords(dgg).find(
+          (record) => record.header.recType === OfficeArtBStoreContainer,
+        ),
+      ).toBeUndefined();
+    });
   });
 
   describe("metadata", () => {

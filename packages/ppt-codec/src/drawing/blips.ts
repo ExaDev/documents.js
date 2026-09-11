@@ -35,6 +35,11 @@ export interface PptBlip {
   readonly bytes: Uint8Array<ArrayBuffer>;
 }
 
+// The ContentImageBlock formats that have both an MSOBLIPTYPE token and a blip record this package reads and writes -- PNG (0x06) and JPEG (0x05), the two document-schema.js holds losslessly. Stated once here, where the MSOBLIPTYPE vocabulary lives, so the writer's blip-store collector and its per-shape block planner agree by construction rather than by two hand-kept copies of the same list. A type guard rather than a plain boolean so a caller holding the schema's wider image-format union narrows to exactly the two a PptBlip can carry.
+export function isBlipFormat(format: string): format is "png" | "jpeg" {
+  return format === "png" || format === "jpeg";
+}
+
 // An OfficeArtBlip record's payload: rgbUid1, optionally rgbUid2, a one-byte tag, then the file's own bytes. How many 16-byte MD4 digests precede the tag is stated by the record header's own recInstance -- one for PNG's 0x6E0 and JPEG's 0x46A/0x6E2 spellings, two for the odd-numbered siblings (0x6E1, 0x46B, 0x6E3) -- and the parity of the instance value is exactly that distinction in every case the specifications enumerate, so the count is derived from it rather than restated per format. The digests themselves are de-duplication keys this reader never verifies.
 function blipPayload(record: PptRecord): PptBlip | undefined {
   const format =
