@@ -1,4 +1,5 @@
 import type {
+  ContentDefinedName,
   ContentSheetPrintRange,
   ContentSheetRepeatRange,
 } from "document-schema.js";
@@ -57,6 +58,40 @@ export function readDefinedNamesBySheet(
     map.set(sheetIndex, existing);
   }
   return map;
+}
+
+// Every defined name in xl/workbook.xml as the schema's own ContentDefinedName carries it: refersTo VERBATIM (the element's own text, in Excel's own formula language -- the identical "no closed grammar without a general formula engine" reasoning ContentSheetCell.formula already records), and a sheet-scoped name's localSheetId mapped onto scopeSheetIndex, which indexes the SAME <sheets> document order this package reads sheets in. The _xlnm built-ins are included rather than filtered: they are definedName entries like any other, and the two print names the print-settings reader additionally promotes into structured printRange/repeatRows fields still belong to the workbook's own name list. Order is the file's own document order, the only order a same-format writer can hope to reproduce.
+export function readWorkbookNames(pkg: Package): ContentDefinedName[] {
+  const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
+  if (workbook === undefined) {
+    return [];
+  }
+  const container = childrenWithTag(workbook, "definedNames")[0];
+  if (container === undefined) {
+    return [];
+  }
+  const names: ContentDefinedName[] = [];
+  for (const definedName of childrenWithTag(container, "definedName")) {
+    const name = attr(definedName, "name");
+    if (name === undefined) {
+      continue;
+    }
+    const localSheetIdRaw = attr(definedName, "localSheetId");
+    const localSheetId =
+      localSheetIdRaw === undefined
+        ? undefined
+        : Number.parseInt(localSheetIdRaw, 10);
+    names.push({
+      name,
+      refersTo: textContent(definedName),
+      ...(localSheetId !== undefined &&
+      Number.isInteger(localSheetId) &&
+      localSheetId >= 0
+        ? { scopeSheetIndex: localSheetId }
+        : {}),
+    });
+  }
+  return names;
 }
 
 // Strips a leading "SheetName!" (or "'Sheet Name'!") prefix from one reference segment. Excel sheet names cannot themselves contain "!" (a reserved formula character), so the LAST "!" in the segment unambiguously separates the sheet-name prefix from the cell/range reference that follows, with no need to parse the optional single-quote sheet-name quoting at all.
