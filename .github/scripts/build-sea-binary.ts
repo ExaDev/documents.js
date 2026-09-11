@@ -37,8 +37,9 @@ export function postBuildCommandsFor(
   return [];
 }
 
+// stdout is redirected to this process's own stderr (fd 2), never inherited directly, so the calling CI step's own `$(node build-sea-binary.ts ...)` capture -- which captures only this process's stdout -- sees nothing from these child processes, just this file's own final `console.log(binaryPath)` in main() below. `node --build-sea` itself prints an informational "Generated single executable ... -> ..." line to stdout, which corrupted exactly that capture the first time this ran for real (documents.js CI, 2026-09-11): the captured value carried two lines, and the second, bare path line (no "key=value" shape) broke the workflow step's own `>> "$GITHUB_OUTPUT"` write with "Invalid format". Stderr is still inherited directly, so a genuine failure (build-sea erroring, codesign refusing) remains fully visible in the CI log exactly as before -- this only reroutes successful, informational stdout chatter that was never meant to be parsed.
 function run(command: string, args: readonly string[]): void {
-  execFileSync(command, args, { stdio: "inherit" });
+  execFileSync(command, args, { stdio: ["inherit", 2, "inherit"] });
 }
 
 /** Builds the SEA binary for `paths.packageDir`, targeting whichever platform this process is currently running under. sea-config.json lives beside the final binary in `paths.outputDir`, which the caller is responsible for pointing at a package's own gitignored dist-sea/ (see tsdown.sea.shared.ts's own comment on why that directory is never published). */
