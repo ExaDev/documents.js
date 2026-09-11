@@ -17,6 +17,8 @@ export default tseslint.config(
       "packages/**",
       "node_modules",
       ".turbo",
+      // Claude Code's own per-agent worktrees, each a full checkout of this repository nested under here. Git only knows to skip them via the user's global gitignore (~/.gitignore_global), which flat-config ESLint never consults, so without this entry a root run walks every worktree's own copy of packages/** too -- confirmed directly: dozens of stale worktrees under here turned a root `pnpm lint` into a multi-gigabyte type-aware parse that crashed Node outright under concurrent load.
+      ".claude",
       "CHANGELOG.md",
       "AGENTS.md",
       "CLAUDE.md",
