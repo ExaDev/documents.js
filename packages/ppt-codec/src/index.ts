@@ -2,6 +2,7 @@
 export * from "./base64";
 export * from "./content";
 export * from "./content-write";
+export * from "./diagnostics";
 export * from "./document/color-scheme-write";
 export * from "./document/document-atom";
 export * from "./document/document-atom-write";
