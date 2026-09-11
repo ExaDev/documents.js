@@ -618,6 +618,41 @@ describe("writePptContent / readPptContent round trip", () => {
     ]);
   });
 
+  it("throws the same drop as a PptUnsupportedContentError when onUnwritableBlock is 'throw', rather than merely reporting it", () => {
+    const document = {
+      metadata: {},
+      slides: [
+        slide({
+          shapes: [
+            {
+              frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+              insetLeftPt: 0,
+              insetTopPt: 0,
+              insetRightPt: 0,
+              insetBottomPt: 0,
+              blocks: [{ kind: "pageBreak" as const }],
+            },
+          ],
+        }),
+      ],
+    };
+
+    expect(() =>
+      writePptContent(document, { onUnwritableBlock: "throw" }),
+    ).toThrow(PptUnsupportedContentError);
+    expect(() =>
+      writePptContent(document, { onUnwritableBlock: "throw" }),
+    ).toThrow(
+      "slide 1: a 'pageBreak' block is dropped; this writer produces no [MS-PPT] spelling for it",
+    );
+
+    // The default -- and 'drop' stated explicitly -- both keep reporting through the sink alone, exactly as the test above already pins.
+    expect(() => writePptContent(document)).not.toThrow();
+    expect(() =>
+      writePptContent(document, { onUnwritableBlock: "drop" }),
+    ).not.toThrow();
+  });
+
   it("throws when two slides declare different sizes, which [MS-PPT] cannot express", () => {
     const document = {
       metadata: {},
