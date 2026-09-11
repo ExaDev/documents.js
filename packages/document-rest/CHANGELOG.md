@@ -1,3 +1,13 @@
+## [1.1.0](https://github.com/ExaDev/documents.js/compare/document-rest%401.0.0...document-rest%401.1.0) (2026-09-11)
+
+### Features
+
+* **document-rest:** build a Node SEA single-executable binary ([39b484c](https://github.com/ExaDev/documents.js/commit/39b484c69cafc43e9e641e1f0236e9a67fbe9dd2))
+
+### Documentation
+
+* document the Node SEA binary distribution for cli/mcp/rest ([420ea7c](https://github.com/ExaDev/documents.js/commit/420ea7cf34e2073950f7e1b823c86f403a8bf25a))
+
 ## 1.0.0 (2026-09-11)
 
 ### Features

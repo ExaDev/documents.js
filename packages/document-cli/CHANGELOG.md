@@ -1,3 +1,13 @@
+## [5.9.0](https://github.com/ExaDev/documents.js/compare/document-cli%405.8.3...document-cli%405.9.0) (2026-09-11)
+
+### Features
+
+* **document-cli:** build a Node SEA single-executable binary ([b933fcf](https://github.com/ExaDev/documents.js/commit/b933fcf180bd67c09442e32015a00b6f5bc2edbc))
+
+### Documentation
+
+* document the Node SEA binary distribution for cli/mcp/rest ([420ea7c](https://github.com/ExaDev/documents.js/commit/420ea7cf34e2073950f7e1b823c86f403a8bf25a))
+
 ## [5.8.3](https://github.com/ExaDev/documents.js/compare/document-cli%405.8.2...document-cli%405.8.3) (2026-09-11)
 
 ### Code Refactoring
