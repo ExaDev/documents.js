@@ -306,6 +306,8 @@ jobs:
       npm-alias-matrix: ${{ steps.released.outputs.npm-alias-matrix }}
       attest-matrix: ${{ steps.released.outputs.attest-matrix }}
       sea-matrix: ${{ steps.released.outputs.sea-matrix }}
+      container-matrix: ${{ steps.released.outputs.container-matrix }}
+      container-image-matrix: ${{ steps.released.outputs.container-image-matrix }}
     steps:
       # main requires status checks to merge, and the default GITHUB_TOKEN has no bypass for that -- the orchestrator's release commits, dependency-bump commits, and tags are direct pushes to main, so they need a token from an actor the branch ruleset explicitly allows to bypass (see ExaDev/.github and this repo's own ruleset). Everything else in this job (release notes, GitHub Release creation, issue/PR comments, OIDC npm publish) keeps using secrets.GITHUB_TOKEN below, unaffected -- only checkout's own git credentials need the elevated token, since that's what the later pushes inherit.
       - name: Generate a token for the release pushes
@@ -343,7 +345,7 @@ jobs:
           NODE_AUTH_TOKEN: ""
       - name: Collect the packages this run released
         id: released
-        # Builds the four matrices the post-release jobs fan out over: one attestation leg per released published package, one GitHub Packages leg per released package the map mirrors there, one npm-alias leg per (released package, alias) pair, and one SEA-binary leg per (SEA-eligible released package, platform) pair. The version comes from each package's own package.json in this working tree -- the orchestrator has already committed the released version by the time this step runs, so it is the same version the tag names. The web UI is private and publishes nothing, so it is filtered out.
+        # Builds the matrices the post-release jobs fan out over: one attestation leg per released published package, one GitHub Packages leg per released package the map mirrors there, one npm-alias leg per (released package, alias) pair, one SEA-binary leg per (SEA-eligible released package, platform) pair, one container-image leg per (container-eligible released package, Linux architecture) pair, and one container-manifest leg per container-eligible released package. The version comes from each package's own package.json in this working tree -- the orchestrator has already committed the released version by the time this step runs, so it is the same version the tag names. The web UI is private and publishes nothing, so it is filtered out.
         run: |
           git ls-remote --tags origin | sed 's|.*refs/tags/||' | grep -v '\^{}' | sort > "$RUNNER_TEMP/release-tags-after.txt"
           comm -13 "$RUNNER_TEMP/release-tags-before.txt" "$RUNNER_TEMP/release-tags-after.txt" > "$RUNNER_TEMP/release-tags-new.txt"
@@ -351,6 +353,8 @@ jobs:
           NPM_ALIASES='[]'
           ATTEST='[]'
           SEA='[]'
+          CONTAINER='[]'
+          CONTAINER_IMAGES='[]'
           while read -r TAG; do
             [ -n "$TAG" ] || continue
             NAME=${TAG%@*}
@@ -383,12 +387,32 @@ jobs:
                 done
                 ;;
             esac
+            # The two packages this workspace runs as long-lived servers rather than a one-shot CLI/TUI -- document-cli is deliberately excluded, per the root README's Releases section. This needs two shapes: one leg per (package, architecture) for build-container-images (its own per-arch build+push), and one leg per package for publish-container-manifests (which merges both architectures' images into one manifest) -- there's no way to dedupe the former into the latter inside a job's own `fromJSON(...)` matrix expression, so both are built here directly. isLatest is "true" here (a genuine release); collect-backfill-matrix's own copy of this block sets it "false", since a historical catch-up run must never regress the floating `latest` tag to an older version.
+            case "$NAME" in
+              document-mcp | document-rest)
+                IMAGE=""
+                [ "$NAME" = "document-rest" ] && IMAGE="documents.js"
+                [ "$NAME" = "document-mcp" ] && IMAGE="document-mcp"
+                CONTAINER_IMAGES=$(echo "$CONTAINER_IMAGES" | jq -c --arg name "$NAME" --arg version "$VERSION" --arg tag "$TAG" --arg image "$IMAGE" \
+                  '. + [{name: $name, version: $version, tag: $tag, image: $image, isLatest: "true"}]')
+                for OS in ubuntu-latest ubuntu-24.04-arm; do
+                  case "$OS" in
+                    ubuntu-latest) DOCKER_ARCH=amd64; NODE_ARCH=x64 ;;
+                    ubuntu-24.04-arm) DOCKER_ARCH=arm64; NODE_ARCH=arm64 ;;
+                  esac
+                  CONTAINER=$(echo "$CONTAINER" | jq -c --arg name "$NAME" --arg version "$VERSION" --arg tag "$TAG" --arg image "$IMAGE" --arg os "$OS" --arg dockerArch "$DOCKER_ARCH" --arg nodeArch "$NODE_ARCH" \
+                    '. + [{name: $name, version: $version, tag: $tag, image: $image, os: $os, dockerArch: $dockerArch, nodeArch: $nodeArch}]')
+                done
+                ;;
+            esac
           done < "$RUNNER_TEMP/release-tags-new.txt"
           {
             echo "github-packages-matrix=$GITHUB_PACKAGES"
             echo "npm-alias-matrix=$NPM_ALIASES"
             echo "attest-matrix=$ATTEST"
             echo "sea-matrix=$SEA"
+            echo "container-matrix=$CONTAINER"
+            echo "container-image-matrix=$CONTAINER_IMAGES"
           } >> "$GITHUB_OUTPUT"
 
   # Everything the release job gates on (commitlint/lint/typecheck/test/test-workers/test-smoke/knip) validates the commit BEFORE release bumps any versions -- never the workspace state AFTER. The orchestrator's own release/dependency-bump commits are pushed with `[skip ci]` (deliberately: a push authenticated this way would otherwise re-trigger this same workflow and risk a concurrent release racing itself, per the release job's own comment above), so nothing else ever runs CI against post-release main either. A package released with a breaking (major) change is therefore never checked against its own workspace-local dependents until whichever of THEIR test suites next happens to run for an unrelated reason -- exactly what caught document-schema.js's 7.0.0 major landing with documents.js's own committed example dumps still pinned to 6.0.0 (ExaDev/documents.js, 2026-09-07): main was red from the moment that release commit landed, silently, until a later PR's own turbo --affected run (which doesn't even touch documents.js on an unrelated branch) happened not to catch it either. This job closes that gap: re-run every check that already exists above, against the real post-release commit on main, so a release that breaks a sibling package inside this same workspace fails LOUDLY on this same workflow run's own summary rather than staying invisible until someone else's unrelated work trips over it. It cannot un-publish a release that already went out -- nothing running after the fact can -- but a red run here is exactly the loud, immediate signal that should prompt a same-day follow-up fix, the way this file's own commit history already shows one landing for the 7.0.0 case.
@@ -436,6 +460,8 @@ jobs:
       npm-alias-matrix: ${{ steps.collect.outputs.npm-alias-matrix }}
       attest-matrix: ${{ steps.collect.outputs.attest-matrix }}
       sea-matrix: ${{ steps.collect.outputs.sea-matrix }}
+      container-matrix: ${{ steps.collect.outputs.container-matrix }}
+      container-image-matrix: ${{ steps.collect.outputs.container-image-matrix }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -451,7 +477,9 @@ jobs:
           NPM_ALIASES='[]'
           ATTEST='[]'
           SEA='[]'
-          # Process substitution, not a pipe: a pipe would run the loop in a subshell, where GITHUB_PACKAGES/NPM_ALIASES/ATTEST/SEA's accumulated values never escape back to the `>> "$GITHUB_OUTPUT"` below.
+          CONTAINER='[]'
+          CONTAINER_IMAGES='[]'
+          # Process substitution, not a pipe: a pipe would run the loop in a subshell, where GITHUB_PACKAGES/NPM_ALIASES/ATTEST/SEA/CONTAINER/CONTAINER_IMAGES's accumulated values never escape back to the `>> "$GITHUB_OUTPUT"` below.
           while IFS= read -r RAW; do
             TAG=$(echo "$RAW" | xargs)
             [ -n "$TAG" ] || continue
@@ -489,6 +517,24 @@ jobs:
                 done
                 ;;
             esac
+            # Mirrors the release job's own identical container-matrix case statement, with one deliberate difference: isLatest is "false" here, never "true" -- a backfill exists specifically to catch up a possibly-old, already-superseded tag after the fact, so floating the registry's `latest` tag onto it would regress `latest` to an older version if newer releases have shipped since.
+            case "$NAME" in
+              document-mcp | document-rest)
+                IMAGE=""
+                [ "$NAME" = "document-rest" ] && IMAGE="documents.js"
+                [ "$NAME" = "document-mcp" ] && IMAGE="document-mcp"
+                CONTAINER_IMAGES=$(echo "$CONTAINER_IMAGES" | jq -c --arg name "$NAME" --arg version "$VERSION" --arg tag "$TAG" --arg image "$IMAGE" \
+                  '. + [{name: $name, version: $version, tag: $tag, image: $image, isLatest: "false"}]')
+                for OS in ubuntu-latest ubuntu-24.04-arm; do
+                  case "$OS" in
+                    ubuntu-latest) DOCKER_ARCH=amd64; NODE_ARCH=x64 ;;
+                    ubuntu-24.04-arm) DOCKER_ARCH=arm64; NODE_ARCH=arm64 ;;
+                  esac
+                  CONTAINER=$(echo "$CONTAINER" | jq -c --arg name "$NAME" --arg version "$VERSION" --arg tag "$TAG" --arg image "$IMAGE" --arg os "$OS" --arg dockerArch "$DOCKER_ARCH" --arg nodeArch "$NODE_ARCH" \
+                    '. + [{name: $name, version: $version, tag: $tag, image: $image, os: $os, dockerArch: $dockerArch, nodeArch: $nodeArch}]')
+                done
+                ;;
+            esac
           # printf '%s\n', not '%s': `tr` never adds a trailing newline of its own, and `read` silently drops the last line of a while-read loop when it hits EOF without one -- confirmed the hard way, the final tag in a comma-separated backfill_tags list was dropped from every matrix with no warning or error. The trailing \n here survives the comma-to-newline translation as the terminator the last tag needs.
           done < <(printf '%s\n' "$BACKFILL_TAGS" | tr ',' '\n')
           {
@@ -496,6 +542,8 @@ jobs:
             echo "npm-alias-matrix=$NPM_ALIASES"
             echo "sea-matrix=$SEA"
             echo "attest-matrix=$ATTEST"
+            echo "container-matrix=$CONTAINER"
+            echo "container-image-matrix=$CONTAINER_IMAGES"
           } >> "$GITHUB_OUTPUT"
 
   # The three jobs below restore what the monorepo migration lost (ExaDev/documents.js#732): each standalone repository's own pipeline republished its package under alternate npm names and a @exadev/<name> scope on GitHub Packages, and signed an SPDX SBOM plus build-provenance attestation against the packed release tarball. They run after the release job (or, for a backfill, the collect-backfill-matrix job above) keyed off whichever of the two produced the matrices, and nothing depends on them -- a failure here can never block or fail the release itself or the Pages deploy.
@@ -786,6 +834,88 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ matrix.tag }}" --clobber "${{ steps.build.outputs.binary-path }}"
+
+  build-container-images:
+    name: Build container image (${{ matrix.image }}, ${{ matrix.dockerArch }})
+    needs: [release, collect-backfill-matrix, build-sea-binaries]
+    # build-sea-binaries' own result is checked for "attempted", not "success": its own matrix spans every SEA-eligible package and OS at once (including document-cli and every non-Linux leg), so an unrelated leg failing there must never block this job -- the gh release download step below fails loudly and specifically instead if the one Linux asset this leg actually needs wasn't uploaded.
+    if: always() && (needs.release.result == 'success' || needs.collect-backfill-matrix.result == 'success') && (needs.release.outputs.container-matrix || needs.collect-backfill-matrix.outputs.container-matrix) != '[]' && (needs.build-sea-binaries.result == 'success' || needs.build-sea-binaries.result == 'failure')
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.release.outputs.container-matrix || needs.collect-backfill-matrix.outputs.container-matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.tag }} # the release commit the orchestrator tagged, not whatever main has moved on to by now
+          fetch-depth: 0
+      - name: Download this leg's Linux SEA binary from the release
+        # Reuses the binary build-sea-binaries already built and uploaded for this exact (package, arch) pair rather than rebuilding it a second time here.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p "packages/${{ matrix.name }}/dist-sea"
+          gh release download "${{ matrix.tag }}" \
+            --pattern "${{ matrix.name }}-linux-${{ matrix.nodeArch }}" \
+            --dir "packages/${{ matrix.name }}/dist-sea" \
+            --clobber
+          mv "packages/${{ matrix.name }}/dist-sea/${{ matrix.name }}-linux-${{ matrix.nodeArch }}" \
+             "packages/${{ matrix.name }}/dist-sea/${{ matrix.name }}"
+          # The distroless base image this package's own Dockerfile builds FROM has no shell to chmod this with, so the execute bit has to already be set on disk before `docker build` runs -- COPY preserves it.
+          chmod +x "packages/${{ matrix.name }}/dist-sea/${{ matrix.name }}"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push this architecture's image
+        uses: docker/build-push-action@v6
+        with:
+          context: packages/${{ matrix.name }}
+          platforms: linux/${{ matrix.dockerArch }}
+          push: true
+          tags: ghcr.io/exadev/${{ matrix.image }}:${{ matrix.version }}-${{ matrix.dockerArch }}
+
+  publish-container-manifests:
+    name: Publish container manifest (${{ matrix.image }} ${{ matrix.version }})
+    needs: [release, collect-backfill-matrix, build-container-images]
+    # build-container-images' own result is likewise checked for "attempted": its own matrix can span both document-rest and document-mcp at once, so one package's arch leg failing must never block merging the other package's manifest -- imagetools create below fails specifically if either of *this* image's two per-arch tags doesn't actually exist.
+    if: always() && (needs.release.result == 'success' || needs.collect-backfill-matrix.result == 'success') && (needs.release.outputs.container-image-matrix || needs.collect-backfill-matrix.outputs.container-image-matrix) != '[]' && (needs.build-container-images.result == 'success' || needs.build-container-images.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.release.outputs.container-image-matrix || needs.collect-backfill-matrix.outputs.container-image-matrix) }}
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Merge the per-architecture images into one multi-arch manifest
+        run: |
+          docker buildx imagetools create \
+            -t "ghcr.io/exadev/${{ matrix.image }}:${{ matrix.version }}" \
+            "ghcr.io/exadev/${{ matrix.image }}:${{ matrix.version }}-amd64" \
+            "ghcr.io/exadev/${{ matrix.image }}:${{ matrix.version }}-arm64"
+      - name: Float latest onto this manifest (never for a backfill run)
+        # A backfill run sets isLatest "false" specifically because it exists to catch up an old, already-superseded tag -- floating `latest` onto it would regress the tag if newer releases have shipped since.
+        if: matrix.isLatest == 'true'
+        run: |
+          docker buildx imagetools create \
+            -t "ghcr.io/exadev/${{ matrix.image }}:latest" \
+            "ghcr.io/exadev/${{ matrix.image }}:${{ matrix.version }}"
 
   deploy-site:
     name: Build and deploy the web UI to Pages
