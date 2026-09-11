@@ -22,6 +22,7 @@ minimumReleaseAgeExclude:
   - document-cli
   - document-compute.js
   - document-mcp
+  - document-operations
   - document-outline.js
   - document-schema.js
   - documents.js

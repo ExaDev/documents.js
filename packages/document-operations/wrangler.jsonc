@@ -1,0 +1,6 @@
+{
+  // A no-op Worker whose only purpose is to host document-operations's source as the module graph the workers test suite (test/workers/**) imports against under the real workerd runtime. src/index.ts is the package's own main entry point, so it is the natural module graph root.
+  "name": "document-operations-workers-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-09-23",
+}
