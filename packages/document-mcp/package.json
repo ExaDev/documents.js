@@ -90,9 +90,7 @@
   "dependencies": {
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
-    "document-compute.js": "1.5.3",
-    "document-outline.js": "3.7.2",
-    "document-schema.js": "7.11.1",
+    "document-operations": "0.1.0",
     "documents.js": "7.20.1",
     "zod": "4.4.3"
   },
@@ -105,6 +103,7 @@
     "@stryker-mutator/vitest-runner": "10.0.0",
     "@types/node": "26.2.0",
     "@vitest/coverage-v8": "4.1.11",
+    "document-schema.js": "7.11.1",
     "eslint": "10.8.1",
     "husky": "9.1.7",
     "odf.js": "7.25.1",
