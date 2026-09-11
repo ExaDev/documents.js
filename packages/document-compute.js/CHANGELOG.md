@@ -1,3 +1,9 @@
+## [1.5.6](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.5.5...document-compute.js%401.5.6) (2026-09-11)
+
+### Tests
+
+* **document-compute.js:** reach a 100% mutation score ([f828f76](https://github.com/ExaDev/documents.js/commit/f828f76251b51a56e72108b2dc76e52c2e984870))
+
 ## [1.5.5](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.5.4...document-compute.js%401.5.5) (2026-09-11)
 
 

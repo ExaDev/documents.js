@@ -432,7 +432,7 @@ importers:
         specifier: 2.0.0
         version: 2.0.0
       document-operations:
-        specifier: 1.1.2
+        specifier: 1.1.3
         version: link:../document-operations
       documents.js:
         specifier: 7.20.3
@@ -502,7 +502,7 @@ importers:
   packages/document-operations:
     dependencies:
       document-compute.js:
-        specifier: 1.5.5
+        specifier: 1.5.6
         version: link:../document-compute.js
       document-outline.js:
         specifier: 3.7.2
@@ -627,7 +627,7 @@ importers:
   packages/document-rest:
     dependencies:
       document-operations:
-        specifier: 1.1.2
+        specifier: 1.1.3
         version: link:../document-operations
       documents.js:
         specifier: 7.20.3
