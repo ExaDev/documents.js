@@ -61,3 +61,14 @@ export function resolveSchemeColor(
   }
   return color;
 }
+
+// The SlideSchemeColorSchemeAtom among a container's children, matched on the recInstance that is the record's only distinguishing mark -- a real producer's slide-shaped containers carry further RT_ColorSchemeAtom records alongside it (LibreOffice 26.2.5.2's own main master opens with a run of recInstance 0x006 extra colour schemes ahead of the real one, confirmed by inspecting its raw bytes), so a lookup keyed on the record type alone finds whichever of those happened to come first. readSlideSchemeColorSchemeAtom would then reject that record for its instance, failing a whole file over a lookup that picked the wrong sibling; finding by both fields keeps the failure for a container that genuinely states no scheme of its own, which is the malformed case.
+export function findSlideSchemeColorSchemeAtom(
+  records: readonly PptRecord[],
+): PptRecord | undefined {
+  return records.find(
+    (record) =>
+      record.header.recType === RT_ColorSchemeAtom &&
+      record.header.recInstance === SLIDE_SCHEME_REC_INSTANCE,
+  );
+}
