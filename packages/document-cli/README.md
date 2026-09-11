@@ -72,6 +72,8 @@ npm i -g doculi
 
 Both names install the exact same package and the exact same binary — `package.json`'s `bin` field declares both `document-cli` and `doculi` pointing at the one built entry point unconditionally, so there is no "real" name and an alias; pick whichever you find easier to type. Unlike a sibling's second _npm package name_ (`documents.js`'s own `js.documents` — see that package's README, and note the older per-repo pipeline's GitHub Packages republish this pattern used to mirror is no longer running, per [ExaDev/documents.js#732](https://github.com/ExaDev/documents.js/issues/732)), this is one package with two `bin` entries: a second name for the same build, not a second build, and unaffected by that gap.
 
+Every release also attaches a Node [single-executable application](https://nodejs.org/api/single-executable-applications.html) build for Linux, macOS, and Windows to that release's own GitHub Release assets — a standalone binary with the entire package and its dependencies embedded, needing no Node.js install or `npm i` at all. It covers every subcommand except the TUI, which needs a real terminal session rather than a spawned subprocess and stays npm-only; running `tui` against the binary prints a message pointing back at the npm-installed package instead of attempting to launch it. Download the asset matching your platform from the package's tag on the [Releases page](https://github.com/ExaDev/documents.js/releases) and run it directly (`chmod +x` on Linux/macOS first).
+
 ## Usage
 
 Every conversion and extraction command reads one input and writes one output. Pass `-` for either to use stdin/stdout instead of a file — useful for piping through other tools without a temp file:
