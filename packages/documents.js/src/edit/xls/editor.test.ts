@@ -46,10 +46,11 @@ describe("XlsEditor cell values", () => {
       kind: "percentage",
       value: 0.25,
     });
-    // The ISO currency code is the one field of this set a re-read does not promise back: the writer states a currency as its number-format string, and the reader re-classifies the kind but does not recover which ISO code the format named.
+    // A currency cell's ISO code survives the round trip through the writer's [$USD]-shaped bracket format -- the one carrier the reader can re-classify the code back out of, the identical encoding ooxml.js's xlsx writer states for the same schema field.
     expect(reread.cell(2, 0).value).toEqual({
       kind: "currency",
       value: 7.99,
+      currency: "USD",
     });
     expect(reread.cell(2, 1).value).toEqual({
       kind: "date",
