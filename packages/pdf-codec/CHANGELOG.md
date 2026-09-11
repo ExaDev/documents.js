@@ -1,3 +1,19 @@
+## [4.7.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.6.0...pdf-codec%404.7.0) (2026-09-11)
+
+### Features
+
+* **pdf-codec:** re-embed a source's own JBIG2/JPX streams verbatim ([fc540d1](https://github.com/ExaDev/documents.js/commit/fc540d10ac64ea8331892fe61061287d42e8e3c1))
+
+### Bug Fixes
+
+* **pdf-codec:** budget the mutation dry run for the instrumented STIX test ([2c1dc98](https://github.com/ExaDev/documents.js/commit/2c1dc98cc7655778a2f9f018e7ea7682e9d3681e))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.5.0
+- Updated document-schema.js to 7.11.0
+
 ## [4.6.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.5.6...pdf-codec%404.6.0) (2026-09-11)
 
 ### Features

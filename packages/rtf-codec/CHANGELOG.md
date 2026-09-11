@@ -1,3 +1,15 @@
+## [4.4.0](https://github.com/ExaDev/documents.js/compare/rtf-codec%404.3.0...rtf-codec%404.4.0) (2026-09-11)
+
+### Features
+
+* **ci:** gate each measured package on its first CI mutation baseline ([9f8fa69](https://github.com/ExaDev/documents.js/commit/9f8fa6947795b2089bed03c936691893643ce2ae))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.0
+- Updated archive-codec to 1.11.0
+
 ## [4.3.0](https://github.com/ExaDev/documents.js/compare/rtf-codec%404.2.5...rtf-codec%404.3.0) (2026-09-11)
 
 ### Features

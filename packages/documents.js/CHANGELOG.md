@@ -1,3 +1,26 @@
+## [7.19.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.18.5...documents.js%407.19.0) (2026-09-11)
+
+### Features
+
+* **documents.js:** carry and consume a source package's embedded font faces through the tree ([f2d8cc3](https://github.com/ExaDev/documents.js/commit/f2d8cc35df06b9cce8f665aa55f25ffeaf9e827e))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.5.0
+- Updated document-schema.js to 7.11.0
+- Updated archive-codec to 1.11.0
+- Updated epub-codec to 1.5.0
+- Updated markdown-codec to 6.7.0
+- Updated odf.js to 7.25.0
+- Updated pdf-codec to 4.7.0
+- Updated doc-codec to 2.9.0
+- Updated ooxml.js to 8.13.0
+- Updated ppt-codec to 1.5.0
+- Updated rtf-codec to 4.4.0
+- Updated wpd-codec to 3.5.0
+- Updated xls-codec to 4.14.0
+
 ## [7.18.5](https://github.com/ExaDev/documents.js/compare/documents.js%407.18.4...documents.js%407.18.5) (2026-09-11)
 
 ### Tests

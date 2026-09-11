@@ -1,3 +1,9 @@
+## [1.2.0](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.1.1...excel-number-format%401.2.0) (2026-09-11)
+
+### Features
+
+* **ci:** gate each measured package on its first CI mutation baseline ([9f8fa69](https://github.com/ExaDev/documents.js/commit/9f8fa6947795b2089bed03c936691893643ce2ae))
+
 ## [1.1.1](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.1.0...excel-number-format%401.1.1) (2026-09-08)
 
 ### Bug Fixes

@@ -1,3 +1,15 @@
+## [3.7.0](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.6.15...document-outline.js%403.7.0) (2026-09-11)
+
+### Features
+
+* **ci:** gate each measured package on its first CI mutation baseline ([9f8fa69](https://github.com/ExaDev/documents.js/commit/9f8fa6947795b2089bed03c936691893643ce2ae))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.0
+- Updated pdf-codec to 4.7.0
+
 ## [3.6.15](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.6.14...document-outline.js%403.6.15) (2026-09-11)
 
 

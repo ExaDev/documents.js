@@ -1,3 +1,10 @@
+## [7.11.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.10.0...document-schema.js%407.11.0) (2026-09-11)
+
+### Features
+
+* **ci:** gate each measured package on its first CI mutation baseline ([9f8fa69](https://github.com/ExaDev/documents.js/commit/9f8fa6947795b2089bed03c936691893643ce2ae))
+* **wpd-codec:** lift D6 watermarks into ContentSection.watermarks ([e84c7f0](https://github.com/ExaDev/documents.js/commit/e84c7f032f8c38bccc69d0199aca2f859d97d507))
+
 ## [7.10.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.9.1...document-schema.js%407.10.0) (2026-09-11)
 
 ### Features

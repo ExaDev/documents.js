@@ -1,3 +1,23 @@
+## [4.9.0](https://github.com/ExaDev/documents.js/compare/document-mcp%404.8.64...document-mcp%404.9.0) (2026-09-11)
+
+### Features
+
+* **ci:** gate each measured package on its first CI mutation baseline ([9f8fa69](https://github.com/ExaDev/documents.js/commit/9f8fa6947795b2089bed03c936691893643ce2ae))
+
+### Documentation
+
+* **document-mcp:** align the odb_query row with the tools table's columns ([ebb6b31](https://github.com/ExaDev/documents.js/commit/ebb6b31429934bfcee50d94797a869fc36b908c0))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.0
+- Updated odf.js to 7.25.0
+- Updated document-outline.js to 3.7.0
+- Updated wpd-codec to 3.5.0
+- Updated documents.js to 7.19.0
+- Updated document-compute.js to 1.5.0
+
 ## [4.8.64](https://github.com/ExaDev/documents.js/compare/document-mcp%404.8.63...document-mcp%404.8.64) (2026-09-11)
 
 

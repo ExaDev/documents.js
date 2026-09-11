@@ -1,3 +1,25 @@
+## [2.9.0](https://github.com/ExaDev/documents.js/compare/doc-codec%402.8.6...doc-codec%402.9.0) (2026-09-11)
+
+### Features
+
+* **ci:** gate each measured package on its first CI mutation baseline ([9f8fa69](https://github.com/ExaDev/documents.js/commit/9f8fa6947795b2089bed03c936691893643ce2ae))
+* **doc-codec:** read and write manual page breaks as the 0x000C mid-section spelling ([ba87509](https://github.com/ExaDev/documents.js/commit/ba87509358201c61fd812624077a6944a92f8355))
+* **doc-codec:** write footnote, header, comment, and endnote stories ([873d1b7](https://github.com/ExaDev/documents.js/commit/873d1b79bb0374a211b021d7c9c389f2f97fac30))
+
+### Bug Fixes
+
+* **doc-codec:** stop dropping a note story's last paragraph when no guard follows it ([d22beb8](https://github.com/ExaDev/documents.js/commit/d22beb809c85eb79c148fd27dae767336bee3e80))
+
+### Documentation
+
+* **doc-codec:** state the hyperlinks/fields write gap by its real blockers ([649f5a6](https://github.com/ExaDev/documents.js/commit/649f5a6aac402dbf5bba150c34c31392438cd648))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.0
+- Updated archive-codec to 1.11.0
+
 ## [2.8.6](https://github.com/ExaDev/documents.js/compare/doc-codec%402.8.5...doc-codec%402.8.6) (2026-09-11)
 
 

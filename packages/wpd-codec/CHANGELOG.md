@@ -1,3 +1,22 @@
+## [3.5.0](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.4.6...wpd-codec%403.5.0) (2026-09-11)
+
+### Features
+
+* **ci:** gate each measured package on its first CI mutation baseline ([9f8fa69](https://github.com/ExaDev/documents.js/commit/9f8fa6947795b2089bed03c936691893643ce2ae))
+* **wpd-codec:** decode WPG vector graphics into the shared drawing vocabulary ([dd9c166](https://github.com/ExaDev/documents.js/commit/dd9c16658923e22c8333c2e59c903c1c62d9b172))
+* **wpd-codec:** lift D6 watermarks into ContentSection.watermarks ([e84c7f0](https://github.com/ExaDev/documents.js/commit/e84c7f032f8c38bccc69d0199aca2f859d97d507))
+* **wpd-codec:** recover native OLE object bytes as tree-form attachments ([f496ca1](https://github.com/ExaDev/documents.js/commit/f496ca15efdcf2b2ae455b62c4740dc209943731))
+
+### Documentation
+
+* **wpd-codec:** state the box-graphics scope this branch lands ([b573a52](https://github.com/ExaDev/documents.js/commit/b573a52687bbaab8beec197bbbdd0bf542c8c070))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.0
+- Updated archive-codec to 1.11.0
+
 ## [3.4.6](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.4.5...wpd-codec%403.4.6) (2026-09-11)
 
 

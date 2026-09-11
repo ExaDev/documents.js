@@ -1,3 +1,14 @@
+## [1.11.0](https://github.com/ExaDev/documents.js/compare/archive-codec%401.10.8...archive-codec%401.11.0) (2026-09-11)
+
+### Features
+
+* **ci:** gate each measured package on its first CI mutation baseline ([9f8fa69](https://github.com/ExaDev/documents.js/commit/9f8fa6947795b2089bed03c936691893643ce2ae))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.0
+
 ## [1.10.8](https://github.com/ExaDev/documents.js/compare/archive-codec%401.10.7...archive-codec%401.10.8) (2026-09-11)
 
 
