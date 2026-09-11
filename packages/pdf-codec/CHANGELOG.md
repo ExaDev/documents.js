@@ -1,3 +1,15 @@
+## [4.6.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.5.6...pdf-codec%404.6.0) (2026-09-11)
+
+### Features
+
+* **pdf-codec:** apply calt and clig through GSUB contextual lookups over GDEF glyph classes ([aa547b7](https://github.com/ExaDev/documents.js/commit/aa547b796f1cee00000cae6b5d56b5496776e8dd))
+* **pdf-codec:** list each form-field widget in its page's /Annots array ([a6e96a9](https://github.com/ExaDev/documents.js/commit/a6e96a92ab5cfe1752ee50ce9b4de6419f8ffd46))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.10.0
+
 ## [4.5.6](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.5.5...pdf-codec%404.5.6) (2026-09-11)
 
 

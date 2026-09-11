@@ -1,3 +1,10 @@
+## [7.10.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.9.1...document-schema.js%407.10.0) (2026-09-11)
+
+### Features
+
+* **document-schema.js:** carry a package's embedded font faces on the tree root ([7c3c41d](https://github.com/ExaDev/documents.js/commit/7c3c41d9c57555206fd0630358a29c42192fb46a))
+* **ooxml.js:** record a pptx slide's reading order as a rank per shape ([cd93541](https://github.com/ExaDev/documents.js/commit/cd93541b8467dc679097472c997f86bd020b9ece))
+
 ## [7.9.1](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.9.0...document-schema.js%407.9.1) (2026-09-11)
 
 ### Bug Fixes

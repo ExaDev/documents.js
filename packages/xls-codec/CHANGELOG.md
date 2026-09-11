@@ -1,3 +1,23 @@
+## [4.13.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.12.6...xls-codec%404.13.0) (2026-09-11)
+
+### Features
+
+* **xls-codec:** carry a currency cell's ISO code through the format bracket ([76f98c1](https://github.com/ExaDev/documents.js/commit/76f98c1135710d1e36b83c0be44dbc90582b925c))
+* **xls-codec:** read a cell's own font from its XF's font table entry ([9b261b0](https://github.com/ExaDev/documents.js/commit/9b261b0a4ce3726aeb9ded56d138b414e93c85cd))
+* **xls-codec:** read the workbook's defined names onto the document ([57a75fc](https://github.com/ExaDev/documents.js/commit/57a75fc9307c21efbd4530e8a9c6269426730cca))
+* **xls-codec:** write per-cell fonts through an interned font table ([a24b611](https://github.com/ExaDev/documents.js/commit/a24b61153ae8bffcfc18702919b292bd7f2408c1))
+* **xls-codec:** write the document's defined names as Lbl records ([741116e](https://github.com/ExaDev/documents.js/commit/741116e912e6c847a51d1fd4622e463ada340ab5))
+
+### Documentation
+
+* **xls-codec:** state the per-cell font, defined-name, and currency-code scope ([7a87cc0](https://github.com/ExaDev/documents.js/commit/7a87cc007f398fc3890096637b0ed213fd2d472a))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.10.0
+- Updated archive-codec to 1.10.8
+
 ## [4.12.6](https://github.com/ExaDev/documents.js/compare/xls-codec%404.12.5...xls-codec%404.12.6) (2026-09-11)
 
 

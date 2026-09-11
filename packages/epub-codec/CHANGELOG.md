@@ -1,3 +1,15 @@
+## [1.4.0](https://github.com/ExaDev/documents.js/compare/epub-codec%401.3.9...epub-codec%401.4.0) (2026-09-11)
+
+### Features
+
+* **epub-codec:** map sub/sup onto ContentRun.verticalAlign in both directions ([33b5256](https://github.com/ExaDev/documents.js/commit/33b525691246ea1fbb7c686dcc3b28227ea96c67))
+* **epub-codec:** map the XHTML dir attribute onto paragraph and run direction ([8d7a3f4](https://github.com/ExaDev/documents.js/commit/8d7a3f4f8f77b5e501a16cac90fccc6eded4fed7))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.10.0
+
 ## [1.3.9](https://github.com/ExaDev/documents.js/compare/epub-codec%401.3.8...epub-codec%401.3.9) (2026-09-11)
 
 

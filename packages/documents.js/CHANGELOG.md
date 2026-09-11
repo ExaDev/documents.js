@@ -1,3 +1,25 @@
+## [7.18.5](https://github.com/ExaDev/documents.js/compare/documents.js%407.18.4...documents.js%407.18.5) (2026-09-11)
+
+### Tests
+
+* **documents.js:** expect the currency ISO code back from the xls editor round trip ([adfb0f9](https://github.com/ExaDev/documents.js/commit/adfb0f9e96bc11fd28bf6f84283d6f7ecd8e6e2d))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.10.0
+- Updated archive-codec to 1.10.8
+- Updated epub-codec to 1.4.0
+- Updated markdown-codec to 6.6.7
+- Updated odf.js to 7.24.5
+- Updated pdf-codec to 4.6.0
+- Updated doc-codec to 2.8.6
+- Updated ooxml.js to 8.12.0
+- Updated ppt-codec to 1.4.11
+- Updated rtf-codec to 4.3.0
+- Updated wpd-codec to 3.4.6
+- Updated xls-codec to 4.13.0
+
 ## [7.18.4](https://github.com/ExaDev/documents.js/compare/documents.js%407.18.3...documents.js%407.18.4) (2026-09-11)
 
 

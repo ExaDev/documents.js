@@ -1,3 +1,17 @@
+## [8.12.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.11.1...ooxml.js%408.12.0) (2026-09-11)
+
+### Features
+
+* **document-schema.js:** record what a node's content was in the source ([f4b4901](https://github.com/ExaDev/documents.js/commit/f4b490195831f1d3557da18d5c3a1bbab08fa0a4)), references [#1197](https://github.com/ExaDev/documents.js/issues/1197)
+* **ooxml.js:** add an opt-in reading-order projection for pptx slides ([94859e7](https://github.com/ExaDev/documents.js/commit/94859e75afd482ab9e9f4822783d529fd53db7b9))
+* **ooxml.js:** record a pptx slide's reading order as a rank per shape ([cd93541](https://github.com/ExaDev/documents.js/commit/cd93541b8467dc679097472c997f86bd020b9ece))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.10.0
+- Updated archive-codec to 1.10.8
+
 ## [8.11.1](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.11.0...ooxml.js%408.11.1) (2026-09-11)
 
 
