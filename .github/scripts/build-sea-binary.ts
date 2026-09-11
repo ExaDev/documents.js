@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export type SeaPlatform = "darwin" | "linux" | "win32";
+export type SeaArch = "arm64" | "x64";
 
 export interface SeaBuildPaths {
   readonly packageDir: string;
@@ -25,12 +26,13 @@ const PLATFORM_LABELS: Record<SeaPlatform, string> = {
   win32: "windows",
 };
 
-/** The platform-qualified on-disk file name for a binary -- every platform gets its own distinct name, not only win32's `.exe`: three release legs (one per platform in the CI matrix) upload to the same GitHub Release via `gh release upload --clobber`, so an unqualified name shared between two platforms silently loses one binary to the other's upload rather than erroring -- confirmed directly the first time a real backfill ran with only win32 disambiguated (ExaDev/documents.js, 2026-09-11): the release ended up with exactly one unsuffixed `document-cli` asset, and there was no way to tell afterward whether it was the Linux or macOS build, because the losing upload left no trace at all. */
+/** The platform-and-architecture-qualified on-disk file name for a binary -- every (platform, arch) pair gets its own distinct name, not only win32's `.exe`: every release leg in the CI matrix uploads to the same GitHub Release via `gh release upload --clobber`, so an unqualified name shared between two legs silently loses one binary to the other's upload rather than erroring -- confirmed directly, twice, the first two times this actually ran (ExaDev/documents.js, 2026-09-11): first with only win32 disambiguated (the macOS and Linux legs shared one name), then again once a second macOS architecture (Intel, alongside Apple Silicon) joined the matrix -- both `darwin`, so a platform-only name collides identically between two legs that differ only in `process.arch`. Both times the release ended up with fewer binaries than legs, and no trace of which one the surviving asset actually was. */
 export function binaryFileName(
   binaryName: string,
   platform: SeaPlatform,
+  arch: SeaArch,
 ): string {
-  const suffixed = `${binaryName}-${PLATFORM_LABELS[platform]}`;
+  const suffixed = `${binaryName}-${PLATFORM_LABELS[platform]}-${arch}`;
   return platform === "win32" ? `${suffixed}.exe` : suffixed;
 }
 
@@ -50,14 +52,15 @@ function run(command: string, args: readonly string[]): void {
   execFileSync(command, args, { stdio: ["inherit", 2, "inherit"] });
 }
 
-/** Builds the SEA binary for `paths.packageDir`, targeting whichever platform this process is currently running under. sea-config.json lives beside the final binary in `paths.outputDir`, which the caller is responsible for pointing at a package's own gitignored dist-sea/ (see tsdown.sea.shared.ts's own comment on why that directory is never published). */
+/** Builds the SEA binary for `paths.packageDir`, targeting whichever platform and architecture this process is currently running under. sea-config.json lives beside the final binary in `paths.outputDir`, which the caller is responsible for pointing at a package's own gitignored dist-sea/ (see tsdown.sea.shared.ts's own comment on why that directory is never published). */
 export function buildSeaBinary(
   paths: SeaBuildPaths,
   platform: SeaPlatform,
+  arch: SeaArch,
 ): string {
   mkdirSync(paths.outputDir, { recursive: true });
 
-  const fileName = binaryFileName(paths.binaryName, platform);
+  const fileName = binaryFileName(paths.binaryName, platform, arch);
   const binaryPath = join(paths.outputDir, fileName);
   const configPath = join(paths.outputDir, "sea-config.json");
 
@@ -91,6 +94,16 @@ function currentPlatform(): SeaPlatform {
   }
   throw new Error(
     `No Node SEA binary target is defined for platform "${platform}".`,
+  );
+}
+
+function currentArch(): SeaArch {
+  const { arch } = process;
+  if (arch === "arm64" || arch === "x64") {
+    return arch;
+  }
+  throw new Error(
+    `No Node SEA binary target is defined for architecture "${arch}".`,
   );
 }
 
@@ -135,7 +148,7 @@ function parseArgs(argv: readonly string[]): SeaBuildPaths {
 
 function main(): void {
   const paths = parseArgs(process.argv.slice(2));
-  const binaryPath = buildSeaBinary(paths, currentPlatform());
+  const binaryPath = buildSeaBinary(paths, currentPlatform(), currentArch());
   console.log(binaryPath);
 }
 

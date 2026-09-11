@@ -189,7 +189,7 @@ Then add the server URL (e.g., `https://your-host:3000/mcp`) as a connector in C
 
 ### Standalone binary
 
-Every release also attaches a Node [single-executable application](https://nodejs.org/api/single-executable-applications.html) build for Linux, macOS, and Windows to that release's own GitHub Release assets — the entire server and its dependencies embedded in one file, needing no Node.js install or `npx` at all. It supports both `stdio` and `--transport http` exactly as above; point an MCP client's `command` at the downloaded binary directly instead of `npx`/`node`. Download the asset matching your platform from the package's tag on the [Releases page](https://github.com/ExaDev/documents.js/releases) and run it directly (`chmod +x` on Linux/macOS first).
+Every release also attaches a Node [single-executable application](https://nodejs.org/api/single-executable-applications.html) build for Linux, Windows, and macOS (both Apple Silicon and Intel) to that release's own GitHub Release assets — the entire server and its dependencies embedded in one file, needing no Node.js install or `npx` at all. It supports both `stdio` and `--transport http` exactly as above; point an MCP client's `command` at the downloaded binary directly instead of `npx`/`node`. Download the asset matching your platform from the package's tag on the [Releases page](https://github.com/ExaDev/documents.js/releases) and run it directly (`chmod +x` on Linux/macOS first).
 
 ### Development
 
