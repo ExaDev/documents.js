@@ -13,10 +13,16 @@ describe("mainFormatFor", () => {
 });
 
 describe("binaryFileName", () => {
-  it("appends .exe only on win32", () => {
-    expect(binaryFileName("document-rest", "win32")).toBe("document-rest.exe");
-    expect(binaryFileName("document-rest", "darwin")).toBe("document-rest");
-    expect(binaryFileName("document-rest", "linux")).toBe("document-rest");
+  it("qualifies every platform with a distinct, human-readable label, appending .exe only on win32", () => {
+    expect(binaryFileName("document-rest", "win32")).toBe(
+      "document-rest-windows.exe",
+    );
+    expect(binaryFileName("document-rest", "darwin")).toBe(
+      "document-rest-macos",
+    );
+    expect(binaryFileName("document-rest", "linux")).toBe(
+      "document-rest-linux",
+    );
   });
 });
 
