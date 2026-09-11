@@ -199,7 +199,7 @@ export function readXlsContent(
   bytes: Uint8Array<ArrayBuffer>,
   password?: string,
 ): XlsContentDocument {
-  const { workbook, metadata } = readWorkbookStreams(bytes);
+  const { workbook, metadata, embeddingStreams } = readWorkbookStreams(bytes);
   // FilePass ([MS-XLS] 2.4.117) is looked for in the raw record list, before grouping or substream-splitting, because its own record type and size are never encrypted ([MS-XLS] 2.2.10) -- readRecords already parses correctly over the still-encrypted stream, so there is no need for a separate raw byte scan.
   const rawRecords = readRecords(workbook);
   const filePassRecord = rawRecords.find(
@@ -238,6 +238,7 @@ export function readXlsContent(
       globals,
       blipStore,
       documentMetadata,
+      embeddingStreams,
     ),
   );
   return {
@@ -289,10 +290,10 @@ function mapDefinedNames(
 function concatDrawingGroupBytes(
   records: Substream["records"],
 ): Uint8Array<ArrayBuffer> {
+  // record.blocks is the whole group -- the base MsoDrawingGroup record's own data plus every Continue record chained onto it ([MS-XLS] 2.4.179); the Blip Store this stream carries routinely exceeds one record's 8224-byte ceiling once a workbook holds more than a handful of images, so reading only blocks[0] would silently truncate it.
   const chunks = records
     .filter((record) => record.type === RECORD_MSODRAWINGGROUP)
-    .map((record) => record.blocks[0])
-    .filter((block): block is Uint8Array<ArrayBuffer> => block !== undefined);
+    .flatMap((record) => record.blocks);
   return concatBytes(chunks);
 }
 
@@ -316,6 +317,7 @@ function readSheet(
   globals: WorkbookGlobals,
   blipStore: ReadonlyMap<number, BlipImage>,
   documentMetadata: LayoutMetadata,
+  embeddingStreams: ReadonlyMap<number, Uint8Array<ArrayBuffer>>,
 ): ContentSheet {
   const substream = substreams.find(
     (candidate) =>
@@ -369,6 +371,7 @@ function readSheet(
     ownSheetCells: cells,
     metadata: documentMetadata,
     allSubstreams: substreams,
+    embeddingStreams,
   });
   return {
     name: entry.name,

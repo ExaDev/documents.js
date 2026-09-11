@@ -26,8 +26,9 @@ import {
   type ShapeAnchor,
 } from "../drawing/shapes";
 import { SHAPE_TYPE_PICTURE_FRAME } from "../drawing/escher-constants";
-import { readObjTypeAndId } from "./comments";
+import { readObjTypeAndId, readObjPictFmlaStorageId } from "./comments";
 import { readChartSeries, type ChartRangeContext } from "./chart";
+import { readEmbeddedObjectPackage } from "./embedded-object";
 import type { RawColumn, RawRow } from "./sheet";
 
 // One worksheet's own drawing content: pictures (ContentSheetImage) and everything else a shape can hold that has no dedicated image slot -- a chart ([MS-XLS] "Obj" ftCmo objType Chart, resolved through its own nested BOF(dt=chart)...EOF substream, see chart.ts) or a generic autoshape/textbox/line (objectKind 'drawing', a ContentDrawPage of one ContentShape). A shape's own drawing geometry (Sp/Opt/ClientAnchor, drawing/shapes.ts) and the Obj record naming what it actually IS pair up 1:1, in document order, across the worksheet substream's own MsoDrawing/Obj records -- the same positional correlation every real BIFF8 reader (this reader's own design, cross-checked against how Apache POI's EscherAggregate and xlrd both resolve this exact pairing) relies on, since neither record names the other directly.
@@ -53,6 +54,8 @@ export interface SheetDrawingContext {
   readonly metadata: LayoutMetadata;
   /** Every substream the workbook stream carries -- searched for the chart substream a Chart-type Obj record's own nested BOF...EOF produced (splitSubstreams reports it as its own entry, positioned by byte offset rather than nested inside the worksheet's own `records`; see biff/substreams.ts's own top comment for why). */
   readonly allSubstreams: readonly Substream[];
+  /** Every "MBD<hex>/Package" Embedding Storage the outer compound file carries, keyed by the storage id a Picture-type Obj record's own FtPictFmla names (container.ts's own readWorkbookStreams) -- resolved here for a Picture Obj record whose data lives in an OLE embedding rather than the workbook-wide Blip Store. */
+  readonly embeddingStreams: ReadonlyMap<number, Uint8Array<ArrayBuffer>>;
 }
 
 const GRID_UNITS_X = 1024;
@@ -156,6 +159,7 @@ export function readSheetDrawing(
     readonly ot: number;
     readonly offset: number;
     readonly nextOffset: number;
+    readonly group: RecordGroup;
   }[] = [];
   for (let index = 0; index < worksheetRecords.length; index += 1) {
     const record = worksheetRecords[index];
@@ -163,17 +167,15 @@ export function readSheetDrawing(
       continue;
     }
     if (record.type === RECORD_MSODRAWING) {
-      const block = record.blocks[0];
-      if (block !== undefined) {
-        drawingChunks.push(block);
-      }
+      // record.blocks is the whole group -- the base MsoDrawing record's own data plus every Continue record chained onto it ([MS-XLS] 2.4.180); a real picture's blip bytes routinely exceed one record's 8224-byte ceiling, so only reading blocks[0] would silently truncate the Escher stream for any sheet carrying an image past that size.
+      drawingChunks.push(...record.blocks);
       continue;
     }
     if (record.type === RECORD_OBJ) {
       const { ot } = readObjTypeAndId(record);
       const nextOffset =
         worksheetRecords[index + 1]?.offset ?? Number.POSITIVE_INFINITY;
-      objEntries.push({ ot, offset: record.offset, nextOffset });
+      objEntries.push({ ot, offset: record.offset, nextOffset, group: record });
     }
   }
   if (drawingChunks.length === 0) {
@@ -200,6 +202,16 @@ export function readSheetDrawing(
       obj.ot === OBJECT_TYPE_PICTURE ||
       shape.shapeType === SHAPE_TYPE_PICTURE_FRAME
     ) {
+      const embedded = embeddedObjectFromObjRecord(
+        obj.group,
+        shape,
+        context,
+        geometry,
+      );
+      if (embedded !== undefined) {
+        embeddedObjects.push(embedded);
+        continue;
+      }
       const image = imageFromShape(shape, context, geometry);
       if (image !== undefined) {
         images.push(image);
@@ -225,6 +237,33 @@ export function readSheetDrawing(
     }
   }
   return { images, embeddedObjects };
+}
+
+/** A Picture-type Obj record whose FtPictFmla names an Embedding Storage this workbook's own outer compound file carries: resolved through readEmbeddedObjectPackage rather than the plain Blip Store path imageFromShape covers, since an OLE-embedded object's data lives in that storage's own Package stream instead of a pib reference into the workbook-wide Blip Store. Undefined for a plain picture (no FtPictFmla at all), an FtPictFmla naming a storage id this workbook's container did not report, or a storage whose Package stream is not this codec's own payload (readEmbeddedObjectPackage's own foreign-payload degrade) -- each falls through to imageFromShape instead. */
+function embeddedObjectFromObjRecord(
+  objGroup: RecordGroup,
+  shape: DrawingShape,
+  context: SheetDrawingContext,
+  geometry: SheetGridGeometry,
+): ContentEmbeddedObject | undefined {
+  const storageId = readObjPictFmlaStorageId(objGroup);
+  if (storageId === undefined) {
+    return undefined;
+  }
+  const packageBytes = context.embeddingStreams.get(storageId);
+  if (packageBytes === undefined) {
+    return undefined;
+  }
+  const placement = resolveAnchorPlacement(shape.anchor, geometry);
+  if (placement.widthPt <= 0 || placement.heightPt <= 0) {
+    return undefined;
+  }
+  return readEmbeddedObjectPackage(packageBytes, {
+    xPt: placement.xPt,
+    yPt: placement.yPt,
+    widthPt: placement.widthPt,
+    heightPt: placement.heightPt,
+  });
 }
 
 function imageFromShape(

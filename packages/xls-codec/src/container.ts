@@ -19,10 +19,15 @@ const LEGACY_WORKBOOK_STREAM = "Book";
 /** The [MS-OLEPS] Property Set Stream a .xls's title/author/dates live in when present ([MS-OSHARED] 2.3.3.2.2) -- a genuinely optional stream, unlike Workbook, since a valid BIFF8 workbook need not carry document properties at all. */
 export const SUMMARY_INFORMATION_STREAM = "\x05SummaryInformation";
 
+/** An MBD Embedding Storage's own directory name ([MS-XLS] 2.1.7): "MBD" followed by the eight-uppercase-hex-digit spelling of the storage id an embedded object's own FtPictFmla names -- workbook/drawing-writer.ts writes exactly this spelling, and a real producer's own embeddings use the identical convention. */
+const EMBEDDING_STORAGE_PATTERN = /^MBD([0-9A-F]{8})\/Package$/;
+
 export interface WorkbookStreams {
   readonly workbook: Uint8Array<ArrayBuffer>;
   /** The raw "\x05SummaryInformation" stream bytes, or undefined when the container carries none. */
   readonly metadata: Uint8Array<ArrayBuffer> | undefined;
+  /** Every "MBD<hex>/Package" Embedding Storage's own Package-stream bytes, keyed by the storage id its directory name spells -- an embedded object's own FtPictFmla names this same id (workbook/drawing.ts's own readEmbeddedObjectPackage resolves it). Empty when the workbook embeds no OLE object at all. */
+  readonly embeddingStreams: ReadonlyMap<number, Uint8Array<ArrayBuffer>>;
 }
 
 /**
@@ -44,7 +49,18 @@ export function readWorkbookStreams(
     const metadata = streams.find(
       (stream) => stream.path === SUMMARY_INFORMATION_STREAM,
     );
-    return { workbook: workbook.bytes, metadata: metadata?.bytes };
+    const embeddingStreams = new Map<number, Uint8Array<ArrayBuffer>>();
+    for (const stream of streams) {
+      const match = EMBEDDING_STORAGE_PATTERN.exec(stream.path);
+      if (match?.[1] !== undefined) {
+        embeddingStreams.set(Number.parseInt(match[1], 16), stream.bytes);
+      }
+    }
+    return {
+      workbook: workbook.bytes,
+      metadata: metadata?.bytes,
+      embeddingStreams,
+    };
   }
   if (streams.some((stream) => stream.path === LEGACY_WORKBOOK_STREAM)) {
     throw new BiffFormatError(

@@ -52,6 +52,39 @@ export function readObjTypeAndId(group: RecordGroup): {
   return { ot, id };
 }
 
+/** [MS-XLS] 2.5.92 FtCmo's own fixed 22-byte length (ft/cb, ot, id, grbit, three unused dwords -- workbook/drawing-writer.ts's own writeFtCmo names the identical fields, in the identical order). */
+const FT_CMO_SIZE = 22;
+
+/** [MS-XLS] 2.5.150 FtPictFmla's own ft value: the one sub-record naming the Embedding Storage an OLE-embedded picture's data actually lives in, as opposed to the workbook-wide Blip Store a plain image references through its Escher shape's own pib property instead. */
+const FT_PICT_FMLA = 0x0009;
+
+/**
+ * The Embedding Storage id an Obj record's own FtPictFmla names, for a Picture-type object hosting an embedded OLE object rather than a plain image -- workbook/drawing-writer.ts's own writeFtPictFmla is this function's exact inverse. Undefined for a plain picture (whose Obj record carries no FtPictFmla at all, since its data lives in the workbook's Blip Store instead) or for any other object kind.
+ *
+ * Walks every sub-record after FtCmo -- FtCf, FtPioGrbit, and whichever others a real producer's own Obj record carries -- by its own generic ft/cb framing ([MS-XLS] 2.4.181's own "OBJECTPARSEDFORMULA = ft cb NAME" - shaped `1*ft` production), stopping the moment FtPictFmla itself is found; a zero ft value is the record's own trailing reserved marker (four zero bytes, [MS-XLS] 2.4.181's own "reserved" field) rather than a genuine sub-record, so it ends the walk with no storage id found.
+ */
+export function readObjPictFmlaStorageId(
+  group: RecordGroup,
+): number | undefined {
+  const cursor = new BlockCursor(group.blocks);
+  cursor.skip(FT_CMO_SIZE);
+  while (cursor.hasMore()) {
+    const ft = cursor.u16();
+    if (ft === 0) {
+      return undefined; // the record's own trailing reserved bytes, not a sub-record
+    }
+    const cb = cursor.u16();
+    if (ft !== FT_PICT_FMLA) {
+      cursor.skip(cb);
+      continue;
+    }
+    const cbFmla = cursor.u16();
+    cursor.skip(cbFmla); // ObjectParsedFormula + PictFmlaEmbedInfo -- this reader has no use for either half, only the storage id that follows
+    return cursor.u32(); // lPosInCtlStm
+  }
+  return undefined;
+}
+
 /** [MS-XLS] 2.4.329 TxO: the fixed fields up to and including ObjFmla are read in full (even the ones this reader discards) purely to advance the cursor correctly onto the Continue-carried text that follows -- reserved4+reserved5 and controlInfo are mutually exclusive per cmo.ot but identical in total size (6 bytes), so which one applies never needs deciding here. Only the plain text is kept: rich per-character formatting runs (cbRuns bytes, TxORuns) are skipped rather than modelled, the same scope limit readRichExtendedString already applies to the SST's own rich strings, for the same reason -- ContentSheetCellComment.text is a plain string with nowhere to carry them. */
 function readTxoText(group: RecordGroup): string {
   const cursor = new BlockCursor(group.blocks);
