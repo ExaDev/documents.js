@@ -418,6 +418,8 @@ export function readSheetDrawing(
         offsetXPt: placement.offsetXPt,
         offsetYPt: placement.offsetYPt,
         source: readChartResidue(chart.root, "xlsx"),
+        // origin names what the embedded object's content IS: the same chart-cache classification the pptx table reader sets, stated here on the object that carries the cached model as a nested spreadsheet -- the identical fact, the format-agnostic channel for it.
+        origin: "chart",
       });
     }
     for (const pic of elementsWithTag([node], "xdr:pic")) {
