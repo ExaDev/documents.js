@@ -56,7 +56,8 @@ export async function main(): Promise<Server | undefined> {
   if (transport === "http") {
     const portArg = readFlag(args, "port");
     const port = portArg === undefined ? DEFAULT_HTTP_PORT : parsePort(portArg);
-    const httpServer = await serveHttp(port);
+    const host = readFlag(args, "host") ?? "127.0.0.1";
+    const httpServer = await serveHttp(port, host);
     const address = httpServer.address();
     if (address === null || typeof address === "string") {
       throw new Error(
@@ -64,7 +65,7 @@ export async function main(): Promise<Server | undefined> {
       );
     }
     console.error(
-      `document-mcp listening on http://127.0.0.1:${String(address.port)}${MCP_HTTP_PATH}`,
+      `document-mcp listening on http://${host}:${String(address.port)}${MCP_HTTP_PATH}`,
     );
     return httpServer;
   }
