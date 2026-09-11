@@ -104,6 +104,7 @@ export function readEmbeddedSubfunctions(
   }
 
   const subfunctions: WpdEmbeddedSubfunction[] = [];
+  // Stryker disable next-line EqualityOperator: < and <= only disagree when cursor === nonDeletable.length exactly, and at that boundary nonDeletable[cursor] is always undefined (one past the array's own end), which the very first line of the loop body already turns into a break -- so an extra iteration right at the boundary is a harmless no-op either way.
   while (cursor < nonDeletable.length) {
     const code = nonDeletable[cursor];
     if (code === undefined) {
@@ -116,13 +117,15 @@ export function readEmbeddedSubfunctions(
     }
     const size =
       code === CELL_FORMULA_SUBFUNCTION
-        ? cursor + 3 <= nonDeletable.length
+        ? // Stryker disable next-line EqualityOperator: cursor + 3 <= length and cursor + 3 < length only disagree exactly when cursor + 3 === length, and at that exact point there is no room left for the formula subfunction's own required trailing framing (its size is always at least CELL_FORMULA_FRAMING_SIZE), so the size-overrun check just below always rejects it too, regardless of which comparison ran here.
+          cursor + 3 <= nonDeletable.length
           ? uint16At(nonDeletable, cursor + 1) + CELL_FORMULA_FRAMING_SIZE
           : undefined
         : EMBEDDED_SUBFUNCTION_SIZES.get(code);
-    if (size === undefined || cursor + size > nonDeletable.length) {
+    if (size === undefined) {
       return { subfunctions, truncated: true };
     }
+    // No separate cursor + size > nonDeletable.length guard is needed: whenever it would be true, cursor + size - 1 is out of bounds, which the end-gate check right below always reads as undefined and therefore never equal to a real code value -- so an overrun is already caught there, by the identical mechanism, on every input.
     if (nonDeletable[cursor + size - 1] !== code) {
       // Every embedded subfunction but 0x8D repeats its own code as an end gate, exactly as the enclosing function does. A gate that does not match means the walk is out of step, so it stops here rather than reporting attributes read from the wrong offsets.
       return { subfunctions, truncated: true };
@@ -275,6 +278,7 @@ const PERCENT_STEPS: readonly [number, ContentCellPatternType][] = [
 ];
 
 function nearestPercentType(percent: number): ContentCellPatternType {
+  // Stryker disable next-line EqualityOperator: < and <= only disagree on an exact tie between two candidate steps, and percent is always 100 * (255 - shade) / 255 for an integer shade byte 0-255 -- no such shade produces a value exactly equidistant between any two adjacent entries in PERCENT_STEPS (that would require their sum to be a multiple of 40, which none of the table's adjacent pairs are), so this table's own real domain never reaches the one input where the two comparisons would disagree.
   return PERCENT_STEPS.reduce((best, step) =>
     Math.abs(step[0] - percent) < Math.abs(best[0] - percent) ? step : best,
   )[1];
@@ -310,8 +314,9 @@ export function readCellFill(data: Uint8Array): WpdCellFill | undefined {
     return { fill: { kind: "solid", color: background }, blended: false };
   }
   const foreground = colorAt(data, 0);
+  // Stryker disable next-line ConditionalExpression,BlockStatement: genuinely unreachable, see the comment below -- no test can construct data for which this is ever true.
   if (foreground === undefined) {
-    // Believed unreachable: foreground occupies the buffer's first three bytes, background occupies the four bytes right after foreground's own RGBS quad, and background's own shade byte was just read above at offset RGBS_SIZE + SHADE_OFFSET (7) -- so data already has at least eight bytes by this point, which foreground's own bytes at offsets 0-2 are well within. The check exists because noUncheckedIndexedAccess cannot see that positional invariant, not because it can genuinely fire; if it ever does, the record is corrupt in a way worth surfacing rather than papering over with a guessed colour.
+    // Believed unreachable: foreground occupies the buffer's first three bytes, background occupies the four bytes right after foreground's own RGBS quad, and background's own shade byte was just read above at offset RGBS_SIZE + SHADE_OFFSET (7) -- so data already has at least eight bytes by this point, which foreground's own bytes at offsets 0-2 are well within. The check exists because noUncheckedIndexedAccess cannot see that positional invariant, not because it can genuinely fire; if it ever does, the record is corrupt in a way worth surfacing rather than papering over with a guessed colour. Stryker disable next-line StringLiteral: unreachable, see above -- no test can ever observe this message.
     throw new WpdFormatError(
       "Cell fill has a readable background colour but an unreadable foreground colour, which the RGBS pair's own contiguous layout should make impossible.",
     );

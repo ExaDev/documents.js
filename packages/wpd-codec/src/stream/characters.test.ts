@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { decodeWpCharacter } from "./characters";
+import {
+  decodeSingleByteCharacter,
+  decodeWordString,
+  decodeWpCharacter,
+} from "./characters";
 
 // Every expectation here is checked against libwpd's own WP6-to-Unicode tables (see character-sets.ts's own top-of-file citation), not typed from memory: each (character set, character number) pair below is the value at that 0-based index in libwpd's own array, and the resulting code point was independently confirmed against the Unicode Character Database (Python's unicodedata module) to carry the expected script and letter name.
 
@@ -93,5 +97,51 @@ describe("decodeWpCharacter", () => {
 
   it("reports no mapping for a character set this package does not name", () => {
     expect(decodeWpCharacter(15, 0)).toBeUndefined();
+  });
+
+  // Character set 0's ASCII range is 0x20-0x7f (0x20 itself only reachable through this path, not the document-area byte stream -- see the module's own top comment), boundaries pinned directly since the rest of this describe block never exercises character numbers near either edge.
+  it("rejects a character set 0 number one below the ASCII range", () => {
+    expect(decodeWpCharacter(0, 0x1f)).toBeUndefined();
+  });
+
+  it("accepts a character set 0 number at the low end of the ASCII range", () => {
+    expect(decodeWpCharacter(0, 0x20)).toBe(" ");
+  });
+
+  it("accepts a character set 0 number at the high end of the ASCII range", () => {
+    expect(decodeWpCharacter(0, 0x7f)).toBe(String.fromCharCode(0x7f));
+  });
+
+  it("rejects a character set 0 number one above the ASCII range", () => {
+    expect(decodeWpCharacter(0, 0x80)).toBeUndefined();
+  });
+});
+
+describe("decodeSingleByteCharacter", () => {
+  it("rejects byte 0, below the ASCII range and not one of the thirty-two shorthands", () => {
+    expect(decodeSingleByteCharacter(0)).toBeUndefined();
+  });
+
+  it("accepts the lowest byte in the ASCII range", () => {
+    expect(decodeSingleByteCharacter(0x21)).toBe("!");
+  });
+
+  it("accepts the highest byte in the ASCII range", () => {
+    expect(decodeSingleByteCharacter(0x7f)).toBe(String.fromCharCode(0x7f));
+  });
+
+  it("rejects a byte one above the ASCII range", () => {
+    expect(decodeSingleByteCharacter(0x80)).toBeUndefined();
+  });
+});
+
+describe("decodeWordString", () => {
+  it("reads each word's own high byte, not a neighbouring word's", () => {
+    // 'A' (ASCII, high byte 0), then character-set 5 number 0 ('♡', high byte 5), then the null terminator -- every existing caller only ever writes pure-ASCII words (high byte always 0), which cannot distinguish a word's own high byte from its neighbour's.
+    const bytes = new Uint8Array([0x41, 0, 0, 5, 0, 0]);
+    expect(decodeWordString(bytes, 0, 10)).toEqual({
+      text: "A♡",
+      wordsRead: 3,
+    });
   });
 });

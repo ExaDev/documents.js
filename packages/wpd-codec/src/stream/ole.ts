@@ -81,6 +81,7 @@ export function readOleDescriptor(
     marker += String.fromCharCode(byteAt(bytes, index));
   }
   if (marker === OLE2_MARKER) {
+    // Stryker disable next-line ArithmeticOperator: bytes IS the whole packet, so there is never real data beyond bytes.length for a larger word budget to reach -- decodeWordString's own bounds check stops at the true end of bytes regardless of how large a maxWords this expression computes, making * or + here behave identically to the correct / and -.
     const { text } = decodeWordString(
       bytes,
       payloadOffset,
