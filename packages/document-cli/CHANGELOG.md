@@ -1,3 +1,9 @@
+## [5.10.0](https://github.com/ExaDev/documents.js/compare/document-cli%405.9.0...document-cli%405.10.0) (2026-09-11)
+
+### Features
+
+* **ci:** build Intel macOS SEA binaries alongside Apple Silicon ([f0a48a1](https://github.com/ExaDev/documents.js/commit/f0a48a19050089f14ecc8a94430a0278bb2b35d8))
+
 ## [5.9.0](https://github.com/ExaDev/documents.js/compare/document-cli%405.8.3...document-cli%405.9.0) (2026-09-11)
 
 ### Features

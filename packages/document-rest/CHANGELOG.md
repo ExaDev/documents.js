@@ -1,3 +1,9 @@
+## [1.2.0](https://github.com/ExaDev/documents.js/compare/document-rest%401.1.0...document-rest%401.2.0) (2026-09-11)
+
+### Features
+
+* **ci:** build Intel macOS SEA binaries alongside Apple Silicon ([f0a48a1](https://github.com/ExaDev/documents.js/commit/f0a48a19050089f14ecc8a94430a0278bb2b35d8))
+
 ## [1.1.0](https://github.com/ExaDev/documents.js/compare/document-rest%401.0.0...document-rest%401.1.0) (2026-09-11)
 
 ### Features
