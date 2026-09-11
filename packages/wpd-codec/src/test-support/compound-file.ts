@@ -49,7 +49,7 @@ function writeDirectoryEntry(
 export function compoundFileWithStream(
   name: string,
   stream: Uint8Array,
-): Uint8Array {
+): Uint8Array<ArrayBuffer> {
   const inMiniStream = stream.length < MINI_STREAM_CUTOFF;
 
   // The mini stream is every small stream padded to whole mini sectors and concatenated; here that is the one stream.
