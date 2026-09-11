@@ -1,3 +1,9 @@
+## [7.9.1](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.9.0...document-schema.js%407.9.1) (2026-09-11)
+
+### Bug Fixes
+
+* **document-schema.js:** state the annotation fields on the hand-written interfaces ([1f85f17](https://github.com/ExaDev/documents.js/commit/1f85f173c083235a2f9d387dbf90b841d82e79e3))
+
 ## [7.9.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.8.0...document-schema.js%407.9.0) (2026-09-10)
 
 ### Features

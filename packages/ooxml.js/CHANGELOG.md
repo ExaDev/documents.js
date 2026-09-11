@@ -1,3 +1,11 @@
+## [8.11.1](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.11.0...ooxml.js%408.11.1) (2026-09-11)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.9.1
+- Updated archive-codec to 1.10.7
+
 ## [8.11.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.10.3...ooxml.js%408.11.0) (2026-09-10)
 
 ### Features
