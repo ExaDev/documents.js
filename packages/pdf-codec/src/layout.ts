@@ -211,6 +211,14 @@ export const LayoutImageAssetSchema = z.object({
   base64: z.string(),
   widthPx: z.number().int().positive(),
   heightPx: z.number().int().positive(),
+  // The source's own compressed stream for a filter this package has no encoder for (JBIG2, JPEG 2000) -- the layout twin of document-schema.js's ContentImageOriginal. base64 stays the always-decodable canonical the render pipeline consumes; the writer re-embeds these bytes verbatim (with their filter, plus the /JBIG2Globals stream as its own indirect object when present) instead of re-encoding decoded pixels through Flate or Group 4, which was the loss a pdf-to-pdf round trip paid for exactly these two filters. Never set for jpeg (already verbatim through format: 'jpeg') or flate/ccitt (re-encoded losslessly, with the bilevel writer preferring Group 4 by size).
+  original: z
+    .object({
+      filter: z.enum(["jbig2", "jpeg2000"]),
+      base64: z.string(),
+      jbig2GlobalsBase64: z.string().optional(),
+    })
+    .optional(),
 });
 export type LayoutImageAsset = z.infer<typeof LayoutImageAssetSchema>;
 
