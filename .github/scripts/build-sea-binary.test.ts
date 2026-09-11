@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   binaryFileName,
+  mainFormatFor,
   postInjectionCommandsFor,
   postjectArgsFor,
   preInjectionCommandsFor,
 } from "./build-sea-binary";
+
+describe("mainFormatFor", () => {
+  it("reads module for a .mjs bundle and commonjs for anything else", () => {
+    expect(mainFormatFor("dist-sea/sea-entry.mjs")).toBe("module");
+    expect(mainFormatFor("dist-sea/sea-entry.cjs")).toBe("commonjs");
+  });
+});
 
 describe("binaryFileName", () => {
   it("appends .exe only on win32", () => {

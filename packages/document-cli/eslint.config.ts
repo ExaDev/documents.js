@@ -10,6 +10,8 @@ export default tseslint.config(
     projects: ["./tsconfig.json"],
     // Runs under Node as a published binary, so Worker isomorphism does not apply.
     isomorphic: false,
+    // dist-sea/ is this package's own SEA (single-executable application) bundle output -- a multi-megabyte, fully-dependency-inlined .cjs file (see tsdown.sea.shared.ts), not source.
+    additionalIgnores: ["dist-sea"],
   }),
   {
     // barrel-policy describes a library: one barrel at src/index.ts, named in the exports map, and re-exports nowhere else. That is right for this package's published surface and stays enforced there. src/tui/ is not that -- it is an Ink application with a screen router, whose deliberate convention is one `<format>/index.tsx` module per document format re-exporting every screen kind for that format, including the format-agnostic screens that physically live under docx/. The router imports one consistent module per format instead of reaching into each screen file, which is the point.

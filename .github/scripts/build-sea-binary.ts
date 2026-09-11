@@ -18,6 +18,11 @@ export interface SeaBuildPaths {
   readonly binaryName: string;
 }
 
+/** Node's SEA `mainFormat`, derived from the bundle's own file extension rather than passed separately -- tsdown.sea.shared.ts's `seaEntryBuildConfig` always writes `.cjs` for a `format: "cjs"` build and `.mjs` for `format: "esm"` (`fixedExtension: true`), so the extension is already an unambiguous, single source of truth for which one this bundle is. */
+export function mainFormatFor(bundlePath: string): "commonjs" | "module" {
+  return bundlePath.endsWith(".mjs") ? "module" : "commonjs";
+}
+
 /** The bare (unsuffixed) binary name and its platform-appropriate on-disk file name -- only win32 gets a suffix, matching how Windows itself resolves an executable by extension rather than a permission bit. */
 export function binaryFileName(
   binaryName: string,
@@ -80,6 +85,7 @@ export function buildSeaBinary(
       {
         main: paths.bundlePath,
         output: blobPath,
+        mainFormat: mainFormatFor(paths.bundlePath),
         disableExperimentalSEAWarning: true,
       },
       null,
