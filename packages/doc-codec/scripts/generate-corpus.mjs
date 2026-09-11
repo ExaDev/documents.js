@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Generates this package's gitignored real-producer .doc corpus under test/corpus/, ready for `pnpm test:corpus`. The producer is LibreOffice's own MS Word 97 export filter: each fixture is authored as a flat-ODT source (construct-spanning, the constructs this package's reader documents itself as reading) and converted headlessly through `soffice --convert-to doc`, so every corpus file is genuine application output rather than hand-built bytes. Run from the package root: `node scripts/generate-corpus.mjs` (requires soffice at /opt/homebrew/bin/soffice or SOFFICE in the environment; overwrites test/corpus/ wholesale). The generated corpus.test.ts carries each fixture's expectations -- authored beside the fixture's construction here, so the generator is the single source of truth for both. What this corpus is and is not is stated in the README: a real producer's Word 97 spelling, not Word 1997-2007 itself.
+// Generates this package's gitignored real-producer .doc corpus under test/corpus/, ready for `pnpm test:corpus`. The producer is LibreOffice's own MS Word 97 export filter: each fixture is authored as a flat-ODT source (construct-spanning, the constructs this package's reader documents itself as reading) and converted headlessly through `soffice --convert-to doc`, so every corpus file is genuine application output rather than hand-built bytes. Run from the package root: `node scripts/generate-corpus.mjs` (requires soffice at /opt/homebrew/bin/soffice or SOFFICE in the environment; replaces this generator's own outputs -- its fixtures, manifest.json and corpus.test.ts at the test/corpus/ root -- while leaving sibling corpus layers such as fetch-word-corpus.mjs's own test/corpus/word/ untouched). The generated corpus.test.ts carries each fixture's expectations -- authored beside the fixture's construction here, so the generator is the single source of truth for both. What this corpus is and is not is stated in the README: a real producer's Word 97 spelling, not Word 1997-2007 itself, which fetch-word-corpus.mjs's own layer supplies.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -345,7 +345,13 @@ describe("doc corpus (LibreOffice-produced Word 97)", () => {
 });
 `;
 
-rmSync(outDir, { recursive: true, force: true });
+// Clear only this generator's own outputs rather than the whole of test/corpus/, which is also home to fetch-word-corpus.mjs's own test/corpus/word/ layer -- wiping wholesale would destroy that neighbour on every regeneration.
+rmSync(join(outDir, ".staging"), { recursive: true, force: true });
+for (const fixture of FIXTURES) {
+  rmSync(join(outDir, fixture.name + ".doc"), { force: true });
+}
+rmSync(join(outDir, "manifest.json"), { force: true });
+rmSync(join(outDir, "corpus.test.ts"), { force: true });
 mkdirSync(outDir, { recursive: true });
 const staging = join(outDir, ".staging");
 mkdirSync(staging, { recursive: true });
