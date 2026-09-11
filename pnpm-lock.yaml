@@ -301,7 +301,7 @@ importers:
         specifier: 7.11.1
         version: link:../document-schema.js
       documents.js:
-        specifier: 7.20.1
+        specifier: 7.20.2
         version: link:../documents.js
       ink:
         specifier: 7.1.1
@@ -347,7 +347,7 @@ importers:
         specifier: 4.0.0
         version: 4.0.0(@types/react@19.2.18)
       odf.js:
-        specifier: 7.25.1
+        specifier: 7.25.2
         version: link:../odf.js
       publint:
         specifier: 0.3.22
@@ -396,7 +396,7 @@ importers:
         specifier: 26.2.0
         version: 26.2.0
       documents.js:
-        specifier: 7.20.1
+        specifier: 7.20.2
         version: link:../documents.js
       eslint:
         specifier: 10.8.1
@@ -432,10 +432,10 @@ importers:
         specifier: 2.0.0
         version: 2.0.0
       document-operations:
-        specifier: 1.1.0
+        specifier: 1.1.1
         version: link:../document-operations
       documents.js:
-        specifier: 7.20.1
+        specifier: 7.20.2
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -475,7 +475,7 @@ importers:
         specifier: 9.1.7
         version: 9.1.7
       odf.js:
-        specifier: 7.25.1
+        specifier: 7.25.2
         version: link:../odf.js
       publint:
         specifier: 0.3.22
@@ -502,7 +502,7 @@ importers:
   packages/document-operations:
     dependencies:
       document-compute.js:
-        specifier: 1.5.3
+        specifier: 1.5.4
         version: link:../document-compute.js
       document-outline.js:
         specifier: 3.7.2
@@ -511,7 +511,7 @@ importers:
         specifier: 7.11.1
         version: link:../document-schema.js
       documents.js:
-        specifier: 7.20.1
+        specifier: 7.20.2
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -545,7 +545,7 @@ importers:
         specifier: 9.1.7
         version: 9.1.7
       odf.js:
-        specifier: 7.25.1
+        specifier: 7.25.2
         version: link:../odf.js
       publint:
         specifier: 0.3.22
@@ -627,10 +627,10 @@ importers:
   packages/document-rest:
     dependencies:
       document-operations:
-        specifier: 1.1.0
+        specifier: 1.1.1
         version: link:../document-operations
       documents.js:
-        specifier: 7.20.1
+        specifier: 7.20.2
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -652,7 +652,7 @@ importers:
         specifier: 9.1.7
         version: 9.1.7
       odf.js:
-        specifier: 7.25.1
+        specifier: 7.25.2
         version: link:../odf.js
       publint:
         specifier: 0.3.22
@@ -743,7 +743,7 @@ importers:
         specifier: 7.11.1
         version: link:../document-schema.js
       epub-codec:
-        specifier: 1.5.1
+        specifier: 1.5.2
         version: link:../epub-codec
       fflate:
         specifier: 0.8.3
@@ -752,10 +752,10 @@ importers:
         specifier: 6.7.1
         version: link:../markdown-codec
       odf.js:
-        specifier: 7.25.1
+        specifier: 7.25.2
         version: link:../odf.js
       ooxml.js:
-        specifier: 8.14.1
+        specifier: 8.14.2
         version: link:../ooxml.js
       pdf-codec:
         specifier: 4.8.1
@@ -1421,7 +1421,7 @@ importers:
         specifier: 7.11.1
         version: link:../document-schema.js
       documents.js:
-        specifier: 7.20.1
+        specifier: 7.20.2
         version: link:../documents.js
       markdown-codec:
         specifier: 6.7.1

@@ -1,6 +1,6 @@
 {
   "name": "document-rest",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "A plain REST API server exposing document-operations' conversion, editing, inspection, and .odb operations as JSON-over-HTTP endpoints -- one POST route per operation, for a caller with no MCP client and no Node runtime of their own.",
   "type": "module",
   "repository": {
@@ -87,8 +87,8 @@
   "license": "MIT",
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "document-operations": "1.1.0",
-    "documents.js": "7.20.1",
+    "document-operations": "1.1.1",
+    "documents.js": "7.20.2",
     "zod": "4.4.3"
   },
   "devDependencies": {
@@ -97,7 +97,7 @@
     "@vitest/coverage-v8": "4.1.11",
     "eslint": "10.8.1",
     "husky": "9.1.7",
-    "odf.js": "7.25.1",
+    "odf.js": "7.25.2",
     "publint": "0.3.22",
     "semantic-release": "25.0.9",
     "tsdown": "0.22.14",
