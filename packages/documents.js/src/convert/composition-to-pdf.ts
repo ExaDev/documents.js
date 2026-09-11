@@ -5,6 +5,8 @@ import {
   type ContentDocument,
   type MathFontMetrics,
   type PageSize,
+  type DocumentTree,
+  type TreeEmbeddedFont,
   type PositionedFormula,
 } from "document-schema.js";
 import {
@@ -24,6 +26,7 @@ import { throwIfAborted } from "../ports/abort";
 import { resolveMetadataTimestamps } from "../model/metadata";
 import {
   createDocumentFontRegistry,
+  treeEmbeddedFontsOf,
   type FontSourcePackage,
 } from "../fonts/registry";
 import {
@@ -68,6 +71,8 @@ export function executeToPdf(
 
   let content: ContentDocument;
   let fonts: FontRegistry;
+  // The source package's own embedded faces in their tree-side spelling, spliced onto the tree onDocument reports so a rebuild of that tree renders through the document's real faces (see treeEmbeddedFontsOf). Undefined for every non-package source, and for a package that embedded nothing -- the same population rule the registry's own sourceFonts slot follows.
+  let sourceFaces: TreeEmbeddedFont[] | undefined;
   // A read-only source has no package to extract embedded faces from and no decode step to run first (see composition.ts's own ReadOnlyFormatNode), so it takes the caller-supplied-faces-only registry the text formats take -- the identical divergence markdownToPdf's own documentation already names, for the identical reason: there is no source package to ask.
   if (isReadOnlyContentFormat(format)) {
     throwIfAborted(options?.signal);
@@ -112,8 +117,9 @@ export function executeToPdf(
       fonts: options?.fonts,
       onFontSubstitution: options?.onFontSubstitution,
     });
+    sourceFaces = treeEmbeddedFontsOf(fontSource);
   }
-  return renderToPdf(content, fonts, options);
+  return renderToPdf(content, fonts, options, sourceFaces);
 }
 
 // The half of executeToPdf that is the same whatever kind of node produced the content: lay the ContentDocument out through its variant's engine, then write the PDF. Split out when read-only sources joined, so the three ways a source's content and font registry are obtained (a package's embedded faces, a text format's caller-supplied ones, a read-only format's caller-supplied ones) each end in one shared render rather than three copies of it.
@@ -121,6 +127,7 @@ function renderToPdf(
   content: ContentDocument,
   fonts: FontRegistry,
   options: UnifiedConversionOptions | undefined,
+  sourceFaces?: TreeEmbeddedFont[],
 ): Uint8Array<ArrayBuffer> {
   const measurer = createFontMeasurer(fonts);
 
@@ -180,7 +187,7 @@ function renderToPdf(
       onSubstitution: options?.onSubstitution,
       fonts,
     });
-    options?.onDocument?.(assembleTree(content, pages));
+    options?.onDocument?.(reportTree(content, pages, sourceFaces));
     return out;
   }
   const out = writePdf(layout, {
@@ -189,8 +196,18 @@ function renderToPdf(
     formulas,
     fonts,
   });
-  options?.onDocument?.(assembleTree(content, pages));
+  options?.onDocument?.(reportTree(content, pages, sourceFaces));
   return out;
+}
+
+// The tree this module hands onDocument: the ordinary assembly, carrying the source package's own embedded faces (when it had any) as the tree's `fonts` table -- the half of the package a flat ContentDocument cannot spell, and the half a rebuild needs to render through the document's real faces instead of vendored substitutes.
+function reportTree(
+  content: ContentDocument,
+  pages: readonly PageSize[],
+  sourceFaces: TreeEmbeddedFont[] | undefined,
+): DocumentTree {
+  const tree = assembleTree(content, pages);
+  return sourceFaces === undefined ? tree : { ...tree, fonts: sourceFaces };
 }
 
 // The full entry point: resolves a path between any two DocumentFormats and runs it with every executor bound -- the forward target of convert.ts's named functions and src/convert/local.ts's DocumentConverter port, and the one conversion entry whose module graph includes the X-to-PDF renderers. Identical in behaviour to the pre-split convertDocument: the same pathfinder, the same runner, the same executors; only the binding of executeToPdf lives here now. Throws UnsupportedConversionError (from capability.ts) for any pair the pathfinder cannot route.
