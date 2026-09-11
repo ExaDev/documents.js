@@ -222,7 +222,10 @@ export function readDocContent(
         topPt: properties.marginTopPt ?? DEFAULT_MARGINS.topPt,
         bottomPt: properties.marginBottomPt ?? DEFAULT_MARGINS.bottomPt,
       },
-      blocks: assembleBlocks(entriesBySection[index] ?? []),
+      blocks: assembleBlocks(
+        entriesBySection[index] ?? [],
+        index === sectionProperties.length - 1,
+      ),
     })),
     numbering,
     footnotes,
