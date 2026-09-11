@@ -119,6 +119,14 @@ describe("readOleDescriptor", () => {
       ),
     ).toBeUndefined();
   });
+
+  // An OLE 1 descriptor with no payload at all: bytes.length lands exactly on payloadOffset, the one boundary where "shorter than" and "no room to spare" agree -- unlike the OLE 2 path, this one still answers a real, defined value from the fixed head alone, so it cannot be masked by a downstream empty-text fallback the way OLE 2 would be.
+  it("reads an OLE 1 descriptor's object number even with zero payload bytes", () => {
+    const descriptor = readOleDescriptor(
+      descriptorPacket("WPWin6.0/OLE 1.0 Prefix Information Marker", 42, []),
+    );
+    expect(descriptor).toEqual({ ole2: false, objectNumber: 42 });
+  });
 });
 
 describe("readGraphicsChildIds", () => {
@@ -149,6 +157,47 @@ describe("readGraphicsChildIds", () => {
           new Uint8Array([9, 0, 3, 0]),
           0x01,
         ),
+      ),
+    ).toBeUndefined();
+  });
+
+  it("answers undefined for a child-carrying packet with fewer than two bytes", () => {
+    expect(
+      readGraphicsChildIds(
+        packet(2, PACKET_TYPE_GRAPHICS_FILENAME, new Uint8Array([9]), 0x01),
+      ),
+    ).toBeUndefined();
+  });
+
+  it("reads a zero-length child list when the count word exactly fills the packet", () => {
+    expect(
+      readGraphicsChildIds(
+        packet(2, PACKET_TYPE_GRAPHICS_FILENAME, new Uint8Array([0, 0]), 0x01),
+      ),
+    ).toEqual([]);
+  });
+
+  it("reads a single child ID that exactly fills the packet, with no room to spare", () => {
+    // [count = 1] [child 7] -- four bytes total, exactly 2 + count * 2.
+    expect(
+      readGraphicsChildIds(
+        packet(
+          2,
+          PACKET_TYPE_GRAPHICS_FILENAME,
+          new Uint8Array([1, 0, 7, 0]),
+          0x01,
+        ),
+      ),
+    ).toEqual([7]);
+  });
+
+  it("answers undefined for a count whose doubled byte cost overruns a small packet", () => {
+    // A count of 10 needs 22 bytes (2 + 10 * 2); this packet has only 10, so the walk must not be let through by an under-counted byte cost.
+    const bytes = new Uint8Array(10);
+    bytes[0] = 10;
+    expect(
+      readGraphicsChildIds(
+        packet(2, PACKET_TYPE_GRAPHICS_FILENAME, bytes, 0x01),
       ),
     ).toBeUndefined();
   });
@@ -213,6 +262,23 @@ describe("readOleObject", () => {
     const dataChild = packet(3, PACKET_TYPE_OLE_OBJECT_DATA, new Uint8Array(4));
     expect(
       readOleObject([graphics, dataChild], graphics, new Map()),
+    ).toBeUndefined();
+  });
+
+  it("answers undefined for an OLE 1 descriptor whose own payload is entirely empty", () => {
+    const graphics = packet(
+      2,
+      PACKET_TYPE_GRAPHICS_FILENAME,
+      new Uint8Array([1, 0, 3, 0, 0, 0, 0, 0]),
+      0x01,
+    );
+    const descriptor = packet(
+      3,
+      PACKET_TYPE_OLE_OBJECT_DESCRIPTOR,
+      descriptorPacket("WPWin6.0/OLE 1.0 Prefix Information Marker", 1, []),
+    );
+    expect(
+      readOleObject([graphics, descriptor], graphics, new Map()),
     ).toBeUndefined();
   });
 
