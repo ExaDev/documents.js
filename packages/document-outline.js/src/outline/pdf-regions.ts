@@ -449,8 +449,20 @@ function attachCaptions(regions: readonly PdfRegion[]): PdfRegion[] {
   // Figure -> its nearest claiming caption. Nearest, because a figure sandwiched between two short runs
   // has two candidates and only one of them is its label; the same gap that decides the caption's own
   // confidence decides which figure wins it.
+  //
+  // On an exact tie the run ABOVE the figure wins, because `regions` arrives sorted top-to-bottom (the
+  // descending-yPt sort where the leaves are built) and the comparison below is strict. That is the less
+  // conventional answer for a figure label, so it is stated here rather than left to be inferred from a
+  // sort two hundred lines away, and a test pins it. The same strictness means a run equidistant from
+  // two figures is claimed by the upper one.
+  //
+  // The two views deliberately do not agree on counts, and a consumer should not assume they do: BOTH
+  // runs in a sandwich are reclassified 'caption' (behaviour this pass already had), while only one
+  // figure carries text. The loser is a 'caption' region that labels nothing.
   const captionFor = new Map<PdfRegion, { text: string; gap: number }>();
-  const claimed = new Map<PdfRegion, { figure: PdfRegion; gap: number }>();
+  // Caption candidate -> the gap to the figure it claims. Only the gap is kept: which figure won is
+  // recorded on the figure's own side, in `captionFor`.
+  const claimed = new Map<PdfRegion, number>();
 
   for (const region of regions) {
     if (
@@ -474,7 +486,7 @@ function attachCaptions(regions: readonly PdfRegion[]): PdfRegion[] {
     }
     if (nearest === undefined) continue;
 
-    claimed.set(region, { figure: nearest, gap: nearestGap });
+    claimed.set(region, nearestGap);
     const existing = captionFor.get(nearest);
     if (existing === undefined || nearestGap < existing.gap) {
       captionFor.set(nearest, { text, gap: nearestGap });
@@ -482,12 +494,12 @@ function attachCaptions(regions: readonly PdfRegion[]): PdfRegion[] {
   }
 
   return regions.map((region) => {
-    const claim = claimed.get(region);
-    if (claim !== undefined) {
+    const gap = claimed.get(region);
+    if (gap !== undefined) {
       return {
         ...region,
         classification: "caption" as const,
-        confidence: clamp01(1 - claim.gap / CAPTION_GAP_PT),
+        confidence: clamp01(1 - gap / CAPTION_GAP_PT),
       };
     }
     const caption = captionFor.get(region);

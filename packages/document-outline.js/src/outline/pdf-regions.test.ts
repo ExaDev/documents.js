@@ -155,8 +155,17 @@ describe("segmentPdfRegions", () => {
     expect(figureRegion?.caption).toBe(
       "Figure 1: a chart of quarterly results.",
     );
-    // Associated, not moved: projecting every region's text must still read the caption exactly once.
-    expect(captionRegion?.items[0]).toMatchObject({ kind: "text" });
+    // Associated, not moved: projecting every region's text must read the caption exactly once. Asserted
+    // by counting it across every region rather than by inspecting the caption region's own items, which
+    // the fixture already guarantees and which would pass even if the figure had swallowed the item too.
+    const occurrences = regions.filter((region) =>
+      region.items.some(
+        (item) =>
+          item.kind === "text" &&
+          item.text === "Figure 1: a chart of quarterly results.",
+      ),
+    );
+    expect(occurrences).toHaveLength(1);
 
     const proseRegion = regions.find(
       (region) => region.classification === "column",
@@ -171,8 +180,8 @@ describe("segmentPdfRegions", () => {
     //
     // Both gaps sit in a narrow window the segmentation forces: wider than the LOCAL cut threshold
     // (1.5x the caption's own ~10pt font size, so ~15pt -- below that the run is not split off as its
-    // own region at all) and within CAPTION_GAP_PT (24pt, beyond which it is not a caption). Below is
-    // 18pt away, above is 22pt.
+    // own region at all) and within CAPTION_GAP_PT (24pt, beyond which it is not a caption). Above is
+    // 18pt away, below is 22pt.
     const figure: LayoutItem = {
       kind: "image",
       imageId: "img-2",
@@ -181,8 +190,13 @@ describe("segmentPdfRegions", () => {
       widthPt: 300,
       heightPt: 200,
     };
-    const above = line(150, 622, "Further away, above the figure.");
-    const below = line(150, 372, "Figure 2: the nearer caption.");
+    // The nearer caption is the one ABOVE, which is the arrangement that makes the tie-break
+    // load-bearing: regions arrive sorted top-to-bottom, so `above` is processed first, and a naive
+    // last-writer-wins would record `below` instead. With the fixture the other way round both rules
+    // agree and the test proves nothing -- verified by mutating the comparison to `if (true)`, under
+    // which the earlier version of this case still passed.
+    const above = line(150, 618, "Figure 2: the nearer caption.");
+    const below = line(150, 368, "Further away, below the figure.");
 
     const regions = segmentPdfRegions(page([above, figure, below]));
     const figureRegion = regions.find(
