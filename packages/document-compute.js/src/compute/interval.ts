@@ -86,7 +86,9 @@ export function negateInterval(a: Interval): Interval {
 }
 
 export function absInterval(a: Interval): Interval {
+  // Stryker disable next-line EqualityOperator: at the boundary a.min === 0, the straddling branch below computes [0, max(-0, a.max)] = [0, a.max] (since a.min <= a.max forces a.max >= 0 there) -- bit-identical to returning `a` unchanged. `>=` and `>` therefore select branches that produce the same result at every input, not just the ones a test happens to exercise.
   if (a.min >= 0) return a;
+  // Stryker disable next-line EqualityOperator: at the boundary a.max === 0, the straddling branch below computes [0, max(-a.min, 0)] = [0, -a.min] (since a.min <= a.max = 0 forces -a.min >= 0) -- bit-identical to negateInterval(a) = [-a.max, -a.min] = [0, -a.min]. `<=` and `<` therefore select branches that produce the same result at every input.
   if (a.max <= 0) return negateInterval(a);
   return interval(0, Math.max(-a.min, a.max), a.dimension);
 }
