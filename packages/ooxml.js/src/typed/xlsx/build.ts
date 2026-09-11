@@ -40,6 +40,7 @@ import { SharedStringTable } from "./shared-strings";
 import {
   CellFormatTable,
   DEFAULT_CELL_FORMAT_INDEX,
+  DEFAULT_FONT_INDEX,
   GENERAL_NUM_FMT_ID,
   RESERVED_BORDER_INDICES,
   RESERVED_FILL_INDICES,
@@ -369,9 +370,9 @@ function buildSharedStringsPart(sharedStrings: SharedStringTable): XmlPart {
 
 // --- xl/styles.xml: the minimal font/border scaffolding real Excel/LibreOffice require, plus the interned fills/borders/cell formats ---
 
-// <fonts> and the two reserved <fills> entries (index 0 "none", index 1 Excel's mandatory gray125) plus the empty reserved <borders> entry (index 0) are fixed scaffolding, confirmed against multiple independent references as the source of Excel's "we found a problem with some content" repair prompt when a hand-rolled writer omits them. On top of that scaffolding this writer now emits the real solid fills and real per-edge borders the cells themselves carried, interned by CellFormatTable alongside the number formats.
+// <fonts> and the two reserved <fills> entries (index 0 "none", index 1 Excel's mandatory gray125) plus the empty reserved <borders> entry (index 0) are fixed scaffolding, confirmed against multiple independent references as the source of Excel's "we found a problem with some content" repair prompt when a hand-rolled writer omits them. On top of that scaffolding this writer now emits the real per-cell fonts, real solid fills, and real per-edge borders the cells themselves carried, interned by CellFormatTable alongside the number formats.
 //
-// The variable parts come straight from the CellFormatTable the worksheets filled: one <numFmt> per custom code interned (and NO <numFmts> element at all when nothing was, which is what keeps a workbook of ordinary numbers and strings byte-identical to what this writer produced before number formats existed), one <fill> per distinct solid background, one <border> per distinct edge set, and one <xf> per cell-format index -- index 0 always being the General + no-decoration default. <dxfs> is the same story for conditionalFormatting rule styling: one <dxf> per DxfTable.intern call the worksheets made (also NO <dxfs> element at all when a workbook has no styled conditional-format rule), populated by the very same per-sheet build pass, which is why buildXlsxPackageFromContent's own worksheets-before-styles ordering note below applies to dxfTable exactly as it already does to cellFormats.
+// The variable parts come straight from the CellFormatTable the worksheets filled: one <numFmt> per custom code interned (and NO <numFmts> element at all when nothing was, which is what keeps a workbook of ordinary numbers and strings byte-identical to what this writer produced before number formats existed), one <font> per distinct cell font (the DEFAULT_FONT Calibri-11 entry always at index 0, one further entry per font that genuinely differs), one <fill> per distinct solid background, one <border> per distinct edge set, and one <xf> per cell-format index -- index 0 always being the General + default-font + no-decoration default. <dxfs> is the same story for conditionalFormatting rule styling: one <dxf> per DxfTable.intern call the worksheets made (also NO <dxfs> element at all when a workbook has no styled conditional-format rule), populated by the very same per-sheet build pass, which is why buildXlsxPackageFromContent's own worksheets-before-styles ordering note below applies to dxfTable exactly as it already does to cellFormats.
 //
 // CT_Stylesheet's own required child element ORDER (ECMA-376 Part 1 SS18.8.39): numFmts?, fonts?, fills?, borders?, cellStyleXfs?, cellXfs?, cellStyles?, dxfs?, ... -- numFmts FIRST, before the fonts element that used to lead this part, and dxfs right after cellStyles (confirmed against real-producer-validation-and-cellis.xlsx's own styles.xml, which places its <dxfs> there, immediately before its <colors> element this writer does not emit).
 function buildStylesPart(
@@ -444,10 +445,30 @@ function buildStylesPart(
     return el("border", {}, edgeElements);
   });
 
+  const fontElements = cellFormats.fontDeclarations().map((font) => {
+    const children: XmlElement[] = [];
+    if (font.bold === true) {
+      children.push(el("b"));
+    }
+    if (font.italic === true) {
+      children.push(el("i"));
+    }
+    if (font.strike === true) {
+      children.push(el("strike"));
+    }
+    if (font.underline === true) {
+      children.push(el("u", { val: "single" }));
+    }
+    if (font.colorRgb !== undefined) {
+      children.push(el("color", { rgb: `FF${font.colorRgb}` }));
+    }
+    children.push(el("sz", { val: font.sz }));
+    children.push(el("name", { val: encodeXmlText(font.name) }));
+    return el("font", {}, children);
+  });
+
   children.push(
-    el("fonts", { count: "1" }, [
-      el("font", {}, [el("sz", { val: "11" }), el("name", { val: "Calibri" })]),
-    ]),
+    el("fonts", { count: String(fontElements.length) }, fontElements),
     el("fills", { count: String(fillElements.length) }, fillElements),
     el("borders", { count: String(borderElements.length) }, borderElements),
     el("cellStyleXfs", { count: "1" }, [
@@ -459,7 +480,7 @@ function buildStylesPart(
   const xfElements = xfRecords.map((record) => {
     const attrs: Record<string, string> = {
       numFmtId: String(record.numFmtId),
-      fontId: "0",
+      fontId: String(record.fontId),
       fillId: String(record.fillId),
       borderId: String(record.borderId),
       xfId: "0",
@@ -468,7 +489,10 @@ function buildStylesPart(
       // CT_Xf/@applyNumberFormat tells a consumer to honour this xf's OWN numFmtId rather than the one it would otherwise inherit from the cell style it is based on (xfId). Real producers differ here -- Excel writes it on every formatted xf, LibreOffice omits it entirely and relies on numFmtId alone (see this directory's own kitchen-sink fixture, whose six formatted xfs carry no applyNumberFormat at all) -- so this writer emits the explicit form, which cannot be misread by either: LibreOffice 26.2 renders every format below correctly with it present (verified), and Excel's own inheritance rule makes it the unambiguous spelling.
       attrs.applyNumberFormat = writeXmlBool(true);
     }
-    // Each apply* flag mirrors applyNumberFormat: it tells a consumer to honour this xf's OWN fillId/borderId/alignment rather than the one inherited from the cell style it is based on. Set next to the id that drives it so what triggers the flag stays local to the line.
+    // Each apply* flag mirrors applyNumberFormat: it tells a consumer to honour this xf's OWN fontId/fillId/borderId/alignment rather than the one inherited from the cell style it is based on. Set next to the id that drives it so what triggers the flag stays local to the line.
+    if (record.fontId !== DEFAULT_FONT_INDEX) {
+      attrs.applyFont = writeXmlBool(true);
+    }
     if (record.fillId !== RESERVED_FILL_INDICES.none) {
       attrs.applyFill = writeXmlBool(true);
     }
@@ -726,13 +750,15 @@ function buildCellElement(
     cell.formula !== undefined,
     sharedStrings,
   );
-  // The cell's own decoration (background/borders/alignment/verticalAlignment) is interned INTO the same cellXfs index as its number format, so two cells sharing both format and decoration share one <xf> entry exactly as a real producer's own output does. An undecorated cell passes no decoration through, landing on the same xf an identical-format undecorated cell already did before decoration existed.
+  // The cell's own font and decoration (font/background/borders/alignment/verticalAlignment) is interned INTO the same cellXfs index as its number format, so two cells sharing format, font, and decoration share one <xf> entry exactly as a real producer's own output does. A cell carrying neither lands on the same xf an identical-format undecorated cell already did before decoration existed.
   const decoration =
+    cell.font !== undefined ||
     cell.background !== undefined ||
     cell.borders !== undefined ||
     cell.alignment !== undefined ||
     cell.verticalAlignment !== undefined
       ? {
+          font: cell.font,
           background: cell.background,
           borders: cell.borders,
           alignment: cell.alignment,
