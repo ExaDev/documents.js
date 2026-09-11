@@ -1,3 +1,18 @@
+## [4.10.0](https://github.com/ExaDev/documents.js/compare/document-mcp%404.9.3...document-mcp%404.10.0) (2026-09-11)
+
+### Features
+
+* **document-operations:** add the canonical document-mcp operation registry ([06c310f](https://github.com/ExaDev/documents.js/commit/06c310f4077164b9fe21258d12dd52fa560fd3fd))
+
+### Code Refactoring
+
+* **document-mcp:** dispatch every tool through document-operations ([cde790d](https://github.com/ExaDev/documents.js/commit/cde790d8738c8b9368446ea597b292099cd4fcfc))
+
+
+### Dependencies
+
+- Updated document-operations to 1.0.0
+
 ## [4.9.3](https://github.com/ExaDev/documents.js/compare/document-mcp%404.9.2...document-mcp%404.9.3) (2026-09-11)
 
 ### Code Refactoring
