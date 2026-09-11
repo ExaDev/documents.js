@@ -1,10 +1,14 @@
 // Composes a source package's own embedded fonts with any caller-supplied faces into a real pdf-codec FontRegistry. This is the whole point of the two extractors either side of it: createFontRegistry already resolves `sourceFonts` ahead of `fonts` ahead of its vendored Carlito/Caladea substitutes ahead of the standard 14, so putting the source document's own embedded bytes in the `sourceFonts` slot is exactly the "source-embedded beats a substitute whenever it exists" precedence this package wants, expressed as data rather than as a branch.
 //
 // The two Package types are structurally identical (src/interop.test.ts is the standing type-level proof), so the discriminant here is not about the container shape -- it selects which extractor to run, since where an embedded font is declared is genuinely format-specific.
-import type { Package as OoxmlPackage } from "ooxml.js";
+import { bytesToBase64, type Package as OoxmlPackage } from "ooxml.js";
 import type { Package as OdfPackage } from "odf.js";
 import type { FontRegistry } from "pdf-codec";
-import type { FontSubstitution, ProvidedFont } from "document-schema.js";
+import type {
+  FontSubstitution,
+  ProvidedFont,
+  TreeEmbeddedFont,
+} from "document-schema.js";
 import { createFontRegistry } from "pdf-codec";
 import { extractOdfEmbeddedFonts } from "./odf";
 import { extractOoxmlEmbeddedFonts } from "./ooxml";
@@ -20,11 +24,27 @@ export interface DocumentFontRegistryOptions {
   readonly onFontSubstitution?: (substitution: FontSubstitution) => void;
 }
 
-// Every font face the given source package embeds. Split out from createDocumentFontRegistry so a caller that wants the faces themselves -- to inspect them, to forward them to a second conversion, or to merge several documents' fonts -- does not have to build a registry to get at them.
+// Every font face the given source package embeds. Split out from createDocumentFontRegistry so a caller that wants the faces themselves -- to inspect them, to forward them to a second conversion, or to merge several documents's fonts -- does not have to build a registry to get at them.
 export function extractSourceFonts(source: FontSourcePackage): ProvidedFont[] {
   return source.kind === "odf"
     ? extractOdfEmbeddedFonts(source.package)
     : extractOoxmlEmbeddedFonts(source.package, source.kind);
+}
+
+// The tree-side spelling of the same faces (document-schema.js's tree-only `fonts` table): the same extraction, base64-encoded for a JSON artefact. Returned as undefined when the package embedded nothing, so a splice site can spread it without minting an empty table a consumer would then have to distinguish from "no fonts". A tree carrying these renders its rebuild through the document's real faces (from-package feeds them back into a registry as sourceFonts) rather than vendored substitutes -- the one layer of the original package a tree could not previously carry (ExaDev/documents.js#1192).
+export function treeEmbeddedFontsOf(
+  source: FontSourcePackage,
+): TreeEmbeddedFont[] | undefined {
+  const faces = extractSourceFonts(source);
+  if (faces.length === 0) {
+    return undefined;
+  }
+  return faces.map((face) => ({
+    family: face.family,
+    bold: face.bold,
+    italic: face.italic,
+    base64: bytesToBase64(face.bytes),
+  }));
 }
 
 // A FontRegistry backed first by the source package's own embedded faces, then by the caller's, then by pdf-codec's vendored substitutes and the standard 14. Safe to call for a package that embeds nothing: `sourceFonts` is then empty and the registry behaves exactly as an un-configured one would.

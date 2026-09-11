@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { DocumentTree } from "document-schema.js";
 import type { FontSubstitution } from "pdf-codec";
 import { createStandardFontMeasurer, loadMathFont, writePdf } from "pdf-codec";
 const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
@@ -6,6 +7,7 @@ import { decodePackage as decodeOdfPackage } from "odf.js";
 import { encodePackage as encodeOoxmlPackage } from "ooxml.js";
 import { openDocx } from "../edit/docx/editor";
 import { openPptx } from "../edit/pptx/editor";
+import { buildDocumentBytes } from "./from-package";
 import { convertDrawingToLayout } from "../layout/drawing";
 import { convertWordprocessingToLayout } from "../layout/engine";
 import { convertSpreadsheetToLayout } from "../layout/sheets";
@@ -296,5 +298,42 @@ describe("X -> PDF: backward compatibility", () => {
     expect(docxToPdf(minimalDocxBytes())).not.toEqual(
       referenceDocxPdf(minimalDocxBytes()),
     );
+  });
+});
+
+describe("X -> PDF: the reported tree's embedded font table (#1192)", () => {
+  it("docxToPdf reports the source package's own embedded faces as the tree's fonts table", () => {
+    let reported: DocumentTree | undefined;
+    const pdf = docxToPdf(encodeOoxmlPackage(embeddedFontDocxPackage()), {
+      onDocument: (pkg) => {
+        reported = pkg;
+      },
+    });
+    expect(pdf.length).toBeGreaterThan(0);
+    expect(reported).toBeDefined();
+    const faces = reported!.fonts;
+    expect(faces).toBeDefined();
+    // The same face triple the extraction tests recover: family plus bold/italic flags plus base64 sfnt bytes.
+    expect(faces!.map((f) => [f.family, f.bold, f.italic])).toContainEqual([
+      "Caladea",
+      false,
+      false,
+    ]);
+    expect(faces!.every((f) => f.base64.length > 0)).toBe(true);
+  });
+
+  it("a rebuild of that tree renders through the document's own face, not a vendored substitute", () => {
+    let reported: DocumentTree | undefined;
+    docxToPdf(encodeOoxmlPackage(embeddedFontDocxPackage()), {
+      onDocument: (pkg) => {
+        reported = pkg;
+      },
+    });
+    expect(reported).toBeDefined();
+    expect(reported!.fonts).toBeDefined();
+    // The rebuild path from-package consumes: the tree's faces feed its registry as sourceFonts, so the re-rendered PDF embeds the document's own Caladea face exactly as the direct conversion did.
+    const rebuilt = buildDocumentBytes(reported!, "pdf");
+    expectEmbeddedTrueTypeFontResource(rebuilt);
+    expect(embeddedFaceNames(rebuilt)).toEqual(["Caladea-Regular"]);
   });
 });
