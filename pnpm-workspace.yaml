@@ -24,6 +24,7 @@ minimumReleaseAgeExclude:
   - document-mcp
   - document-operations
   - document-outline.js
+  - document-rest
   - document-schema.js
   - documents.js
   - epub-codec

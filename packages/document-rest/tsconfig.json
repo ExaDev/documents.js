@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2024"],
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true
+  },
+  "include": [
+    "src",
+    "tsdown.config.ts",
+    "vitest.config.ts",
+    "stryker.config.ts",
+    "eslint.config.ts"
+  ]
+}
