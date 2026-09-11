@@ -244,9 +244,9 @@ function buildPalettePlan(sheets: readonly ContentSheet[]): PalettePlan {
       record(cell.borders?.top?.color);
       record(cell.borders?.bottom?.color);
     }
-    // A conditional-format rule's own style colours are palette references too (the DXFN the CF writer emits), so the same workbook-wide scan registers them -- only the 'cellIs' rules this writer actually states, mirroring the sheet writer's own refusal of every other variant before any colour is consulted.
+    // A conditional-format rule's own style colours are palette references too (the DXFN the base-CF and CF12 writers emit for every rule variant that carries a style field), so the same workbook-wide scan registers them. The visual-scale variants (colour scale, data bar, icon set) carry no style and state their colours as CFColor RGB triples instead, which need no palette slot.
     for (const rule of sheet.conditionalFormats ?? []) {
-      if (rule.type !== "cellIs") {
+      if (!("style" in rule)) {
         continue;
       }
       record(rule.style?.textColor);
