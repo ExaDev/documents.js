@@ -4,7 +4,7 @@
 
 > An MCP (Model Context Protocol) server exposing [`documents.js`](https://github.com/ExaDev/documents.js)'s document-conversion, `.odb`, metadata, and font tooling — plus [`document-compute.js`](../document-compute.js/README.md)'s units-typed formula evaluation — as MCP tools, so an MCP-speaking agent can convert, inspect, edit, and compute over docx/pptx/odt/odp/ods/odg/odf/pdf/odb/xlsx/markdown documents without writing TypeScript against either library directly.
 
-`document-mcp` adds no conversion or editing logic of its own — it is a dispatch layer over `documents.js`'s existing conversion functions, `DocumentConverter` port, and `.odb`/PDF readers, wired up as MCP tools served over stdio. [`document-cli`](../document-cli/README.md) is the sibling frontend over the identical `documents.js` library — a terminal CLI/TUI rather than an MCP server — so the two are independent consumers of one shared implementation and can expose different subsets of it. A `convert_document` call's fidelity — which `(source, targetFormat)` pairs round-trip losslessly, which are a best-effort reconstruction, and why — is exactly what [`documents.js`'s own Fidelity section](../documents.js/README.md#fidelity) documents, table included; it is not restated here.
+`document-mcp` adds no conversion or editing logic of its own — every tool is a thin `registerOperation()` wrapper (`src/register-operation.ts`) around a [`document-operations`](../document-operations/README.md) `DocumentOperation`: that package holds the actual dispatch to `documents.js`'s conversion functions, `DocumentConverter` port, and `.odb`/PDF readers, as one Zod schema plus one transport-agnostic `run()` per operation, shared with (eventually) a REST server and `document-cli`'s own flag parsing rather than defined here a second time. [`document-cli`](../document-cli/README.md) is the sibling frontend over the identical underlying operations — a terminal CLI/TUI rather than an MCP server — so the two are independent consumers of one shared implementation and can expose different subsets of it. A `convert_document` call's fidelity — which `(source, targetFormat)` pairs round-trip losslessly, which are a best-effort reconstruction, and why — is exactly what [`documents.js`'s own Fidelity section](../documents.js/README.md#fidelity) documents, table included; it is not restated here.
 
 ```mermaid
 graph TD
@@ -17,13 +17,12 @@ graph TD
     documents("documents.js")
     outline("document-outline.js")
     compute("document-compute.js")
+    operations("document-operations")
     mcp("document-mcp")
     cli("document-cli")
 
     schema --> outline
-    outline --> mcp
     schema --> compute
-    compute --> mcp
     schema --> mcp
     schema --> ooxml
     schema --> odf
@@ -36,8 +35,10 @@ graph TD
     mdcodec --> documents
     bytecodec --> pdfcodec
     bytecodec --> documents
-    documents --> mcp
-    pdfcodec --> mcp
+    documents --> operations
+    outline --> operations
+    compute --> operations
+    operations --> mcp
     documents --> cli
     odf --> cli
     pdfcodec --> cli
@@ -51,6 +52,7 @@ graph TD
     click documents "https://github.com/ExaDev/documents.js" "documents.js"
     click outline "https://github.com/ExaDev/documents.js/tree/main/packages/document-outline.js" "document-outline.js"
     click compute "https://github.com/ExaDev/documents.js/tree/main/packages/document-compute.js" "document-compute.js"
+    click operations "https://github.com/ExaDev/documents.js/tree/main/packages/document-operations" "document-operations"
     click mcp "https://github.com/ExaDev/documents.js/tree/main/packages/document-mcp" "document-mcp"
     click cli "https://github.com/ExaDev/documents.js/tree/main/packages/document-cli" "document-cli"
 
@@ -243,7 +245,7 @@ Every tool that takes or produces document bytes goes through the same two hybri
 
 ## Gotchas
 
-- **Runtime dependencies are `documents.js` + `document-outline.js` + `document-compute.js` + `document-schema.js` + `@modelcontextprotocol/server` + `@modelcontextprotocol/node` + `zod` only; `pdf-codec` and `odf.js` are devDependencies (test-support only).** `@modelcontextprotocol/node` is the Node adapter (`toNodeHandler`) the `--transport http` listener uses to bridge `@modelcontextprotocol/server`'s web-standard `createMcpHandler` onto a plain `node:http` server — see [Remote transport](#remote-transport-http) above. `document-outline.js` is the one dependency beyond the server stack itself: `outline_document` imports `buildOutline`/`outlineLeafText` from it, and documents.js deliberately does not re-export them (the outline projection lives in the family's artefact-utilities package, which depends only on `document-schema.js` — already a transitive dependency via documents.js — so it adds no second copy of anything). `document-compute.js` and `document-schema.js` are the pair `compute_formula` needs for the identical reason: `evaluate()` lives in `document-compute.js` (documents.js has never depended on it, being the very gap [ExaDev/documents.js#928](https://github.com/ExaDev/documents.js/issues/928) closed), and documents.js re-exports neither `flattenTree` (the tree-to-flat transform turning `readNativeDocumentTree`'s `DocumentTree` back into the `ContentDocument` a formula walk needs) nor the `ContentFormula`/`MathExpression`/`FormulaBindings`/`Quantity`/`Interval`/`SymbolTable` types `evaluate()`'s own inputs and outputs are shaped by — both come from `document-schema.js` directly, exactly as that package's own README already documents for any `evaluate()` caller. Every runtime reach into `pdf-codec`/`odf.js` — `ProvidedFont`/`FontSubstitution`/`describeFontFace`/the `WinAnsi` substitution shape — goes through `documents.js`'s own re-exports, so a published install pulls in no direct `pdf-codec`/`odf.js` dependency. `odf.js` survives in `devDependencies` solely because `src/test-support/odm-fixture.ts`, `src/test-support/embedded-font-fixture.ts`, and `src/test-support/odf-formula-fixture.ts` build real ODF package fixtures from its low-level XML primitives (`zipPackage`/`el`/`rootElement`), and `src/test-support/` is excluded from the `tsdown` build — only `src/index.ts` and `src/bin.ts` are entry points — so none of these fixture modules ever ships in `dist/`.
+- **Runtime dependencies are `document-operations` + `documents.js` + `@modelcontextprotocol/server` + `@modelcontextprotocol/node` + `zod` only; `pdf-codec`, `odf.js`, and `document-schema.js` are devDependencies (test-support only).** `@modelcontextprotocol/node` is the Node adapter (`toNodeHandler`) the `--transport http` listener uses to bridge `@modelcontextprotocol/server`'s web-standard `createMcpHandler` onto a plain `node:http` server — see [Remote transport](#remote-transport-http) above. Every tool's actual implementation — the conversion/editing/inspection/`.odb` logic previously defined directly in `src/tools/*.ts`, including its own reach into `document-outline.js`'s `buildOutline`/`outlineLeafText` and `document-compute.js`'s `evaluate()` — now lives in [`document-operations`](../document-operations/README.md) as a `DocumentOperation`; this package's own `src/tools/*.ts` are thin `registerOperation()` wrappers (`src/register-operation.ts`) that register each one as an MCP tool and, for the two operations whose own errors need MCP-specific enrichment (`odb_render_report`'s `OdbReportNotSpecifiedError`, `odm_to_pdf`'s `OdmUnresolvedSectionError`), a `mapError` hook. Every runtime reach into `pdf-codec`/`odf.js` — `ProvidedFont`/`FontSubstitution`/`describeFontFace`/the `WinAnsi` substitution shape — goes through `documents.js`'s own re-exports (by way of `document-operations`), so a published install pulls in no direct `pdf-codec`/`odf.js` dependency. `odf.js` and `document-schema.js` survive in `devDependencies` solely for this package's own test fixtures and `compute_formula`'s own test assertions (`document-schema.js`'s `assembleTree`/`ContentDocument`); `src/test-support/` is excluded from the `tsdown` build — only `src/index.ts` and `src/bin.ts` are entry points — so none of it ever ships in `dist/`.
 
 ## Contributing
 

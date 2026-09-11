@@ -22,7 +22,7 @@ import { createServer } from "../server";
 import {
   ConvertDocumentOutputSchema,
   ListDocumentConversionsOutputSchema,
-} from "./convert";
+} from "document-operations";
 
 // Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip -- not the tool callback in isolation -- so this proves the wiring: that convert_document and list_document_conversions are registered under those names, that convert_document dispatches to a real documents.js DocumentConverter (createLocalDocumentConverter), and that the resolved output/diagnostics/font-substitution data reaches the caller as structuredContent matching each tool's own declared outputSchema.
 
