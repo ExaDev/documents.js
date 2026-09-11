@@ -1,3 +1,9 @@
+## [4.8.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.7.0...pdf-codec%404.8.0) (2026-09-11)
+
+### Features
+
+* **pdf-codec:** define a PageRasteriser port and renderPdfPage over the read machinery ([847d8a8](https://github.com/ExaDev/documents.js/commit/847d8a8fcf60226901e495b2a7afcf6f4619d4c0))
+
 ## [4.7.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.6.0...pdf-codec%404.7.0) (2026-09-11)
 
 ### Features

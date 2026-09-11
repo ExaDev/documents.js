@@ -1,3 +1,23 @@
+## [4.15.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.14.0...xls-codec%404.15.0) (2026-09-11)
+
+### Features
+
+* **xls-codec:** chain an oversized MsoDrawing/MsoDrawingGroup record onto Continue ([758a634](https://github.com/ExaDev/documents.js/commit/758a63455a82c804ee9e026e56ea70977def826d))
+* **xls-codec:** write a sheet's own images and embedded objects ([30d02ef](https://github.com/ExaDev/documents.js/commit/30d02ef43872bf6e682c9a40b641f4cba0bc2fb4))
+* **xls-codec:** write the CF12-era conditional-format rules ([71ffc90](https://github.com/ExaDev/documents.js/commit/71ffc90bd083201e7732ca8b5e161da62c97826b))
+
+### Bug Fixes
+
+* **xls-codec:** concatenate every Continue-chained Escher block, not just the first ([aaffc1f](https://github.com/ExaDev/documents.js/commit/aaffc1f73b26eb79ed77d318915964fbb234d780))
+
+### Documentation
+
+* **xls-codec:** describe the image and embedded-object writer ([f98493d](https://github.com/ExaDev/documents.js/commit/f98493d29b06473fe1da7bde8aacb9d0b1f4526f))
+
+### Tests
+
+* **xls-codec:** round-trip a sheet's own images and embedded objects ([e0458cd](https://github.com/ExaDev/documents.js/commit/e0458cd03707d720f36382fd27c35fc5a4d1fca9))
+
 ## [4.14.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.13.0...xls-codec%404.14.0) (2026-09-11)
 
 ### Features
