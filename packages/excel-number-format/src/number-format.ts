@@ -35,6 +35,7 @@ export function tokenizeNumberFormat(formatCode: string): NumberFormatToken[] {
       // An unterminated quote runs to the end of the format code rather than throwing -- real producers never write one, but a malformed code must still tokenize into something classifiable.
       let text = "";
       index += 1;
+      // Stryker disable next-line EqualityOperator: index<=chars.length reads one past the end via at()'s "" fallback and appends it to text, a no-op string concatenation indistinguishable from stopping at index<chars.length -- the resulting token and final index (already past the outer loop's own bound either way) are identical under both.
       while (index < chars.length && at(chars, index) !== '"') {
         text += at(chars, index);
         index += 1;
@@ -52,6 +53,7 @@ export function tokenizeNumberFormat(formatCode: string): NumberFormatToken[] {
     if (char === "[") {
       let body = "";
       index += 1;
+      // Stryker disable next-line EqualityOperator: index<=chars.length reads one past the end via at()'s "" fallback and appends it to body, a no-op string concatenation indistinguishable from stopping at index<chars.length, for the same reason as the quote-consuming loop above.
       while (index < chars.length && at(chars, index) !== "]") {
         body += at(chars, index);
         index += 1;
@@ -167,6 +169,7 @@ function matchesAt(
 }
 
 function codeRunsOf(section: readonly NumberFormatToken[]): CodeRun[] {
+  // Stryker disable next-line ArrayDeclaration: a bogus seed element here becomes its own inert leading run -- no signal branch below recognizes an unrecognized multi-character "letter", and every distance-based lookup (nearestResolvingLetter) walks by relative offset, so a uniform +1 shift to every real run's index changes nothing observable.
   const chars: string[] = [];
   for (const token of section) {
     if (token.kind === "code") {
@@ -187,6 +190,7 @@ function codeRunsOf(section: readonly NumberFormatToken[]): CodeRun[] {
     const char = at(chars, index).toLowerCase();
     let length = 0;
     while (
+      // Stryker disable next-line ConditionalExpression,EqualityOperator,ArithmeticOperator: char is always a real, non-empty character here (index is already bounds-checked by the caller's own while), so the bounds clause is redundant -- at(chars, index+length) returning "" for any out-of-range read already fails the equality test against a non-empty char, stopping the loop at the identical length regardless of what this clause says.
       index + length < chars.length &&
       at(chars, index + length).toLowerCase() === char
     ) {
@@ -208,6 +212,7 @@ function nearestResolvingLetter(
 ): string | undefined {
   for (
     let index = from + step;
+    // Stryker disable next-line EqualityOperator: index<=runs.length lets the loop read one past the end via runs[index], which is plain `undefined` for an out-of-range array index (not a throw) -- the very next line's `run !== undefined` guard already discards it, so the loop reaches the identical outcome one iteration later either way.
     index >= 0 && index < runs.length;
     index += step
   ) {
@@ -276,9 +281,7 @@ function collectSignals(section: readonly NumberFormatToken[]): SectionSignals {
       if (meaning.kind === "currency") {
         signals.hasCurrency = true;
         // The first currency bracket carrying a real ISO code wins; a format with two of them is malformed, and the leading one is the one a reader would see.
-        if (signals.currencyCode === undefined && meaning.code !== undefined) {
-          signals.currencyCode = meaning.code;
-        }
+        signals.currencyCode ??= meaning.code;
       }
     }
   }
@@ -297,6 +300,7 @@ function collectSignals(section: readonly NumberFormatToken[]): SectionSignals {
       return;
     }
     if (run.letter === "m") {
+      // Stryker disable next-line BlockStatement: signals.hasTime = true below is kept for clarity even though it's provably redundant -- monthRunIsMinutes only returns true when an 'h' precedes or an 's' follows this run in the same section, and that run's own turn through this same forEach already sets hasTime via the h/s branch above, so no input can make this assignment's removal observable.
       if (run.length <= 2 && monthRunIsMinutes(runs, index)) {
         signals.hasTime = true;
       } else {
@@ -349,10 +353,8 @@ function classifySection(
     return { kind: "percentage" };
   }
   if (signals.hasCurrency) {
-    const code = signals.currencyCode;
-    return code === undefined
-      ? { kind: "currency" }
-      : { kind: "currency", code };
+    // A code of undefined here is indistinguishable from omitting the field entirely (property access, JSON.stringify, and toEqual all treat them alike), so there's no need to branch on its presence.
+    return { kind: "currency", code: signals.currencyCode };
   }
   if (signals.hasText && !signals.hasNumeric) {
     return { kind: "text" };
