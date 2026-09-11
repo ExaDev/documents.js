@@ -990,6 +990,7 @@ describe("readXlsxContent: chart graphic frames", () => {
     expect(document.sheets[0]?.embeddedObjects).toHaveLength(1);
     const chart = document.sheets[0]?.embeddedObjects?.[0];
     expect(chart?.objectKind).toBe("chart");
+    expect(chart?.origin).toBe("chart");
     expect(chart?.anchorColumn).toBe(0);
     expect(chart?.anchorRow).toBe(1);
     // The frame: anchored at column 0 offset 19050 EMU, row 1, spanning to the start of column 2 and row 4 -- absolute position from the sheet's left edge through the declared column widths and default row height, size the difference of the two anchors.

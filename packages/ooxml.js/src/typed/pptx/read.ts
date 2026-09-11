@@ -11,6 +11,7 @@ import type {
   ContentCellPatternType,
   ContentEmbeddedObjectBlock,
   ContentImageBlock,
+  ContentOrigin,
   ContentParagraph,
   ContentRun,
   ContentShape,
@@ -836,6 +837,8 @@ function readGraphicFrameShape(
       : undefined;
   let blocks: ContentBlock[];
   let shapeSource: SourceResidue | undefined;
+  // origin names what this shape's content IS, when the graphic-frame kind establishes it: a SmartArt diagram's blocks are the diagram's own node text, not freeform slide prose -- the annotation channel's motivating distinction, stated only where the reader genuinely knows it.
+  let shapeOrigin: ContentOrigin | undefined;
   if (tbl !== undefined) {
     blocks = [readTable(tbl, context, slideRels)];
   } else if (uri === CHART_GRAPHIC_URI && graphicData !== undefined) {
@@ -867,6 +870,7 @@ function readGraphicFrameShape(
       relPartRoot("r:qs"),
       relPartRoot("r:cs"),
     );
+    shapeOrigin = "diagram";
   } else if (uri === OLE_GRAPHIC_URI && graphicData !== undefined) {
     // What the slide actually displays is the OLE object's fallback picture (mc:Fallback > p:oleObj > p:pic under the mc:AlternateContent wrapper, or a p:pic directly under p:oleObj where a producer skipped the wrapper), so that picture is read like any other blip image. With no reachable picture, the p:oleObj's progId at least records what kind of object the frame holds. The object's own payload (p:oleObj/@r:id's embedded part) is additionally decoded when it is a ZIP archive -- a modern producer's embedded xlsx/docx/pptx -- and its recovered sub-document appended as an embeddedObject block beside whatever the display path produced (readOleEmbeddedObject below); the classic non-ZIP OLE compound-file payload stays opaque external-application data, and a ZIP that does not decode as one of the three OOXML flavours degrades to no embedded block, so an undecodable payload never fails the slide read.
     const image = readBlipImage(graphicData, slideRels, pkg, frame);
@@ -894,6 +898,7 @@ function readGraphicFrameShape(
     rotationDeg,
     ...NO_TEXT_BODY_EXTRAS,
     source: shapeSource,
+    origin: shapeOrigin,
     blocks,
   };
 }

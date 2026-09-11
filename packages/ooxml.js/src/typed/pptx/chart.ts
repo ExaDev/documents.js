@@ -130,6 +130,7 @@ export function readChartTable(
   const columnWidthPt = frame.widthPt / (series.length + 1);
   return {
     kind: "table",
+    // origin names what this table's content IS: a chart's cached numbers, not an authored data table -- the fact that separates it from the identical-looking table a pasted screenshot of the same chart would produce, which no other field on the node carries (the schema's motivating case for the annotation channel).
     origin: "chart",
     rows,
     columnWidthsPt: Array.from(
