@@ -178,6 +178,28 @@ describe("readNumberingDefinitions", () => {
     });
   });
 
+  it("reads an LVLF.nfc outside MSONFC's table as decimal rather than refusing the document", () => {
+    // The genuine in-the-wild shape: a real .doc readable end to end by LibreOffice carries nfc 0x92, far outside MSONFC's 0x00-0x3B and 0xFF range -- one byte of one level's number format, not structural corruption, so the whole document no longer refuses over it (see numberFormatFor's own note for the independent implementation's matching default).
+    const { table, fib } = tableStreamWithNumbering(
+      [
+        {
+          lsid: 3000,
+          levels: [
+            {
+              nfc: 0x92,
+              text: [{ placeholderLevel: 0 }, { char: "." }],
+            },
+          ],
+        },
+      ],
+      [3000],
+    );
+    const definitions = readNumberingDefinitions(table, fib);
+    expect(definitions).toEqual({
+      "1": { levels: { "0": { format: "decimal", text: "%1.", startAt: 1 } } },
+    });
+  });
+
   it("resolves a simple one-level decimal list with a '%1.' placeholder template", () => {
     const { table, fib } = tableStreamWithNumbering(
       [
@@ -282,13 +304,12 @@ describe("readNumberingDefinitions", () => {
     expect(definitions["2"]?.levels["0"]?.text).toBe("A");
   });
 
-  it("throws on an unrecognised MSONFC value", () => {
+  it("reads another out-of-table MSONFC value as decimal too, not just the one a real file was caught carrying", () => {
     const { table, fib } = tableStreamWithNumbering(
       [{ lsid: 6000, levels: [{ nfc: 0x50, text: [] }] }],
       [6000],
     );
-    expect(() => readNumberingDefinitions(table, fib)).toThrow(
-      /not a recognised MSONFC value/,
-    );
+    const definitions = readNumberingDefinitions(table, fib);
+    expect(definitions["1"]?.levels["0"]?.format).toBe("decimal");
   });
 });
