@@ -1,6 +1,6 @@
 import { DocumentTreeSchema, flattenTree } from "document-schema.js";
 import { decodePackage as decodeOoxmlPackage, readXlsxContent } from "ooxml.js";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   embeddedHsqldbCachedOdbBytes,
   embeddedHsqldbOdbBytes,
@@ -143,23 +143,12 @@ describe("odbToXlsx / odbToCsv onDocument", () => {
   });
 });
 
-// The Tier 2 byte-level round trip: embeddedHsqldbCachedOdbBytes() (src/test-support/odb.ts) is a real, zipped .odb package wrapping a genuine HSQLDB 1.8.0.10 CACHED-table database's own database/script + database/data + database/properties + database/backup -- decoded exactly the way a caller's own bytes would be, through decodePackage -> readOdbTables (src/odb/read.ts's withCachedTableRows, src/hsqldb/cache.ts) -> odbTablesToSpreadsheetDocument/buildOdbTableCsv. DATE columns are involved, so this suite pins TZ the same way src/hsqldb/cache.test.ts does -- see that file's own comment on why.
+// The Tier 2 byte-level round trip: embeddedHsqldbCachedOdbBytes() (src/test-support/odb.ts) is a real, zipped .odb package wrapping a genuine HSQLDB 1.8.0.10 CACHED-table database's own database/script + database/data + database/properties + database/backup -- decoded exactly the way a caller's own bytes would be, through decodePackage -> readOdbTables (src/odb/read.ts's withCachedTableRows, src/hsqldb/cache.ts) -> odbTablesToSpreadsheetDocument/buildOdbTableCsv. DATE columns are involved, so the calls below pass { timeZone: "Europe/London" } explicitly, the same as src/hsqldb/cache.test.ts -- see that file's own comment on why a runtime process.env.TZ mutation isn't used instead.
 describe("odbToXlsx / odbToCsv: a real HSQLDB 1.8.0.10 CACHED-table database", () => {
-  let previousTz: string | undefined;
-  beforeAll(() => {
-    previousTz = process.env.TZ;
-    process.env.TZ = "Europe/London";
-  });
-  afterAll(() => {
-    if (previousTz === undefined) {
-      delete process.env.TZ;
-    } else {
-      process.env.TZ = previousTz;
-    }
-  });
-
   it("produces a spreadsheet ContentDocument with one sheet per table, EMPLOYEES rows decoded from the real binary row store", () => {
-    const xlsxBytes = odbToXlsx(embeddedHsqldbCachedOdbBytes());
+    const xlsxBytes = odbToXlsx(embeddedHsqldbCachedOdbBytes(), {
+      timeZone: "Europe/London",
+    });
     const content = readXlsxContent(decodeOoxmlPackage(xlsxBytes));
     expect(content.kind).toBe("spreadsheet");
     if (content.kind !== "spreadsheet") {
@@ -200,6 +189,7 @@ describe("odbToXlsx / odbToCsv: a real HSQLDB 1.8.0.10 CACHED-table database", (
   it("writes the named table as CSV, recovering TIME/TIMESTAMP/BIGINT/SMALLINT/TINYINT from TYPE_TEST", () => {
     const csvBytes = odbToCsv(embeddedHsqldbCachedOdbBytes(), {
       table: "TYPE_TEST",
+      timeZone: "Europe/London",
     });
     const text = new TextDecoder().decode(csvBytes);
     const lines = text.split("\r\n").filter((line) => line.length > 0);
