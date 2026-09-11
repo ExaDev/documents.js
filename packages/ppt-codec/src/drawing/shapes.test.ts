@@ -20,7 +20,7 @@ import {
   writeAtom as atom,
   writeContainer as container,
 } from "../record/write";
-import { readDrawingShapes } from "./shapes";
+import { type PptShape, readDrawingShapes } from "./shapes";
 
 // OfficeArtFSPGR ([MS-ODRAW] 2.2.38): recVer 0x1, recLen 0x10, then xLeft/yTop/xRight/yBottom as signed 32-bit integers. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/82d2d6a1-3a7a-4d15-9803-33145a76545a
 const OfficeArtFSPGR = 0xf009;
@@ -109,10 +109,11 @@ function drawing(
   ]);
 }
 
-function shapesOf(
-  bytes: Uint8Array<ArrayBuffer>,
-): ReturnType<typeof readDrawingShapes> {
-  return readDrawingShapes(readRecordAt(bytes, 0));
+// Every test in this file is about plain shapes, so the walk's result is narrowed to its shape arm -- a table group (which carries `cells` instead) never reaches these assertions.
+function shapesOf(bytes: Uint8Array<ArrayBuffer>): PptShape[] {
+  return readDrawingShapes(readRecordAt(bytes, 0)).filter(
+    (entry): entry is PptShape => "clientTextbox" in entry,
+  );
 }
 
 describe("readDrawingShapes", () => {
