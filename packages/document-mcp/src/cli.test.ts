@@ -81,4 +81,30 @@ describe("main", () => {
     process.argv = ["node", "bin.js", "--transport"];
     await expect(main()).rejects.toThrow(/--transport requires a value/);
   });
+
+  it("binds the given --host instead of the loopback default", async () => {
+    process.argv = [
+      "node",
+      "bin.js",
+      "--transport",
+      "http",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "0",
+    ];
+    server = await main();
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("document-mcp listening on http://0.0.0.0:"),
+    );
+    const address = server?.address();
+    if (
+      address === null ||
+      address === undefined ||
+      typeof address === "string"
+    ) {
+      throw new Error("expected a TCP address");
+    }
+    expect(address.address).toBe("0.0.0.0");
+  });
 });
