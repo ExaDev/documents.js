@@ -191,6 +191,16 @@ Then add the server URL (e.g., `https://your-host:3000/mcp`) as a connector in C
 
 Every release also attaches a Node [single-executable application](https://nodejs.org/api/single-executable-applications.html) build for Linux (x64 and arm64), Windows (x64 and arm64), and macOS (Apple Silicon and Intel) to that release's own GitHub Release assets — the entire server and its dependencies embedded in one file, needing no Node.js install or `npx` at all. It supports both `stdio` and `--transport http` exactly as above; point an MCP client's `command` at the downloaded binary directly instead of `npx`/`node`. Download the asset matching your platform from the package's tag on the [Releases page](https://github.com/ExaDev/documents.js/releases) and run it directly (`chmod +x` on Linux/macOS first).
 
+### Container image
+
+Every release also publishes a multi-arch (`linux/amd64` + `linux/arm64`) container image to GitHub Container Registry, wrapping the identical standalone `--transport http` binary above on a minimal [distroless](https://github.com/GoogleContainerTools/distroless) base rather than a Node install:
+
+```sh
+docker run -p 3000:3000 ghcr.io/exadev/document-mcp:VERSION --port 3000
+```
+
+The image always runs in `--transport http` mode — `stdio` mode is exec'd directly by an MCP client as a subprocess, which a container has no role in — and binds to `0.0.0.0` inside the container regardless of `--port`, so `-p <host>:<container>` reaches `/mcp` directly. Replace `VERSION` with the package's own exact release version; `latest` also tracks the newest release, matching `document-rest`'s identical image. See [Remote transport](#remote-transport-http) above for this listener's own lack of authentication.
+
 ### Development
 
 Requires Node.js `>=20` and pnpm `11.6.0` (pinned via `packageManager` in `package.json`).
