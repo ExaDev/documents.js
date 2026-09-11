@@ -71,10 +71,15 @@ export type EmbeddedObjectSerialiser = (
 ) => Uint8Array<ArrayBuffer> | undefined;
 
 // The write options, matching the shape markdown-codec's, pdf-codec's and rtf-codec's own option objects already use in this family: an AbortSignal and a diagnostic sink. A writer's input is a value this process already holds rather than bytes of unknown provenance, so there are no read-side resource limits here -- and every deliberate drop this writer makes fires through the sink rather than passing silently, per the family's own diagnostic-channel convention.
+//
+// onUnwritableBlock decides what a drop the sink would otherwise merely report DOES: 'drop' (the default) keeps every existing caller's own behaviour unchanged -- the block is named through the sink and excluded from the written text body -- while 'throw' raises a PptUnsupportedContentError naming the identical block and reason instead of writing a file that silently omits it, matching doc-codec's own convention for content it cannot express. The default stays 'drop' rather than converging on doc-codec's 'throw' as this writer's own default, because the two packages' own upstream differs in kind rather than degree: documents.js's PDF-to-ppt and odp-to-ppt reconstruction is this package's primary caller today, and it ROUTINELY hands this writer content the binary PPT format has no spelling for at all (an unrecognised alignment value, a construct marker, an OLE object with no serialiser port supplied) -- not as a rare edge case a bug would explain, but as the ordinary shape of a cross-format conversion into a narrower target. Flipping the default to 'throw' would turn "this slide's OLE object degrades to geometry" into "the whole presentation fails to convert" for every one of those callers, a severe regression this option exists to let a caller opt into deliberately rather than have imposed on it.
+export type PptUnwritableBlockPolicy = "drop" | "throw";
+
 export interface WritePptOptions {
   readonly signal?: AbortSignal;
   readonly sink?: PptDiagnosticSink;
   readonly serialiseEmbeddedObject?: EmbeddedObjectSerialiser;
+  readonly onUnwritableBlock?: PptUnwritableBlockPolicy;
 }
 
 // The write path, the mirror image of read.ts: a presentation's ContentSlide[] mapped onto [MS-PPT] records (document container, master and slide lists, one main master, one slide container per slide with its drawing and text, and one notes container per slide that has speaker notes), a single-edit persist layer over them (stream/persist-write.ts), and the two [MS-CFB] streams archive-codec's writeCompoundFile wraps into real .ppt bytes. Deliberately narrower than the read path's own coverage -- see the package README's write-scope section for exactly what a written file carries and what it does not.
@@ -255,10 +260,12 @@ export function writePptStreams(
     return index;
   };
   const store = planBlipStore(slides);
+  const strict = options.onUnwritableBlock === "throw";
   const contextFor = (location: string): DrawingWriteContext => ({
     fontIndexOf,
     blipIndexOf: store.pibOf,
     sink,
+    strict,
     location,
   });
 

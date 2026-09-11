@@ -7,7 +7,12 @@ import type {
 } from "document-schema.js";
 import { buildTextBody } from "../content-write";
 import { isBlipFormat } from "./blips";
-import { type PptDiagnosticSink, PptDiagnosticCodes } from "../diagnostics";
+import {
+  type PptDiagnostic,
+  type PptDiagnosticSink,
+  PptDiagnosticCodes,
+} from "../diagnostics";
+import { PptUnsupportedContentError } from "../errors";
 import {
   concatBytes,
   i32le,
@@ -228,12 +233,24 @@ export interface DrawingWritten {
   readonly maxSpid: number;
 }
 
-// Everything a drawing's writer needs from the document around it: the font resolver the text body shares, the blip-store resolver that assigns a picture its one-based pib (called only for an image whose format this writer can blip -- png or jpeg), the diagnostic sink every deliberate drop fires through, and a human name for where this drawing sits, so a drop message says "slide 2" rather than an index the caller has to decode.
+// Everything a drawing's writer needs from the document around it: the font resolver the text body shares, the blip-store resolver that assigns a picture its one-based pib (called only for an image whose format this writer can blip -- png or jpeg), the diagnostic sink every deliberate drop fires through, whether a whole-block drop should throw instead of merely reporting (see reportDrop below), and a human name for where this drawing sits, so a drop message says "slide 2" rather than an index the caller has to decode.
 export interface DrawingWriteContext {
   readonly fontIndexOf: (family: string) => number;
   readonly blipIndexOf: (image: ContentImageBlock) => number;
   readonly sink: PptDiagnosticSink;
+  readonly strict: boolean;
   readonly location: string;
+}
+
+// The one place a whole-block drop (a block that does not appear in the written output at all -- BLOCK_DROPPED, IMAGE_DROPPED) decides between WritePptOptions' two policies: reported through the sink alone (the default, matching every existing caller's own current behaviour), or reported AND thrown as a PptUnsupportedContentError, for a caller that would rather fail the whole conversion than ship a file quietly missing content it asked for. A lossy-but-still-written narrowing (TABLE_SPAN_DROPPED, a merged cell writing one column/row wide rather than vanishing) is never routed through this: it is a fidelity approximation, not an omission, and always stays sink-only regardless of the caller's policy.
+function reportDrop(
+  context: DrawingWriteContext,
+  diagnostic: PptDiagnostic,
+): void {
+  context.sink(diagnostic);
+  if (context.strict) {
+    throw new PptUnsupportedContentError(diagnostic.message);
+  }
 }
 
 // The image formats MSOBLIPTYPE gives this writer a blip record for are exactly isBlipFormat's two -- the same vocabulary drawing/blips.ts reads with, so a written picture always reads back as the same image.
@@ -252,7 +269,7 @@ function planShapeBlocks(
   let pib: number | undefined;
   let table: ContentTable | undefined;
   const drop = (block: ContentBlock, reason: string): void => {
-    context.sink({
+    reportDrop(context, {
       code: PptDiagnosticCodes.BLOCK_DROPPED,
       severity: "warning",
       message: `${context.location}: ${reason}`,
@@ -268,7 +285,7 @@ function planShapeBlocks(
     }
     if (block.kind === "image") {
       if (!isBlipFormat(block.format)) {
-        context.sink({
+        reportDrop(context, {
           code: PptDiagnosticCodes.IMAGE_DROPPED,
           severity: "warning",
           message: `${context.location}: an image block in format '${block.format}' is dropped; MSOBLIPTYPE gives this writer a blip record for PNG and JPEG only`,
@@ -276,7 +293,7 @@ function planShapeBlocks(
         continue;
       }
       if (pib !== undefined) {
-        context.sink({
+        reportDrop(context, {
           code: PptDiagnosticCodes.IMAGE_DROPPED,
           severity: "warning",
           message: `${context.location}: a second image block is dropped; a shape carries exactly one blip-store reference, and an earlier image already consumed it`,
@@ -310,7 +327,7 @@ function planShapeBlocks(
       );
     }
     if (pib !== undefined) {
-      context.sink({
+      reportDrop(context, {
         code: PptDiagnosticCodes.IMAGE_DROPPED,
         severity: "warning",
         message: `${context.location}: an image block is dropped; a shape carrying a table becomes a table group, which has no blip reference of its own`,
@@ -466,7 +483,7 @@ function writeTableGroup(
       );
       for (const block of cell.blocks) {
         if (block.kind !== "paragraph") {
-          context.sink({
+          reportDrop(context, {
             code: PptDiagnosticCodes.BLOCK_DROPPED,
             severity: "warning",
             message: `${context.location}: a '${block.kind}' block inside a table cell is dropped; a table cell in this format is a plain text-box shape with no property table or object reference of its own`,
