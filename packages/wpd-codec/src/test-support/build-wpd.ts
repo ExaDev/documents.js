@@ -44,7 +44,7 @@ export function buildWpdFile(
   bytes[9] = 0x0a; // file type: WordPerfect document
   bytes[10] = 2; // major version: the 6.x-X6 lineage
   bytes[11] = 1; // minor version
-  putUint16(bytes, 12, 0); // not encrypted
+  // Offset 12-13 (the encryption word) is left at its zero-initialised default rather than written explicitly -- `new Uint8Array` always starts zeroed, so a build produces an unencrypted document either way.
   putUint16(bytes, 14, PREFIX_HEADER_SIZE); // pointer to the index area
   putUint32(bytes, 16, 5); // the documented reserved long at the head of the extended header
   putUint32(bytes, 20, fileSize);
