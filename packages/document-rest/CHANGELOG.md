@@ -1,3 +1,9 @@
+## [1.3.0](https://github.com/ExaDev/documents.js/compare/document-rest%401.2.0...document-rest%401.3.0) (2026-09-11)
+
+### Features
+
+* **ci:** build ARM64 Linux and Windows SEA binaries too ([78cfe9f](https://github.com/ExaDev/documents.js/commit/78cfe9fae5c8478ea47a69a9a6dcc723bb696bb4))
+
 ## [1.2.0](https://github.com/ExaDev/documents.js/compare/document-rest%401.1.0...document-rest%401.2.0) (2026-09-11)
 
 ### Features

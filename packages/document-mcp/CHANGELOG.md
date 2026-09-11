@@ -1,3 +1,9 @@
+## [4.13.0](https://github.com/ExaDev/documents.js/compare/document-mcp%404.12.0...document-mcp%404.13.0) (2026-09-11)
+
+### Features
+
+* **ci:** build ARM64 Linux and Windows SEA binaries too ([78cfe9f](https://github.com/ExaDev/documents.js/commit/78cfe9fae5c8478ea47a69a9a6dcc723bb696bb4))
+
 ## [4.12.0](https://github.com/ExaDev/documents.js/compare/document-mcp%404.11.0...document-mcp%404.12.0) (2026-09-11)
 
 ### Features
