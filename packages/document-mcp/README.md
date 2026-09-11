@@ -187,6 +187,10 @@ Then add the server URL (e.g., `https://your-host:3000/mcp`) as a connector in C
 
 > **Security note:** this HTTP listener has no authentication and no Host/Origin allowlisting of its own — anyone who can reach it can call every tool, including ones that read and write arbitrary filesystem paths. It is safe by default only because it binds to loopback; whatever fronts it for remote access (tunnel, reverse proxy) is responsible for authenticating callers before traffic ever reaches this process.
 
+### Standalone binary
+
+Every release also attaches a Node [single-executable application](https://nodejs.org/api/single-executable-applications.html) build for Linux, macOS, and Windows to that release's own GitHub Release assets — the entire server and its dependencies embedded in one file, needing no Node.js install or `npx` at all. It supports both `stdio` and `--transport http` exactly as above; point an MCP client's `command` at the downloaded binary directly instead of `npx`/`node`. Download the asset matching your platform from the package's tag on the [Releases page](https://github.com/ExaDev/documents.js/releases) and run it directly (`chmod +x` on Linux/macOS first).
+
 ### Development
 
 Requires Node.js `>=20` and pnpm `11.6.0` (pinned via `packageManager` in `package.json`).

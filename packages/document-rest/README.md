@@ -18,6 +18,10 @@ This binds a plain `node:http` listener to `127.0.0.1` (loopback only) on the gi
 
 > **Security note:** this listener has no authentication and no Host/Origin allowlisting of its own — anyone who can reach it can call every operation, including ones that read and write arbitrary filesystem paths. It is safe by default only because it binds to loopback; whatever fronts it for remote access (a tunnel, a reverse proxy) is responsible for authenticating callers before traffic ever reaches this process. Matches [`document-mcp`'s own `--transport http` listener](../document-mcp/README.md#remote-transport-http), which carries the identical note for the identical reason.
 
+### Standalone binary
+
+Every release also attaches a Node [single-executable application](https://nodejs.org/api/single-executable-applications.html) build for Linux, macOS, and Windows to that release's own GitHub Release assets — the entire server and its dependencies embedded in one file, needing no Node.js install or `npx` at all. For the "a caller with no Node runtime of its own" case this package exists for in the first place, this removes the last Node dependency too: download the asset matching your platform from the package's tag on the [Releases page](https://github.com/ExaDev/documents.js/releases), run it directly (`chmod +x` on Linux/macOS first), and it takes the identical `--port` flag.
+
 ## API
 
 **`GET /`** lists every available operation:
