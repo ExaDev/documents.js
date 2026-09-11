@@ -31,6 +31,7 @@ minimumReleaseAgeExclude:
   - odf.js
   - ooxml.js
   - pdf-codec
+  - pdf-raster-cpu
   - ppt-codec
   - rtf-codec
   - wpd-codec
