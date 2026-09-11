@@ -148,10 +148,48 @@ describe("segmentPdfRegions", () => {
     expect(captionRegion?.confidence).toBeGreaterThan(0);
     expect(captionRegion?.confidence).toBeLessThanOrEqual(1);
 
+    // Recorded in both directions: the caption stays its own region, and the figure it labels now
+    // carries that text. The pass already had to work out which figure the caption belonged to in
+    // order to classify it, and used to drop the answer -- so a consumer wanting a figure's own label
+    // had to re-derive the adjacency this function had just computed.
+    expect(figureRegion?.caption).toBe(
+      "Figure 1: a chart of quarterly results.",
+    );
+    // Associated, not moved: projecting every region's text must still read the caption exactly once.
+    expect(captionRegion?.items[0]).toMatchObject({ kind: "text" });
+
     const proseRegion = regions.find(
       (region) => region.classification === "column",
     );
     expect(proseRegion?.items).toHaveLength(4);
+  });
+
+  it("gives a figure the nearer of two candidate captions", () => {
+    // A figure sandwiched between two short runs has two candidates and only one is its label. The same
+    // gap that decides a caption's own confidence decides which figure wins it, so the nearer text is
+    // the one recorded on the figure.
+    //
+    // Both gaps sit in a narrow window the segmentation forces: wider than the LOCAL cut threshold
+    // (1.5x the caption's own ~10pt font size, so ~15pt -- below that the run is not split off as its
+    // own region at all) and within CAPTION_GAP_PT (24pt, beyond which it is not a caption). Below is
+    // 18pt away, above is 22pt.
+    const figure: LayoutItem = {
+      kind: "image",
+      imageId: "img-2",
+      xPt: 100,
+      yPt: 400,
+      widthPt: 300,
+      heightPt: 200,
+    };
+    const above = line(150, 622, "Further away, above the figure.");
+    const below = line(150, 372, "Figure 2: the nearer caption.");
+
+    const regions = segmentPdfRegions(page([above, figure, below]));
+    const figureRegion = regions.find(
+      (region) => region.classification === "figure",
+    );
+
+    expect(figureRegion?.caption).toBe("Figure 2: the nearer caption.");
   });
 
   it("does not attach a caption to a figure it is not vertically adjacent to", () => {

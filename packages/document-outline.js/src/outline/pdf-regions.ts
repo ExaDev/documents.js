@@ -1,3 +1,4 @@
+import type { ContentInterpretation } from "document-schema.js";
 import type { LayoutItem, LayoutPage } from "pdf-codec";
 import type { RegionClassification } from "./regions";
 
@@ -18,6 +19,21 @@ export interface PdfRegion {
   readonly items: readonly LayoutItem[];
   readonly classification: RegionClassification;
   readonly confidence: number;
+  // The caption text this region is labelled by, set on a 'figure' region when attachCaptions below
+  // found one. Associated, not moved: the caption remains its own 'caption'-classified region in the
+  // returned array, so a consumer projecting every region's text still reads it exactly once -- the same
+  // rule document-schema.js's ContentImageBlock.caption follows for a docx figure, and for the same
+  // reason. Absent when no adjacent short text run claimed this figure, which is the common case.
+  readonly caption?: string;
+  // What a consumer read out of this region, when it has read it -- the schema's own annotation channel,
+  // reused here rather than re-minted (ContentInterpretationSchema is exported for exactly this).
+  //
+  // Never set by segmentPdfRegions: this package infers geometry, and nothing in it calls a model or
+  // reads pixels. The field exists because a PDF region is the one place an interpretation of a *vector*
+  // figure can attach at all -- a chart drawn as paths is dozens of sibling rect/line/path items with no
+  // single content node whose extent is the chart, so the region is the only container whose content IS
+  // the thing being described. A consumer that rasterises a region and reads it puts the result here.
+  readonly interpretation?: ContentInterpretation;
 }
 
 interface Bounds {
@@ -417,22 +433,34 @@ const CAPTION_MAX_CHARS = 160;
 const CAPTION_GAP_PT = 24;
 
 // Second pass: a short text leaf classified 'column' or 'unknown' that sits immediately above or below a 'figure' leaf, and horizontally overlaps it, is a caption -- captions are a RELATIONSHIP to a figure, not a standalone geometric signature, so this can only run after every leaf already has its own first-pass classification.
+//
+// The relationship is recorded in BOTH directions, which it was not before: the text leaf becomes a
+// 'caption' region as it always did, and the figure it labels now carries that text on its own `caption`.
+// The pass already had to find which figure a caption belonged to in order to classify it at all, and
+// then dropped the answer -- so a consumer wanting a figure's own label had to re-derive the adjacency
+// this function had just computed. That matters for the case the field exists to serve: handing a
+// figure's region to something that reads it (a vision model, say) is far more useful when the author's
+// own caption for that figure comes with it.
 function attachCaptions(regions: readonly PdfRegion[]): PdfRegion[] {
   const figures = regions.filter(
     (region) => region.classification === "figure",
   );
-  return regions.map((region) => {
+
+  // Figure -> its nearest claiming caption. Nearest, because a figure sandwiched between two short runs
+  // has two candidates and only one of them is its label; the same gap that decides the caption's own
+  // confidence decides which figure wins it.
+  const captionFor = new Map<PdfRegion, { text: string; gap: number }>();
+  const claimed = new Map<PdfRegion, { figure: PdfRegion; gap: number }>();
+
+  for (const region of regions) {
     if (
       region.classification !== "column" &&
       region.classification !== "unknown"
     ) {
-      return region;
+      continue;
     }
-    const text = region.items
-      .map((item) => (item.kind === "text" ? item.text : ""))
-      .join(" ")
-      .trim();
-    if (text.length === 0 || text.length > CAPTION_MAX_CHARS) return region;
+    const text = regionText(region);
+    if (text.length === 0 || text.length > CAPTION_MAX_CHARS) continue;
 
     let nearest: PdfRegion | undefined;
     let nearestGap = Number.POSITIVE_INFINITY;
@@ -444,13 +472,37 @@ function attachCaptions(regions: readonly PdfRegion[]): PdfRegion[] {
         nearestGap = gap;
       }
     }
-    if (nearest === undefined) return region;
-    return {
-      ...region,
-      classification: "caption",
-      confidence: clamp01(1 - nearestGap / CAPTION_GAP_PT),
-    };
+    if (nearest === undefined) continue;
+
+    claimed.set(region, { figure: nearest, gap: nearestGap });
+    const existing = captionFor.get(nearest);
+    if (existing === undefined || nearestGap < existing.gap) {
+      captionFor.set(nearest, { text, gap: nearestGap });
+    }
+  }
+
+  return regions.map((region) => {
+    const claim = claimed.get(region);
+    if (claim !== undefined) {
+      return {
+        ...region,
+        classification: "caption" as const,
+        confidence: clamp01(1 - claim.gap / CAPTION_GAP_PT),
+      };
+    }
+    const caption = captionFor.get(region);
+    return caption === undefined
+      ? region
+      : { ...region, caption: caption.text };
   });
+}
+
+// A region's own text content, joined and trimmed. Non-text items contribute nothing.
+function regionText(region: PdfRegion): string {
+  return region.items
+    .map((item) => (item.kind === "text" ? item.text : ""))
+    .join(" ")
+    .trim();
 }
 
 function horizontallyOverlaps(a: PdfRegionBounds, b: PdfRegionBounds): boolean {
