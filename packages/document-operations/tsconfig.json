@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2024"],
+    "types": ["node"],
+    // eslint.config.ts imports the workspace-root eslint.shared.ts by its real path, extension included, which is what ESLint's own TypeScript config loader resolves. TypeScript rejects a .ts specifier without this, and permits it here because the base config sets noEmit.
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true
+  },
+  "include": [
+    "src",
+    "tsdown.config.ts",
+    "vitest.config.ts",
+    "vitest.workers.config.ts",
+    "stryker.config.ts",
+    "eslint.config.ts"
+  ]
+}
