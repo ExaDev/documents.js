@@ -11,6 +11,11 @@ export interface DecodedStream {
   readonly bytes: Uint8Array<ArrayBuffer>;
   // Set when decoding stopped before exhausting the /Filter chain: DCTDecode's deliberate JPEG passthrough (the encoded bytes ARE the deliverable -- see src/image/*'s own module docs), JPXDecode's own passthrough (a JPEG 2000 codestream carries its own component count and sample depth, which no plain byte array can express -- src/images-read.ts decodes it where those are meaningful), a filter this codec doesn't implement (Crypt), or a JBIG2Decode stream using a JBIG2 feature src/image/jbig2.ts does not decode. `bytes` is still encoded per this filter name either way.
   readonly remainingFilter?: string;
+  // Set when a JBIG2Decode filter decoded successfully: the stream's own JBIG2-encoded bytes as they entered that filter (any outer transport filter such as a wrapping FlateDecode already peeled), plus the decoded /JBIG2Globals segments when the stream declared them. This package has no JBIG2 encoder (a hand-written one is research-grade symbol-dictionary design), so these bytes are the only lossless spelling of the image a writer can re-emit -- the image layer lifts them onto the asset's `original` for verbatim re-embedding, exactly as DCTDecode's own bytes ride through `format: 'jpeg'`.
+  readonly jbig2?: {
+    readonly encoded: Uint8Array<ArrayBuffer>;
+    readonly globals?: Uint8Array<ArrayBuffer>;
+  };
 }
 
 // Follows one indirect reference. Only /DecodeParms entries that are themselves whole objects need this -- in practice just JBIG2Decode's /JBIG2Globals stream, which a producer essentially always writes as a reference since several images share it. Declared as a bare callback rather than taking src/interpret.ts's PdfObjectResolver so this module keeps no dependency on the interpreter.
@@ -28,6 +33,7 @@ export function decodeStream(
   const filters = filterNames(dict);
   const parms = decodeParmsList(dict, filters.length);
   let bytes = raw;
+  let jbig2: DecodedStream["jbig2"] | undefined;
   for (let i = 0; i < filters.length; i++) {
     const filter = filters[i]!;
     const parm = parms[i];
@@ -54,7 +60,8 @@ export function decodeStream(
       if (decoded === undefined) {
         return { bytes, remainingFilter: "JBIG2Decode" };
       }
-      bytes = decoded;
+      jbig2 = { encoded: bytes, globals: decoded.globals };
+      bytes = decoded.bytes;
     } else if (filter === "DCTDecode" || filter === "DCT") {
       return { bytes, remainingFilter: "DCTDecode" };
     } else if (filter === "JPXDecode") {
@@ -69,7 +76,7 @@ export function decodeStream(
       return { bytes, remainingFilter: filter };
     }
   }
-  return { bytes };
+  return jbig2 === undefined ? { bytes } : { bytes, jbig2 };
 }
 
 function applyPredictorIfPresent(
@@ -112,14 +119,19 @@ function ccittFaxDecode(
 //
 // Two polarity/sizing details, both of them PDF's rather than JBIG2's, and both handled here so src/image/jbig2.ts stays free of PDF knowledge. First, JBIG2 codes a black pixel as a 1 bit (T.88 3.29) while a PDF 1-bit /DeviceGray image reads 0 as black, so the decoded bitmap is inverted on the way out -- exactly the convention CCITTFaxDecode reaches through its own /BlackIs1 defaulting to false. Second, the image dictionary's own /Width and /Height are authoritative over the page information segment's, which is also the only way a JBIG2 page of "unknown" (striped) height resolves at all.
 //
-// Returns undefined when the stream uses a JBIG2 feature this decoder does not implement, or is malformed. That degrades exactly like an unimplemented filter: the caller gets the still-encoded bytes back with remainingFilter set, skips the image, and the rest of the page still reads.
+// Returns undefined when the stream uses a JBIG2 feature this decoder does not implement, or is malformed. That degrades exactly like an unimplemented filter: the caller gets the still-encoded bytes back with remainingFilter set, skips the image, and the rest of the page still reads. On success it returns the decoded samples beside the globals segments it consumed, so decodeStream can capture the verbatim-re-embedding pair (see DecodedStream.jbig2).
 function jbig2Decode(
   data: Uint8Array<ArrayBuffer>,
   parm: PdfDict | undefined,
   dict: PdfDict,
   sink: PdfDiagnosticSink,
   resolve: PdfIndirectResolver | undefined,
-): Uint8Array<ArrayBuffer> | undefined {
+):
+  | {
+      bytes: Uint8Array<ArrayBuffer>;
+      globals: Uint8Array<ArrayBuffer> | undefined;
+    }
+  | undefined {
   const globalsObj =
     parm !== undefined ? dictGet(parm, "JBIG2Globals") : undefined;
   const resolvedGlobals =
@@ -150,7 +162,10 @@ function jbig2Decode(
         sink({ code: "pdf/jbig2-degraded", severity: "warning", message });
       },
     });
-    return Uint8Array.from(image.bytes, (byte) => byte ^ 0xff);
+    return {
+      bytes: Uint8Array.from(image.bytes, (byte) => byte ^ 0xff),
+      globals,
+    };
   } catch (error) {
     sink({
       code: "pdf/jbig2-undecodable",

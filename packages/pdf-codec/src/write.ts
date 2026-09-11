@@ -382,10 +382,45 @@ function preparePngImage(
   return { dict, raw: data, alpha };
 }
 
+// Verbatim re-embedding of a no-encoder filter's original stream (JBIG2, JPEG 2000): the asset's own decoded canonical never reaches the file at all -- these bytes are the compressed stream as the source carried it, re-emitted under the same filter, so a pdf-to-pdf round trip pays zero generation loss for exactly the two filters this package cannot re-encode. Width/Height still come from the asset (a viewer needs them whatever the stream says). A JBIG2 image is 1-bit /DeviceGray by construction (T.88's bitmap inverted into PDF's 0-is-black convention at decode), stated explicitly; a JPEG 2000 stream's component count and sample depth are the codestream's own to state (ISO 32000-1 7.4.9: /BitsPerComponent "shall not be present", /ColorSpace optional), so neither is written. /DecodeParms with the /JBIG2Globals reference is added in place at emission, once the globals stream's own object number is known -- the identical late-binding the SMask reference already uses. A source soft mask still re-emits: the decoded canonical's alpha is extracted through the ordinary PNG prepare path and rides along as a generated /SMask, since the original compressed stream does not encode it.
+function preparePassthroughImage(
+  asset: LayoutImageAsset,
+  compress: boolean,
+): PreparedImage {
+  if (asset.original === undefined) {
+    throw new Error(
+      "preparePassthroughImage: asset carries no original stream",
+    );
+  }
+  const png = preparePngImage(base64ToBytes(asset.base64), compress);
+  const entries = new Map<string, PdfObject>([
+    ["Type", pdfName("XObject")],
+    ["Subtype", pdfName("Image")],
+    ["Width", pdfNum(asset.widthPx)],
+    ["Height", pdfNum(asset.heightPx)],
+    [
+      "Filter",
+      pdfName(asset.original.filter === "jbig2" ? "JBIG2Decode" : "JPXDecode"),
+    ],
+  ]);
+  if (asset.original.filter === "jbig2") {
+    entries.set("ColorSpace", pdfName("DeviceGray"));
+    entries.set("BitsPerComponent", pdfNum(1));
+  }
+  return {
+    dict: pdfDict(entries),
+    raw: base64ToBytes(asset.original.base64),
+    ...(png.alpha !== undefined ? { alpha: png.alpha } : {}),
+  };
+}
+
 function prepareImage(
   asset: LayoutImageAsset,
   compress: boolean,
 ): PreparedImage {
+  if (asset.original !== undefined) {
+    return preparePassthroughImage(asset, compress);
+  }
   const bytes = base64ToBytes(asset.base64);
   return asset.format === "jpeg"
     ? prepareJpegImage(bytes)
@@ -640,6 +675,8 @@ export function writePdf(
     {
       readonly imageNum: number;
       readonly smaskNum: number | undefined;
+      readonly globalsNum: number | undefined;
+      readonly globalsBase64: string | undefined;
       readonly resourceName: string;
       readonly prepared: PreparedImage;
     }
@@ -654,9 +691,16 @@ export function writePdf(
     const prepared = prepareImage(asset, compress);
     const imageNum = nextObjNum++;
     const smaskNum = prepared.alpha === undefined ? undefined : nextObjNum++;
+    const globalsBase64 =
+      asset.original?.filter === "jbig2"
+        ? asset.original.jbig2GlobalsBase64
+        : undefined;
+    const globalsNum = globalsBase64 !== undefined ? nextObjNum++ : undefined;
     imageAllocs.set(imageId, {
       imageNum,
       smaskNum,
+      globalsNum,
+      globalsBase64,
       resourceName: `Im${index + 1}`,
       prepared,
     });
@@ -1266,6 +1310,25 @@ export function writePdf(
       objects.push({
         num: alloc.smaskNum,
         value: pdfStream(alloc.prepared.alpha.dict, alloc.prepared.alpha.raw),
+      });
+    }
+    if (alloc.globalsNum !== undefined && alloc.globalsBase64 !== undefined) {
+      // The verbatim /JBIG2Globals stream re-emitted as its own object, rebuilt from the decoded segments the reader captured: the globals are JBIG2 segment data, not a compressed image, so they travel under a plain (optionally Flate) transport the same way any producer writes them.
+      const globalsRaw = base64ToBytes(alloc.globalsBase64);
+      alloc.prepared.dict.entries.set(
+        "DecodeParms",
+        pdfDict({ JBIG2Globals: pdfRef(alloc.globalsNum, 0) }),
+      );
+      objects.push({
+        num: alloc.globalsNum,
+        value: pdfStream(
+          pdfDict(
+            compress
+              ? new Map<string, PdfObject>([["Filter", pdfName("FlateDecode")]])
+              : new Map<string, PdfObject>(),
+          ),
+          compress ? deflate(globalsRaw) : globalsRaw,
+        ),
       });
     }
     objects.push({

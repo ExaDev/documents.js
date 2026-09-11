@@ -37,7 +37,7 @@ import { decodeStream } from "./filters";
 import { throwIfAborted } from "./util/abort";
 import type { FontResolverService } from "./font-read";
 import { createFontResolver } from "./font-read";
-import { readImageXObject } from "./images-read";
+import { type ExtractedPdfImage, readImageXObject } from "./images-read";
 import type {
   ExtractedEllipse,
   ExtractedImage,
@@ -800,7 +800,9 @@ function registerExtractedImage(
   widthPx: number,
   heightPx: number,
   images: Record<string, LayoutImageAsset>,
+  original: ExtractedPdfImage["original"],
 ): string {
+  // The imageId is a crc32 of the DECODED canonical bytes (a JBIG2/JPX original must not fold into it: two different producers' compressed streams of the same raster content would then mint two ids for what every consumer sees as the same image, while a re-encoded canonical would mint a different id than the source's own re-read of the same file produced before this write -- the canonical is the identity, the original is a re-emission spelling of it).
   const imageId = `img${crc32(bytes).toString(16)}`;
   if (!(imageId in images)) {
     images[imageId] = {
@@ -808,6 +810,17 @@ function registerExtractedImage(
       base64: bytesToBase64(bytes),
       widthPx,
       heightPx,
+      ...(original !== undefined
+        ? {
+            original: {
+              filter: original.filter,
+              base64: bytesToBase64(original.bytes),
+              ...(original.globalsBytes !== undefined
+                ? { jbig2GlobalsBase64: bytesToBase64(original.globalsBytes) }
+                : {}),
+            },
+          }
+        : {}),
     };
   }
   return imageId;
@@ -835,6 +848,7 @@ function resolveCachedImageId(
     decoded.widthPx,
     decoded.heightPx,
     images,
+    decoded.original,
   );
   cache.set(dict, imageId);
   return imageId;
@@ -893,6 +907,7 @@ function convertInlineImage(
     decoded.widthPx,
     decoded.heightPx,
     images,
+    decoded.original,
   );
   const composed = multiplyMatrices(item.matrix, pageMatrix);
   return {

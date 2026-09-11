@@ -20,6 +20,12 @@ export interface ExtractedPdfImage {
   readonly bytes: Uint8Array<ArrayBuffer>;
   readonly widthPx: number;
   readonly heightPx: number;
+  // The source's own compressed stream for a filter this package has no encoder for (JBIG2, JPEG 2000), carried beside the decoded canonical so a same-format writer re-embeds it verbatim instead of re-encoding the pixels -- the image-layer spelling of document-schema.js's ContentImageOriginal. globalsBytes is the decoded /JBIG2Globals segment stream a JBIG2 image declared (without it a symbol-dictionary stream cannot decode, so a verbatim re-embed must carry it). Never set for DCTDecode (the JPEG bytes ARE the deliverable) or Flate/CCITT (re-encoded losslessly).
+  readonly original?: {
+    readonly filter: "jbig2" | "jpeg2000";
+    readonly bytes: Uint8Array<ArrayBuffer>;
+    readonly globalsBytes?: Uint8Array<ArrayBuffer>;
+  };
 }
 
 type ResolvedColorSpace =
@@ -420,6 +426,7 @@ function readJpeg2000Image(
     bytes: encodePng(withAlpha),
     widthPx: image.width,
     heightPx: image.height,
+    original: { filter: "jpeg2000", bytes: raw },
   };
 }
 
@@ -441,6 +448,16 @@ export function readImageXObject(
 
   // The resolver is threaded in here, and only here, because JBIG2Decode's own /JBIG2Globals DecodeParms entry is a stream that a producer essentially always writes as an indirect reference -- no other filter this codec implements has a parameter that needs dereferencing.
   const decoded = decodeStream(raw, dict, sink, (obj) => resolver.resolve(obj));
+  const jbig2Original: ExtractedPdfImage["original"] =
+    decoded.jbig2 === undefined
+      ? undefined
+      : {
+          filter: "jbig2",
+          bytes: decoded.jbig2.encoded,
+          ...(decoded.jbig2.globals !== undefined
+            ? { globalsBytes: decoded.jbig2.globals }
+            : {}),
+        };
   if (decoded.remainingFilter === "DCTDecode") {
     let info: JpegInfo;
     try {
@@ -543,5 +560,6 @@ export function readImageXObject(
     bytes: encodePng(withAlpha),
     widthPx: width,
     heightPx: height,
+    ...(jbig2Original !== undefined ? { original: jbig2Original } : {}),
   };
 }
