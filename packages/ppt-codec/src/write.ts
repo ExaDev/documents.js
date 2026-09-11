@@ -4,7 +4,9 @@ import {
   writeSummaryInformationStream,
 } from "archive-codec";
 import {
+  type ContentDocument,
   type ContentImageBlock,
+  type ContentShape,
   type ContentSlide,
   type DocumentTree,
   type PageSize,
@@ -32,6 +34,7 @@ import {
   writeDrawingGroupContainer,
 } from "./drawing/blips";
 import {
+  type DrawingShape,
   type DrawingWriteContext,
   type DrawingWritten,
   writeSlideDrawing,
@@ -42,6 +45,12 @@ import {
 } from "./diagnostics";
 import { PptUnsupportedContentError } from "./errors";
 import { layoutMetadataToSummaryInformation } from "./metadata";
+import {
+  type WritableOleEmbed,
+  writeExOleObjStg,
+  writeExObjListContainer,
+  writeOleClientData,
+} from "./ole/embedded-write";
 import {
   CURRENT_USER_STREAM,
   POWERPOINT_DOCUMENT_STREAM,
@@ -56,10 +65,16 @@ import {
   writeUserEditAtom,
 } from "./stream/persist-write";
 
+// Turns a shape's embedded object into the [MS-CFB] compound-file bytes its ExOleObjStg persist object carries -- the write-side mirror of read.ts's DecodeEmbeddedObjectPort, and the identical injected-port answer to the identical cross-codec-layering problem ooxml.js's own EmbeddedPresentationSerialiser solves one layer up: this package depends on no sibling format codec, so it cannot itself serialise an arbitrary nested ContentDocument, and documents.js -- which already depends on every write-capable codec -- is expected to wire one from whichever codec matches the document's own kind. Returning undefined (no port supplied, or a kind the port cannot serialise) degrades the shape to writing with no clientData and no ExOleObjStg entry at all -- the identical silent-drop policy this writer already applies to every other block kind it cannot express (see the package README's write-scope section), deliberately unchanged by this port's addition.
+export type EmbeddedObjectSerialiser = (
+  document: ContentDocument,
+) => Uint8Array<ArrayBuffer> | undefined;
+
 // The write options, matching the shape markdown-codec's, pdf-codec's and rtf-codec's own option objects already use in this family: an AbortSignal and a diagnostic sink. A writer's input is a value this process already holds rather than bytes of unknown provenance, so there are no read-side resource limits here -- and every deliberate drop this writer makes fires through the sink rather than passing silently, per the family's own diagnostic-channel convention.
 export interface WritePptOptions {
   readonly signal?: AbortSignal;
   readonly sink?: PptDiagnosticSink;
+  readonly serialiseEmbeddedObject?: EmbeddedObjectSerialiser;
 }
 
 // The write path, the mirror image of read.ts: a presentation's ContentSlide[] mapped onto [MS-PPT] records (document container, master and slide lists, one main master, one slide container per slide with its drawing and text, and one notes container per slide that has speaker notes), a single-edit persist layer over them (stream/persist-write.ts), and the two [MS-CFB] streams archive-codec's writeCompoundFile wraps into real .ppt bytes. Deliberately narrower than the read path's own coverage -- see the package README's write-scope section for exactly what a written file carries and what it does not.
@@ -97,9 +112,13 @@ function writeSlideContainer(
   shapes: ContentSlide["shapes"],
   notesIdRef: number,
   context: DrawingWriteContext,
+  clientDataFor: (shape: ContentShape) => Uint8Array<ArrayBuffer> | undefined,
 ): DrawingWritten {
   const drawing = writeSlideDrawing(
-    shapes.map((shape) => ({ shape, clientData: undefined })),
+    shapes.map((shape): DrawingShape => ({
+      shape,
+      clientData: clientDataFor(shape),
+    })),
     context,
   );
   return {
@@ -109,6 +128,64 @@ function writeSlideContainer(
     ]),
     shapeCount: drawing.shapeCount,
     maxSpid: drawing.maxSpid,
+  };
+}
+
+// One ExOleObjStg persist object and one ExObjListContainer entry per shape whose own embeddedObject block a serialiser port actually recovered bytes for -- a shape whose block the port declines (no port supplied, or a document kind it cannot serialise) writes with no clientData at all, identical to a shape that never carried an embeddedObject block. Persist identifiers are minted from firstPersistId contiguously, so the caller only has to reserve as many identifiers as embeds this plan actually produced (readable back from persistObjects.length) rather than an upper bound.
+interface OleEmbedPlan {
+  readonly embeds: readonly WritableOleEmbed[];
+  readonly persistObjects: readonly {
+    readonly persistId: number;
+    readonly bytes: Uint8Array<ArrayBuffer>;
+  }[];
+  readonly clientDataFor: (
+    shape: ContentShape,
+  ) => Uint8Array<ArrayBuffer> | undefined;
+}
+
+function planOleEmbeds(
+  slides: readonly ContentSlide[],
+  serialise: EmbeddedObjectSerialiser | undefined,
+  firstPersistId: number,
+): OleEmbedPlan {
+  const embeds: WritableOleEmbed[] = [];
+  const persistObjects: {
+    persistId: number;
+    bytes: Uint8Array<ArrayBuffer>;
+  }[] = [];
+  const clientDataByShape = new Map<ContentShape, Uint8Array<ArrayBuffer>>();
+  if (serialise !== undefined) {
+    for (const slide of slides) {
+      for (const shape of slide.shapes) {
+        const embedBlock = shape.blocks.find(
+          (block) => block.kind === "embeddedObject",
+        );
+        if (embedBlock === undefined) {
+          continue;
+        }
+        const storageBytes = serialise(embedBlock.document);
+        if (storageBytes === undefined) {
+          continue;
+        }
+        const exObjId = embeds.length + 1;
+        const persistId = firstPersistId + persistObjects.length;
+        embeds.push({
+          exObjId,
+          persistIdRef: persistId,
+          objectKind: embedBlock.objectKind,
+        });
+        persistObjects.push({
+          persistId,
+          bytes: writeExOleObjStg(storageBytes),
+        });
+        clientDataByShape.set(shape, writeOleClientData(exObjId));
+      }
+    }
+  }
+  return {
+    embeds,
+    persistObjects,
+    clientDataFor: (shape) => clientDataByShape.get(shape),
   };
 }
 
@@ -198,6 +275,14 @@ export function writePptStreams(
         slides.slice(0, index).filter((earlier) => earlier.notes.length > 0)
           .length,
   );
+  const notesCount = notesIdRefs.filter((id) => id !== NO_NOTES_ID_REF).length;
+
+  // Persist identifiers reserved above run 1 (document) .. 2 (master) .. 3..3+slides.length-1 (slides) .. one further contiguous run per slide with notes -- so an OLE embed's own persist objects are the ones minted after every one of those, never interleaved with them, which is what lets planOleEmbeds hand out its own ids purely by counting rather than needing to know any other object's identifier.
+  const oleEmbeds = planOleEmbeds(
+    slides,
+    options.serialiseEmbeddedObject,
+    FIRST_SLIDE_PERSIST_ID + slides.length + notesCount,
+  );
 
   // The document-wide OfficeArtFDGG facts, accumulated from what every drawing writer actually emitted rather than stated as constants: cspSaved is every shape container in every drawing, spidMax the highest identifier any of them minted, cdgSaved the number of DrawingContainers written.
   let shapeCount = 0;
@@ -223,6 +308,7 @@ export function writePptStreams(
       slide.shapes,
       notesIdRef,
       contextFor(`slide ${index + 1}`),
+      oleEmbeds.clientDataFor,
     );
     account(container);
     return { persistId: ref.persistIdRef, bytes: container.bytes };
@@ -254,6 +340,10 @@ export function writePptStreams(
   // [MS-PPT] 2.4.1 orders the DocumentContainer's children: documentAtom, then the optional exObjList, then documentTextInfo (this package's RT_Environment), then the DrawingGroupContainer carrying the blip store, then the master, slide and notes lists. The drawing group's FDGG counts are the ones accumulated above, so the document-wide shape bookkeeping is derived from the drawings actually written rather than restated alongside them.
   const environment = writeEnvironment(fontNames);
   const documentChildren: Uint8Array<ArrayBuffer>[] = [writeDocumentAtom(size)];
+  const exObjList = writeExObjListContainer(oleEmbeds.embeds);
+  if (exObjList !== undefined) {
+    documentChildren.push(exObjList);
+  }
   if (environment !== undefined) {
     documentChildren.push(environment);
   }
@@ -281,6 +371,7 @@ export function writePptStreams(
     { persistId: MASTER_PERSIST_ID, bytes: mainMaster.bytes },
     ...slideContainers,
     ...notesContainers,
+    ...oleEmbeds.persistObjects,
   ];
 
   const persistEntries: { persistId: number; offset: number }[] = [];

@@ -20,6 +20,12 @@ export const PROPERTY_PIB = 0x0104;
 export const PROPERTY_TABLE_PROPERTIES = 0x039f;
 export const PROPERTY_TABLE_ROW_PROPERTIES = 0x03a0;
 
+// The four text-inset properties, each a plain signed EMU value with its own specification page: dxTextLeft: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/e89d660e-4f08-4786-a159-ee90cc76c9ac dyTextTop: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/7bb231df-17ce-4111-8eba-9a8337e96563 dxTextRight: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/4d1d87bd-e76f-4f26-a86f-82b26f2c1b9b dyTextBottom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/a1e315f3-bec7-418a-b872-379cf08bbeba -- each property's own default (0x00016530 EMU for the left/right pair, 0x0000B298 for top/bottom) is the 0.1in/0.05in pair read.ts's DEFAULT_INSET_LEFT_RIGHT_PT/DEFAULT_INSET_TOP_BOTTOM_PT already state, so a shape with none of the four present needs no fallback beyond those constants.
+export const PROPERTY_DX_TEXT_LEFT = 0x0081;
+export const PROPERTY_DY_TEXT_TOP = 0x0082;
+export const PROPERTY_DX_TEXT_RIGHT = 0x0083;
+export const PROPERTY_DY_TEXT_BOTTOM = 0x0084;
+
 // rotation's value is a Fixed Point ([MS-OSHARED] 2.2.1.6): a signed 32-bit number whose high 16 bits are the whole degrees and whose low 16 bits are the fraction, so the conversion in either direction is a multiply or divide by exactly 2^16 -- and a whole number of degrees is exactly representable, which is what ContentShape.rotationDeg's consumers hand this writer.
 const FIXED_POINT_ONE = 0x10000;
 

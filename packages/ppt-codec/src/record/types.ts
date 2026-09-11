@@ -36,7 +36,7 @@ export const RT_FontEntityAtom = 0x0fb7;
 export const RT_CString = 0x0fba;
 // ExOleObjAtom 2.10.12, the per-object record inside an ExOleEmbedContainer naming the persist object that holds the OLE storage: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/a3517016-8e32-4585-9a42-adae02eea798
 export const RT_ExternalOleObjectAtom = 0x0fc3;
-// ExOleEmbedContainer 2.10.27, one entry of the document's ExObjListContainer per embedded OLE object: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/c687090c-a35e-4ffc-918e-415117e10229
+// ExOleEmbedContainer 2.10.27, one entry of the document's ExObjListContainer per embedded OLE object: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/c687090c-a359-4ffc-918e-415117e10229
 export const RT_ExternalOleEmbed = 0x0fcc;
 export const RT_ExternalOleEmbedAtom = 0x0fcd;
 // One value shared by MasterListWithTextContainer, SlideListWithTextContainer and NotesListWithTextContainer; only rh.recInstance distinguishes them, and it does not run in the order the names suggest -- see the instance constants below.
