@@ -18,8 +18,11 @@ import { isCompoundFile, readCompoundFile } from "archive-codec";
 import { describe, expect, it } from "vitest";
 
 import {
+  RECORD_CONTINUE,
   RECORD_EXTERNSHEET,
   RECORD_LBL,
+  RECORD_MSODRAWING,
+  RECORD_MSODRAWINGGROUP,
   RECORD_SUPBOOK,
 } from "./biff/record-types";
 import { readRecords } from "./biff/records";
@@ -1701,6 +1704,207 @@ describe("cell comments", () => {
       text: "note two",
       author: "Someone",
     });
+  });
+});
+
+describe("writeXlsContent: images and embedded objects written (#971)", () => {
+  // A minimal but genuinely valid 1x1 PNG (a real signature, IHDR, IDAT, IEND chain) -- the identical fixture drawing/blips.test.ts uses, since resolveBlip only checks image.format, never the bytes' own structure.
+  const PNG_BYTES = new Uint8Array([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+    0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+    0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xde, 0x00, 0x00, 0x00,
+    0x0c, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00,
+    0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xdd, 0x8d, 0xb0, 0x00, 0x00, 0x00,
+    0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+  ]);
+
+  function base64Of(bytes: Uint8Array): string {
+    let binary = "";
+    const chunkSize = 0x2000;
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      binary += String.fromCharCode(
+        ...bytes.subarray(offset, offset + chunkSize),
+      );
+    }
+    return btoa(binary);
+  }
+
+  const SMALL_PNG_BASE64 = base64Of(PNG_BYTES);
+
+  /** Bytes large enough on their own to push a single BSE entry (or a single sheet's own shape tree, repeated many times over) past the 8224-byte single-record ceiling, forcing writeRecordChain to split its record onto a Continue chain -- a non-repeating pattern so a byte-exact round trip can't pass by coincidence (e.g. every byte happening to be zero). */
+  function largeBytes(length: number): Uint8Array {
+    const bytes = new Uint8Array(length);
+    for (let index = 0; index < length; index += 1) {
+      bytes[index] = index % 251;
+    }
+    return bytes;
+  }
+
+  it("round-trips a sheet image's format, bytes, and cell anchor", () => {
+    const content = document([
+      sheet("Sheet1", [], {
+        images: [
+          {
+            kind: "image",
+            format: "png",
+            base64: SMALL_PNG_BASE64,
+            widthPt: 40,
+            heightPt: 30,
+            anchorRow: 2,
+            anchorColumn: 1,
+            offsetXPt: 5,
+            offsetYPt: 3,
+          },
+        ],
+      }),
+    ]);
+    const read = readXlsContent(writeXlsContent(content));
+    const image = read.sheets[0]?.images[0];
+    expect(image?.format).toBe("png");
+    expect(image?.base64).toBe(SMALL_PNG_BASE64);
+    expect(image?.anchorRow).toBe(2);
+    expect(image?.anchorColumn).toBe(1);
+    expect(image?.widthPt).toBeCloseTo(40, 0);
+    expect(image?.heightPt).toBeCloseTo(30, 0);
+  });
+
+  it("round-trips an image large enough to force the workbook-wide Blip Store onto a Continue chain", () => {
+    const bytes = largeBytes(9000);
+    const base64 = base64Of(bytes);
+    const content = document([
+      sheet("Sheet1", [], {
+        images: [
+          {
+            kind: "image",
+            format: "png",
+            base64,
+            widthPt: 40,
+            heightPt: 30,
+            anchorRow: 0,
+            anchorColumn: 0,
+            offsetXPt: 0,
+            offsetYPt: 0,
+          },
+        ],
+      }),
+    ]);
+    const written = writeXlsContent(content);
+    // Confirms the test actually exercises the Continue chain rather than passing by coincidence: a MSODRAWINGGROUP record this large MUST be followed by at least one CONTINUE record ([MS-XLS] 2.1.4's own 8224-byte single-record ceiling).
+    const globalsRecords = readRecords(
+      readCompoundFile(written).find((stream) => stream.path === "Workbook")
+        ?.bytes ?? new Uint8Array(),
+    );
+    const drawingGroupIndex = globalsRecords.findIndex(
+      (record) => record.type === RECORD_MSODRAWINGGROUP,
+    );
+    expect(drawingGroupIndex).toBeGreaterThanOrEqual(0);
+    expect(globalsRecords[drawingGroupIndex + 1]?.type).toBe(RECORD_CONTINUE);
+
+    const read = readXlsContent(written);
+    const image = read.sheets[0]?.images[0];
+    expect(image?.format).toBe("png");
+    expect(image?.base64).toBe(base64);
+  });
+
+  it("round-trips many images on one sheet, forcing that sheet's own MsoDrawing record onto a Continue chain", () => {
+    const imageCount = 150;
+    const images = Array.from({ length: imageCount }, (_, index) => ({
+      kind: "image" as const,
+      format: "png" as const,
+      base64: SMALL_PNG_BASE64,
+      widthPt: 10,
+      heightPt: 10,
+      anchorRow: index,
+      anchorColumn: 0,
+      offsetXPt: 0,
+      offsetYPt: 0,
+    }));
+    const content = document([sheet("Sheet1", [], { images })]);
+    const written = writeXlsContent(content);
+    const workbookBytes =
+      readCompoundFile(written).find((stream) => stream.path === "Workbook")
+        ?.bytes ?? new Uint8Array();
+    const records = readRecords(workbookBytes);
+    const drawingIndex = records.findIndex(
+      (record) => record.type === RECORD_MSODRAWING,
+    );
+    expect(drawingIndex).toBeGreaterThanOrEqual(0);
+    expect(records[drawingIndex + 1]?.type).toBe(RECORD_CONTINUE);
+
+    const read = readXlsContent(written);
+    expect(read.sheets[0]?.images).toHaveLength(imageCount);
+    expect(
+      read.sheets[0]?.images.every(
+        (image) => image.base64 === SMALL_PNG_BASE64,
+      ),
+    ).toBe(true);
+  });
+
+  it("round-trips a non-chart embedded OLE object through its own Embedding Storage", () => {
+    const embeddedDocument = {
+      kind: "drawing" as const,
+      metadata: {},
+      pages: [
+        {
+          size: { widthPt: 50, heightPt: 40 },
+          shapes: [],
+          vectors: [],
+        },
+      ],
+    };
+    const content = document([
+      sheet("Sheet1", [], {
+        embeddedObjects: [
+          {
+            objectKind: "drawing",
+            document: embeddedDocument,
+            frame: { xPt: 0, yPt: 0, widthPt: 50, heightPt: 40 },
+            anchorRow: 3,
+            anchorColumn: 2,
+            offsetXPt: 4,
+            offsetYPt: 2,
+          },
+        ],
+      }),
+    ]);
+    const written = writeXlsContent(content);
+    const streams = readCompoundFile(written);
+    expect(
+      streams.some((stream) => /^MBD[0-9A-F]{8}\/Package$/.test(stream.path)),
+    ).toBe(true);
+
+    const read = readXlsContent(written);
+    const embedded = read.sheets[0]?.embeddedObjects?.[0];
+    expect(embedded?.objectKind).toBe("drawing");
+    expect(embedded?.document).toEqual(embeddedDocument);
+  });
+
+  it("throws when asked to write a 'chart' embedded object", () => {
+    const content = document([
+      sheet("Sheet1", [], {
+        embeddedObjects: [
+          {
+            objectKind: "chart",
+            document: {
+              kind: "spreadsheet",
+              metadata: {},
+              sheets: [
+                {
+                  name: "Chart",
+                  cells: [],
+                  columns: [],
+                  rows: [],
+                  images: [],
+                  printSettings: PRINT_SETTINGS,
+                },
+              ],
+            },
+            frame: { xPt: 0, yPt: 0, widthPt: 50, heightPt: 40 },
+          },
+        ],
+      }),
+    ]);
+    expect(() => writeXlsContent(content)).toThrow(BiffWriteError);
   });
 });
 
