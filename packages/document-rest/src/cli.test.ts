@@ -59,4 +59,17 @@ describe("main", () => {
     process.argv = ["node", "bin.js", "--port"];
     await expect(main()).rejects.toThrow(/--port requires a value/);
   });
+
+  it("binds the given --host instead of the loopback default", async () => {
+    process.argv = ["node", "bin.js", "--host", "0.0.0.0", "--port", "0"];
+    server = await main();
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("document-rest listening on http://0.0.0.0:"),
+    );
+    const address = server.address();
+    if (address === null || typeof address === "string") {
+      throw new Error("expected a TCP address");
+    }
+    expect(address.address).toBe("0.0.0.0");
+  });
 });

@@ -45,11 +45,12 @@ export async function main(): Promise<Server> {
   const args = process.argv.slice(2);
   const portArg = readFlag(args, "port");
   const port = portArg === undefined ? DEFAULT_PORT : parsePort(portArg);
+  // Defaults to loopback-only, matching document-mcp's own --transport http listener: this process has no authentication or Host/Origin allowlisting of its own, so binding to 127.0.0.1 is the actual network boundary -- whatever fronts it for remote access (a tunnel, a reverse proxy) is responsible for authenticating callers before traffic ever reaches this process. --host exists so a container's own ENTRYPOINT can bind 0.0.0.0 instead: a loopback bind is unreachable from outside a container's network namespace no matter what port a `docker run -p` maps, since Docker's port mapping reaches the container's external interface, not its loopback.
+  const host = readFlag(args, "host") ?? "127.0.0.1";
 
   const server = createRestServer();
   await new Promise<void>((resolve) => {
-    // Loopback-only, matching document-mcp's own --transport http listener: this process has no authentication or Host/Origin allowlisting of its own, so binding to 127.0.0.1 is the actual network boundary -- whatever fronts it for remote access (a tunnel, a reverse proxy) is responsible for authenticating callers before traffic ever reaches this process.
-    server.listen(port, "127.0.0.1", resolve);
+    server.listen(port, host, resolve);
   });
   const address = server.address();
   if (address === null || typeof address === "string") {
@@ -58,7 +59,7 @@ export async function main(): Promise<Server> {
     );
   }
   console.error(
-    `document-rest listening on http://127.0.0.1:${String(address.port)}`,
+    `document-rest listening on http://${host}:${String(address.port)}`,
   );
   return server;
 }
