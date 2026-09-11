@@ -1,3 +1,13 @@
+## [4.11.0](https://github.com/ExaDev/documents.js/compare/document-mcp%404.10.1...document-mcp%404.11.0) (2026-09-11)
+
+### Features
+
+* **document-mcp:** build a Node SEA single-executable binary ([c69cbb3](https://github.com/ExaDev/documents.js/commit/c69cbb3f3427d379ccbc649a416e36fbced92e55))
+
+### Documentation
+
+* document the Node SEA binary distribution for cli/mcp/rest ([420ea7c](https://github.com/ExaDev/documents.js/commit/420ea7cf34e2073950f7e1b823c86f403a8bf25a))
+
 ## [4.10.1](https://github.com/ExaDev/documents.js/compare/document-mcp%404.10.0...document-mcp%404.10.1) (2026-09-11)
 
 
