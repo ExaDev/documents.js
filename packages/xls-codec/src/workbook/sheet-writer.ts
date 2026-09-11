@@ -703,9 +703,9 @@ export function buildWorksheetSubstream(
     pieces.push(...writeSheetComments(commentedCells));
   }
 
-  // The DataValidationTable and conditional-format groups follow the cell table and its notes, the position a real producer's own worksheet substream carries them in ([MS-XLS] 2.1.7.20's own production order; confirmed directly against a LibreOffice-written .xls whose Dval/Dv pair sits after the last cell record and before EOF).
-  pieces.push(...writeSheetDataValidations(sheet));
+  // The conditional-format groups and the DataValidationTable follow the cell table and its notes, in that order -- [MS-XLS] 2.1.7.20.5's own WORKSHEETCONTENT production places CONDFMTS ahead of [DVAL] (`... *MergeCells [LRng] *QUERYTABLE [PHONETICINFO] CONDFMTS *HLINK [DVAL] ... EOF`), so a Dval/Dv pair arriving before the conditional formats would sit outside the grammar even though this package's own order-tolerant reader walk accepts either.
   pieces.push(...writeSheetConditionalFormats(sheet, ctx.icvOf));
+  pieces.push(...writeSheetDataValidations(sheet));
 
   pieces.push(writeRecord(RECORD_EOF, new Uint8Array(0)));
 

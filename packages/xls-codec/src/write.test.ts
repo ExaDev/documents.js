@@ -1827,23 +1827,316 @@ describe("writeXlsContent: conditional formats written (#971)", () => {
     expect(reread.sheets[0]?.conditionalFormats).toEqual([rule]);
   });
 
-  it("refuses a rule variant with no base CF spelling rather than dropping it", () => {
+  it("refuses a rule variant with no BIFF8 spelling rather than dropping it", () => {
+    // A colour scale carrying fewer than the schema's own two-stop minimum is malformed input, so the honest refusal fixture is a variant the FORMAT cannot spell: a year-scoped time period, an ODF extension value no icfTemplate names.
     expect(() =>
       writeXlsContent(
         document([
           sheet("S", [], {
             conditionalFormats: [
               {
-                type: "colorScale",
+                type: "timePeriod",
                 ranges: [
                   { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 },
                 ],
-                stops: [],
+                timePeriod: "thisYear",
               },
             ],
           }),
         ]),
       ),
-    ).toThrow(/no base BIFF8 CF spelling/);
+    ).toThrow(/no BIFF8 rule names it/);
+  });
+});
+
+describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => {
+  const RANGE = { startRow: 1, endRow: 4, startColumn: 1, endColumn: 3 };
+
+  function roundTripped(
+    rule: ContentSheetConditionalFormat,
+  ): ContentSheetConditionalFormat[] {
+    const reread = readXlsContent(
+      writeXlsContent(
+        document([sheet("S", [], { conditionalFormats: [rule] })]),
+      ),
+    );
+    return reread.sheets[0]?.conditionalFormats ?? [];
+  }
+
+  it("round-trips a two-stop colour scale with an explicit priority", () => {
+    const rule: ContentSheetConditionalFormat = {
+      type: "colorScale",
+      ranges: [RANGE],
+      priority: 3,
+      stops: [
+        { value: { type: "min" }, color: { r: 1, g: 0, b: 0 } },
+        { value: { type: "max" }, color: { r: 0, g: 1, b: 0 } },
+      ],
+    };
+    expect(roundTripped(rule)).toEqual([rule]);
+  });
+
+  it("round-trips a three-stop colour scale with numeric, percent, and percentile thresholds", () => {
+    const rule: ContentSheetConditionalFormat = {
+      type: "colorScale",
+      ranges: [RANGE],
+      stops: [
+        { value: { type: "num", value: "0" }, color: { r: 0, g: 0, b: 1 } },
+        {
+          value: { type: "percent", value: "50" },
+          color: { r: 1, g: 1, b: 0 },
+        },
+        { value: { type: "max" }, color: { r: 1, g: 0, b: 0 } },
+      ],
+    };
+    expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+  });
+
+  it("round-trips a data bar with its bar colour, thresholds, and hidden value", () => {
+    const rule: ContentSheetConditionalFormat = {
+      type: "dataBar",
+      ranges: [RANGE],
+      min: { type: "num", value: "0" },
+      max: { type: "num", value: "100" },
+      // 51/255 and 204/255: colour values exact under the reader's own 255ths quantisation, so the round trip is byte-exact rather than approximately equal.
+      color: { r: 0, g: 204 / 255, b: 1 },
+      showValue: false,
+    };
+    expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+  });
+
+  it("round-trips an icon set with reverse and a five-icon set", () => {
+    const rule: ContentSheetConditionalFormat = {
+      type: "iconSet",
+      ranges: [RANGE],
+      iconSetType: "5Quarters",
+      reverse: true,
+      thresholds: [
+        { type: "min" },
+        { type: "percent", value: "25" },
+        { type: "percent", value: "50" },
+        { type: "percent", value: "75" },
+        { type: "max" },
+      ],
+    };
+    expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+  });
+
+  it("refuses an icon-set threshold count the named set cannot carry", () => {
+    expect(() =>
+      roundTripped({
+        type: "iconSet",
+        ranges: [RANGE],
+        iconSetType: "3Arrows",
+        thresholds: [
+          { type: "min" },
+          { type: "percent", value: "50" },
+          { type: "max" },
+          { type: "percent", value: "75" },
+        ],
+      }),
+    ).toThrow(/cStates table fixes the set at 3/);
+  });
+
+  it("refuses an icon-set type outside the seventeen built-in sets", () => {
+    expect(() =>
+      roundTripped({
+        type: "iconSet",
+        ranges: [RANGE],
+        iconSetType: "Custom3Arrows",
+        thresholds: [
+          { type: "min" },
+          { type: "percent", value: "50" },
+          { type: "max" },
+        ],
+      }),
+    ).toThrow(/no BIFF8 byte to be written as/);
+  });
+
+  it("refuses stopIfTrue on a visual-scale rule, which [MS-XLS] pins to zero", () => {
+    expect(() =>
+      roundTripped({
+        type: "dataBar",
+        ranges: [RANGE],
+        min: { type: "min" },
+        max: { type: "max" },
+        color: { r: 0, g: 0, b: 0 },
+        stopIfTrue: true,
+      }),
+    ).toThrow(/pins CF12's own fStopIfTrue bit to zero/);
+  });
+
+  it("round-trips a top10 rule with rank, percent, bottom, and style", () => {
+    const rule: ContentSheetConditionalFormat = {
+      type: "top10",
+      ranges: [RANGE],
+      rank: 5,
+      percent: true,
+      bottom: true,
+      priority: 2,
+      // Red and pale yellow -- the identical pair the cellIs style round trip above uses, both exact under the reader's 255ths colour quantisation and present in the fixed default palette, so the DXFN icv path round-trips them byte-exactly.
+      style: {
+        textColor: { r: 1, g: 0, b: 0 },
+        background: { r: 1, g: 1, b: 0.8 },
+      },
+    };
+    expect(roundTripped(rule)).toEqual([rule]);
+  });
+
+  it("round-trips a plain aboveAverage rule and an equal-average below-average one", () => {
+    const above: ContentSheetConditionalFormat = {
+      type: "aboveAverage",
+      ranges: [RANGE],
+    };
+    const belowEqualStdDev: ContentSheetConditionalFormat = {
+      type: "aboveAverage",
+      ranges: [RANGE],
+      aboveAverage: false,
+      equalAverage: true,
+      stdDev: 2,
+    };
+    expect(roundTripped(above)).toEqual([{ ...above, priority: 1 }]);
+    expect(roundTripped(belowEqualStdDev)).toEqual([
+      { ...belowEqualStdDev, priority: 1 },
+    ]);
+  });
+
+  it("refuses an aboveAverage standard-deviation count beyond [MS-XLS]'s own table", () => {
+    expect(() =>
+      roundTripped({
+        type: "aboveAverage",
+        ranges: [RANGE],
+        stdDev: 3,
+      }),
+    ).toThrow(/admits only 0, 1, or 2/);
+  });
+
+  it("round-trips a timePeriod rule", () => {
+    const rule: ContentSheetConditionalFormat = {
+      type: "timePeriod",
+      ranges: [RANGE],
+      timePeriod: "last7Days",
+    };
+    expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+  });
+
+  it("round-trips the operand-free family", () => {
+    for (const type of [
+      "containsBlanks",
+      "notContainsBlanks",
+      "containsErrors",
+      "notContainsErrors",
+      "uniqueValues",
+      "duplicateValues",
+    ] as const) {
+      const rule: ContentSheetConditionalFormat = {
+        type,
+        ranges: [RANGE],
+        style: { background: { r: 1, g: 1, b: 0.8 } },
+      };
+      expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+    }
+  });
+
+  it("round-trips the text family, recovering the search text from the generated formula", () => {
+    for (const type of [
+      "containsText",
+      "notContainsText",
+      "beginsWith",
+      "endsWith",
+    ] as const) {
+      const rule: ContentSheetConditionalFormat = {
+        type,
+        ranges: [RANGE],
+        text: 'a "quoted" needle',
+        style: { textColor: { r: 1, g: 0, b: 0 } },
+      };
+      expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+    }
+  });
+
+  it("mints unique priorities for rules stating none, and keeps stated ones", () => {
+    const rules: ContentSheetConditionalFormat[] = [
+      {
+        type: "timePeriod",
+        ranges: [RANGE],
+        timePeriod: "today",
+      },
+      {
+        type: "duplicateValues",
+        ranges: [RANGE],
+        priority: 1,
+      },
+      {
+        type: "uniqueValues",
+        ranges: [RANGE],
+      },
+    ];
+    const reread = readXlsContent(
+      writeXlsContent(
+        document([sheet("S", [], { conditionalFormats: rules })]),
+      ),
+    );
+    expect(reread.sheets[0]?.conditionalFormats).toEqual([
+      { ...rules[0], priority: 2 },
+      { ...rules[1], priority: 1 },
+      { ...rules[2], priority: 3 },
+    ]);
+  });
+
+  it("refuses two rules declaring the same priority rather than renumbering them", () => {
+    expect(() =>
+      roundTripped({
+        type: "timePeriod",
+        ranges: [RANGE],
+        timePeriod: "today",
+        priority: 7,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      writeXlsContent(
+        document([
+          sheet("S", [], {
+            conditionalFormats: [
+              {
+                type: "timePeriod",
+                ranges: [RANGE],
+                timePeriod: "today",
+                priority: 7,
+              },
+              {
+                type: "timePeriod",
+                ranges: [RANGE],
+                timePeriod: "tomorrow",
+                priority: 7,
+              },
+            ],
+          }),
+        ]),
+      ),
+    ).toThrow(/requires ipriority to be unique/);
+  });
+
+  it("keeps base cellIs groups and CF12 groups on one sheet, both reading back", () => {
+    const cellIs: ContentSheetConditionalFormat = {
+      type: "cellIs",
+      ranges: [RANGE],
+      operator: "equal",
+      formula1: "3",
+    };
+    const textRule: ContentSheetConditionalFormat = {
+      type: "containsText",
+      ranges: [RANGE],
+      text: "needle",
+    };
+    const reread = readXlsContent(
+      writeXlsContent(
+        document([sheet("S", [], { conditionalFormats: [cellIs, textRule] })]),
+      ),
+    );
+    expect(reread.sheets[0]?.conditionalFormats).toEqual([
+      cellIs,
+      { ...textRule, priority: 1 },
+    ]);
   });
 });
