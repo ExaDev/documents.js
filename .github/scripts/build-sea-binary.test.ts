@@ -1,12 +1,8 @@
-import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   binaryFileName,
   mainFormatFor,
-  postInjectionCommandsFor,
-  postjectArgsFor,
-  preInjectionCommandsFor,
-  resolvePostjectCliPath,
+  postBuildCommandsFor,
 } from "./build-sea-binary";
 
 describe("mainFormatFor", () => {
@@ -24,42 +20,12 @@ describe("binaryFileName", () => {
   });
 });
 
-describe("postjectArgsFor", () => {
-  it("adds the Mach-O segment name only on darwin", () => {
-    expect(postjectArgsFor("darwin")).toEqual([
-      "--macho-segment-name",
-      "NODE_SEA",
+describe("postBuildCommandsFor", () => {
+  it("force ad-hoc signs only on darwin, overwriting the copied Node binary's own real signature", () => {
+    expect(postBuildCommandsFor("darwin", "/out/app")).toEqual([
+      ["codesign", ["--sign", "-", "--force", "/out/app"]],
     ]);
-    expect(postjectArgsFor("linux")).toEqual([]);
-    expect(postjectArgsFor("win32")).toEqual([]);
-  });
-});
-
-describe("preInjectionCommandsFor", () => {
-  it("removes an existing signature only on win32", () => {
-    expect(preInjectionCommandsFor("win32", "C:\\out\\app.exe")).toEqual([
-      ["signtool", ["remove", "/s", "C:\\out\\app.exe"]],
-    ]);
-    expect(preInjectionCommandsFor("darwin", "/out/app")).toEqual([]);
-    expect(preInjectionCommandsFor("linux", "/out/app")).toEqual([]);
-  });
-});
-
-describe("postInjectionCommandsFor", () => {
-  it("ad-hoc signs only on darwin, removing the copied signature first", () => {
-    expect(postInjectionCommandsFor("darwin", "/out/app")).toEqual([
-      ["codesign", ["--remove-signature", "/out/app"]],
-      ["codesign", ["--sign", "-", "/out/app"]],
-    ]);
-    expect(postInjectionCommandsFor("linux", "/out/app")).toEqual([]);
-    expect(postInjectionCommandsFor("win32", "C:\\out\\app.exe")).toEqual([]);
-  });
-});
-
-describe("resolvePostjectCliPath", () => {
-  it("resolves to the real, lockfile-pinned postject CLI script rather than a registry fetch", () => {
-    const cliPath = resolvePostjectCliPath();
-    expect(cliPath).toMatch(/postject.*cli\.js$/);
-    expect(existsSync(cliPath)).toBe(true);
+    expect(postBuildCommandsFor("linux", "/out/app")).toEqual([]);
+    expect(postBuildCommandsFor("win32", "C:\\out\\app.exe")).toEqual([]);
   });
 });

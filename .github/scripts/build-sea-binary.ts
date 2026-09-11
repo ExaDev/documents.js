@@ -1,20 +1,8 @@
-// Builds a Node single-executable application (SEA) binary from a package's own tsdown-bundled dist-sea/sea-entry.cjs (see tsdown.sea.shared.ts) for whichever platform this script runs on -- one call per (package, platform) cell of the CI matrix, never cross-compiled: Node's own SEA injection copies the CURRENT running node binary, so the platform this script runs under is the platform the resulting binary targets. Mirrors the exact sequence https://nodejs.org/api/single-executable-applications.html documents (sea-config -> node --experimental-sea-config -> postject injection -> platform-specific signing), packaged as one script so CI's per-OS steps stay identical shell invocations rather than three near-duplicate workflow step lists.
+// Builds a Node single-executable application (SEA) binary from a package's own tsdown-bundled dist-sea/sea-entry.cjs (see tsdown.sea.shared.ts) for whichever platform this script runs on -- one call per (package, platform) cell of the CI matrix, never cross-compiled: Node's own --build-sea copies the CURRENT running node binary, so the platform this script runs under is the platform the resulting binary targets. Uses the single `node --build-sea` flag (Node 25.5.0+, see https://nodejs.org/api/single-executable-applications.html), not the older two-step --experimental-sea-config-then-postject workflow that flag replaced: --build-sea generates the preparation blob and injects it into a copy of the running binary in one internal step, writing the finished executable straight to sea-config.json's own "output" path, so this script has no separate blob file, no external injector dependency, and no manual "copy the node binary first" step of its own.
 import { execFileSync } from "node:child_process";
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-
-// Fixed per Node's own documentation -- identifies an injected blob to the runtime at startup; not a secret, and never changes between builds.
-const SENTINEL_FUSE = "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2";
-// Required specifically for the macOS Mach-O injection step; postject's own default segment name collides with a reserved one on that platform.
-const MACHO_SEGMENT_NAME = "NODE_SEA";
 
 export type SeaPlatform = "darwin" | "linux" | "win32";
 
@@ -30,7 +18,7 @@ export function mainFormatFor(bundlePath: string): "commonjs" | "module" {
   return bundlePath.endsWith(".mjs") ? "module" : "commonjs";
 }
 
-/** The bare (unsuffixed) binary name and its platform-appropriate on-disk file name -- only win32 gets a suffix, matching how Windows itself resolves an executable by extension rather than a permission bit. */
+/** The bare (unsuffixed) binary name and its platform-appropriate on-disk file name -- only win32 gets a suffix, and Node's own --build-sea requires it: its own documentation states the .exe extension is necessary for the "output" path on Windows, not merely conventional. */
 export function binaryFileName(
   binaryName: string,
   platform: SeaPlatform,
@@ -38,34 +26,13 @@ export function binaryFileName(
   return platform === "win32" ? `${binaryName}.exe` : binaryName;
 }
 
-/** The postject invocation's own platform-specific argv tail -- only macOS's Mach-O format needs a named segment; ELF (Linux) and PE (Windows) postject targets need no equivalent. */
-export function postjectArgsFor(platform: SeaPlatform): readonly string[] {
-  return platform === "darwin"
-    ? ["--macho-segment-name", MACHO_SEGMENT_NAME]
-    : [];
-}
-
-/** Every step this platform needs before postject injection can safely run -- Windows' own stock node.exe download ships pre-signed, and Node's own SEA documentation removes that signature before injecting (an unmodified signature covering different bytes would otherwise make the binary appear tampered); macOS and Linux have no equivalent pre-injection step. Returns the argv for each command to run, in order. */
-export function preInjectionCommandsFor(
-  platform: SeaPlatform,
-  binaryPath: string,
-): readonly (readonly [string, readonly string[]])[] {
-  if (platform === "win32") {
-    return [["signtool", ["remove", "/s", binaryPath]]];
-  }
-  return [];
-}
-
-/** Every step this platform needs after postject injection -- macOS refuses to run an unsigned (or injection-invalidated) binary at all, so an ad-hoc signature (`codesign --sign -`, no certificate, no Apple Developer account) is required for the binary to launch; Linux needs no signing step; Windows signing needs a real certificate this pipeline does not hold, so an unsigned .exe ships as-is (it still runs, per Node's own SEA documentation -- Windows SmartScreen may warn on an unsigned download, exactly as it does for any other unsigned .exe). */
-export function postInjectionCommandsFor(
+/** Every step this platform needs after --build-sea produces the executable -- macOS refuses to run an unsigned binary at all, so an ad-hoc signature (`codesign --sign -`, no certificate, no Apple Developer account) is required for the binary to launch. `--force` is load-bearing, not optional: --build-sea copies whichever Node binary built it, and every officially distributed Node build (and every macos-latest GitHub Actions runner's own preinstalled one) already carries a real code signature -- confirmed directly, `codesign --sign -` alone against such a binary exits 1 ("is already signed") without `--force`, which Node's own quick-start doesn't surface because it's written against a plain unsigned build. Linux needs no signing step; Windows signing needs a real certificate this pipeline does not hold, so an unsigned .exe ships as-is (it still runs, per Node's own SEA documentation -- Windows SmartScreen may warn on an unsigned download, exactly as it does for any other unsigned .exe). */
+export function postBuildCommandsFor(
   platform: SeaPlatform,
   binaryPath: string,
 ): readonly (readonly [string, readonly string[]])[] {
   if (platform === "darwin") {
-    return [
-      ["codesign", ["--remove-signature", binaryPath]],
-      ["codesign", ["--sign", "-", binaryPath]],
-    ];
+    return [["codesign", ["--sign", "-", "--force", binaryPath]]];
   }
   return [];
 }
@@ -74,48 +41,7 @@ function run(command: string, args: readonly string[]): void {
   execFileSync(command, args, { stdio: "inherit" });
 }
 
-function isRecordOfStrings(value: unknown): value is Record<string, string> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  return Object.values(value).every((entry) => typeof entry === "string");
-}
-
-function hasStringRecordBinField(
-  value: unknown,
-): value is { bin: Record<string, string> } {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-  if (!("bin" in value)) {
-    return false;
-  }
-  return isRecordOfStrings(value.bin);
-}
-
-/** Resolves postject's own CLI entry point through Node's real module resolution against this file's own location, rather than `npx --yes postject`, which would fetch whatever version the registry currently serves at injection time -- unpinned and unlocked, letting a compromised postject release replace a signed SEA binary's contents between one release and the next. Node's `createRequire` walks up from this script's directory exactly the way `require.resolve` always has, so it finds the exact, lockfile-pinned copy `pnpm add -D -w postject` installed at the workspace root, the same one every other tool in this repository already resolves the same way. */
-export function resolvePostjectCliPath(): string {
-  const packageJsonPath = createRequire(import.meta.url).resolve(
-    "postject/package.json",
-  );
-  const packageJson: unknown = JSON.parse(
-    readFileSync(packageJsonPath, "utf8"),
-  );
-  if (!hasStringRecordBinField(packageJson)) {
-    throw new Error(
-      `postject's own package.json at ${packageJsonPath} declares no usable "bin" field.`,
-    );
-  }
-  const binEntry = packageJson.bin.postject;
-  if (binEntry === undefined) {
-    throw new Error(
-      `postject's own package.json at ${packageJsonPath} declares no "postject" bin entry.`,
-    );
-  }
-  return join(dirname(packageJsonPath), binEntry);
-}
-
-/** Builds the SEA binary for `paths.packageDir`, targeting whichever platform this process is currently running under. Every intermediate file (sea-config.json, the prep blob) lives beside the final binary in `paths.outputDir`, which the caller is responsible for pointing at a package's own gitignored dist-sea/ (see tsdown.sea.shared.ts's own comment on why that directory is never published). */
+/** Builds the SEA binary for `paths.packageDir`, targeting whichever platform this process is currently running under. sea-config.json lives beside the final binary in `paths.outputDir`, which the caller is responsible for pointing at a package's own gitignored dist-sea/ (see tsdown.sea.shared.ts's own comment on why that directory is never published). */
 export function buildSeaBinary(
   paths: SeaBuildPaths,
   platform: SeaPlatform,
@@ -124,7 +50,6 @@ export function buildSeaBinary(
 
   const fileName = binaryFileName(paths.binaryName, platform);
   const binaryPath = join(paths.outputDir, fileName);
-  const blobPath = join(paths.outputDir, "sea-prep.blob");
   const configPath = join(paths.outputDir, "sea-config.json");
 
   writeFileSync(
@@ -132,7 +57,7 @@ export function buildSeaBinary(
     JSON.stringify(
       {
         main: paths.bundlePath,
-        output: blobPath,
+        output: binaryPath,
         mainFormat: mainFormatFor(paths.bundlePath),
         disableExperimentalSEAWarning: true,
       },
@@ -141,28 +66,9 @@ export function buildSeaBinary(
     ),
   );
 
-  run(process.execPath, ["--experimental-sea-config", configPath]);
+  run(process.execPath, ["--build-sea", configPath]);
 
-  copyFileSync(process.execPath, binaryPath);
-
-  for (const [command, args] of preInjectionCommandsFor(platform, binaryPath)) {
-    run(command, args);
-  }
-
-  run(process.execPath, [
-    resolvePostjectCliPath(),
-    binaryPath,
-    "NODE_SEA_BLOB",
-    blobPath,
-    "--sentinel-fuse",
-    SENTINEL_FUSE,
-    ...postjectArgsFor(platform),
-  ]);
-
-  for (const [command, args] of postInjectionCommandsFor(
-    platform,
-    binaryPath,
-  )) {
+  for (const [command, args] of postBuildCommandsFor(platform, binaryPath)) {
     run(command, args);
   }
 
