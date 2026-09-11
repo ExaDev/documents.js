@@ -1,3 +1,10 @@
+## [2.11.13](https://github.com/ExaDev/documents.js/compare/web%402.11.12...web%402.11.13) (2026-09-11)
+
+
+### Dependencies
+
+- Updated documents.js to 7.20.2
+
 ## [2.11.12](https://github.com/ExaDev/documents.js/compare/web%402.11.11...web%402.11.12) (2026-09-11)
 
 ### Code Refactoring

@@ -1,3 +1,9 @@
+## [8.14.2](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.14.1...ooxml.js%408.14.2) (2026-09-11)
+
+### Bug Fixes
+
+* **ooxml.js:** keep the pinned zip entry mtime inside fflate's valid DOS-date range ([b593da8](https://github.com/ExaDev/documents.js/commit/b593da83b1f5bdbad900ccdde909240a3f8664ac))
+
 ## [8.14.1](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.14.0...ooxml.js%408.14.1) (2026-09-11)
 
 ### Code Refactoring

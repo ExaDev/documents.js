@@ -1,6 +1,6 @@
 {
   "name": "document-operations",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "The canonical set of document-conversion, editing, inspection, and .odb operations documents.js exposes -- one Zod input/output schema and one transport-agnostic run() function per operation, shared by document-mcp, document-cli, and a REST API server rather than each defining its own copy.",
   "type": "module",
   "repository": {
@@ -82,10 +82,10 @@
   "license": "MIT",
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "document-compute.js": "1.5.3",
+    "document-compute.js": "1.5.4",
     "document-outline.js": "3.7.2",
     "document-schema.js": "7.11.1",
-    "documents.js": "7.20.1",
+    "documents.js": "7.20.2",
     "zod": "4.4.3"
   },
   "devDependencies": {
@@ -98,7 +98,7 @@
     "@vitest/coverage-v8": "4.1.11",
     "eslint": "10.8.1",
     "husky": "9.1.7",
-    "odf.js": "7.25.1",
+    "odf.js": "7.25.2",
     "publint": "0.3.22",
     "semantic-release": "25.0.9",
     "tsdown": "0.22.14",
