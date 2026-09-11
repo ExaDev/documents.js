@@ -4,11 +4,13 @@ import {
   writeSummaryInformationStream,
 } from "archive-codec";
 import {
+  type ContentImageBlock,
   type ContentSlide,
   type DocumentTree,
   type PageSize,
   flattenTree,
 } from "document-schema.js";
+import { base64ToBytes } from "./base64";
 import { collectFontFamilies } from "./content-write";
 import { writeDocumentAtom } from "./document/document-atom-write";
 import { writeEnvironment } from "./document/fonts-write";
@@ -24,7 +26,20 @@ import {
   type SlidePersistRef,
   writeSlideListWithText,
 } from "./document/slide-list-write";
-import { writeSlideDrawing } from "./drawing/shapes-write";
+import {
+  type PptBlip,
+  isBlipFormat,
+  writeDrawingGroupContainer,
+} from "./drawing/blips";
+import {
+  type DrawingWriteContext,
+  type DrawingWritten,
+  writeSlideDrawing,
+} from "./drawing/shapes-write";
+import {
+  type PptDiagnosticSink,
+  NOOP_PPT_DIAGNOSTIC_SINK,
+} from "./diagnostics";
 import { PptUnsupportedContentError } from "./errors";
 import { layoutMetadataToSummaryInformation } from "./metadata";
 import {
@@ -40,6 +55,12 @@ import {
   writePersistDirectoryAtom,
   writeUserEditAtom,
 } from "./stream/persist-write";
+
+// The write options, matching the shape markdown-codec's, pdf-codec's and rtf-codec's own option objects already use in this family: an AbortSignal and a diagnostic sink. A writer's input is a value this process already holds rather than bytes of unknown provenance, so there are no read-side resource limits here -- and every deliberate drop this writer makes fires through the sink rather than passing silently, per the family's own diagnostic-channel convention.
+export interface WritePptOptions {
+  readonly signal?: AbortSignal;
+  readonly sink?: PptDiagnosticSink;
+}
 
 // The write path, the mirror image of read.ts: a presentation's ContentSlide[] mapped onto [MS-PPT] records (document container, master and slide lists, one main master, one slide container per slide with its drawing and text, and one notes container per slide that has speaker notes), a single-edit persist layer over them (stream/persist-write.ts), and the two [MS-CFB] streams archive-codec's writeCompoundFile wraps into real .ppt bytes. Deliberately narrower than the read path's own coverage -- see the package README's write-scope section for exactly what a written file carries and what it does not.
 
@@ -75,21 +96,74 @@ function requireOneSlideSize(slides: readonly ContentSlide[]): PageSize {
 function writeSlideContainer(
   shapes: ContentSlide["shapes"],
   notesIdRef: number,
-  fontIndexOf: (family: string) => number,
-): Uint8Array<ArrayBuffer> {
-  return writeContainer(RT_Slide, [
-    writeSlideAtomForSlide(notesIdRef),
-    writeSlideDrawing(shapes, fontIndexOf),
-  ]);
+  context: DrawingWriteContext,
+): DrawingWritten {
+  const drawing = writeSlideDrawing(
+    shapes.map((shape) => ({ shape, clientData: undefined })),
+    context,
+  );
+  return {
+    bytes: writeContainer(RT_Slide, [
+      writeSlideAtomForSlide(notesIdRef),
+      drawing.bytes,
+    ]),
+    shapeCount: drawing.shapeCount,
+    maxSpid: drawing.maxSpid,
+  };
+}
+
+// The document's whole blip store and the pib each distinct image resolves to. Every png/jpeg image block across every slide contributes one store entry the first time its exact bytes appear -- the same de-duplication a real producer's rgbUid digests exist for, keyed here by the base64 that uniquely names those bytes -- and a shape's property table references it by the one-based index readBlipStore hands back. An image whose format is neither png nor jpeg never enters the store at all: it has no MSOBLIPTYPE token to be written with, and the per-shape planner is the place that drop is diagnosed.
+interface BlipStorePlan {
+  readonly blips: readonly PptBlip[];
+  readonly pibOf: (image: ContentImageBlock) => number;
+}
+
+function planBlipStore(slides: readonly ContentSlide[]): BlipStorePlan {
+  const blips: PptBlip[] = [];
+  const pibByKey = new Map<string, number>();
+  for (const slide of slides) {
+    for (const shape of slide.shapes) {
+      for (const block of shape.blocks) {
+        if (block.kind !== "image" || !isBlipFormat(block.format)) {
+          continue;
+        }
+        const key = `${block.format}:${block.base64}`;
+        if (!pibByKey.has(key)) {
+          pibByKey.set(key, blips.length + 1);
+          blips.push({
+            format: block.format,
+            bytes: base64ToBytes(block.base64),
+          });
+        }
+      }
+    }
+  }
+  return {
+    blips,
+    pibOf: (image) => {
+      const pib = pibByKey.get(`${image.format}:${image.base64}`);
+      if (pib === undefined) {
+        throw new PptUnsupportedContentError(
+          "internal error: an image block reached the drawing writer without first being collected into the document's blip store",
+        );
+      }
+      return pib;
+    },
+  };
 }
 
 // Streams a caller already holds two [MS-PPT] artifacts for -- the same split readPptStreams exposes on the way in, so a caller assembling its own container can bypass writePptContent's archive-codec dependency entirely.
-export function writePptStreams(document: PptDocument): {
+export function writePptStreams(
+  document: PptDocument,
+  options: WritePptOptions = {},
+): {
   readonly currentUserStream: Uint8Array<ArrayBuffer>;
   readonly powerPointDocumentStream: Uint8Array<ArrayBuffer>;
 } {
+  options.signal?.throwIfAborted();
   const { slides } = document;
   const size = requireOneSlideSize(slides);
+  const sink = options.sink ?? NOOP_PPT_DIAGNOSTIC_SINK;
 
   const fontNames = collectFontFamilies(
     slides.map((slide) => slide.shapes.flatMap((shape) => shape.blocks)),
@@ -103,41 +177,93 @@ export function writePptStreams(document: PptDocument): {
     }
     return index;
   };
+  const store = planBlipStore(slides);
+  const contextFor = (location: string): DrawingWriteContext => ({
+    fontIndexOf,
+    blipIndexOf: store.pibOf,
+    sink,
+    location,
+  });
 
   const slidePersistRefs: SlidePersistRef[] = slides.map((_slide, index) => ({
     persistIdRef: FIRST_SLIDE_PERSIST_ID + index,
     slideId: FIRST_SLIDE_ID + index,
   }));
 
-  // Only a slide that actually carries notes gets a NotesContainer, and only such a slide's own SlideAtom names one. A slide with no notes is left with no notes slide at all rather than an empty one: readNotesBySlideId then finds nothing for it and read.ts reports "", which is exactly what an absent notes slide means -- whereas an empty NotesContainer would be a real notes slide that happens to say nothing, a different fact, and one no round trip could tell apart from the notes the caller never wrote.
-  const notesPersists: NotesPersist[] = [];
-  const notesContainers: Uint8Array<ArrayBuffer>[] = [];
-  const notesIdRefs = slides.map((slide, index) => {
-    if (slide.notes.length === 0) {
-      return NO_NOTES_ID_REF;
+  // Only a slide that actually carries notes gets a NotesContainer, and only such a slide's own SlideAtom names one. A slide with no notes is left with no notes slide at all rather than an empty one: readNotesBySlideId then finds nothing for it and read.ts reports "", which is exactly what an absent notes slide means -- whereas an empty NotesContainer would be a real notes slide that happens to say nothing, a different fact, and one no round trip could tell apart from the notes the caller never wrote. The ids are assigned before any container is built, because a slide's own container has to name its notes slide's id.
+  const notesIdRefs = slides.map((slide, index) =>
+    slide.notes.length === 0
+      ? NO_NOTES_ID_REF
+      : FIRST_NOTES_ID +
+        slides.slice(0, index).filter((earlier) => earlier.notes.length > 0)
+          .length,
+  );
+
+  // The document-wide OfficeArtFDGG facts, accumulated from what every drawing writer actually emitted rather than stated as constants: cspSaved is every shape container in every drawing, spidMax the highest identifier any of them minted, cdgSaved the number of DrawingContainers written.
+  let shapeCount = 0;
+  let maxSpid = 0;
+  let drawingCount = 0;
+  const account = (drawing: DrawingWritten): void => {
+    shapeCount += drawing.shapeCount;
+    maxSpid = Math.max(maxSpid, drawing.maxSpid);
+    drawingCount += 1;
+  };
+
+  const mainMaster = writeMainMaster(size, contextFor("the main master"));
+  account(mainMaster);
+  const slideContainers = slides.map((slide, index) => {
+    const ref = slidePersistRefs[index];
+    const notesIdRef = notesIdRefs[index];
+    if (ref === undefined || notesIdRef === undefined) {
+      throw new PptUnsupportedContentError(
+        "internal error: slide persist reference missing for a slide being written",
+      );
     }
-    const notesId = FIRST_NOTES_ID + notesPersists.length;
-    notesPersists.push({
-      persistIdRef:
-        FIRST_SLIDE_PERSIST_ID + slides.length + notesPersists.length,
-      notesId,
-    });
-    notesContainers.push(
-      writeNotesContainer(
-        FIRST_SLIDE_ID + index,
-        slide.notes,
-        size,
-        fontIndexOf,
-      ),
+    const container = writeSlideContainer(
+      slide.shapes,
+      notesIdRef,
+      contextFor(`slide ${index + 1}`),
     );
-    return notesId;
+    account(container);
+    return { persistId: ref.persistIdRef, bytes: container.bytes };
   });
 
+  const notesPersists: NotesPersist[] = [];
+  const notesContainers: {
+    persistId: number;
+    bytes: Uint8Array<ArrayBuffer>;
+  }[] = [];
+  slides.forEach((slide, index) => {
+    const notesId = notesIdRefs[index];
+    if (notesId === undefined || notesId === NO_NOTES_ID_REF) {
+      return;
+    }
+    const persistIdRef =
+      FIRST_SLIDE_PERSIST_ID + slides.length + notesPersists.length;
+    notesPersists.push({ persistIdRef, notesId });
+    const container = writeNotesContainer(
+      FIRST_SLIDE_ID + index,
+      slide.notes,
+      size,
+      contextFor(`slide ${index + 1}'s speaker notes`),
+    );
+    account(container);
+    notesContainers.push({ persistId: persistIdRef, bytes: container.bytes });
+  });
+
+  // [MS-PPT] 2.4.1 orders the DocumentContainer's children: documentAtom, then the optional exObjList, then documentTextInfo (this package's RT_Environment), then the DrawingGroupContainer carrying the blip store, then the master, slide and notes lists. The drawing group's FDGG counts are the ones accumulated above, so the document-wide shape bookkeeping is derived from the drawings actually written rather than restated alongside them.
   const environment = writeEnvironment(fontNames);
-  const documentChildren = [writeDocumentAtom(size)];
+  const documentChildren: Uint8Array<ArrayBuffer>[] = [writeDocumentAtom(size)];
   if (environment !== undefined) {
     documentChildren.push(environment);
   }
+  documentChildren.push(
+    writeDrawingGroupContainer(store.blips, {
+      spidMax: maxSpid,
+      shapeCount,
+      drawingCount,
+    }),
+  );
   documentChildren.push(writeMasterListWithText(MASTER_PERSIST_ID));
   documentChildren.push(writeSlideListWithText(slidePersistRefs));
   // Omitted entirely when no slide has notes, rather than written empty: the reader treats an absent notes list and an empty one identically, and a real producer states no list when there is nothing to list.
@@ -152,30 +278,10 @@ export function writePptStreams(document: PptDocument): {
     readonly bytes: Uint8Array<ArrayBuffer>;
   }[] = [
     { persistId: DOCUMENT_PERSIST_ID, bytes: documentContainer },
-    { persistId: MASTER_PERSIST_ID, bytes: writeMainMaster(size, fontIndexOf) },
+    { persistId: MASTER_PERSIST_ID, bytes: mainMaster.bytes },
+    ...slideContainers,
+    ...notesContainers,
   ];
-  slides.forEach((slide, index) => {
-    const ref = slidePersistRefs[index];
-    const notesIdRef = notesIdRefs[index];
-    if (ref === undefined || notesIdRef === undefined) {
-      throw new PptUnsupportedContentError(
-        "internal error: slide persist reference missing for a slide being written",
-      );
-    }
-    persistObjects.push({
-      persistId: ref.persistIdRef,
-      bytes: writeSlideContainer(slide.shapes, notesIdRef, fontIndexOf),
-    });
-  });
-  notesPersists.forEach((persist, index) => {
-    const bytes = notesContainers[index];
-    if (bytes === undefined) {
-      throw new PptUnsupportedContentError(
-        "internal error: notes container missing for a notes persist reference",
-      );
-    }
-    persistObjects.push({ persistId: persist.persistIdRef, bytes });
-  });
 
   const persistEntries: { persistId: number; offset: number }[] = [];
   let offset = 0;
@@ -213,9 +319,12 @@ export function writePptStreams(document: PptDocument): {
 // Wraps writePptStreams' two [MS-PPT] streams in a real [MS-CFB] compound file via archive-codec's writeCompoundFile -- genuine .ppt bytes readPptContent (and any conformant [MS-PPT] reader) can open.
 export function writePptContent(
   document: PptDocument,
+  options: WritePptOptions = {},
 ): Uint8Array<ArrayBuffer> {
-  const { currentUserStream, powerPointDocumentStream } =
-    writePptStreams(document);
+  const { currentUserStream, powerPointDocumentStream } = writePptStreams(
+    document,
+    options,
+  );
   const streams = [
     { path: CURRENT_USER_STREAM, bytes: currentUserStream },
     { path: POWERPOINT_DOCUMENT_STREAM, bytes: powerPointDocumentStream },
@@ -233,15 +342,21 @@ export function writePptContent(
 }
 
 // Writes a presentation DocumentTree to .ppt bytes, the mirror of readPpt. Throws PptUnsupportedContentError for a tree of any other kind: this writer covers presentations only, the same kind readPpt itself always produces.
-export function writePpt(tree: DocumentTree): Uint8Array<ArrayBuffer> {
+export function writePpt(
+  tree: DocumentTree,
+  options: WritePptOptions = {},
+): Uint8Array<ArrayBuffer> {
   const content = flattenTree(tree);
   if (content.kind !== "presentation") {
     throw new PptUnsupportedContentError(
       `ppt-codec's writer only writes presentation documents; got a '${content.kind}' document`,
     );
   }
-  return writePptContent({
-    metadata: content.metadata,
-    slides: content.slides,
-  });
+  return writePptContent(
+    {
+      metadata: content.metadata,
+      slides: content.slides,
+    },
+    options,
+  );
 }

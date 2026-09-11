@@ -1,5 +1,9 @@
 import type { ContentShape, PageSize } from "document-schema.js";
-import { writeDrawingWithClientData } from "../drawing/shapes-write";
+import {
+  type DrawingWriteContext,
+  type DrawingWritten,
+  writeSlideDrawing,
+} from "../drawing/shapes-write";
 import { writeSlideSchemeColorSchemeAtom } from "./color-scheme-write";
 import {
   DEFAULT_INSET_LEFT_RIGHT_PT,
@@ -173,11 +177,11 @@ function writeTextMasterStyleAtom(textType: number): Uint8Array<ArrayBuffer> {
   });
 }
 
-// The MainMasterContainer itself: the five placeholder shapes SL_TitleBody's own MasterVariant rule requires of a main master, each anchored and each carrying nothing, since this writer has no master content to put in them.
+// The MainMasterContainer itself: the five placeholder shapes SL_TitleBody's own MasterVariant rule requires of a main master, each anchored and each carrying nothing, since this writer has no master content to put in them. The drawing counts ride out alongside the bytes, since the master's own drawing is one of the drawings the document-wide OfficeArtFDGG aggregates.
 export function writeMainMaster(
   size: PageSize,
-  fontIndexOf: (family: string) => number,
-): Uint8Array<ArrayBuffer> {
+  context: DrawingWriteContext,
+): DrawingWritten {
   const placeholders = MASTER_PLACEHOLDER_TYPES.map((placementId, index) => {
     const frame = placeholderFrames(size)[index];
     if (frame === undefined) {
@@ -198,21 +202,26 @@ export function writeMainMaster(
       clientData: placeholderClientData(index, placementId),
     };
   });
-  return writeContainer(RT_MainMaster, [
-    writeSlideAtom({
-      geom: SL_TITLE_BODY,
-      placeholderTypes: MASTER_PLACEHOLDER_TYPES,
-      // [MS-PPT] 2.5.2: both MUST be 0x00000000 when the SlideAtom's container is a MainMasterContainer -- a master follows no master, and has no notes slide.
-      masterIdRef: 0,
-      notesIdRef: 0,
-      slideFlags: 0,
-    }),
-    writeTextMasterStyleAtom(TEXT_TYPE_TITLE),
-    writeTextMasterStyleAtom(TEXT_TYPE_BODY),
-    writeTextMasterStyleAtom(TEXT_TYPE_NOTES),
-    writeDrawingWithClientData(placeholders, fontIndexOf),
-    writeSlideSchemeColorSchemeAtom(),
-  ]);
+  const drawing = writeSlideDrawing(placeholders, context);
+  return {
+    bytes: writeContainer(RT_MainMaster, [
+      writeSlideAtom({
+        geom: SL_TITLE_BODY,
+        placeholderTypes: MASTER_PLACEHOLDER_TYPES,
+        // [MS-PPT] 2.5.2: both MUST be 0x00000000 when the SlideAtom's container is a MainMasterContainer -- a master follows no master, and has no notes slide.
+        masterIdRef: 0,
+        notesIdRef: 0,
+        slideFlags: 0,
+      }),
+      writeTextMasterStyleAtom(TEXT_TYPE_TITLE),
+      writeTextMasterStyleAtom(TEXT_TYPE_BODY),
+      writeTextMasterStyleAtom(TEXT_TYPE_NOTES),
+      drawing.bytes,
+      writeSlideSchemeColorSchemeAtom(),
+    ]),
+    shapeCount: drawing.shapeCount,
+    maxSpid: drawing.maxSpid,
+  };
 }
 
 // [MS-PPT] 2.4.14.1 MasterListWithTextContainer and 2.4.14.2 MasterPersistAtom: the same RT_SlidePersistAtom and 0x14 length the slide and notes lists use, told apart by rh.recInstance alone, with the master's own identifier where a SlidePersistAtom states its slideId.
