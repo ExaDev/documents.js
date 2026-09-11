@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 const UNIT_TEST_TIMEOUT_MS = 10_000;
 const SMOKE_TEST_TIMEOUT_MS = 15_000;
 
-// Two named projects, filtered by --project in package.json's scripts: "unit" (src/**/*.test.ts) for pnpm test/test:watch; "smoke" (test/smoke.test.mjs, which spawns dist/bin.js) only ever run by pnpm test:smoke, right after tsdown rebuilds dist/. Mirrors document-mcp's own vitest.config.ts convention exactly.
+// Two named projects, filtered by --project in package.json's scripts: "unit" (src/**/*.test.ts) for pnpm test/test:watch; "smoke" (test/smoke.test.ts, which spawns dist/bin.js) only ever run by pnpm test:smoke, right after tsdown rebuilds dist/.
 export default defineConfig({
   test: {
     coverage: {
@@ -24,7 +24,7 @@ export default defineConfig({
       {
         test: {
           name: "smoke",
-          include: ["test/smoke.test.mjs"],
+          include: ["test/smoke.test.ts"],
           testTimeout: SMOKE_TEST_TIMEOUT_MS,
         },
       },
