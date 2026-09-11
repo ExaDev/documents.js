@@ -298,7 +298,7 @@ importers:
         specifier: 7.11.0
         version: link:../document-schema.js
       documents.js:
-        specifier: 7.19.0
+        specifier: 7.19.1
         version: link:../documents.js
       ink:
         specifier: 7.1.1
@@ -393,7 +393,7 @@ importers:
         specifier: 26.2.0
         version: 26.2.0
       documents.js:
-        specifier: 7.19.0
+        specifier: 7.19.1
         version: link:../documents.js
       eslint:
         specifier: 10.8.1
@@ -429,7 +429,7 @@ importers:
         specifier: 2.0.0
         version: 2.0.0
       document-compute.js:
-        specifier: 1.5.0
+        specifier: 1.5.1
         version: link:../document-compute.js
       document-outline.js:
         specifier: 3.7.0
@@ -438,7 +438,7 @@ importers:
         specifier: 7.11.0
         version: link:../document-schema.js
       documents.js:
-        specifier: 7.19.0
+        specifier: 7.19.1
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -639,13 +639,13 @@ importers:
         specifier: 7.25.0
         version: link:../odf.js
       ooxml.js:
-        specifier: 8.13.0
+        specifier: 8.14.0
         version: link:../ooxml.js
       pdf-codec:
         specifier: 4.7.0
         version: link:../pdf-codec
       ppt-codec:
-        specifier: 1.5.0
+        specifier: 1.6.0
         version: link:../ppt-codec
       rtf-codec:
         specifier: 4.4.0
@@ -1250,7 +1250,7 @@ importers:
         specifier: 7.11.0
         version: link:../document-schema.js
       documents.js:
-        specifier: 7.19.0
+        specifier: 7.19.1
         version: link:../documents.js
       markdown-codec:
         specifier: 6.7.0

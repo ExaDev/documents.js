@@ -1,3 +1,11 @@
+## [7.19.1](https://github.com/ExaDev/documents.js/compare/documents.js%407.19.0...documents.js%407.19.1) (2026-09-11)
+
+
+### Dependencies
+
+- Updated ooxml.js to 8.14.0
+- Updated ppt-codec to 1.6.0
+
 ## [7.19.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.18.5...documents.js%407.19.0) (2026-09-11)
 
 ### Features
