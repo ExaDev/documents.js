@@ -1,4 +1,5 @@
 import { defineConfig } from "tsdown";
+import { seaEntryBuildConfig } from "../../tsdown.sea.shared.ts";
 
 export default defineConfig([
   {
@@ -18,4 +19,5 @@ export default defineConfig([
     clean: false,
     fixedExtension: false,
   },
+  seaEntryBuildConfig("src/sea-entry.ts"),
 ]);

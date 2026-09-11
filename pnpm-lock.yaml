@@ -117,6 +117,9 @@ importers:
       syncpack:
         specifier: 15.3.3
         version: 15.3.3
+      tsdown:
+        specifier: 0.22.14
+        version: 0.22.14(@arethetypeswrong/core@0.18.5)(oxc-resolver@11.24.2)(publint@0.3.22)(typescript@6.0.3)
       turbo:
         specifier: 2.10.8
         version: 2.10.8

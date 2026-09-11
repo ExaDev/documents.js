@@ -21,6 +21,7 @@
     "eslint.shared.ts",
     "prettier.config.ts",
     "stryker.shared.ts",
+    "tsdown.sea.shared.ts",
     "knip.config.ts",
     "vitest.root.config.ts",
     "release-workspace.config.test.ts",
