@@ -15,7 +15,10 @@ import {
 } from "document-schema.js";
 import { buildParagraphs } from "./content";
 import { bytesToBase64 } from "./base64";
-import { readSlideSchemeColorSchemeAtom } from "./document/color-scheme";
+import {
+  findSlideSchemeColorSchemeAtom,
+  readSlideSchemeColorSchemeAtom,
+} from "./document/color-scheme";
 import { readDocumentAtom } from "./document/document-atom";
 import { readFontNames } from "./document/fonts";
 import {
@@ -36,7 +39,6 @@ import { decryptPptDocumentStream } from "./encryption";
 import { PptEncryptedError, PptFormatError } from "./errors";
 import { type PptRecord, childRecords, findChild } from "./record/tree";
 import {
-  RT_ColorSchemeAtom,
   RT_Document,
   RT_DocumentAtom,
   RT_Drawing,
@@ -244,7 +246,7 @@ function colorSchemeFor(
   slideChildren: readonly PptRecord[],
   master: MasterInfo,
 ): readonly RgbColor[] {
-  const ownScheme = findChild(slideChildren, RT_ColorSchemeAtom);
+  const ownScheme = findSlideSchemeColorSchemeAtom(slideChildren);
   return ownScheme === undefined
     ? master.colorScheme
     : readSlideSchemeColorSchemeAtom(ownScheme);
@@ -278,7 +280,7 @@ function readMastersById(
       .filter((record) => record.header.recType === RT_TextMasterStyleAtom)
       .map(readTextMasterStyleAtom);
     const styles = buildMasterStyleTable(masterAtoms, documentDefault);
-    const colorSchemeRecord = findChild(masterChildren, RT_ColorSchemeAtom);
+    const colorSchemeRecord = findSlideSchemeColorSchemeAtom(masterChildren);
     if (colorSchemeRecord === undefined) {
       throw new PptFormatError(
         `MainMasterContainer for master ${persist.slideId} has no SlideSchemeColorSchemeAtom, which [MS-PPT] 2.5.3 requires`,
