@@ -49,6 +49,7 @@ function baseContext(
     ownSheetCells: [],
     metadata: {},
     allSubstreams: [],
+    embeddingStreams: new Map<number, Uint8Array<ArrayBuffer>>(),
     ...overrides,
   };
 }
