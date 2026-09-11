@@ -154,6 +154,11 @@ function slideSchemeColorSchemeAtom(
   );
 }
 
+// A recInstance 0x006 RT_ColorSchemeAtom ahead of the real one in the master -- the "extra colour scheme" spelling a real producer opens its main master with (LibreOffice 26.2.5.2 writes a run of these, confirmed by inspecting its raw bytes), placed in this fixture so the master's scheme lookup is exercised against a sibling sharing its record type rather than only against an empty container.
+function extraColorSchemeAtom(): Uint8Array<ArrayBuffer> {
+  return atom(RT_ColorSchemeAtom, new Uint8Array(32), { recInstance: 0x006 });
+}
+
 // A TextMasterStyleAtom for TITLE stating one real level (level 0): bold, and a colour-scheme reference to Accent 1 (slot 0x05) rather than a literal RGB value -- built directly from the mask-bit layout text/style.ts's own readTextPFException/readTextCFException expect (the same low-level construction style.test.ts's own fixtures already use), independently of those readers, so this fixture proves the wiring rather than merely reflecting it. Used only when a test asks for it (masterTitleBold): every other master-related test keeps the empty-levels master every other test already relies on.
 function titleMasterStyleAtomWithBoldAccent1(): Uint8Array<ArrayBuffer> {
   const pfLevel = u32le(0); // masks: no paragraph-level fields stated
@@ -542,9 +547,11 @@ export function syntheticPresentation(
           ]),
         ]);
 
-  // [MS-PPT] 2.5.3 MainMasterContainer: this master's own SlideAtom (masterIdRef/notesIdRef both 0, since a master follows no master and has no notes of its own), one TextMasterStyleAtom per placeholder type it carries -- each stating no levels of its own (cLevels 0x0000), matching this package's own writer (master-write.ts) exactly, so a fixture whose runs never state formatting either resolves to the identical "everything absent" every existing test already asserts -- and this master's own colour scheme.
+  // [MS-PPT] 2.5.3 MainMasterContainer: this master's own SlideAtom (masterIdRef/notesIdRef both 0, since a master follows no master and has no notes of its own), one TextMasterStyleAtom per placeholder type it carries -- each stating no levels of its own (cLevels 0x0000), matching this package's own writer (master-write.ts) exactly, so a fixture whose runs never state formatting either resolves to the identical "everything absent" every existing test already asserts -- a run of extra colour schemes ahead of the real one (a real producer's own spelling), and this master's own colour scheme.
   const masterContainer = container(RT_MainMaster, [
     slideAtom(0, 0),
+    extraColorSchemeAtom(),
+    extraColorSchemeAtom(),
     masterTitleBold
       ? titleMasterStyleAtomWithBoldAccent1()
       : atom(RT_TextMasterStyleAtom, u16le(0), {
