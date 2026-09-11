@@ -149,10 +149,11 @@ export function writeShapePropertyTable(
   const complexParts: Uint8Array<ArrayBuffer>[] = [];
   const entryParts = ordered.map((entry) => {
     const isComplex = entry.complex !== undefined;
+    // fBid is independent of fComplex in OfficeArtFOPTEOPID's own bit layout, and a real producer sets both on a complex property (Microsoft Office PowerPoint's own table writes set fComplex and fBid together on tableRowProperties -- confirmed by inspecting its raw bytes), so no special case excludes one with the other.
     const opidWord =
       entry.opid |
       (isComplex ? OPID_FCOMPLEX : 0) |
-      (entry.fBid === true && !isComplex ? OPID_FBID : 0);
+      (entry.fBid === true ? OPID_FBID : 0);
     if (isComplex) {
       complexParts.push(entry.complex);
     }

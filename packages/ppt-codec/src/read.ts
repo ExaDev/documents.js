@@ -8,6 +8,8 @@ import {
   type ContentDocument,
   type ContentShape,
   type ContentSlide,
+  type ContentTable,
+  type ContentTableCell,
   type DocumentTree,
   type LayoutMetadata,
   type PageSize,
@@ -34,7 +36,7 @@ import {
 } from "./document/slide-list";
 import { type PptBlip, blipForPib, readBlipStore } from "./drawing/blips";
 import { PROPERTY_PIB, type ShapeProperty } from "./drawing/properties";
-import { readDrawingShapes } from "./drawing/shapes";
+import { type PptTable, readDrawingShapes } from "./drawing/shapes";
 import { decryptPptDocumentStream } from "./encryption";
 import { PptEncryptedError, PptFormatError } from "./errors";
 import { type PptRecord, childRecords, findChild } from "./record/tree";
@@ -214,6 +216,47 @@ function imageBlocksFor(
   ];
 }
 
+// A table's grid, derived from its cells' own rectangles -- the one place the format states it, since no record names a row or a column and every cell is an ordinary anchored shape. Row boundaries are the distinct cell tops, column boundaries the distinct cell lefts, each in document-declared order; a cell lands at the intersection of its own top and left; a grid position no cell occupies reads as an empty cell, because the schema's table is dense and the format's is not. A cell carrying no anchor contributes nothing at all, the same "positioned, but unknown where" drop the slide's own walk applies to a shape with no anchor, and neither does a shape with a degenerate rectangle -- a real PowerPoint table's group carries a run of zero-width and zero-height shapes spelling its gridlines (confirmed by inspecting Microsoft Office PowerPoint's own output), which are not cells and would otherwise plant phantom rows and columns. master-unit arithmetic stays exact through to points (72/576 is exactly 1/8, exactly representable), so boundaries derived by subtraction never drift off a cell edge.
+function tableBlockFor(table: PptTable, context: DrawingContext): ContentTable {
+  const placed = table.cells.flatMap((cell) =>
+    cell.anchor === undefined ||
+    cell.anchor.right <= cell.anchor.left ||
+    cell.anchor.bottom <= cell.anchor.top
+      ? []
+      : [{ cell, anchor: cell.anchor }],
+  );
+  const rowTops = [...new Set(placed.map((entry) => entry.anchor.top))].sort(
+    (a, b) => a - b,
+  );
+  const columnLefts = [
+    ...new Set(placed.map((entry) => entry.anchor.left)),
+  ].sort((a, b) => a - b);
+  const rightmost = Math.max(
+    ...placed.map((entry) => entry.anchor.right),
+    ...columnLefts,
+  );
+  const columnWidthsPt = columnLefts.map((left, index) => {
+    // The next column's own left is this column's right edge; the last column (the only one .at() has no next left for) runs to the rightmost cell edge the table states.
+    const right = columnLefts.at(index + 1) ?? rightmost;
+    return masterUnitsToPoints(right - left);
+  });
+  const rows = rowTops.map((top) => {
+    const inRow = placed
+      .filter((entry) => entry.anchor.top === top)
+      .sort((a, b) => a.anchor.left - b.anchor.left);
+    const bottom = Math.max(...inRow.map((entry) => entry.anchor.bottom), top);
+    const cells: ContentTableCell[] = columnLefts.map((left) => {
+      const at = inRow.find((entry) => entry.anchor.left === left);
+      return at === undefined
+        ? { blocks: [] }
+        : { blocks: blocksFor(at.cell.clientTextbox, context) };
+    });
+    const heightPt = masterUnitsToPoints(bottom - top);
+    return heightPt > 0 ? { cells, heightPt } : { cells };
+  });
+  return { kind: "table", rows, columnWidthsPt };
+}
+
 // Every notes slide's text, keyed by the slideId of the presentation slide it belongs to. [MS-PPT] 3.5.3 makes this the association: "A notes slide is associated with its presentation slide by means of the slideIdRef field in the NotesContainer record", and it explicitly warns that the notes list's own order is not meaningful, so the mapping has to be built from each container's own atom rather than by pairing the two lists positionally. A NotesContainer naming the notes master states slideIdRef 0x00000000, which no presentation slide's own slideId can be, so such an entry simply matches nothing.
 //
 // A real producer does not always write that mandated 0x00000000, though: LibreOffice 26.2.5.2's own notes master states slideIdRef 0x80000001 instead, confirmed by inspecting its raw bytes. That is harmless here only because a presentation slide's own slideId (this package writes 256 + index, and no other producer this package has been checked against uses anything near it) never reaches that high -- [MS-PPT] 2.2.13 reserves 0x80000000 and above for MasterId, so a real slideId that large would already be spec-nonconformant. If a slideId this package's own write.ts mints (see FIRST_SLIDE_ID's own note) ever moved up into that range, or a third-party file's own genuine slideId did, this lookup would risk pairing a slide with the wrong notes -- or with the master's own sentinel entry -- rather than with none. Nothing here currently guards that bound, since it would take roughly two billion slides to reach it from this package's own writer, but a future notes-aware reader keying on slideIdRef anywhere else should carry the identical caveat.
@@ -337,6 +380,34 @@ function readSlide(
   const drawing = findChild(slideChildren, RT_Drawing);
   const shapes: ContentShape[] = [];
   for (const shape of drawing === undefined ? [] : readDrawingShapes(drawing)) {
+    // A table arrives as one entry rather than as its cells: the group's own anchor is the shape's frame, the grid inside it is the table block, and a table's insets are the defaults (nothing about a table is a picture).
+    if (!("clientTextbox" in shape)) {
+      const tableLeft = masterUnitsToPoints(shape.anchor.left);
+      const tableTop = masterUnitsToPoints(shape.anchor.top);
+      shapes.push({
+        frame: {
+          xPt: tableLeft,
+          yPt: tableTop,
+          widthPt: Math.max(
+            0,
+            masterUnitsToPoints(shape.anchor.right) - tableLeft,
+          ),
+          heightPt: Math.max(
+            0,
+            masterUnitsToPoints(shape.anchor.bottom) - tableTop,
+          ),
+        },
+        ...(shape.rotationDeg === undefined
+          ? {}
+          : { rotationDeg: shape.rotationDeg }),
+        insetLeftPt: DEFAULT_INSET_LEFT_RIGHT_PT,
+        insetTopPt: DEFAULT_INSET_TOP_BOTTOM_PT,
+        insetRightPt: DEFAULT_INSET_LEFT_RIGHT_PT,
+        insetBottomPt: DEFAULT_INSET_TOP_BOTTOM_PT,
+        blocks: [tableBlockFor(shape, context)],
+      });
+      continue;
+    }
     // A shape with no anchor has no rectangle on the slide, and ContentShape has no way to say "positioned, but unknown where". Dropping it loses less than inventing a position for it would: the alternative is a shape rendered at a place the file never states.
     if (shape.anchor === undefined) {
       continue;

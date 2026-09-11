@@ -23,4 +23,6 @@ export const PptDiagnosticCodes = {
   IMAGE_DROPPED: "ppt/image-dropped",
   // Write side: a block kind with no [MS-PPT] spelling this writer produces (a page break, a construct marker, and every further kind the README's write-scope section names). The message names the kind and where it sat.
   BLOCK_DROPPED: "ppt/block-dropped",
+  // Write side: a table cell's colSpan or rowSpan, which the binary format's tables cannot state at all -- a PowerPoint 97-2003 table is a strict grid of shapes with no merge records (PowerPoint itself gained merged cells only in the 2010 XML format), so the cell's text is kept, sized to its single grid position, and the span is reported rather than silently narrowed.
+  TABLE_SPAN_DROPPED: "ppt/table-span-dropped",
 } as const;

@@ -8,6 +8,7 @@ import {
   OfficeArtFSP,
   OfficeArtSpContainer,
   OfficeArtSpgrContainer,
+  OfficeArtTertiaryFOPT,
   RT_Drawing,
   RT_TextBytesAtom,
 } from "../record/types";
@@ -20,6 +21,11 @@ import {
   writeAtom as atom,
   writeContainer as container,
 } from "../record/write";
+import {
+  PROPERTY_TABLE_PROPERTIES,
+  TABLE_FLAG_IS_TABLE,
+  writeShapePropertyTable,
+} from "./properties";
 import { type PptShape, readDrawingShapes } from "./shapes";
 
 // OfficeArtFSPGR ([MS-ODRAW] 2.2.38): recVer 0x1, recLen 0x10, then xLeft/yTop/xRight/yBottom as signed 32-bit integers. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/82d2d6a1-3a7a-4d15-9803-33145a76545a
@@ -284,5 +290,67 @@ describe("readDrawingShapes", () => {
 
   it("returns nothing for a drawing with no OfficeArtDgContainer", () => {
     expect(shapesOf(container(RT_Drawing, []))).toEqual([]);
+  });
+});
+
+describe("readDrawingShapes: table groups", () => {
+  // A table group's tertiary property table stating tableProperties with fIsTable -- the one mark separating a table from an ordinary grouping.
+  function tablePropertyTable(): Uint8Array<ArrayBuffer> {
+    return writeShapePropertyTable(OfficeArtTertiaryFOPT, [
+      { opid: PROPERTY_TABLE_PROPERTIES, op: TABLE_FLAG_IS_TABLE },
+    ]);
+  }
+
+  it("collects a table group as one entry whose cells' child anchors are mapped through the group's coordinate system", () => {
+    const bytes = drawing(
+      container(OfficeArtSpgrContainer, [
+        container(OfficeArtSpContainer, [
+          fspgr(0, 0, 2000, 1000),
+          fsp(2, FSP_GROUP),
+          tablePropertyTable(),
+          largeClientAnchor(1000, 2000, 3000, 2000),
+        ]),
+        container(OfficeArtSpContainer, [
+          fsp(3, 0),
+          childAnchor(0, 0, 1000, 1000),
+          clientTextbox("cell"),
+        ]),
+      ]),
+    );
+    const [entry] = readDrawingShapes(readRecordAt(bytes, 0));
+    if (entry === undefined || !("cells" in entry)) {
+      throw new Error("expected a table entry");
+    }
+    expect(entry.anchor).toEqual({
+      left: 2000,
+      top: 1000,
+      right: 3000,
+      bottom: 2000,
+    });
+    // The group's space (0,0,2000,1000) maps onto its anchor rectangle (left 2000, top 1000, right 3000, bottom 2000): a cell filling the whole space lands on the whole rectangle, scaled 1/2 horizontally and 1/1 vertically.
+    expect(entry.cells[0]?.anchor).toEqual({
+      left: 2000,
+      top: 1000,
+      right: 2500,
+      bottom: 2000,
+    });
+  });
+
+  it("keeps an ordinary group flattening: no tableProperties means the children are shapes on the slide", () => {
+    const bytes = drawing(
+      container(OfficeArtSpgrContainer, [
+        container(OfficeArtSpContainer, [
+          fspgr(0, 0, 100, 100),
+          fsp(2, FSP_GROUP),
+          largeClientAnchor(0, 0, 100, 100),
+        ]),
+        container(OfficeArtSpContainer, [
+          fsp(3, 0),
+          childAnchor(0, 0, 100, 100),
+          clientTextbox("plain grouped shape"),
+        ]),
+      ]),
+    );
+    expect(shapesOf(bytes).map((shape) => shape.spid)).toEqual([3]);
   });
 });
