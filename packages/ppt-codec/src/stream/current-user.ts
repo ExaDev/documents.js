@@ -29,7 +29,8 @@ function decodeAnsi(bytes: Uint8Array<ArrayBuffer>): string {
   return text;
 }
 
-function decodeUtf16Le(bytes: Uint8Array<ArrayBuffer>): string {
+// Exported because ole/embedded.ts's ProgIDAtom reading needs the identical little-endian UTF-16 decode this module already carries for ansiUserName's own unicodeUserName sibling field -- one implementation rather than a second copy that could drift from it.
+export function decodeUtf16Le(bytes: Uint8Array<ArrayBuffer>): string {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let text = "";
   for (let at = 0; at + 1 < bytes.length; at += 2) {
