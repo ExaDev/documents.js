@@ -111,3 +111,28 @@ describe("readHsqldbColumnValue: exactValue sidecar for DECIMAL/NUMERIC", () => 
     expect(cell).toEqual({ kind: "number", value: -250.5 });
   });
 });
+
+// present-flag(1) + 8-byte big-endian epoch-millis long -- DATE's own on-disk shape (see this module's own formatDate).
+function dateCursor(epochMillis: bigint): HsqldbDataCursor {
+  const bytes = new Uint8Array(9);
+  bytes[0] = 1;
+  new DataView(bytes.buffer).setBigInt64(1, epochMillis, false);
+  return new HsqldbDataCursor(bytes);
+}
+
+const DATE_TYPE_CODE = 91;
+
+describe("readHsqldbColumnValue: DATE with no explicit timeZone", () => {
+  it("defers to the reading process's own local calendar, the same as Date's own local getters -- not UTC or any other fixed zone", () => {
+    // Deliberately doesn't pin process.env.TZ to a specific zone: the expected value is derived from `new Date(...)`'s own local getters for the identical instant, so the assertion holds whatever zone the process actually runs under, and never depends on a runtime TZ mutation being observed (which a worker_threads pool's own cached local-timezone resolution does not reliably do -- see src/hsqldb/cache.test.ts's own comment on why that suite passes timeZone explicitly instead).
+    const epochMillis = 1_700_000_000_000n;
+    const cell = readHsqldbColumnValue(dateCursor(epochMillis), DATE_TYPE_CODE);
+    const reference = new Date(Number(epochMillis));
+    const expectedValue = [
+      reference.getFullYear(),
+      String(reference.getMonth() + 1).padStart(2, "0"),
+      String(reference.getDate()).padStart(2, "0"),
+    ].join("-");
+    expect(cell).toEqual({ kind: "date", value: expectedValue });
+  });
+});
