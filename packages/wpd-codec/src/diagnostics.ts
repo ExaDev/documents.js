@@ -48,6 +48,8 @@ export const WpdDiagnosticCodes = {
   MergeFieldSpansParagraphs: "wpd/merge-field-spans-paragraphs",
   // A box's own function-level override names real content, but this reader could not read it -- the content prefix ID resolves to a packet type this reader does not decode (an image's Graphics Filename packet, an OLE object, a content type this reader has no text-block reader for), or resolves to no packet at all.
   BoxContentUnresolved: "wpd/box-content-unresolved",
+  // A WPG vector graphic this reader did not fully decode: either a partial decode (the message names the record types the walk skipped -- see src/stream/wpg.ts's own scope statement for the layered subset that does decode) or a graphic recognised and refused whole (a WPG 1.0-major file whose record vocabulary predates the framed WPG 2.x stream, an encrypted graphic, or a record stream with no walkable Start WPG record).
+  WpgRecordsUndecoded: "wpd/wpg-records-undecoded",
   // A box's own content resolved to real, readable text, but its function-level override states no width and height this reader can trust -- a box relying on its template's own inherited geometry, which this reader does not resolve. The box's content is not lifted without a frame to place it in.
   BoxFrameUnresolved: "wpd/box-frame-unresolved",
 } as const;
