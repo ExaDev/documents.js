@@ -1,3 +1,16 @@
+## [2.11.12](https://github.com/ExaDev/documents.js/compare/web%402.11.11...web%402.11.12) (2026-09-11)
+
+### Code Refactoring
+
+* load stryker.config.ts directly instead of a jiti .mjs bootstrap ([4221520](https://github.com/ExaDev/documents.js/commit/42215205caa1c8fc6368ed38729d15836bdd613b))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.1
+- Updated markdown-codec to 6.7.1
+- Updated documents.js to 7.20.1
+
 ## [2.11.11](https://github.com/ExaDev/documents.js/compare/web%402.11.10...web%402.11.11) (2026-09-11)
 
 

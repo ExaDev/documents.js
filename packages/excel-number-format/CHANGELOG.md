@@ -1,3 +1,9 @@
+## [1.2.1](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.2.0...excel-number-format%401.2.1) (2026-09-11)
+
+### Code Refactoring
+
+* load stryker.config.ts directly instead of a jiti .mjs bootstrap ([4221520](https://github.com/ExaDev/documents.js/commit/42215205caa1c8fc6368ed38729d15836bdd613b))
+
 ## [1.2.0](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.1.1...excel-number-format%401.2.0) (2026-09-11)
 
 ### Features

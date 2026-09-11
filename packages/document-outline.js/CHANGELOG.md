@@ -1,3 +1,15 @@
+## [3.7.2](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.7.1...document-outline.js%403.7.2) (2026-09-11)
+
+### Code Refactoring
+
+* load stryker.config.ts directly instead of a jiti .mjs bootstrap ([4221520](https://github.com/ExaDev/documents.js/commit/42215205caa1c8fc6368ed38729d15836bdd613b))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.1
+- Updated pdf-codec to 4.8.1
+
 ## [3.7.1](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.7.0...document-outline.js%403.7.1) (2026-09-11)
 
 

@@ -1,6 +1,6 @@
 {
   "name": "document-outline.js",
-  "version": "3.7.1",
+  "version": "3.7.2",
   "description": "Utilities for consumers holding a tree-form DocumentTree - the TOC outline projection, effective-property resolution, and flatten/leaf-text/stable-hash helpers, the outline package for the documents.js family.",
   "type": "module",
   "repository": {
@@ -68,8 +68,8 @@
   },
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "document-schema.js": "7.11.0",
-    "pdf-codec": "4.8.0",
+    "document-schema.js": "7.11.1",
+    "pdf-codec": "4.8.1",
     "zod": "4.4.3"
   },
   "devDependencies": {
