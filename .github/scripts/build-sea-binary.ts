@@ -132,27 +132,41 @@ function currentPlatform(): SeaPlatform {
   );
 }
 
+const BUNDLE_BASENAME = "sea-entry";
+const BUNDLE_EXTENSIONS = [".cjs", ".mjs"] as const;
+
+/** Locates the tsdown-produced bundle inside a package's own dist-sea/ without the caller having to know whether that package builds CJS or ESM (document-cli's Ink-driven ESM build vs. document-mcp/document-rest's CJS default -- see each package's own tsdown.config.ts) -- the bundle's extension is itself the single source of truth for that choice, per mainFormatFor's own reasoning above. */
+function findBundlePath(outputDir: string): string {
+  const candidates = BUNDLE_EXTENSIONS.map((extension) =>
+    join(outputDir, `${BUNDLE_BASENAME}${extension}`),
+  );
+  const [bundlePath, ...extraMatches] = candidates.filter((candidate) =>
+    existsSync(candidate),
+  );
+  if (bundlePath === undefined || extraMatches.length > 0) {
+    throw new Error(
+      `Expected exactly one of ${candidates.join(", ")} to exist -- run this package's own build (which produces dist-sea/) first. Found: ${[bundlePath, ...extraMatches].filter((path) => path !== undefined).join(", ") || "none"}.`,
+    );
+  }
+  return bundlePath;
+}
+
 function parseArgs(argv: readonly string[]): SeaBuildPaths {
-  const [packageDir, bundlePath, outputDir, binaryName] = argv;
+  const [packageDir, outputDir, binaryName] = argv;
   if (
     packageDir === undefined ||
-    bundlePath === undefined ||
     outputDir === undefined ||
     binaryName === undefined
   ) {
     throw new Error(
-      "Usage: build-sea-binary.ts <packageDir> <bundlePath> <outputDir> <binaryName>",
+      "Usage: build-sea-binary.ts <packageDir> <outputDir> <binaryName>",
     );
   }
-  if (!existsSync(join(packageDir, bundlePath))) {
-    throw new Error(
-      `${bundlePath} does not exist under ${packageDir} -- run this package's own build (which produces dist-sea/) first.`,
-    );
-  }
+  const resolvedOutputDir = join(packageDir, outputDir);
   return {
     packageDir,
-    bundlePath: join(packageDir, bundlePath),
-    outputDir: join(packageDir, outputDir),
+    bundlePath: findBundlePath(resolvedOutputDir),
+    outputDir: resolvedOutputDir,
     binaryName,
   };
 }

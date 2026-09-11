@@ -301,10 +301,11 @@ jobs:
       pull-requests: write # to comment on released pull requests
       id-token: write # OIDC identity for npm trusted publishing (no NPM_TOKEN)
     outputs:
-      # JSON matrices for the three post-release jobs below, listing exactly what this run released. Each is [] when nothing released, which each consuming job tests for in its own `if` -- an empty include list does not skip a matrix job, it makes the matrix invalid and fails the run.
+      # JSON matrices for the post-release jobs below, listing exactly what this run released. Each is [] when nothing released, which each consuming job tests for in its own `if` -- an empty include list does not skip a matrix job, it makes the matrix invalid and fails the run.
       github-packages-matrix: ${{ steps.released.outputs.github-packages-matrix }}
       npm-alias-matrix: ${{ steps.released.outputs.npm-alias-matrix }}
       attest-matrix: ${{ steps.released.outputs.attest-matrix }}
+      sea-matrix: ${{ steps.released.outputs.sea-matrix }}
     steps:
       # main requires status checks to merge, and the default GITHUB_TOKEN has no bypass for that -- the orchestrator's release commits, dependency-bump commits, and tags are direct pushes to main, so they need a token from an actor the branch ruleset explicitly allows to bypass (see ExaDev/.github and this repo's own ruleset). Everything else in this job (release notes, GitHub Release creation, issue/PR comments, OIDC npm publish) keeps using secrets.GITHUB_TOKEN below, unaffected -- only checkout's own git credentials need the elevated token, since that's what the later pushes inherit.
       - name: Generate a token for the release pushes
@@ -342,13 +343,14 @@ jobs:
           NODE_AUTH_TOKEN: ""
       - name: Collect the packages this run released
         id: released
-        # Builds the three matrices the post-release jobs fan out over: one attestation leg per released published package, one GitHub Packages leg per released package the map mirrors there, and one npm-alias leg per (released package, alias) pair. The version comes from each package's own package.json in this working tree -- the orchestrator has already committed the released version by the time this step runs, so it is the same version the tag names. The web UI is private and publishes nothing, so it is filtered out.
+        # Builds the four matrices the post-release jobs fan out over: one attestation leg per released published package, one GitHub Packages leg per released package the map mirrors there, one npm-alias leg per (released package, alias) pair, and one SEA-binary leg per (SEA-eligible released package, platform) pair. The version comes from each package's own package.json in this working tree -- the orchestrator has already committed the released version by the time this step runs, so it is the same version the tag names. The web UI is private and publishes nothing, so it is filtered out.
         run: |
           git ls-remote --tags origin | sed 's|.*refs/tags/||' | grep -v '\^{}' | sort > "$RUNNER_TEMP/release-tags-after.txt"
           comm -13 "$RUNNER_TEMP/release-tags-before.txt" "$RUNNER_TEMP/release-tags-after.txt" > "$RUNNER_TEMP/release-tags-new.txt"
           GITHUB_PACKAGES='[]'
           NPM_ALIASES='[]'
           ATTEST='[]'
+          SEA='[]'
           while read -r TAG; do
             [ -n "$TAG" ] || continue
             NAME=${TAG%@*}
@@ -372,11 +374,21 @@ jobs:
               NPM_ALIASES=$(echo "$NPM_ALIASES" | jq -c --arg name "$NAME" --arg version "$VERSION" --arg tag "$TAG" --arg alias "$ALIAS" \
                 '. + [{name: $name, version: $version, tag: $tag, alias: $alias}]')
             done < <(jq -r --arg name "$NAME" '.[$name].aliases // [] | .[]' .github/release-republish.json)
+            # The only three packages this workspace builds a Node SEA (single-executable application) binary for -- see packages/document-cli, document-mcp, document-rest's own tsdown.config.ts. A hardcoded literal set, not a config-file entry like the alias/GitHub-Packages maps above: those vary per package and grow independently, where this is a small, closed set unlikely to grow the same way.
+            case "$NAME" in
+              document-cli | document-mcp | document-rest)
+                for OS in ubuntu-latest macos-latest windows-latest; do
+                  SEA=$(echo "$SEA" | jq -c --arg name "$NAME" --arg version "$VERSION" --arg tag "$TAG" --arg os "$OS" \
+                    '. + [{name: $name, version: $version, tag: $tag, os: $os}]')
+                done
+                ;;
+            esac
           done < "$RUNNER_TEMP/release-tags-new.txt"
           {
             echo "github-packages-matrix=$GITHUB_PACKAGES"
             echo "npm-alias-matrix=$NPM_ALIASES"
             echo "attest-matrix=$ATTEST"
+            echo "sea-matrix=$SEA"
           } >> "$GITHUB_OUTPUT"
 
   # Everything the release job gates on (commitlint/lint/typecheck/test/test-workers/test-smoke/knip) validates the commit BEFORE release bumps any versions -- never the workspace state AFTER. The orchestrator's own release/dependency-bump commits are pushed with `[skip ci]` (deliberately: a push authenticated this way would otherwise re-trigger this same workflow and risk a concurrent release racing itself, per the release job's own comment above), so nothing else ever runs CI against post-release main either. A package released with a breaking (major) change is therefore never checked against its own workspace-local dependents until whichever of THEIR test suites next happens to run for an unrelated reason -- exactly what caught document-schema.js's 7.0.0 major landing with documents.js's own committed example dumps still pinned to 6.0.0 (ExaDev/documents.js, 2026-09-07): main was red from the moment that release commit landed, silently, until a later PR's own turbo --affected run (which doesn't even touch documents.js on an unrelated branch) happened not to catch it either. This job closes that gap: re-run every check that already exists above, against the real post-release commit on main, so a release that breaks a sibling package inside this same workspace fails LOUDLY on this same workflow run's own summary rather than staying invisible until someone else's unrelated work trips over it. It cannot un-publish a release that already went out -- nothing running after the fact can -- but a red run here is exactly the loud, immediate signal that should prompt a same-day follow-up fix, the way this file's own commit history already shows one landing for the 7.0.0 case.
@@ -423,6 +435,7 @@ jobs:
       github-packages-matrix: ${{ steps.collect.outputs.github-packages-matrix }}
       npm-alias-matrix: ${{ steps.collect.outputs.npm-alias-matrix }}
       attest-matrix: ${{ steps.collect.outputs.attest-matrix }}
+      sea-matrix: ${{ steps.collect.outputs.sea-matrix }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -437,7 +450,8 @@ jobs:
           GITHUB_PACKAGES='[]'
           NPM_ALIASES='[]'
           ATTEST='[]'
-          # Process substitution, not a pipe: a pipe would run the loop in a subshell, where GITHUB_PACKAGES/NPM_ALIASES/ATTEST's accumulated values never escape back to the `>> "$GITHUB_OUTPUT"` below.
+          SEA='[]'
+          # Process substitution, not a pipe: a pipe would run the loop in a subshell, where GITHUB_PACKAGES/NPM_ALIASES/ATTEST/SEA's accumulated values never escape back to the `>> "$GITHUB_OUTPUT"` below.
           while IFS= read -r RAW; do
             TAG=$(echo "$RAW" | xargs)
             [ -n "$TAG" ] || continue
@@ -466,11 +480,21 @@ jobs:
               NPM_ALIASES=$(echo "$NPM_ALIASES" | jq -c --arg name "$NAME" --arg version "$VERSION" --arg tag "$TAG" --arg alias "$ALIAS" \
                 '. + [{name: $name, version: $version, tag: $tag, alias: $alias}]')
             done < <(jq -r --arg name "$NAME" '.[$name].aliases // [] | .[]' .github/release-republish.json)
+            # Mirrors the release job's own identical case statement -- see that step's own comment on why this is a hardcoded literal set rather than a release-republish.json entry.
+            case "$NAME" in
+              document-cli | document-mcp | document-rest)
+                for OS in ubuntu-latest macos-latest windows-latest; do
+                  SEA=$(echo "$SEA" | jq -c --arg name "$NAME" --arg version "$VERSION" --arg tag "$TAG" --arg os "$OS" \
+                    '. + [{name: $name, version: $version, tag: $tag, os: $os}]')
+                done
+                ;;
+            esac
           # printf '%s\n', not '%s': `tr` never adds a trailing newline of its own, and `read` silently drops the last line of a while-read loop when it hits EOF without one -- confirmed the hard way, the final tag in a comma-separated backfill_tags list was dropped from every matrix with no warning or error. The trailing \n here survives the comma-to-newline translation as the terminator the last tag needs.
           done < <(printf '%s\n' "$BACKFILL_TAGS" | tr ',' '\n')
           {
             echo "github-packages-matrix=$GITHUB_PACKAGES"
             echo "npm-alias-matrix=$NPM_ALIASES"
+            echo "sea-matrix=$SEA"
             echo "attest-matrix=$ATTEST"
           } >> "$GITHUB_OUTPUT"
 
@@ -716,6 +740,49 @@ jobs:
             -f "registry_url=https://registry.npmjs.org/" \
             -f "repository=${{ matrix.name }}" \
             -f "artifact_url=https://registry.npmjs.org/${{ matrix.name }}/-/${{ matrix.name }}-${{ matrix.version }}.tgz"
+
+  build-sea-binaries:
+    name: Build SEA binary (${{ matrix.name }}, ${{ matrix.os }})
+    needs: [release, collect-backfill-matrix]
+    # See the note on publish-github-packages: an empty include list is an invalid matrix, not a skip, and the always()-plus-direct-needs-read shape is deliberate, not incidental.
+    if: always() && (needs.release.result == 'success' || needs.collect-backfill-matrix.result == 'success') && (needs.release.outputs.sea-matrix || needs.collect-backfill-matrix.outputs.sea-matrix) != '[]'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: write # to upload the binary as a release asset
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.release.outputs.sea-matrix || needs.collect-backfill-matrix.outputs.sea-matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.tag }} # the release commit the orchestrator tagged, not whatever main has moved on to by now
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build the released package's SEA bundle
+        run: pnpm --dir "packages/${{ matrix.name }}" build
+      # The workspace's own pinned Node (.tool-versions) predates the native ESM SEA mainFormat support document-cli's Ink-driven ESM bundle needs (see tsdown.sea.shared.ts and build-sea-binary.ts's own mainFormatFor), and a Homebrew-style distribution of even a new-enough Node can ship with the SEA feature itself compiled out. This second install, immediately before the injection step, targets one specific version confirmed locally to have SEA enabled, rather than "latest", so a future Node release can't silently break this step.
+      - name: Install a Node build with SEA and native ESM mainFormat support
+        uses: actions/setup-node@v7
+        with:
+          node-version: "26.8.1"
+      - name: Build the SEA binary
+        id: build
+        shell: bash
+        working-directory: packages/${{ matrix.name }}
+        run: |
+          BINARY_PATH=$(node --experimental-strip-types ../../.github/scripts/build-sea-binary.ts . dist-sea "${{ matrix.name }}")
+          echo "binary-path=packages/${{ matrix.name }}/$BINARY_PATH" >> "$GITHUB_OUTPUT"
+      - name: Upload the binary as a release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ matrix.tag }}" --clobber "${{ steps.build.outputs.binary-path }}"
 
   deploy-site:
     name: Build and deploy the web UI to Pages
