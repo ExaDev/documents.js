@@ -27,10 +27,8 @@ import {
   FORM_AND_REPORT_REPORT_NAME,
   loadFormAndReportOdbBytes,
 } from "../test-support/odb-fixture";
-import {
-  odbReportNotSpecifiedResult,
-  OdbRenderReportOutputSchema,
-} from "./odb-render-report";
+import { OdbRenderReportOutputSchema } from "document-operations";
+import { odbReportNotSpecifiedResult } from "./odb-render-report";
 
 // Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip -- not the tool callback in isolation -- so this proves the wiring: that `odb_render_report` is registered under that name, that it reaches documents.js's real readOdbReportContent/odbReportToDocx/odbReportToOdt/odbReportToPdf, and that the output really decodes as the report's own data, not merely non-empty bytes. Ground truth for the fixture's own SalesByRegion report (region/quarter groups, group totals, grand total) is documents.js's own src/odb/report/content.test.ts, which renders and hand-verifies the identical report against the identical fixture. Mirrors src/tools/odm.test.ts's own connection harness.
 

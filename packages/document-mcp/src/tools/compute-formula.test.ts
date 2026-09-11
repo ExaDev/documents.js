@@ -26,7 +26,7 @@ import {
 } from "vitest";
 import { createServer } from "../server";
 import { odfFormulaBytes } from "../test-support/odf-formula-fixture";
-import { ComputeFormulaOutputSchema } from "./compute-formula";
+import { ComputeFormulaOutputSchema } from "document-operations";
 
 // Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip -- proving compute_formula is registered under that name, reads a document's real embedded formulas via documents.js's own readNativeDocumentTree + document-schema.js's flattenTree + documents.js's shared collectDocumentFormulas walk, and evaluates each through a real document-compute.js evaluate() call. Mirrors src/tools/metadata.test.ts's own connection harness.
 //
