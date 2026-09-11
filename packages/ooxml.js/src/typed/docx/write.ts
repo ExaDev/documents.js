@@ -322,6 +322,13 @@ function buildRunProperties(run: ContentRun): XmlElement | undefined {
   if (run.underline !== undefined) {
     children.push(el("w:u", { "w:val": run.underline ? "single" : "none" }));
   }
+  if (run.verticalAlign !== undefined) {
+    children.push(el("w:vertAlign", { "w:val": run.verticalAlign }));
+  }
+  // An explicitly left-to-right run says so with the off spelling, mirroring bold: false -- an absent w:rtl is "inherit" to the read-side cascade, not "left-to-right", so a resolved ltr must be spelled rather than omitted.
+  if (run.direction !== undefined) {
+    children.push(toggleElement("w:rtl", run.direction === "rtl"));
+  }
   return children.length === 0 ? undefined : el("w:rPr", {}, children);
 }
 
@@ -375,7 +382,7 @@ const JUSTIFICATION_BY_ALIGNMENT: Readonly<Record<Alignment, string>> = {
   justify: "both",
 };
 
-// CT_PPr's own child sequence, which Word enforces: pStyle, pageBreakBefore, numPr, spacing, ind, jc, outlineLvl. An indentFirstLinePt is w:firstLine when positive and w:hanging (the signed inverse) when negative, matching the convention readParagraphPropertiesLayer reads it back through.
+// CT_PPr's own child sequence, which Word enforces: pStyle, pageBreakBefore, numPr, bidi, spacing, ind, jc, outlineLvl. An indentFirstLinePt is w:firstLine when positive and w:hanging (the signed inverse) when negative, matching the convention readParagraphPropertiesLayer reads it back through.
 function buildParagraphProperties(
   paragraph: ContentParagraph,
   pageBreakBefore: boolean,
@@ -399,6 +406,10 @@ function buildParagraphProperties(
       );
     }
     children.push(el("w:numPr", {}, numPrChildren));
+  }
+  // CT_PPrBase places bidi between the numPr family and spacing; an explicitly left-to-right paragraph says so with the off spelling, the same discipline w:rtl's own writer below applies at run level.
+  if (paragraph.direction !== undefined) {
+    children.push(toggleElement("w:bidi", paragraph.direction === "rtl"));
   }
   const spacing: Record<string, string> = {};
   if (paragraph.spacingBeforePt !== undefined) {

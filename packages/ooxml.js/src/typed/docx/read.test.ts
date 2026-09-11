@@ -619,6 +619,116 @@ describe("readDocxContent: run text with tab/break", () => {
   });
 });
 
+describe("readDocxContent: verticalAlign and direction (w:vertAlign/w:rtl/w:bidi)", () => {
+  it("reads w:vertAlign superscript/subscript onto ContentRun.verticalAlign, and w:rtl onto ContentRun.direction", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:r", {}, [
+        el("w:rPr", {}, [el("w:vertAlign", { "w:val": "superscript" })]),
+        el("w:t", {}, [txt("above")]),
+      ]),
+      el("w:r", {}, [
+        el("w:rPr", {}, [el("w:vertAlign", { "w:val": "subscript" })]),
+        el("w:t", {}, [txt("below")]),
+      ]),
+      el("w:r", {}, [
+        el("w:rPr", {}, [el("w:rtl")]),
+        el("w:t", {}, [txt("right to left")]),
+      ]),
+      el("w:r", {}, [
+        el("w:rPr", {}, [el("w:rtl", { "w:val": "0" })]),
+        el("w:t", {}, [txt("explicitly ltr")]),
+      ]),
+      textRun("plain"),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const runs = firstParagraph(doc).runs;
+    expect(runs.map((run) => run.verticalAlign)).toEqual([
+      "superscript",
+      "subscript",
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(runs.map((run) => run.direction)).toEqual([
+      undefined,
+      undefined,
+      "rtl",
+      "ltr",
+      undefined,
+    ]);
+  });
+
+  it("reads a baseline vertAlign as the explicit override of an inherited position, stating nothing on the run", () => {
+    // The named character style supersedes its basedOn chain: the chain says superscript, the direct rPr turns it back off, and the resolved run carries no verticalAlign -- baseline, the schema's own spelling of the field's absence.
+    const styles = el("w:styles", {}, [
+      el(
+        "w:style",
+        { "w:type": "paragraph", "w:styleId": "Normal", "w:default": "1" },
+        [],
+      ),
+      el("w:style", { "w:type": "character", "w:styleId": "Sup" }, [
+        el("w:basedOn", { "w:val": "Normal" }),
+        el("w:rPr", {}, [el("w:vertAlign", { "w:val": "superscript" })]),
+      ]),
+    ]);
+    const paragraph = el("w:p", {}, [
+      el("w:r", {}, [
+        el("w:rPr", {}, [
+          el("w:rStyle", { "w:val": "Sup" }),
+          el("w:vertAlign", { "w:val": "baseline" }),
+        ]),
+        el("w:t", {}, [txt("flattened")]),
+      ]),
+    ]);
+    const doc = readDocxContent(
+      paragraphPackage(paragraph, {
+        "word/styles.xml": { kind: "xml", nodes: [styles] },
+      }),
+    );
+    expect(firstParagraph(doc).runs[0]?.verticalAlign).toBeUndefined();
+  });
+
+  it("reads w:bidi onto ContentParagraph.direction, both on and explicitly off", () => {
+    const on = readDocxContent(
+      paragraphPackage(
+        el("w:p", {}, [
+          el("w:pPr", {}, [el("w:bidi")]),
+          textRun("rtl paragraph"),
+        ]),
+      ),
+    );
+    expect(firstParagraph(on).direction).toBe("rtl");
+    const off = readDocxContent(
+      paragraphPackage(
+        el("w:p", {}, [
+          el("w:pPr", {}, [el("w:bidi", { "w:val": "0" })]),
+          textRun("explicitly ltr paragraph"),
+        ]),
+      ),
+    );
+    expect(firstParagraph(off).direction).toBe("ltr");
+  });
+
+  it("round-trips verticalAlign, run direction, and paragraph direction through buildDocxPackageFromContent", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:pPr", {}, [el("w:bidi")]),
+      el("w:r", {}, [
+        el("w:rPr", {}, [
+          el("w:vertAlign", { "w:val": "superscript" }),
+          el("w:rtl"),
+        ]),
+        el("w:t", {}, [txt("everything at once")]),
+      ]),
+    ]);
+    const before = readDocxContent(paragraphPackage(paragraph));
+    const after = readDocxContent(buildDocxPackageFromContent(before));
+    const roundTripped = firstParagraph(after);
+    expect(roundTripped.direction).toBe("rtl");
+    expect(roundTripped.runs[0]?.verticalAlign).toBe("superscript");
+    expect(roundTripped.runs[0]?.direction).toBe("rtl");
+  });
+});
+
 describe("readDocxContent: tables", () => {
   it("reads column widths and a horizontally-merged cell's colSpan and background", () => {
     const doc = readDocxContent(buildFixturePackage());
