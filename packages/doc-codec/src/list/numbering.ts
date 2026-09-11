@@ -90,17 +90,12 @@ export const NUMBER_FORMAT_BY_NFC: Readonly<Record<number, string>> = {
 /** MSONFC's own "Specifies that the sequence will not display any numbering" sentinel -- not itself an ST_NumberFormat value, so this reader's own spelling for it ("none") is a deliberate literal rather than a value MSONFC's table states. */
 const NFC_NONE = 0xff;
 
+// An LVLF.nfc outside MSONFC's table reads as "decimal" rather than refusing the document. The value is one byte of one list level's own number format -- a property-level fact, not structural corruption, so the whole-document refusal this function used to make was disproportionate to this package's own degrade convention for a property it cannot convert (the identical principle every unconverted sprm already follows). "decimal" is not a guess pulled from nowhere: it is the default the one independent [MS-DOC] implementation applies -- LibreOffice's WW8ListManager::GetSvxNumTypeFromMSONFC (sw/source/filter/ww8/ww8par3.cxx) initialises its result to SVX_NUM_ARABIC and its switch's default falls through to it -- and a real .doc readable end to end by that implementation carries an out-of-table value (nfc 0x92, far outside MSONFC's 0x00-0x3B and 0xFF range).
 function numberFormatFor(nfc: number): string {
   if (nfc === NFC_NONE) {
     return "none";
   }
-  const format = NUMBER_FORMAT_BY_NFC[nfc];
-  if (format === undefined) {
-    throw new DocFormatError(
-      `LVLF.nfc is 0x${nfc.toString(16).padStart(2, "0")}, not a recognised MSONFC value ([MS-OSHARED] 2.2.1.3)`,
-    );
-  }
-  return format;
+  return NUMBER_FORMAT_BY_NFC[nfc] ?? "decimal";
 }
 
 export interface NumberingLevel {
