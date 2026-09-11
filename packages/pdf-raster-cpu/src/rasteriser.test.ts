@@ -213,6 +213,9 @@ describe("CpuRasteriser page state", () => {
     const rasteriser = createCpuRasteriser();
     const first = renderPdfPage(bytes, 0, {}, rasteriser);
     const second = renderPdfPage(bytes, 1, {}, rasteriser);
+    if (first instanceof Promise || second instanceof Promise) {
+      throw new Error("CpuRasteriser.finish never returns a promise");
+    }
     expect(first).toBeInstanceOf(Uint8Array);
     const firstImage = decodePng(first);
     const secondImage = decodePng(second);
@@ -465,7 +468,7 @@ describe("image pixels", () => {
       [0, 0, 255],
       [255, 255, 255],
     ];
-    const expected = [0, 1, 2].map((channel) => {
+    const expected = ([0, 1, 2] as const).map((channel) => {
       const [c0, c1, c2, c3] = corners;
       if (
         c0 === undefined ||

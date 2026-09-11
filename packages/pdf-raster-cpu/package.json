@@ -78,8 +78,8 @@
   "license": "MIT",
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "byte-codec": "1.4.2",
-    "pdf-codec": "4.5.2"
+    "byte-codec": "1.5.0",
+    "pdf-codec": "4.7.0"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
