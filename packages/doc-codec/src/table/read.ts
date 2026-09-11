@@ -78,8 +78,9 @@ interface RawCell {
 
 export function assembleBlocks(
   entries: readonly ParagraphEntry[],
+  documentStreamEnds = false,
 ): ContentBlock[] {
-  return walkBlocksAtDepth(entries, 0);
+  return walkBlocksAtDepth(entries, 0, documentStreamEnds);
 }
 
 // A paragraph's own table depth: sprmPItap's explicit value when the paragraph's own grpprl carries it (a real producer states it for a nested table, and may state it even at depth 1), falling back to "1 when sprmPFInTable is set, else 0" for a paragraph that carries no sprmPItap of its own -- [MS-DOC] 2.4.3's own compatibility relationship between the two sprms at depth 1, where sprmPItap is not required.
@@ -109,9 +110,12 @@ function isRowBoundary(entry: ParagraphEntry, tableDepth: number): boolean {
 }
 
 // Walks a flat span of paragraph entries at nesting `depth` (0 for the section's or a non-table cell's own top-level content) into a real ContentBlock[]: an ordinary paragraph passes straight through, and a contiguous run of entries at depth+1 folds into a nested ContentTable via tryAssembleTable -- recursively, since that table's own cells are themselves walked at depth+1, letting a table nest to whatever depth the file actually states rather than only one level. This one function is what both read.ts's top-level call (depth 0, the whole entries array) and every table cell's own content (depth tableDepth, the slice of entries between that cell's boundaries) share, so a table nested inside a table cell inside a table cell needs no separate code path from an ordinary top-level table.
+//
+// `documentStreamEnds` is true only for the walk over the final section's own entries, where the end of the array is the end of the document's whole text stream: every other walk (a cell's own entries, a header/footer story's, an earlier section's) ends at a boundary mark of some enclosing structure that itself continues, so a table run dangling at such an array's end still has a stream after it and degrades rather than reading as truncated.
 function walkBlocksAtDepth(
   entries: readonly ParagraphEntry[],
   depth: number,
+  documentStreamEnds: boolean,
 ): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   let index = 0;
@@ -129,7 +133,11 @@ function walkBlocksAtDepth(
       index,
       tableDepth,
     );
-    const table = tryAssembleTable(runEntries, tableDepth);
+    const table = tryAssembleTable(
+      runEntries,
+      tableDepth,
+      !documentStreamEnds || nextIndex < entries.length,
+    );
     blocks.push(
       ...(table !== undefined
         ? [table]
@@ -162,10 +170,11 @@ function collectTableRun(
   return { runEntries, nextIndex: index };
 }
 
-// Attempts to fold one contiguous run of paragraphs at `tableDepth` into a real ContentTable, per [MS-DOC] 2.4.3's own Overview of Tables: cell boundaries at each cell mark (isCellBoundary), a row closed by its own row-ending mark (isRowBoundary) whose TAP (tap.ts's applyTableSprms) supplies the row's column layout and every physical cell's merge state. A cell's own raw entries are walked recursively at depth tableDepth (walkBlocksAtDepth), which is what lets a cell hold either ordinary paragraphs or a table nested one level deeper -- exactly [MS-DOC]'s own "table cell consists of one or more paragraphs at the same nonzero table depth and, optionally, one or more tables whose table depth is one greater than that of the containing cell". Returns undefined -- never throws -- when a row's own TAP cannot be resolved this way, rather than refusing the whole document: a real producer's own row mark can state its TAP indirectly (sprmPTableProps pointing at a PrcData of incremental sprmT* operations, [MS-DOC] 2.4.3's own worked example) rather than through the direct sprmTDefTable this reader follows, or a row's cell marks can simply not agree with what its TAP declares -- both genuinely legal constructs this reader does not implement, exactly the "reads with fewer properties than it states" degrade the README's scope table already documents for an indirect Papx elsewhere in this package, not corruption. The run's own paragraphs read as paragraphs instead, the same as any other property this reader does not convert. A row ending mid-cell with no terminating mark at all, by contrast, is genuine corruption (the stream itself is truncated, not merely using an unsupported mechanism) and still throws.
+// Attempts to fold one contiguous run of paragraphs at `tableDepth` into a real ContentTable, per [MS-DOC] 2.4.3's own Overview of Tables: cell boundaries at each cell mark (isCellBoundary), a row closed by its own row-ending mark (isRowBoundary) whose TAP (tap.ts's applyTableSprms) supplies the row's column layout and every physical cell's merge state. A cell's own raw entries are walked recursively at depth tableDepth (walkBlocksAtDepth), which is what lets a cell hold either ordinary paragraphs or a table nested one level deeper -- exactly [MS-DOC]'s own "table cell consists of one or more paragraphs at the same nonzero table depth and, optionally, one or more tables whose table depth is one greater than that of the containing cell". Returns undefined -- never throws -- when a row's own TAP cannot be resolved this way, rather than refusing the whole document: a real producer's own row mark can state its TAP indirectly (sprmPTableProps pointing at a PrcData of incremental sprmT* operations, [MS-DOC] 2.4.3's own worked example) rather than through the direct sprmTDefTable this reader follows, or a row's cell marks can simply not agree with what its TAP declares -- both genuinely legal constructs this reader does not implement, exactly the "reads with fewer properties than it states" degrade the README's scope table already documents for an indirect Papx elsewhere in this package, not corruption. The run's own paragraphs read as paragraphs instead, the same as any other property this reader does not convert. A row ending mid-cell with no terminating mark at all, by contrast, is genuine corruption (the stream itself is truncated, not merely using an unsupported mechanism) and still throws -- as does a run of table-flagged paragraphs dangling at the very end of the stream (the `streamContinues` parameter's own note, inside).
 function tryAssembleTable(
   runEntries: readonly ParagraphEntry[],
   tableDepth: number,
+  streamContinues: boolean,
 ): ContentTable | undefined {
   const rawRows: RawCell[][] = [];
   const rowDefinitions: TableRowDefinition[] = [];
@@ -209,12 +218,18 @@ function tryAssembleTable(
 
     if (isCellBoundary(entry, tableDepth)) {
       // An ordinary cell mark -- not the row's own -- closes the cell that was accumulating: everything from the last cell (or row) boundary up to and including this paragraph, walked recursively so a nested table inside this very cell resolves rather than flattening to paragraphs.
-      rowCells.push({ blocks: walkBlocksAtDepth(cellEntries, tableDepth) });
+      rowCells.push({
+        blocks: walkBlocksAtDepth(cellEntries, tableDepth, false),
+      });
       cellEntries = [];
     }
   }
 
   if (cellEntries.length > 0 || rowCells.length > 0) {
+    // A run that never closed a single row is not a table at all, however many of its paragraphs carry sprmPFInTable: [MS-DOC] 2.4.3's own Overview of Tables ABNF states every row as CellN followed by a TTP mark (RowN = 1*63 CellN TTPN), so a run with zero TTP marks states zero rows, and the paragraphs read as paragraphs instead -- the identical degrade an unresolvable TAP already performs two ways above. This is not hypothetical fast-save debris: a genuine Word 2000-authored document (title page paragraphs each carrying sprmPFInTable and sprmPItap with no cell mark or row mark anywhere in its text stream, confirmed against LibreOffice 26.8.0.3, which reads the identical bytes with no table at all) reaches exactly this shape. Scoped to a run the wider stream continues past (a shallower paragraph follows, ending the run): a run dangling at the very end of the text itself is still the truncated stream the throw below exists for, since [MS-DOC] 2.4.2 requires the stream's last character to close a paragraph and no well-formed ending produces an in-table run with nothing after it.
+    if (rawRows.length === 0 && streamContinues) {
+      return undefined;
+    }
     throw new DocFormatError(
       "a table's paragraphs end without a row-ending mark to close the row's last cell",
     );
