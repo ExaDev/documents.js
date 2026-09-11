@@ -919,6 +919,175 @@ const DECORATED_SHEET: ContentSheet = {
   },
 };
 
+const FONTED_SHEET: ContentSheet = {
+  name: "Fonted",
+  cells: [
+    {
+      row: 0,
+      column: 0,
+      value: { kind: "string", value: "Header" },
+      displayText: "Header",
+      font: { bold: true, color: { r: 1, g: 0, b: 0 } },
+    },
+    {
+      row: 1,
+      column: 0,
+      value: { kind: "number", value: 42 },
+      displayText: "42",
+      font: { fontFamily: "Courier New", sizePt: 14, strike: true },
+    },
+    {
+      row: 2,
+      column: 0,
+      value: { kind: "number", value: 7 },
+      displayText: "7",
+      // bold: false against this writer's own not-bold default font restates the default, so this cell must share font entry 0 and mint nothing.
+      font: { bold: false },
+    },
+  ],
+  columns: [],
+  rows: [],
+  images: [],
+  printSettings: {
+    pageSize: PAGE_SIZE_A4,
+    margins: { topPt: 36, rightPt: 36, bottomPt: 36, leftPt: 36 },
+    gridlines: true,
+    headers: true,
+    pageOrder: "downThenOver",
+  },
+};
+
+describe("buildXlsxPackageFromContent: writes the per-cell font into xl/styles.xml", () => {
+  const pkg = buildXlsxPackageFromContent({
+    kind: "spreadsheet",
+    metadata: {
+      title: undefined,
+      author: undefined,
+      subject: undefined,
+      keywords: undefined,
+      creator: undefined,
+      producer: undefined,
+      createdIso: undefined,
+      modifiedIso: undefined,
+    },
+    sheets: [FONTED_SHEET],
+  });
+  const styles = rootElement(pkg.parts["xl/styles.xml"]);
+  if (styles === undefined) {
+    throw new Error("expected xl/styles.xml to have a root element");
+  }
+  const required = (
+    element: XmlElement | undefined,
+    message: string,
+  ): XmlElement => {
+    if (element === undefined) {
+      throw new Error(message);
+    }
+    return element;
+  };
+
+  it("writes the default Calibri-11 font at index 0, then one entry per distinct cell font", () => {
+    const fontsEl = required(
+      childrenWithTag(styles, "fonts")[0],
+      "expected a <fonts> element",
+    );
+    const fonts = childrenWithTag(fontsEl, "font");
+    expect(fonts).toHaveLength(3);
+    const defaultFont = required(fonts[0], "expected the default <font> at 0");
+    expect(
+      childrenWithTag(defaultFont, "sz")[0]?.attributes.find(
+        (a) => a.name === "val",
+      )?.value,
+    ).toBe("11");
+    expect(
+      childrenWithTag(defaultFont, "name")[0]?.attributes.find(
+        (a) => a.name === "val",
+      )?.value,
+    ).toBe("Calibri");
+    const boldRed = required(fonts[1], "expected a bold <font> at 1");
+    expect(childrenWithTag(boldRed, "b")).toHaveLength(1);
+    expect(
+      childrenWithTag(boldRed, "color")[0]?.attributes.find(
+        (a) => a.name === "rgb",
+      )?.value,
+    ).toBe("FFff0000");
+    const courier = required(fonts[2], "expected a courier <font> at 2");
+    expect(childrenWithTag(courier, "strike")).toHaveLength(1);
+    expect(
+      childrenWithTag(courier, "sz")[0]?.attributes.find(
+        (a) => a.name === "val",
+      )?.value,
+    ).toBe("14");
+    expect(
+      childrenWithTag(courier, "name")[0]?.attributes.find(
+        (a) => a.name === "val",
+      )?.value,
+    ).toBe("Courier New");
+  });
+
+  it("writes fontId and applyFont on a fonted xf, leaving the default xf free of both", () => {
+    const cellXfsEl = required(
+      childrenWithTag(styles, "cellXfs")[0],
+      "expected a <cellXfs> element",
+    );
+    const xfs = childrenWithTag(cellXfsEl, "xf");
+    // xf[0] = default (General + default font, shared with the bold:false cell); xf[1] = bold red; xf[2] = courier
+    expect(xfs).toHaveLength(3);
+    const defaultXf = required(xfs[0], "expected the default <xf> at 0");
+    expect(defaultXf.attributes.map((a) => a.name)).not.toContain("applyFont");
+    expect(defaultXf.attributes.find((a) => a.name === "fontId")?.value).toBe(
+      "0",
+    );
+    const boldRedXf = required(xfs[1], "expected a fonted <xf> at 1");
+    expect(boldRedXf.attributes.find((a) => a.name === "fontId")?.value).toBe(
+      "1",
+    );
+    expect(boldRedXf.attributes.map((a) => a.name)).toContain("applyFont");
+    expect(xfs[2]?.attributes.find((a) => a.name === "fontId")?.value).toBe(
+      "2",
+    );
+  });
+});
+
+describe("readXlsxContent(buildXlsxPackageFromContent(x)) round-trips the per-cell font", () => {
+  const result = readXlsxContent(
+    buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: {
+        title: undefined,
+        author: undefined,
+        subject: undefined,
+        keywords: undefined,
+        creator: undefined,
+        producer: undefined,
+        createdIso: undefined,
+        modifiedIso: undefined,
+      },
+      sheets: [FONTED_SHEET],
+    }),
+  );
+  if (result.kind !== "spreadsheet") {
+    throw new Error("expected a spreadsheet ContentDocument");
+  }
+  const cells = result.sheets[0]?.cells ?? [];
+
+  it("preserves each distinct cell font through the round trip", () => {
+    expect(cells[0]?.font).toEqual({
+      bold: true,
+      color: { r: 1, g: 0, b: 0 },
+    });
+    expect(cells[1]?.font).toEqual({
+      fontFamily: "Courier New",
+      sizePt: 14,
+      strike: true,
+    });
+  });
+
+  it("reads a font that normalised back to the default as no font of its own", () => {
+    expect(cells[2]?.font).toBeUndefined();
+  });
+});
+
 describe("buildXlsxPackageFromContent: writes cell decoration (fills/borders/alignment) into xl/styles.xml", () => {
   const pkg = buildXlsxPackageFromContent({
     kind: "spreadsheet",
