@@ -134,9 +134,12 @@ function containsSymbol(expression: MathExpression): boolean {
 
 // Narrows evaluate()'s Quantity | Interval return type down to this harness's own Quantity-only scope (see the module header comment on why an Interval cannot actually arise here) -- an explicit, named gap rather than a silent narrowing assumption, so a future change to how bindings are built that DID introduce an Interval would surface as data instead of a wrong comparison.
 function asQuantity(value: EvaluationResult): Quantity {
+  // Stryker disable next-line ConditionalExpression,StringLiteral: every call site below passes either EMPTY_BINDINGS or a `bindings: Record<string, Quantity>` built up entirely from values this same function has already narrowed -- so evaluate() can never resolve a 'sym' node to an Interval here, and no other node kind produces one either (see the module header comment). isInterval(value) is therefore always false in practice; kept as a named, thrown gap rather than a silent narrowing assumption in case a future change to how bindings are built ever did introduce one, per the doc comment above.
   if (isInterval(value)) {
     throw new UnsupportedExpressionError(
+      // Stryker disable next-line StringLiteral: unreachable for the same reason as the guard above -- see that comment.
       "runWorkedExampleSequence",
+      // Stryker disable next-line StringLiteral: unreachable for the same reason as the guard above -- see that comment.
       "this harness compares point-valued Quantity answers only; a symbol resolving to a range (Interval) has no stated-answer comparison defined yet",
     );
   }
@@ -159,9 +162,11 @@ function gapFromError(error: unknown): WorkedExampleGap {
   if (error instanceof UnsupportedExpressionError) {
     return "unsupported-construct";
   }
+  // Stryker disable next-line ConditionalExpression: every error evaluate() can throw is one of exactly six classes (errors.ts), and the five checked above rule out five of them -- so any error reaching this line that is not a NumericDomainError would have to be the sixth, NonConvergentSolveError, which the next check below never actually sees either (evaluate() never throws it; only solveFor() does, and this harness never calls solveFor()). With no error left to tell apart from a genuine NumericDomainError, mutating this condition to `true` is indistinguishable from the real check for every input evaluate() can actually produce.
   if (error instanceof NumericDomainError) {
     return "numeric-domain";
   }
+  // Stryker disable next-line ConditionalExpression,BlockStatement: kept for the stated one-category-per-error-class completeness (see this module's header comment), but unreachable in practice -- gapFromError is only ever called on an error caught from evaluate() (never from solveFor(), which this harness never invokes), and evaluate() itself never throws NonConvergentSolveError.
   if (error instanceof NonConvergentSolveError) {
     return "non-convergent-solve";
   }
