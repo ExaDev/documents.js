@@ -624,7 +624,7 @@ importers:
   packages/document-rest:
     dependencies:
       document-operations:
-        specifier: 0.1.0
+        specifier: 1.0.0
         version: link:../document-operations
       documents.js:
         specifier: 7.20.1
