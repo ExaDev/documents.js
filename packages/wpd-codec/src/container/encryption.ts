@@ -58,6 +58,7 @@ export function applyWpdStandardEncryption(
     if (passwordByte === undefined) {
       // Unreachable: the empty-password throw above guarantees a non-empty array, so a modulo of its length always indexes in bounds. This is the noUncheckedIndexedAccess narrowing, not a fallback.
       throw new WpdFormatError(
+        // Stryker disable next-line StringLiteral: no test can ever reach this branch to observe its message -- see the comment above.
         "The password normalised to no bytes, which the cipher cannot key with.",
       );
     }

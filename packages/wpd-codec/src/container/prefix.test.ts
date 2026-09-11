@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { WpdFormatError } from "../errors";
+import { buildWpdFile, word } from "../test-support/build-wpd";
 import { genericHeaderBytes } from "../test-support/generic-header";
 import { readFileHeader } from "./header";
 import {
@@ -92,6 +93,31 @@ describe("readPrefixPackets", () => {
     expect(() => readPrefixPackets(bytes, readFileHeader(bytes))).toThrow(
       WpdFormatError,
     );
+    expect(() => readPrefixPackets(bytes, readFileHeader(bytes))).toThrow(
+      "The index block at offset 512 opens with flags 7, not the index header's documented value of 2.",
+    );
+  });
+
+  it("rejects an index header claiming zero indexes, since it is itself one of them", () => {
+    const bytes = genericHeaderBytes();
+    // The index header's own [count] word sits at 512 + 2.
+    bytes[514] = 0;
+    bytes[515] = 0;
+    expect(() => readPrefixPackets(bytes, readFileHeader(bytes))).toThrow(
+      "The index header claims 0 indexes, but it is itself one of them.",
+    );
+  });
+
+  // Packet Type 0 ("Index Entry Is Available or Was Deleted") is a live slot whose size and pointer fields mean nothing -- it must still consume a prefix ID (recorded with empty bytes), never be resolved through sliceAt against its own (meaningless) size and offset fields the way a real packet is.
+  it("records a deleted index slot with empty bytes rather than resolving its meaningless size and offset", () => {
+    const bytes = buildWpdFile(
+      [0],
+      [{ packetType: 0, bytes: new Uint8Array([1, 2, 3]) }],
+    );
+    const packets = readPrefixPackets(bytes, readFileHeader(bytes));
+    expect(packets).toHaveLength(1);
+    expect(packets[0]?.packetType).toBe(0);
+    expect(packets[0]?.bytes).toEqual(new Uint8Array(0));
   });
 });
 
@@ -109,6 +135,21 @@ describe("readTypefaceName", () => {
 
   it("returns undefined for a packet too short to hold a descriptor's fixed fields", () => {
     expect(readTypefaceName(new Uint8Array(10))).toBeUndefined();
+  });
+
+  it("returns undefined for a stated name length of zero", () => {
+    const packet = new Uint8Array(24);
+    // [typeface name length] at offset 22 is already zero-initialised.
+    expect(readTypefaceName(packet)).toBeUndefined();
+  });
+
+  // A descriptor whose stated name length (6) is genuinely shorter than the bytes physically remaining in the packet (12, six whole word slots) -- the SDK's own generic-header example never exercises this because its name length happens to equal its remaining bytes exactly, so the two candidate bounds always agree there.
+  it("stops at the stated name length even though more word slots physically follow it", () => {
+    const packet = new Uint8Array(36);
+    packet.set(word(6), 22); // [typeface name length] = 6 bytes = 3 words
+    const chars = Array.from("ABCDEF", (c) => c.charCodeAt(0)).flatMap(word);
+    packet.set(chars, 24); // six word slots physically present (12 bytes)
+    expect(readTypefaceName(packet)).toBe("ABC");
   });
 });
 
@@ -132,5 +173,23 @@ describe("readGeneralWpTextBlocks", () => {
   it("returns undefined rather than reading past the packet's own bytes", () => {
     const header = [1, 0, 4, 0, 100, 0]; // claims a 100-byte block with no data present
     expect(readGeneralWpTextBlocks(new Uint8Array(header))).toBeUndefined();
+  });
+
+  it("returns undefined for a packet too short to even hold the block count and offset", () => {
+    expect(readGeneralWpTextBlocks(new Uint8Array(2))).toBeUndefined();
+  });
+
+  // A block count (10) claiming far more size-field slots than the ten-byte packet has room for: sizesEnd (4 + blockCount * 2 = 24) must correctly exceed the packet's own length here, or the reader would walk off the end of the buffer trying to read each block's own stated size.
+  it("returns undefined when the block count's own size fields would run past the packet", () => {
+    const header = [10, 0, 0, 0]; // [count=10] [offset=0]
+    expect(
+      readGeneralWpTextBlocks(new Uint8Array([...header, 0, 0, 0, 0, 0, 0])),
+    ).toBeUndefined();
+  });
+
+  // A single zero-length block whose one size field exactly fills out the packet, with no room to spare -- sizesEnd (4 + blockCount * 2 = 6) lands exactly on the packet's own six-byte length, the one boundary where "runs past" and "fits exactly" agree or disagree depending on which comparison runs.
+  it("reads a zero-length block when its own size field exactly fills the packet", () => {
+    const bytes = new Uint8Array([1, 0, 0, 0, 0, 0]); // [count=1] [offset=0] [size1=0]
+    expect(readGeneralWpTextBlocks(bytes)).toEqual(new Uint8Array(0));
   });
 });

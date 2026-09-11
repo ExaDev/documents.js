@@ -1,10 +1,16 @@
 import { byteAt } from "../bytes/view";
 import { describe, expect, it } from "vitest";
 import { buildWpdFile } from "../test-support/build-wpd";
-import { WpdEncryptedDocumentError, WpdWrongPasswordError } from "../errors";
+import {
+  WpdEncryptedDocumentError,
+  WpdFormatError,
+  WpdWrongPasswordError,
+} from "../errors";
 import { readWpdContent } from "../read";
+import type { WpdFileHeader } from "./header";
 import {
   applyWpdStandardEncryption,
+  decryptWpdDocument,
   encryptWpdDocumentForTests,
   normaliseWpdPassword,
   wpdPasswordChecksum16,
@@ -23,6 +29,24 @@ describe("normaliseWpdPassword", () => {
       0x50, 0x41, 0xdf,
     ]);
     expect(() => normaliseWpdPassword("passwörd日")).toThrow(/Latin-1/);
+  });
+
+  it("accepts U+00FF, the last code unit Latin-1 can encode", () => {
+    expect(normaliseWpdPassword(String.fromCharCode(0xff))).toEqual([0xff]);
+  });
+
+  it("refuses U+0100, one past the last code unit Latin-1 can encode", () => {
+    expect(() => normaliseWpdPassword(String.fromCharCode(0x100))).toThrow(
+      WpdFormatError,
+    );
+  });
+
+  it("states the offending code unit in uppercase hex, padded to four digits, and its position", () => {
+    expect(() =>
+      normaliseWpdPassword(`ok${String.fromCharCode(0xabc)}`),
+    ).toThrow(
+      "A password with characters outside Latin-1 cannot be encoded into the byte-keyed WordPerfect cipher (code unit U+0ABC at position 2).",
+    );
   });
 });
 
@@ -89,6 +113,34 @@ describe("applyWpdStandardEncryption", () => {
     const before = Array.from(bytes);
     applyWpdStandardEncryption(bytes, password, 512);
     expect(Array.from(bytes)).toEqual(before);
+  });
+
+  it("refuses an empty password, which the cipher cannot key with", () => {
+    expect(() => applyWpdStandardEncryption(filled(520), [], 512)).toThrow(
+      "The WordPerfect cipher is keyed by the password's own bytes, so an empty password decrypts nothing.",
+    );
+  });
+});
+
+describe("decryptWpdDocument", () => {
+  // decryptWpdDocument's own doc comment says it is "called only for ... a non-empty password", but it is a plain exported function with its own contract, tested directly here rather than only through the container-level guarantee that happens to hold today.
+  //
+  // The header's own encryption word is deliberately 0 here (never a real encrypted document's actual value, but this function never inspects that invariant itself): an empty password's checksum is always 0 too, so any non-zero encryption word would already fail the checksum comparison the normal flow performs anyway, masking whether the dedicated empty-password guard ran at all. Only encryption === 0 lets the guard's absence actually be observed -- without it, the empty password would fall through to applyWpdStandardEncryption and throw a WpdFormatError there instead, not a WpdWrongPasswordError.
+  it("treats an empty password as a wrong password rather than an empty-cipher-key error", () => {
+    const bytes = buildWpdFile([0]);
+    const header: WpdFileHeader = {
+      documentAreaOffset: 0,
+      productType: 1,
+      fileType: 0x0a,
+      majorVersion: 2,
+      minorVersion: 1,
+      indexAreaOffset: 512,
+      fileSize: bytes.length,
+      encryption: 0,
+    };
+    expect(() => decryptWpdDocument(bytes, header, "")).toThrow(
+      WpdWrongPasswordError,
+    );
   });
 });
 

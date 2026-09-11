@@ -48,9 +48,7 @@ export interface WpdFileHeader {
 
 // True when the bytes open with the -1,"WPC" file ID. Cheap enough to run before any other work, and the discriminator the container layer uses to decide whether a buffer is a bare WordPerfect file or something (an OLE compound file) that may contain one.
 export function hasWordPerfectFileId(bytes: Uint8Array): boolean {
-  if (bytes.length < WPD_FILE_ID.length) {
-    return false;
-  }
+  // No separate length guard is needed: indexing a Uint8Array past its own end always answers undefined rather than throwing, and undefined never equals one of WPD_FILE_ID's own byte values, so a buffer shorter than the file ID already fails the every() below on its own.
   return WPD_FILE_ID.every((expected, index) => bytes[index] === expected);
 }
 

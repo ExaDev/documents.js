@@ -85,6 +85,7 @@ export function readDocumentSummary(packet: Uint8Array): LayoutMetadata {
 
   let cursor = 0;
   for (let group = 0; group < MAX_SUMMARY_GROUPS; group += 1) {
+    // Stryker disable next-line EqualityOperator: at cursor + GROUP_HEADER_SIZE === packet.length exactly, there is no room in the packet for this group's own data (or for a further group after it), so whether this breaks one iteration early or lets the header be read and immediately fail the size check below makes no difference to the resulting metadata -- true for every possible header value, not just one tested case, since size < GROUP_HEADER_SIZE always breaks either way and size === GROUP_HEADER_SIZE (the only surviving case) reads zero words of data regardless.
     if (cursor + GROUP_HEADER_SIZE > packet.length) {
       break;
     }
@@ -141,7 +142,7 @@ export function readDocumentSummary(packet: Uint8Array): LayoutMetadata {
           break;
         }
         default:
-          break;
+        // No break needed: this is already the switch's last case.
       }
     }
     cursor += size;

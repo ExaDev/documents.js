@@ -118,6 +118,7 @@ export const PACKET_TYPE_GENERAL_WP_TEXT = 0x08;
 export function readGeneralWpTextBlocks(
   bytes: Uint8Array,
 ): Uint8Array | undefined {
+  // Stryker disable next-line EqualityOperator: at bytes.length exactly 4, blockCount is either 0 (undefined via the blockCount === 0 check below) or at least 1, in which case sizesEnd is at least 6 and always exceeds a 4-byte buffer (undefined via the sizesEnd > bytes.length check below) -- every path through a 4-byte buffer ends at undefined regardless of which comparison runs here.
   if (bytes.length < 4) {
     return undefined;
   }
@@ -135,7 +136,8 @@ export function readGeneralWpTextBlocks(
     totalSize += uint16At(bytes, 4 + index * 2);
   }
   const end = firstBlockOffset + totalSize;
-  if (firstBlockOffset < 0 || end > bytes.length) {
+  // No separate firstBlockOffset < 0 guard is needed: uint16At only ever answers an unsigned 16-bit value, so firstBlockOffset can never be negative in the first place.
+  if (end > bytes.length) {
     return undefined;
   }
   return bytes.subarray(firstBlockOffset, end);
@@ -143,14 +145,14 @@ export function readGeneralWpTextBlocks(
 
 // "The typeface name is made up for four separate null word-terminated strings: 1st string = typeface family (such as Times or Swiss), 2nd string = attributes (such as Bold, Italic, or Bold Italic), 3rd string = name prefix ... 4th string = name extension." Only the first is returned: it is the one a ContentRun's fontFamily wants, and the attributes string duplicates information the document's own Attribute On/Off functions already carry.
 export function readTypefaceName(packet: Uint8Array): string | undefined {
+  // Stryker disable next-line EqualityOperator: at packet.length exactly TYPEFACE_NAME_OFFSET, available (below) is 0 either way this comparison runs, and available === 0 already falls through to the identical undefined result via text.length > 0 below -- no input can tell < from <= here.
   if (packet.length < TYPEFACE_NAME_OFFSET) {
     return undefined;
   }
   const nameLength = uint16At(packet, TYPEFACE_NAME_LENGTH_OFFSET);
+  // Stryker disable next-line ArithmeticOperator: packet.length + TYPEFACE_NAME_OFFSET always overstates the packet's real remaining bytes, but decodeWordString below stops the moment it runs off the real end of `packet` regardless of how many words it was asked for -- so inflating this bound can never change the text actually decoded.
   const available = Math.min(nameLength, packet.length - TYPEFACE_NAME_OFFSET);
-  if (available <= 0) {
-    return undefined;
-  }
+  // No separate available <= 0 guard is needed: available can never be negative (it is a Math.min of two non-negative values, packet.length - TYPEFACE_NAME_OFFSET guaranteed >= 0 by the guard above), and available === 0 already reads zero words and returns undefined via the text.length > 0 check below.
   const { text } = decodeWordString(
     packet,
     TYPEFACE_NAME_OFFSET,
