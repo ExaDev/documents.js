@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   binaryFileName,
@@ -5,6 +6,7 @@ import {
   postInjectionCommandsFor,
   postjectArgsFor,
   preInjectionCommandsFor,
+  resolvePostjectCliPath,
 } from "./build-sea-binary";
 
 describe("mainFormatFor", () => {
@@ -51,5 +53,13 @@ describe("postInjectionCommandsFor", () => {
     ]);
     expect(postInjectionCommandsFor("linux", "/out/app")).toEqual([]);
     expect(postInjectionCommandsFor("win32", "C:\\out\\app.exe")).toEqual([]);
+  });
+});
+
+describe("resolvePostjectCliPath", () => {
+  it("resolves to the real, lockfile-pinned postject CLI script rather than a registry fetch", () => {
+    const cliPath = resolvePostjectCliPath();
+    expect(cliPath).toMatch(/postject.*cli\.js$/);
+    expect(existsSync(cliPath)).toBe(true);
   });
 });
