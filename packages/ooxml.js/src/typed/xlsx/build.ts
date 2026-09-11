@@ -1,5 +1,6 @@
 import type {
   ContentCellValue,
+  ContentDefinedName,
   ContentDocument,
   ContentSheet,
   ContentSheetCell,
@@ -61,9 +62,8 @@ import {
 import { buildDataValidationsElement } from "./data-validation";
 import { buildThreadedCommentsRoot, sheetHasComments } from "./comments-write";
 import {
-  buildGeneralDefinedNameElements,
+  buildNameDefinedNameElements,
   buildTablePart,
-  collectNamedRangeEntries,
   collectTableEntries,
   type TableEntry,
 } from "./definitions-write";
@@ -74,7 +74,7 @@ import {
   newDrawingCounters,
 } from "./drawings-write";
 
-// ContentDocument (kind: 'spreadsheet') -> Package: the first genuinely NEW xlsx package this ecosystem writes from scratch, rather than decoding/re-encoding an existing one -- every part below is constructed directly via xml/fragment.ts's el/txt, matching typed/xlsx/content.ts's own readXlsxContent as its read-side inverse: writing everything that reader reads, through the same number-format vocabulary that reader classifies (see renderCellValue and typed/xlsx/number-format.ts's own write-side section), and honestly re-approximating the one lossy conversion left on the way in (column-width characters). ContentSheetCell.comment now survives a round trip too, via the threaded-comments part comments-write.ts builds (see buildWorksheetPart's own note below). The reader's own drawing rows -- chart graphic frames (embeddedObjects) and pictures (images), typed/xlsx/drawings.ts -- now have a real write side too (ExaDev/documents.js#973, typed/xlsx/drawings-write.ts): every image and chart embedded object a sheet carries writes back out as a real xdr:oneCellAnchor in a genuine xl/drawings/drawingN.xml, plus xl/media/imageN.<ext> or xl/charts/chartN.xml as appropriate. The workbook's own definitions table (general defined names and Table/List objects, typed/xlsx/definitions.ts on the read side) closes the same way, via the optional `definitions` passed in BuildXlsxContentOptions (typed/xlsx/definitions-write.ts) -- flattenTree itself still cannot carry that table (it is a tree-only facility, document-schema.js's own rule), so buildXlsxPackage (typed/document-tree.ts) threads it through as this separate option rather than through the flattened ContentDocument. See typed/xlsx/content.test.ts and typed/xlsx/build.test.ts for the real-LibreOffice round-trip verification this pairing is built and tested against.
+// ContentDocument (kind: 'spreadsheet') -> Package: the first genuinely NEW xlsx package this ecosystem writes from scratch, rather than decoding/re-encoding an existing one -- every part below is constructed directly via xml/fragment.ts's el/txt, matching typed/xlsx/content.ts's own readXlsxContent as its read-side inverse: writing everything that reader reads, through the same number-format vocabulary that reader classifies (see renderCellValue and typed/xlsx/number-format.ts's own write-side section), and honestly re-approximating the one lossy conversion left on the way in (column-width characters). ContentSheetCell.comment now survives a round trip too, via the threaded-comments part comments-write.ts builds (see buildWorksheetPart's own note below). The reader's own drawing rows -- chart graphic frames (embeddedObjects) and pictures (images), typed/xlsx/drawings.ts -- now have a real write side too (ExaDev/documents.js#973, typed/xlsx/drawings-write.ts): every image and chart embedded object a sheet carries writes back out as a real xdr:oneCellAnchor in a genuine xl/drawings/drawingN.xml, plus xl/media/imageN.<ext> or xl/charts/chartN.xml as appropriate. The workbook's own defined names now ride the ContentDocument's names field both ways (typed/xlsx/defined-names.ts's readWorkbookNames, definitions-write.ts's buildNameDefinedNameElements), and its table/List objects still ride the tree-only definitions table (typed/xlsx/definitions.ts on the read side, the optional `definitions` passed in BuildXlsxContentOptions on the write side) -- flattenTree cannot carry that table (it is a tree-only facility, document-schema.js's own rule), so buildXlsxPackage (typed/document-tree.ts) threads it through as this separate option rather than through the flattened ContentDocument. See typed/xlsx/content.test.ts and typed/xlsx/build.test.ts for the real-LibreOffice round-trip verification this pairing is built and tested against.
 //
 // This is the flat, content-level half of the xlsx write pair: buildXlsxPackage (typed/document-tree.ts) is the primary name, flattening a tree-form DocumentTree (styles-table refs materialised away) and handing the result straight to this function.
 
@@ -285,15 +285,27 @@ function buildWorkbookRelsPart(sheetCount: number): XmlPart {
   return xmlPart(root);
 }
 
-// --- xl/workbook.xml (sheets list + sheet-scoped Print_Area/Print_Titles defined names) --------------------------
+// --- xl/workbook.xml (sheets list + the document's own names + sheet-scoped Print_Area/Print_Titles defined names) ---
+
+// The (name, localSheetId) identity of one emitted definedName, the key the two emission passes reconcile against: a workbook never carries two definedNames of the same name and scope, so a derived print name whose (name, scope) the names array already carries verbatim is a second spelling of the one fact, derived only when the array does not carry it. An unscoped name keys on the empty sheet segment.
+function definedNameKey(
+  name: string,
+  localSheetId: number | undefined,
+): string {
+  return `${name}@${localSheetId ?? ""}`;
+}
 
 function buildDefinedNameElements(
   sheets: readonly ContentSheet[],
+  carriedNames: ReadonlySet<string>,
 ): XmlElement[] {
   const elements: XmlElement[] = [];
   sheets.forEach((sheet, sheetIndex) => {
     const { printRange, repeatRows, repeatColumns } = sheet.printSettings;
-    if (printRange !== undefined) {
+    if (
+      printRange !== undefined &&
+      !carriedNames.has(definedNameKey(XLNM_PRINT_AREA, sheetIndex))
+    ) {
       const value = buildPrintAreaValue(sheet.name, printRange);
       elements.push(
         el(
@@ -303,7 +315,10 @@ function buildDefinedNameElements(
         ),
       );
     }
-    if (repeatRows !== undefined || repeatColumns !== undefined) {
+    if (
+      (repeatRows !== undefined || repeatColumns !== undefined) &&
+      !carriedNames.has(definedNameKey(XLNM_PRINT_TITLES, sheetIndex))
+    ) {
       const value = buildPrintTitlesValue(
         sheet.name,
         repeatRows,
@@ -325,7 +340,7 @@ function buildDefinedNameElements(
 
 function buildWorkbookPart(
   sheets: readonly ContentSheet[],
-  generalDefinedNameElements: readonly XmlElement[],
+  names: readonly ContentDefinedName[],
 ): XmlPart {
   const sheetElements = sheets.map((sheet, index) =>
     el("sheet", {
@@ -335,9 +350,12 @@ function buildWorkbookPart(
     }),
   );
   const children: XmlElement[] = [el("sheets", {}, sheetElements)];
+  // The document's own names array writes back VERBATIM and in its own order -- the file's own definedName order is the only order a same-format round trip can hope to reproduce, and the array's refersTo (a multi-area print range, a quoted sheet name) is the higher-fidelity spelling of exactly the two _xlnm print names a structured printRange/repeatRows can restate. The print-settings derivation then fills in only what the array does not carry: a hand-built document stating a structured printRange with no matching names entry still gets its reserved definedName.
+  const carriedNames = new Set<string>();
+  const nameElements = buildNameDefinedNameElements(names, carriedNames);
   const definedNameElements = [
-    ...buildDefinedNameElements(sheets),
-    ...generalDefinedNameElements,
+    ...nameElements,
+    ...buildDefinedNameElements(sheets, carriedNames),
   ];
   if (definedNameElements.length > 0) {
     children.push(el("definedNames", {}, definedNameElements));
@@ -1059,7 +1077,7 @@ function buildWorksheetPart(
 // --- entry point -----------------------------------------------------------------------------------------------
 
 export interface BuildXlsxContentOptions {
-  // A workbook's general defined names and Table/List objects -- the tree reader's own root-level facility (typed/document-tree.ts's readXlsx/typed/xlsx/definitions.ts), passed straight through by buildXlsxPackage since flattenTree itself drops the table on the way down (document-schema.js's own rule -- the flat ContentDocument structurally cannot carry it). A caller driving this flat entry point directly may also supply one.
+  // A workbook's Table/List objects -- the tree reader's own root-level facility (typed/document-tree.ts's readXlsx/typed/xlsx/definitions.ts), passed straight through by buildXlsxPackage since flattenTree itself drops the table on the way down (document-schema.js's own rule -- the flat ContentDocument structurally cannot carry it). A caller driving this flat entry point directly may also supply one. Defined names are NOT this option's concern: they ride the ContentDocument's own names field both ways, so supplying them here is no longer possible.
   readonly definitions?: DefinitionsTable;
 }
 
@@ -1096,9 +1114,6 @@ export function buildXlsxPackageFromContent(
       ...entry,
       id: index + 1,
     }));
-  const generalDefinedNameElements = buildGeneralDefinedNameElements(
-    collectNamedRangeEntries(options?.definitions),
-  );
 
   const commentedSheetIndices: number[] = [];
   const drawingSheetIndices: number[] = [];
@@ -1188,7 +1203,7 @@ export function buildXlsxPackageFromContent(
       usedImageFormats,
     ),
     "_rels/.rels": buildPackageRelsPart(),
-    "xl/workbook.xml": buildWorkbookPart(sheets, generalDefinedNameElements),
+    "xl/workbook.xml": buildWorkbookPart(sheets, document.names ?? []),
     "xl/_rels/workbook.xml.rels": buildWorkbookRelsPart(sheets.length),
     "xl/styles.xml": buildStylesPart(cellFormats, dxfTable),
     "xl/sharedStrings.xml": buildSharedStringsPart(sharedStrings),

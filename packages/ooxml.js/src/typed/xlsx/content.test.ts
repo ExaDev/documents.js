@@ -325,6 +325,23 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
       expect(summary.printSettings.repeatColumns).toBeUndefined();
     });
   });
+
+  describe("the workbook's own defined names (names, refersTo verbatim)", () => {
+    it("carries every definedName the fixture declares, the two _xlnm print built-ins included, refersTo verbatim", () => {
+      expect(document.names).toEqual([
+        {
+          name: "_xlnm.Print_Area",
+          refersTo: "Data!$A$1:$I$20",
+          scopeSheetIndex: 0,
+        },
+        {
+          name: "_xlnm.Print_Titles",
+          refersTo: "Data!$A:$A,Data!$1:$1",
+          scopeSheetIndex: 0,
+        },
+      ]);
+    });
+  });
 });
 
 describe("readXlsxContent: minimal.xlsx (real LibreOffice output, default/unmodified sheet)", () => {
@@ -410,6 +427,7 @@ describe("readXlsxContent: scope boundaries and error/fallback paths (synthetic 
     expect(result.kind).toBe("spreadsheet");
     if (result.kind === "spreadsheet") {
       expect(result.sheets).toEqual([]);
+      expect(result.names).toBeUndefined();
     }
   });
 
