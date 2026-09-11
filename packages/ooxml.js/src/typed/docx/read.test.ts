@@ -1317,6 +1317,108 @@ describe("readDocxContent: images", () => {
   });
 });
 
+describe("readDocxContent: lifted-image anchors (anchorRunIndex/anchorOffset)", () => {
+  function imageParts(): Package["parts"] {
+    return {
+      "word/_rels/document.xml.rels": {
+        kind: "xml",
+        nodes: [
+          rels([{ id: "rIdImg", type: IMAGE_REL, target: "media/image1.png" }]),
+        ],
+      },
+      "word/media/image1.png": { kind: "binary", base64: TINY_PNG_BASE64 },
+    };
+  }
+
+  function imageRun(): XmlElement {
+    return el("w:r", {}, [
+      drawingElement("wp:inline", "rIdImg", "Anchored alt text"),
+    ]);
+  }
+
+  it("anchors an image in its own run to the previous run at that run's full length", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:r", {}, [el("w:t", {}, [txt("Hello ")])]),
+      imageRun(),
+      el("w:r", {}, [el("w:t", {}, [txt("World")])]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph, imageParts()));
+    // The image sits between two runs: anchor names the run whose text it followed (index 0, "Hello ") and the position after that run's whole text.
+    const image = asImage(doc.sections[0]?.blocks[1]);
+    expect(image.anchorRunIndex).toBe(0);
+    expect(image.anchorOffset).toBe(6);
+  });
+
+  it("anchors an image at the paragraph's very start to (0, 0)", () => {
+    const paragraph = el("w:p", {}, [
+      imageRun(),
+      el("w:r", {}, [el("w:t", {}, [txt("Trailing text")])]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph, imageParts()));
+    const image = asImage(doc.sections[0]?.blocks[1]);
+    expect(image.anchorRunIndex).toBe(0);
+    expect(image.anchorOffset).toBe(0);
+  });
+
+  it("anchors an image sharing a run with text to that run at the length of the text preceding it", () => {
+    const sharedRun = el("w:r", {}, [
+      el("w:t", {}, [txt("foo")]),
+      drawingElement("wp:inline", "rIdImg", "Mid-run alt text"),
+      el("w:t", {}, [txt("bar")]),
+    ]);
+    const doc = readDocxContent(
+      paragraphPackage(el("w:p", {}, [sharedRun]), imageParts()),
+    );
+    const image = asImage(doc.sections[0]?.blocks[1]);
+    expect(image.anchorRunIndex).toBe(0);
+    expect(image.anchorOffset).toBe(3);
+  });
+
+  it("anchors an image inside a hyperlink through the run the walk emitted for it", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:r", {}, [el("w:t", {}, [txt("See ")])]),
+      el("w:hyperlink", { "r:id": "rIdLink" }, [
+        el("w:r", {}, [el("w:t", {}, [txt("the proof")])]),
+        imageRun(),
+      ]),
+    ]);
+    const parts = imageParts();
+    const relsPart = parts["word/_rels/document.xml.rels"];
+    if (relsPart?.kind !== "xml") {
+      throw new Error("expected document rels");
+    }
+    relsPart.nodes = [
+      rels([
+        { id: "rIdImg", type: IMAGE_REL, target: "media/image1.png" },
+        {
+          id: "rIdLink",
+          type: HYPERLINK_REL,
+          target: "https://example.invalid/",
+          external: true,
+        },
+      ]),
+    ];
+    const doc = readDocxContent(paragraphPackage(paragraph, parts));
+    // Runs as walked: [0] "See ", [1] "the proof" (hyperlink-wrapped), [2] the image's own empty run -- the anchor names run 1 at its full length.
+    const image = asImage(doc.sections[0]?.blocks[1]);
+    expect(image.anchorRunIndex).toBe(1);
+    expect(image.anchorOffset).toBe(9);
+  });
+
+  it("round-trips an end-of-paragraph image's anchor through buildDocxPackageFromContent", () => {
+    // The writer re-inlines a lifted image as the last run of its containing paragraph, so an image that already sat at the paragraph's end keeps its anchor through a round trip: (last run, that run's full length) is exactly where the written run lands.
+    const paragraph = el("w:p", {}, [
+      el("w:r", {}, [el("w:t", {}, [txt("Signed: ")])]),
+      imageRun(),
+    ]);
+    const before = readDocxContent(paragraphPackage(paragraph, imageParts()));
+    const after = readDocxContent(buildDocxPackageFromContent(before));
+    const image = asImage(after.sections[0]?.blocks[1]);
+    expect(image.anchorRunIndex).toBe(0);
+    expect(image.anchorOffset).toBe(8);
+  });
+});
+
 // An inline OLE object's real-world spelling: a w:r carries a w:object whose w:dxaOrig/w:dyaOrig (twips) size it, whose v:shape > v:imagedata names the raster preview picture rendered in its place (a VML spelling this reader has no path for, so the preview contributes no image block), and whose o:OLEObject names the payload part through its own relationship. The payload relationship is parameterised so a test can point rIdOle at whatever part shape it needs (the ZIP-payload case targets the default embeddings/oleObject1.xlsx; the classic-OLE case retargets to a .bin; the linked case goes external) -- the fixture itself ships no embeddings part, so each test adds exactly the payload bytes it wants. extraRuns splices additional runs after the object run inside the same paragraph.
 function oleObjectFixturePackage(
   oleRel: { target: string; external?: boolean },

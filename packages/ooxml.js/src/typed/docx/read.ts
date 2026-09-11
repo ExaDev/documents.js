@@ -423,11 +423,18 @@ function readObjectEmbeddedObject(
       };
 }
 
-// Collects every w:drawing and w:object found anywhere inside a paragraph's own content (nested inside w:r, w:hyperlink, w:ins, w:fldSimple), in document order. Deleted subtrees (w:del, w:moveFrom) are excluded unless the caller is carrying deletions -- mirroring readParagraphRuns' own tracked-changes handling, since a deleted drawing's own w:r sits inside w:del alongside w:delText runs, and a drawing lifted out of a deletion the reader is not carrying would appear as live content. A w:object is pushed at its own position and then recursed into, so a w:drawing nested inside it (a modern producer's mc:AlternateContent preview spelling) is still collected as an image in its own right, exactly as it was before embedded-object recovery existed.
+// One lifted element's identity in collection order: the w:drawing/w:object itself, plus -- for a drawing nested inside a w:object (a modern producer's mc:AlternateContent preview spelling) -- the object whose run position is the only position the reader can honestly anchor the preview to.
+interface LiftedElement {
+  readonly element: XmlElement;
+  readonly owner: XmlElement | undefined;
+}
+
+// Collects every w:drawing and w:object found anywhere inside a paragraph's own content (nested inside w:r, w:hyperlink, w:ins, w:fldSimple), in document order. Deleted subtrees (w:del, w:moveFrom) are excluded unless the caller is carrying deletions -- mirroring readParagraphRuns' own tracked-changes handling, since a deleted drawing's own w:r sits inside w:del alongside w:delText runs, and a drawing lifted out of a deletion the reader is not carrying would appear as live content. A w:object is pushed at its own position and then recursed into (with itself as the nesting owner), so a w:drawing nested inside it is still collected as an image in its own right, exactly as it was before embedded-object recovery existed.
 function collectLiftedElements(
   nodes: readonly XmlNode[],
   carryDeletions: boolean,
-  out: XmlElement[],
+  owner: XmlElement | undefined,
+  out: LiftedElement[],
 ): void {
   for (const node of nodes) {
     if (node.type !== "element") {
@@ -440,30 +447,85 @@ function collectLiftedElements(
       continue;
     }
     if (node.tag === "w:drawing" || node.tag === "w:object") {
-      out.push(node);
+      out.push({ element: node, owner });
       if (node.tag === "w:drawing") {
         continue;
       }
+      collectLiftedElements(node.children, carryDeletions, node, out);
+      continue;
     }
-    collectLiftedElements(node.children, carryDeletions, out);
+    collectLiftedElements(node.children, carryDeletions, owner, out);
   }
 }
 
-// ContentRun has no field to carry an inline image or embedded object (unlike ContentShape's blocks list in pptx) -- media found inside a paragraph's own runs is therefore surfaced as its own sibling block (ContentImageBlock or ContentEmbeddedObjectBlock), appended immediately after that paragraph's block in the order the markup introduced them, rather than nested inside it. This preserves block-level document order (each lifted block still appears right after the paragraph that contained it, and drawings and objects keep their relative order) at the cost of losing each one's exact character-level position within that paragraph's text -- a real, bounded scope narrowing forced by ContentParagraph's own shape, not a silent drop.
+// The position a run walk recorded for one w:drawing/w:object that sat as a direct child of an emitted run: the index that run occupies in the paragraph's own runs array, and the length of the run text preceding the element inside that same run (readRunText's own accounting -- w:t/w:delText length, w:tab/w:br/w:cr one character each).
+interface LiftedPosition {
+  readonly runIndex: number;
+  readonly offset: number;
+}
+
+// Records every w:drawing/w:object direct child of one emitted run, at the text position each sat at: the walk has just pushed the run at `runIndex`, so the element's own paragraph-level position is (runIndex, characters of run text before it). Elements not direct children of a run (nested inside a w:object, or inside run children the walk never reaches) get no entry here -- readParagraphLiftedBlocks then leaves their anchor unset, the schema's own "absent when the lifting reader does not know the position" spelling.
+function recordLiftedPositions(
+  run: XmlElement,
+  runIndex: number,
+  out: Map<XmlElement, LiftedPosition>,
+): void {
+  let offset = 0;
+  for (const child of run.children) {
+    if (child.type !== "element") {
+      continue;
+    }
+    if (child.tag === "w:drawing" || child.tag === "w:object") {
+      out.set(child, { runIndex, offset });
+      continue;
+    }
+    if (child.tag === "w:t" || child.tag === "w:delText") {
+      offset += textContent(child).length;
+    } else if (
+      child.tag === "w:tab" ||
+      child.tag === "w:br" ||
+      child.tag === "w:cr"
+    ) {
+      offset += 1;
+    }
+  }
+}
+
+// ContentRun has no field to carry an inline image or embedded object (unlike ContentShape's blocks list in pptx) -- media found inside a paragraph's own runs is therefore surfaced as its own sibling block (ContentImageBlock or ContentEmbeddedObjectBlock), appended immediately after that paragraph's block in the order the markup introduced them, rather than nested inside it. This preserves block-level document order (each lifted block still appears right after the paragraph that contained it, and drawings and objects keep their relative order), and each lifted ContentImageBlock now records where it sat: anchorRunIndex/anchorOffset name the run whose text the image originally followed and the character position within that run after which it sat, so the inline position is recoverable rather than structural. `positions` is the run walk's recorded map; an empty map leaves every anchor unset (the mid-run page-break split's spelling -- see readParagraphBlocks).
 function readParagraphLiftedBlocks(
   paragraph: XmlElement,
   ctx: DocxReadContext,
   carryDeletions: boolean,
+  runs: readonly ContentRun[],
+  positions: ReadonlyMap<XmlElement, LiftedPosition>,
 ): ContentBlock[] {
-  const lifted: XmlElement[] = [];
-  collectLiftedElements(paragraph.children, carryDeletions, lifted);
+  const lifted: LiftedElement[] = [];
+  collectLiftedElements(paragraph.children, carryDeletions, undefined, lifted);
   const blocks: ContentBlock[] = [];
-  for (const element of lifted) {
+  for (const entry of lifted) {
     const block =
-      element.tag === "w:object"
-        ? readObjectEmbeddedObject(element, ctx)
-        : readDrawingImage(element, ctx);
+      entry.element.tag === "w:object"
+        ? readObjectEmbeddedObject(entry.element, ctx)
+        : readDrawingImage(entry.element, ctx);
     if (block !== undefined) {
+      if (block.kind === "image") {
+        const position = positions.get(entry.owner ?? entry.element);
+        if (position !== undefined) {
+          if (position.offset > 0) {
+            block.anchorRunIndex = position.runIndex;
+            block.anchorOffset = position.offset;
+          } else if (position.runIndex > 0) {
+            // The image sat at the head of its own run, so the run whose text it followed is the previous one, at that run's full length -- the schema's "between two runs" spelling. The paragraph's very first position keys (0, 0).
+            const previous = runs[position.runIndex - 1];
+            block.anchorRunIndex = position.runIndex - 1;
+            block.anchorOffset =
+              previous === undefined ? 0 : previous.text.length;
+          } else {
+            block.anchorRunIndex = 0;
+            block.anchorOffset = 0;
+          }
+        }
+      }
       blocks.push(block);
     }
   }
@@ -536,6 +598,8 @@ interface ParagraphRunEvents {
   pointAnchors: RunPointAnchorEvent[];
   links: RunLinkEvent[];
   pageBreak: ParagraphPageBreakEvent | undefined;
+  // Every w:drawing/w:object direct child of an emitted run, at the (run index, preceding-text length) position it sat at -- the map readParagraphLiftedBlocks resolves lifted images' anchors through, the run-level counterpart of the pageBreak event's own run/char indices.
+  liftedPositions: Map<XmlElement, LiftedPosition>;
 }
 
 function newParagraphRunEvents(): ParagraphRunEvents {
@@ -546,6 +610,7 @@ function newParagraphRunEvents(): ParagraphRunEvents {
     pointAnchors: [],
     links: [],
     pageBreak: undefined,
+    liftedPositions: new Map(),
   };
 }
 
@@ -671,6 +736,7 @@ function readParagraphRuns(
             ? run
             : { ...run, hyperlink: hyperlinkTarget },
         );
+        recordLiftedPositions(node, runs.length - 1, events.liftedPositions);
         recordReferenceAnchor(node);
       } else if (node.tag === "w:fldSimple") {
         const startRun = runs.length;
@@ -815,6 +881,7 @@ function assembleRunConstructs(
 interface ReadParagraphResult {
   readonly paragraph: ContentParagraph;
   readonly pageBreak: ParagraphPageBreakEvent | undefined;
+  readonly liftedPositions: ReadonlyMap<XmlElement, LiftedPosition>;
 }
 
 function readParagraph(
@@ -856,6 +923,7 @@ function readParagraph(
       borders: readParagraphBorders(pPr),
     },
     pageBreak: events.pageBreak,
+    liftedPositions: events.liftedPositions,
   };
 }
 
@@ -931,20 +999,25 @@ function splitParagraphAtPageBreak(
   ];
 }
 
-// The one entry point collectParagraph calls: reads a w:p as its own real ContentBlock array, honouring a mid-run page-type w:br by splitting into [before, pageBreak, after] rather than folding it into one paragraph's own literal '\n' text.
+// The one entry point collectParagraph calls: reads a w:p as its own real ContentBlock array, honouring a mid-run page-type w:br by splitting into [before, pageBreak, after] rather than folding it into one paragraph's own literal '\n' text, and appending the paragraph's lifted media blocks after whichever halves the split produced. A paragraph that splits carries no lifted anchors: the two halves' own runs arrays are re-indexed and re-shaped by the split, so a pre-split run index would name a position in one half or the other ambiguously -- exactly the "no clean encoding, so dropped rather than mis-encoded" rule the split itself applies to a construct spanning the break -- and an unsplit paragraph (the overwhelmingly common case) anchors every lifted image it has.
 function readParagraphBlocks(
   paragraph: XmlElement,
   ctx: DocxReadContext,
   carryDeletions: boolean,
 ): ContentBlock[] {
-  const { paragraph: block, pageBreak } = readParagraph(
+  const read = readParagraph(paragraph, ctx, carryDeletions);
+  const lifted = readParagraphLiftedBlocks(
     paragraph,
     ctx,
     carryDeletions,
+    read.paragraph.runs,
+    read.pageBreak === undefined
+      ? read.liftedPositions
+      : new Map<XmlElement, LiftedPosition>(),
   );
-  return pageBreak === undefined
-    ? [block]
-    : splitParagraphAtPageBreak(block, pageBreak);
+  return read.pageBreak === undefined
+    ? [read.paragraph, ...lifted]
+    : [...splitParagraphAtPageBreak(read.paragraph, read.pageBreak), ...lifted];
 }
 
 // WordprocessingML's own ST_Border enumeration has several dozen decorative line styles (wave, threeDEmboss, dashDotStroked, ...) that ContentBorder's four-member ContentStrokeStyle can't distinguish individually -- each maps to whichever of solid/dashed/dotted/double it visually resembles most closely, the same "narrow to the closest matching value" convention readAlignment (styles.ts) already applies to w:jc's own both/distribute -> justify. Anything unmapped defaults to 'solid' rather than being dropped, since a border with an unrecognised style is still visually a border.
@@ -1432,12 +1505,9 @@ function collectParagraph(
   if (hasPageBreakBefore(paragraph)) {
     state.blocks.push({ kind: "pageBreak" });
   }
-  // The pageBreak block above sits outside every extent recorded here: it is the paragraph's own w:pageBreakBefore rendered as a preceding block, not part of any construct that brackets the paragraph. A mid-run page-type w:br produces its own pageBreak block too, spliced between the two ContentParagraph halves readParagraphBlocks returns for it -- see that function's own doc comment.
+  // The pageBreak block above sits outside every extent recorded here: it is the paragraph's own w:pageBreakBefore rendered as a preceding block, not part of any construct that brackets the paragraph. A mid-run page-type w:br produces its own pageBreak block too, spliced between the two ContentParagraph halves readParagraphBlocks returns for it -- see that function's own doc comment. The lifted media blocks readParagraphBlocks now appends sit INSIDE the extent, exactly where the separate push below used to place them.
   const paragraphIndex = state.blocks.length;
   state.blocks.push(...readParagraphBlocks(paragraph, ctx, paragraphDeleted));
-  state.blocks.push(
-    ...readParagraphLiftedBlocks(paragraph, ctx, paragraphDeleted),
-  );
   const endIndex = state.blocks.length;
 
   if (tracked !== undefined) {
