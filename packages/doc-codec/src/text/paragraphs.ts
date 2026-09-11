@@ -3,7 +3,7 @@ import type {
   ContentParagraph,
   ContentRun,
 } from "document-schema.js";
-import { readInt32LE } from "../bytes";
+import { readInt32LE, readUint16LE, readUint32LE, slice } from "../bytes";
 import { DocFormatError } from "../errors";
 import { type PropertyBinTable } from "../prop/fkp";
 import {
@@ -107,6 +107,46 @@ export function readParagraphs(
   return entries;
 }
 
+/** sprmPHugePapx (0x6646), [MS-DOC] 2.6.2's Paragraph Properties table: "a 4-byte unsigned integer that specifies a location in the Data Stream" where "a PrcData structure begins ... and specifies additional properties for the paragraph". A paragraph whose direct grpprl opens with this sprm keeps its real properties in that Data-stream PrcData -- the whole point of the sprm is a Papx too large for its own 512-byte FKP page, so Word leaves the FKP holding only the pointer. */
+const SPRM_P_HUGE_PAPX = 0x6646;
+
+// The same table's own chain bound, made finite: "sprmPHugePapx and sprmPTableProps values can refer to PrcDatas containing each other, but the chain MUST eventually terminate in a PrcData structure [that] does not contain a sprmPHugePapx value or a sprmPTableProps value". A chain longer than any real producer writes is a malformed file, and throwing beats looping on it; the bound is generous rather than derived because the specification states no number, only termination.
+const MAX_PAPX_INDIRECTION_HOPS = 16;
+
+// Resolves a paragraph's own direct grpprl through its indirect spelling: a grpprl whose FIRST Prl is sprmPHugePapx is replaced by the PrcData its operand names, because [MS-DOC] 2.6.2's own text is "if an application processes this PrcData, then it MUST NOT process any more Prl elements in the array that contained the sprmPHugePapx" -- the PrcData's GrpPrl substitutes for the rest of the array rather than stacking beneath it. A sprmPHugePapx that is not first "MUST be ignored" (the same table's own rule), and in a GrpPrlAndIstd it "MUST be the only Prl in that array and the ... istd member ... MUST be zero", so following only a first Prl covers every legal spelling. Each hop reads the PrcData at the operand's Data-stream offset -- cbGrpprl (a signed 2-byte length) followed by that many bytes of GrpPrl, the PrcData structure's own layout -- and a GrpPrl that itself opens with sprmPHugePapx is one more legal hop of the same chain.
+function resolveIndirectPapx(
+  prls: readonly Prl[],
+  context: ReadContext,
+): readonly Prl[] {
+  let current = prls;
+  for (let hop = 0; ; hop += 1) {
+    const first = current[0];
+    if (first?.sprm.value !== SPRM_P_HUGE_PAPX) {
+      return current;
+    }
+    if (hop >= MAX_PAPX_INDIRECTION_HOPS) {
+      throw new DocFormatError(
+        `a paragraph's indirect property chain did not terminate within ${MAX_PAPX_INDIRECTION_HOPS} sprmPHugePapx hops; [MS-DOC] 2.6.2 requires the chain to terminate`,
+      );
+    }
+    if (context.dataStream === undefined) {
+      throw new DocFormatError(
+        "a paragraph's grpprl opens with sprmPHugePapx, but this compound file carries no Data stream for it to point into",
+      );
+    }
+    const offset = readUint32LE(first.operand, 0);
+    // PrcData's own layout: cbGrpprl, a 2-byte length, then that many bytes of GrpPrl. Declared signed in the specification only so negatives are illegal; read unsigned here, exactly as the one independent implementation (LibreOffice's WW8Fkp constructor) does, with the slice's own bounds check refusing a malformed value.
+    const cbGrpprl = readUint16LE(context.dataStream, offset);
+    const grpprl = slice(
+      context.dataStream,
+      offset + 2,
+      cbGrpprl,
+      "a sprmPHugePapx-referenced PrcData's GrpPrl",
+    );
+    current = readGrpprl(grpprl);
+  }
+}
+
 function buildParagraph(
   text: string,
   fcs: readonly number[],
@@ -117,7 +157,10 @@ function buildParagraph(
 ): ParagraphEntry {
   const papx = context.papxTable.papx(propertyFc);
   const properties: ParagraphProperties = {};
-  const grpprl = papx !== undefined ? readGrpprl(papx.grpprl) : [];
+  const grpprl =
+    papx !== undefined
+      ? resolveIndirectPapx(readGrpprl(papx.grpprl), context)
+      : [];
   if (papx !== undefined) {
     // The istd comes from the GrpPrlAndIstd's own field, and a sprmPIstd inside the grpprl can then replace it -- so it is seeded first and the fold is allowed to overwrite it.
     properties.istd = papx.istd;
