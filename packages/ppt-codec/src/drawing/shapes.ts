@@ -14,6 +14,8 @@ import {
 } from "../record/types";
 import {
   PROPERTY_ROTATION,
+  PROPERTY_TABLE_PROPERTIES,
+  TABLE_FLAG_IS_TABLE,
   type ShapeProperty,
   fixedPointToDegrees,
   readShapeProperties,
@@ -46,6 +48,16 @@ export interface PptShape {
   readonly clientData: PptRecord | undefined;
   // The shape's property tables, merged -- the source of its rotation and, for a picture, its blip-store reference.
   readonly properties: ReadonlyMap<number, ShapeProperty>;
+}
+
+// A table, which the format spells as a group whose own shape's property table states tableProperties with fIsTable set ([MS-ODRAW] 2.3.4.36): the group's own anchor places the table on the slide, and each cell is an ordinary OfficeArtSpContainer among the group's children, carrying its own anchor and its own text. A cell is not distinguished from any other shape by any flag -- the grid is genuinely derived from the cells' own rectangles, which is how every reader of this spelling recovers it.
+export interface PptTable {
+  // The table's own rectangle in slide coordinates, from the group shape's anchor.
+  readonly anchor: ShapeRect;
+  // The group's own rotation in degrees clockwise -- the whole table rotates as one shape.
+  readonly rotationDeg: number | undefined;
+  // The cell shapes in document order, each with its own rectangle in slide coordinates (a client anchor is absolute; a child anchor is mapped through the group's coordinate system like any grouped shape's).
+  readonly cells: readonly PptShape[];
 }
 
 interface Transform {
@@ -154,6 +166,15 @@ function rotationDegOf(
   return degrees === 0 ? undefined : degrees;
 }
 
+// Whether a group shape's property table states tableProperties with fIsTable set -- the one mark that separates a table from an ordinary grouping ([MS-ODRAW] 2.3.4.36: "flags for a group that represents a table"). A group stating no tableProperties at all is an ordinary group, the property's own documented default of 0x00000000.
+function isTableGroup(properties: ReadonlyMap<number, ShapeProperty>): boolean {
+  const tableProperties = properties.get(PROPERTY_TABLE_PROPERTIES);
+  return (
+    tableProperties !== undefined &&
+    (tableProperties.value & TABLE_FLAG_IS_TABLE) !== 0
+  );
+}
+
 // Composes the transform a group's children are read through: their coordinates run in the space the group's OfficeArtFSPGR declares, and the group's own anchor says where that space lands in the parent's. The patriarch -- every drawing's outermost group -- is the exception the spec's structure creates rather than an assumption: it declares a degenerate coordinate system and no anchor, because its children are already in slide coordinates.
 function groupTransform(groupShape: PptRecord, parent: Transform): Transform {
   const { spid, flags } = readShapeIdentity(groupShape);
@@ -189,7 +210,7 @@ function groupTransform(groupShape: PptRecord, parent: Transform): Transform {
 function collectShape(
   shape: PptRecord,
   transform: Transform,
-  into: PptShape[],
+  into: (PptShape | PptTable)[],
 ): void {
   const { spid, flags } = readShapeIdentity(shape);
   // A deleted shape's content is retained in the file but is not part of the drawing; a group's own placeholder shape carries the group's geometry rather than content, and is consumed by groupTransform instead.
@@ -211,7 +232,7 @@ function collectShape(
 function collectGroup(
   group: PptRecord,
   parent: Transform,
-  into: PptShape[],
+  into: (PptShape | PptTable)[],
 ): void {
   const children = childRecords(group);
   const [groupShape, ...rest] = children;
@@ -219,6 +240,29 @@ function collectGroup(
     return;
   }
   // [MS-ODRAW] 2.2.16: the first child of a group container is always the OfficeArtSpContainer holding that group's own shape information.
+  const groupProperties = readShapeProperties(groupShape);
+  if (isTableGroup(groupProperties)) {
+    // A table group's children are its cells, not shapes to flatten into the slide -- the grid is the content here, and a nested group inside a table is not a shape the format defines, so only OfficeArtSpContainer children are collected.
+    const anchor = resolveAnchor(groupShape, parent);
+    if (anchor === undefined) {
+      throw new PptFormatError(
+        `table group shape ${readShapeIdentity(groupShape).spid} carries no anchor, so the table cannot be placed on the slide`,
+      );
+    }
+    const tableTransform = groupTransform(groupShape, parent);
+    const cells: PptShape[] = [];
+    for (const child of rest) {
+      if (child.header.recType === OfficeArtSpContainer) {
+        collectShape(child, tableTransform, cells);
+      }
+    }
+    into.push({
+      anchor,
+      rotationDeg: rotationDegOf(groupProperties),
+      cells,
+    });
+    return;
+  }
   const transform = groupTransform(groupShape, parent);
   for (const child of rest) {
     if (child.header.recType === OfficeArtSpgrContainer) {
@@ -229,8 +273,10 @@ function collectGroup(
   }
 }
 
-// Every content shape in a slide's drawing, in document order, each shape's rectangle resolved into slide coordinates.
-export function readDrawingShapes(drawing: PptRecord): PptShape[] {
+// Every content shape in a slide's drawing, in document order, each shape's rectangle resolved into slide coordinates. A table group arrives as one PptTable entry rather than as its cells, so a caller walking the result sees one table where the file spells one.
+export function readDrawingShapes(
+  drawing: PptRecord,
+): readonly (PptShape | PptTable)[] {
   if (drawing.header.recType !== RT_Drawing) {
     throw new PptFormatError(
       `expected RT_Drawing (0x${RT_Drawing.toString(16)}), found record type 0x${drawing.header.recType.toString(16)}`,
@@ -240,7 +286,7 @@ export function readDrawingShapes(drawing: PptRecord): PptShape[] {
   if (dg === undefined) {
     return [];
   }
-  const shapes: PptShape[] = [];
+  const shapes: (PptShape | PptTable)[] = [];
   for (const child of childRecords(dg)) {
     if (child.header.recType === OfficeArtSpgrContainer) {
       collectGroup(child, IDENTITY, shapes);

@@ -1,7 +1,9 @@
 import type {
   ContentBlock,
   ContentImageBlock,
+  ContentParagraph,
   ContentShape,
+  ContentTable,
 } from "document-schema.js";
 import { buildTextBody } from "../content-write";
 import { isBlipFormat } from "./blips";
@@ -15,6 +17,7 @@ import {
   writeContainer,
 } from "../record/write";
 import {
+  OfficeArtChildAnchor,
   OfficeArtClientAnchor,
   OfficeArtClientTextbox,
   OfficeArtDgContainer,
@@ -23,6 +26,7 @@ import {
   OfficeArtFSPGR,
   OfficeArtSpContainer,
   OfficeArtSpgrContainer,
+  OfficeArtTertiaryFOPT,
   RT_Drawing,
   RT_TextCharsAtom,
   RT_TextHeaderAtom,
@@ -30,8 +34,12 @@ import {
 import {
   PROPERTY_PIB,
   PROPERTY_ROTATION,
+  PROPERTY_TABLE_PROPERTIES,
+  PROPERTY_TABLE_ROW_PROPERTIES,
+  TABLE_FLAG_IS_TABLE,
   type WritableShapeProperty,
   degreesToFixedPoint,
+  writeIMsoArray,
   writeShapePropertyTable,
 } from "./properties";
 import { TEXT_TYPE_OTHER, characterCountOf } from "../text/atoms";
@@ -40,8 +48,11 @@ import { pointsToMasterUnits } from "../units";
 
 // The write-side mirror of drawing/shapes.ts: given a slide's ContentShape list, emits the [MS-ODRAW]/[MS-PPT] shape tree readDrawingShapes flattens back into PptShape[] -- one outermost patriarch group (the same fGroup|fPatriarch placeholder shape collectGroup/groupTransform special-case on read) followed by one plain OfficeArtSpContainer per content shape, each carrying a client anchor in slide coordinates, a property table when the shape states rotation or displays a picture, and, when the shape has text, an OfficeArtClientTextbox. Deliberately narrower than the read side's own coverage: every shape this writer emits is an ungrouped, unrotated-rectangle-in-slide-coordinates shape (an OfficeArtClientAnchor, never OfficeArtChildAnchor/OfficeArtFSPGR group nesting) -- see the package README's write-scope section.
 
-// [MS-ODRAW] 2.2.40 OfficeArtFSP's flags word -- the same two bits drawing/shapes.ts's FSP_GROUP/FSP_PATRIARCH name for reading.
+// [MS-ODRAW] 2.2.40 OfficeArtFSP's flags word -- the same bits drawing/shapes.ts's FSP_GROUP/FSP_PATRIARCH name for reading.
 const FSP_GROUP = 1 << 0;
+const FSP_CHILD = 1 << 1;
+// [MS-ODRAW] 2.2.40 bit 9: "this shape has an anchor to the parent" -- real producers set it on every anchored shape, the table group's own shape included.
+const FSP_HAVE_ANCHOR = 1 << 9;
 const FSP_PATRIARCH = 1 << 2;
 // The patriarch's own shape id is always 1 ([MS-ODRAW] does not mandate this, but every real producer's outermost group shape is spid 1, and nothing in this reader's own drawing/shapes.ts inspects spid values at all -- see PptShape.spid's read-side comment); content shapes are numbered from 2, uniquely per slide, which is all readDrawingShapes/collectShape ever need of an spid.
 const PATRIARCH_SPID = 1;
@@ -183,16 +194,25 @@ export interface DrawingWriteContext {
 
 // The image formats MSOBLIPTYPE gives this writer a blip record for are exactly isBlipFormat's two -- the same vocabulary drawing/blips.ts reads with, so a written picture always reads back as the same image.
 
-// One shape's blocks, partitioned the way the writer genuinely treats them, so the drop diagnostics and the write itself can never disagree: paragraph blocks become the text body, the first png/jpeg image becomes the shape's single blip reference, and everything else -- an image whose format has no MSOBLIPTYPE token here, a second image beyond the one pib a shape carries, and every block kind with no [MS-PPT] spelling this writer produces -- is dropped, with a diagnostic naming it. Keeping the partition in one place is what makes the diagnostic honest: there is no second filter elsewhere that could silently spare or spare-drop a block this function classified differently.
+// One shape's blocks, partitioned the way the writer genuinely treats them, so the drop diagnostics and the write itself can never disagree: paragraph blocks become the text body, the first png/jpeg image becomes the shape's single blip reference, the first table block turns the whole shape into a table group, and everything else -- an image whose format has no MSOBLIPTYPE token here, a second image beyond the one pib a shape carries, a second table, and every block kind with no [MS-PPT] spelling this writer produces -- is dropped, with a diagnostic naming it. When a table is present the shape is a table group and carries no text body or blip of its own, so any paragraph or image collected before the table is dropped too, each named through the same sink. Keeping the partition in one place is what makes the diagnostic honest: there is no second filter elsewhere that could silently spare or spare-drop a block this function classified differently.
 function planShapeBlocks(
   blocks: readonly ContentBlock[],
   context: DrawingWriteContext,
 ): {
   readonly pib: number | undefined;
   readonly textBlocks: readonly ContentBlock[];
+  readonly table: ContentTable | undefined;
 } {
   const textBlocks: ContentBlock[] = [];
   let pib: number | undefined;
+  let table: ContentTable | undefined;
+  const drop = (block: ContentBlock, reason: string): void => {
+    context.sink({
+      code: PptDiagnosticCodes.BLOCK_DROPPED,
+      severity: "warning",
+      message: `${context.location}: ${reason}`,
+    });
+  };
   for (const block of blocks) {
     if (block.kind === "paragraph") {
       textBlocks.push(block);
@@ -218,30 +238,252 @@ function planShapeBlocks(
       pib = context.blipIndexOf(block);
       continue;
     }
-    context.sink({
-      code: PptDiagnosticCodes.BLOCK_DROPPED,
-      severity: "warning",
-      message: `${context.location}: a '${block.kind}' block is dropped; this writer produces no [MS-PPT] spelling for it`,
+    if (block.kind === "table") {
+      if (table !== undefined) {
+        drop(
+          block,
+          "a second 'table' block is dropped; a shape becomes one table group, and an earlier table already did",
+        );
+        continue;
+      }
+      table = block;
+      continue;
+    }
+    drop(
+      block,
+      `a '${block.kind}' block is dropped; this writer produces no [MS-PPT] spelling for it`,
+    );
+  }
+  if (table !== undefined) {
+    for (const block of textBlocks) {
+      drop(
+        block,
+        "a 'paragraph' block is dropped; a shape carrying a table becomes a table group, which holds its text in cells rather than a text body of its own",
+      );
+    }
+    if (pib !== undefined) {
+      context.sink({
+        code: PptDiagnosticCodes.IMAGE_DROPPED,
+        severity: "warning",
+        message: `${context.location}: an image block is dropped; a shape carrying a table becomes a table group, which has no blip reference of its own`,
+      });
+    }
+    return { pib: undefined, textBlocks: [], table };
+  }
+  return { pib, textBlocks, table };
+}
+
+// A table's row heights in master units, for the tableRowProperties IMsoArray: every row stating a heightPt states its own minimum height, and the rows stating none share what remains of the table's own height equally -- the neutral division that adds no information the input did not give, where inventing per-row values would.
+function tableRowHeights(
+  table: ContentTable,
+  frameHeightMasterUnits: number,
+): number[] {
+  const stated = table.rows.map((row) =>
+    row.heightPt === undefined ? undefined : pointsToMasterUnits(row.heightPt),
+  );
+  const unstatedCount = stated.filter((height) => height === undefined).length;
+  if (unstatedCount === 0) {
+    return stated.map((height) => {
+      if (height === undefined) {
+        throw new Error(
+          "internal error: a stated row height became unstated in the same pass",
+        );
+      }
+      return height;
     });
   }
-  return { pib, textBlocks };
+  const remaining =
+    frameHeightMasterUnits -
+    stated.reduce<number>((sum, height) => sum + (height ?? 0), 0);
+  const shared = Math.max(1, Math.round(remaining / unstatedCount));
+  return stated.map((height) => height ?? shared);
+}
+
+// A table group, in the spelling a real PowerPoint-authored file carries (confirmed by inspecting Microsoft Office PowerPoint's own output, Apache POI's table_test.ppt fixture): the group shape opens with the FSPGR child coordinate system ([MS-ODRAW] 2.2.14 puts shapeGroup first), carries fGroup, states tableProperties fIsTable plus tableRowProperties as a complex IMsoArray of row minimum heights in the tertiary property table, and anchors the whole table with a client anchor whose rectangle is the FSPGR's own -- an identity mapping, so the cells' child anchors read as slide coordinates directly; then one plain text-box shape per cell, each carrying fChild and an OfficeArtChildAnchor at its grid position. Cell geometry is derived from the table's own frame, the column widths, and the row heights -- the same derivation read.ts's tableBlockFor reverses, so the grid this writer lays out is exactly the grid that reads back.
+function writeTableGroup(
+  spid: number,
+  shape: ContentShape,
+  table: ContentTable,
+  context: DrawingWriteContext,
+): { readonly bytes: Uint8Array<ArrayBuffer>; readonly shapeCount: number } {
+  const { frame } = shape;
+  const rowHeights = tableRowHeights(
+    table,
+    pointsToMasterUnits(frame.heightPt),
+  );
+  // The grid's column widths in master units: the declared widths, extended past the declared count by repeating the last one so a ragged row's extra cells continue the grid rightward rather than collapsing onto earlier columns (which would silently overwrite them on read, since the reader places a cell by its left edge). A table declaring no widths at all divides its own frame equally.
+  const declaredWidths = table.columnWidthsPt.map(pointsToMasterUnits);
+  // Seeded at 1 so even a table with no rows and no declared widths derives a one-column grid rather than an empty one.
+  const cellCount = Math.max(
+    1,
+    ...table.rows.map((row) => row.cells.length),
+    declaredWidths.length,
+  );
+  const lastDeclared = declaredWidths.at(-1);
+  const equalShare = Math.max(
+    1,
+    Math.round(pointsToMasterUnits(frame.widthPt) / cellCount),
+  );
+  const columnWidthsMasterUnits = Array.from(
+    { length: cellCount },
+    (_, index) => declaredWidths[index] ?? lastDeclared ?? equalShare,
+  );
+  const columnBoundaries: number[] = [];
+  let columnEdge = pointsToMasterUnits(frame.xPt);
+  for (const width of columnWidthsMasterUnits) {
+    columnBoundaries.push(columnEdge);
+    columnEdge += width;
+  }
+  columnBoundaries.push(columnEdge);
+  const rowBoundaries: number[] = [];
+  let rowEdge = pointsToMasterUnits(frame.yPt);
+  for (const height of rowHeights) {
+    rowBoundaries.push(rowEdge);
+    rowEdge += height;
+  }
+  rowBoundaries.push(rowEdge);
+  const rowHeightsPayload = writeIMsoArray(rowHeights, 4);
+  // The FSPGR states the table's own slide-coordinate rectangle, and the client anchor states the same rectangle -- the identity mapping real PowerPoint writes, so the cells' child anchors are their slide positions.
+  const tableLeft = pointsToMasterUnits(frame.xPt);
+  const tableTop = pointsToMasterUnits(frame.yPt);
+  const tableRight = pointsToMasterUnits(frame.xPt + frame.widthPt);
+  const tableBottom = pointsToMasterUnits(frame.yPt + frame.heightPt);
+  const groupShape = writeContainer(OfficeArtSpContainer, [
+    writeAtom(
+      OfficeArtFSPGR,
+      concatBytes(
+        i32le(tableLeft),
+        i32le(tableTop),
+        i32le(tableRight),
+        i32le(tableBottom),
+      ),
+      { recVer: 0x1 },
+    ),
+    writeFsp(spid, FSP_GROUP | FSP_HAVE_ANCHOR),
+    ...(shape.rotationDeg === undefined
+      ? []
+      : [
+          writeShapePropertyTable(OfficeArtFOPT, [
+            {
+              opid: PROPERTY_ROTATION,
+              op: degreesToFixedPoint(shape.rotationDeg),
+            },
+          ]),
+        ]),
+    writeShapePropertyTable(OfficeArtTertiaryFOPT, [
+      { opid: PROPERTY_TABLE_PROPERTIES, op: TABLE_FLAG_IS_TABLE },
+      {
+        opid: PROPERTY_TABLE_ROW_PROPERTIES,
+        op: rowHeightsPayload.length,
+        // fBid is set alongside fComplex because the real producer sets both together here (Microsoft Office PowerPoint's own table writes do exactly this, confirmed by inspecting its raw bytes) and LibreOffice's import only finds the row-height payload on a property marked fBid -- without it the group imports as plain grouped shapes rather than a table.
+        fBid: true,
+        complex: rowHeightsPayload,
+      },
+    ]),
+    writeClientAnchor(frame.xPt, frame.yPt, frame.widthPt, frame.heightPt),
+  ]);
+  let cellSpid = spid + 1;
+  const cellShapes = table.rows.flatMap((row, rowIndex) =>
+    row.cells.map((cell, columnIndex) => {
+      const cellLeft = columnBoundaries[columnIndex];
+      const cellRight = columnBoundaries[columnIndex + 1];
+      const cellTop = rowBoundaries[rowIndex];
+      const cellBottom = rowBoundaries[rowIndex + 1];
+      if (
+        cellLeft === undefined ||
+        cellRight === undefined ||
+        cellTop === undefined ||
+        cellBottom === undefined
+      ) {
+        throw new Error(
+          "internal error: a table cell sits outside the grid boundaries derived from its own table",
+        );
+      }
+      if (cell.colSpan !== undefined && cell.colSpan > 1) {
+        context.sink({
+          code: PptDiagnosticCodes.TABLE_SPAN_DROPPED,
+          severity: "warning",
+          message: `${context.location}: a table cell's colSpan ${String(cell.colSpan)} is dropped; a PowerPoint 97-2003 table is a strict grid of shapes with no merge records, so the cell is written one column wide`,
+        });
+      }
+      if (cell.rowSpan !== undefined && cell.rowSpan > 1) {
+        context.sink({
+          code: PptDiagnosticCodes.TABLE_SPAN_DROPPED,
+          severity: "warning",
+          message: `${context.location}: a table cell's rowSpan ${String(cell.rowSpan)} is dropped; a PowerPoint 97-2003 table is a strict grid of shapes with no merge records, so the cell is written one row tall`,
+        });
+      }
+      const paragraphs = cell.blocks.filter(
+        (block): block is ContentParagraph => block.kind === "paragraph",
+      );
+      for (const block of cell.blocks) {
+        if (block.kind !== "paragraph") {
+          context.sink({
+            code: PptDiagnosticCodes.BLOCK_DROPPED,
+            severity: "warning",
+            message: `${context.location}: a '${block.kind}' block inside a table cell is dropped; a table cell in this format is a plain text-box shape with no property table or object reference of its own`,
+          });
+        }
+      }
+      const textbox = writeClientTextbox(paragraphs, context.fontIndexOf);
+      const children = [
+        // fChild ([MS-ODRAW] 2.2.40): the cell belongs to the table's group, and its anchor is a child anchor in the group's own coordinate space.
+        writeFsp(cellSpid, FSP_CHILD),
+        writeAtom(
+          OfficeArtChildAnchor,
+          // OfficeArtChildAnchor 2.2.39: xLeft, yTop, xRight, yBottom -- the left-top order, unlike a client anchor's top-left one.
+          concatBytes(
+            i32le(cellLeft),
+            i32le(cellTop),
+            i32le(cellRight),
+            i32le(cellBottom),
+          ),
+        ),
+      ];
+      cellSpid += 1;
+      if (textbox !== undefined) {
+        children.push(textbox);
+      }
+      return writeContainer(OfficeArtSpContainer, children);
+    }),
+  );
+  return {
+    bytes: writeContainer(OfficeArtSpgrContainer, [groupShape, ...cellShapes]),
+    // The group shape itself plus one shape per cell.
+    shapeCount: 1 + table.rows.reduce((sum, row) => sum + row.cells.length, 0),
+  };
 }
 
 function writeDrawing(
   shapes: readonly DrawingShape[],
   context: DrawingWriteContext,
 ): DrawingWritten {
-  const shapeContainers = shapes.map((entry, index) => {
+  // Spids are minted contiguously across every shape this drawing writes -- a plain shape takes one, a table group takes one for its group shape and one per cell -- so the identifier space and the shape count stay derived from the same walk.
+  let nextSpid = FIRST_CONTENT_SPID;
+  let shapeCount = 1; // the patriarch
+  const shapeContainers: Uint8Array<ArrayBuffer>[] = [];
+  for (const entry of shapes) {
     const plan = planShapeBlocks(entry.shape.blocks, context);
-    return writeShape(
-      FIRST_CONTENT_SPID + index,
-      entry.shape,
-      plan.pib,
-      plan.textBlocks,
-      context.fontIndexOf,
-      entry.clientData,
+    if (plan.table !== undefined) {
+      const group = writeTableGroup(nextSpid, entry.shape, plan.table, context);
+      nextSpid += group.shapeCount;
+      shapeCount += group.shapeCount;
+      shapeContainers.push(group.bytes);
+      continue;
+    }
+    shapeContainers.push(
+      writeShape(
+        nextSpid,
+        entry.shape,
+        plan.pib,
+        plan.textBlocks,
+        context.fontIndexOf,
+        entry.clientData,
+      ),
     );
-  });
+    nextSpid += 1;
+    shapeCount += 1;
+  }
   return {
     bytes: writeContainer(RT_Drawing, [
       writeContainer(OfficeArtDgContainer, [
@@ -251,13 +493,8 @@ function writeDrawing(
         ]),
       ]),
     ]),
-    // Every shape container, the patriarch included.
-    shapeCount: shapes.length + 1,
-    // Spids run PATRIARCH_SPID then FIRST_CONTENT_SPID upward, so the last content shape minted the highest identifier.
-    maxSpid:
-      shapes.length === 0
-        ? PATRIARCH_SPID
-        : FIRST_CONTENT_SPID + shapes.length - 1,
+    shapeCount,
+    maxSpid: Math.max(PATRIARCH_SPID, nextSpid - 1),
   };
 }
 
