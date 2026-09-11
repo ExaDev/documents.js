@@ -759,6 +759,9 @@ jobs:
         with:
           ref: ${{ matrix.tag }} # the release commit the orchestrator tagged, not whatever main has moved on to by now
           fetch-depth: 0
+      # build-sea-binary.ts and its shared tsdown config are workspace-level CI tooling, not part of any package's own versioned release -- unlike a package's own src/, they have no reason to stay frozen at whatever they looked like the moment a tag was cut. Checking out the tag alone would mean a script bug fixed on main today stays permanently unfixable for every already-tagged release, including a later backfill run against that same tag, since a backfill checks out the identical ref. Overlaying main's own current copies here is exactly what caught and needed fixing the first time this job ran for real (ExaDev/documents.js#1230, 2026-09-11): node --build-sea's own stdout corrupted this job's GITHUB_OUTPUT write, fixed on main, but every already-tagged release would still replay the old, broken script without this.
+      - name: Use the latest SEA build tooling rather than this tag's own frozen copy
+        run: git checkout origin/main -- .github/scripts/build-sea-binary.ts tsdown.sea.shared.ts
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
