@@ -28,7 +28,12 @@ export interface ResolvedParagraphProperties {
   readonly indentFirstLinePt?: number;
   // w:pPr/w:outlineLvl verbatim, 0-based (0 is a level-1 heading). This is ECMA-376's own "this paragraph style is a heading at level N" mechanism, inherited through w:basedOn like every other field here -- which is why a custom style based on Heading2 resolves without name-matching the styleId. Kept raw because this interface mirrors the cascade; readParagraph converts it to the schema's 1-based headingLevel.
   readonly outlineLvl?: number;
+  // w:pPr/w:bidi (ECMA-376 Part 1 17.3.1.6, "Right to Left Paragraph Layout") resolved through the cascade: true means the paragraph lays out right-to-left, false an explicit left-to-right, absent unspecified.
+  readonly bidi?: boolean;
 }
+
+// One layer's w:vertAlign value: superscript/subscript map onto ContentRun.verticalAlign's own members, while "baseline" is the cascade's own explicit-override spelling -- a layer stating baseline turns OFF a lower layer's inherited superscript or subscript, so it must win the merge and then disappear (ContentRun models baseline as the field's absence). The bare string union keeps mergeRunLayer's layer-wins semantics uniform across all members.
+type VerticalAlignLayer = "superscript" | "subscript" | "baseline" | undefined;
 
 export interface ResolvedRunProperties {
   readonly bold?: boolean;
@@ -38,6 +43,9 @@ export interface ResolvedRunProperties {
   readonly fontFamily?: string;
   readonly sizePt?: number;
   readonly color?: Color;
+  readonly verticalAlign?: VerticalAlignLayer;
+  // w:rPr/w:rtl (ECMA-376 Part 1 17.3.2.30) resolved through the cascade: true means the run's text is right-to-left, false an explicit left-to-right, absent unspecified. The direction field this feeds is the schema's own run-level scope, the WordprocessingML spelling RTF's \rtlch/\ltrch pair states at the same level.
+  readonly rtl?: boolean;
 }
 
 function mergeParagraphLayer(
@@ -52,6 +60,7 @@ function mergeParagraphLayer(
     indentLeftPt: layer.indentLeftPt ?? base.indentLeftPt,
     indentFirstLinePt: layer.indentFirstLinePt ?? base.indentFirstLinePt,
     outlineLvl: layer.outlineLvl ?? base.outlineLvl,
+    bidi: layer.bidi ?? base.bidi,
   };
 }
 
@@ -67,6 +76,8 @@ function mergeRunLayer(
     fontFamily: layer.fontFamily ?? base.fontFamily,
     sizePt: layer.sizePt ?? base.sizePt,
     color: layer.color ?? base.color,
+    verticalAlign: layer.verticalAlign ?? base.verticalAlign,
+    rtl: layer.rtl ?? base.rtl,
   };
 }
 
@@ -186,6 +197,17 @@ function readRunFontFamily(
   return undefined;
 }
 
+// w:vertAlign/@w:val (CT_VerticalAlignRun, ST_VerticalAlignRun: baseline/superscript/subscript): superscript and subscript survive onto ContentRun.verticalAlign, and "baseline" is the explicit none-of-the-above a producer writes to turn an inherited position off -- an unrecognised or absent value leaves the layer unspecified rather than guessing a position.
+function readVerticalAlignLayer(
+  vertAlign: XmlElement | undefined,
+): VerticalAlignLayer {
+  const val = vertAlign === undefined ? undefined : attr(vertAlign, "w:val");
+  if (val === "superscript" || val === "subscript" || val === "baseline") {
+    return val;
+  }
+  return undefined;
+}
+
 function readRunPropertiesLayer(
   rPr: XmlElement | undefined,
   theme: DrawingTheme,
@@ -203,6 +225,10 @@ function readRunPropertiesLayer(
     fontFamily: readRunFontFamily(childrenWithTag(rPr, "w:rFonts")[0], theme),
     sizePt: szVal === undefined ? undefined : halfPointsToPt(Number(szVal)),
     color: readRunColor(childrenWithTag(rPr, "w:color")[0], theme),
+    verticalAlign: readVerticalAlignLayer(
+      childrenWithTag(rPr, "w:vertAlign")[0],
+    ),
+    rtl: readToggle(childrenWithTag(rPr, "w:rtl")[0]),
   };
 }
 
@@ -264,6 +290,7 @@ function readParagraphPropertiesLayer(
           ? -twipsToPt(Number(hanging))
           : undefined,
     outlineLvl: outlineLvlVal === undefined ? undefined : Number(outlineLvlVal),
+    bidi: readToggle(childrenWithTag(pPr, "w:bidi")[0]),
   };
 }
 

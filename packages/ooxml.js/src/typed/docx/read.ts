@@ -485,6 +485,10 @@ function readRun(
     fontFamily: props.fontFamily,
     sizePt: props.sizePt,
     color: props.color,
+    // "baseline" is the cascade's own explicit-override spelling, not a position ContentRun states: the schema models baseline as verticalAlign's absence, so the resolved layer value disappears here exactly as the resolved formatting it overrode did.
+    verticalAlign:
+      props.verticalAlign === "baseline" ? undefined : props.verticalAlign,
+    direction: props.rtl === undefined ? undefined : props.rtl ? "rtl" : "ltr",
   };
 }
 
@@ -847,6 +851,8 @@ function readParagraph(
       lineSpacing: props.lineSpacing,
       indentLeftPt: props.indentLeftPt,
       indentFirstLinePt: props.indentFirstLinePt,
+      direction:
+        props.bidi === undefined ? undefined : props.bidi ? "rtl" : "ltr",
       borders: readParagraphBorders(pPr),
     },
     pageBreak: events.pageBreak,
