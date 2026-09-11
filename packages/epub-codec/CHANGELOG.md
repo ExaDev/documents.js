@@ -1,3 +1,14 @@
+## [1.5.0](https://github.com/ExaDev/documents.js/compare/epub-codec%401.4.0...epub-codec%401.5.0) (2026-09-11)
+
+### Features
+
+* **ci:** gate each measured package on its first CI mutation baseline ([9f8fa69](https://github.com/ExaDev/documents.js/commit/9f8fa6947795b2089bed03c936691893643ce2ae))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.0
+
 ## [1.4.0](https://github.com/ExaDev/documents.js/compare/epub-codec%401.3.9...epub-codec%401.4.0) (2026-09-11)
 
 ### Features

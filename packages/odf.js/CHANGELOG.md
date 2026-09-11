@@ -1,3 +1,14 @@
+## [7.25.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.24.5...odf.js%407.25.0) (2026-09-11)
+
+### Features
+
+* **ci:** gate each measured package on its first CI mutation baseline ([9f8fa69](https://github.com/ExaDev/documents.js/commit/9f8fa6947795b2089bed03c936691893643ce2ae))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.0
+
 ## [7.24.5](https://github.com/ExaDev/documents.js/compare/odf.js%407.24.4...odf.js%407.24.5) (2026-09-11)
 
 

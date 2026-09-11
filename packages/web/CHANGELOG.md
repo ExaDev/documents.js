@@ -1,3 +1,16 @@
+## [2.11.9](https://github.com/ExaDev/documents.js/compare/web%402.11.8...web%402.11.9) (2026-09-11)
+
+### Bug Fixes
+
+* **web:** restate the jsdom environment in the mutation vitest config ([83029df](https://github.com/ExaDev/documents.js/commit/83029df81b17599f891d8af78fe65eb8a323fdf5))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.0
+- Updated markdown-codec to 6.7.0
+- Updated documents.js to 7.19.0
+
 ## [2.11.8](https://github.com/ExaDev/documents.js/compare/web%402.11.7...web%402.11.8) (2026-09-11)
 
 

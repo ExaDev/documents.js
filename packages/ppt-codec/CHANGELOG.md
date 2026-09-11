@@ -1,3 +1,15 @@
+## [1.5.0](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.4.11...ppt-codec%401.5.0) (2026-09-11)
+
+### Features
+
+* **ci:** gate each measured package on its first CI mutation baseline ([9f8fa69](https://github.com/ExaDev/documents.js/commit/9f8fa6947795b2089bed03c936691893643ce2ae))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.0
+- Updated archive-codec to 1.11.0
+
 ## [1.4.11](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.4.10...ppt-codec%401.4.11) (2026-09-11)
 
 

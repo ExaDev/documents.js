@@ -1,3 +1,14 @@
+## [6.7.0](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.6.7...markdown-codec%406.7.0) (2026-09-11)
+
+### Features
+
+* **ci:** gate each measured package on its first CI mutation baseline ([9f8fa69](https://github.com/ExaDev/documents.js/commit/9f8fa6947795b2089bed03c936691893643ce2ae))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.0
+
 ## [6.6.7](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.6.6...markdown-codec%406.6.7) (2026-09-11)
 
 

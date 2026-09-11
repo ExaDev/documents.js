@@ -1,3 +1,17 @@
+## [5.8.0](https://github.com/ExaDev/documents.js/compare/document-cli%405.7.17...document-cli%405.8.0) (2026-09-11)
+
+### Features
+
+* **ci:** gate each measured package on its first CI mutation baseline ([9f8fa69](https://github.com/ExaDev/documents.js/commit/9f8fa6947795b2089bed03c936691893643ce2ae))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.0
+- Updated odf.js to 7.25.0
+- Updated document-outline.js to 3.7.0
+- Updated documents.js to 7.19.0
+
 ## [5.7.17](https://github.com/ExaDev/documents.js/compare/document-cli%405.7.16...document-cli%405.7.17) (2026-09-11)
 
 

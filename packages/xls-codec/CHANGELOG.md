@@ -1,3 +1,16 @@
+## [4.14.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.13.0...xls-codec%404.14.0) (2026-09-11)
+
+### Features
+
+* **ci:** gate each measured package on its first CI mutation baseline ([9f8fa69](https://github.com/ExaDev/documents.js/commit/9f8fa6947795b2089bed03c936691893643ce2ae))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.0
+- Updated excel-number-format to 1.2.0
+- Updated archive-codec to 1.11.0
+
 ## [4.13.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.12.6...xls-codec%404.13.0) (2026-09-11)
 
 ### Features

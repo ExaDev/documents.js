@@ -1,3 +1,9 @@
+## [1.5.0](https://github.com/ExaDev/documents.js/compare/byte-codec%401.4.2...byte-codec%401.5.0) (2026-09-11)
+
+### Features
+
+* **ci:** gate each measured package on its first CI mutation baseline ([9f8fa69](https://github.com/ExaDev/documents.js/commit/9f8fa6947795b2089bed03c936691893643ce2ae))
+
 ## [1.4.2](https://github.com/ExaDev/documents.js/compare/byte-codec%401.4.1...byte-codec%401.4.2) (2026-09-10)
 
 ### Documentation
