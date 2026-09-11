@@ -1,3 +1,17 @@
+## [4.3.0](https://github.com/ExaDev/documents.js/compare/rtf-codec%404.2.5...rtf-codec%404.3.0) (2026-09-11)
+
+### Features
+
+* **rtf-codec:** read and write \super/\sub and \upN/\dnN onto ContentRun.verticalAlign ([34efbd7](https://github.com/ExaDev/documents.js/commit/34efbd7e644c754639c66908700478f2468a8b76))
+* **rtf-codec:** read and write cell vertical alignment onto ContentTableCell.verticalAlign ([100ad3f](https://github.com/ExaDev/documents.js/commit/100ad3f3f5f009e110727e4e297e370c4f9ec4fc))
+* **rtf-codec:** read and write text direction at all four RTF scopes ([0565a5c](https://github.com/ExaDev/documents.js/commit/0565a5c0bda601e00aa6f4235d8cd6611618e5b7))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.10.0
+- Updated archive-codec to 1.10.8
+
 ## [4.2.5](https://github.com/ExaDev/documents.js/compare/rtf-codec%404.2.4...rtf-codec%404.2.5) (2026-09-11)
 
 
