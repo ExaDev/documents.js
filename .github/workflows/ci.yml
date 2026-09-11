@@ -195,7 +195,7 @@ jobs:
       - uses: ./.github/actions/setup-workspace
         with:
           task: npm-registration
-          # Deliberately no $TURBO_FLAGS: this isn't a turbo task at all. A brand-new package's registration gap doesn't depend on which packages a PR's diff touched -- the whole point is catching it for the package the PR itself just added, before its first release attempt ever runs (see the script's own top-of-file comment for the OIDC chicken-and-egg mechanics this guards against).
+          # Not a turbo task -- the script does its own scoping directly from GITHUB_BASE_REF (set automatically on a pull_request event, absent on push/workflow_dispatch), checking only the packages a pull request's own diff touches and the whole workspace on a push to main. See the script's own top-of-file comment for why (a required check with no such scoping would let one still-unregistered package block every unrelated pull request) and for the OIDC chicken-and-egg mechanics this guards against.
           command: node --experimental-strip-types .github/scripts/check-npm-registration.ts
 
   audit:
