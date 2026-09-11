@@ -68,6 +68,7 @@
     "jiti": "2.7.0",
     "knip": "6.32.2",
     "lint-staged": "17.3.0",
+    "postject": "1.0.0-alpha.6",
     "prettier": "3.9.6",
     "semantic-release": "25.0.9",
     "semver": "7.8.5",

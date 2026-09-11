@@ -1,7 +1,14 @@
 // Builds a Node single-executable application (SEA) binary from a package's own tsdown-bundled dist-sea/sea-entry.cjs (see tsdown.sea.shared.ts) for whichever platform this script runs on -- one call per (package, platform) cell of the CI matrix, never cross-compiled: Node's own SEA injection copies the CURRENT running node binary, so the platform this script runs under is the platform the resulting binary targets. Mirrors the exact sequence https://nodejs.org/api/single-executable-applications.html documents (sea-config -> node --experimental-sea-config -> postject injection -> platform-specific signing), packaged as one script so CI's per-OS steps stay identical shell invocations rather than three near-duplicate workflow step lists.
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 // Fixed per Node's own documentation -- identifies an injected blob to the runtime at startup; not a secret, and never changes between builds.
@@ -67,6 +74,47 @@ function run(command: string, args: readonly string[]): void {
   execFileSync(command, args, { stdio: "inherit" });
 }
 
+function isRecordOfStrings(value: unknown): value is Record<string, string> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  return Object.values(value).every((entry) => typeof entry === "string");
+}
+
+function hasStringRecordBinField(
+  value: unknown,
+): value is { bin: Record<string, string> } {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  if (!("bin" in value)) {
+    return false;
+  }
+  return isRecordOfStrings(value.bin);
+}
+
+/** Resolves postject's own CLI entry point through Node's real module resolution against this file's own location, rather than `npx --yes postject`, which would fetch whatever version the registry currently serves at injection time -- unpinned and unlocked, letting a compromised postject release replace a signed SEA binary's contents between one release and the next. Node's `createRequire` walks up from this script's directory exactly the way `require.resolve` always has, so it finds the exact, lockfile-pinned copy `pnpm add -D -w postject` installed at the workspace root, the same one every other tool in this repository already resolves the same way. */
+export function resolvePostjectCliPath(): string {
+  const packageJsonPath = createRequire(import.meta.url).resolve(
+    "postject/package.json",
+  );
+  const packageJson: unknown = JSON.parse(
+    readFileSync(packageJsonPath, "utf8"),
+  );
+  if (!hasStringRecordBinField(packageJson)) {
+    throw new Error(
+      `postject's own package.json at ${packageJsonPath} declares no usable "bin" field.`,
+    );
+  }
+  const binEntry = packageJson.bin.postject;
+  if (binEntry === undefined) {
+    throw new Error(
+      `postject's own package.json at ${packageJsonPath} declares no "postject" bin entry.`,
+    );
+  }
+  return join(dirname(packageJsonPath), binEntry);
+}
+
 /** Builds the SEA binary for `paths.packageDir`, targeting whichever platform this process is currently running under. Every intermediate file (sea-config.json, the prep blob) lives beside the final binary in `paths.outputDir`, which the caller is responsible for pointing at a package's own gitignored dist-sea/ (see tsdown.sea.shared.ts's own comment on why that directory is never published). */
 export function buildSeaBinary(
   paths: SeaBuildPaths,
@@ -101,9 +149,8 @@ export function buildSeaBinary(
     run(command, args);
   }
 
-  run("npx", [
-    "--yes",
-    "postject",
+  run(process.execPath, [
+    resolvePostjectCliPath(),
     binaryPath,
     "NODE_SEA_BLOB",
     blobPath,
