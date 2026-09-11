@@ -222,6 +222,90 @@ describe("readPptStreams", () => {
     });
   });
 
+  describe("tables", () => {
+    it("reads a native table group as one shape carrying a table block, with the grid derived from the cells' own rectangles", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({
+          table: {
+            rows: [
+              ["A1", "B1"],
+              ["A2", "B2"],
+            ],
+          },
+        });
+      const [slide] = readPptStreams(
+        currentUserStream,
+        powerPointDocumentStream,
+      ).slides;
+      // The fourth shape of the fixture after the title reference and the body: the table.
+      const table = slide?.shapes[2];
+      expect(table?.frame).toEqual({
+        xPt: 180,
+        yPt: 250,
+        widthPt: 432,
+        heightPt: 120,
+      });
+      expect(table?.blocks).toEqual([
+        {
+          kind: "table",
+          rows: [
+            {
+              cells: [
+                { blocks: [{ kind: "paragraph", runs: [{ text: "A1" }] }] },
+                { blocks: [{ kind: "paragraph", runs: [{ text: "B1" }] }] },
+              ],
+              heightPt: 60,
+            },
+            {
+              cells: [
+                { blocks: [{ kind: "paragraph", runs: [{ text: "A2" }] }] },
+                { blocks: [{ kind: "paragraph", runs: [{ text: "B2" }] }] },
+              ],
+              heightPt: 60,
+            },
+          ],
+          columnWidthsPt: [216, 216],
+        },
+      ]);
+    });
+
+    it("reads a ragged table's missing grid positions as empty cells", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({
+          table: { rows: [["only cell"]] },
+        });
+      const [slide] = readPptStreams(
+        currentUserStream,
+        powerPointDocumentStream,
+      ).slides;
+      const table = slide?.shapes[2]?.blocks[0];
+      expect(table).toMatchObject({
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [{ kind: "paragraph", runs: [{ text: "only cell" }] }],
+              },
+            ],
+          },
+        ],
+      });
+    });
+
+    it("reads a rotated table group's rotation onto the table shape", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({
+          table: { rows: [["x"]], rotationDeg: 90 },
+        });
+      const [slide] = readPptStreams(
+        currentUserStream,
+        powerPointDocumentStream,
+      ).slides;
+      expect(slide?.shapes[2]?.rotationDeg).toBe(90);
+    });
+  });
+
   it("refuses an encrypted document by name rather than failing as malformed", () => {
     const { currentUserStream, powerPointDocumentStream } =
       syntheticPresentation({ encrypted: true });

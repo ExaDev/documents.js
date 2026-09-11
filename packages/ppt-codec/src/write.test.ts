@@ -3,6 +3,7 @@ import { encodePng } from "byte-codec";
 import {
   ContentDocumentSchema,
   DocumentTreeSchema,
+  type ContentBlock,
   type ContentDocument,
   type ContentImageBlock,
   type ContentShape,
@@ -48,6 +49,11 @@ function slide(overrides: Partial<ContentSlide> = {}): ContentSlide {
     notes: "",
     ...overrides,
   };
+}
+
+// One plain single-run paragraph block -- the spelling every hand-built fixture in this file repeats.
+function paragraph(text: string): ContentBlock {
+  return { kind: "paragraph", runs: [{ text }] };
 }
 
 // The PowerPoint Document stream's own top-level record sequence: the document container, every slide and notes container, the persist directory and the user edit, in the order the writer laid them out.
@@ -859,7 +865,7 @@ describe("writePptContent / readPptContent round trip", () => {
   });
 
   describe("the document-wide drawing group", () => {
-    // The OfficeArtFDGG's own four count fields ([MS-ODRAW] 2.2.47): spidMax, cidcl, cspSaved, cdgSaved, in order.
+    // The OfficeArtFDGG's own four count fields ([MS-ODRAW] 2.2.47): spidMax, cidcl, cspSaved, cdgSaved, in order -- read straight out of the written stream so the counts are checked against the bytes, not against the writer's own bookkeeping.
     function fdggFields(
       streamBytes: Uint8Array<ArrayBuffer>,
     ): [number, number, number, number] {
@@ -957,6 +963,264 @@ describe("writePptContent / readPptContent round trip", () => {
           (record) => record.header.recType === OfficeArtBStoreContainer,
         ),
       ).toBeUndefined();
+    });
+
+    it("counts a table's group shape and its cells in the document-wide shape totals", () => {
+      const { powerPointDocumentStream } = writePptStreams({
+        metadata: {},
+        slides: [
+          slide({
+            shapes: [
+              {
+                frame: { xPt: 60, yPt: 90, widthPt: 240, heightPt: 120 },
+                insetLeftPt: 0,
+                insetTopPt: 0,
+                insetRightPt: 0,
+                insetBottomPt: 0,
+                blocks: [
+                  {
+                    kind: "table" as const,
+                    rows: [
+                      {
+                        cells: [{ blocks: [] }, { blocks: [] }],
+                        heightPt: 60,
+                      },
+                      {
+                        cells: [{ blocks: [] }, { blocks: [] }],
+                        heightPt: 60,
+                      },
+                    ],
+                    columnWidthsPt: [120, 120],
+                  },
+                ],
+              },
+            ],
+          }),
+        ],
+      });
+      // The master's six shapes, then the slide drawing's six -- its patriarch, the table's group shape and its four cells: twelve shape containers across two drawings, spidMax 6 from the master's placeholders.
+      expect(fdggFields(powerPointDocumentStream)).toEqual([6, 2, 12, 2]);
+    });
+  });
+
+  describe("tables", () => {
+    function tableShape(blocks: ContentBlock[]): ContentShape {
+      return {
+        frame: { xPt: 60, yPt: 90, widthPt: 240, heightPt: 120 },
+        insetLeftPt: 0.1 * 72,
+        insetTopPt: 0.05 * 72,
+        insetRightPt: 0.1 * 72,
+        insetBottomPt: 0.05 * 72,
+        blocks,
+      };
+    }
+
+    it("round-trips a table as one group whose cells read back as the same grid", () => {
+      const { slides } = readPptContent(
+        writePptContent({
+          metadata: {},
+          slides: [
+            slide({
+              shapes: [
+                tableShape([
+                  {
+                    kind: "table",
+                    rows: [
+                      {
+                        cells: [
+                          { blocks: [paragraph("A1")] },
+                          { blocks: [paragraph("B1")] },
+                        ],
+                        heightPt: 60,
+                      },
+                      {
+                        cells: [
+                          { blocks: [paragraph("A2")] },
+                          { blocks: [paragraph("B2")] },
+                        ],
+                        heightPt: 60,
+                      },
+                    ],
+                    columnWidthsPt: [100, 140],
+                  },
+                ]),
+              ],
+            }),
+          ],
+        }),
+      );
+      expect(slides[0]?.shapes[0]?.blocks).toEqual([
+        {
+          kind: "table",
+          rows: [
+            {
+              cells: [
+                { blocks: [{ kind: "paragraph", runs: [{ text: "A1" }] }] },
+                { blocks: [{ kind: "paragraph", runs: [{ text: "B1" }] }] },
+              ],
+              heightPt: 60,
+            },
+            {
+              cells: [
+                { blocks: [{ kind: "paragraph", runs: [{ text: "A2" }] }] },
+                { blocks: [{ kind: "paragraph", runs: [{ text: "B2" }] }] },
+              ],
+              heightPt: 60,
+            },
+          ],
+          // 100pt and 140pt are whole master units (800 and 1120), so the widths read back exactly.
+          columnWidthsPt: [100, 140],
+        },
+      ]);
+    });
+
+    it("round-trips a rotated table group's rotation", () => {
+      const { slides } = readPptContent(
+        writePptContent({
+          metadata: {},
+          slides: [
+            slide({
+              shapes: [
+                {
+                  ...tableShape([]),
+                  rotationDeg: 180,
+                  blocks: [
+                    {
+                      kind: "table",
+                      rows: [{ cells: [{ blocks: [paragraph("x")] }] }],
+                      columnWidthsPt: [240],
+                    },
+                  ],
+                },
+              ],
+            }),
+          ],
+        }),
+      );
+      expect(slides[0]?.shapes[0]?.rotationDeg).toBe(180);
+    });
+
+    it("drops a paragraph block alongside the table, naming it through the diagnostic sink", () => {
+      const diagnostics: PptDiagnostic[] = [];
+      const { slides } = readPptContent(
+        writePptContent(
+          {
+            metadata: {},
+            slides: [
+              slide({
+                shapes: [
+                  tableShape([
+                    { kind: "paragraph", runs: [{ text: "stray" }] },
+                    {
+                      kind: "table",
+                      rows: [
+                        {
+                          cells: [{ blocks: [paragraph("kept")] }],
+                          heightPt: 120,
+                        },
+                      ],
+                      columnWidthsPt: [240],
+                    },
+                  ]),
+                ],
+              }),
+            ],
+          },
+          { sink: (diagnostic) => diagnostics.push(diagnostic) },
+        ),
+      );
+      expect(slides[0]?.shapes[0]?.blocks).toEqual([
+        {
+          kind: "table",
+          rows: [
+            {
+              cells: [
+                {
+                  blocks: [{ kind: "paragraph", runs: [{ text: "kept" }] }],
+                },
+              ],
+              heightPt: 120,
+            },
+          ],
+          columnWidthsPt: [240],
+        },
+      ]);
+      expect(diagnostics).toEqual([
+        {
+          code: PptDiagnosticCodes.BLOCK_DROPPED,
+          severity: "warning",
+          message:
+            "slide 1: a 'paragraph' block is dropped; a shape carrying a table becomes a table group, which holds its text in cells rather than a text body of its own",
+        },
+      ]);
+    });
+
+    it("drops a second table block on one shape, whose single group the first table already consumed", () => {
+      const diagnostics: PptDiagnostic[] = [];
+      const table = {
+        kind: "table" as const,
+        rows: [{ cells: [{ blocks: [] }] }],
+        columnWidthsPt: [240],
+      };
+      const { slides } = readPptContent(
+        writePptContent(
+          {
+            metadata: {},
+            slides: [slide({ shapes: [tableShape([table, table])] })],
+          },
+          { sink: (diagnostic) => diagnostics.push(diagnostic) },
+        ),
+      );
+      expect(slides[0]?.shapes[0]?.blocks).toHaveLength(1);
+      expect(diagnostics).toEqual([
+        {
+          code: PptDiagnosticCodes.BLOCK_DROPPED,
+          severity: "warning",
+          message:
+            "slide 1: a second 'table' block is dropped; a shape becomes one table group, and an earlier table already did",
+        },
+      ]);
+    });
+
+    it("drops a cell's colSpan and rowSpan, which the format's strict grid cannot state", () => {
+      const diagnostics: PptDiagnostic[] = [];
+      const { slides } = readPptContent(
+        writePptContent(
+          {
+            metadata: {},
+            slides: [
+              slide({
+                shapes: [
+                  tableShape([
+                    {
+                      kind: "table",
+                      rows: [
+                        {
+                          cells: [
+                            { blocks: [], colSpan: 2, rowSpan: 3 },
+                            { blocks: [] },
+                          ],
+                        },
+                      ],
+                      columnWidthsPt: [120, 120],
+                    },
+                  ]),
+                ],
+              }),
+            ],
+          },
+          { sink: (diagnostic) => diagnostics.push(diagnostic) },
+        ),
+      );
+      // The spanning cell is written one column wide and one row tall, and reads back as a plain cell.
+      expect(slides[0]?.shapes[0]?.blocks[0]).toMatchObject({
+        kind: "table",
+        rows: [{ cells: [{ blocks: [] }, { blocks: [] }] }],
+      });
+      expect(diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+        PptDiagnosticCodes.TABLE_SPAN_DROPPED,
+        PptDiagnosticCodes.TABLE_SPAN_DROPPED,
+      ]);
     });
   });
 

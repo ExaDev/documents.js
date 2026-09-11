@@ -11,6 +11,7 @@ import {
   OfficeArtFOPT,
   OfficeArtSpContainer,
   OfficeArtSpgrContainer,
+  OfficeArtTertiaryFOPT,
   RT_ColorSchemeAtom,
   RT_CryptSession10Container,
   RT_CurrentUserAtom,
@@ -50,8 +51,16 @@ import {
   writeAtom as atom,
   writeContainer as container,
 } from "../record/write";
-import { writeShapePropertyTable } from "../drawing/properties";
-import { PROPERTY_PIB } from "../drawing/properties";
+import {
+  PROPERTY_PIB,
+  PROPERTY_ROTATION,
+  PROPERTY_TABLE_PROPERTIES,
+  PROPERTY_TABLE_ROW_PROPERTIES,
+  TABLE_FLAG_IS_TABLE,
+  degreesToFixedPoint,
+  writeIMsoArray,
+  writeShapePropertyTable,
+} from "../drawing/properties";
 import { CURRENT_USER_HEADER_TOKEN_PLAIN } from "../stream/current-user";
 import {
   TEXT_TYPE_BODY,
@@ -214,6 +223,12 @@ export interface SyntheticPresentationOptions {
     readonly bytes: Uint8Array<ArrayBuffer>;
   };
   readonly pictureInPicturesStream?: boolean;
+  // Adds a native table group to the slide: an OfficeArtSpgrContainer whose group shape states tableProperties with fIsTable in its tertiary property table and tableRowProperties as a complex IMsoArray of row minimum heights, with one plain text-box shape per cell -- the spelling [MS-ODRAW] 2.3.4.36/2.3.4.37 give a table and the one a real PowerPoint-authored file carries (LibreOffice exports ODP tables to .ppt as OLE objects instead, confirmed by inspecting its own output, so this fixture is the honest native spelling a reader of real files needs).
+  readonly table?: {
+    readonly rows: readonly (readonly string[])[];
+    // Written onto the table group's own primary property table as the rotation property, so a fixture can state the whole-table rotation a real file carries.
+    readonly rotationDeg?: number;
+  };
 }
 
 // [MS-OFFCRYPTO] 2.3.5.1's own RC4 CryptoAPI EncryptionInfo/EncryptionHeader/EncryptionVerifier layout, built independently of encryption.ts's own reader (readDocumentEncryptionAtom) rather than by calling it in reverse -- the two are cross-checked against each other only by the read.test.ts round trip that decrypts what this function encrypts, not by sharing this byte-layout logic. keySizeBits is fixed at 128 here: this package's own decryptor supports any RC4 key size the header states, so a fixture testing the 40-bit special case belongs in encryption.test.ts, which exercises deriveRc4CryptoApiBlockKey directly rather than through a whole synthetic presentation.
@@ -382,6 +397,82 @@ function pictureShape(
   ]);
 }
 
+// The table's own rectangle and per-row height, in master units -- fixed here so every table fixture's geometry is derivable by hand.
+const TABLE_TOP = 2000;
+const TABLE_LEFT = 1440;
+const TABLE_RIGHT = 4896;
+const TABLE_ROW_HEIGHT = 480;
+
+// A native table group: the group shape opens with the FSPGR child coordinate system ([MS-ODRAW] 2.2.14 puts shapeGroup first), carries fGroup, states tableProperties fIsTable and tableRowProperties as a complex IMsoArray of row minimum heights in the tertiary property table where a real producer puts them, and anchors the whole table with a client anchor; then one plain text-box shape per cell, each carrying its own client anchor -- the grid itself lives nowhere but in those anchors.
+function tableShape(
+  spid: number,
+  table: {
+    readonly rows: readonly (readonly string[])[];
+    readonly rotationDeg?: number;
+  },
+): Uint8Array<ArrayBuffer> {
+  const columnCount = Math.max(...table.rows.map((row) => row.length), 1);
+  const rowCount = table.rows.length;
+  const bottom = TABLE_TOP + rowCount * TABLE_ROW_HEIGHT;
+  const columnWidth = Math.floor((TABLE_RIGHT - TABLE_LEFT) / columnCount);
+  const rowHeights = writeIMsoArray(
+    table.rows.map(() => TABLE_ROW_HEIGHT),
+    4,
+  );
+  const groupShape = container(OfficeArtSpContainer, [
+    atom(
+      OfficeArtFSPGR,
+      concatBytes(
+        i32le(TABLE_LEFT),
+        i32le(TABLE_TOP),
+        i32le(TABLE_RIGHT),
+        i32le(bottom),
+      ),
+      { recVer: 0x1 },
+    ),
+    fsp(spid, 1 << 0),
+    ...(table.rotationDeg === undefined
+      ? []
+      : [
+          writeShapePropertyTable(OfficeArtFOPT, [
+            {
+              opid: PROPERTY_ROTATION,
+              op: degreesToFixedPoint(table.rotationDeg),
+            },
+          ]),
+        ]),
+    writeShapePropertyTable(OfficeArtTertiaryFOPT, [
+      { opid: PROPERTY_TABLE_PROPERTIES, op: TABLE_FLAG_IS_TABLE },
+      {
+        opid: PROPERTY_TABLE_ROW_PROPERTIES,
+        op: rowHeights.length,
+        complex: rowHeights,
+      },
+    ]),
+    clientAnchor(TABLE_TOP, TABLE_LEFT, TABLE_RIGHT, bottom),
+  ]);
+  const cells = table.rows.flatMap((row, rowIndex) =>
+    row.map((text, columnIndex) => {
+      const cellTop = TABLE_TOP + rowIndex * TABLE_ROW_HEIGHT;
+      const cellLeft = TABLE_LEFT + columnIndex * columnWidth;
+      return container(OfficeArtSpContainer, [
+        fsp(spid + 1 + rowIndex * columnCount + columnIndex, 0),
+        clientAnchor(
+          cellTop,
+          cellLeft,
+          cellLeft + columnWidth,
+          cellTop + TABLE_ROW_HEIGHT,
+        ),
+        container(OfficeArtClientTextbox, [
+          atom(RT_TextHeaderAtom, u32le(TEXT_TYPE_BODY)),
+          textBytesAtom(text),
+        ]),
+      ]);
+    }),
+  );
+  return container(OfficeArtSpgrContainer, [groupShape, ...cells]);
+}
+
 export function syntheticPresentation(
   options: SyntheticPresentationOptions = {},
 ): SyntheticPresentation {
@@ -397,6 +488,7 @@ export function syntheticPresentation(
     masterTitleBold = false,
     picture,
     pictureInPicturesStream = false,
+    table,
   } = options;
 
   const USER_NAME = "Ada";
@@ -514,6 +606,7 @@ export function syntheticPresentation(
           ...(picture !== undefined
             ? [pictureShape(8, 1, 360, 1440, 2240, 1080)]
             : []),
+          ...(table !== undefined ? [tableShape(9, table)] : []),
         ]),
       ]),
     ]),
