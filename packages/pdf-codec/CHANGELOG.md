@@ -1,3 +1,15 @@
+## [4.8.1](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.8.0...pdf-codec%404.8.1) (2026-09-11)
+
+### Code Refactoring
+
+* load stryker.config.ts directly instead of a jiti .mjs bootstrap ([4221520](https://github.com/ExaDev/documents.js/commit/42215205caa1c8fc6368ed38729d15836bdd613b))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.5.1
+- Updated document-schema.js to 7.11.1
+
 ## [4.8.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.7.0...pdf-codec%404.8.0) (2026-09-11)
 
 ### Features

@@ -1,3 +1,19 @@
+## [4.9.3](https://github.com/ExaDev/documents.js/compare/document-mcp%404.9.2...document-mcp%404.9.3) (2026-09-11)
+
+### Code Refactoring
+
+* load stryker.config.ts directly instead of a jiti .mjs bootstrap ([4221520](https://github.com/ExaDev/documents.js/commit/42215205caa1c8fc6368ed38729d15836bdd613b))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.1
+- Updated odf.js to 7.25.1
+- Updated document-outline.js to 3.7.2
+- Updated wpd-codec to 3.5.1
+- Updated documents.js to 7.20.1
+- Updated document-compute.js to 1.5.3
+
 ## [4.9.2](https://github.com/ExaDev/documents.js/compare/document-mcp%404.9.1...document-mcp%404.9.2) (2026-09-11)
 
 

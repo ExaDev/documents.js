@@ -1,3 +1,15 @@
+## [3.5.1](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.5.0...wpd-codec%403.5.1) (2026-09-11)
+
+### Code Refactoring
+
+* load stryker.config.ts directly instead of a jiti .mjs bootstrap ([4221520](https://github.com/ExaDev/documents.js/commit/42215205caa1c8fc6368ed38729d15836bdd613b))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.1
+- Updated archive-codec to 1.11.1
+
 ## [3.5.0](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.4.6...wpd-codec%403.5.0) (2026-09-11)
 
 ### Features

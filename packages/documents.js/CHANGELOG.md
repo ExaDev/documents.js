@@ -1,3 +1,26 @@
+## [7.20.1](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.0...documents.js%407.20.1) (2026-09-11)
+
+### Code Refactoring
+
+* load stryker.config.ts directly instead of a jiti .mjs bootstrap ([4221520](https://github.com/ExaDev/documents.js/commit/42215205caa1c8fc6368ed38729d15836bdd613b))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.5.1
+- Updated document-schema.js to 7.11.1
+- Updated archive-codec to 1.11.1
+- Updated epub-codec to 1.5.1
+- Updated markdown-codec to 6.7.1
+- Updated odf.js to 7.25.1
+- Updated pdf-codec to 4.8.1
+- Updated doc-codec to 2.10.1
+- Updated ooxml.js to 8.14.1
+- Updated ppt-codec to 1.7.1
+- Updated rtf-codec to 4.4.1
+- Updated wpd-codec to 3.5.1
+- Updated xls-codec to 4.15.1
+
 ## [7.20.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.19.1...documents.js%407.20.0) (2026-09-11)
 
 ### Features
