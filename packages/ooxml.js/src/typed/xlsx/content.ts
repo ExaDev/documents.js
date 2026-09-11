@@ -20,7 +20,7 @@ import {
 import { readCoreProperties } from "../shared/metadata";
 import { parseCellReference, parseRangeReference } from "document-schema.js";
 import type { SheetDefinedNames } from "./defined-names";
-import { readDefinedNamesBySheet } from "./defined-names";
+import { readDefinedNamesBySheet, readWorkbookNames } from "./defined-names";
 import type { NumberFormatClass } from "excel-number-format";
 import { classifyNumberFormat } from "excel-number-format";
 import { readSheetDrawing } from "./drawings";
@@ -588,9 +588,12 @@ export function readXlsxContent(pkg: Package): ContentDocument {
       dxfs,
     ),
   );
+  // The workbook's own defined names (typed/xlsx/defined-names.ts's readWorkbookNames): every <definedName> including the _xlnm built-ins, refersTo verbatim -- absent when the workbook carries none, so a plain workbook's document is field-for-field what it was.
+  const names = readWorkbookNames(pkg);
   return {
     kind: "spreadsheet",
     metadata: readCoreProperties(pkg),
     sheets,
+    ...(names.length > 0 ? { names } : {}),
   };
 }

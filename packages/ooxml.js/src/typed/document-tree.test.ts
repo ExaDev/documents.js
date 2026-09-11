@@ -746,20 +746,12 @@ describe("readXlsx / buildXlsxPackage: the xlsx DocumentTree boundary", () => {
     };
   }
 
-  it("reads general defined names and table objects into the tree's definitions table, excluding the two _xlnm names print settings already carry", () => {
-    const tree = readXlsx(workbookWithTablesAndNames());
-    expect(tree.definitions).toEqual({
-      "namedRange:TaxRate": {
-        kind: "namedRange",
-        name: "TaxRate",
-        refersTo: "Summary!$B$1",
-      },
-      "namedRange:ReportTitle": {
-        kind: "namedRange",
-        name: "ReportTitle",
-        refersTo: "Data!$A$1",
-        localSheetId: 0,
-      },
+  it("reads table objects into the tree's definitions table, with defined names riding the tree's own names field instead", () => {
+    const wide = readXlsx(workbookWithTablesAndNames());
+    if (wide.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet DocumentTree");
+    }
+    expect(wide.definitions).toEqual({
       "table:SalesTable": {
         kind: "table",
         name: "SalesTable",
@@ -768,15 +760,39 @@ describe("readXlsx / buildXlsxPackage: the xlsx DocumentTree boundary", () => {
         columns: ["Item", "Amount"],
       },
     });
+    // The names field assembleTree spliced onto the root: every definedName including the _xlnm built-in, refersTo verbatim, localSheetId mapped onto scopeSheetIndex.
+    expect(wide.names).toEqual([
+      { name: "TaxRate", refersTo: "Summary!$B$1" },
+      { name: "ReportTitle", refersTo: "Data!$A$1", scopeSheetIndex: 0 },
+      {
+        name: "_xlnm.Print_Area",
+        refersTo: "Data!$A$1:$C$4",
+        scopeSheetIndex: 0,
+      },
+    ]);
   });
 
-  it("leaves the definitions field absent for a workbook carrying no general names and no tables (the kitchen-sink fixture carries only Print_Area/Print_Titles)", () => {
-    expect(
-      readXlsx(decodePackage(fixtureBytes("kitchen-sink.xlsx"))).definitions,
-    ).toBeUndefined();
+  it("leaves the definitions field absent for a workbook carrying no tables (the kitchen-sink fixture's defined names all ride names, which the fixture's two _xlnm print names populate)", () => {
+    const wide = readXlsx(decodePackage(fixtureBytes("kitchen-sink.xlsx")));
+    if (wide.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet DocumentTree");
+    }
+    expect(wide.definitions).toBeUndefined();
+    expect(wide.names).toEqual([
+      {
+        name: "_xlnm.Print_Area",
+        refersTo: "Data!$A$1:$I$20",
+        scopeSheetIndex: 0,
+      },
+      {
+        name: "_xlnm.Print_Titles",
+        refersTo: "Data!$A:$A,Data!$1:$1",
+        scopeSheetIndex: 0,
+      },
+    ]);
   });
 
-  it("writes the tree's own definitions table back out (ExaDev/documents.js#973): buildXlsxPackage closes the row flattenTree itself cannot carry, while the flat write pair still emits neither a general defined name nor an xl/tables part", () => {
+  it("writes the tree's own definitions table back out (ExaDev/documents.js#973): buildXlsxPackage closes the row flattenTree itself cannot carry, while the flat write pair still emits no xl/tables part", () => {
     const pkg = workbookWithTablesAndNames();
     const treePackage = buildXlsxPackage(readXlsx(pkg));
     const flatPackage = buildXlsxPackageFromContent(readXlsxContent(pkg));
@@ -789,11 +805,24 @@ describe("readXlsx / buildXlsxPackage: the xlsx DocumentTree boundary", () => {
     expect(flattenTree(readXlsx(pkg))).toEqual(readXlsxContent(pkg));
   });
 
-  it("round-trips the tree's own definitions table through a real byte encode/decode: reading the freshly-built package back recovers the same general defined names and table object", () => {
+  it("round-trips the tree's own definitions table through a real byte encode/decode: reading the freshly-built package back recovers the same table object", () => {
     const pkg = workbookWithTablesAndNames();
     const rebuilt = decodePackage(
       encodePackage(buildXlsxPackage(readXlsx(pkg))),
     );
     expect(readXlsx(rebuilt).definitions).toEqual(readXlsx(pkg).definitions);
+  });
+
+  it("round-trips the tree's own names field through a real byte encode/decode: reading the freshly-built package back recovers every defined name, scope and verbatim refersTo", () => {
+    const pkg = workbookWithTablesAndNames();
+    const rebuilt = decodePackage(
+      encodePackage(buildXlsxPackage(readXlsx(pkg))),
+    );
+    const reread = readXlsx(rebuilt);
+    const original = readXlsx(pkg);
+    if (reread.kind !== "spreadsheet" || original.kind !== "spreadsheet") {
+      throw new Error("expected spreadsheet DocumentTrees");
+    }
+    expect(reread.names).toEqual(original.names);
   });
 });
