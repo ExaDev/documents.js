@@ -148,10 +148,62 @@ describe("segmentPdfRegions", () => {
     expect(captionRegion?.confidence).toBeGreaterThan(0);
     expect(captionRegion?.confidence).toBeLessThanOrEqual(1);
 
+    // Recorded in both directions: the caption stays its own region, and the figure it labels now
+    // carries that text. The pass already had to work out which figure the caption belonged to in
+    // order to classify it, and used to drop the answer -- so a consumer wanting a figure's own label
+    // had to re-derive the adjacency this function had just computed.
+    expect(figureRegion?.caption).toBe(
+      "Figure 1: a chart of quarterly results.",
+    );
+    // Associated, not moved: projecting every region's text must read the caption exactly once. Asserted
+    // by counting it across every region rather than by inspecting the caption region's own items, which
+    // the fixture already guarantees and which would pass even if the figure had swallowed the item too.
+    const occurrences = regions.filter((region) =>
+      region.items.some(
+        (item) =>
+          item.kind === "text" &&
+          item.text === "Figure 1: a chart of quarterly results.",
+      ),
+    );
+    expect(occurrences).toHaveLength(1);
+
     const proseRegion = regions.find(
       (region) => region.classification === "column",
     );
     expect(proseRegion?.items).toHaveLength(4);
+  });
+
+  it("gives a figure the nearer of two candidate captions", () => {
+    // A figure sandwiched between two short runs has two candidates and only one is its label. The same
+    // gap that decides a caption's own confidence decides which figure wins it, so the nearer text is
+    // the one recorded on the figure.
+    //
+    // Both gaps sit in a narrow window the segmentation forces: wider than the LOCAL cut threshold
+    // (1.5x the caption's own ~10pt font size, so ~15pt -- below that the run is not split off as its
+    // own region at all) and within CAPTION_GAP_PT (24pt, beyond which it is not a caption). Above is
+    // 18pt away, below is 22pt.
+    const figure: LayoutItem = {
+      kind: "image",
+      imageId: "img-2",
+      xPt: 100,
+      yPt: 400,
+      widthPt: 300,
+      heightPt: 200,
+    };
+    // The nearer caption is the one ABOVE, which is the arrangement that makes the tie-break
+    // load-bearing: regions arrive sorted top-to-bottom, so `above` is processed first, and a naive
+    // last-writer-wins would record `below` instead. With the fixture the other way round both rules
+    // agree and the test proves nothing -- verified by mutating the comparison to `if (true)`, under
+    // which the earlier version of this case still passed.
+    const above = line(150, 618, "Figure 2: the nearer caption.");
+    const below = line(150, 368, "Further away, below the figure.");
+
+    const regions = segmentPdfRegions(page([above, figure, below]));
+    const figureRegion = regions.find(
+      (region) => region.classification === "figure",
+    );
+
+    expect(figureRegion?.caption).toBe("Figure 2: the nearer caption.");
   });
 
   it("does not attach a caption to a figure it is not vertically adjacent to", () => {
