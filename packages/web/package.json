@@ -33,7 +33,7 @@
     "test:coverage": "turbo run _test:coverage",
     "_test:coverage": "vitest run --project unit --coverage",
     "test:mutation": "turbo run _test:mutation",
-    "_test:mutation": "stryker run stryker.config.mjs",
+    "_test:mutation": "stryker run stryker.config.ts",
     "test:e2e": "turbo run _test:e2e",
     "_test:e2e": "playwright test",
     "prepare": "husky",
