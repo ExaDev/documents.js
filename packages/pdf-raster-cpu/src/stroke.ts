@@ -139,7 +139,9 @@ function emitJoinWedge(
   } else {
     wedge = [a1, vertex, a2];
   }
-  polygons.push(polygonSignedArea(wedge) < 0 ? wedge : [...wedge].reverse());
+  polygons.push(
+    polygonSignedArea(wedge) < 0 ? [...wedge] : [...wedge].reverse(),
+  );
 }
 
 // The miter length as a multiple of the half-width, from the dot product of the two outer normals: |n1 + n2| / (1 + n1 . n2) = 1 / cos(theta / 2), where theta is the angle between them -- straight continuation 1, right angle sqrt(2), reversal unbounded.

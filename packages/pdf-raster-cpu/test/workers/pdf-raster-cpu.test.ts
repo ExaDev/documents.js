@@ -89,6 +89,9 @@ function pixelAt(
 describe("pdf-raster-cpu under the Cloudflare Workers runtime", () => {
   it("renders a page to the same pinned pixels the node suite asserts (no Node API)", () => {
     const png = renderPdfPage(fixturePdf(), 0, {}, createCpuRasteriser());
+    if (png instanceof Promise) {
+      throw new Error("CpuRasteriser.finish never returns a promise");
+    }
     expect(png).toBeInstanceOf(Uint8Array);
     const image = decodePng(png);
     expect(image.width).toBe(200);
@@ -109,6 +112,9 @@ describe("pdf-raster-cpu under the Cloudflare Workers runtime", () => {
   it("produces byte-identical PNGs for identical draw ops inside the isolate", () => {
     const first = renderPdfPage(fixturePdf(), 0, {}, createCpuRasteriser());
     const second = renderPdfPage(fixturePdf(), 0, {}, createCpuRasteriser());
+    if (first instanceof Promise || second instanceof Promise) {
+      throw new Error("CpuRasteriser.finish never returns a promise");
+    }
     expect([...second]).toEqual([...first]);
   });
 });
