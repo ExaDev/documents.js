@@ -59,7 +59,7 @@
     "_test": "vitest run --project unit",
     "_test:coverage": "vitest run --project unit --coverage",
     "test:mutation": "turbo run _test:mutation",
-    "_test:mutation": "stryker run stryker.config.mjs",
+    "_test:mutation": "stryker run stryker.config.ts",
     "test:watch": "vitest --project unit",
     "test:workers": "turbo run _test:workers",
     "_test:workers": "vitest run --config vitest.workers.config.ts",

@@ -62,7 +62,7 @@
     "test:coverage": "turbo run _test:coverage",
     "_test:coverage": "vitest run --project unit --coverage",
     "test:mutation": "turbo run _test:mutation",
-    "_test:mutation": "stryker run stryker.config.mjs",
+    "_test:mutation": "stryker run stryker.config.ts",
     "test:smoke": "turbo run _test:smoke",
     "_test:smoke": "vitest run --project smoke",
     "prepare": "husky",
