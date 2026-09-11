@@ -1,3 +1,19 @@
+## [1.6.0](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.5.0...ppt-codec%401.6.0) (2026-09-11)
+
+### Features
+
+* **ppt-codec:** read and write table shapes through the drawing group's own cell grid ([b7db809](https://github.com/ExaDev/documents.js/commit/b7db8098c2579924d047451fec433dec590cb102))
+* **ppt-codec:** read picture shapes and rotation through the drawing property tables ([2dac65e](https://github.com/ExaDev/documents.js/commit/2dac65e3a44cecaabefe60e9231a8daa98f9b875))
+* **ppt-codec:** write pictures and rotation back through the drawing property tables ([5e65818](https://github.com/ExaDev/documents.js/commit/5e658187b1bd34d2af35b7db23ba95dc63014871))
+
+### Bug Fixes
+
+* **ppt-codec:** match the slide scheme colour atom by its own recInstance ([ed8d8ef](https://github.com/ExaDev/documents.js/commit/ed8d8ef46709773b0bfaf96a03e6922d3a2373cb))
+
+### Documentation
+
+* **ppt-codec:** describe the picture, table, and rotation read/write paths ([61013dd](https://github.com/ExaDev/documents.js/commit/61013dd7cdfdbd542e6bc6561a7096a4fd00e61d))
+
 ## [1.5.0](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.4.11...ppt-codec%401.5.0) (2026-09-11)
 
 ### Features

@@ -1,3 +1,10 @@
+## [1.5.1](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.5.0...document-compute.js%401.5.1) (2026-09-11)
+
+
+### Dependencies
+
+- Updated documents.js to 7.19.1
+
 ## [1.5.0](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.4.7...document-compute.js%401.5.0) (2026-09-11)
 
 ### Features

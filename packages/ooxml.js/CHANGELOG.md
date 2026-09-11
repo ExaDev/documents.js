@@ -1,3 +1,17 @@
+## [8.14.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.13.0...ooxml.js%408.14.0) (2026-09-11)
+
+### Features
+
+* **ooxml.js:** carry xlsx defined names on the ContentDocument both ways ([d7d5078](https://github.com/ExaDev/documents.js/commit/d7d5078c8cae491cb670a7302d29d3f2ab571715))
+* **ooxml.js:** read and write docx vertAlign, rtl, and bidi ([b5d8d86](https://github.com/ExaDev/documents.js/commit/b5d8d86e8ae10cec41db6f9f082ea9b3b6cc237b))
+* **ooxml.js:** read and write the xlsx per-cell font through the font table ([9b020af](https://github.com/ExaDev/documents.js/commit/9b020affb320432c448efb62426d6cafc41f209e))
+* **ooxml.js:** record where each lifted docx image sat in its run stream ([e45b1a7](https://github.com/ExaDev/documents.js/commit/e45b1a7c1f8dd7d5bccec75c5cb69b768b1833f7))
+* **ooxml.js:** state chart and diagram origin on the content nodes ([6a6f8e3](https://github.com/ExaDev/documents.js/commit/6a6f8e38215a385ee096a541cefe06360e2f337b))
+
+### Documentation
+
+* **ooxml.js:** state the per-cell font, defined names, direction, origin, and anchor coverage ([c5bec41](https://github.com/ExaDev/documents.js/commit/c5bec41b41f87026bd1e96ede1bd84f388833189))
+
 ## [8.13.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.12.0...ooxml.js%408.13.0) (2026-09-11)
 
 ### Features
