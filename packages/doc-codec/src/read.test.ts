@@ -826,6 +826,157 @@ describe("readDocContent", () => {
     expect(paragraphAt(document, 0).runs[0]?.text).toBe("cell one");
   });
 
+  // sprmPHugePapx (0x6646), hand-encoded: a lone first Prl whose 4-byte operand is a Data-stream offset.
+  const HUGE_PAPX_AT_0 = [0x46, 0x66, 0x00, 0x00, 0x00, 0x00];
+  // A PrcData (cbGrpprl then GrpPrl) whose GrpPrl states sprmPDxaLeft 720 twips and sprmPDyaBefore 240 twips -- 11 bytes of GrpPrl, at or past the 10-byte minimum [MS-DOC] 2.6.2's own sprmPHugePapx entry requires of a referenced PrcData.
+  const indirectGrpPrl = [
+    0x5e,
+    0x84,
+    0xd0,
+    0x02, // sprmPDxaLeft, 720 twips (36pt).
+    0x13,
+    0xa4,
+    0xf0,
+    0x00, // sprmPDyaBefore, 240 twips (12pt).
+    0x07,
+    0x24,
+    0x00, // sprmPFPageBreakBefore, false.
+  ];
+  const prcData = new Uint8Array([
+    indirectGrpPrl.length & 0xff,
+    indirectGrpPrl.length >> 8,
+    ...indirectGrpPrl,
+  ]);
+
+  it("resolves a paragraph's properties through sprmPHugePapx's Data-stream PrcData, which replaces the rest of its grpprl", () => {
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          // The direct grpprl opens with sprmPHugePapx naming the PrcData at Data offset 0, then a sprmPJc the PrcData's own GrpPrl displaces -- "it MUST NOT process any more Prl elements in the array that contained the sprmPHugePapx".
+          {
+            runs: [{ text: "indirect" }],
+            grpprl: [...HUGE_PAPX_AT_0, 0x61, 0x24, 0x01],
+          },
+          { runs: [{ text: "direct" }] },
+        ],
+        data: prcData,
+      }),
+    );
+    const indirect = paragraphAt(document, 0);
+    expect(indirect.indentLeftPt).toBe(36);
+    expect(indirect.spacingBeforePt).toBe(12);
+    // The displaced trailing sprmPJc must not also apply.
+    expect(indirect.alignment).toBeUndefined();
+    expect(paragraphAt(document, 1).indentLeftPt).toBeUndefined();
+  });
+
+  it("throws on a sprmPHugePapx chain that never terminates, rather than looping", () => {
+    const loopGrpPrl = [
+      ...HUGE_PAPX_AT_0, // names the PrcData at offset 0 -- this very one.
+      0x07,
+      0x24,
+      0x00, // sprmPFPageBreakBefore, false, padding the GrpPrl past the 10-byte minimum.
+    ];
+    const looping = new Uint8Array([
+      loopGrpPrl.length & 0xff,
+      loopGrpPrl.length >> 8,
+      ...loopGrpPrl,
+    ]);
+    expect(() =>
+      readDocContent(
+        buildDoc({
+          paragraphs: [{ runs: [{ text: "loop" }], grpprl: HUGE_PAPX_AT_0 }],
+          data: looping,
+        }),
+      ),
+    ).toThrow(DocFormatError);
+  });
+
+  it("throws when a grpprl opens with sprmPHugePapx but the container carries no Data stream", () => {
+    expect(() =>
+      readDocContent(
+        buildDoc({
+          paragraphs: [{ runs: [{ text: "no data" }], grpprl: HUGE_PAPX_AT_0 }],
+        }),
+      ),
+    ).toThrow(DocFormatError);
+  });
+
+  it("reads a run of sprmPFInTable paragraphs that never closes a row as paragraphs, not a refusal", () => {
+    // The genuine Word 2000 shape: title-page paragraphs each carrying sprmPFInTable and sprmPItap, with no cell mark and no row mark anywhere -- a run that states zero rows and therefore no table at all (see tryAssembleTable's own note).
+    const inTable = [
+      0x16,
+      0x24,
+      0x01, // sprmPFInTable, true.
+      0x49,
+      0x66,
+      0x01,
+      0x00,
+      0x00,
+      0x00, // sprmPItap, depth 1.
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          { runs: [{ text: "flagged one" }], grpprl: inTable },
+          { runs: [{ text: "flagged two" }], grpprl: inTable },
+          { runs: [{ text: "plain" }] },
+        ],
+      }),
+    );
+    expect(paragraphs(document)).toHaveLength(3);
+    expect(textOf(paragraphAt(document, 0))).toBe("flagged one");
+    expect(textOf(paragraphAt(document, 1))).toBe("flagged two");
+    expect(textOf(paragraphAt(document, 2))).toBe("plain");
+  });
+
+  it("reads a document whose Plcfhdd carries Word 97's placeholder CPs (-1, and past the header document's own end) without refusing", () => {
+    // Build a genuine well-formed header document first, then corrupt its Plcfhdd into the shape a real Word 97 file carries when a document has (mostly) no headers: separator-story keys replaced by -1 placeholders and one CP past ccpHdd. The per-section slots' own keys stay well formed, so the one real story must still come through.
+    const original = buildDoc({
+      paragraphs: [{ runs: [{ text: "main text" }] }],
+      headerFooterStories: [
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [{ runs: [{ text: "the odd header" }] }],
+        [],
+        [],
+        [],
+        [],
+      ],
+    });
+    const streams = readDocStreams(original);
+    const table = new Uint8Array(streams.table);
+    const view = new DataView(table.buffer, table.byteOffset, table.byteLength);
+    const keyAt = (index: number): number =>
+      view.getInt32(streams.fib.fcPlcfHdd + index * 4, true);
+    // Sanity: the built file's keys are ascending and in range, so any normalisation below is genuinely exercised against the placeholder shape rather than a fixture that was already broken.
+    const ccpHdd = streams.fib.ccpHdd;
+    expect(keyAt(1)).toBeGreaterThanOrEqual(0);
+    expect(keyAt(7)).toBeLessThanOrEqual(ccpHdd);
+    view.setInt32(streams.fib.fcPlcfHdd + 2 * 4, -1, true);
+    view.setInt32(streams.fib.fcPlcfHdd + 3 * 4, -1, true);
+    view.setInt32(streams.fib.fcPlcfHdd + 4 * 4, ccpHdd + 99, true);
+    const patched = compoundFile([
+      { path: "WordDocument", bytes: new Uint8Array(streams.wordDocument) },
+      { path: "1Table", bytes: table },
+    ]);
+    const document = readDocContent(patched);
+    expect(document.headerFooterStories).toHaveLength(1);
+    expect(document.headerFooterStories[0]?.slot).toBe("oddHeader");
+    expect(
+      document.headerFooterStories[0]?.blocks.map((block) =>
+        block.kind === "paragraph"
+          ? block.runs.map((run) => run.text).join("")
+          : "",
+      ),
+    ).toEqual(["the odd header"]);
+  });
+
   it("keeps a field's result and drops its instruction", () => {
     const instruction = `${String.fromCharCode(FIELD_BEGIN)} HYPERLINK "https://example.com" ${String.fromCharCode(FIELD_SEPARATOR)}`;
     const document = readDocContent(
