@@ -9,10 +9,15 @@ import {
   RECORD_BOUNDSHEET8,
   RECORD_EOF,
   RECORD_EXTERNSHEET,
+  RECORD_MSODRAWINGGROUP,
   RECORD_SST,
   RECORD_SUPBOOK,
 } from "../biff/record-types";
-import { concatRecords, writeRecord } from "../biff/record-writer";
+import {
+  concatRecords,
+  writeRecord,
+  writeRecordChain,
+} from "../biff/record-writer";
 import {
   writeRichExtendedString,
   writeShortXLUnicodeString,
@@ -98,6 +103,8 @@ export interface WorkbookGlobalsPlan {
   readonly printNames: readonly PrintNamePlanEntry[];
   /** The document-level defined names the workbook declares, one Lbl record each, from workbook/defined-names.ts's own compile of the document's names array. */
   readonly definedNames: readonly DefinedNamePlanEntry[];
+  /** The workbook-wide Escher drawing group ([MS-ODRAW] OfficeArtDggContainer, drawing/escher-writer.ts's own writeDrawingGroupBytes) -- the FDGGBlock plus the Blip Store every sheet's picture shapes share -- or undefined when no sheet in the workbook carries an image or embedded object, in which case no MsoDrawingGroup record is written at all. */
+  readonly drawingGroupBytes?: Uint8Array<ArrayBuffer>;
 }
 
 export interface WorkbookGlobalsBuild {
@@ -236,6 +243,16 @@ export function buildWorkbookGlobals(
       push(record);
     }
     for (const record of writeDefinedNameRecords(plan.definedNames)) {
+      push(record);
+    }
+  }
+
+  // [MS-XLS] 2.1.7.20.3's own WORKBOOKCONTENT production places *MSODRAWINGGROUP after the BoundSheet8/SupBook/Lbl group and before SHAREDSTRINGS -- written only when some sheet in the workbook carries an image or embedded object, chained across as many Continue records as the Blip Store needs (writeRecordChain, since a real Blip Store routinely exceeds one record's 8224-byte ceiling once a workbook holds more than a picture or two).
+  if (plan.drawingGroupBytes !== undefined) {
+    for (const record of writeRecordChain(
+      RECORD_MSODRAWINGGROUP,
+      plan.drawingGroupBytes,
+    )) {
       push(record);
     }
   }

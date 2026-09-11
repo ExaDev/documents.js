@@ -62,6 +62,7 @@ import { writeSheetConditionalFormats } from "./conditional-format-write";
 import { writeSheetDataValidations } from "./data-validation-write";
 import { writeSheetComments } from "./comment-writer";
 import { GENERAL_CELL_XF_INDEX } from "./globals-writer";
+import type { SheetDrawingWrite } from "./drawing-writer";
 
 // The worksheet substream ([MS-XLS] 2.1.7.20.5), write side: the page setup, grid geometry, and cell table for one sheet, the counterpart of workbook/sheet.ts's own readSheetRecords. See xls-codec's README for exactly which worksheet-substream records this writer emits (the print-settings group, Dimensions, ColInfo, Row, the value-cell family, MergeCells) and which it deliberately omits (Window2, the calc-state family, Index/DBCell) -- real content, not per-window UI state or a lookup optimisation this reader (or any reader) does not require to find a cell.
 //
@@ -639,10 +640,11 @@ function writeCellRecords(
     : [writeCellValueRecord(cell, xfIndex, ctx)];
 }
 
-/** Builds one worksheet's own substream: BOF, the print-settings records, Dimensions, ColInfo per column, Row + value-cell records per populated or declared row (in ascending row then column order), MergeCells if the sheet declares any, comment records for cells carrying one, EOF. */
+/** Builds one worksheet's own substream: BOF, the print-settings records, Dimensions, ColInfo per column, Row + value-cell records per populated or declared row (in ascending row then column order), MergeCells if the sheet declares any, comment records for cells carrying one, the sheet's own MsoDrawing/Obj records for images and embedded objects, EOF. */
 export function buildWorksheetSubstream(
   sheet: ContentSheet,
   ctx: SheetWriteContext,
+  drawing: SheetDrawingWrite,
 ): Uint8Array<ArrayBuffer> {
   for (const cell of sheet.cells) {
     checkedCellPosition(cell);
@@ -702,6 +704,9 @@ export function buildWorksheetSubstream(
   if (commentedCells.length > 0) {
     pieces.push(...writeSheetComments(commentedCells));
   }
+
+  // A comment's own Note/Obj/Txo triple takes object ids 1..N (writeSheetComments above); drawing-writer.ts's own buildDrawingWritePlan continues object-id assignment from N+1, so every image/embedded-object shape's MsoDrawing/Obj records are placed after the comments' own, matching what that plan already assumes about the ids it minted.
+  pieces.push(...drawing.msoDrawingRecords, ...drawing.objRecords);
 
   // The conditional-format groups and the DataValidationTable follow the cell table and its notes, in that order -- [MS-XLS] 2.1.7.20.5's own WORKSHEETCONTENT production places CONDFMTS ahead of [DVAL] (`... *MergeCells [LRng] *QUERYTABLE [PHONETICINFO] CONDFMTS *HLINK [DVAL] ... EOF`), so a Dval/Dv pair arriving before the conditional formats would sit outside the grammar even though this package's own order-tolerant reader walk accepts either.
   pieces.push(...writeSheetConditionalFormats(sheet, ctx.icvOf));

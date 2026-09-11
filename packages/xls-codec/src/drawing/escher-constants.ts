@@ -21,6 +21,10 @@ export const ESCHER_BSE = 0xf007;
 export const ESCHER_SP = 0xf00a;
 /** A shape's own property table (fopt): a run of fixed-size property entries this reader consults for exactly one property, `pib` -- see FOPT_PROPERTY_PIB below ([MS-ODRAW] OfficeArtFOPT, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/10dc2fe1-9e69-48dc-a1d1-2921dfb9c28e). */
 export const ESCHER_OPT = 0xf00b;
+/** A group shape's own coordinate system ([MS-ODRAW] OfficeArtFSPGR, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/82d2d6a1-3a7a-4d15-9803-33145a76545a): four i32 coordinates, written as the all-zero rectangle a patriarch group whose children are all anchored in the sheet's own cell grid states. */
+export const ESCHER_FSPGR = 0xf009;
+/** The marker every shape whose following BIFF record is an Obj carries: [MS-XLS]'s own MsoDrawing prose ("If the rgChildRec has a shape structure in it ... and that shape has a clientData record in it ..., then the next record following this record MUST be an Obj") makes this empty atom the join between one Escher shape and its Obj record. [MS-ODRAW] OfficeArtClientData. */
+export const ESCHER_CLIENT_DATA = 0xf011;
 /** A shape's cell-anchor placement in a worksheet, macro sheet, or dialog sheet substream -- [MS-ODRAW]'s own generic ClientAnchor atom carries a host-defined payload, and [MS-XLS] 2.5.163 OfficeArtClientAnchorSheet (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/fd656a2c-d5ee-4171-8f65-17a08b9f2262) is what that payload actually is here (a chart-sheet substream uses the distinct OfficeArtClientAnchorChart instead, not read by this package). */
 export const ESCHER_CLIENT_ANCHOR = 0xf010;
 

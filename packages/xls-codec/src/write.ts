@@ -62,6 +62,7 @@ import {
   buildWorksheetSubstream,
   type SheetWriteContext,
 } from "./workbook/sheet-writer";
+import { buildDrawingWritePlan } from "./workbook/drawing-writer";
 import { cellCarriesFormatting, writesCellRecord } from "./written-cells";
 
 // The BIFF8 write path: a ContentDocument (or DocumentTree) of kind 'spreadsheet' back to real .xls bytes -- a genuine [MS-XLS] Workbook stream wrapped in a genuine [MS-CFB] compound file via archive-codec's writeCompoundFile. The counterpart of content.ts's readXlsContent/readXls, and of ooxml.js's own writeXlsx.
@@ -631,10 +632,17 @@ function concatBytes(
   return out;
 }
 
+interface WorkbookStreamBuild {
+  readonly bytes: Uint8Array<ArrayBuffer>;
+  /** The Embedding Storage streams (drawing-writer.ts's own MBD-named Package streams, [MS-XLS] 2.1.7) an embedded OLE object needs beside the Workbook stream in the outer compound file -- empty when the workbook carries none. */
+  readonly embeddingStreams: readonly {
+    readonly path: string;
+    readonly bytes: Uint8Array<ArrayBuffer>;
+  }[];
+}
+
 /** Builds the [MS-XLS] Workbook stream: the globals substream followed by one worksheet substream per sheet, with every BoundSheet8's own lbPlyPos patched to the real byte offset its sheet's substream landed at. */
-function buildWorkbookStream(
-  content: XlsContentDocument,
-): Uint8Array<ArrayBuffer> {
+function buildWorkbookStream(content: XlsContentDocument): WorkbookStreamBuild {
   if (content.sheets.length === 0) {
     throw new BiffWriteError(
       "a .xls workbook must contain at least one sheet ([MS-XLS] 2.1.7.20.3's own BUNDLESHEET production requires 1*BoundSheet8), but the document being written has none",
@@ -651,6 +659,7 @@ function buildWorkbookStream(
     palettePlan,
     fontPlan,
   );
+  const drawingPlan = buildDrawingWritePlan(content.sheets);
 
   const globalsPlan: WorkbookGlobalsPlan = {
     sheetNames: content.sheets.map((sheet) => sheet.name),
@@ -662,6 +671,7 @@ function buildWorkbookStream(
     paletteColors: palettePlan.paletteColors,
     printNames: buildPrintNamePlan(content.sheets),
     definedNames: definedNameEntriesFor(content.names ?? [], content.sheets),
+    drawingGroupBytes: drawingPlan.drawingGroupBytes,
   };
   const globals = buildWorkbookGlobals(globalsPlan);
 
@@ -671,9 +681,15 @@ function buildWorkbookStream(
     icvOf: palettePlan.icvOf,
   };
 
-  const sheetStreams = content.sheets.map((sheet) =>
-    buildWorksheetSubstream(sheet, sheetContext),
-  );
+  const sheetStreams = content.sheets.map((sheet, index) => {
+    const drawing = drawingPlan.sheetDrawings[index];
+    if (drawing === undefined) {
+      throw new BiffWriteError(
+        `internal error: sheet ${index} has no drawing plan entry -- buildDrawingWritePlan produced fewer entries than there are sheets`,
+      );
+    }
+    return buildWorksheetSubstream(sheet, sheetContext, drawing);
+  });
 
   const sheetOffsets: number[] = [];
   let offset = globals.bytes.length;
@@ -685,7 +701,10 @@ function buildWorkbookStream(
   const globalsBytes = globals.bytes.slice();
   patchBoundSheetOffsets(globalsBytes, globals.lbPlyPosOffsets, sheetOffsets);
 
-  return concatBytes([globalsBytes, ...sheetStreams]);
+  return {
+    bytes: concatBytes([globalsBytes, ...sheetStreams]),
+    embeddingStreams: drawingPlan.embeddingStreams,
+  };
 }
 
 /**
@@ -696,8 +715,11 @@ function buildWorkbookStream(
 export function writeXlsContent(
   content: XlsContentDocument,
 ): Uint8Array<ArrayBuffer> {
-  const stream = buildWorkbookStream(content);
-  const streams = [{ path: WORKBOOK_STREAM_NAME, bytes: stream }];
+  const workbook = buildWorkbookStream(content);
+  const streams = [
+    { path: WORKBOOK_STREAM_NAME, bytes: workbook.bytes },
+    ...workbook.embeddingStreams,
+  ];
   // Only when there is something SummaryInformation can actually hold: an input whose metadata carries nothing beyond creator/producer/language (or nothing at all) should read back exactly as it would with no stream present, not force an empty-but-present one into existence.
   if (hasSummaryInformationFields(content.metadata)) {
     streams.push({
