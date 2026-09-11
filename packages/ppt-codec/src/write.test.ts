@@ -1479,11 +1479,10 @@ describe("writePpt / readPpt round trip", () => {
           shapes: [
             {
               frame: { xPt: 72, yPt: 72, widthPt: 400, heightPt: 100 },
-              // readPpt always reports PowerPoint's own default insets (0.1in/0.05in) regardless of what a file's own OfficeArtFOPT states -- a documented reader-side gap, not something this writer's own insets ever reach -- so the input must state those same defaults for a whole-tree equality check to hold.
-              insetLeftPt: 7.2,
-              insetTopPt: 3.6,
-              insetRightPt: 7.2,
-              insetBottomPt: 3.6,
+              insetLeftPt: 0.1 * 72,
+              insetTopPt: 0.05 * 72,
+              insetRightPt: 0.1 * 72,
+              insetBottomPt: 0.05 * 72,
               blocks: [
                 {
                   kind: "paragraph" as const,
@@ -1502,6 +1501,35 @@ describe("writePpt / readPpt round trip", () => {
     expect(flattenTree(roundTripped)).toEqual(flattenTree(tree));
   });
 
+  it("round-trips insets that differ from PowerPoint's own defaults", () => {
+    const content: ContentDocument = {
+      kind: "presentation",
+      metadata: {},
+      slides: [
+        slide({
+          shapes: [
+            {
+              frame: { xPt: 72, yPt: 72, widthPt: 400, heightPt: 100 },
+              insetLeftPt: 20,
+              insetTopPt: 10,
+              insetRightPt: 15,
+              insetBottomPt: 5,
+              blocks: [
+                {
+                  kind: "paragraph" as const,
+                  runs: [{ text: "Custom insets" }],
+                },
+              ],
+            },
+          ],
+        }),
+      ],
+    };
+    const tree = assembleTree(content);
+    const roundTripped = readPpt(writePpt(tree));
+    expect(flattenTree(roundTripped)).toEqual(flattenTree(tree));
+  });
+
   it("throws when asked to write a non-presentation document", () => {
     const content: ContentDocument = {
       kind: "wordprocessing",
@@ -1511,6 +1539,168 @@ describe("writePpt / readPpt round trip", () => {
     expect(() => writePpt(assembleTree(content))).toThrow(
       PptUnsupportedContentError,
     );
+  });
+});
+
+describe("OLE embedded objects", () => {
+  function shapeWithEmbed(document: ContentDocument): ContentShape {
+    return {
+      frame: { xPt: 72, yPt: 72, widthPt: 200, heightPt: 150 },
+      insetLeftPt: 0,
+      insetTopPt: 0,
+      insetRightPt: 0,
+      insetBottomPt: 0,
+      blocks: [
+        {
+          kind: "embeddedObject",
+          objectKind: "spreadsheet",
+          document,
+          frame: { xPt: 72, yPt: 72, widthPt: 200, heightPt: 150 },
+        },
+      ],
+    };
+  }
+
+  const embeddedSpreadsheet: ContentDocument = {
+    kind: "spreadsheet",
+    metadata: {},
+    sheets: [
+      {
+        name: "Sheet1",
+        cells: [],
+        columns: [],
+        rows: [],
+        images: [],
+        printSettings: {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          gridlines: false,
+          headers: false,
+          pageOrder: "downThenOver",
+        },
+      },
+    ],
+  };
+
+  it("round-trips a shape's embedded object through injected serialise/decode ports", () => {
+    const storageBytes = new Uint8Array([1, 2, 3, 4, 5]);
+    const content: ContentDocument = {
+      kind: "presentation",
+      metadata: {},
+      slides: [slide({ shapes: [shapeWithEmbed(embeddedSpreadsheet)] })],
+    };
+    const bytes = writePptContent(
+      { metadata: content.metadata, slides: content.slides },
+      {
+        serialiseEmbeddedObject: (document) =>
+          document === embeddedSpreadsheet ? storageBytes : undefined,
+      },
+    );
+    const read = readPptContent(bytes, undefined, {
+      decodeEmbeddedObject: (recovered, progId) =>
+        Array.from(recovered).every(
+          (byte, index) => byte === storageBytes[index],
+        ) && recovered.length === storageBytes.length
+          ? { objectKind: "spreadsheet", document: embeddedSpreadsheet }
+          : (() => {
+              throw new Error(`unexpected storage bytes/progId: ${progId}`);
+            })(),
+    });
+    expect(read.slides[0]?.shapes[0]?.blocks).toEqual([
+      {
+        kind: "embeddedObject",
+        objectKind: "spreadsheet",
+        document: embeddedSpreadsheet,
+        frame: { xPt: 72, yPt: 72, widthPt: 200, heightPt: 150 },
+      },
+    ]);
+    // Excel.Sheet.8 is ExOleObjSubTypeEnum's own ProgID for the spreadsheet kind ([MS-PPT] 2.10.14) -- confirming the writer actually stated it, not merely that the decode port ignored whatever arrived.
+    let seenProgId: string | undefined;
+    readPptContent(bytes, undefined, {
+      decodeEmbeddedObject: (_bytes, progId) => {
+        seenProgId = progId;
+        return { objectKind: "spreadsheet", document: embeddedSpreadsheet };
+      },
+    });
+    expect(seenProgId).toBe("Excel.Sheet.8");
+  });
+
+  it("drops the embedded object silently when no serialise port is supplied, matching the writer's existing silent-drop policy for other unwritable blocks", () => {
+    const content: ContentDocument = {
+      kind: "presentation",
+      metadata: {},
+      slides: [slide({ shapes: [shapeWithEmbed(embeddedSpreadsheet)] })],
+    };
+    const bytes = writePptContent({
+      metadata: content.metadata,
+      slides: content.slides,
+    });
+    const read = readPptContent(bytes);
+    expect(read.slides[0]?.shapes[0]?.blocks).toEqual([]);
+  });
+
+  it("drops the embedded object silently when a serialise port declines this document, and writes no ExObjListContainer at all when nothing serialised", () => {
+    const content: ContentDocument = {
+      kind: "presentation",
+      metadata: {},
+      slides: [slide({ shapes: [shapeWithEmbed(embeddedSpreadsheet)] })],
+    };
+    const bytes = writePptContent(
+      { metadata: content.metadata, slides: content.slides },
+      { serialiseEmbeddedObject: () => undefined },
+    );
+    const read = readPptContent(bytes);
+    expect(read.slides[0]?.shapes[0]?.blocks).toEqual([]);
+  });
+
+  it("reads no embedded block when no decode port is supplied, even though the file genuinely carries one", () => {
+    const content: ContentDocument = {
+      kind: "presentation",
+      metadata: {},
+      slides: [slide({ shapes: [shapeWithEmbed(embeddedSpreadsheet)] })],
+    };
+    const bytes = writePptContent(
+      { metadata: content.metadata, slides: content.slides },
+      { serialiseEmbeddedObject: () => new Uint8Array([9, 9, 9]) },
+    );
+    const read = readPptContent(bytes);
+    expect(read.slides[0]?.shapes[0]?.blocks).toEqual([]);
+  });
+
+  it("fires no block-dropped diagnostic for an embeddedObject block a serialise port actually recovered bytes for", () => {
+    const content: ContentDocument = {
+      kind: "presentation",
+      metadata: {},
+      slides: [slide({ shapes: [shapeWithEmbed(embeddedSpreadsheet)] })],
+    };
+    const diagnostics: PptDiagnostic[] = [];
+    writePptContent(
+      { metadata: content.metadata, slides: content.slides },
+      {
+        serialiseEmbeddedObject: () => new Uint8Array([1, 2, 3]),
+        sink: (diagnostic) => diagnostics.push(diagnostic),
+      },
+    );
+    expect(diagnostics).toEqual([]);
+  });
+
+  it("fires a block-dropped diagnostic for an embeddedObject block a serialise port declines", () => {
+    const content: ContentDocument = {
+      kind: "presentation",
+      metadata: {},
+      slides: [slide({ shapes: [shapeWithEmbed(embeddedSpreadsheet)] })],
+    };
+    const diagnostics: PptDiagnostic[] = [];
+    writePptContent(
+      { metadata: content.metadata, slides: content.slides },
+      {
+        serialiseEmbeddedObject: () => undefined,
+        sink: (diagnostic) => diagnostics.push(diagnostic),
+      },
+    );
+    expect(diagnostics).toEqual([
+      expect.objectContaining({ code: PptDiagnosticCodes.BLOCK_DROPPED }),
+    ]);
   });
 });
 

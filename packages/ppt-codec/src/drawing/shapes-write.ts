@@ -32,6 +32,10 @@ import {
   RT_TextHeaderAtom,
 } from "../record/types";
 import {
+  PROPERTY_DX_TEXT_LEFT,
+  PROPERTY_DX_TEXT_RIGHT,
+  PROPERTY_DY_TEXT_BOTTOM,
+  PROPERTY_DY_TEXT_TOP,
   PROPERTY_PIB,
   PROPERTY_ROTATION,
   PROPERTY_TABLE_PROPERTIES,
@@ -42,9 +46,48 @@ import {
   writeIMsoArray,
   writeShapePropertyTable,
 } from "./properties";
+import {
+  DEFAULT_INSET_LEFT_RIGHT_PT,
+  DEFAULT_INSET_TOP_BOTTOM_PT,
+} from "../read";
 import { TEXT_TYPE_OTHER, characterCountOf } from "../text/atoms";
 import { writeStyleTextPropAtom } from "../text/style-write";
-import { pointsToMasterUnits } from "../units";
+import { pointsToEmu, pointsToMasterUnits } from "../units";
+
+// Whichever of a shape's own four insets differs from the default its own picture-ness implies (zero on every side for a picture, the standard 0.1in/0.05in pair otherwise -- read.ts's insetsForShape states the identical default pair for the identical reason). A shape stating exactly the applicable default writes no inset property at all, matching a real producer's own habit of only emitting what a shape actually overrides.
+function insetProperties(
+  shape: ContentShape,
+  isPicture: boolean,
+): WritableShapeProperty[] {
+  const defaultLeftRight = isPicture ? 0 : DEFAULT_INSET_LEFT_RIGHT_PT;
+  const defaultTopBottom = isPicture ? 0 : DEFAULT_INSET_TOP_BOTTOM_PT;
+  const entries: WritableShapeProperty[] = [];
+  if (shape.insetLeftPt !== defaultLeftRight) {
+    entries.push({
+      opid: PROPERTY_DX_TEXT_LEFT,
+      op: pointsToEmu(shape.insetLeftPt),
+    });
+  }
+  if (shape.insetTopPt !== defaultTopBottom) {
+    entries.push({
+      opid: PROPERTY_DY_TEXT_TOP,
+      op: pointsToEmu(shape.insetTopPt),
+    });
+  }
+  if (shape.insetRightPt !== defaultLeftRight) {
+    entries.push({
+      opid: PROPERTY_DX_TEXT_RIGHT,
+      op: pointsToEmu(shape.insetRightPt),
+    });
+  }
+  if (shape.insetBottomPt !== defaultTopBottom) {
+    entries.push({
+      opid: PROPERTY_DY_TEXT_BOTTOM,
+      op: pointsToEmu(shape.insetBottomPt),
+    });
+  }
+  return entries;
+}
 
 // The write-side mirror of drawing/shapes.ts: given a slide's ContentShape list, emits the [MS-ODRAW]/[MS-PPT] shape tree readDrawingShapes flattens back into PptShape[] -- one outermost patriarch group (the same fGroup|fPatriarch placeholder shape collectGroup/groupTransform special-case on read) followed by one plain OfficeArtSpContainer per content shape, each carrying a client anchor in slide coordinates, a property table when the shape states rotation or displays a picture, and, when the shape has text, an OfficeArtClientTextbox. Deliberately narrower than the read side's own coverage: every shape this writer emits is an ungrouped, unrotated-rectangle-in-slide-coordinates shape (an OfficeArtClientAnchor, never OfficeArtChildAnchor/OfficeArtFSPGR group nesting) -- see the package README's write-scope section.
 
@@ -85,7 +128,7 @@ function writeTextCharsAtom(text: string): Uint8Array<ArrayBuffer> {
   return writeAtom(RT_TextCharsAtom, utf16le(text));
 }
 
-// The shape's own primary property table ([MS-ODRAW] 2.2.9), written only when the shape states something it carries: rotation as the fixed-point ([MS-OSHARED] 2.2.1.6) value drawing/properties.ts converts whole degrees into, and a picture's one-based blip-store reference with the fBid bit that says the value is a store index rather than a plain integer.
+// The shape's own primary property table ([MS-ODRAW] 2.2.9), written only when the shape states something it carries: rotation as the fixed-point ([MS-OSHARED] 2.2.1.6) value drawing/properties.ts converts whole degrees into, a picture's one-based blip-store reference with the fBid bit that says the value is a store index rather than a plain integer, and whichever of the four text insets the shape states beyond the default its own picture-ness implies.
 function writeShapeProperties(
   shape: ContentShape,
   pib: number | undefined,
@@ -100,6 +143,7 @@ function writeShapeProperties(
   if (pib !== undefined) {
     entries.push({ opid: PROPERTY_PIB, op: pib, fBid: true });
   }
+  entries.push(...insetProperties(shape, pib !== undefined));
   return entries.length === 0
     ? undefined
     : writeShapePropertyTable(OfficeArtFOPT, entries);
@@ -194,10 +238,11 @@ export interface DrawingWriteContext {
 
 // The image formats MSOBLIPTYPE gives this writer a blip record for are exactly isBlipFormat's two -- the same vocabulary drawing/blips.ts reads with, so a written picture always reads back as the same image.
 
-// One shape's blocks, partitioned the way the writer genuinely treats them, so the drop diagnostics and the write itself can never disagree: paragraph blocks become the text body, the first png/jpeg image becomes the shape's single blip reference, the first table block turns the whole shape into a table group, and everything else -- an image whose format has no MSOBLIPTYPE token here, a second image beyond the one pib a shape carries, a second table, and every block kind with no [MS-PPT] spelling this writer produces -- is dropped, with a diagnostic naming it. When a table is present the shape is a table group and carries no text body or blip of its own, so any paragraph or image collected before the table is dropped too, each named through the same sink. Keeping the partition in one place is what makes the diagnostic honest: there is no second filter elsewhere that could silently spare or spare-drop a block this function classified differently.
+// One shape's blocks, partitioned the way the writer genuinely treats them, so the drop diagnostics and the write itself can never disagree: paragraph blocks become the text body, the first png/jpeg image becomes the shape's single blip reference, the first table block turns the whole shape into a table group, an embeddedObject block is silently skipped when `hasOleClientData` says write.ts's own OLE plan already turned it into a real ExObjRefAtom (naming it here too would be a false "dropped" diagnostic for content that was genuinely written), and everything else -- an image whose format has no MSOBLIPTYPE token here, a second image beyond the one pib a shape carries, a second table, an embeddedObject block no OLE plan claimed (no serialiser port, or one that declined this document), and every block kind with no [MS-PPT] spelling this writer produces -- is dropped, with a diagnostic naming it. When a table is present the shape is a table group and carries no text body or blip of its own, so any paragraph or image collected before the table is dropped too, each named through the same sink. Keeping the partition in one place is what makes the diagnostic honest: there is no second filter elsewhere that could silently spare or spare-drop a block this function classified differently.
 function planShapeBlocks(
   blocks: readonly ContentBlock[],
   context: DrawingWriteContext,
+  hasOleClientData: boolean,
 ): {
   readonly pib: number | undefined;
   readonly textBlocks: readonly ContentBlock[];
@@ -214,6 +259,9 @@ function planShapeBlocks(
     });
   };
   for (const block of blocks) {
+    if (block.kind === "embeddedObject" && hasOleClientData) {
+      continue;
+    }
     if (block.kind === "paragraph") {
       textBlocks.push(block);
       continue;
@@ -463,7 +511,11 @@ function writeDrawing(
   let shapeCount = 1; // the patriarch
   const shapeContainers: Uint8Array<ArrayBuffer>[] = [];
   for (const entry of shapes) {
-    const plan = planShapeBlocks(entry.shape.blocks, context);
+    const plan = planShapeBlocks(
+      entry.shape.blocks,
+      context,
+      entry.clientData !== undefined,
+    );
     if (plan.table !== undefined) {
       const group = writeTableGroup(nextSpid, entry.shape, plan.table, context);
       nextSpid += group.shapeCount;

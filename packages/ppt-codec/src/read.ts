@@ -6,6 +6,7 @@ import {
 import {
   type ContentBlock,
   type ContentDocument,
+  type ContentEmbeddedObjectKind,
   type ContentShape,
   type ContentSlide,
   type ContentTable,
@@ -35,10 +36,23 @@ import {
   readSlideListWithText,
 } from "./document/slide-list";
 import { type PptBlip, blipForPib, readBlipStore } from "./drawing/blips";
-import { PROPERTY_PIB, type ShapeProperty } from "./drawing/properties";
+import {
+  PROPERTY_DX_TEXT_LEFT,
+  PROPERTY_DX_TEXT_RIGHT,
+  PROPERTY_DY_TEXT_BOTTOM,
+  PROPERTY_DY_TEXT_TOP,
+  PROPERTY_PIB,
+  type ShapeProperty,
+} from "./drawing/properties";
 import { type PptTable, readDrawingShapes } from "./drawing/shapes";
 import { decryptPptDocumentStream } from "./encryption";
 import { PptEncryptedError, PptFormatError } from "./errors";
+import {
+  type ExternalOleEmbed,
+  readExObjIdRef,
+  readExternalOleEmbeds,
+  resolveOleObjectStorage,
+} from "./ole/embedded";
 import { type PptRecord, childRecords, findChild } from "./record/tree";
 import {
   RT_Document,
@@ -71,7 +85,7 @@ import {
   readStyleTextPropAtom,
   readTextMasterStyleAtom,
 } from "./text/style";
-import { POINTS_PER_INCH, masterUnitsToPoints } from "./units";
+import { POINTS_PER_INCH, emuToPoints, masterUnitsToPoints } from "./units";
 
 // The read path, top to bottom: an [MS-CFB] compound file's two required streams, the persist directory that says which of the file's appended edits is live, the document container that edit names, and then each slide's drawing and text mapped onto document-schema.js's presentation content model -- the same ContentSlide/ContentShape/ContentParagraph/ContentRun vocabulary ooxml.js's pptx reader and odf.js's odp reader produce, so a .ppt reaches every consumer of that schema without a second representation of a slide existing anywhere. [MS-PPT] 2.1.1 Current User Stream: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/76cfa657-07a6-464b-81ab-4c017c611f64 [MS-PPT] 2.1.2 PowerPoint Document Stream: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/1fc22d56-28f9-4818-bd45-67c2bf721ccf
 
@@ -84,11 +98,52 @@ export const PICTURES_STREAM = "Pictures";
 /** The [MS-OLEPS] Property Set Stream a .ppt's title/author/dates live in when present ([MS-OSHARED] 2.3.3.2.2) -- a genuinely optional stream, unlike the two above, since a valid PowerPoint binary document need not carry document properties at all. */
 export const SUMMARY_INFORMATION_STREAM = "\x05SummaryInformation";
 
-// PowerPoint's own default text insets: 0.1 inch left and right, 0.05 inch top and bottom -- the same figures ECMA-376 later wrote into a:bodyPr's defaults, and the ones ooxml.js applies to a pptx shape stating none. A per-shape override lives in the shape's OfficeArtFOPT text properties, which this reader does not yet read; see the README's scope note. Exported because the write side needs them too: ContentShape requires all four insets, and a shape the writer builds for itself (a notes body, a master placeholder) has to state the same defaults a read of that shape would report rather than invent its own.
+// PowerPoint's own default text insets: 0.1 inch left and right, 0.05 inch top and bottom -- the same figures ECMA-376 later wrote into a:bodyPr's defaults, and the ones ooxml.js applies to a pptx shape stating none. A per-shape override lives in the shape's OfficeArtFOPT text properties (dxTextLeft/dyTextTop/dxTextRight/dyTextBottom -- insetsForShape below reads them). Exported because the write side needs them too: ContentShape requires all four insets, and a shape the writer builds for itself (a notes body, a master placeholder) has to state the same defaults a read of that shape would report rather than invent its own.
 export const DEFAULT_INSET_LEFT_RIGHT_PT = 0.1 * POINTS_PER_INCH;
 export const DEFAULT_INSET_TOP_BOTTOM_PT = 0.05 * POINTS_PER_INCH;
 
+interface ShapeInsets {
+  readonly insetLeftPt: number;
+  readonly insetTopPt: number;
+  readonly insetRightPt: number;
+  readonly insetBottomPt: number;
+}
+
+// A shape's own text insets: each of the four OfficeArtFOPT properties overrides its own default independently (a producer that only narrows the left margin still gets the standard 0.05in top/bottom), and a picture -- having no text body of its own -- falls back to zero on whichever side its own properties leave unstated, rather than to the text-shape default (see the isPicture comment above this function's call sites).
+function insetsForShape(
+  properties: ReadonlyMap<number, ShapeProperty>,
+  isPicture: boolean,
+): ShapeInsets {
+  const defaultLeftRight = isPicture ? 0 : DEFAULT_INSET_LEFT_RIGHT_PT;
+  const defaultTopBottom = isPicture ? 0 : DEFAULT_INSET_TOP_BOTTOM_PT;
+  const emuOrDefault = (opid: number, fallback: number): number => {
+    const property = properties.get(opid);
+    return property === undefined ? fallback : emuToPoints(property.value);
+  };
+  return {
+    insetLeftPt: emuOrDefault(PROPERTY_DX_TEXT_LEFT, defaultLeftRight),
+    insetTopPt: emuOrDefault(PROPERTY_DY_TEXT_TOP, defaultTopBottom),
+    insetRightPt: emuOrDefault(PROPERTY_DX_TEXT_RIGHT, defaultLeftRight),
+    insetBottomPt: emuOrDefault(PROPERTY_DY_TEXT_BOTTOM, defaultTopBottom),
+  };
+}
+
 const NO_STYLE: StyleTextProps = { paragraphRuns: [], characterRuns: [] };
+
+// The recovered nested content for an embedded OLE object: what readExternalOleEmbeds/resolveOleObjectStorage recover as raw [MS-CFB] compound-file bytes are second-order content this single-format package cannot itself decode -- it depends on no sibling format codec, per the monorepo README's own layering rule, so it has no doc-codec/xls-codec/ooxml.js reader available to turn those bytes into a real nested document. This port is the family's own established answer to that exact problem (ooxml.js's docx writer takes an analogous EmbeddedPresentationSerialiser port for the identical reason, one layer up in documents.js, which already depends on every format codec): a caller that DOES hold every codec -- documents.js -- supplies the decode, and this package stays decoupled either way. Returning undefined for anything (no port supplied, an unrecognised progId, a decode failure) degrades to no embedded block, matching the read-side tiered-degrade convention ooxml.js's own embedded-object recovery already states: one bad or unrecoverable embedded object never fails the host slide's read.
+export type DecodeEmbeddedObjectPort = (
+  storageBytes: Uint8Array<ArrayBuffer>,
+  progId: string | undefined,
+) =>
+  | {
+      readonly objectKind: ContentEmbeddedObjectKind;
+      readonly document: ContentDocument;
+    }
+  | undefined;
+
+export interface ReadPptOptions {
+  readonly decodeEmbeddedObject?: DecodeEmbeddedObjectPort;
+}
 
 // What a slide's own reading starts from: the resolved document-wide state (streams, persist directory, blip store) plus this slide's own list entry and the document's font collection.
 interface DocumentContext {
@@ -97,6 +152,8 @@ interface DocumentContext {
   readonly blips: readonly PptBlip[];
   readonly persist: SlidePersist;
   readonly fontNames: readonly string[];
+  readonly externalOleEmbeds: ReadonlyMap<number, ExternalOleEmbed>;
+  readonly decodeEmbeddedObject: DecodeEmbeddedObjectPort | undefined;
 }
 
 // A DocumentContext narrowed onto one slide by its resolved master -- the formatting cascade and colour scheme a run's unstated properties resolve against, which is per-slide because a slide's own scheme can differ from its master's.
@@ -212,6 +269,45 @@ function imageBlocksFor(
       base64: bytesToBase64(blip.bytes),
       widthPt,
       heightPt,
+    },
+  ];
+}
+
+// A shape's OLE-embedded object, when its OfficeArtClientData names one, the document's own external-object list resolves it, its persist entry's storage recovers, AND a decode port turns those bytes into a real nested document -- any one of those failing degrades to no additional block, the shape's own picture/text blocks (already collected by imageBlocksFor/blocksFor above) standing alone exactly as if this package had no OLE support at all. This mirrors ooxml.js's own OLE graphic-frame reading precedent: the fallback picture stays, and the embedded-object block sits beside it rather than replacing it, when a document was actually recovered.
+function embeddedObjectBlocksFor(
+  clientData: PptRecord | undefined,
+  context: DrawingContext,
+  frame: { xPt: number; yPt: number; widthPt: number; heightPt: number },
+): ContentBlock[] {
+  if (clientData === undefined || context.decodeEmbeddedObject === undefined) {
+    return [];
+  }
+  const exObjId = readExObjIdRef(clientData);
+  if (exObjId === undefined) {
+    return [];
+  }
+  const embed = context.externalOleEmbeds.get(exObjId);
+  if (embed === undefined) {
+    return [];
+  }
+  const storageBytes = resolveOleObjectStorage(
+    context.streamBytes,
+    context.directory,
+    embed.persistIdRef,
+  );
+  if (storageBytes === undefined) {
+    return [];
+  }
+  const decoded = context.decodeEmbeddedObject(storageBytes, embed.progId);
+  if (decoded === undefined) {
+    return [];
+  }
+  return [
+    {
+      kind: "embeddedObject" as const,
+      objectKind: decoded.objectKind,
+      document: decoded.document,
+      frame,
     },
   ];
 }
@@ -426,10 +522,7 @@ function readSlide(
       ...(shape.rotationDeg === undefined
         ? {}
         : { rotationDeg: shape.rotationDeg }),
-      insetLeftPt: isPicture ? 0 : DEFAULT_INSET_LEFT_RIGHT_PT,
-      insetTopPt: isPicture ? 0 : DEFAULT_INSET_TOP_BOTTOM_PT,
-      insetRightPt: isPicture ? 0 : DEFAULT_INSET_LEFT_RIGHT_PT,
-      insetBottomPt: isPicture ? 0 : DEFAULT_INSET_TOP_BOTTOM_PT,
+      ...insetsForShape(shape.properties, isPicture),
       blocks: [
         ...imageBlocksFor(
           shape.properties.get(PROPERTY_PIB),
@@ -438,6 +531,12 @@ function readSlide(
           heightPt,
         ),
         ...blocksFor(shape.clientTextbox, context),
+        ...embeddedObjectBlocksFor(shape.clientData, context, {
+          xPt: left,
+          yPt: top,
+          widthPt,
+          heightPt,
+        }),
       ],
     });
   }
@@ -451,6 +550,7 @@ export function readPptStreams(
   powerPointDocumentStream: Uint8Array<ArrayBuffer>,
   password?: string,
   picturesStream?: Uint8Array<ArrayBuffer>,
+  options?: ReadPptOptions,
 ): PptDocument {
   const currentUser = readCurrentUserAtom(currentUserStream);
   // The persist directory itself is always readable: UserEditAtom and PersistDirectoryAtom are never encrypted (see encryption.ts's own top comment), so building it does not need to wait on a password.
@@ -541,6 +641,7 @@ export function readPptStreams(
     documentContainer,
     currentUser.encrypted ? undefined : picturesStream,
   );
+  const externalOleEmbeds = readExternalOleEmbeds(children);
 
   return {
     // Document properties live in the compound file's own "\x05SummaryInformation" stream ([MS-OSHARED]), not in any [MS-PPT] record -- genuinely outside what a caller holding only these two streams can supply. readPptContent, one level up, is where a container-level caller gets the real value: it looks the stream up itself and overrides this field when one is present.
@@ -553,6 +654,8 @@ export function readPptStreams(
           persist,
           fontNames,
           blips,
+          externalOleEmbeds,
+          decodeEmbeddedObject: options?.decodeEmbeddedObject,
         },
         size,
         notesBySlideId.get(persist.slideId) ?? "",
@@ -566,6 +669,7 @@ export function readPptStreams(
 export function readPptContent(
   bytes: Uint8Array<ArrayBuffer>,
   password?: string,
+  options?: ReadPptOptions,
 ): PptDocument {
   const streams = readCompoundFile(bytes);
   const pictures = streams.find((stream) => stream.path === PICTURES_STREAM);
@@ -574,6 +678,7 @@ export function readPptContent(
     requireStream(streams, POWERPOINT_DOCUMENT_STREAM),
     password,
     pictures === undefined ? undefined : pictures.bytes,
+    options,
   );
   const metadataStream = streams.find(
     (stream) => stream.path === SUMMARY_INFORMATION_STREAM,
@@ -593,8 +698,9 @@ export function readPptContent(
 export function readPpt(
   bytes: Uint8Array<ArrayBuffer>,
   password?: string,
+  options?: ReadPptOptions,
 ): DocumentTree {
-  const { metadata, slides } = readPptContent(bytes, password);
+  const { metadata, slides } = readPptContent(bytes, password, options);
   const document: ContentDocument = {
     kind: "presentation",
     metadata,
