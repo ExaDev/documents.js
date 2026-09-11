@@ -18,12 +18,20 @@ export function mainFormatFor(bundlePath: string): "commonjs" | "module" {
   return bundlePath.endsWith(".mjs") ? "module" : "commonjs";
 }
 
-/** The bare (unsuffixed) binary name and its platform-appropriate on-disk file name -- only win32 gets a suffix, and Node's own --build-sea requires it: its own documentation states the .exe extension is necessary for the "output" path on Windows, not merely conventional. */
+// A human-readable platform label for the asset name -- "macos"/"linux"/"windows" rather than Node's own "darwin"/"linux"/"win32", matching how every other cross-platform release asset on GitHub names itself, which is who actually reads this filename.
+const PLATFORM_LABELS: Record<SeaPlatform, string> = {
+  darwin: "macos",
+  linux: "linux",
+  win32: "windows",
+};
+
+/** The platform-qualified on-disk file name for a binary -- every platform gets its own distinct name, not only win32's `.exe`: three release legs (one per platform in the CI matrix) upload to the same GitHub Release via `gh release upload --clobber`, so an unqualified name shared between two platforms silently loses one binary to the other's upload rather than erroring -- confirmed directly the first time a real backfill ran with only win32 disambiguated (ExaDev/documents.js, 2026-09-11): the release ended up with exactly one unsuffixed `document-cli` asset, and there was no way to tell afterward whether it was the Linux or macOS build, because the losing upload left no trace at all. */
 export function binaryFileName(
   binaryName: string,
   platform: SeaPlatform,
 ): string {
-  return platform === "win32" ? `${binaryName}.exe` : binaryName;
+  const suffixed = `${binaryName}-${PLATFORM_LABELS[platform]}`;
+  return platform === "win32" ? `${suffixed}.exe` : suffixed;
 }
 
 /** Every step this platform needs after --build-sea produces the executable -- macOS refuses to run an unsigned binary at all, so an ad-hoc signature (`codesign --sign -`, no certificate, no Apple Developer account) is required for the binary to launch. `--force` is load-bearing, not optional: --build-sea copies whichever Node binary built it, and every officially distributed Node build (and every macos-latest GitHub Actions runner's own preinstalled one) already carries a real code signature -- confirmed directly, `codesign --sign -` alone against such a binary exits 1 ("is already signed") without `--force`, which Node's own quick-start doesn't surface because it's written against a plain unsigned build. Linux needs no signing step; Windows signing needs a real certificate this pipeline does not hold, so an unsigned .exe ships as-is (it still runs, per Node's own SEA documentation -- Windows SmartScreen may warn on an unsigned download, exactly as it does for any other unsigned .exe). */
