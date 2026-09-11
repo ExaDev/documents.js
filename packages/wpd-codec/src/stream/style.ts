@@ -47,11 +47,9 @@ const SYSTEM_STYLE_NONE = 0xff;
 export function readSystemStyleNumber(
   nonDeletable: Uint8Array,
 ): number | undefined {
+  // No separate undefined check is needed: value is already undefined when the byte is absent, so returning it as-is in that case already answers undefined -- exactly what an explicit check-and-return-undefined would do.
   const value = nonDeletable[SYSTEM_STYLE_NUMBER_OFFSET];
-  if (value === undefined || value === SYSTEM_STYLE_NONE) {
-    return undefined;
-  }
-  return value;
+  return value === SYSTEM_STYLE_NONE ? undefined : value;
 }
 
 // The SDK's own enumeration, transcribed for the entries the shared content schema has a structural spelling for. Everything else it lists -- footnote and endnote number styles, box number styles, table-of-contents and index levels, header and footer styles, hypertext, captions -- names a region whose own construct this package does not lift, so those numbers open a scope that carries no heading level and no list level rather than being forced onto the nearest thing that fits.
@@ -143,6 +141,7 @@ const TEXT_BLOCK_HEADER_SIZE = 2 + 4 * 4; // [number of text blocks] then four L
 export function readStyleBeginBlock(
   packet: Uint8Array,
 ): Uint8Array | undefined {
+  // Stryker disable next-line EqualityOperator: at packet.length exactly 2, pidCount can be any value a 2-byte packet can state, but afterPids + TEXT_BLOCK_HEADER_SIZE (at least 2 + 18 = 20) always exceeds a 2-byte packet regardless -- the check below always rejects it too, so whether this breaks one check early makes no observable difference.
   if (packet.length < 2) {
     return undefined;
   }
@@ -159,7 +158,8 @@ export function readStyleBeginBlock(
   }
   const start = relativeOffset + paragraphTextSize;
   const end = start + beginningStyleTextSize;
-  if (start < 0 || end > packet.length) {
+  // No separate start < 0 guard is needed: relativeOffset and paragraphTextSize are both unsigned 32-bit reads, so start can never be negative.
+  if (end > packet.length) {
     return undefined;
   }
   return packet.subarray(start, end);

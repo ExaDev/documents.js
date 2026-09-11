@@ -110,6 +110,11 @@ describe("styleSemanticsFor", () => {
       expect(styleSemanticsFor(systemStyle)).toBeUndefined();
     },
   );
+
+  // One past the heading range's own upper bound (75): every existing case above either lands inside a range or well below all of them, so nothing yet proves the heading and not-indented ranges actually stop where the SDK says they do, rather than continuing to swallow everything above their first value.
+  it("gives system style 76, one past the heading range, no structural meaning", () => {
+    expect(styleSemanticsFor(76)).toBeUndefined();
+  });
 });
 
 describe("style scope pairing", () => {
@@ -151,6 +156,14 @@ describe("paragraph number display", () => {
     "does not treat subfunction %i as a paragraph number",
     (subfunction) => {
       expect(isParagraphNumberDisplayOn(subfunction)).toBe(false);
+    },
+  );
+
+  // The On code itself, and an unrelated subfunction, must both fail isParagraphNumberDisplayOff -- otherwise a version that always answers true regardless of input would pass every existing check here.
+  it.each([0x0c, 0x04])(
+    "does not treat subfunction %i as the paragraph number display Off code",
+    (subfunction) => {
+      expect(isParagraphNumberDisplayOff(subfunction)).toBe(false);
     },
   );
 
@@ -207,5 +220,17 @@ describe("readStyleBeginBlock", () => {
 
   it("returns undefined for a packet too short to carry the text-block header", () => {
     expect(readStyleBeginBlock(new Uint8Array([0, 0]))).toBeUndefined();
+  });
+
+  it("returns undefined for a packet too short to even hold the pid count", () => {
+    expect(readStyleBeginBlock(new Uint8Array(0))).toBeUndefined();
+  });
+
+  // A pid count (60) whose doubled byte cost the packet plainly cannot afford: the overrun check must reject it using the real byte cost, not an under- or negatively-computed one that would let the walk proceed and misread bytes 30-58 past where the pid list truly ends.
+  it("rejects a pid count whose doubled byte cost overruns the packet", () => {
+    const bytes = new Array<number>(60).fill(0);
+    bytes[0] = 60; // pid count = 60, low byte
+    bytes[42] = 5; // only reachable, and only turns into a real answer, if afterPids is mis-computed
+    expect(readStyleBeginBlock(new Uint8Array(bytes))).toBeUndefined();
   });
 });
