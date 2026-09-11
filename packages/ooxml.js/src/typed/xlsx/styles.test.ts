@@ -425,6 +425,7 @@ describe("CellFormatTable: interning decoration alongside the number format", ()
     const records = table.cellFormatRecords();
     expect(records[first]).toEqual({
       numFmtId: GENERAL_NUM_FMT_ID,
+      fontId: 0,
       fillId: 0,
       borderId: 0,
       alignment: { horizontal: "center", vertical: "middle" },
@@ -438,6 +439,186 @@ describe("CellFormatTable: interning decoration alongside the number format", ()
     );
     expect(table.cellFormatRecords()[0]).toEqual({
       numFmtId: GENERAL_NUM_FMT_ID,
+      fontId: 0,
+      fillId: 0,
+      borderId: 0,
+    });
+  });
+});
+
+// --- the cell font: read-side diffing against the workbook's own default font ---
+
+describe("readCellStyles: the cell font, diffed against <fonts> entry 0", () => {
+  it("states only the properties that genuinely differ from the workbook's own default font", () => {
+    const pkg = stylesPackage(
+      el("styleSheet", {}, [
+        el("fonts", {}, [
+          el("font", {}, [
+            el("sz", { val: "11" }),
+            el("name", { val: "Calibri" }),
+          ]),
+          el("font", {}, [
+            el("b"),
+            el("i"),
+            el("strike"),
+            el("sz", { val: "14" }),
+            el("name", { val: "Courier New" }),
+            el("color", { rgb: "FFFF0000" }),
+          ]),
+        ]),
+        el("cellXfs", {}, [
+          el("xf", { numFmtId: "0", fontId: "0" }),
+          el("xf", { numFmtId: "0", fontId: "1" }),
+        ]),
+      ]),
+    );
+    const entries = readCellStyles(pkg);
+    expect(entries[0]?.font).toBeUndefined();
+    expect(entries[1]?.font).toEqual({
+      bold: true,
+      italic: true,
+      strike: true,
+      sizePt: 14,
+      fontFamily: "Courier New",
+      color: { r: 1, g: 0, b: 0 },
+    });
+  });
+
+  it("states bold: false for a cell font whose only difference is turning the default's bold off", () => {
+    const pkg = stylesPackage(
+      el("styleSheet", {}, [
+        el("fonts", {}, [
+          el("font", {}, [el("b"), el("name", { val: "Calibri" })]),
+          el("font", {}, [el("name", { val: "Calibri" })]),
+        ]),
+        el("cellXfs", {}, [el("xf", { numFmtId: "0", fontId: "1" })]),
+      ]),
+    );
+    expect(readCellStyles(pkg)[0]?.font).toEqual({ bold: false });
+  });
+
+  it("states underline: true for any named underline style, and nothing for u val=none", () => {
+    const pkg = stylesPackage(
+      el("styleSheet", {}, [
+        el("fonts", {}, [
+          el("font", {}, [el("name", { val: "Calibri" })]),
+          el("font", {}, [
+            el("u", { val: "double" }),
+            el("name", { val: "Calibri" }),
+          ]),
+          el("font", {}, [
+            el("u", { val: "none" }),
+            el("name", { val: "Calibri" }),
+          ]),
+        ]),
+        el("cellXfs", {}, [
+          el("xf", { numFmtId: "0", fontId: "1" }),
+          el("xf", { numFmtId: "0", fontId: "2" }),
+        ]),
+      ]),
+    );
+    const entries = readCellStyles(pkg);
+    expect(entries[0]?.font).toEqual({ underline: true });
+    expect(entries[1]?.font).toBeUndefined();
+  });
+
+  it("leaves a theme- or indexed-carried colour unstated, matching the fill/border colour policy", () => {
+    const pkg = stylesPackage(
+      el("styleSheet", {}, [
+        el("fonts", {}, [
+          el("font", {}, [el("name", { val: "Calibri" })]),
+          el("font", {}, [
+            el("color", { theme: "1" }),
+            el("name", { val: "Calibri" }),
+          ]),
+        ]),
+        el("cellXfs", {}, [el("xf", { numFmtId: "0", fontId: "1" })]),
+      ]),
+    );
+    expect(readCellStyles(pkg)[0]?.font).toBeUndefined();
+  });
+
+  it("reads past a <vertAlign> ContentFont has no member for, stating the differences it can", () => {
+    const pkg = stylesPackage(
+      el("styleSheet", {}, [
+        el("fonts", {}, [
+          el("font", {}, [el("name", { val: "Calibri" })]),
+          el("font", {}, [
+            el("vertAlign", { val: "superscript" }),
+            el("b"),
+            el("name", { val: "Calibri" }),
+          ]),
+        ]),
+        el("cellXfs", {}, [el("xf", { numFmtId: "0", fontId: "1" })]),
+      ]),
+    );
+    expect(readCellStyles(pkg)[0]?.font).toEqual({ bold: true });
+  });
+
+  it("states no font for an out-of-range fontId or a workbook with no <fonts> table", () => {
+    const outOfRange = stylesPackage(
+      el("styleSheet", {}, [
+        el("cellXfs", {}, [el("xf", { numFmtId: "0", fontId: "99" })]),
+      ]),
+    );
+    expect(readCellStyles(outOfRange)[0]?.font).toBeUndefined();
+    expect(readCellStyles(stylesPackage(el("styleSheet", {}, [])))).toEqual([]);
+  });
+});
+
+// --- the cell font: write-side interning ---
+
+describe("CellFormatTable: interning the cell font alongside the number format", () => {
+  it("always carries the default Calibri-11 font at index 0, and a font normalising back to it references that entry", () => {
+    const table = new CellFormatTable();
+    expect(table.fontDeclarations()).toEqual([{ sz: "11", name: "Calibri" }]);
+    expect(
+      table.intern(
+        { kind: "builtin", id: GENERAL_NUM_FMT_ID },
+        { font: { bold: false } },
+      ),
+    ).toBe(DEFAULT_CELL_FORMAT_INDEX);
+    // bold: false against THIS writer's not-bold entry 0 is a restatement of the default, so nothing was minted.
+    expect(table.fontDeclarations()).toEqual([{ sz: "11", name: "Calibri" }]);
+  });
+
+  it("mints one entry per distinct font and deduplicates identical ones", () => {
+    const table = new CellFormatTable();
+    const boldRed = table.intern(
+      { kind: "builtin", id: GENERAL_NUM_FMT_ID },
+      { font: { bold: true, color: { r: 1, g: 0, b: 0 } } },
+    );
+    expect(
+      table.intern(
+        { kind: "builtin", id: GENERAL_NUM_FMT_ID },
+        { font: { bold: true, color: { r: 1, g: 0, b: 0 } } },
+      ),
+    ).toBe(boldRed);
+    expect(table.fontDeclarations()).toEqual([
+      { sz: "11", name: "Calibri" },
+      { bold: true, colorRgb: "ff0000", sz: "11", name: "Calibri" },
+    ]);
+    const courierBig = table.intern(
+      { kind: "builtin", id: GENERAL_NUM_FMT_ID },
+      { font: { fontFamily: "Courier New", sizePt: 14, strike: true } },
+    );
+    expect(courierBig).not.toBe(boldRed);
+    expect(table.fontDeclarations()[2]).toEqual({
+      strike: true,
+      sz: "14",
+      name: "Courier New",
+    });
+  });
+
+  it("carries fontId on the cellFormatRecord, distinct from the default font's 0", () => {
+    const table = new CellFormatTable();
+    const index = table.intern(
+      { kind: "builtin", id: GENERAL_NUM_FMT_ID },
+      { font: { italic: true } },
+    );
+    expect(table.cellFormatRecords()[index]).toEqual({
+      numFmtId: GENERAL_NUM_FMT_ID,
+      fontId: 1,
       fillId: 0,
       borderId: 0,
     });
