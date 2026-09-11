@@ -69,12 +69,16 @@ export function readNotesText(notesContainer: PptRecord): string {
     return "";
   }
   const bodies: string[] = [];
-  for (const shape of readDrawingShapes(drawing)) {
-    if (shape.clientTextbox === undefined) {
+  for (const entry of readDrawingShapes(drawing)) {
+    // A table group on a notes page has no single text body to contribute -- and a real notes page carries none, so it is passed over rather than flattened.
+    if (!("clientTextbox" in entry)) {
+      continue;
+    }
+    if (entry.clientTextbox === undefined) {
       continue;
     }
     // No OutlineTextRefAtom indirection to follow: that atom indexes the texts a slide's own entry in the SlideListWithTextContainer carries, and [MS-PPT] 2.4.14.6 gives the notes list no texts at all to index into.
-    const text = readTextBody(childRecords(shape.clientTextbox));
+    const text = readTextBody(childRecords(entry.clientTextbox));
     if (text === undefined || text.length === 0) {
       continue;
     }

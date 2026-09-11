@@ -14,6 +14,7 @@ import {
   assembleTree,
 } from "document-schema.js";
 import { buildParagraphs } from "./content";
+import { bytesToBase64 } from "./base64";
 import { readSlideSchemeColorSchemeAtom } from "./document/color-scheme";
 import { readDocumentAtom } from "./document/document-atom";
 import { readFontNames } from "./document/fonts";
@@ -28,6 +29,8 @@ import {
   type SlidePersist,
   readSlideListWithText,
 } from "./document/slide-list";
+import { type PptBlip, blipForPib, readBlipStore } from "./drawing/blips";
+import { PROPERTY_PIB, type ShapeProperty } from "./drawing/properties";
 import { readDrawingShapes } from "./drawing/shapes";
 import { decryptPptDocumentStream } from "./encryption";
 import { PptEncryptedError, PptFormatError } from "./errors";
@@ -71,6 +74,8 @@ import { POINTS_PER_INCH, masterUnitsToPoints } from "./units";
 // [MS-PPT] 2.1.1/2.1.2: both stream names are mandated exactly, including the space.
 export const CURRENT_USER_STREAM = "Current User";
 export const POWERPOINT_DOCUMENT_STREAM = "PowerPoint Document";
+// [MS-PPT] 2.1.3: the optional stream a producer moves blips into when they are not embedded in the blip store itself -- genuinely optional, since an FBSE may carry its blip inline instead. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/150a72bc-487f-467e-994e-01270dfaf9bf
+export const PICTURES_STREAM = "Pictures";
 
 /** The [MS-OLEPS] Property Set Stream a .ppt's title/author/dates live in when present ([MS-OSHARED] 2.3.3.2.2) -- a genuinely optional stream, unlike the two above, since a valid PowerPoint binary document need not carry document properties at all. */
 export const SUMMARY_INFORMATION_STREAM = "\x05SummaryInformation";
@@ -80,6 +85,20 @@ export const DEFAULT_INSET_LEFT_RIGHT_PT = 0.1 * POINTS_PER_INCH;
 export const DEFAULT_INSET_TOP_BOTTOM_PT = 0.05 * POINTS_PER_INCH;
 
 const NO_STYLE: StyleTextProps = { paragraphRuns: [], characterRuns: [] };
+
+// What a slide's own reading starts from: the resolved document-wide state (streams, persist directory, blip store) plus this slide's own list entry and the document's font collection.
+interface DocumentContext {
+  readonly streamBytes: Uint8Array<ArrayBuffer>;
+  readonly directory: ReadonlyMap<number, number>;
+  readonly blips: readonly PptBlip[];
+  readonly persist: SlidePersist;
+  readonly fontNames: readonly string[];
+}
+
+// A DocumentContext narrowed onto one slide by its resolved master -- the formatting cascade and colour scheme a run's unstated properties resolve against, which is per-slide because a slide's own scheme can differ from its master's.
+interface DrawingContext extends DocumentContext {
+  readonly masterInfo: MasterInfo;
+}
 
 // The flat form: metadata plus slides, matching the shape ooxml.js's readPptxContent and odf.js's readOdpContent return, rather than a full ContentDocument envelope. readPpt below is what wraps it.
 export interface PptDocument {
@@ -143,14 +162,12 @@ function textRecordsFor(
 
 function blocksFor(
   clientTextbox: PptRecord | undefined,
-  persist: SlidePersist,
-  fontNames: readonly string[],
-  masterInfo: MasterInfo,
+  context: DrawingContext,
 ): ContentBlock[] {
   if (clientTextbox === undefined) {
     return [];
   }
-  const { textType, records } = textRecordsFor(clientTextbox, persist);
+  const { textType, records } = textRecordsFor(clientTextbox, context.persist);
   const text = readTextBody(records);
   if (text === undefined) {
     return [];
@@ -163,11 +180,36 @@ function blocksFor(
   return buildParagraphs(
     text,
     style,
-    fontNames,
-    masterInfo.styles,
+    context.fontNames,
+    context.masterInfo.styles,
     textType,
-    masterInfo.colorScheme,
+    context.masterInfo.colorScheme,
   );
+}
+
+// A picture shape's image block, sized to the shape's own frame -- the same frame-sized spelling ooxml.js's pptx reader gives a p:pic, so a picture reads identically from either format. An unresolvable pib (past the end of the store, an empty slot, a WMF/EMF/TIFF/DIB blip this package decodes none of) keeps the shape with empty content rather than dropping it, mirroring readPicShape's own "unresolvable image keeps the geometry" convention.
+function imageBlocksFor(
+  pibProperty: ShapeProperty | undefined,
+  context: DrawingContext,
+  widthPt: number,
+  heightPt: number,
+): ContentBlock[] {
+  if (pibProperty === undefined) {
+    return [];
+  }
+  const blip = blipForPib(context.blips, pibProperty.value);
+  if (blip === undefined) {
+    return [];
+  }
+  return [
+    {
+      kind: "image" as const,
+      format: blip.format,
+      base64: bytesToBase64(blip.bytes),
+      widthPt,
+      heightPt,
+    },
+  ];
 }
 
 // Every notes slide's text, keyed by the slideId of the presentation slide it belongs to. [MS-PPT] 3.5.3 makes this the association: "A notes slide is associated with its presentation slide by means of the slideIdRef field in the NotesContainer record", and it explicitly warns that the notes list's own order is not meaningful, so the mapping has to be built from each container's own atom rather than by pairing the two lists positionally. A NotesContainer naming the notes master states slideIdRef 0x00000000, which no presentation slide's own slideId can be, so such an entry simply matches nothing.
@@ -251,14 +293,12 @@ function readMastersById(
 }
 
 function readSlide(
-  streamBytes: Uint8Array<ArrayBuffer>,
-  directory: ReadonlyMap<number, number>,
-  persist: SlidePersist,
+  base: DocumentContext,
   size: PageSize,
-  fontNames: readonly string[],
   notes: string,
   mastersById: ReadonlyMap<number, MasterInfo>,
 ): ContentSlide {
+  const { streamBytes, directory, persist } = base;
   const slideContainer = resolvePersistObject(
     streamBytes,
     directory,
@@ -284,9 +324,12 @@ function readSlide(
       `slide ${persist.slideId}'s own SlideAtom names masterIdRef ${masterIdRef}, which the master list does not contain`,
     );
   }
-  const masterInfo: MasterInfo = {
-    styles: master.styles,
-    colorScheme: colorSchemeFor(slideChildren, master),
+  const context: DrawingContext = {
+    ...base,
+    masterInfo: {
+      styles: master.styles,
+      colorScheme: colorSchemeFor(slideChildren, master),
+    },
   };
 
   const drawing = findChild(slideChildren, RT_Drawing);
@@ -298,29 +341,43 @@ function readSlide(
     }
     const left = masterUnitsToPoints(shape.anchor.left);
     const top = masterUnitsToPoints(shape.anchor.top);
+    const widthPt = Math.max(0, masterUnitsToPoints(shape.anchor.right) - left);
+    const heightPt = Math.max(
+      0,
+      masterUnitsToPoints(shape.anchor.bottom) - top,
+    );
+    // A picture has no text body of its own -- its insets are genuinely zero rather than defaulted, since nothing ever positions text against them (the same convention ooxml.js's pptx reader states for a shape with no p:txBody).
+    const isPicture = shape.properties.get(PROPERTY_PIB) !== undefined;
     shapes.push({
-      frame: {
-        xPt: left,
-        yPt: top,
-        widthPt: Math.max(0, masterUnitsToPoints(shape.anchor.right) - left),
-        heightPt: Math.max(0, masterUnitsToPoints(shape.anchor.bottom) - top),
-      },
-      insetLeftPt: DEFAULT_INSET_LEFT_RIGHT_PT,
-      insetTopPt: DEFAULT_INSET_TOP_BOTTOM_PT,
-      insetRightPt: DEFAULT_INSET_LEFT_RIGHT_PT,
-      insetBottomPt: DEFAULT_INSET_TOP_BOTTOM_PT,
-      blocks: blocksFor(shape.clientTextbox, persist, fontNames, masterInfo),
+      frame: { xPt: left, yPt: top, widthPt, heightPt },
+      ...(shape.rotationDeg === undefined
+        ? {}
+        : { rotationDeg: shape.rotationDeg }),
+      insetLeftPt: isPicture ? 0 : DEFAULT_INSET_LEFT_RIGHT_PT,
+      insetTopPt: isPicture ? 0 : DEFAULT_INSET_TOP_BOTTOM_PT,
+      insetRightPt: isPicture ? 0 : DEFAULT_INSET_LEFT_RIGHT_PT,
+      insetBottomPt: isPicture ? 0 : DEFAULT_INSET_TOP_BOTTOM_PT,
+      blocks: [
+        ...imageBlocksFor(
+          shape.properties.get(PROPERTY_PIB),
+          context,
+          widthPt,
+          heightPt,
+        ),
+        ...blocksFor(shape.clientTextbox, context),
+      ],
     });
   }
   // Speaker notes live in their own NotesContainer persist objects, reached through the document's notes list rather than through the slide, and are resolved to this slide by readNotesBySlideId above. A slide with no notes slide of its own reads as "", which is what the schema requires of a slide with none.
   return { size, shapes, notes };
 }
 
-// Reads the two [MS-PPT] streams directly, for a caller that already holds them. The compound file below this is archive-codec's business, and separating the two keeps every record-level behaviour testable without a container around it.
+// Reads the two [MS-PPT] streams directly, for a caller that already holds them. The compound file below this is archive-codec's business, and separating the two keeps every record-level behaviour testable without a container around it. `picturesStream`, when supplied, is the optional "Pictures" stream ([MS-PPT] 2.1.3) a producer moves blips into instead of embedding them in the blip store; it is ignored for an encrypted document, whose pictures stream is itself RC4-encrypted by a per-picture scheme ([MS-PPT] 2.1.3's own decryption steps) this package does not implement -- such pictures read as no image rather than as garbage.
 export function readPptStreams(
   currentUserStream: Uint8Array<ArrayBuffer>,
   powerPointDocumentStream: Uint8Array<ArrayBuffer>,
   password?: string,
+  picturesStream?: Uint8Array<ArrayBuffer>,
 ): PptDocument {
   const currentUser = readCurrentUserAtom(currentUserStream);
   // The persist directory itself is always readable: UserEditAtom and PersistDirectoryAtom are never encrypted (see encryption.ts's own top comment), so building it does not need to wait on a password.
@@ -407,17 +464,24 @@ export function readPptStreams(
     directory,
     listWithInstance(SLIDE_LIST_INSTANCE_NOTES),
   );
+  const blips = readBlipStore(
+    documentContainer,
+    currentUser.encrypted ? undefined : picturesStream,
+  );
 
   return {
     // Document properties live in the compound file's own "\x05SummaryInformation" stream ([MS-OSHARED]), not in any [MS-PPT] record -- genuinely outside what a caller holding only these two streams can supply. readPptContent, one level up, is where a container-level caller gets the real value: it looks the stream up itself and overrides this field when one is present.
     metadata: {},
     slides: persists.map((persist) =>
       readSlide(
-        streamBytes,
-        directory,
-        persist,
+        {
+          streamBytes,
+          directory,
+          persist,
+          fontNames,
+          blips,
+        },
         size,
-        fontNames,
         notesBySlideId.get(persist.slideId) ?? "",
         mastersById,
       ),
@@ -431,10 +495,12 @@ export function readPptContent(
   password?: string,
 ): PptDocument {
   const streams = readCompoundFile(bytes);
+  const pictures = streams.find((stream) => stream.path === PICTURES_STREAM);
   const document = readPptStreams(
     requireStream(streams, CURRENT_USER_STREAM),
     requireStream(streams, POWERPOINT_DOCUMENT_STREAM),
     password,
+    pictures === undefined ? undefined : pictures.bytes,
   );
   const metadataStream = streams.find(
     (stream) => stream.path === SUMMARY_INFORMATION_STREAM,

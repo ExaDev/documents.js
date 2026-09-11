@@ -3,6 +3,7 @@ import { type PptRecord, childRecords, findChild } from "../record/tree";
 import {
   OfficeArtChildAnchor,
   OfficeArtClientAnchor,
+  OfficeArtClientData,
   OfficeArtClientTextbox,
   OfficeArtDgContainer,
   OfficeArtFSP,
@@ -11,10 +12,16 @@ import {
   OfficeArtSpgrContainer,
   RT_Drawing,
 } from "../record/types";
+import {
+  PROPERTY_ROTATION,
+  type ShapeProperty,
+  fixedPointToDegrees,
+  readShapeProperties,
+} from "./properties";
 
 // The drawing walk: a slide's DrawingContainer holds an [MS-ODRAW] OfficeArtDgContainer, and beneath it a tree of group and shape containers. This module flattens that tree into the shapes a reader actually cares about, resolving each one's rectangle into the slide's own coordinate system on the way down -- a grouped shape's anchor is stated in its group's private coordinate system, so the rectangle is only meaningful once every enclosing group's transform has been applied to it. [MS-PPT] 2.5.13 DrawingContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/0595b49f-da96-4402-b353-1f766e9d548f [MS-ODRAW] 2.2.13 OfficeArtDgContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/68976475-fcfd-4483-8fc4-75adc635130d [MS-ODRAW] 2.2.14 OfficeArtSpContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/16194cb9-b4b0-476c-9678-a6ac1f06b034 [MS-ODRAW] 2.2.16 OfficeArtSpgrContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/e42f26e5-c0eb-4d10-a708-eef5958af44d
 
-// [MS-ODRAW] 2.2.40 OfficeArtFSP's flags word, in the spec's own A-to-L order. Only the three the walk acts on are named.
+// [MS-ODRAW] 2.2.40 OfficeArtFSP's flags word, in the spec's own A-to-L order. Only the bits the walk acts on are named.
 const FSP_GROUP = 1 << 0;
 const FSP_PATRIARCH = 1 << 2;
 const FSP_DELETED = 1 << 3;
@@ -31,8 +38,14 @@ export interface PptShape {
   readonly spid: number;
   // The shape's rectangle in slide coordinates, or undefined for a shape carrying no anchor at all.
   readonly anchor: ShapeRect | undefined;
+  // The shape's rotation in degrees clockwise, from its property table's rotation property -- undefined when the shape states none ([MS-ODRAW] 2.3.18.5).
+  readonly rotationDeg: number | undefined;
   // The OfficeArtClientTextbox holding this shape's text records, when it has one.
   readonly clientTextbox: PptRecord | undefined;
+  // The OfficeArtClientData record holding this shape's host-defined data -- for an OLE shape, the ExObjRefAtom naming its object.
+  readonly clientData: PptRecord | undefined;
+  // The shape's property tables, merged -- the source of its rotation and, for a picture, its blip-store reference.
+  readonly properties: ReadonlyMap<number, ShapeProperty>;
 }
 
 interface Transform {
@@ -95,13 +108,13 @@ function readClientAnchor(record: PptRecord): ShapeRect {
   );
 }
 
-interface ShapeProperties {
+interface ShapeIdentity {
   readonly spid: number;
   readonly flags: number;
 }
 
 // [MS-ODRAW] 2.2.14 makes shapeProp a required field of every OfficeArtSpContainer, so a container without a readable one is malformed rather than a shape with unknown identity -- read as one pair so neither half can be answered while the other fails.
-function readShapeProperties(shape: PptRecord): ShapeProperties {
+function readShapeIdentity(shape: PptRecord): ShapeIdentity {
   const fsp = findChild(childRecords(shape), OfficeArtFSP);
   if (fsp === undefined || fsp.data.length < 8) {
     throw new PptFormatError(
@@ -129,9 +142,21 @@ function resolveAnchor(
   return undefined;
 }
 
+function rotationDegOf(
+  properties: ReadonlyMap<number, ShapeProperty>,
+): number | undefined {
+  const rotation = properties.get(PROPERTY_ROTATION);
+  if (rotation === undefined) {
+    return undefined;
+  }
+  const degrees = fixedPointToDegrees(rotation.value);
+  // The shared schema's own convention: an unrotated shape is undefined rather than a stored zero, so a zero rotation reads as no statement at all.
+  return degrees === 0 ? undefined : degrees;
+}
+
 // Composes the transform a group's children are read through: their coordinates run in the space the group's OfficeArtFSPGR declares, and the group's own anchor says where that space lands in the parent's. The patriarch -- every drawing's outermost group -- is the exception the spec's structure creates rather than an assumption: it declares a degenerate coordinate system and no anchor, because its children are already in slide coordinates.
 function groupTransform(groupShape: PptRecord, parent: Transform): Transform {
-  const { spid, flags } = readShapeProperties(groupShape);
+  const { spid, flags } = readShapeIdentity(groupShape);
   if ((flags & FSP_PATRIARCH) !== 0) {
     return parent;
   }
@@ -166,15 +191,20 @@ function collectShape(
   transform: Transform,
   into: PptShape[],
 ): void {
-  const { spid, flags } = readShapeProperties(shape);
+  const { spid, flags } = readShapeIdentity(shape);
   // A deleted shape's content is retained in the file but is not part of the drawing; a group's own placeholder shape carries the group's geometry rather than content, and is consumed by groupTransform instead.
   if ((flags & FSP_DELETED) !== 0 || (flags & FSP_GROUP) !== 0) {
     return;
   }
+  const children = childRecords(shape);
+  const properties = readShapeProperties(shape);
   into.push({
     spid,
     anchor: resolveAnchor(shape, transform),
-    clientTextbox: findChild(childRecords(shape), OfficeArtClientTextbox),
+    rotationDeg: rotationDegOf(properties),
+    clientTextbox: findChild(children, OfficeArtClientTextbox),
+    clientData: findChild(children, OfficeArtClientData),
+    properties,
   });
 }
 
@@ -199,7 +229,7 @@ function collectGroup(
   }
 }
 
-// Every content shape in a slide's drawing, in document order, each with its rectangle resolved into slide coordinates.
+// Every content shape in a slide's drawing, in document order, each shape's rectangle resolved into slide coordinates.
 export function readDrawingShapes(drawing: PptRecord): PptShape[] {
   if (drawing.header.recType !== RT_Drawing) {
     throw new PptFormatError(

@@ -1,10 +1,12 @@
 import { writeSummaryInformationStream } from "archive-codec";
+import { encodePng } from "byte-codec";
 import {
   ContentDocumentSchema,
   DocumentTreeSchema,
   flattenTree,
 } from "document-schema.js";
 import { describe, expect, it } from "vitest";
+import { bytesToBase64 } from "./base64";
 import { PptEncryptedError, PptFormatError } from "./errors";
 import {
   CURRENT_USER_STREAM,
@@ -129,6 +131,95 @@ describe("readPptStreams", () => {
       powerPointDocumentStream,
     ).slides;
     expect(slide?.shapes).toHaveLength(2);
+  });
+
+  describe("picture shapes", () => {
+    const PNG = encodePng({
+      width: 1,
+      height: 1,
+      channels: 3,
+      data: new Uint8Array([0x40, 0x80, 0xc0]),
+    });
+    const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+
+    it("reads a picture shape as an image block sized to its frame, through the document's blip store", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({ picture: { format: "png", bytes: PNG } });
+      const [slide] = readPptStreams(
+        currentUserStream,
+        powerPointDocumentStream,
+      ).slides;
+      // The third shape of the fixture: the picture, anchored top 360 left 1440 right 2160 bottom 2880 master units -- 45pt down, 180pt across, 100pt wide, 90pt tall.
+      expect(slide?.shapes[2]).toEqual({
+        frame: { xPt: 180, yPt: 45, widthPt: 100, heightPt: 90 },
+        insetLeftPt: 0,
+        insetTopPt: 0,
+        insetRightPt: 0,
+        insetBottomPt: 0,
+        blocks: [
+          {
+            kind: "image",
+            format: "png",
+            base64: bytesToBase64(PNG),
+            widthPt: 100,
+            heightPt: 90,
+          },
+        ],
+      });
+    });
+
+    it("reads a JPEG blip with its format from the record type, never from the payload's bytes", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({ picture: { format: "jpeg", bytes: JPEG } });
+      const [slide] = readPptStreams(
+        currentUserStream,
+        powerPointDocumentStream,
+      ).slides;
+      expect(slide?.shapes[2]?.blocks[0]).toMatchObject({
+        kind: "image",
+        format: "jpeg",
+        base64: bytesToBase64(JPEG),
+      });
+    });
+
+    it("resolves a delay-stream blip through the Pictures stream at the FBSE's foDelay", () => {
+      const { currentUserStream, powerPointDocumentStream, picturesStream } =
+        syntheticPresentation({
+          picture: { format: "png", bytes: PNG },
+          pictureInPicturesStream: true,
+        });
+      const document = readPptContent(
+        compoundFile([
+          { name: CURRENT_USER_STREAM, bytes: currentUserStream },
+          {
+            name: POWERPOINT_DOCUMENT_STREAM,
+            bytes: powerPointDocumentStream,
+          },
+          ...(picturesStream === undefined
+            ? []
+            : [{ name: "Pictures", bytes: picturesStream }]),
+        ]),
+      );
+      expect(document.slides[0]?.shapes[2]?.blocks[0]).toMatchObject({
+        kind: "image",
+        format: "png",
+        base64: bytesToBase64(PNG),
+      });
+    });
+
+    it("keeps a picture shape's geometry with empty content when no Pictures stream is supplied for a delay-stream blip", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({
+          picture: { format: "png", bytes: PNG },
+          pictureInPicturesStream: true,
+        });
+      const [slide] = readPptStreams(
+        currentUserStream,
+        powerPointDocumentStream,
+      ).slides;
+      expect(slide?.shapes[2]?.blocks).toEqual([]);
+      expect(slide?.shapes[2]?.frame).toBeDefined();
+    });
   });
 
   it("refuses an encrypted document by name rather than failing as malformed", () => {

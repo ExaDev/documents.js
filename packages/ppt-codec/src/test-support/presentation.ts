@@ -1,10 +1,14 @@
 import { deriveRc4CryptoApiBlockKey, rc4, sha1 } from "archive-codec";
 import {
+  OfficeArtBStoreContainer,
   OfficeArtClientAnchor,
   OfficeArtClientTextbox,
   OfficeArtDgContainer,
+  OfficeArtDggContainer,
+  OfficeArtFBSE,
   OfficeArtFSP,
   OfficeArtFSPGR,
+  OfficeArtFOPT,
   OfficeArtSpContainer,
   OfficeArtSpgrContainer,
   RT_ColorSchemeAtom,
@@ -13,6 +17,7 @@ import {
   RT_Document,
   RT_DocumentAtom,
   RT_Drawing,
+  RT_DrawingGroup,
   RT_Environment,
   RT_FontCollection,
   RT_FontEntityAtom,
@@ -45,6 +50,8 @@ import {
   writeAtom as atom,
   writeContainer as container,
 } from "../record/write";
+import { writeShapePropertyTable } from "../drawing/properties";
+import { PROPERTY_PIB } from "../drawing/properties";
 import { CURRENT_USER_HEADER_TOKEN_PLAIN } from "../stream/current-user";
 import {
   TEXT_TYPE_BODY,
@@ -178,6 +185,8 @@ function clientAnchor(
 export interface SyntheticPresentation {
   readonly currentUserStream: Uint8Array<ArrayBuffer>;
   readonly powerPointDocumentStream: Uint8Array<ArrayBuffer>;
+  // The optional "Pictures" stream, present only when `pictureInPicturesStream` asked for the delay-stream spelling.
+  readonly picturesStream: Uint8Array<ArrayBuffer> | undefined;
 }
 
 export interface SyntheticPresentationOptions {
@@ -194,6 +203,12 @@ export interface SyntheticPresentationOptions {
   readonly notesText?: string;
   // When set, the master's own TITLE TextMasterStyleAtom states one real level (bold, Accent 1 scheme colour) instead of the usual empty one -- an end-to-end proof that a title run stating neither directly resolves both through document/master.ts's own cascade and through the slide's colour scheme, rather than only through the pure-function unit tests document/master.test.ts/document/color-scheme.test.ts already cover in isolation.
   readonly masterTitleBold?: boolean;
+  // Adds a picture shape to the slide, backed by a real blip store in the document's DrawingGroupContainer: the honest end-to-end spelling of a picture -- a shape whose property table states pib 1, the one-based index into the store the fixture embeds the image bytes in. When `pictureInPicturesStream` is set the FBSE instead points at a separate Pictures stream the fixture emits, which is the delay-stream spelling a real producer with more pictures than it wants inline uses.
+  readonly picture?: {
+    readonly format: "png" | "jpeg";
+    readonly bytes: Uint8Array<ArrayBuffer>;
+  };
+  readonly pictureInPicturesStream?: boolean;
 }
 
 // [MS-OFFCRYPTO] 2.3.5.1's own RC4 CryptoAPI EncryptionInfo/EncryptionHeader/EncryptionVerifier layout, built independently of encryption.ts's own reader (readDocumentEncryptionAtom) rather than by calling it in reverse -- the two are cross-checked against each other only by the read.test.ts round trip that decrypts what this function encrypts, not by sharing this byte-layout logic. keySizeBits is fixed at 128 here: this package's own decryptor supports any RC4 key size the header states, so a fixture testing the 40-bit special case belongs in encryption.test.ts, which exercises deriveRc4CryptoApiBlockKey directly rather than through a whole synthetic presentation.
@@ -250,6 +265,118 @@ function encryptionAtomBytes(
   );
 }
 
+// One OfficeArtBlip record wrapping an image's file bytes, in the single-uid spelling of each format (PNG 0x6E0, JPEG 0x46A).
+function blipRecord(options: {
+  readonly format: "png" | "jpeg";
+  readonly bytes: Uint8Array<ArrayBuffer>;
+}): Uint8Array<ArrayBuffer> {
+  const recType = options.format === "png" ? 0xf01e : 0xf01d;
+  const recInstance = options.format === "png" ? 0x6e0 : 0x46a;
+  return atom(
+    recType,
+    concatBytes(new Uint8Array(16), u8(0xff), options.bytes),
+    { recInstance },
+  );
+}
+
+// One OfficeArtFBSE whose blip is embedded inline (foDelay 0, the payload after an empty name).
+function embeddedFbse(options: {
+  readonly format: "png" | "jpeg";
+  readonly bytes: Uint8Array<ArrayBuffer>;
+}): Uint8Array<ArrayBuffer> {
+  const blipType = options.format === "png" ? 0x06 : 0x05;
+  const embedded = blipRecord(options);
+  return atom(
+    OfficeArtFBSE,
+    concatBytes(
+      u8(blipType),
+      u8(blipType),
+      new Uint8Array(16), // rgbUid -- a zero digest; this fixture never verifies one
+      u16le(0xff), // tag
+      u32le(embedded.length), // size
+      u32le(1), // cRef
+      u32le(0), // foDelay -- embedded
+      u8(0),
+      u8(0), // cbName -- no nameData
+      u8(0),
+      u8(0),
+      embedded,
+    ),
+    { recVer: 0x2, recInstance: blipType },
+  );
+}
+
+// One FBSE pointing at a Pictures stream offset instead of embedding (foDelay names the offset; cRef 1).
+function delayFbse(options: {
+  readonly format: "png" | "jpeg";
+  readonly foDelay: number;
+}): Uint8Array<ArrayBuffer> {
+  const blipType = options.format === "png" ? 0x06 : 0x05;
+  return atom(
+    OfficeArtFBSE,
+    concatBytes(
+      u8(blipType),
+      u8(blipType),
+      new Uint8Array(16),
+      u16le(0xff),
+      u32le(0), // size -- unknown to this fixture, and unread on the delay path
+      u32le(1),
+      u32le(options.foDelay),
+      u8(0),
+      u8(0),
+      u8(0),
+      u8(0),
+    ),
+    { recVer: 0x2, recInstance: blipType },
+  );
+}
+
+// The DocumentContainer's own DrawingGroupContainer: a real OfficeArtDggContainer whose mandatory OfficeArtFDGGBlock states document-wide counts, with the blip store after it.
+function drawingGroupContainer(
+  fbseRecords: readonly Uint8Array<ArrayBuffer>[],
+): Uint8Array<ArrayBuffer> {
+  const fdggBlock = atom(
+    0xf006,
+    concatBytes(
+      u32le(6), // spidMax
+      u32le(2), // cidcl
+      u32le(5), // cspSaved
+      u32le(2), // cdgSaved
+      u32le(1), // one IDCL: dgid
+      u32le(6), // cspidCur
+    ),
+  );
+  const dggChildren: Uint8Array<ArrayBuffer>[] = [fdggBlock];
+  if (fbseRecords.length > 0) {
+    dggChildren.push(
+      container(OfficeArtBStoreContainer, fbseRecords, {
+        recInstance: fbseRecords.length,
+      }),
+    );
+  }
+  return container(RT_DrawingGroup, [
+    container(OfficeArtDggContainer, dggChildren),
+  ]);
+}
+
+// A picture shape: an ordinary OfficeArtSpContainer whose property table states pib, the one-based index into the document's blip store.
+function pictureShape(
+  spid: number,
+  pib: number,
+  top: number,
+  left: number,
+  right: number,
+  bottom: number,
+): Uint8Array<ArrayBuffer> {
+  return container(OfficeArtSpContainer, [
+    fsp(spid, 0),
+    writeShapePropertyTable(OfficeArtFOPT, [
+      { opid: PROPERTY_PIB, op: pib, fBid: true },
+    ]),
+    clientAnchor(top, left, right, bottom),
+  ]);
+}
+
 export function syntheticPresentation(
   options: SyntheticPresentationOptions = {},
 ): SyntheticPresentation {
@@ -263,6 +390,8 @@ export function syntheticPresentation(
     password,
     notesText,
     masterTitleBold = false,
+    picture,
+    pictureInPicturesStream = false,
   } = options;
 
   const USER_NAME = "Ada";
@@ -271,7 +400,7 @@ export function syntheticPresentation(
   const MASTER_PERSIST_ID = 2;
   const SLIDE_PERSIST_ID = 3;
   const NOTES_PERSIST_ID = 4;
-  const ENCRYPTION_PERSIST_ID = 5;
+  // Minted after whatever objects precede it, so an OLE storage persist object and an encryption session can coexist in one fixture.
   // [MS-PPT] 2.2.13: a MasterId MUST be at or above 0x80000000, which is also what keeps it out of the SlideId range -- matching master-write.ts's own MASTER_SLIDE_ID.
   const MASTER_ID = 0x80000000;
   const SLIDE_ID = 256;
@@ -293,11 +422,24 @@ export function syntheticPresentation(
     [0x4b, 0x8c, 0x1a], // Accent 3
   ];
 
-  const documentChildren = [
+  const documentChildren: Uint8Array<ArrayBuffer>[] = [
     documentAtom(slideWidth, slideHeight),
+  ];
+  documentChildren.push(
     container(RT_Environment, [
       container(RT_FontCollection, [fontEntityAtom(fontName)]),
     ]),
+  );
+  if (picture !== undefined) {
+    documentChildren.push(
+      drawingGroupContainer(
+        pictureInPicturesStream
+          ? [delayFbse({ format: picture.format, foDelay: 0 })]
+          : [embeddedFbse(picture)],
+      ),
+    );
+  }
+  documentChildren.push(
     // [MS-PPT] 2.4.14.1 MasterListWithTextContainer: the same RT_SlidePersistAtom shape the slide list itself uses, its own identifier naming a master rather than a slide.
     container(
       RT_SlideListWithText,
@@ -313,7 +455,7 @@ export function syntheticPresentation(
       ],
       { recInstance: SLIDE_LIST_INSTANCE_SLIDES },
     ),
-  ];
+  );
   if (notesText !== undefined) {
     // [MS-PPT] 2.4.14.6: the notes list holds NotesPersistAtom records alone, distinguished from the slide and master lists by rh.recInstance. [MS-PPT] 2.4.14.7's own field order puts a reserved word where a SlidePersistAtom states cTexts, and the notes identifier -- not a slide identifier -- at offset 12.
     documentChildren.push(
@@ -364,6 +506,9 @@ export function syntheticPresentation(
               textBytesAtom(bodyText),
             ]),
           ]),
+          ...(picture !== undefined
+            ? [pictureShape(8, 1, 360, 1440, 2240, 1080)]
+            : []),
         ]),
       ]),
     ]),
@@ -410,7 +555,10 @@ export function syntheticPresentation(
     slideSchemeColorSchemeAtom(MASTER_COLOR_SCHEME),
   ]);
 
-  const persistObjects = [
+  const persistObjects: {
+    persistId: number;
+    bytes: Uint8Array<ArrayBuffer>;
+  }[] = [
     { persistId: DOCUMENT_PERSIST_ID, bytes: documentContainer },
     { persistId: MASTER_PERSIST_ID, bytes: masterContainer },
     { persistId: SLIDE_PERSIST_ID, bytes: slideContainer },
@@ -421,6 +569,8 @@ export function syntheticPresentation(
       bytes: notesContainer,
     });
   }
+  // Minted after whatever objects precede it, so an OLE storage persist object and an encryption session can coexist in one fixture.
+  const ENCRYPTION_PERSIST_ID = persistObjects.length + 1;
   if (password !== undefined) {
     // Every existing persist object gets RC4-encrypted in place, keyed by its own persist ID -- the DocumentEncryptionAtom itself never does, since a decryptor has to read it before it knows any key at all.
     for (const object of persistObjects) {
@@ -506,5 +656,10 @@ export function syntheticPresentation(
       persistDirectory,
       userEdit,
     ),
+    // Only for the delay-stream spelling: the blip record itself at offset 0, which the fixture's delay FBSE names by foDelay.
+    picturesStream:
+      pictureInPicturesStream && picture !== undefined
+        ? blipRecord(picture)
+        : undefined,
   };
 }

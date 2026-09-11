@@ -1110,6 +1110,9 @@ importers:
       '@types/node':
         specifier: 26.2.0
         version: 26.2.0
+      byte-codec:
+        specifier: 1.5.0
+        version: link:../byte-codec
       eslint:
         specifier: 10.8.1
         version: 10.8.1(jiti@2.7.0)

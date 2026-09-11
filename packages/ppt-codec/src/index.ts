@@ -1,4 +1,5 @@
 // The PowerPoint 97-2003 binary file format ([MS-PPT]) reader and writer for the documents.js family: the compound-file stream layer, the record-tree walk over the PowerPoint Document stream, and the mapping of slide text and geometry onto document-schema.js's shared presentation content model. Worker-isomorphic -- no node:*, no Buffer -- so the same code runs under Node and inside a Cloudflare Workers isolate.
+export * from "./base64";
 export * from "./content";
 export * from "./content-write";
 export * from "./document/color-scheme-write";
@@ -13,6 +14,8 @@ export * from "./document/notes-list-write";
 export * from "./document/notes-write";
 export * from "./document/slide-list";
 export * from "./document/slide-list-write";
+export * from "./drawing/blips";
+export * from "./drawing/properties";
 export * from "./drawing/shapes";
 export * from "./drawing/shapes-write";
 export * from "./errors";
