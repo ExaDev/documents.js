@@ -2,9 +2,9 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js/tree/main/packages/document-operations) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/document-operations) [![npm version](https://img.shields.io/npm/v/document-operations)](https://www.npmjs.com/package/document-operations) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
-> The canonical set of document-conversion, editing, inspection, and `.odb` operations [`documents.js`](https://github.com/ExaDev/documents.js) exposes — one Zod input/output schema and one transport-agnostic `run()` function per operation, so [`document-mcp`](../document-mcp/README.md), a REST API server, and [`document-cli`](../document-cli/README.md) can each expose the identical operation without redefining its shape or its behaviour a second time.
+> The canonical set of document-conversion, editing, inspection, and `.odb` operations [`documents.js`](https://github.com/ExaDev/documents.js) exposes — one Zod input/output schema and one transport-agnostic `run()` function per operation, so [`document-mcp`](../document-mcp/README.md), [`document-rest`](../document-rest/README.md), and [`document-cli`](../document-cli/README.md) can each expose the identical operation without redefining its shape or its behaviour a second time.
 
-Before this package existed, `document-mcp` defined each MCP tool's Zod schema and dispatch logic directly in its own `src/tools/*.ts`, and `document-cli` described the same underlying operations again as hand-written `commander` flags — two independent definitions of "what does `convert_document` take" that could silently drift, with no shared source of truth a third surface (a REST server) could build against either. `document-operations` is that source of truth: every operation from `document-mcp`'s own tool set moved here unchanged in behaviour, decoupled from any one transport's own result-shaping.
+Before this package existed, `document-mcp` defined each MCP tool's Zod schema and dispatch logic directly in its own `src/tools/*.ts`, and `document-cli` described the same underlying operations again as hand-written `commander` flags — two independent definitions of "what does `convert_document` take" that could silently drift, with no shared source of truth a third surface could build against. `document-operations` is that source of truth: every operation from `document-mcp`'s own tool set moved here unchanged in behaviour, decoupled from any one transport's own result-shaping, and `document-rest` is the first new consumer built directly against it rather than against a second copy.
 
 ```mermaid
 graph TD
@@ -14,6 +14,7 @@ graph TD
     compute("document-compute.js")
     operations("document-operations")
     mcp("document-mcp")
+    rest("document-rest")
 
     schema --> documents
     schema --> outline
@@ -22,6 +23,7 @@ graph TD
     outline --> operations
     compute --> operations
     operations --> mcp
+    operations --> rest
 
     click schema "https://github.com/ExaDev/documents.js/tree/main/packages/document-schema.js" "document-schema.js"
     click documents "https://github.com/ExaDev/documents.js" "documents.js"
@@ -29,6 +31,7 @@ graph TD
     click compute "https://github.com/ExaDev/documents.js/tree/main/packages/document-compute.js" "document-compute.js"
     click operations "https://github.com/ExaDev/documents.js/tree/main/packages/document-operations" "document-operations"
     click mcp "https://github.com/ExaDev/documents.js/tree/main/packages/document-mcp" "document-mcp"
+    click rest "https://github.com/ExaDev/documents.js/tree/main/packages/document-rest" "document-rest"
 
     style operations fill:#f9a825,stroke:#333,stroke-width:3px
 ```
