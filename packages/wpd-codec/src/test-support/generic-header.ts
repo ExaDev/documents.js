@@ -32,7 +32,7 @@ export const GENERIC_HEADER_SIZE = 745;
 export const GENERIC_HEADER_DOCUMENT_AREA_OFFSET = 718;
 export const GENERIC_HEADER_INDEX_AREA_OFFSET = 512;
 
-export function genericHeaderBytes(): Uint8Array {
+export function genericHeaderBytes(): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(GENERIC_HEADER_SIZE);
   for (const [offset, line] of GENERIC_HEADER_LINES) {
     const values = line.split(" ").map((token) => Number.parseInt(token, 16));
