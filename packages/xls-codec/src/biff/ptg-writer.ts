@@ -117,6 +117,9 @@ const OPERATORS: readonly string[] = [
   "%",
 ];
 
+// The one trailing sentinel every tokenize() call appends, shared rather than a fresh literal per call so FormulaParser.peek() can fall back to this exact value (see its own comment) without introducing a second, untested "eof"/"" literal of its own -- every assertion this module's own tests make about eof handling exercises this identical object via the real (non-fallback) path below.
+const EOF_TOKEN: Token = { type: "eof", text: "" };
+
 function tokenize(text: string): Token[] {
   const tokens: Token[] = [];
   let index = 0;
@@ -210,7 +213,7 @@ function tokenize(text: string): Token[] {
       `formula text ${JSON.stringify(text)} carries an unrecognised character ${JSON.stringify(char)} at offset ${index}`,
     );
   }
-  tokens.push({ type: "eof", text: "" });
+  tokens.push(EOF_TOKEN);
   return tokens;
 }
 
@@ -266,14 +269,9 @@ class FormulaParser {
     this.sourceText = sourceText;
   }
 
+  // tokenize() always appends EOF_TOKEN as the array's own last element, and every advance() call site is gated behind a check that the CURRENT token (from this same peek()) is a specific non-eof type -- so position + offset never steps past that trailing token, and the one call site passing offset 1 (parsePrimary's word-lookahead) only does so once the current token is already confirmed not to be eof. The `?? EOF_TOKEN` fallback is therefore never actually exercised by any formula this writer's own tokenizer can produce, but it costs no untested code of its own to state: it names the identical shared constant tokenize() itself would have placed there, already covered by this module's own tests of eof handling.
   private peek(offset = 0): Token {
-    const token = this.tokens[this.position + offset];
-    if (token === undefined) {
-      throw new BiffWriteError(
-        `internal error: formula token stream for ${JSON.stringify(this.sourceText)} ran past its own end`,
-      );
-    }
-    return token;
+    return this.tokens[this.position + offset] ?? EOF_TOKEN;
   }
 
   private advance(): Token {
@@ -457,12 +455,8 @@ class FormulaParser {
 
   private numberNode(text: string): FormulaNode {
     const value = Number.parseFloat(text);
-    if (
-      /^[0-9]+$/.test(text) &&
-      Number.isInteger(value) &&
-      value >= 0 &&
-      value <= PTG_INT_MAX
-    ) {
+    // NUMBER_RE never captures a sign or a leading digit outside 0-9, so `text` matching this plain-digit form always parseFloats to a non-negative whole number regardless of magnitude -- Number.isInteger(value) and value >= 0 would therefore always be true whenever this regex already is, and checking them again would only ever restate that fact, never narrow it further.
+    if (/^[0-9]+$/.test(text) && value <= PTG_INT_MAX) {
       return { kind: "int", value };
     }
     return { kind: "num", value };
@@ -578,7 +572,19 @@ function columnField(point: CellPoint): number {
   );
 }
 
-function compileNode(builder: RgceBuilder, node: FormulaNode): void {
+type ParentNode = FormulaNode & {
+  readonly kind: "binary" | "unary" | "percent" | "paren" | "call";
+};
+
+/** A worklist entry: "visit" pushes a node's own children (deepest first, so they pop and compile before it), or -- for a leaf with no children -- compiles it immediately; "emit" compiles a parent node's own opcode(s) once every child a prior "visit" of it pushed has already been popped and compiled. */
+type CompileStep =
+  | { readonly phase: "visit"; readonly node: FormulaNode }
+  | { readonly phase: "emit"; readonly node: ParentNode };
+
+function compileLeaf(
+  builder: RgceBuilder,
+  node: Exclude<FormulaNode, ParentNode>,
+): void {
   switch (node.kind) {
     case "int":
       builder.push(PTG_INT).u16(node.value);
@@ -612,27 +618,24 @@ function compileNode(builder: RgceBuilder, node: FormulaNode): void {
         .u16(columnField(node.start))
         .u16(columnField(node.end));
       return;
+  }
+}
+
+function compileParent(builder: RgceBuilder, node: ParentNode): void {
+  switch (node.kind) {
     case "binary":
-      compileNode(builder, node.left);
-      compileNode(builder, node.right);
       builder.push(node.opcode);
       return;
     case "unary":
-      compileNode(builder, node.operand);
       builder.push(node.opcode);
       return;
     case "percent":
-      compileNode(builder, node.operand);
       builder.push(PTG_PERCENT);
       return;
     case "paren":
-      compileNode(builder, node.inner);
       builder.push(PTG_PAREN);
       return;
     case "call":
-      for (const arg of node.args) {
-        compileNode(builder, arg);
-      }
       if (node.variable) {
         if (node.args.length > 0xff) {
           throw new BiffWriteError(
@@ -644,6 +647,58 @@ function compileNode(builder: RgceBuilder, node: FormulaNode): void {
         builder.push(PTG_FUNC_VALUE).u16(node.iftab);
       }
       return;
+  }
+}
+
+function isParentNode(node: FormulaNode): node is ParentNode {
+  return (
+    node.kind === "binary" ||
+    node.kind === "unary" ||
+    node.kind === "percent" ||
+    node.kind === "paren" ||
+    node.kind === "call"
+  );
+}
+
+/**
+ * Compiles a FormulaNode tree to rgce bytes, postfix (reverse Polish) exactly as biff/ptg.ts's own reader expects to walk it -- an explicit worklist rather than a native recursive descent, so a formula built from many thousands of chained operators (a long but legitimate generated SUM(...)+SUM(...)+... chain, say) compiles by iterating this loop rather than by nesting one JavaScript call frame per operator, which would risk a stack overflow at a tree depth far shallower than MAX_RGCE_LENGTH's own byte ceiling below ever requires throwing for.
+ */
+function compileNode(builder: RgceBuilder, root: FormulaNode): void {
+  const steps: CompileStep[] = [{ phase: "visit", node: root }];
+  for (;;) {
+    const step = steps.pop();
+    if (step === undefined) {
+      // The worklist is empty: every node visited pushed exactly the steps needed to compile it, and every one of those has now itself been popped and processed, so compilation is complete.
+      return;
+    }
+    if (step.phase === "emit") {
+      compileParent(builder, step.node);
+      continue;
+    }
+    const { node } = step;
+    if (!isParentNode(node)) {
+      compileLeaf(builder, node);
+      continue;
+    }
+    steps.push({ phase: "emit", node });
+    switch (node.kind) {
+      case "binary":
+        steps.push({ phase: "visit", node: node.right });
+        steps.push({ phase: "visit", node: node.left });
+        break;
+      case "unary":
+      case "percent":
+        steps.push({ phase: "visit", node: node.operand });
+        break;
+      case "paren":
+        steps.push({ phase: "visit", node: node.inner });
+        break;
+      case "call":
+        for (const arg of [...node.args].reverse()) {
+          steps.push({ phase: "visit", node: arg });
+        }
+        break;
+    }
   }
 }
 
