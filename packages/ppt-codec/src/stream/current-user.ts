@@ -90,8 +90,9 @@ export function readCurrentUserAtom(
   }
   const unicodeStart = ansiEnd + 4;
   const unicodeEnd = unicodeStart + lenUserName * 2;
+  // No separate `lenUserName > 0` guard: when lenUserName is 0, unicodeEnd equals unicodeStart, so decodeUtf16Le would decode the identical empty slice decodeAnsi's own empty ansiUserName slice already does -- the two branches are indistinguishable for a zero-length name, so gating on the name's length as well as the buffer's would only add a comparison that can never change the result.
   const userName =
-    unicodeEnd <= data.length && lenUserName > 0
+    unicodeEnd <= data.length
       ? decodeUtf16Le(data.subarray(unicodeStart, unicodeEnd))
       : decodeAnsi(data.subarray(CURRENT_USER_FIXED_SIZE, ansiEnd));
 
