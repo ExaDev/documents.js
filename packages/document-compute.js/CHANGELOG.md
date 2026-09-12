@@ -1,3 +1,25 @@
+## [1.5.9](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.5.8...document-compute.js%401.5.9) (2026-09-12)
+
+### Code Refactoring
+
+* **document-compute.js:** drop bisection sign booleans and newton's unreachable finite guard ([79b6dd2](https://github.com/ExaDev/documents.js/commit/79b6dd21e551dfa72db5f7b6f53b72531fe4cfc2))
+* **document-compute.js:** fold containsSymbol's non-recursive leaves into one default branch ([6c6a6fb](https://github.com/ExaDev/documents.js/commit/6c6a6fb6cff9050e683b0e952e492c92f0345c19))
+* **document-compute.js:** restate absInterval and rational gcd without equivalent branches ([3229c85](https://github.com/ExaDev/documents.js/commit/3229c85a36d195373dc87783b132ff0efac816ac))
+* **document-compute.js:** share Quantity narrowing, drop unreachable solve gap ([6455e80](https://github.com/ExaDev/documents.js/commit/6455e80a66b9b0b1c4d691990037b1064b4adfe9))
+
+### Documentation
+
+* **document-compute.js:** describe the break threshold with no mutants excluded ([ed58c6a](https://github.com/ExaDev/documents.js/commit/ed58c6ad9f9fcc0c868723380e7dbba07be06c13))
+
+### Tests
+
+* **document-compute.js:** assert the exact shape of every SI unit fixture ([9783a61](https://github.com/ExaDev/documents.js/commit/9783a613124069744662beb970e6e300ee378c0b))
+
+
+### Dependencies
+
+- Updated documents.js to 7.20.6
+
 ## [1.5.8](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.5.7...document-compute.js%401.5.8) (2026-09-12)
 
 
