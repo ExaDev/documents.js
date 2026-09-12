@@ -6,7 +6,7 @@ import type {
 import { bytesToBase64 } from "./bytes/base64";
 import { describe, expect, it } from "vitest";
 import { WpdDiagnosticCodes, type WpdDiagnostic } from "./diagnostics";
-import { readWpd, readWpdContent } from "./read";
+import { assertDefined, readWpd, readWpdContent } from "./read";
 import {
   buildWpdFile,
   fontDescriptorPacket,
@@ -46,6 +46,23 @@ function readDocumentArea(
 ): ContentDocument {
   return readWpdContent(buildWpdFile(documentArea, packets));
 }
+
+describe("assertDefined", () => {
+  it("throws with the exact given message for an undefined value", () => {
+    expect(() => {
+      assertDefined(undefined, "should not be undefined");
+    }).toThrow("should not be undefined");
+  });
+
+  it("does not throw for a defined value, including a falsy one", () => {
+    expect(() => {
+      assertDefined(0, "unreachable");
+    }).not.toThrow();
+    expect(() => {
+      assertDefined("", "unreachable");
+    }).not.toThrow();
+  });
+});
 
 describe("readWpdContent", () => {
   it("reads a wordprocessing document", () => {
@@ -384,6 +401,19 @@ describe("readWpdContent", () => {
     expect(paragraphsOf(document)[0]?.alignment).toBe("center");
   });
 
+  // applyVariableFunction's own paragraph-group dispatch must actually gate on the subgroup being PARAGRAPH_SET_JUSTIFICATION -- a different subfunction in the same group, even one whose own first byte happens to look like a justification mode, must not be misread as one.
+  it("does not apply a justification change for an unrelated paragraph-group subfunction", () => {
+    const document = readDocumentArea([
+      ...variableFunction({
+        group: 0xd3,
+        subgroup: 0x01, // not PARAGRAPH_SET_JUSTIFICATION
+        nonDeletable: [2], // happens to look like "center" if misread as a justification mode
+      }),
+      ...text("plain"),
+    ]);
+    expect(paragraphsOf(document)[0]?.alignment).toBeUndefined();
+  });
+
   // "Subfunctions 0 to 28 (0x1C) of this group are interchangeable with the single-byte function codes 180 (0xB4) to 207 (0xCF) ... A program reading WP 7.0 documents must handle both."
   it("handles the multi-byte spelling of a hard end of line", () => {
     const document = readDocumentArea([
@@ -395,6 +425,18 @@ describe("readWpdContent", () => {
       "first",
       "second",
     ]);
+  });
+
+  // applyVariableFunction's own group dispatch must fall through its default case, contributing nothing, for a variable-function group this reader names no handling for at all.
+  it("contributes nothing for a variable-function group with no named case", () => {
+    const document = readDocumentArea([
+      ...text("un"),
+      ...variableFunction({ group: 0xd8, subgroup: 0 }), // an unassigned variable-function group
+      ...text("broken"),
+    ]);
+    const paragraphs = paragraphsOf(document);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.runs[0]?.text).toBe("unbroken");
   });
 
   // Subfunction 0, Beginning of File, is the one End-of-Line subfunction with no single-byte spelling at all -- it exists solely as this group's own subgroup 0 -- and the SDK's own conversion table maps it to nothing: it contributes neither a character nor a paragraph break.
