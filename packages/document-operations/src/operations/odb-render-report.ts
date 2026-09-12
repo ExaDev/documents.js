@@ -1,8 +1,6 @@
 import {
   base64ToBytes,
   decodeOdbPackage,
-  type FontSubstitution,
-  type OmmlDiagnostic,
   odbReportToDocx,
   odbReportToOdt,
   odbReportToPdf,
@@ -98,27 +96,14 @@ export const odbRenderReportOperation = defineOperation({
     const pkg = decodeOdbPackage(inputBytes);
     const content = readOdbReportContent(pkg, { report });
 
+    // Always empty, by construction rather than by coincidence: readOdbReportContent's own render pass (documents.js's src/odb/report/render.ts) builds every band's cells as a plain ContentParagraph carrying at most one run of display text (cellParagraph, via elementText/displayTextFor) -- there is no code path in that renderer producing a 'formula' block, and none setting a font on a run (that module's own top comment states it outright: "nothing here sets a font, an alignment, or a border"). onMathDiagnostic and onFontSubstitution accordingly can never fire for a report this operation renders, in docx, odt, or pdf alike -- convert.ts's own OdbReportToDocxOptions.onMathDiagnostic doc comment says the same about its own wiring ("not because a report is expected to trigger it"). Wiring either callback here would add an AST node no real report content can ever reach, so neither is passed to odbReportToDocx/odbReportToPdf below.
     const mathDiagnostics: z.infer<typeof MathDiagnosticSchema>[] = [];
-    const recordMathDiagnostic = (
-      diagnostic: OmmlDiagnostic,
-      diagnosticContext: { readonly sourcePath?: string },
-    ): void => {
-      mathDiagnostics.push({
-        kind: diagnostic.kind,
-        detail: diagnostic.detail,
-        sourcePath: diagnosticContext.sourcePath,
-      });
-    };
-
-    const fontSubstitutions: FontSubstitution[] = [];
+    const fontSubstitutions: z.infer<typeof FontSubstitutionSchema>[] = [];
     const charSubstitutions: z.infer<typeof CharSubstitutionSchema>[] = [];
 
     let bytes: Uint8Array<ArrayBuffer>;
     if (targetFormat === "docx") {
-      bytes = odbReportToDocx(content, {
-        signal,
-        onMathDiagnostic: recordMathDiagnostic,
-      });
+      bytes = odbReportToDocx(content, { signal });
     } else if (targetFormat === "odt") {
       bytes = odbReportToOdt(content, { signal });
     } else {
@@ -130,8 +115,6 @@ export const odbRenderReportOperation = defineOperation({
           italic: font.italic,
           bytes: base64ToBytes(font.bytesBase64),
         })),
-        onFontSubstitution: (substitution) =>
-          fontSubstitutions.push(substitution),
         onSubstitution: (substitution, substitutionContext) => {
           charSubstitutions.push({
             from: substitution.from,
@@ -139,7 +122,6 @@ export const odbRenderReportOperation = defineOperation({
             pageIndex: substitutionContext.pageIndex,
           });
         },
-        onMathDiagnostic: recordMathDiagnostic,
       });
     }
 
