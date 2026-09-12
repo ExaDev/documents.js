@@ -26,6 +26,21 @@ function sheet(cells: ContentSheetCell[]): ContentSheet {
   };
 }
 
+function numberCell(
+  row: number,
+  column: number,
+  value: number,
+  extra: Partial<ContentSheetCell> = {},
+): ContentSheetCell {
+  return {
+    row,
+    column,
+    value: { kind: "number", value },
+    displayText: String(value),
+    ...extra,
+  };
+}
+
 describe("threadedCommentId", () => {
   it("formats the counter as zero-padded, UPPERCASE hex inside the braced GUID shape", () => {
     expect(threadedCommentId(0)).toBe("{00000000-0000-0000-0000-000000000000}");
@@ -38,24 +53,13 @@ describe("threadedCommentId", () => {
 
 describe("sheetHasComments", () => {
   it("is false for a sheet with no cell comments at all", () => {
-    expect(
-      sheetHasComments(
-        sheet([{ row: 0, column: 0, value: { kind: "number", value: 1 } }]),
-      ),
-    ).toBe(false);
+    expect(sheetHasComments(sheet([numberCell(0, 0, 1)]))).toBe(false);
   });
 
   it("is true when any cell carries a comment", () => {
     expect(
       sheetHasComments(
-        sheet([
-          {
-            row: 0,
-            column: 0,
-            value: { kind: "number", value: 1 },
-            comment: { text: "note" },
-          },
-        ]),
+        sheet([numberCell(0, 0, 1, { comment: { text: "note" } })]),
       ),
     ).toBe(true);
   });
@@ -64,18 +68,8 @@ describe("sheetHasComments", () => {
 describe("buildThreadedCommentElements", () => {
   it("assigns sequential, increasing ids across two separately-commented cells, not just within one thread", () => {
     const s = sheet([
-      {
-        row: 0,
-        column: 0,
-        value: { kind: "number", value: 1 },
-        comment: { text: "first" },
-      },
-      {
-        row: 1,
-        column: 0,
-        value: { kind: "number", value: 2 },
-        comment: { text: "second" },
-      },
+      numberCell(0, 0, 1, { comment: { text: "first" } }),
+      numberCell(1, 0, 2, { comment: { text: "second" } }),
     ]);
     const elements = buildThreadedCommentElements(s);
     expect(
@@ -88,15 +82,9 @@ describe("buildThreadedCommentElements", () => {
 
   it("writes a reply immediately after its own root, carrying the root's own id as parentId", () => {
     const s = sheet([
-      {
-        row: 0,
-        column: 0,
-        value: { kind: "number", value: 1 },
-        comment: {
-          text: "root",
-          replies: [{ text: "reply" }],
-        },
-      },
+      numberCell(0, 0, 1, {
+        comment: { text: "root", replies: [{ text: "reply" }] },
+      }),
     ]);
     const elements = buildThreadedCommentElements(s);
     expect(elements).toHaveLength(2);
