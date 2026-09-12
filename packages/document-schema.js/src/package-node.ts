@@ -184,11 +184,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 // The shared wrapper shape every group guard checks: a record whose `node` is itself a record, whose `children` is an array of values each satisfying that group kind's own child predicate, whose optional `style` ref is a string when present, and which carries no other keys -- every group fragment in content-json-schema-defs.ts declares additionalProperties: false over exactly { node, style, children }, so a wrapper with any fourth key must fail here too, or documentFromJson would accept a value the published .schema.json rejects. Per-kind child predicates (not one generic isTreeNode) are what make these guards the untrusted-input boundary: a tree that hangs a paragraph leaf directly off a slide group, or a section group off a sheet, is structurally illegal and rejects here, where the reference implementation's own guard checks children generically (it walks trees it constructed itself; this schema's job is to validate trees it did not).
+// No isRecord(value.node) check here: every one of this function's nine call sites (isSectionGroupNode through isShapeConstructGroupNode) only ever calls isGroupWrapper after that same value.node has already passed a real Zod object schema's own safeParse (SectionDescriptorSchema, HeadingParagraphSchema, ConstructDescriptorSchema, ...), and a z.object() schema's safeParse can only succeed against a genuine non-null, non-array record -- so value.node is already guaranteed to be one by the time this function runs, for every real call in this codebase.
 function isGroupWrapper(
   value: Record<string, unknown>,
   isChild: (child: unknown) => boolean,
 ): boolean {
-  if (!isRecord(value.node)) return false;
   if (value.style !== undefined && typeof value.style !== "string")
     return false;
   if (
