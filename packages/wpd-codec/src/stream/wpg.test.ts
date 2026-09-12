@@ -555,6 +555,21 @@ describe("readCountField's 1/3/5-byte spellings", () => {
     expect(decoded.skippedRecords).toEqual(["record type 0x99"]);
   });
 
+  it("reads a Length field of exactly 0xFE as the plain single-byte spelling, not the extended one", () => {
+    // 0xFE is the top of the single-byte range ("a byte 0-0xFE is the value"); only 0xFF introduces the extended spelling.
+    const filler = new Array<number>(0xfe).fill(0);
+    const graphic = wpg([
+      record(0x01, startWpgData({})),
+      record(0x99, filler),
+      record(0x02, []),
+    ]);
+    const decoded = decodeWpgGraphic(graphic, NO_TEXT);
+    if (decoded?.status !== "decoded") {
+      throw new Error("expected a decoded graphic");
+    }
+    expect(decoded.skippedRecords).toEqual(["record type 0x99"]);
+  });
+
   it("stops the walk rather than reading past the buffer when a Length field's 3-byte marker has no room for its own short value", () => {
     // 0xff with nothing after it: cursor + 3 runs past the buffer's own end.
     const raw = [0x0f, 0x99, 0, 0xff];
@@ -627,6 +642,19 @@ describe("readCharacterization's edit-lock and Object ID walks", () => {
     expect(rect.frame).toEqual({ xPt: 0, yPt: 134, widthPt: 10, heightPt: 10 });
   });
 
+  it("reads the characterization flags from a record whose data is exactly the 2-byte flags word, with nothing to spare", () => {
+    const flags = 0; // no special bits
+    const data = [...word(flags)]; // exactly 2 bytes: cursor + 2 lands exactly on the record's own end
+    const graphic = wpg([record(0x01, startWpgData({})), record(0x18, data)]);
+    const decoded = decodeWpgGraphic(graphic, NO_TEXT);
+    if (decoded?.status !== "decoded") {
+      throw new Error("expected a decoded graphic");
+    }
+    // Characterization itself succeeds exactly at this boundary; the geometry read that follows it has nothing left to read and refuses on its own account.
+    expect(decoded.vectors).toEqual([]);
+    expect(decoded.skippedRecords).toEqual(["Rectangle"]);
+  });
+
   it("refuses a record whose Object ID field itself has no room before the record ends", () => {
     const flags = 0x0020; // FLAG_OBJECT_ID
     const data = [...word(flags), 0xaa]; // only one byte where the 2-byte id needs to fit
@@ -650,6 +678,32 @@ describe("readCharacterization's edit-lock and Object ID walks", () => {
     }
     expect(decoded.vectors).toEqual([]);
     expect(decoded.skippedRecords).toEqual(["Rectangle"]);
+  });
+
+  // Unlike Object ID's own overflow (guarded by its own room check before the +2/+4 step is ever taken), the edit-lock descriptor's blind +4 step has no such guard of its own -- readCharacterization's own final `geometryAt > recordEnd` check is the ONLY thing standing between a too-short record and treating the very next record's own bytes as this one's geometry.
+  it("refuses a Rectangle whose edit-lock descriptor alone pushes geometryAt past the record, rather than reading the next record's own bytes as geometry", () => {
+    const flags = 0x0080; // FLAG_EDIT_LOCK only
+    const data = [...word(flags)]; // no room at all for the 4-byte edit-lock descriptor, let alone any geometry
+    // Exactly the bytes geometryAt would land on and misread as xll/yll/xur/yur/rx/ry if the overrun were allowed through.
+    const siblingBytes = [
+      ...word(100),
+      ...word(200),
+      ...word(300),
+      ...word(400),
+      ...word(0),
+      ...word(0),
+    ];
+    const graphic = wpg([
+      record(0x01, startWpgData({})),
+      record(0x18, data),
+      record(0x99, siblingBytes),
+    ]);
+    const decoded = decodeWpgGraphic(graphic, NO_TEXT);
+    if (decoded?.status !== "decoded") {
+      throw new Error("expected a decoded graphic");
+    }
+    expect(decoded.vectors).toEqual([]);
+    expect(decoded.skippedRecords).toEqual(["Rectangle", "record type 0x99"]);
   });
 });
 
@@ -1124,6 +1178,49 @@ describe("readPolyline boundaries and branching", () => {
 });
 
 describe("readWpgRectangle's rounded-corner path", () => {
+  // rx and ry are checked independently ("if EITHER... is less than or equal to zero"), so each boundary needs its own isolated test with the other axis held well clear of zero -- otherwise a wrong comparison on one axis hides behind the other axis' own, correct, square-corner trigger.
+  it("treats rx of exactly zero as a square corner even with a real, positive ry", () => {
+    const graphic = wpg([
+      record(0x01, startWpgData({})),
+      record(0x18, [
+        ...word(0x8000), // FRM only
+        ...word(0),
+        ...word(0),
+        ...word(100),
+        ...word(60),
+        ...word(0), // rx: exactly zero
+        ...word(6), // ry: a real, positive radius
+      ]),
+    ]);
+    const decoded = decodeWpgGraphic(graphic, NO_TEXT);
+    if (decoded?.status !== "decoded") {
+      throw new Error("expected a decoded graphic");
+    }
+    const rect = decoded.vectors[0];
+    if (rect?.kind !== "rect") throw new Error("expected a rect vector");
+  });
+
+  it("treats ry of exactly zero as a square corner even with a real, positive rx", () => {
+    const graphic = wpg([
+      record(0x01, startWpgData({})),
+      record(0x18, [
+        ...word(0x8000), // FRM only
+        ...word(0),
+        ...word(0),
+        ...word(100),
+        ...word(60),
+        ...word(10), // rx: a real, positive radius
+        ...word(0), // ry: exactly zero
+      ]),
+    ]);
+    const decoded = decodeWpgGraphic(graphic, NO_TEXT);
+    if (decoded?.status !== "decoded") {
+      throw new Error("expected a decoded graphic");
+    }
+    const rect = decoded.vectors[0];
+    if (rect?.kind !== "rect") throw new Error("expected a rect vector");
+  });
+
   it("keeps each axis' own corner radius unclamped when neither exceeds half its side", () => {
     const kappa = (4 / 3) * (Math.SQRT2 - 1);
     const graphic = wpg([
@@ -1217,11 +1314,39 @@ describe("readWpgRectangle's rounded-corner path", () => {
     const path = decoded.vectors[0];
     if (path?.kind !== "path") throw new Error("expected a path vector");
     const subpath = path.subpaths[0];
-    const firstLine = subpath?.segments[0];
+    const [firstLine, firstCubic] = subpath?.segments ?? [];
     if (firstLine?.kind !== "line") throw new Error("expected a line segment");
-    // Clamped to half the width (50) and half the height (30) -- not the declared 1000.
+    if (firstCubic?.kind !== "cubic")
+      throw new Error("expected a cubic segment");
+    // Clamped to half the width (50) and half the height (30) -- not the declared 1000. cornerRyPt (the height's own clamp) surfaces only in the first cubic's own endpoint, never in the first line, which always ends at y=0 regardless of either axis' radius.
     expect(firstLine.to).toEqual({ xPt: 50, yPt: 0 });
+    expect(firstCubic.to).toEqual({ xPt: 100, yPt: 30 });
     expect(Object.hasOwn(path, "stroke")).toBe(false);
+  });
+
+  it("carries a real stroke on a rounded rectangle, not just a square one", () => {
+    // Every other rounded-rectangle fixture in this file has no active pen width, so its own stroke is always absent regardless -- proving the rounded path's own stroke spread actually fires needs one with a real, active pen width behind it.
+    const graphic = wpg([
+      record(0x01, startWpgData({})),
+      record(0x25, [255, 0, 0, 0]), // Pen Fore Color: red, opaque
+      record(0x2b, [...word(2), ...word(2)]), // Pen Size: 2 units
+      record(0x18, [
+        ...word(0x8000), // FRM only
+        ...word(0),
+        ...word(0),
+        ...word(100),
+        ...word(60),
+        ...word(10), // rx
+        ...word(6), // ry
+      ]),
+    ]);
+    const decoded = decodeWpgGraphic(graphic, NO_TEXT);
+    if (decoded?.status !== "decoded") {
+      throw new Error("expected a decoded graphic");
+    }
+    const path = decoded.vectors[0];
+    if (path?.kind !== "path") throw new Error("expected a path vector");
+    expect(path.stroke).toEqual({ color: { r: 1, g: 0, b: 0 }, widthPt: 2 });
   });
 
   it("refuses a Rectangle with no room for its own six coordinates", () => {
@@ -1727,6 +1852,26 @@ describe("the record-walk loop's own boundaries", () => {
     expect(decoded.skippedRecords).toEqual(["Start WPG"]);
     expect(decoded.sizePt).toEqual({ widthPt: 288, heightPt: 144 });
   });
+
+  // Exactly 13 bytes: room for ppi/ppi/precision/viewport (the fixed fields this check exists to protect), but genuinely nothing left for the extent that follows -- proving the skip-vs-refuse boundary sits at < 13, not <= 13. A record this size is NOT skipped (data.length < 13 is false): it proceeds to read ppi/precision, then refuses the WHOLE graphic outright once the separate, later extent-room check finds nothing left -- a categorically different outcome (refused vs skipped-and-continue) than an off-by-one here would produce.
+  it("proceeds past a Start WPG record of exactly 13 bytes rather than skipping it, then refuses for its missing extent", () => {
+    // A genuinely valid Start WPG follows the 13-byte one: the correct code returns refused immediately from inside the first record's own extent check (a whole-function return, not merely a skip), so the second, valid one is never reached at all -- proving that directly needs a record after the boundary one that would, wrongly, produce a real decoded result if the first were skipped instead of refused.
+    const exactlyThirteen = [
+      ...word(72),
+      ...word(72),
+      0,
+      ...new Array<number>(8).fill(0),
+    ];
+    const graphic = wpg([
+      record(0x01, exactlyThirteen),
+      record(0x01, startWpgData({})),
+      record(0x02, []),
+    ]);
+    expect(decodeWpgGraphic(graphic, NO_TEXT)).toEqual({
+      status: "refused",
+      reason: "malformed",
+    });
+  });
 });
 
 describe("paint order across a text shape followed by another vector", () => {
@@ -1915,7 +2060,8 @@ describe("readPolyline's own point-local-to-frame arithmetic and stroke", () => 
     }
     const path = decoded.vectors[0];
     if (path?.kind !== "path") throw new Error("expected a path vector");
-    expect(path.stroke).toBeUndefined();
+    // Not just an undefined value: the key itself must be absent, since toEqual/toBeUndefined can't tell "no stroke key at all" from "a stroke key holding undefined" -- and only the former is what an absent stroke should actually produce.
+    expect(path).not.toHaveProperty("stroke");
   });
 
   it("refuses a Polyline whose weakened per-point bounds check would otherwise read a coordinate past the buffer", () => {
@@ -1965,5 +2111,30 @@ describe("a swallowed group's second-of-two members stays swallowed", () => {
     }
     expect(decoded.vectors).toEqual([]);
     expect(decoded.skippedRecords).toEqual(["Compound Polygon"]);
+  });
+});
+
+describe("a Text Block whose own frame failed to resolve swallows its declared members too", () => {
+  it("swallows a Polyline declared as a failed Text Block's own member, not walking it as real content", () => {
+    const graphic = wpg([
+      record(0x01, startWpgData({})),
+      // A Text Block with no data at all: readTextBlockFrame fails (readCharacterization can't even read its own flags word), leaving pendingTextBlockFrame undefined -- but it still declares one member.
+      record(0x1d, [], 1),
+      record(0x15, [
+        ...word(0x8000),
+        ...word(2),
+        ...word(0),
+        ...word(0),
+        ...word(10),
+        ...word(10),
+      ]),
+      record(0x02, []),
+    ]);
+    const decoded = decodeWpgGraphic(graphic, NO_TEXT);
+    if (decoded?.status !== "decoded") {
+      throw new Error("expected a decoded graphic");
+    }
+    expect(decoded.vectors).toEqual([]);
+    expect(decoded.skippedRecords).toEqual(["Text Block"]);
   });
 });

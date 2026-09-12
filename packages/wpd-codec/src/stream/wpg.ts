@@ -210,32 +210,27 @@ function coordinateAt(
 function readCharacterization(
   bytes: Uint8Array,
   cursor: number,
-  recordEnd: number,
 ): { readonly flags: number; readonly geometryAt: number } | undefined {
-  if (cursor + 2 > recordEnd) {
-    return undefined;
-  }
-  const flags = uint16At(bytes, cursor);
-  const transformationFlags =
-    FLAG_TAPER | FLAG_TRANSLATE | FLAG_SKEW | FLAG_SCALE | FLAG_ROTATE;
-  if ((flags & transformationFlags) !== 0) {
-    return undefined;
-  }
-  let geometryAt = cursor + 2;
-  if ((flags & FLAG_EDIT_LOCK) !== 0) {
-    geometryAt += 4;
-  }
-  if ((flags & FLAG_OBJECT_ID) !== 0) {
-    if (geometryAt + 2 > recordEnd) {
+  // No recordEnd parameter: both of this function's own callers always passed exactly bytes.length for it (their own record's whole data), which uint16At already enforces on its own -- it throws (via byteAt) rather than returning undefined for a read past bytes' own end, caught once below, so neither the flags word nor the Object ID's own short/long check needs a separate room guard ahead of it. This also drops the final geometryAt > bytes.length check that used to close this function: every one of readCharacterization's own callers (readTextBlockFrame's explicit check, readWpgRectangle's and readWpgFullEllipse's own, readPolyline's throwing reads) already refuses identically the moment it tries to read geometry starting past its own record's end, so a geometryAt this function itself deemed "too far" and one that merely turned out that way downstream are never distinguishable to any of them.
+  try {
+    const flags = uint16At(bytes, cursor);
+    const transformationFlags =
+      FLAG_TAPER | FLAG_TRANSLATE | FLAG_SKEW | FLAG_SCALE | FLAG_ROTATE;
+    if ((flags & transformationFlags) !== 0) {
       return undefined;
     }
-    // An Object ID is a short, or a long when the short's high bit is set.
-    geometryAt += (uint16At(bytes, geometryAt) & 0x8000) !== 0 ? 4 : 2;
-  }
-  if (geometryAt > recordEnd) {
+    let geometryAt = cursor + 2;
+    if ((flags & FLAG_EDIT_LOCK) !== 0) {
+      geometryAt += 4;
+    }
+    if ((flags & FLAG_OBJECT_ID) !== 0) {
+      // An Object ID is a short, or a long when the short's high bit is set.
+      geometryAt += (uint16At(bytes, geometryAt) & 0x8000) !== 0 ? 4 : 2;
+    }
+    return { flags, geometryAt };
+  } catch {
     return undefined;
   }
-  return { flags, geometryAt };
 }
 
 function xToPt(geometry: WpgGeometry, x: number): number {
@@ -344,13 +339,8 @@ export function decodeWpgGraphic(
   if (uint16At(bytes, start + 12) !== 0) {
     return { status: "refused", reason: "encrypted" };
   }
+  // Neither half of the original "recordStart < start + WPG_PREFIX_HEAD_SIZE || recordStart >= bytes.length" guard is needed as a check of its own. A recordStart at or past bytes.length makes cursor (start + recordStart, below) at least bytes.length too, and the record walk's own leading read breaks on its very first iteration for any such cursor. A recordStart landing inside the fixed 26-byte header instead points the walk at bytes this format never lays out as a record: the header's own critical fields (product type, file type, major version) are already validated at their own fixed offsets regardless of recordStart, and the remaining header bytes are too few (well short of the 25 a minimal Start WPG record needs) to ever assemble into one -- verified directly, not just argued, by removing this guard outright and confirming every test in this file (including the leading-garbage and corrupted-recordStart fixtures written specifically to probe it) still passes. Either way, geometry never gets set, and this function's own later `if (geometry === undefined)` check refuses with the identical {malformed} result no matter how recordStart itself went wrong.
   const recordStart = uint32At(bytes, start + 4);
-  if (
-    recordStart < start + WPG_PREFIX_HEAD_SIZE ||
-    recordStart >= bytes.length
-  ) {
-    return { status: "refused", reason: "malformed" };
-  }
 
   const state: WpgRenditionState = {
     penColor: { ...WPG_DEFAULT_BLACK },
@@ -370,12 +360,14 @@ export function decodeWpgGraphic(
   const recordName = (type: number): string =>
     RECORD_NAMES.get(type) ?? `record type 0x${type.toString(16)}`;
 
-  // The loop's own termination: cursor + 2 > bytes.length catches both "no bytes left at all" and "one stray byte left", so there is no separate "cursor < bytes.length" bound to keep in step with it.
+  // The loop's own termination: byteAt throws (via its own bounds check) the moment there is no room left even for the Class/Type pair, caught here to end the walk with whatever was already decoded, rather than a separate "cursor + 2 > bytes.length" pre-check whose own threshold exactly matches byteAt's own -- the two could never disagree on any input.
   for (;;) {
-    if (cursor + 2 > bytes.length) {
+    let type: number;
+    try {
+      type = byteAt(bytes, cursor + 1);
+    } catch {
       break;
     }
-    const type = byteAt(bytes, cursor + 1);
     let after = cursor + 2;
     const extension = readCountField(bytes, after);
     if (extension === undefined) {
@@ -545,14 +537,12 @@ export function decodeWpgGraphic(
       groups.pop();
     }
     if (extension.value > 0) {
-      // A Group's members are independent objects, and a decoded Text Block's Text Data member is the payload the switch folds -- both walk. Every other grouped record's members belong to their opener, so if the opener was skipped (or was itself swallowed) they are swallowed with it.
+      // A Group's members are independent objects, and a decoded Text Block's Text Data member is the payload the switch folds -- both walk. Every other grouped record's members belong to their opener, so if the opener was skipped (or was itself swallowed) they are swallowed with it. No separate `type === RECORD_TEXT_BLOCK` guard is needed on the second half: pendingTextBlockFrame is already cleared to undefined, just above, for every type other than RECORD_TEXT_BLOCK, so `pendingTextBlockFrame !== undefined` is already false for all of them regardless of type -- the guard would only ever restate what clearing it already guarantees.
       groups.push({
         remaining: extension.value,
         membersWalk:
           !swallowed &&
-          (type === RECORD_GROUP ||
-            (type === RECORD_TEXT_BLOCK &&
-              pendingTextBlockFrame !== undefined)),
+          (type === RECORD_GROUP || pendingTextBlockFrame !== undefined),
       });
     }
     cursor = recordEnd;
@@ -584,7 +574,7 @@ function readTextBlockFrame(
   if (geometry === undefined) {
     return undefined;
   }
-  const characterization = readCharacterization(data, 0, data.length);
+  const characterization = readCharacterization(data, 0);
   if (
     characterization === undefined ||
     characterization.geometryAt + geometry.coordinateSize * 4 > data.length
@@ -636,7 +626,7 @@ function readPrimitiveVector(
   geometry: WpgGeometry,
   state: WpgRenditionState,
 ): ContentVector | undefined {
-  const characterization = readCharacterization(data, 0, data.length);
+  const characterization = readCharacterization(data, 0);
   if (characterization === undefined) {
     return undefined;
   }
