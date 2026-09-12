@@ -658,20 +658,17 @@ describe("page geometry margin subgroup isolation", () => {
   });
 
   it("reports the exact PageGeometryChanged message", () => {
-    const { diagnostics } = (() => {
-      const diagnostics: WpdDiagnostic[] = [];
-      const document = readWpdContent(
-        buildWpdFile([
-          ...marginFunction(PAGE_GROUP, 0x00, 600),
-          ...text("first"),
-          HARD_EOL,
-          ...marginFunction(PAGE_GROUP, 0x00, 2400),
-          ...text("second"),
-        ]),
-        { sink: (d) => diagnostics.push(d) },
-      );
-      return { document, diagnostics };
-    })();
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(
+      buildWpdFile([
+        ...marginFunction(PAGE_GROUP, 0x00, 600),
+        ...text("first"),
+        HARD_EOL,
+        ...marginFunction(PAGE_GROUP, 0x00, 2400),
+        ...text("second"),
+      ]),
+      { sink: (d) => diagnostics.push(d) },
+    );
     const found = diagnostics.find(
       (d) => d.code === WpdDiagnosticCodes.PageGeometryChanged,
     );
