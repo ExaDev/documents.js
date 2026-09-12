@@ -13,8 +13,8 @@ export function MathMlView({ mathml, className }: MathMlViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const container = containerRef.current;
-    if (container === null) return;
+    // Never null when this effect runs: the ref is attached to an unconditionally-rendered element of this same component instance, and React attaches refs during commit, strictly before a passive effect can observe them.
+    const container = containerRef.current!;
     container.innerHTML = "";
     const math = document.createElementNS(MATHML_NS, "math");
     appendMathMlNodes(math, mathml);

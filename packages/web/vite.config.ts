@@ -111,7 +111,7 @@ const pwa = VitePWA({
   },
 });
 
-export default defineConfig(({ command }) => ({
+export default defineConfig(({ command, mode }) => ({
   // Only the production build serves from GitHub Pages' project-site subpath. Base was previously computed from CI alone, at module scope, and applied unconditionally to `vite` (dev) too -- every CI run of the e2e suite starts the dev server under the same CI=true env var the real Pages build reads, so the dev server silently served every asset from /<repo>/ while the browser requested them from /, and the app never rendered at all. Gating on `command` (vite's own build/serve discriminator) instead of the env var alone is the actual fix, not a workaround: dev must always stay at '/' regardless of which environment it runs in.
   base: command === "build" && process.env.CI ? pagesBase() : "/",
   define: {
@@ -121,8 +121,12 @@ export default defineConfig(({ command }) => ({
     __APP_COMMIT_TIMESTAMP__: JSON.stringify(commitTimestampMs),
   },
   plugins: [
-    // Must precede react(): the router plugin's route-tree codegen needs to run before plugin-react's JSX transform sees the generated imports.
-    tanstackRouter({ target: "react", autoCodeSplitting: true }),
+    // Must precede react(): the router plugin's route-tree codegen needs to run before plugin-react's JSX transform sees the generated imports. routeFileIgnorePattern excludes a route file's own unit tests from the generated route tree -- without it, the first test added directly under src/routes/ (e.g. index.test.ts) warns "does not export a Route" on every build and test run, and the existing dash-prefix convention (this directory's own -Sidebar.tsx, a genuine non-route support file) is the wrong fix for a test file: dash-prefixing every *.test.ts(x) here would read oddly next to every other test file in the package, which carries no such prefix. autoCodeSplitting is a production bundle-size optimisation, irrelevant to correctness -- worse than irrelevant under vitest, since it rewrites a route file's own component behind a real dynamic import, and a test mounting that route's Route.options.component directly (bypassing routeTree.gen.ts, which is what a route-level unit test necessarily does) genuinely suspends on first render waiting for a chunk vitest has no reason to ever finish resolving quickly. Gated off under mode "test" (vitest's own default mode, unless a run overrides it) for the identical reason `base` above is gated on `command`: a build-time concern must not leak into how tests execute.
+    tanstackRouter({
+      target: "react",
+      autoCodeSplitting: mode !== "test",
+      routeFileIgnorePattern: "\\.test\\.tsx?$",
+    }),
     react(),
     vanillaExtractPlugin(),
     pwa,
