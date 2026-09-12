@@ -42,17 +42,15 @@ export function inflateTolerant(data: Uint8Array<ArrayBuffer>): InflateResult {
   }
 
   let offset = 0;
-  // Stryker disable next-line ConditionalExpression,EqualityOperator: isAsciiWhitespace(undefined) is explicitly false (see reader.ts), and Uint8Array indexing past the end always returns undefined -- so once offset reaches data.length, the right-hand operand alone already stops the loop at the exact same offset regardless of whether the left-hand length bound is dropped or loosened to <=.
-  while (offset < data.length && isAsciiWhitespace(data[offset])) {
+  // Bounded by the data itself rather than by a separately tracked length: isAsciiWhitespace(undefined) is explicitly false (see reader.ts), and Uint8Array indexing past the end always returns undefined, so the loop already stops the moment offset runs off the end without needing its own length check.
+  while (isAsciiWhitespace(data[offset])) {
     offset++;
   }
-  // Stryker disable next-line ConditionalExpression,EqualityOperator: offset is only ever positive here because of a real detected whitespace prefix; when offset is 0, retrying inflate() on data.subarray(0) (the identical bytes the try block above already threw on) is a deterministic no-op that reaches the exact same fall-through -- so forcing this guard to always run changes nothing observable when offset is 0, and it is not reached differently when offset is genuinely positive.
-  if (offset > 0) {
-    try {
-      return { bytes: inflate(data.subarray(offset)), recovered: true };
-    } catch {
-      // fall through
-    }
+  // Retried unconditionally, even when offset is still 0 (no whitespace prefix was found): inflate() is a deterministic pure function, so re-running it on data.subarray(0) -- the identical bytes the try block above already threw on -- fails the same way and falls through to the next recovery tier, exactly as if this attempt had been skipped.
+  try {
+    return { bytes: inflate(data.subarray(offset)), recovered: true };
+  } catch {
+    // fall through
   }
 
   try {
