@@ -29,9 +29,9 @@ describe("sha1", () => {
     expect(toHex(sha1(input))).toBe("bb2fa3ee7afb9f54c6dfb5d021f14b1ffe40c163");
   });
 
-  // RFC 3174 7.3's own third vector: one million repetitions of "a". Heavier than the others deliberately -- it is the one vector in the published suite that exercises the multi-block message schedule across many blocks rather than just one or two.
+  // RFC 3174 7.3's own third vector: one million repetitions of "a". Heavier than the others deliberately -- it is the one vector in the published suite that exercises the multi-block message schedule across many blocks rather than just one or two. Given an explicit, generous timeout (rather than vitest's 5000ms default) because per-test coverage instrumentation (Stryker's dry run, or plain `--coverage`) measurably multiplies this test's own real cost well past that default on a loaded machine, independent of anything this suite is actually testing.
   it("hashes one million repetitions of 'a'", () => {
     const input = ascii("a".repeat(1_000_000));
     expect(toHex(sha1(input))).toBe("34aa973cd4c4daa4f61eeb2bdbad27316534016f");
-  });
+  }, 30_000);
 });
