@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { scanImagePayload } from "./image";
+import {
+  bigEndianUint16At,
+  bigEndianUint32At,
+  scanImagePayload,
+} from "./image";
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
@@ -59,9 +63,34 @@ function tinyJpeg(
   ];
 }
 
+describe("bigEndianUint32At", () => {
+  // A distinct, nonzero digit in every byte position, so a wrong sign between any two terms or a wrong operator on any one of them changes the result -- every real PNG/JPEG fixture below keeps its own chunk/segment lengths small, leaving every byte but the last at zero, where a wrong sign or operator on that term would go unobserved.
+  it("assembles four bytes into one big-endian 32-bit value", () => {
+    expect(bigEndianUint32At(new Uint8Array([0x12, 0x34, 0x56, 0x78]), 0)).toBe(
+      0x12345678,
+    );
+  });
+});
+
+describe("bigEndianUint16At", () => {
+  it("assembles two bytes into one big-endian 16-bit value", () => {
+    expect(bigEndianUint16At(new Uint8Array([0x12, 0x34]), 0)).toBe(0x1234);
+  });
+});
+
 describe("scanImagePayload", () => {
   it("returns undefined for a packet with neither signature at all", () => {
     expect(scanImagePayload(new Uint8Array([1, 2, 3, 4, 5]))).toBeUndefined();
+  });
+
+  // PNG_SIGNATURE's own first byte, with no room left for the other seven: a fit check that let this position through anyway would matter here, since bytesMatchAt now throws for an out-of-range byte rather than silently answering false, and the mismatched bytes elsewhere in this file's other fixtures never happen to start with 0x89 this close to the buffer's own end.
+  it("does not attempt a PNG signature match too close to the buffer's own end to ever complete", () => {
+    expect(scanImagePayload(new Uint8Array([1, 2, 3, 0x89]))).toBeUndefined();
+  });
+
+  // JPEG_SOI's own first byte (0xFF), with no room for the second: the same fit-check concern as the PNG case above, isolated to the shorter signature.
+  it("does not attempt a JPEG signature match too close to the buffer's own end to ever complete", () => {
+    expect(scanImagePayload(new Uint8Array([1, 2, 3, 0xff]))).toBeUndefined();
   });
 
   describe("PNG", () => {
