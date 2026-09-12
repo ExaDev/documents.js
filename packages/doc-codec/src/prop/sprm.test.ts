@@ -80,6 +80,16 @@ describe("operandSize", () => {
     expect(() =>
       operandSize(decodeSprm(0xc615), new Uint8Array([0xff, 0, 0, 0]), 0),
     ).toThrow(DocUnsupportedError);
+    expect(() =>
+      operandSize(decodeSprm(0xc615), new Uint8Array([0xff, 0, 0, 0]), 0),
+    ).toThrow(/255 sentinel/);
+  });
+
+  it("rejects sprmTDefTable's own cb of 0, which cannot be a remainder length incremented by 1", () => {
+    const operand = new Uint8Array(4);
+    expect(() => operandSize(decodeSprm(0xd608), operand, 0)).toThrow(
+      /sprmTDefTable declares cb 0/,
+    );
   });
 
   it("sizes sprmPChgTabs from its length byte when that byte is not the sentinel", () => {
@@ -112,9 +122,16 @@ describe("readGrpprl", () => {
     );
   });
 
-  it("rejects a trailing single byte, too short even for a sprm's own two", () => {
+  it("rejects a trailing single byte, too short even for a sprm's own two, naming the exact count and offset", () => {
     expect(() => readGrpprl(new Uint8Array([0x35, 0x08, 0x01, 0x00]))).toThrow(
-      DocFormatError,
+      /grpprl has 1 trailing byte\(s\) at offset 3/,
+    );
+  });
+
+  it("rejects a sprm with exactly its own two opcode bytes and nothing left for its operand, distinctly from a genuinely-too-short trailer", () => {
+    // Exactly two bytes remain -- enough for a bare opcode but not the one operand byte sprmCFBold's own spra always needs, so this must fail via the operand's own bounds check, never the "too few for a sprm's own two" trailing-byte guard above (which this input never actually triggers).
+    expect(() => readGrpprl(new Uint8Array([0x35, 0x08]))).toThrow(
+      /operand of sprm 0x835/,
     );
   });
 });
