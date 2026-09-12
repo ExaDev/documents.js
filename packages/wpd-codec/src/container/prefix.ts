@@ -118,43 +118,41 @@ export const PACKET_TYPE_GENERAL_WP_TEXT = 0x08;
 export function readGeneralWpTextBlocks(
   bytes: Uint8Array,
 ): Uint8Array | undefined {
-  if (bytes.length < 4) {
+  // uint16At throws (via byteAt) rather than returning undefined for a read that runs past bytes' own end, caught below -- so neither the block count, the first block offset, nor any one size word in the loop below needs a separate room check ahead of reading it. A dedicated sizesEnd > bytes.length guard used to sit ahead of the loop, checking room for every size word the loop is about to read in one go -- but unlike the text-block header guard style.ts's readStyleBeginBlock still needs (which checks room for a field the loop never reads), this guard's own threshold (4 + blockCount * 2) is exactly the byte offset the loop's own last iteration already requires, so a bytes.length short of it makes that same iteration throw in precisely the place the guard would have rejected it -- no input can tell the removed guard from the throw it deferred to.
+  try {
+    const blockCount = uint16At(bytes, 0);
+    const firstBlockOffset = uint16At(bytes, 2);
+    if (blockCount === 0) {
+      return undefined;
+    }
+    let totalSize = 0;
+    for (let index = 0; index < blockCount; index += 1) {
+      totalSize += uint16At(bytes, 4 + index * 2);
+    }
+    const end = firstBlockOffset + totalSize;
+    // No separate firstBlockOffset < 0 guard is needed: uint16At only ever answers an unsigned 16-bit value, so firstBlockOffset can never be negative in the first place.
+    if (end > bytes.length) {
+      return undefined;
+    }
+    return bytes.subarray(firstBlockOffset, end);
+  } catch {
     return undefined;
   }
-  const blockCount = uint16At(bytes, 0);
-  const firstBlockOffset = uint16At(bytes, 2);
-  if (blockCount === 0) {
-    return undefined;
-  }
-  const sizesEnd = 4 + blockCount * 2;
-  if (sizesEnd > bytes.length) {
-    return undefined;
-  }
-  let totalSize = 0;
-  for (let index = 0; index < blockCount; index += 1) {
-    totalSize += uint16At(bytes, 4 + index * 2);
-  }
-  const end = firstBlockOffset + totalSize;
-  if (firstBlockOffset < 0 || end > bytes.length) {
-    return undefined;
-  }
-  return bytes.subarray(firstBlockOffset, end);
 }
 
 // "The typeface name is made up for four separate null word-terminated strings: 1st string = typeface family (such as Times or Swiss), 2nd string = attributes (such as Bold, Italic, or Bold Italic), 3rd string = name prefix ... 4th string = name extension." Only the first is returned: it is the one a ContentRun's fontFamily wants, and the attributes string duplicates information the document's own Attribute On/Off functions already carry.
 export function readTypefaceName(packet: Uint8Array): string | undefined {
-  if (packet.length < TYPEFACE_NAME_OFFSET) {
+  // uint16At throws (via byteAt) rather than returning undefined for a read that runs past packet's own end, caught below -- so the name-length word itself needs no separate room check ahead of reading it.
+  try {
+    const nameLength = uint16At(packet, TYPEFACE_NAME_LENGTH_OFFSET);
+    // No separate bound against packet's own remaining length is needed here: decodeWordString already stops the moment it runs off the real end of `packet`, regardless of how many words it is asked for, so nameLength alone (converted from a byte count to a word count) is exactly as safe a bound as intersecting it with the packet's own remaining length would be.
+    const { text } = decodeWordString(
+      packet,
+      TYPEFACE_NAME_OFFSET,
+      Math.floor(nameLength / 2),
+    );
+    return text.length > 0 ? text : undefined;
+  } catch {
     return undefined;
   }
-  const nameLength = uint16At(packet, TYPEFACE_NAME_LENGTH_OFFSET);
-  const available = Math.min(nameLength, packet.length - TYPEFACE_NAME_OFFSET);
-  if (available <= 0) {
-    return undefined;
-  }
-  const { text } = decodeWordString(
-    packet,
-    TYPEFACE_NAME_OFFSET,
-    Math.floor(available / 2),
-  );
-  return text.length > 0 ? text : undefined;
 }
