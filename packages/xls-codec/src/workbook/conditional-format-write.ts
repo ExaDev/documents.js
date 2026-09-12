@@ -4,6 +4,7 @@ import type {
   ContentSheetConditionalFormat,
   ContentSheetConditionalFormatStyle,
   ContentSheetConditionalFormatValue,
+  ContentSheetRange,
 } from "document-schema.js";
 import { BiffWriteError } from "../biff/write-errors";
 import { RecordBuilder } from "../biff/builder";
@@ -19,16 +20,27 @@ import type { SheetRuleOperator } from "document-schema.js";
 
 // The write-side inverse of conditional-format.ts's readCondFmtGroup/readCf and conditional-format-12.ts's readCondFmt12Group/readCf12: a 'cellIs' rule writes as one CondFmt record ([MS-XLS] 2.4.56) carrying exactly one CF record ([MS-XLS] 2.4.42) -- the schema models a rule's ranges per rule, so there is nothing to group the way a multi-rule CondFmt would -- while every other variant the schema models writes as one CondFmt12 ([MS-XLS] 2.4.57) carrying exactly one CF12 ([MS-XLS] 2.4.43), the CF12-era spelling those rule types have no base-CF record for at all. The two families are emitted base-first within one sheet's CONDFMTS section, whose own ABNF (`*(CONDFMT / CONDFMT12) *(CFEx [CF12])`, [MS-XLS] 2.1.7.20.6) admits them interleaved or grouped; the CFEx compatibility spelling -- a legacy CF-plus-extension pair keeping a pre-2007 Excel able to evaluate the rule -- is deliberately not written, the CF12 spelling being the one this package's own reader resolves either way.
 
-const CP_BY_OPERATOR: ReadonlyMap<SheetRuleOperator, number> = new Map([
-  ["between", 0x1],
-  ["notBetween", 0x2],
-  ["equal", 0x3],
-  ["notEqual", 0x4],
-  ["greaterThan", 0x5],
-  ["lessThan", 0x6],
-  ["greaterThanOrEqual", 0x7],
-  ["lessThanOrEqual", 0x8],
-]);
+// The CF record's own cp table ([MS-XLS] 2.5.16's own Cpt), the inverse of conditional-format.ts's OPERATOR_BY_CP -- a real exhaustive switch over SheetRuleOperator's closed eight-member union rather than a Map, so the compiler itself proves every operator has a cp value and this never needs an "operator has no cp" fallback to guard a lookup that cannot miss.
+function cpOf(operator: SheetRuleOperator): number {
+  switch (operator) {
+    case "between":
+      return 0x1;
+    case "notBetween":
+      return 0x2;
+    case "equal":
+      return 0x3;
+    case "notEqual":
+      return 0x4;
+    case "greaterThan":
+      return 0x5;
+    case "lessThan":
+      return 0x6;
+    case "greaterThanOrEqual":
+      return 0x7;
+    case "lessThanOrEqual":
+      return 0x8;
+  }
+}
 
 // DXFFNTD's own fixed length ([MS-XLS] 2.4.97), mirrored from parseDxfStyle's own constant: everything this writer states in the block is zero but icvFore.
 const DXFFNTD_LENGTH = 122;
@@ -76,12 +88,7 @@ function writeCfRecord(
   rule: Extract<ContentSheetConditionalFormat, { type: "cellIs" }>,
   icvOf: (color: Color) => number,
 ): Uint8Array<ArrayBuffer> {
-  const cp = CP_BY_OPERATOR.get(rule.operator);
-  if (cp === undefined) {
-    throw new BiffWriteError(
-      `conditional-format operator "${rule.operator}" has no CF cp value`,
-    );
-  }
+  const cp = cpOf(rule.operator);
   const rgce1 = compileFormulaText(rule.formula1);
   const rgce2 =
     rule.formula2 !== undefined ? compileFormulaText(rule.formula2) : undefined;
@@ -149,9 +156,7 @@ const ICF_TEMPLATE_BELOW_OR_EQUAL_AVERAGE = 0x001e;
 const TEMPLATE_PARAMS_SIZE = 16;
 
 // The CFVO type codes' inverse ([MS-XLS] 2.5.40's own cfvoType table), mirrored from conditional-format-12.ts's CFVO_TYPE_TO_VALUE_TYPE.
-function cfvoTypeCodeOf(
-  value: ContentSheetConditionalFormatValue,
-): number | undefined {
+function cfvoTypeCodeOf(value: ContentSheetConditionalFormatValue): number {
   switch (value.type) {
     case "num":
       return 0x01;
@@ -165,8 +170,6 @@ function cfvoTypeCodeOf(
       return 0x05;
     case "formula":
       return 0x07;
-    default:
-      return undefined;
   }
 }
 
@@ -175,11 +178,6 @@ function writeCfvo(
   value: ContentSheetConditionalFormatValue,
 ): Uint8Array<ArrayBuffer> {
   const cfvoType = cfvoTypeCodeOf(value);
-  if (cfvoType === undefined) {
-    throw new BiffWriteError(
-      `internal error: ContentSheetConditionalFormatValue carries type "${value.type}", which cfvoTypeCodeOf has no [MS-XLS] 2.5.40 cfvoType code for`,
-    );
-  }
   if (value.type === "min" || value.type === "max") {
     // A bound, not a value: no rgce, no numValue.
     return new RecordBuilder().u8(cfvoType).u16(0).build();
@@ -339,9 +337,9 @@ const TIME_PERIOD_TO_ICF_TEMPLATE: ReadonlyMap<
   ["thisMonth", 0x0018],
 ]);
 
-// The operand-free family's icfTemplate values, the inverse of conditional-format-12.ts's SIMPLE_ICF_TEMPLATE_KIND: CFExDefaultTemplateParams is 16 reserved bytes, so the template value is the whole rule.
-const SIMPLE_KIND_TO_ICF_TEMPLATE: ReadonlyMap<
-  Extract<
+// The operand-free family's icfTemplate values, the inverse of conditional-format-12.ts's SIMPLE_ICF_TEMPLATE_KIND: CFExDefaultTemplateParams is 16 reserved bytes, so the template value is the whole rule. A real exhaustive switch over the six-member union rather than a Map, so the compiler proves every one of these rule types has an icfTemplate value.
+function simpleKindIcfTemplate(
+  type: Extract<
     ContentSheetConditionalFormat,
     {
       type:
@@ -353,29 +351,41 @@ const SIMPLE_KIND_TO_ICF_TEMPLATE: ReadonlyMap<
         | "duplicateValues";
     }
   >["type"],
-  number
-> = new Map([
-  ["containsBlanks", ICF_TEMPLATE_CONTAINS_BLANKS],
-  ["notContainsBlanks", ICF_TEMPLATE_CONTAINS_NO_BLANKS],
-  ["containsErrors", ICF_TEMPLATE_CONTAINS_ERRORS],
-  ["notContainsErrors", ICF_TEMPLATE_CONTAINS_NO_ERRORS],
-  ["uniqueValues", ICF_TEMPLATE_UNIQUE_VALUES],
-  ["duplicateValues", ICF_TEMPLATE_DUPLICATE_VALUES],
-]);
+): number {
+  switch (type) {
+    case "containsBlanks":
+      return ICF_TEMPLATE_CONTAINS_BLANKS;
+    case "notContainsBlanks":
+      return ICF_TEMPLATE_CONTAINS_NO_BLANKS;
+    case "containsErrors":
+      return ICF_TEMPLATE_CONTAINS_ERRORS;
+    case "notContainsErrors":
+      return ICF_TEMPLATE_CONTAINS_NO_ERRORS;
+    case "uniqueValues":
+      return ICF_TEMPLATE_UNIQUE_VALUES;
+    case "duplicateValues":
+      return ICF_TEMPLATE_DUPLICATE_VALUES;
+  }
+}
 
-// ctp ([MS-XLS] 2.5.27's CFExTextTemplateParams table): which of the four text sub-types a containsText-family rule is, the inverse of conditional-format-12.ts's CTP_TO_TEXT_KIND.
-const CTP_BY_TEXT_TYPE: ReadonlyMap<
-  Extract<
+// ctp ([MS-XLS] 2.5.27's CFExTextTemplateParams table): which of the four text sub-types a containsText-family rule is, the inverse of conditional-format-12.ts's CTP_TO_TEXT_KIND. A real exhaustive switch rather than a Map, for the same reason simpleKindIcfTemplate above is.
+function ctpOf(
+  type: Extract<
     ContentSheetConditionalFormat,
     { type: "containsText" | "notContainsText" | "beginsWith" | "endsWith" }
   >["type"],
-  number
-> = new Map([
-  ["containsText", 0x0000],
-  ["notContainsText", 0x0001],
-  ["beginsWith", 0x0002],
-  ["endsWith", 0x0003],
-]);
+): number {
+  switch (type) {
+    case "containsText":
+      return 0x0000;
+    case "notContainsText":
+      return 0x0001;
+    case "beginsWith":
+      return 0x0002;
+    case "endsWith":
+      return 0x0003;
+  }
+}
 
 // The formula a text-predicate rule carries as its ct 0x02 condition: neither CFExTextTemplateParams nor CFFilter has anywhere to state the literal search text, so it lives only as the PtgStr operand of the formula itself -- written in the shape Excel's own rule generator and LibreOffice's own GetFixedFormula both produce (sc/source/filter/excel/xestyle... and xcl97... confirmed shapes; see conditional-format-12.ts's own top comment for the reader-side citation), referencing the rule's own first anchor cell relatively. The first string literal of each shape is the search text, which is exactly what the reader's extractFirstStringLiteral recovers.
 function textRuleFormula(
@@ -383,13 +393,8 @@ function textRuleFormula(
     ContentSheetConditionalFormat,
     { type: "containsText" | "notContainsText" | "beginsWith" | "endsWith" }
   >,
+  anchor: ContentSheetRange,
 ): string {
-  const anchor = rule.ranges[0];
-  if (anchor === undefined) {
-    throw new BiffWriteError(
-      "internal error: textRuleFormula was called for a rule whose ranges were never validated",
-    );
-  }
   const cell = relativeCellRef(anchor.startRow, anchor.startColumn);
   // An Excel string literal escapes a double quote by doubling it -- the identical spelling biff/ptg-writer.ts's own tokenizer reads back -- so the literal is built here rather than through JSON.stringify, whose backslash escape has no meaning in a formula.
   const text = `"${rule.text.replaceAll('"', '""')}"`;
@@ -421,6 +426,7 @@ function writeCf12Record(
   rule: Exclude<ContentSheetConditionalFormat, { type: "cellIs" }>,
   ipriority: number,
   icvOf: (color: Color) => number,
+  anchor: ContentSheetRange,
 ): Uint8Array<ArrayBuffer> {
   let ct: number;
   let icfTemplate: number;
@@ -513,13 +519,7 @@ function writeCf12Record(
     case "uniqueValues":
     case "duplicateValues": {
       ct = CT_FILTER;
-      const template = SIMPLE_KIND_TO_ICF_TEMPLATE.get(rule.type);
-      if (template === undefined) {
-        throw new BiffWriteError(
-          `internal error: SIMPLE_KIND_TO_ICF_TEMPLATE has no icfTemplate for rule type "${rule.type}"`,
-        );
-      }
-      icfTemplate = template;
+      icfTemplate = simpleKindIcfTemplate(rule.type);
       templateParams = new Uint8Array(TEMPLATE_PARAMS_SIZE); // CFExDefaultTemplateParams: 16 reserved bytes
       rgbCt = writeCfFilter(undefined);
       dxf = writeDxfn(rule.style, icvOf);
@@ -532,26 +532,16 @@ function writeCf12Record(
       ct = CT_FORMULA;
       icfTemplate = ICF_TEMPLATE_CONTAINS_TEXT;
       // CFExTextTemplateParams ([MS-XLS] 2.5.27): ctp, then 14 reserved bytes.
-      const ctp = CTP_BY_TEXT_TYPE.get(rule.type);
-      if (ctp === undefined) {
-        throw new BiffWriteError(
-          `internal error: CTP_BY_TEXT_TYPE has no ctp for rule type "${rule.type}"`,
-        );
-      }
+      const ctp = ctpOf(rule.type);
       templateParams = new RecordBuilder()
         .u16(ctp)
         .bytes(new Uint8Array(14))
         .build();
       // ct 0x02's condition is the formula itself; rgbCT MUST be omitted ([MS-XLS] 2.4.43's own ct table).
-      rgce1 = compileFormulaText(textRuleFormula(rule));
+      rgce1 = compileFormulaText(textRuleFormula(rule, anchor));
       dxf = writeDxfn(rule.style, icvOf);
       break;
     }
-    default:
-      // The switch above is exhaustive over the schema's own rule-type union, so this branch exists only to satisfy the definite-assignment analysis of the shared skeleton fields below.
-      throw new BiffWriteError(
-        "internal error: writeCf12Record was called for a rule type its own dispatch never names",
-      );
   }
 
   const writer = new RecordBuilder()
@@ -580,12 +570,24 @@ function writeCf12Record(
   return writeRecord(RECORD_CF12, writer.build());
 }
 
+interface Cf12RuleEntry {
+  readonly rule: Exclude<ContentSheetConditionalFormat, { type: "cellIs" }>;
+  readonly nID: number;
+  /** The rule's own first range, already validated non-empty by validateRuleGrid -- carried alongside rather than re-derived by index later, since a plain-array `ranges` field could otherwise only be indexed as possibly-undefined this far from where non-emptiness was actually checked. */
+  readonly anchor: ContentSheetRange;
+}
+
+/** A Cf12RuleEntry with its ipriority resolved alongside it -- returned zipped together, rather than as a same-length array of bare priority numbers the caller would need to re-correlate to `entries` by index, so there is nothing for a caller to get out of step with. */
+interface Cf12RuleEntryWithPriority extends Cf12RuleEntry {
+  readonly ipriority: number;
+}
+
 // ipriority MUST be unique across every CF12 record in the worksheet substream ([MS-XLS] 2.4.43). The schema's priority is optional, but the field is not, so a rule stating none is minted the smallest positive integer no other rule of the sheet took -- while two rules stating the same priority is a document whose own ordering contradicts itself, and is refused rather than silently renumbered.
 function assignPriorities(
-  rules: readonly Exclude<ContentSheetConditionalFormat, { type: "cellIs" }>[],
-): number[] {
+  entries: readonly Cf12RuleEntry[],
+): Cf12RuleEntryWithPriority[] {
   const used = new Set<number>();
-  for (const rule of rules) {
+  for (const { rule } of entries) {
     if (rule.priority === undefined) {
       continue;
     }
@@ -596,16 +598,16 @@ function assignPriorities(
     }
     used.add(rule.priority);
   }
-  return rules.map((rule) => {
-    if (rule.priority !== undefined) {
-      return rule.priority;
+  return entries.map((entry) => {
+    if (entry.rule.priority !== undefined) {
+      return { ...entry, ipriority: entry.rule.priority };
     }
     let candidate = 1;
     while (used.has(candidate)) {
       candidate += 1;
     }
     used.add(candidate);
-    return candidate;
+    return { ...entry, ipriority: candidate };
   });
 }
 
@@ -638,8 +640,14 @@ function writeCondFmt12Record(
   return writeRecord(RECORD_CONDFMT12, header.build());
 }
 
-function validateRuleGrid(rule: ContentSheetConditionalFormat): void {
-  if (rule.ranges.length === 0) {
+/**
+ * Validates every one of a rule's ranges against BIFF8's own grid, and returns them narrowed to a provably non-empty tuple -- the schema requires at least one range but types `ranges` as a plain array, so without this the one caller that needs a rule's own first range (textRuleFormula, via its own anchor parameter) would index into a `ContentSheetRange | undefined` for a case that can only ever arise from calling it on a rule this function was never run against first.
+ */
+function validateRuleGrid(
+  rule: ContentSheetConditionalFormat,
+): readonly [ContentSheetRange, ...ContentSheetRange[]] {
+  const [first, ...rest] = rule.ranges;
+  if (first === undefined) {
     throw new BiffWriteError(
       "a conditional-format rule carrying no range states nothing; the schema requires at least one",
     );
@@ -656,6 +664,7 @@ function validateRuleGrid(rule: ContentSheetConditionalFormat): void {
       );
     }
   }
+  return [first, ...rest];
 }
 
 // [MS-XLS] 2.4.43 pins fStopIfTrue to zero for the three visual-scale rule types, so a stopIfTrue colour scale/data bar/icon set is a document the record vocabulary itself cannot state -- refused by name rather than written with the bit silently dropped, the identical refusal the four out-of-scope formula constructs already draw.
@@ -690,12 +699,9 @@ export function writeSheetConditionalFormats(
       `this sheet's ${rules.length} conditional-format rules exceed CondFmt's own 15-bit nID field`,
     );
   }
-  const cf12Rules: {
-    readonly rule: Exclude<ContentSheetConditionalFormat, { type: "cellIs" }>;
-    readonly nID: number;
-  }[] = [];
+  const cf12Rules: Cf12RuleEntry[] = [];
   rules.forEach((rule, index) => {
-    validateRuleGrid(rule);
+    const [anchor] = validateRuleGrid(rule);
     if (rule.type === "cellIs") {
       basePieces.push(
         writeCondFmtRecord(rule, index + 1),
@@ -704,21 +710,14 @@ export function writeSheetConditionalFormats(
       return;
     }
     validateStopIfTrue(rule);
-    cf12Rules.push({ rule, nID: index + 1 });
+    cf12Rules.push({ rule, nID: index + 1, anchor });
   });
-  const priorities = assignPriorities(cf12Rules.map(({ rule }) => rule));
-  cf12Rules.forEach(({ rule, nID }, index) => {
-    const ipriority = priorities[index];
-    if (ipriority === undefined) {
-      throw new BiffWriteError(
-        "internal error: assignPriorities returned fewer priorities than there are CF12 rules",
-      );
-    }
+  for (const { rule, nID, anchor, ipriority } of assignPriorities(cf12Rules)) {
     cf12Pieces.push(
       writeCondFmt12Record(rule, nID),
-      writeCf12Record(rule, ipriority, icvOf),
+      writeCf12Record(rule, ipriority, icvOf, anchor),
     );
-  });
+  }
   // Base groups first, then the CF12 groups, both inside the one CONDFMTS run -- [MS-XLS] 2.1.7.20.6's own production (`*(CONDFMT / CONDFMT12)`) admits either grouping, and conditional-format.ts's reader walk is order-tolerant across the two families besides.
   return [...basePieces, ...cf12Pieces];
 }
