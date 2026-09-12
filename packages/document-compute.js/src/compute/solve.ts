@@ -122,8 +122,8 @@ function bisection(
     if (Math.abs(fMid) < tolerance) {
       return mid;
     }
-    // Stryker disable next-line EqualityOperator: `fMid > 0` vs `fMid >= 0` (and likewise for `fLow`) only disagree when the operand is exactly 0 -- but the `Math.abs(fMid) < tolerance` return above already catches fMid === 0 whenever tolerance > 0 (0 is always < a positive tolerance), so this line is never reached with fMid === 0 in that case. The only way to reach it with fMid === 0 is tolerance <= 0, and then this line's outcome can never be observed either: no residual ever satisfies a `< tolerance` (or `<= 0`) check again for the rest of the run, so the loop always exhausts to the identical `maxIterations`-and-`tolerance` message regardless of which branch was taken here. fLow is bound to fMid in the true branch (`fLow = fMid`), so the same reasoning applies to it on every subsequent iteration.
-    if (fMid > 0 === fLow > 0) {
+    // Which half of the bracket still straddles the root: the half whose two residuals disagree in sign. Compared as Math.sign values rather than as a pair of `> 0` booleans, because the boolean spelling has to decide which side an exact zero belongs to -- and both answers are defensible, so `> 0` and `>= 0` are two equally correct spellings of the same intent that only ever disagree on a residual the `Math.abs(fMid) < tolerance` return above has already claimed. Math.sign keeps zero as its own third value instead, which drops it out of the half being kept (a residual of exactly zero IS the root, so shrinking the bracket down onto it from the other side is the correct move) with no boundary comparison to spell either way.
+    if (Math.sign(fMid) === Math.sign(fLow)) {
       low = mid;
       fLow = fMid;
     } else {
@@ -165,17 +165,8 @@ function newton(
         `the numeric derivative vanished or diverged near x=${x}`,
       );
     }
-    const next = x - fx / derivative;
-    // Stryker disable next-line ConditionalExpression,BlockStatement: kept as a genuine safety net (a caller-supplied MathExpression could in principle be pathological), but no expression buildable from this package's own grammar (add/subtract/multiply/divide/pow/trig, all smooth away from their own poles) can actually reach this branch without derivative having already failed the check above. For any such function, |f'(x)| scales with |f(x)| / |x| near an ordinary point (so a residual large enough to overflow fx / derivative forces a comparably large, non-vanishing derivative, keeping the quotient bounded), and at a genuine critical point (f' -> 0) reaching a residual that large requires an additive constant so much bigger than the varying term that the central-difference subtraction rounds the measured derivative to exactly 0.0 -- caught above as vanished, never as a small-but-finite value here. So `next` is non-finite if and only if `derivative` already was, or fx itself already was (both already thrown above by the time this line runs), which also means the throw body immediately below -- including its own message -- has no reachable input to exercise it either.
-    if (!Number.isFinite(next)) {
-      throw new NonConvergentSolveError(
-        "newton",
-        i,
-        // Stryker disable next-line StringLiteral: unreachable for the same reason as the guard above -- see that comment.
-        `the iteration diverged to a non-finite value near x=${x}`,
-      );
-    }
-    x = next;
+    // The step itself needs no separate non-finite guard: the check above is the one that catches divergence, and it catches it on the very next pass rather than this one. A non-finite x makes f(x) non-finite, which makes the central difference above non-finite (or NaN), which fails `Number.isFinite(derivative)` and throws -- so an iterate that runs away still terminates as a NonConvergentSolveError naming the point it ran away from, one iteration later, instead of silently spinning out the iteration budget. Guarding `x` here as well would only restate that, for an input the smooth grammar this package evaluates cannot actually produce.
+    x = x - fx / derivative;
   }
   throw new NonConvergentSolveError(
     "newton",
