@@ -1,3 +1,9 @@
+## [1.2.3](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.2.2...excel-number-format%401.2.3) (2026-09-12)
+
+### Tests
+
+* **excel-number-format:** eliminate every mutant by restructuring rather than suppressing ([b437e59](https://github.com/ExaDev/documents.js/commit/b437e59cd01815ef0e5206661022caac580649d8))
+
 ## [1.2.2](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.2.1...excel-number-format%401.2.2) (2026-09-11)
 
 ### Tests

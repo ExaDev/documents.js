@@ -1,3 +1,11 @@
+## [7.20.5](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.4...documents.js%407.20.5) (2026-09-12)
+
+
+### Dependencies
+
+- Updated ooxml.js to 8.14.4
+- Updated xls-codec to 4.15.3
+
 ## [7.20.4](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.3...documents.js%407.20.4) (2026-09-12)
 
 

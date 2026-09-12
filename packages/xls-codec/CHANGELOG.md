@@ -1,3 +1,10 @@
+## [4.15.3](https://github.com/ExaDev/documents.js/compare/xls-codec%404.15.2...xls-codec%404.15.3) (2026-09-12)
+
+
+### Dependencies
+
+- Updated excel-number-format to 1.2.3
+
 ## [4.15.2](https://github.com/ExaDev/documents.js/compare/xls-codec%404.15.1...xls-codec%404.15.2) (2026-09-11)
 
 
