@@ -223,6 +223,7 @@ function readLengthPrefixedByteString(
   }
   const slice = cursor.bytes.subarray(cursor.offset, cursor.offset + length);
   cursor.offset += length;
+  // Stryker disable next-line ArrowFunction,StringLiteral: this function's only caller (code 30's floating point constant) discards the decoded string itself and checks only whether it is defined -- the double it read is what the caller reports, this spelling is skipped past. Both mutations here still produce a real, defined string of the same length, never undefined, so the one thing the caller observes is unaffected regardless of what text this actually builds.
   return Array.from(slice, (byte) => String.fromCharCode(byte)).join("");
 }
 
