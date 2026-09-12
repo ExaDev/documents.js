@@ -60,6 +60,11 @@ describe("resolveIcvColor", () => {
   it("does not resolve a value outside every documented range", () => {
     expect(resolveIcvColor(0x7fff, undefined)).toBeUndefined();
   });
+
+  it("resolves icv 63, the palette range's own last valid index, and refuses icv 64, one past it", () => {
+    expect(resolveIcvColor(63, undefined)).toBeDefined();
+    expect(resolveIcvColor(64, undefined)).toBeUndefined();
+  });
 });
 
 describe("DEFAULT_PALETTE_HEX_TO_ICV", () => {
@@ -310,4 +315,77 @@ describe("applyTint", () => {
     expect(tinted.g).toBeCloseTo(tinted.b);
     expect(tinted.r).toBeGreaterThan(grey.r);
   });
+
+  // An independent reference implementation of the identical, standard sRGB<->HSL conversion (W3C CSS Color Module Level 3's own algorithm, https://www.w3.org/TR/css-color-3/#hsl-color) plus the tint formula the source's own top comment cites -- so the colours below (none of them a pure primary, unlike red/grey above, both of which happen to compute an exact 0.5 lightness that never exercises the s formula's own l > 0.5 branch or any hue branch but max === r) can be checked against a real computed expectation rather than only a directional bound.
+  function referenceTint(
+    color: { r: number; g: number; b: number },
+    tint: number,
+  ): { r: number; g: number; b: number } {
+    const { r, g, b } = color;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    let h = 0;
+    let s = 0;
+    if (max !== min) {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      if (max === r) {
+        h = (g - b) / d + (g < b ? 6 : 0);
+      } else if (max === g) {
+        h = (b - r) / d + 2;
+      } else {
+        h = (r - g) / d + 4;
+      }
+      h /= 6;
+    }
+    const newL = tint < 0 ? l * (1 + tint) : l * (1 - tint) + tint;
+    if (s === 0) {
+      return { r: newL, g: newL, b: newL };
+    }
+    const q = newL < 0.5 ? newL * (1 + s) : newL + s - newL * s;
+    const p = 2 * newL - q;
+    const hueToRgb = (t: number): number => {
+      let tt = t;
+      if (tt < 0) tt += 1;
+      if (tt > 1) tt -= 1;
+      if (tt < 1 / 6) return p + (q - p) * 6 * tt;
+      if (tt < 1 / 2) return q;
+      if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
+      return p;
+    };
+    return { r: hueToRgb(h + 1 / 3), g: hueToRgb(h), b: hueToRgb(h - 1 / 3) };
+  }
+
+  it.each([
+    // A lightened variant of blue (b uniquely max, l <= 0.5) -- the hue branch neither red (max === r) nor the green case below exercises.
+    {
+      label: "b-dominant, l<=0.5",
+      color: { r: 0.2, g: 0.2, b: 0.6 },
+      tint: 0.5,
+    },
+    // g uniquely max, l > 0.5 -- the s formula's own d / (2 - max - min) branch, which red's exact 0.5 lightness never selects.
+    { label: "g-dominant, l>0.5", color: { r: 0.6, g: 1, b: 0.7 }, tint: 0.5 },
+    // r max with g < b (red's own g === b never selects the "+6" branch of that ternary), shaded rather than tinted.
+    {
+      label: "r-dominant with g<b, shaded",
+      color: { r: 0.8, g: 0.1, b: 0.3 },
+      tint: -0.4,
+    },
+    // g-dominant with b well below r -- the one shape among these whose own computed hue puts h - 1/3 below zero, exercising hueToRgb's own negative-wraparound branch none of the other cases here reach.
+    {
+      label: "g-dominant, low hue",
+      color: { r: 0.9, g: 1, b: 0.1 },
+      tint: 0.3,
+    },
+  ] as const)(
+    "matches an independently computed HSL tint for $label",
+    ({ color, tint }) => {
+      const expected = referenceTint(color, tint);
+      const actual = applyTint(color, tint);
+      expect(actual.r).toBeCloseTo(expected.r);
+      expect(actual.g).toBeCloseTo(expected.g);
+      expect(actual.b).toBeCloseTo(expected.b);
+    },
+  );
 });
