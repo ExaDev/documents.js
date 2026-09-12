@@ -1,3 +1,10 @@
+## [1.7.2](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.7.1...ppt-codec%401.7.2) (2026-09-12)
+
+
+### Dependencies
+
+- Updated byte-codec to 1.5.2
+
 ## [1.7.1](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.7.0...ppt-codec%401.7.1) (2026-09-11)
 
 ### Code Refactoring
