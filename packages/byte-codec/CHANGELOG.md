@@ -1,3 +1,9 @@
+## [1.5.2](https://github.com/ExaDev/documents.js/compare/byte-codec%401.5.1...byte-codec%401.5.2) (2026-09-12)
+
+### Tests
+
+* **byte-codec:** reach a 100% mutation score ([e68567c](https://github.com/ExaDev/documents.js/commit/e68567ca87f4aa1ae0b03ce812b0e801d6877be4))
+
 ## [1.5.1](https://github.com/ExaDev/documents.js/compare/byte-codec%401.5.0...byte-codec%401.5.1) (2026-09-11)
 
 ### Code Refactoring
