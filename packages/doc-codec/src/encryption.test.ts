@@ -96,6 +96,26 @@ describe("decryptDocStreams (RC4)", () => {
     );
     expect(table.subarray(0, LKEY)).toEqual(tableBefore.subarray(0, LKEY));
   });
+
+  it("refuses RC4 CryptoAPI's own EncryptionVersionInfo rather than misreading it as the plain RC4 header", () => {
+    const table = buildTable();
+    new DataView(table.buffer).setUint16(2, 2, true); // vMinor 2 -> RC4 CryptoAPI, [MS-DOC] 2.2.6.3.
+    expect(() =>
+      decryptDocStreams(buildWordDocument(), table, PASSWORD, false),
+    ).toThrow(/RC4 CryptoAPI/);
+  });
+
+  it("throws rather than reading past the end of a Table stream too short for the EncryptionHeader", () => {
+    const shortTable = buildTable().subarray(0, 10);
+    expect(() =>
+      decryptDocStreams(
+        buildWordDocument(),
+        new Uint8Array(shortTable),
+        PASSWORD,
+        false,
+      ),
+    ).toThrow(/runs past the end/);
+  });
 });
 
 describe("decryptDocStreams (XOR obfuscation)", () => {
