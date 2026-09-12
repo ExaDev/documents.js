@@ -29,27 +29,31 @@ function padTo4(length: number): number {
   return Math.ceil(length / 4) * 4;
 }
 
+// One Data4 byte's own two hex characters, starting at charIndex: kept as a single shared expression (rather than writeGuid computing a start and an independently-derived end) so a wrong charIndex always extracts a genuinely different two-character window, never one that merely gains extra leading digits setUint8's own mod-256 truncation would silently discard.
+function hexByte(digits: string, charIndex: number): number {
+  return Number.parseInt(digits.slice(charIndex, charIndex + 2), 16);
+}
+
 function writeGuid(view: DataView, offset: number, guid: string): void {
   const digits = guid.replace(/[{}-]/g, "");
   view.setUint32(offset, Number.parseInt(digits.slice(0, 8), 16), true);
   view.setUint16(offset + 4, Number.parseInt(digits.slice(8, 12), 16), true);
   view.setUint16(offset + 6, Number.parseInt(digits.slice(12, 16), 16), true);
-  for (let i = 0; i < 8; i++) {
-    view.setUint8(
-      offset + 8 + i,
-      Number.parseInt(digits.slice(16 + i * 2, 18 + i * 2), 16),
-    );
+  // Data4's own 8 bytes, over a literal index list rather than a `for` loop's own comparison bound: a bound one iteration too long or short would otherwise land on the byte immediately past the GUID's own 16 bytes, which every real call site overwrites with its own next field regardless, leaving the off-by-one silently unobservable.
+  for (const i of [0, 1, 2, 3, 4, 5, 6, 7]) {
+    view.setUint8(offset + 8 + i, hexByte(digits, 16 + i * 2));
   }
 }
 
+// Walks value.split("") rather than a `for` loop bound by value.length: a loop bound one iteration too long would write its extra byte at exactly the already-zero null-terminator slot the allocation reserves, an equivalent mutant no test could ever observe. split("") has no comparison bound to mismeasure in the first place.
 function encodeAsciiCodePageString(value: string): Uint8Array<ArrayBuffer> {
   const size = value.length + 1; // + null terminator
   const bytes = new Uint8Array(4 + padTo4(size));
   const view = new DataView(bytes.buffer);
   view.setUint32(0, size, true);
-  for (let i = 0; i < value.length; i++) {
-    bytes[4 + i] = value.charCodeAt(i);
-  }
+  value.split("").forEach((char, i) => {
+    view.setUint8(4 + i, char.charCodeAt(0));
+  });
   return bytes;
 }
 
@@ -59,9 +63,9 @@ function encodeUnicodeString(value: string): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(4 + padTo4(charBytes));
   const view = new DataView(bytes.buffer);
   view.setUint32(0, units, true);
-  for (let i = 0; i < value.length; i++) {
-    view.setUint16(4 + i * 2, value.charCodeAt(i), true);
-  }
+  value.split("").forEach((char, i) => {
+    view.setUint16(4 + i * 2, char.charCodeAt(0), true);
+  });
   return bytes;
 }
 
