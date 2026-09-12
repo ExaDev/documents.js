@@ -113,16 +113,19 @@ export function buildTextBody(
   const paragraphs = blocks.filter(
     (block): block is ContentParagraph => block.kind === "paragraph",
   );
-  const bodies = paragraphs.map((paragraph) =>
-    paragraph.runs.map((run) => storedRunText(run.text)).join(""),
-  );
-  const text = bodies.join(PARAGRAPH_SEPARATOR);
+  // Each paragraph paired with its own already-joined body text, rather than two same-length arrays indexed separately: the pairing is what a plain positional lookup back into a second array would only reconstruct by assuming the two stay in step, and TypeScript's own noUncheckedIndexedAccess would then need a fallback for an index that is, in fact, never out of range.
+  const paragraphBodies = paragraphs.map((paragraph) => ({
+    paragraph,
+    bodyText: paragraph.runs.map((run) => storedRunText(run.text)).join(""),
+  }));
+  const text = paragraphBodies
+    .map(({ bodyText }) => bodyText)
+    .join(PARAGRAPH_SEPARATOR);
 
   const paragraphRuns: StyleRun<ParagraphProperties>[] = [];
   const characterRuns: StyleRun<CharacterProperties>[] = [];
 
-  paragraphs.forEach((paragraph, index) => {
-    const bodyText = bodies[index] ?? "";
+  paragraphBodies.forEach(({ paragraph, bodyText }) => {
     paragraphRuns.push({
       count: bodyText.length + 1,
       properties: {
