@@ -370,7 +370,9 @@ export function decodeWpgGraphic(
   const recordName = (type: number): string =>
     RECORD_NAMES.get(type) ?? `record type 0x${type.toString(16)}`;
 
+  // Stryker disable next-line EqualityOperator: at the exact tie (cursor === bytes.length) the loop body's own very first check (cursor + 2 > bytes.length) is also true, breaking immediately either way -- so entering the loop body one extra time at this tie changes nothing observable.
   while (cursor < bytes.length) {
+    // Stryker disable next-line EqualityOperator: at the exact tie (cursor + 2 === bytes.length) the 2-byte Class/Type header is read successfully either way, but with nothing left afterwards readCountField's own first byte read returns undefined immediately, breaking the walk on the very next check regardless of which operator gates this one.
     if (cursor + 2 > bytes.length) {
       break;
     }
@@ -539,6 +541,7 @@ export function decodeWpgGraphic(
       }
     }
 
+    // Stryker disable next-line ConditionalExpression,EqualityOperator: forcing the length check to always-true, or weakening > to >=, only ever matters when groups is empty (length 0) -- and there, `groups[groups.length - 1]` is already `groups[-1]`, so the optional-chained `?.remaining === 0` on the right independently evaluates to `undefined === 0`, false, regardless of the left operand. Both mutants agree with the original on every input.
     while (groups.length > 0 && groups[groups.length - 1]?.remaining === 0) {
       groups.pop();
     }
@@ -585,6 +588,7 @@ function readTextBlockFrame(
   const characterization = readCharacterization(data, 0, data.length);
   if (
     characterization === undefined ||
+    // Stryker disable next-line EqualityOperator: readCharacterization is always called with cursor 0 here, so its own geometryAt is either the -1 refusal sentinel or cursor + 2 (at least 2); it can never be exactly 0, so < and <= agree on every reachable value.
     characterization.geometryAt < 0 ||
     characterization.geometryAt + geometry.coordinateSize * 4 > data.length
   ) {
@@ -636,6 +640,7 @@ function readPrimitiveVector(
   state: WpgRenditionState,
 ): ContentVector | undefined {
   const characterization = readCharacterization(data, 0, data.length);
+  // Stryker disable next-line EqualityOperator: readCharacterization is always called with cursor 0 here, so its own geometryAt is either the -1 refusal sentinel or cursor + 2 (at least 2); it can never be exactly 0, so < and <= agree on every reachable value.
   if (characterization === undefined || characterization.geometryAt < 0) {
     return undefined;
   }
@@ -669,6 +674,7 @@ function readPolyline(
   stroke: ContentStroke | undefined,
   state: WpgRenditionState,
 ): ContentVector | undefined {
+  // Stryker disable next-line EqualityOperator: at the exact tie (geometryAt + 2 === data.length) the count field is read successfully either way -- but with zero bytes left for any point, a count of 0 empties `points` (refused below, no first point) and a count > 0 immediately fails the per-point room check on its first iteration, so both operators end in the identical refusal.
   if (geometryAt + 2 > data.length) {
     return undefined;
   }
