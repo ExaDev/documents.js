@@ -12,10 +12,15 @@ const ASCII_CHUNK_SIZE = 8192;
 
 export function asciiStringFromBytes(input: Uint8Array): string {
   let out = "";
-  for (let start = 0; start < input.length; start += ASCII_CHUNK_SIZE) {
-    out += String.fromCharCode(
-      ...input.subarray(start, start + ASCII_CHUNK_SIZE),
-    );
+  let start = 0;
+  // Stops on the first empty chunk rather than comparing `start` against `input.length` directly: Uint8Array.subarray already clamps a past-the-end range to empty on its own, so this is the one condition that actually distinguishes "more bytes remain" from "done", regardless of whether input.length happens to be an exact multiple of ASCII_CHUNK_SIZE.
+  for (;;) {
+    const chunk = input.subarray(start, start + ASCII_CHUNK_SIZE);
+    if (chunk.length === 0) {
+      break;
+    }
+    out += String.fromCharCode(...chunk);
+    start += ASCII_CHUNK_SIZE;
   }
   return out;
 }
@@ -29,7 +34,8 @@ export function appendBytes(target: number[], input: Uint8Array): void {
 
 export function rtfBytesFromLatin1(source: string): Uint8Array {
   const out = new Uint8Array(source.length);
-  for (let index = 0; index < source.length; index += 1) {
+  // index increments by exactly 1 every iteration, so it can never skip past source.length -- !== is exactly equivalent to < here, and unlike <, an off-by-one mutation of it (=== in place of !==) stops the loop from running at all instead of surviving unobserved.
+  for (let index = 0; index !== source.length; index += 1) {
     const code = source.charCodeAt(index);
     if (code > 0xff) {
       throw new RtfParseError(
