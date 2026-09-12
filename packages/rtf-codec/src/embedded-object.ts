@@ -29,9 +29,6 @@ const OBJECT_HEADER_OLE_VERSION = 0x00000501;
 // ObjectHeader.ClassName for this module's own EmbeddedObject: "Package" is the class name real Word/PowerPoint write for exactly this shape -- an OLE Package stream sitting inside the object's native data -- so a real OLE-aware consumer that cannot decode our own JSON payload still sees a recognisable, accurate class rather than an invented ProgID.
 const OBJECT_HEADER_CLASS_NAME = "Package";
 
-// The ANSI decoder for ObjectHeader's three LengthPrefixedAnsiString fields, matching archive-codec's own cfb/ole-package.ts convention for the identical kind of producer-locale ANSI string.
-const ANSI_DECODER = new TextDecoder("windows-1252");
-
 // [MS-OLEDS] 2.2.1 PresentationObjectHeader.FormatID: "This MUST be set to 0x00000000 or 0x00000005 ... 0x00000005 [means] The ClassName field is present." This module's own Presentation field always carries a ClassName (see PRESENTATION_CLASS_NAME below), so it only ever writes 0x00000005, and only ever accepts that value back -- a real presentation object with FormatID 0x00000000 exists in principle but is not a shape this module's own writer ever produces.
 const PRESENTATION_OBJECT_HEADER_FORMAT_ID = 0x00000005;
 
@@ -47,18 +44,10 @@ const DIB_HEADER_SIZE_BITMAPINFOHEADER = 40;
 // [MS-WMF] 2.1.1.3 BitCount Enumeration's BI_BITCOUNT_1: "The image is specified with two colours... represented by a single bit." The smallest legal pixel depth a DeviceIndependentBitmap Object can declare, paired with a 2-entry RGBQuad colour table below.
 const DIB_BIT_COUNT_MONOCHROME = 1;
 
-// [MS-OLEDS] 2.1.4 LengthPrefixedAnsiString: "Length (4 bytes): This MUST be set to the number of ANSI characters in the String field, including the terminating null character. Length MUST be set to 0x00000000 to indicate an empty string." -- so an empty string is the 4-byte zero length alone, with no String field at all, not a length of 1 holding just a null byte.
+// [MS-OLEDS] 2.1.4 LengthPrefixedAnsiString: "Length (4 bytes): This MUST be set to the number of ANSI characters in the String field, including the terminating null character. Length MUST be set to 0x00000000 to indicate an empty string." -- so an empty string is the 4-byte zero length alone, with no String field at all, not a length of 1 holding just a null byte. Every caller passes one of this module's own fixed ASCII constants (OBJECT_HEADER_CLASS_NAME, or an empty string), never caller-supplied text, so this trusts its input is ASCII rather than re-validating a property already guaranteed by construction.
 function writeLengthPrefixedAnsiString(value: string): Uint8Array<ArrayBuffer> {
   if (value.length === 0) {
     return new Uint8Array(4); // already zero -- Length = 0x00000000
-  }
-  for (let index = 0; index < value.length; index++) {
-    const code = value.charCodeAt(index);
-    if (code > 0x7f) {
-      throw new Error(
-        `ObjectHeader string contains a character (U+${code.toString(16).padStart(4, "0")}) outside ASCII; encoding it to an arbitrary windows-1252 byte would need a full codepage table this module does not carry`,
-      );
-    }
   }
   const length = value.length + 1; // + the terminating null character, per LengthPrefixedAnsiString's own field definition
   const out = new Uint8Array(4 + length);
@@ -71,31 +60,19 @@ function writeLengthPrefixedAnsiString(value: string): Uint8Array<ArrayBuffer> {
   return out;
 }
 
-// The mirror of writeLengthPrefixedAnsiString. Throws on any structural shortfall (loud failure over a truncated string that looks complete), matching archive-codec's readZeroTerminated/readOlePackage precedent for the identical class of format.
+// The mirror of writeLengthPrefixedAnsiString, returning only the offset immediately past the field -- every caller (readObjectHeader, skipPresentationObjectHeader) walks past a LengthPrefixedAnsiString purely to reach whatever follows it, and never inspects the string itself (ClassName/TopicName/ItemName all name a shape this reader already knows from context, not information it acts on), so this skips decoding it at all rather than computing a value nothing reads. Reading the Length field needs no explicit bounds check: DataView.getUint32 already throws a RangeError when offset+4 exceeds bytes.length, caught by readEmbeddedObjectData's own shared catch. The declared String length is never validated against bytes.length either, even though Uint8Array.subarray would silently clamp an out-of-range end index rather than throw were the bytes actually decoded: the returned offset alone is what every caller trusts, and an offset that overruns the real buffer is still caught the moment it is next used for a bounds-checked read (a getUint32 field, or the final NativeData/PresentationData subarray-and-decode) -- there is no path through this module where an overlong declared length reaches a caller that trusts it uninspected.
 function readLengthPrefixedAnsiString(
   bytes: Uint8Array<ArrayBuffer>,
   offset: number,
-  fieldName: string,
-): { readonly value: string; readonly next: number } {
-  if (offset + 4 > bytes.length) {
-    throw new Error(`ObjectHeader ends before its ${fieldName} length field`);
-  }
+): number {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const length = view.getUint32(offset, true);
   offset += 4;
   if (length === 0) {
-    return { value: "", next: offset };
+    return offset;
   }
-  if (offset + length > bytes.length) {
-    throw new Error(
-      `ObjectHeader's ${fieldName} declares ${length} bytes but only ${bytes.length - offset} remain`,
-    );
-  }
-  // length includes the terminating null character (LengthPrefixedAnsiString's own definition); drop it rather than decode it as a character.
-  const value = ANSI_DECODER.decode(
-    bytes.subarray(offset, offset + length - 1),
-  );
-  return { value, next: offset + length };
+  // length includes the terminating null character -- LengthPrefixedAnsiString's own definition -- so the field's total byte span is exactly `length` past this point.
+  return offset + length;
 }
 
 // Builds an [MS-OLEDS] 2.2.4 ObjectHeader for an EmbeddedObject: OLEVersion, FormatID (fixed at 0x00000002 -- this module never writes a LinkedObject), then ClassName/TopicName/ItemName as LengthPrefixedAnsiStrings. TopicName and ItemName are both empty: "If the ObjectHeader structure is contained by an EmbeddedObject structure ... the TopicName [ItemName] field SHOULD contain an empty string and MUST be ignored on processing" -- both are LinkedObject-only fields.
@@ -124,23 +101,17 @@ function writeObjectHeader(): Uint8Array<ArrayBuffer> {
   return out;
 }
 
-// The mirror of writeObjectHeader, generalised to accept either FormatID this reader may legitimately encounter (a real \object could carry a LinkedObject's header, even though this module's own writer never produces one). OLEVersion is read and discarded -- "MUST be ignored on receipt" is the spec's own instruction, not this module's choice.
+// The mirror of writeObjectHeader, generalised to accept either FormatID this reader may legitimately encounter (a real \object could carry a LinkedObject's header, even though this module's own writer never produces one). OLEVersion is read and discarded -- "MUST be ignored on receipt" is the spec's own instruction, not this module's choice. Reading FormatID needs no explicit length guard: DataView.getUint32 already throws a RangeError for bytes shorter than 8, caught by readEmbeddedObjectData's own shared catch exactly like every other structural shortfall this module reports.
 function readObjectHeader(bytes: Uint8Array<ArrayBuffer>): {
   readonly formatId: number;
   readonly next: number;
 } {
-  if (bytes.length < 8) {
-    throw new Error("ObjectHeader ends before its FormatID field");
-  }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const formatId = view.getUint32(4, true);
   let offset = 8;
-  const className = readLengthPrefixedAnsiString(bytes, offset, "ClassName");
-  offset = className.next;
-  const topicName = readLengthPrefixedAnsiString(bytes, offset, "TopicName");
-  offset = topicName.next;
-  const itemName = readLengthPrefixedAnsiString(bytes, offset, "ItemName");
-  offset = itemName.next;
+  offset = readLengthPrefixedAnsiString(bytes, offset); // ClassName
+  offset = readLengthPrefixedAnsiString(bytes, offset); // TopicName
+  offset = readLengthPrefixedAnsiString(bytes, offset); // ItemName
   return { formatId, next: offset };
 }
 
@@ -210,16 +181,11 @@ function writePresentationObject(): Uint8Array<ArrayBuffer> {
   return out;
 }
 
-// The mirror of writePresentationObjectHeader: validates and skips a PresentationObjectHeader, throwing when the bytes are not this module's own shape (a FormatID other than 0x00000005, or a truncated ClassName) -- readEmbeddedObjectData's shared catch treats that identically to every other reason a payload is not this package's own.
+// The mirror of writePresentationObjectHeader: validates and skips a PresentationObjectHeader, throwing when the bytes are not this module's own shape (a FormatID other than 0x00000005, or a truncated ClassName) -- readEmbeddedObjectData's shared catch treats that identically to every other reason a payload is not this package's own. Reading FormatID needs no explicit length guard of its own: DataView.getUint32 already throws a RangeError for a truncated field, caught the same way.
 function skipPresentationObjectHeader(
   bytes: Uint8Array<ArrayBuffer>,
   offset: number,
 ): number {
-  if (offset + 8 > bytes.length) {
-    throw new Error(
-      "the Presentation field ends before its PresentationObjectHeader's FormatID",
-    );
-  }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const formatId = view.getUint32(offset + 4, true);
   if (formatId !== PRESENTATION_OBJECT_HEADER_FORMAT_ID) {
@@ -227,25 +193,15 @@ function skipPresentationObjectHeader(
       `PresentationObjectHeader.FormatID is 0x${formatId.toString(16).padStart(8, "0")}, not the 0x00000005 this module's own Presentation field always writes`,
     );
   }
-  const className = readLengthPrefixedAnsiString(
-    bytes,
-    offset + 8,
-    "PresentationObjectHeader.ClassName",
-  );
-  return className.next;
+  return readLengthPrefixedAnsiString(bytes, offset + 8); // PresentationObjectHeader.ClassName
 }
 
-// The mirror of writeClipboardFormatHeader.
+// The mirror of writeClipboardFormatHeader. Reading ClipboardFormat needs no explicit length guard of its own, for the identical reason skipPresentationObjectHeader's own FormatID read doesn't.
 function skipClipboardFormatHeader(
   bytes: Uint8Array<ArrayBuffer>,
   offset: number,
 ): number {
   const afterHeader = skipPresentationObjectHeader(bytes, offset);
-  if (afterHeader + 4 > bytes.length) {
-    throw new Error(
-      "ClipboardFormatHeader ends before its ClipboardFormat field",
-    );
-  }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const clipboardFormat = view.getUint32(afterHeader, true);
   if (clipboardFormat !== CLIPBOARD_FORMAT_CF_DIB) {
@@ -262,11 +218,7 @@ function skipPresentationObject(
   offset: number,
 ): number {
   const afterHeader = skipClipboardFormatHeader(bytes, offset);
-  if (afterHeader + 4 > bytes.length) {
-    throw new Error(
-      "StandardClipboardFormatPresentationObject ends before its PresentationDataSize field",
-    );
-  }
+  // PresentationDataSize itself needs no explicit length guard (DataView.getUint32 already throws for a truncated field), but the check below is genuinely load-bearing: the returned offset is never itself bounds-checked by any caller, so this is the only place a PresentationDataSize claiming more bytes than actually exist is ever caught.
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const presentationDataSize = view.getUint32(afterHeader, true);
   const dataStart = afterHeader + 4;
@@ -373,9 +325,7 @@ export function readEmbeddedObjectData(
     ) {
       return undefined;
     }
-    if (header.next + 4 > bytes.length) {
-      return undefined;
-    }
+    // NativeDataSize itself needs no explicit length guard: DataView.getUint32 already throws a RangeError for a truncated field, caught by the shared catch below exactly like every other structural shortfall. NativeData's own bounds do need one -- Uint8Array.subarray silently clamps an out-of-range end index rather than throwing, so without this check an oversized nativeDataSize would hand readCompoundFile a silently truncated buffer instead of being rejected outright.
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const nativeDataSize = view.getUint32(header.next, true);
     const nativeDataStart = header.next + 4;
