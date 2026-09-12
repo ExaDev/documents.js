@@ -242,4 +242,25 @@ describe("readStyleBeginBlock", () => {
       new Uint8Array(bytes.slice(0, 5)),
     );
   });
+
+  // The header's own fourth field (extraStyleTextSize) is never read by this function -- only relativeOffset, paragraphTextSize, and beginningStyleTextSize are -- but the room guard still checks for all four LONGs' worth of space, TEXT_BLOCK_HEADER_SIZE (18) bytes past afterPids. A packet with room for exactly the three real reads (14 bytes past afterPids) but not the fourth still states a begin block that would, on the bytes read alone, appear to fit within those same 14 bytes -- proving the guard's own room requirement is load-bearing rather than redundant with the reads it precedes.
+  it("rejects a packet whose header has room for the three fields this function reads but not the fourth it never reads", () => {
+    const bytes = new Array<number>(16).fill(0); // pid count (2) + 14: exactly enough for relativeOffset/paragraphTextSize/beginningStyleTextSize, one 4-byte field short of the full header
+    putUint32(bytes, 12, 3); // beginningStyleTextSize = 3; relativeOffset and paragraphTextSize stay 0, so a begin block of bytes 0-2 would otherwise fit inside these 16 bytes
+    expect(readStyleBeginBlock(new Uint8Array(bytes))).toBeUndefined();
+  });
+
+  // A nonzero pid count whose doubled byte cost, if computed with the wrong sign, still lands on a small, in-bounds (but wrong) afterPids rather than a deeply negative one a later throw would catch -- unlike the overrun case above, this proves the addition itself (not just its magnitude) is load-bearing.
+  it("computes afterPids by adding the pid list's own byte cost, not subtracting it", () => {
+    const bytes = new Array<number>(30).fill(0);
+    bytes[0] = 1; // pid count = 1, so afterPids = 2 + 1 * 2 = 4
+    putUint32(bytes, 6, 24); // relativeOffset at afterPids + 2 = 6
+    putUint32(bytes, 14, 3); // beginningStyleTextSize at afterPids + 10 = 14
+    bytes[24] = 9;
+    bytes[25] = 9;
+    bytes[26] = 9; // the begin block itself, at relativeOffset (24) + paragraphTextSize (0)
+    expect(readStyleBeginBlock(new Uint8Array(bytes))).toEqual(
+      new Uint8Array([9, 9, 9]),
+    );
+  });
 });
