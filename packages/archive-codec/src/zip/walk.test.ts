@@ -140,6 +140,11 @@ describe("walkArchive depth guard", () => {
     const error = catchLimit(() => walkArchive(bytes));
     expect(error.limit).toBe("depth");
     expect(error.name).toBe("ArchiveWalkLimitError");
+    // The message names both the configured cap and the " > "-joined ancestor chain that reached it, outermost archive first: nestZip's own wrapping order makes level-(MAX_WALK_DEPTH - 1).zip the outermost entry and level-0.zip the one that directly contains innermost.txt.
+    expect(error.message).toContain(`maximum walk depth of ${MAX_WALK_DEPTH}`);
+    expect(error.message).toContain(
+      `level-${MAX_WALK_DEPTH - 1}.zip > level-${MAX_WALK_DEPTH - 2}.zip`,
+    );
   });
 
   it("honours a tighter caller-supplied maxDepth", () => {
@@ -157,9 +162,9 @@ describe("walkArchive cumulative-size guard", () => {
       "a.bin": new Uint8Array(600),
       "b.bin": new Uint8Array(600),
     });
-    expect(
-      catchLimit(() => walkArchive(bytes, { maxTotalBytes: 1000 })).limit,
-    ).toBe("total-bytes");
+    const error = catchLimit(() => walkArchive(bytes, { maxTotalBytes: 1000 }));
+    expect(error.limit).toBe("total-bytes");
+    expect(error.message).toContain("exceeded the 1000-byte budget at b.bin");
   });
 
   it("counts decompressed bytes cumulatively across nesting levels, not per archive", () => {
