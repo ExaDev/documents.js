@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   DocumentTreeSchema,
+  type ContentParagraph,
   type DocumentTree,
   type StylesTable,
 } from "document-schema.js";
-import { effectivePackage } from "./effective";
+import {
+  assertResolvedHeadingAnchor,
+  assertResolvedListAnchor,
+  effectivePackage,
+} from "./effective";
 import {
   drawPageGroup,
   drawingPackage,
@@ -30,6 +35,8 @@ import {
 const styles: StylesTable = {
   outer: { paragraph: { indentLeftPt: 24 }, run: { bold: true } },
   inner: { paragraph: { indentLeftPt: 48 } },
+  // Neither a paragraph nor a run half: resolving against this ref changes nothing, so a group carrying it as its OWN style still has its ref consumed (stripped) even though its anchor and children come back unaffected.
+  emptyEntry: {},
 };
 
 function expectSchemaValid(pkg: DocumentTree, label: string): void {
@@ -305,6 +312,426 @@ describe("effectivePackage", () => {
     expect(effectivePackage(pkg)).toEqual(bare);
   });
 
+  it("strips a section group's own consumed style ref even when its children are otherwise unaffected", () => {
+    const cellsTable = table([["cell"]]);
+    const pkg = wordprocessingPackage(
+      [sectionGroup([cellsTable], { style: "outer" })],
+      { styles },
+    );
+    const resolved = effectivePackage(pkg);
+    const group = resolved.children[0]!;
+    expect("style" in group).toBe(false);
+    asGroup(group);
+    expect(group.children[0]).toBe(cellsTable);
+  });
+
+  it("returns the identical slide group by reference when nothing in it needs resolving", () => {
+    const slide = slideGroup([shapeGroup([table([["x"]])])]);
+    const pkg = presentationPackage([slide], { styles });
+    expect(effectivePackage(pkg).children[0]).toBe(slide);
+  });
+
+  it("strips a slide group's own consumed style ref even when none of its shapes change", () => {
+    const slide = slideGroup([shapeGroup([table([["x"]])])], {
+      style: "outer",
+    });
+    const pkg = presentationPackage([slide], { styles });
+    const resolvedSlide = effectivePackage(pkg).children[0]!;
+    expect("style" in resolvedSlide).toBe(false);
+  });
+
+  it("returns the identical sheet group by reference when it carries no style, and a stripped rebuild when it does", () => {
+    const noStyleSheet = sheetGroup({ name: "NoStyle" });
+    const styledSheet = sheetGroup({ name: "Styled", style: "outer" });
+    const pkg = spreadsheetPackage([noStyleSheet, styledSheet], { styles });
+    const resolved = effectivePackage(pkg);
+    expect(resolved.children[0]).toBe(noStyleSheet);
+    expect(resolved.children[1]).not.toBe(styledSheet);
+    expect("style" in resolved.children[1]!).toBe(false);
+  });
+
+  it("returns the identical draw page group by reference when nothing in it needs resolving", () => {
+    const line = vectorLine();
+    const page = drawPageGroup([line]);
+    const pkg = drawingPackage([page], { styles });
+    expect(effectivePackage(pkg).children[0]).toBe(page);
+  });
+
+  it("strips a draw page group's own consumed style ref even when its children are unaffected", () => {
+    const page = drawPageGroup([vectorLine()], { style: "outer" });
+    const pkg = drawingPackage([page], { styles });
+    expect("style" in effectivePackage(pkg).children[0]!).toBe(false);
+  });
+
+  it("returns the identical shape group by reference when unaffected, and a stripped rebuild when styled but otherwise unchanged", () => {
+    const noStyleShape = shapeGroup([table([["x"]])]);
+    const styledShape = shapeGroup([table([["x"]])], { style: "outer" });
+    const pkg = presentationPackage([slideGroup([noStyleShape, styledShape])], {
+      styles,
+    });
+    const resolved = effectivePackage(pkg);
+    asGroup(resolved.children[0]!);
+    expect(resolved.children[0].children[0]).toBe(noStyleShape);
+    expect(resolved.children[0].children[1]).not.toBe(styledShape);
+    asGroup(resolved.children[0].children[1]!);
+    expect("style" in resolved.children[0].children[1]).toBe(false);
+  });
+
+  it("returns the identical section construct group by reference when unaffected, and a stripped rebuild when styled but otherwise unchanged", () => {
+    const noStyleConstruct = sectionConstructGroup([table([["x"]])]);
+    const styledConstruct = sectionConstructGroup([table([["x"]])], {
+      style: "outer",
+    });
+    const pkg = wordprocessingPackage(
+      [sectionGroup([noStyleConstruct, styledConstruct])],
+      { styles },
+    );
+    const resolved = effectivePackage(pkg);
+    const section = resolved.children[0]!;
+    asGroup(section);
+    expect(section.children[0]).toBe(noStyleConstruct);
+    expect(section.children[1]).not.toBe(styledConstruct);
+    asGroup(section.children[1]);
+    expect("style" in section.children[1]).toBe(false);
+  });
+
+  it("returns the identical shape construct group by reference when unaffected, and a stripped rebuild when styled but otherwise unchanged", () => {
+    const noStyleConstruct = shapeConstructGroup([table([["x"]])]);
+    const styledConstruct = shapeConstructGroup([table([["x"]])], {
+      style: "outer",
+    });
+    const pkg = presentationPackage(
+      [slideGroup([shapeGroup([noStyleConstruct, styledConstruct])])],
+      { styles },
+    );
+    const resolved = effectivePackage(pkg);
+    asGroup(resolved.children[0]!);
+    asGroup(resolved.children[0].children[0]!);
+    expect(resolved.children[0].children[0].children[0]).toBe(noStyleConstruct);
+    expect(resolved.children[0].children[0].children[1]).not.toBe(
+      styledConstruct,
+    );
+    asGroup(resolved.children[0].children[0].children[1]!);
+    expect("style" in resolved.children[0].children[0].children[1]).toBe(false);
+  });
+
+  it("rebuilds a section construct group with no own style whose children genuinely changed via an inherited ref", () => {
+    // The construct group itself carries no style ref (its own clause is trivially satisfied), but its child paragraph resolves against the OUTER section's inherited "outer" chain and genuinely changes -- proving the children clause is actually evaluated, not just assumed true because the group has no ref of its own.
+    const pkg = wordprocessingPackage(
+      [
+        sectionGroup([sectionConstructGroup([paragraph("Body")])], {
+          style: "outer",
+        }),
+      ],
+      { styles },
+    );
+    const resolved = effectivePackage(pkg);
+    expectSchemaValid(resolved, "resolved");
+    expect(resolved).toEqual(
+      wordprocessingPackage([
+        sectionGroup([
+          {
+            node: { kind: "contentControl", controlType: "richText" },
+            children: [
+              {
+                kind: "paragraph",
+                runs: [{ text: "Body", bold: true }],
+                indentLeftPt: 24,
+              },
+            ],
+          },
+        ]),
+      ]),
+    );
+  });
+
+  it("rebuilds a shape construct group with no own style whose children genuinely changed via an inherited ref", () => {
+    const pkg = presentationPackage(
+      [
+        slideGroup([
+          shapeGroup([shapeConstructGroup([paragraph("Body")])], {
+            style: "outer",
+          }),
+        ]),
+      ],
+      { styles },
+    );
+    const resolved = effectivePackage(pkg);
+    expectSchemaValid(resolved, "presentation resolved");
+    asGroup(resolved.children[0]!);
+    asGroup(resolved.children[0].children[0]!);
+    expect(resolved.children[0].children[0].children[0]).toEqual({
+      node: { kind: "contentControl", controlType: "richText" },
+      children: [
+        {
+          kind: "paragraph",
+          runs: [{ text: "Body", bold: true }],
+          indentLeftPt: 24,
+        },
+      ],
+    });
+  });
+
+  it("returns the identical heading group by reference when no style applies anywhere in its chain", () => {
+    const heading = headingGroup("Chapter", 1, []);
+    const section = sectionGroup([heading]);
+    const pkg = wordprocessingPackage([section], { styles });
+    expect(effectivePackage(pkg).children[0]).toBe(section);
+  });
+
+  it("resolves a nested heading anchor via an inherited style even though it carries no ref of its own", () => {
+    const pkg = wordprocessingPackage(
+      [
+        sectionGroup([
+          headingGroup("Outer", 1, [headingGroup("Inner", 2, [])], {
+            style: "outer",
+          }),
+        ]),
+      ],
+      { styles },
+    );
+    const resolved = effectivePackage(pkg);
+    expectSchemaValid(resolved, "resolved");
+    expect(resolved).toEqual(
+      wordprocessingPackage([
+        sectionGroup([
+          {
+            node: {
+              kind: "paragraph",
+              runs: [{ text: "Outer", bold: true }],
+              headingLevel: 1,
+              indentLeftPt: 24,
+            },
+            children: [
+              {
+                node: {
+                  kind: "paragraph",
+                  runs: [{ text: "Inner", bold: true }],
+                  headingLevel: 2,
+                  indentLeftPt: 24,
+                },
+                children: [],
+              },
+            ],
+          },
+        ]),
+      ]),
+    );
+  });
+
+  it("returns the identical list group by reference when no style applies anywhere in its chain", () => {
+    const list = listGroup("Item", 0, []);
+    const section = sectionGroup([list]);
+    const pkg = wordprocessingPackage([section], { styles });
+    expect(effectivePackage(pkg).children[0]).toBe(section);
+  });
+
+  it("resolves a nested list anchor via an inherited style even though it carries no ref of its own", () => {
+    const pkg = wordprocessingPackage(
+      [
+        sectionGroup([
+          listGroup("Outer", 0, [listGroup("Inner", 1, [])], {
+            style: "outer",
+          }),
+        ]),
+      ],
+      { styles },
+    );
+    const resolved = effectivePackage(pkg);
+    expectSchemaValid(resolved, "resolved");
+    expect(resolved).toEqual(
+      wordprocessingPackage([
+        sectionGroup([
+          {
+            node: {
+              kind: "paragraph",
+              runs: [{ text: "Outer", bold: true }],
+              list: { level: 0 },
+              indentLeftPt: 24,
+            },
+            children: [
+              {
+                node: {
+                  kind: "paragraph",
+                  runs: [{ text: "Inner", bold: true }],
+                  list: { level: 1 },
+                  indentLeftPt: 24,
+                },
+                children: [],
+              },
+            ],
+          },
+        ]),
+      ]),
+    );
+  });
+
+  it("rebuilds a list group whose own anchor and inherited entry are both unaffected, but whose children genuinely changed", () => {
+    // Mirrors the heading Grandparent/Parent/Child test above: Parent has no own style but inherits Grandparent's "emptyEntry" chain (a real, non-empty chain that nonetheless resolves to no actual change to Parent's own anchor). Child, nested inside Parent, carries its own REAL style ref and so genuinely changes -- which must still rebuild Parent's own children array, and therefore Parent itself, even though Parent's own anchor/style clauses are both trivially satisfied.
+    const pkg = wordprocessingPackage(
+      [
+        sectionGroup([
+          listGroup(
+            "Grandparent",
+            0,
+            [
+              listGroup("Parent", 1, [
+                listGroup("Child", 2, [], { style: "outer" }),
+              ]),
+            ],
+            { style: "emptyEntry" },
+          ),
+        ]),
+      ],
+      { styles },
+    );
+    const resolved = effectivePackage(pkg);
+    expectSchemaValid(resolved, "resolved");
+    expect(resolved).toEqual(
+      wordprocessingPackage([
+        sectionGroup([
+          {
+            node: {
+              kind: "paragraph",
+              runs: [{ text: "Grandparent" }],
+              list: { level: 0 },
+            },
+            children: [
+              {
+                node: {
+                  kind: "paragraph",
+                  runs: [{ text: "Parent" }],
+                  list: { level: 1 },
+                },
+                children: [
+                  {
+                    node: {
+                      kind: "paragraph",
+                      runs: [{ text: "Child", bold: true }],
+                      list: { level: 2 },
+                      indentLeftPt: 24,
+                    },
+                    children: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ]),
+      ]),
+    );
+  });
+
+  it("returns a bare paragraph leaf by the identical reference when no style applies to it at all", () => {
+    const body = paragraph("body");
+    const pkg = wordprocessingPackage([sectionGroup([body])], { styles });
+    const section = effectivePackage(pkg).children[0]!;
+    asGroup(section);
+    expect(section.children[0]).toBe(body);
+  });
+
+  it("applies a paragraph-only style entry without touching the paragraph's own runs", () => {
+    const paragraphOnly: StylesTable = {
+      indentOnly: { paragraph: { indentLeftPt: 30 } },
+    };
+    const original = paragraph("body");
+    const pkg = wordprocessingPackage(
+      [sectionGroup([original], { style: "indentOnly" })],
+      { styles: paragraphOnly },
+    );
+    const resolved = effectivePackage(pkg);
+    expect(resolved).toEqual(
+      wordprocessingPackage([
+        sectionGroup([paragraph("body", { indentLeftPt: 30 })]),
+      ]),
+    );
+    // The entry has no run half, so applyEntry must hand back the SAME runs array rather than rebuilding it through an unnecessary map.
+    const section = resolved.children[0]!;
+    asGroup(section);
+    const resolvedLeaf = section.children[0] as ContentParagraph;
+    expect(resolvedLeaf.runs).toBe(original.runs);
+  });
+
+  it("strips a heading anchor's own consumed style ref even when the entry resolves to no actual change", () => {
+    const pkg = wordprocessingPackage(
+      [sectionGroup([headingGroup("Chapter", 1, [], { style: "emptyEntry" })])],
+      { styles },
+    );
+    const resolved = effectivePackage(pkg);
+    const section = resolved.children[0]!;
+    asGroup(section);
+    const group = section.children[0]!;
+    expect("style" in group).toBe(false);
+  });
+
+  it("strips a list anchor's own consumed style ref even when the entry resolves to no actual change", () => {
+    const pkg = wordprocessingPackage(
+      [sectionGroup([listGroup("Item", 0, [], { style: "emptyEntry" })])],
+      { styles },
+    );
+    const resolved = effectivePackage(pkg);
+    const section = resolved.children[0]!;
+    asGroup(section);
+    const group = section.children[0]!;
+    expect("style" in group).toBe(false);
+  });
+
+  it("rebuilds a heading group whose own anchor and inherited entry are both unaffected, but whose children genuinely changed", () => {
+    // Parent has no own style but inherits Grandparent's "emptyEntry" chain (a real, non-empty chain that nonetheless resolves to no actual change to Parent's own anchor). Child, nested inside Parent, carries its own REAL style ref and so genuinely changes -- which must still rebuild Parent's own children array, and therefore Parent itself, even though Parent's own anchor/style clauses are both trivially satisfied.
+    const pkg = wordprocessingPackage(
+      [
+        sectionGroup([
+          headingGroup(
+            "Grandparent",
+            1,
+            [
+              headingGroup("Parent", 2, [
+                headingGroup("Child", 3, [], { style: "outer" }),
+              ]),
+            ],
+            { style: "emptyEntry" },
+          ),
+        ]),
+      ],
+      { styles },
+    );
+    const resolved = effectivePackage(pkg);
+    expectSchemaValid(resolved, "resolved");
+    expect(resolved).toEqual(
+      wordprocessingPackage([
+        sectionGroup([
+          {
+            node: {
+              kind: "paragraph",
+              runs: [{ text: "Grandparent" }],
+              headingLevel: 1,
+            },
+            children: [
+              {
+                node: {
+                  kind: "paragraph",
+                  runs: [{ text: "Parent" }],
+                  headingLevel: 2,
+                },
+                children: [
+                  {
+                    node: {
+                      kind: "paragraph",
+                      runs: [{ text: "Child", bold: true }],
+                      headingLevel: 3,
+                      indentLeftPt: 24,
+                    },
+                    children: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ]),
+      ]),
+    );
+  });
+
   it("throws loudly on a ref the styles table does not carry", () => {
     const pkg = wordprocessingPackage(
       [sectionGroup([paragraph("body")], { style: "missing" })],
@@ -344,5 +771,55 @@ describe("effectivePackage", () => {
     const resolved = effectivePackage(factored);
     expectSchemaValid(resolved, "resolved");
     expect(resolved).toEqual(twin);
+  });
+});
+
+describe("assertResolvedHeadingAnchor", () => {
+  it("throws if a resolved heading anchor ever comes back without its headingLevel -- a document-schema.js fill-only contract regression, never reachable through effectivePackage's own construction", () => {
+    const droppedHeadingLevel: ContentParagraph = {
+      kind: "paragraph",
+      runs: [{ text: "orphaned" }],
+    };
+    expect(() => {
+      assertResolvedHeadingAnchor(droppedHeadingLevel);
+    }).toThrow(
+      "effectivePackage: resolution dropped a heading anchor's headingLevel",
+    );
+  });
+
+  it("does not throw once headingLevel is present", () => {
+    const withHeadingLevel: ContentParagraph = {
+      kind: "paragraph",
+      runs: [{ text: "titled" }],
+      headingLevel: 2,
+    };
+    expect(() => {
+      assertResolvedHeadingAnchor(withHeadingLevel);
+    }).not.toThrow();
+  });
+});
+
+describe("assertResolvedListAnchor", () => {
+  it("throws if a resolved list anchor ever comes back without its list membership -- a document-schema.js fill-only contract regression, never reachable through effectivePackage's own construction", () => {
+    const droppedListMembership: ContentParagraph = {
+      kind: "paragraph",
+      runs: [{ text: "orphaned" }],
+    };
+    expect(() => {
+      assertResolvedListAnchor(droppedListMembership);
+    }).toThrow(
+      "effectivePackage: resolution dropped a list anchor's list membership",
+    );
+  });
+
+  it("does not throw once list membership is present", () => {
+    const withListMembership: ContentParagraph = {
+      kind: "paragraph",
+      runs: [{ text: "itemised" }],
+      list: { level: 0 },
+    };
+    expect(() => {
+      assertResolvedListAnchor(withListMembership);
+    }).not.toThrow();
   });
 });
