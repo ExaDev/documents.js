@@ -35,13 +35,11 @@ function codepointToString(codepoint: number): string {
 }
 
 // Matches an entity or numeric character reference starting at `start` (which must be the `&`). Returns undefined when what follows is not a valid reference at all -- a bare `&` is ordinary text, never an error.
+// No separate "does text[start] even open with '&'?" guard: ENTITY_PATTERN's own source is anchored at `^&`, so a slice that doesn't open with '&' can never match regardless -- the same reasoning src/html/html.ts's matchHtmlTag/matchHtmlBlockStart apply to their own leading '<' checks.
 export function matchEntity(
   text: string,
   start: number,
 ): EntityMatch | undefined {
-  if (text.charAt(start) !== "&") {
-    return undefined;
-  }
   const match = ENTITY_PATTERN.exec(text.slice(start));
   if (match === null) {
     return undefined;
@@ -66,12 +64,11 @@ export function matchEntity(
 
 // Resolves backslash escapes and character references inside a string that is NOT itself parsed as inline content -- a link destination or a link title. spec 0.31.2: "backslash escapes and entity and numeric character references are recognized" in both. This is a flattening operation with no node structure of its own, which is exactly why it lives here rather than being expressed in terms of the inline parser's own dispatch loop.
 export function unescapeString(text: string): string {
-  if (!text.includes("\\") && !text.includes("&")) {
-    return text;
-  }
+  // No "does text hold neither '\\' nor '&' at all?" fast path: for a string with neither, the loop below never takes the backslash/entity branches, so it does nothing but copy every character straight through -- reconstructing `text` exactly, just one character-append at a time rather than in a single return. The fast path changed how much work this function did for that input, never what it produced.
   let result = "";
   let index = 0;
-  while (index < text.length) {
+  // text.charAt(index) !== "", not index < text.length: the two are equivalent for every real index (charAt already returns "" one past the end, which never matches "\\" or "&" either), but only this spelling's own mutation is actually reachable by a test.
+  while (text.charAt(index) !== "") {
     const char = text.charAt(index);
     if (char === "\\") {
       const next = text.charAt(index + 1);
