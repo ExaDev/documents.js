@@ -29,12 +29,8 @@ export function isOutlineNode(value: unknown): value is OutlineNode {
   if (typeof value !== "object" || value === null || Array.isArray(value))
     return false;
   if (!("text" in value) || typeof value.text !== "string") return false;
-  if (
-    !("level" in value) ||
-    typeof value.level !== "number" ||
-    !Number.isFinite(value.level)
-  )
-    return false;
+  // Number.isFinite's own TypeScript signature accepts `unknown` directly (it is the runtime type check, not merely a narrowing convenience), so no separate `typeof value.level !== "number"` guard is needed: Number.isFinite already returns false for every non-number input.
+  if (!("level" in value) || !Number.isFinite(value.level)) return false;
   if (!("children" in value) || !Array.isArray(value.children)) return false;
   return value.children.every(isOutlineChild);
 }
