@@ -283,6 +283,22 @@ describe("readWpdContent", () => {
     expect(paragraphsOf(document)[0]?.runs[0]?.text).toBe("keepkeep");
   });
 
+  // An End of Text to Skip with no matching Start (a stray or duplicated code, possible in a document edited by a third-party writer) must not drive the skip depth negative: clamping at zero means the very next Start still raises it to exactly one, so the region it opens is skipped as normal. Without the clamp, an unmatched End would leave the depth one lower than it should be, and the following Start/End pair's own text would wrongly leak into the document instead of being dropped.
+  it("clamps skip depth at zero so an unmatched End of Text to Skip cannot leak a later skip region's text", () => {
+    const document = readDocumentArea([
+      ...text("keep"),
+      0x8d, // START_OF_TEXT_TO_SKIP
+      ...text("drop"),
+      0x8e, // END_OF_TEXT_TO_SKIP -- balances the Start above
+      0x8e, // an extra, unmatched END_OF_TEXT_TO_SKIP
+      0x8d, // START_OF_TEXT_TO_SKIP again
+      ...text("hidden"),
+      0x8e, // END_OF_TEXT_TO_SKIP
+      ...text("keep"),
+    ]);
+    expect(paragraphsOf(document)[0]?.runs[0]?.text).toBe("keepkeep");
+  });
+
   it("takes a run's font family from the descriptor packet a font face change names", () => {
     const document = readDocumentArea(
       [
@@ -352,6 +368,100 @@ describe("readWpdContent", () => {
     const document = readDocumentArea([
       ...text("first"),
       ...variableFunction({ group: 0xd0, subgroup: 4 }),
+      ...text("second"),
+    ]);
+    expect(paragraphsOf(document).map((p) => p.runs[0]?.text)).toEqual([
+      "first",
+      "second",
+    ]);
+  });
+
+  // Subfunction 0, Beginning of File, is the one End-of-Line subfunction with no single-byte spelling at all -- it exists solely as this group's own subgroup 0 -- and the SDK's own conversion table maps it to nothing: it contributes neither a character nor a paragraph break.
+  it("ignores the Beginning-of-File End-of-Line subfunction, reachable only through its multi-byte spelling", () => {
+    const document = readDocumentArea([
+      ...text("before"),
+      ...variableFunction({ group: 0xd0, subgroup: 0 }),
+      ...text("after"),
+    ]);
+    const paragraphs = paragraphsOf(document);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.runs[0]?.text).toBe("beforeafter");
+  });
+
+  // The shared content schema has no column-break block, so a hard end of column becomes a paragraph break instead, and the diagnostic sink is told exactly what was flattened away.
+  it("reports a column break becoming a paragraph break", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile([
+        ...text("first"),
+        ...variableFunction({ group: 0xd0, subgroup: 7 }),
+        ...text("second"),
+      ]),
+      { sink: (diagnostic) => diagnostics.push(diagnostic) },
+    );
+    expect(paragraphsOf(document).map((p) => p.runs[0]?.text)).toEqual([
+      "first",
+      "second",
+    ]);
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === WpdDiagnosticCodes.ColumnBreakFlattened,
+    );
+    expect(found?.message).toBe("A column break became a paragraph break.");
+  });
+
+  // "Both mark a permitted break point that is not currently taken, and neither shows a character": the invisible return contributes no text and does not split the run it sits in, exactly like the soft hyphen it is documented alongside.
+  it("contributes nothing for an invisible return in line", () => {
+    const document = readDocumentArea([
+      ...text("un"),
+      0x86, // INVISIBLE_RETURN_IN_LINE
+      ...text("broken"),
+    ]);
+    const paragraphs = paragraphsOf(document);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.runs[0]?.text).toBe("unbroken");
+  });
+
+  // "An auto-hyphen was inserted by the formatter at the end of a line" -- displayed exactly like the other end-of-line hyphen functions.
+  it("appends a hyphen for an auto-hyphen at the end of a line", () => {
+    const document = readDocumentArea([
+      ...text("auto"),
+      0x85, // AUTO_HYPHEN_AT_END_OF_LINE
+      ...text("mated"),
+    ]);
+    expect(paragraphsOf(document)[0]?.runs[0]?.text).toBe("auto-mated");
+  });
+
+  // "Whenever a [HRt] code appears alone at the top of a page that starts with a soft page break, the formatter changes the Hard Return code into a Dormant Hard Return code." The paragraph boundary the author typed is still there, so it still closes the paragraph.
+  it("splits paragraphs at a dormant hard return", () => {
+    const document = readDocumentArea([
+      ...text("first"),
+      0x87, // DORMANT_HARD_RETURN
+      ...text("second"),
+    ]);
+    expect(paragraphsOf(document).map((p) => p.runs[0]?.text)).toEqual([
+      "first",
+      "second",
+    ]);
+  });
+
+  // "The formatter inserts a soft End of Line, which causes centering to end, but not the paragraph" -- a wrap, so it becomes the same space every other soft end of line converts to.
+  it("appends a space for a soft end of center align", () => {
+    const document = readDocumentArea([
+      ...text("centred"),
+      0x88, // SOFT_END_OF_CENTER_ALIGN
+      ...text("text"),
+    ]);
+    const paragraphs = paragraphsOf(document);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.runs[0]?.text).toBe("centred text");
+  });
+
+  // "The Enter key is pressed, ending the line, the centering, and the paragraph."
+  it("splits paragraphs at a hard end of center align", () => {
+    const document = readDocumentArea([
+      ...text("first"),
+      0x89, // HARD_END_OF_CENTER_ALIGN
       ...text("second"),
     ]);
     expect(paragraphsOf(document).map((p) => p.runs[0]?.text)).toEqual([
