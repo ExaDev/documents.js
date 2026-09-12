@@ -6,7 +6,7 @@ import {
   WpdFormatError,
   WpdWrongPasswordError,
 } from "../errors";
-import { readWpdContent } from "../read";
+import { readWpd, readWpdContent } from "../read";
 import type { WpdFileHeader } from "./header";
 import {
   applyWpdStandardEncryption,
@@ -179,6 +179,12 @@ describe("reading an encrypted document", () => {
     expect(decrypted.sections[0]?.blocks).toEqual(
       unencrypted.sections[0]?.blocks,
     );
+  });
+
+  // readWpd threads its own password option through to the same openWpdDocument call readWpdContent uses -- proven separately, since readWpd builds its own tree-form read from scratch rather than delegating to readWpdContent.
+  it("reads the tree form of the same encrypted document with the password", () => {
+    const tree = readWpd(encrypted, { password: "sECret" });
+    expect(tree.kind).toBe("wordprocessing");
   });
 
   it("throws WpdEncryptedDocumentError without a password", () => {

@@ -156,15 +156,31 @@ describe("readWpdContent", () => {
   it("renders an unmapped character visibly and reports it", () => {
     const diagnostics: WpdDiagnostic[] = [];
     // Character 0 of set 12 (Tibetan): libwpd's own tibetanMap1 table has no entry below character number 33, so this position genuinely has no mapping in the cited source rather than being a gap this package introduced.
-    readWpdContent(buildWpdFile([...text("x"), 0xf0, 0, 12, 0xf0]), {
-      sink: (diagnostic) => diagnostics.push(diagnostic),
-    });
+    const document = readWpdContent(
+      buildWpdFile([...text("x"), 0xf0, 0, 12, 0xf0]),
+      { sink: (diagnostic) => diagnostics.push(diagnostic) },
+    );
+    expect(paragraphsOf(document)[0]?.runs[0]?.text).toBe("x�");
     const found = diagnostics.find(
       (diagnostic) => diagnostic.code === WpdDiagnosticCodes.UnmappedCharacter,
     );
     expect(found?.message).toBe(
       "Character 0 of WordPerfect character set 12 has no mapping in this package and was rendered as U+FFFD.",
     );
+  });
+
+  // A fixed-length function code this reader names no specific meaning for at all -- Undo (0xF1), reserved by the format but not one applyFixedFunction handles -- must contribute neither a character nor an attribute change.
+  it("contributes nothing for a fixed-length function code with no named meaning", () => {
+    const document = readDocumentArea([
+      ...text("un"),
+      0xf1,
+      0,
+      0,
+      0,
+      0xf1, // Undo: a genuine 5-byte fixed function, gated at both ends
+      ...text("broken"),
+    ]);
+    expect(paragraphsOf(document)[0]?.runs).toEqual([{ text: "unbroken" }]);
   });
 
   it("splits runs at an attribute boundary", () => {
@@ -911,6 +927,54 @@ describe("readWpd", () => {
       );
     }
   });
+
+  // The tree-form section must actually carry a header, footer, and watermark when the document declares them -- proving readWpd's own headers/footers/watermarks spreads fire when non-empty, not just that they stay absent when empty.
+  it("carries a header, footer, and watermark on the tree-form section", () => {
+    function furniturePacket(text_: string) {
+      const documentArea = text(text_);
+      const header = [
+        1,
+        0,
+        6,
+        0,
+        documentArea.length & 0xff,
+        (documentArea.length >>> 8) & 0xff,
+      ];
+      return {
+        packetType: 0x08,
+        bytes: new Uint8Array([...header, ...documentArea]),
+      };
+    }
+    function furnitureFunction(subgroup: number, prefixId: number): number[] {
+      return variableFunction({
+        group: 0xd6,
+        subgroup,
+        prefixIds: [prefixId],
+        nonDeletable: [1, 0], // occurrence: odd/default pages
+      });
+    }
+    const tree = readWpd(
+      buildWpdFile(
+        [
+          ...text("body"),
+          ...furnitureFunction(0x00, 1), // header
+          ...furnitureFunction(0x02, 2), // footer
+          ...furnitureFunction(0x04, 3), // watermark
+        ],
+        [furniturePacket("H"), furniturePacket("F"), furniturePacket("W")],
+      ),
+    );
+    if (tree.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing");
+    }
+    const section = tree.children[0]?.node;
+    if (section?.kind !== "section") {
+      throw new Error("expected a section node");
+    }
+    expect(Object.hasOwn(section, "headers")).toBe(true);
+    expect(Object.hasOwn(section, "footers")).toBe(true);
+    expect(Object.hasOwn(section, "watermarks")).toBe(true);
+  });
 });
 
 describe("boxes", () => {
@@ -1402,6 +1466,20 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
     });
   }
 
+  it("gives a plain flat document's own section no headers, footers, or watermarks keys at all", () => {
+    const document = readDocumentArea(text("plain"));
+    if (document.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing");
+    }
+    const section = document.sections[0];
+    expect(section).toBeDefined();
+    for (const key of ["headers", "footers", "watermarks"]) {
+      expect(section === undefined ? false : Object.hasOwn(section, key)).toBe(
+        false,
+      );
+    }
+  });
+
   it("lifts a header occurring on odd pages into the section's default header slot", () => {
     const document = readDocumentArea(
       [...text("body"), ...headerFunction(0x00, 0x01)],
@@ -1616,6 +1694,8 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
         },
       ],
     });
+    // No OLE objects anywhere in this document -- the attachments table must not appear at all, not even empty.
+    expect(tree.attachments).toBeUndefined();
   });
 
   it("reports the exact could-not-read message for a note whose body packet is the wrong type", () => {
@@ -1844,6 +1924,8 @@ describe("native OLE objects (#1191)", () => {
       name: "OLE10",
       base64: bytesToBase64(nativeBytes),
     });
+    // No notes anywhere in this document -- the definitions table must not appear at all, not even empty.
+    expect(tree.definitions).toBeUndefined();
   });
 
   it("carries an OLE 1 object's inline descriptor bytes as a tree-form attachment in a bare file", () => {
