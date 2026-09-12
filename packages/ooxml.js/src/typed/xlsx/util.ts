@@ -22,11 +22,9 @@ export function parseUniversalMeasureToPt(value: string): number | undefined {
   if (match === null) {
     return undefined;
   }
-  const amountRaw = match[1];
-  const unit = match[2];
-  if (amountRaw === undefined || unit === undefined) {
-    return undefined;
-  }
+  // Neither capture group is optional in UNIVERSAL_MEASURE_RE itself (neither has a trailing `?`), so a successful match always populates both -- TypeScript's own RegExpExecArray typing just can't express that a specific pattern's groups are mandatory, which is what the non-null assertions below state instead of a runtime check nothing real can ever fail.
+  const amountRaw = match[1]!;
+  const unit = match[2]!;
   const amount = Number(amountRaw);
   switch (unit) {
     case "mm":
