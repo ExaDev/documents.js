@@ -91,4 +91,32 @@ describe("mintListNumId / parseListNumId", () => {
   it("mintedListType reads back just the type without the rest", () => {
     expect(mintedListType("md1:ordered@7+task")).toBe("ordered");
   });
+
+  it("ignores a start value on a bullet mint -- the suffix is ordered-only", () => {
+    const state = createNumIdMintState();
+    expect(
+      mintListNumId(state, {
+        type: "bullet",
+        start: 5,
+        task: false,
+        loose: false,
+      }),
+    ).toBe("md1:bullet");
+  });
+
+  it("omits the start suffix on an ordered mint with no start at all", () => {
+    const state = createNumIdMintState();
+    expect(
+      mintListNumId(state, { type: "ordered", task: false, loose: false }),
+    ).toBe("md1:ordered");
+  });
+
+  it("ignores a numeric @N suffix on a bullet numId when parsing -- start is ordered-only", () => {
+    expect(parseListNumId("md1:bullet@3")).toEqual({
+      type: "bullet",
+      start: undefined,
+      task: false,
+      loose: false,
+    });
+  });
 });
