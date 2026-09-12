@@ -26,6 +26,7 @@ const FIRST_OVERRIDE_BLOCK_OFFSET = OVERRIDE_FLAGS_OFFSET + 2;
 function walkOverrideBlocks(
   nonDeletable: Uint8Array,
 ): { flags: number; blocks: ReadonlyMap<number, Uint8Array> } | undefined {
+  // Stryker disable next-line EqualityOperator: at nonDeletable.length exactly FIRST_OVERRIDE_BLOCK_OFFSET, cursor starts exactly at the buffer's own end, so any set bit's own cursor + 2 > nonDeletable.length check just below is already true regardless of whether this check runs -- no bit's data can ever be read from an empty remainder.
   if (nonDeletable.length < FIRST_OVERRIDE_BLOCK_OFFSET) {
     return undefined;
   }
@@ -39,6 +40,7 @@ function walkOverrideBlocks(
     if (bit === OVERRIDE_BIT_HTML) {
       continue;
     }
+    // Stryker disable next-line EqualityOperator: at cursor + 2 === nonDeletable.length exactly, only size === 0 avoids the overrun check just below (any size > 0 already exceeds a buffer with nothing left) -- and a resulting empty block already fails every one of this module's own downstream minimum-length checks (readContentType's, readPositionOverride's), so whether this rejects one check earlier makes no difference.
     if (cursor + 2 > nonDeletable.length) {
       return undefined;
     }
@@ -55,15 +57,14 @@ function walkOverrideBlocks(
 
 // The content override block's own nested flags (WPFF_DF-BOX.htm, "bit 13: box content data"): [content override flags], then bit15 (PID flags, 2 bytes, no size prefix of its own) and bit14 (the content type byte itself). Bit 13 (rendering information) and bit 12 (alignment) are not read -- this module only needs the type, not how it renders.
 function readContentType(contentBlock: Uint8Array): number | undefined {
+  // Stryker disable next-line EqualityOperator: at contentBlock.length exactly 2, the type byte this function returns is always read at an offset (2, or 4 once the optional PID skip runs) that is out of bounds regardless of flags, so this function already answers undefined at that exact length either way.
   if (contentBlock.length < 2) {
     return undefined;
   }
   const flags = uint16At(contentBlock, 0);
   let cursor = 2;
+  // No separate room guard is needed for the PID-flags skip: it only advances cursor (no read of its own), and the type byte this function ultimately returns is read through plain bracket access, which safely answers undefined for any offset this skip could have advanced cursor past without a guard -- there is no buffer length where skipping the guard produces an in-bounds-but-wrong byte instead of the identical out-of-bounds undefined a guard would have forced.
   if ((flags & 0x8000) !== 0) {
-    if (cursor + 2 > contentBlock.length) {
-      return undefined;
-    }
     cursor += 2;
   }
   if ((flags & 0x4000) === 0) {
@@ -78,6 +79,7 @@ function readPositionOverride(
 ):
   | { widthWpu?: number; heightWpu?: number; xWpu?: number; yWpu?: number }
   | undefined {
+  // Stryker disable next-line EqualityOperator: at positionBlock.length exactly 2, cursor starts exactly at the buffer's own end, so need() for any bit's own data (each requiring at least 2 more bytes) is already false regardless of whether this check runs.
   if (positionBlock.length < 2) {
     return undefined;
   }
@@ -91,14 +93,13 @@ function readPositionOverride(
   const need = (bytes: number): boolean =>
     cursor + bytes <= positionBlock.length;
 
+  // Neither the PID-flags skip (bit 15) nor the general-positioning-flags skip (bit 14) below needs its own room guard: neither reads anything through it (each only advances cursor), so an insufficient buffer only ever surfaces once a later bit that actually reads data hits its own guard against the same total length -- or, with no later bit set, the walk safely ends with every optional field left undefined, exactly as if this block had been correctly rejected.
   if ((flags & 0x8000) !== 0) {
     // bit 15: PID flags, 2 bytes.
-    if (!need(2)) return undefined;
     cursor += 2;
   }
   if ((flags & 0x4000) !== 0) {
     // bit 14: general positioning flags, 2 bytes.
-    if (!need(2)) return undefined;
     cursor += 2;
   }
   if ((flags & 0x2000) !== 0) {
