@@ -50,6 +50,11 @@ describe("readSlideSchemeColorSchemeAtom", () => {
     expect(() =>
       readSlideSchemeColorSchemeAtom(readRecordAt(bytes, 0)),
     ).toThrow(PptFormatError);
+    expect(() =>
+      readSlideSchemeColorSchemeAtom(readRecordAt(bytes, 0)),
+    ).toThrow(
+      `expected RT_ColorSchemeAtom (0x${RT_ColorSchemeAtom.toString(16)}) at offset 0, found record type 0x${RT_DocumentAtom.toString(16)}`,
+    );
   });
 
   it("rejects a ColorSchemeAtom whose recInstance is not the slide-scheme's own 0x001", () => {
@@ -57,6 +62,11 @@ describe("readSlideSchemeColorSchemeAtom", () => {
     expect(() =>
       readSlideSchemeColorSchemeAtom(readRecordAt(bytes, 0)),
     ).toThrow(PptFormatError);
+    expect(() =>
+      readSlideSchemeColorSchemeAtom(readRecordAt(bytes, 0)),
+    ).toThrow(
+      "ColorSchemeAtom at offset 0 declares recInstance 0x2, not the SlideSchemeColorSchemeAtom's own 0x1",
+    );
   });
 
   it("rejects a record with fewer than 8 scheme slots", () => {
@@ -64,6 +74,11 @@ describe("readSlideSchemeColorSchemeAtom", () => {
     expect(() =>
       readSlideSchemeColorSchemeAtom(readRecordAt(bytes, 0)),
     ).toThrow(PptFormatError);
+    expect(() =>
+      readSlideSchemeColorSchemeAtom(readRecordAt(bytes, 0)),
+    ).toThrow(
+      "SlideSchemeColorSchemeAtom at offset 0 carries 28 bytes, not the mandated 32 (8 four-byte scheme slots)",
+    );
   });
 });
 
@@ -84,5 +99,8 @@ describe("resolveSchemeColor", () => {
 
   it("throws for an index with no entry in the given scheme", () => {
     expect(() => resolveSchemeColor(8, scheme)).toThrow(PptFormatError);
+    expect(() => resolveSchemeColor(8, scheme)).toThrow(
+      "colour scheme slot 8 has no entry in a 8-entry colour scheme",
+    );
   });
 });
