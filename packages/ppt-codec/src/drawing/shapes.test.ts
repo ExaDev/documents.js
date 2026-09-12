@@ -353,4 +353,175 @@ describe("readDrawingShapes: table groups", () => {
     );
     expect(shapesOf(bytes).map((shape) => shape.spid)).toEqual([3]);
   });
+
+  it("treats tableProperties with fIsTable clear (other bits set) as an ordinary group, not a table", () => {
+    const otherBitsOnly = writeShapePropertyTable(OfficeArtTertiaryFOPT, [
+      // fIsTablePlaceholder (bit 1) and fIsTableRTL (bit 2), with fIsTable (bit 0) itself clear.
+      { opid: PROPERTY_TABLE_PROPERTIES, op: 0b110 },
+    ]);
+    const bytes = drawing(
+      container(OfficeArtSpgrContainer, [
+        container(OfficeArtSpContainer, [
+          fspgr(0, 0, 100, 100),
+          fsp(2, FSP_GROUP),
+          otherBitsOnly,
+          largeClientAnchor(0, 0, 100, 100),
+        ]),
+        container(OfficeArtSpContainer, [
+          fsp(3, 0),
+          childAnchor(0, 0, 100, 100),
+          clientTextbox("plain grouped shape"),
+        ]),
+      ]),
+    );
+    expect(shapesOf(bytes).map((shape) => shape.spid)).toEqual([3]);
+  });
+});
+
+describe("readDrawingShapes: rejections", () => {
+  it("rejects a client anchor record whose recLen is neither 0x8 nor 0x10", () => {
+    const bytes = drawing(
+      container(OfficeArtSpContainer, [
+        fsp(2, 0),
+        atom(OfficeArtClientAnchor, new Uint8Array(4)),
+      ]),
+    );
+    expect(() => readDrawingShapes(readRecordAt(bytes, 0))).toThrow(
+      "OfficeArtClientAnchor declares recLen 0x4, neither the 0x8 of a SmallRectStruct nor the 0x10 of a RectStruct",
+    );
+  });
+
+  it("rejects an anchor record too short for its own four coordinate fields", () => {
+    const bytes = drawing(
+      container(OfficeArtSpContainer, [
+        fsp(2, 0),
+        atom(OfficeArtChildAnchor, new Uint8Array(4)),
+      ]),
+    );
+    expect(() => readDrawingShapes(readRecordAt(bytes, 0))).toThrow(
+      /anchor record 0x[0-9a-f]+ carries 4 bytes, fewer than the 16/,
+    );
+  });
+
+  it("rejects a shape container with no readable OfficeArtFSP", () => {
+    const bytes = drawing(container(OfficeArtSpContainer, []));
+    expect(() => readDrawingShapes(readRecordAt(bytes, 0))).toThrow(
+      "has no readable OfficeArtFSP, so the shape has neither an identity nor its flags",
+    );
+  });
+
+  it("rejects a group shape missing its own OfficeArtFSPGR coordinate system", () => {
+    const bytes = drawing(
+      container(OfficeArtSpgrContainer, [
+        container(OfficeArtSpContainer, [
+          fsp(2, FSP_GROUP),
+          largeClientAnchor(0, 0, 100, 100),
+        ]),
+        container(OfficeArtSpContainer, [fsp(3, 0)]),
+      ]),
+    );
+    expect(() => readDrawingShapes(readRecordAt(bytes, 0))).toThrow(
+      "lacks an OfficeArtFSPGR coordinate system, so its children's coordinates cannot be placed on the slide",
+    );
+  });
+
+  it("rejects a group shape missing its own anchor, distinctly from missing FSPGR", () => {
+    const bytes = drawing(
+      container(OfficeArtSpgrContainer, [
+        container(OfficeArtSpContainer, [
+          fspgr(0, 0, 100, 100),
+          fsp(2, FSP_GROUP),
+        ]),
+        container(OfficeArtSpContainer, [fsp(3, 0)]),
+      ]),
+    );
+    expect(() => readDrawingShapes(readRecordAt(bytes, 0))).toThrow(
+      "lacks an anchor, so its children's coordinates cannot be placed on the slide",
+    );
+  });
+
+  it("rejects a group whose coordinate system declares zero width", () => {
+    const bytes = drawing(
+      container(OfficeArtSpgrContainer, [
+        container(OfficeArtSpContainer, [
+          fspgr(0, 0, 0, 100),
+          fsp(2, FSP_GROUP),
+          largeClientAnchor(0, 0, 100, 100),
+        ]),
+        container(OfficeArtSpContainer, [fsp(3, 0)]),
+      ]),
+    );
+    expect(() => readDrawingShapes(readRecordAt(bytes, 0))).toThrow(
+      "declares a coordinate system of zero width, which no child coordinate can be scaled through",
+    );
+  });
+
+  it("rejects a group whose coordinate system declares zero height, distinctly from zero width", () => {
+    const bytes = drawing(
+      container(OfficeArtSpgrContainer, [
+        container(OfficeArtSpContainer, [
+          fspgr(0, 0, 100, 0),
+          fsp(2, FSP_GROUP),
+          largeClientAnchor(0, 0, 100, 100),
+        ]),
+        container(OfficeArtSpContainer, [fsp(3, 0)]),
+      ]),
+    );
+    expect(() => readDrawingShapes(readRecordAt(bytes, 0))).toThrow(
+      "declares a coordinate system of zero height, which no child coordinate can be scaled through",
+    );
+  });
+
+  it("rejects a table group with no anchor of its own", () => {
+    const bytes = drawing(
+      container(OfficeArtSpgrContainer, [
+        container(OfficeArtSpContainer, [
+          fspgr(0, 0, 100, 100),
+          fsp(2, FSP_GROUP),
+          writeShapePropertyTable(OfficeArtTertiaryFOPT, [
+            { opid: PROPERTY_TABLE_PROPERTIES, op: TABLE_FLAG_IS_TABLE },
+          ]),
+        ]),
+      ]),
+    );
+    expect(() => readDrawingShapes(readRecordAt(bytes, 0))).toThrow(
+      "carries no anchor, so the table cannot be placed on the slide",
+    );
+  });
+
+  it("rejects a record whose type is not RT_Drawing", () => {
+    expect(() =>
+      readDrawingShapes(readRecordAt(container(OfficeArtDgContainer, []), 0)),
+    ).toThrow(
+      `expected RT_Drawing (0x${RT_Drawing.toString(16)}), found record type 0x${OfficeArtDgContainer.toString(16)}`,
+    );
+  });
+});
+
+describe("rotationDegOf", () => {
+  it("reports zero rotation as undefined -- an unrotated shape states no rotation at all", () => {
+    const bytes = drawing(
+      container(OfficeArtSpContainer, [
+        fsp(2, 0),
+        writeShapePropertyTable(OfficeArtTertiaryFOPT, [
+          { opid: 0x0004 /* PROPERTY_ROTATION */, op: 0 },
+        ]),
+        smallClientAnchor(0, 0, 10, 10),
+      ]),
+    );
+    expect(shapesOf(bytes)[0]?.rotationDeg).toBeUndefined();
+  });
+
+  it("reports a real non-zero rotation", () => {
+    const bytes = drawing(
+      container(OfficeArtSpContainer, [
+        fsp(2, 0),
+        writeShapePropertyTable(OfficeArtTertiaryFOPT, [
+          { opid: 0x0004, op: 45 * 0x10000 },
+        ]),
+        smallClientAnchor(0, 0, 10, 10),
+      ]),
+    );
+    expect(shapesOf(bytes)[0]?.rotationDeg).toBe(45);
+  });
 });
