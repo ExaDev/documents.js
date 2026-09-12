@@ -82,6 +82,38 @@ describe("parseFib", () => {
     expect(() => parseFib(buildFib({ wIdent: 0x1234 }))).toThrow(/0xA5EC/);
   });
 
+  it("names the actual wrong signature, uppercase and padded to four hex digits", () => {
+    expect(() => parseFib(buildFib({ wIdent: 0x00ab }))).toThrow(
+      /begins with 0x00AB rather than/,
+    );
+  });
+
+  it("rejects a csw that disagrees with the mandated 0x000E", () => {
+    const fib = buildFib({});
+    new DataView(fib.buffer).setUint16(32, 0x0001, true); // csw, per test-support/fib.ts's own offset.
+    expect(() => parseFib(fib)).toThrow(
+      /Fib.csw is 0x1 rather than the mandated 0xe/,
+    );
+  });
+
+  it("rejects a cslw that disagrees with the mandated 0x0016", () => {
+    const fib = buildFib({});
+    new DataView(fib.buffer).setUint16(62, 0x0001, true); // cslw, per test-support/fib.ts's own offset.
+    expect(() => parseFib(fib)).toThrow(
+      /Fib.cslw is 0x1 rather than the mandated 0x16/,
+    );
+  });
+
+  it("accepts a cbRgFcLcb whose blob reaches this reader's own highest value index (149, lcbPlfLfo) by exactly one 4-byte value", () => {
+    expect(() => parseFib(buildFib({ cbRgFcLcb: 75 }))).not.toThrow();
+  });
+
+  it("rejects a cbRgFcLcb whose blob ends exactly at the highest value index this reader needs, one 4-byte value short", () => {
+    expect(() => parseFib(buildFib({ cbRgFcLcb: 74 }))).toThrow(
+      /does not reach value index 149/,
+    );
+  });
+
   it("reads fWhichTblStm, which names the Table stream every other offset is relative to", () => {
     expect(tableStreamName(parseFib(buildFib({ fWhichTblStm: 1 })))).toBe(
       "1Table",
@@ -111,5 +143,57 @@ describe("parseFib", () => {
 
   it("accepts the 0x005D blob size [MS-DOC] mandates for nFib 0x00C1", () => {
     expect(parseFib(buildFib({ cbRgFcLcb: 0x005d })).ccpText).toBe(0);
+  });
+
+  it("reads every fc/lcb pair and every FibRgLw97 count this reader consumes, each set to its own distinct non-zero value", () => {
+    const fib = parseFib(
+      buildFib({
+        ccpTxbx: 11,
+        ccpHdrTxbx: 12,
+        fcPlcffndRef: 0x101,
+        lcbPlcffndRef: 0x102,
+        fcPlcfandRef: 0x103,
+        lcbPlcfandRef: 0x104,
+        fcPlcfendRef: 0x105,
+        lcbPlcfendRef: 0x106,
+        fcPlcffndTxt: 0x107,
+        lcbPlcffndTxt: 0x108,
+        fcPlcfandTxt: 0x109,
+        lcbPlcfandTxt: 0x10a,
+        fcPlcfendTxt: 0x10b,
+        lcbPlcfendTxt: 0x10c,
+        fcPlcfHdd: 0x10d,
+        lcbPlcfHdd: 0x10e,
+        fcPlfLst: 0x10f,
+        lcbPlfLst: 0x110,
+        fcPlfLfo: 0x111,
+        lcbPlfLfo: 0x112,
+      }),
+    );
+    expect(fib.ccpTxbx).toBe(11);
+    expect(fib.ccpHdrTxbx).toBe(12);
+    expect(fib.fcPlcffndRef).toBe(0x101);
+    expect(fib.lcbPlcffndRef).toBe(0x102);
+    expect(fib.fcPlcfandRef).toBe(0x103);
+    expect(fib.lcbPlcfandRef).toBe(0x104);
+    expect(fib.fcPlcfendRef).toBe(0x105);
+    expect(fib.lcbPlcfendRef).toBe(0x106);
+    expect(fib.fcPlcffndTxt).toBe(0x107);
+    expect(fib.lcbPlcffndTxt).toBe(0x108);
+    expect(fib.fcPlcfandTxt).toBe(0x109);
+    expect(fib.lcbPlcfandTxt).toBe(0x10a);
+    expect(fib.fcPlcfendTxt).toBe(0x10b);
+    expect(fib.lcbPlcfendTxt).toBe(0x10c);
+    expect(fib.fcPlcfHdd).toBe(0x10d);
+    expect(fib.lcbPlcfHdd).toBe(0x10e);
+    expect(fib.fcPlfLst).toBe(0x10f);
+    expect(fib.lcbPlfLst).toBe(0x110);
+    expect(fib.fcPlfLfo).toBe(0x111);
+    expect(fib.lcbPlfLfo).toBe(0x112);
+  });
+
+  it("writes nFibBack as a real little-endian 0x00BF, even though this reader never consumes it", () => {
+    const fib = buildFib({});
+    expect(new DataView(fib.buffer).getUint16(12, true)).toBe(0x00bf);
   });
 });
