@@ -299,6 +299,27 @@ describe("readWpdContent", () => {
     expect(paragraphsOf(document)[0]?.runs[0]?.text).toBe("keepkeep");
   });
 
+  // A font face change must split off whatever text already accumulated before it into its own run, so that earlier text keeps its own (absent) font family rather than being retroactively folded into the new one.
+  it("splits the run at a font face change, leaving earlier text without the new font family", () => {
+    const document = readDocumentArea(
+      [
+        ...text("before"),
+        ...variableFunction({
+          group: 0xd4,
+          subgroup: 0x1a,
+          prefixIds: [1],
+          nonDeletable: [0, 0, 0, 0, 0, 0, 0, 0],
+        }),
+        ...text("after"),
+      ],
+      [fontDescriptorPacket("Courier New")],
+    );
+    expect(paragraphsOf(document)[0]?.runs).toEqual([
+      { text: "before" },
+      { text: "after", fontFamily: "Courier New" },
+    ]);
+  });
+
   it("takes a run's font family from the descriptor packet a font face change names", () => {
     const document = readDocumentArea(
       [
@@ -470,6 +491,18 @@ describe("readWpdContent", () => {
     ]);
   });
 
+  // A single-byte function code this switch names no case for at all -- one of the format's own formatting/bookkeeping markers this reader has no specific behaviour for -- must fall through to the default case and contribute neither characters nor structure, exactly like the codes with an explicit no-op case.
+  it("contributes nothing for a single-byte function code with no named case", () => {
+    const document = readDocumentArea([
+      ...text("un"),
+      0x8a, // an unassigned single-byte function code between INVISIBLE_RETURN_IN_LINE (0x86) and START_OF_TEXT_TO_SKIP (0x8d)
+      ...text("broken"),
+    ]);
+    const paragraphs = paragraphsOf(document);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.runs[0]?.text).toBe("unbroken");
+  });
+
   // A cell or row boundary with no Table Definition open has no grid to belong to, which a stray code left behind by an edit can produce. The text on either side still survives as paragraphs, in reading order.
   // flushParagraphIfContent must still flush when the pending text is empty but a run has already been split off it (here, by an attribute change) -- checking only state.text.length would wrongly drop that already-built run.
   it("flushes a paragraph at a boundary whose pending text is empty but whose runs are not", () => {
@@ -539,6 +572,28 @@ describe("readWpdContent", () => {
     );
   });
 
+  it("reports the exact missing-prefix-packet message for a font face change naming an unknown prefix ID", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(
+      buildWpdFile([
+        ...variableFunction({
+          group: 0xd4,
+          subgroup: 0x1a,
+          prefixIds: [7],
+          nonDeletable: [0, 0, 0, 0, 0, 0, 0, 0],
+        }),
+        ...text("plain"),
+      ]),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.MissingPrefixPacket,
+    );
+    expect(found?.message).toBe(
+      "A font face change names prefix ID 7, which this document's index does not carry.",
+    );
+  });
+
   it("does not apply a font face change when the named packet is not a font descriptor", () => {
     const document = readDocumentArea(
       [
@@ -569,6 +624,59 @@ describe("readWpdContent", () => {
       [{ packetType: 0x55, bytes: new Uint8Array(0) }], // font descriptor packet type, but too short for a typeface name
     );
     expect(paragraphsOf(document)[0]?.runs[0]).toEqual({ text: "plain" });
+  });
+
+  // The packet-type check must actually gate the read, not just happen to agree with it: a packet whose own bytes would decode as a valid typeface if read as a font descriptor, but which is not one, must not have its bytes read that way at all.
+  it("does not read a non-font-descriptor packet's bytes as a typeface even when they would decode as one", () => {
+    const descriptorShapedBytes = fontDescriptorPacket("Courier New").bytes;
+    const document = readDocumentArea(
+      [
+        ...variableFunction({
+          group: 0xd4,
+          subgroup: 0x1a,
+          prefixIds: [1],
+          nonDeletable: [0, 0, 0, 0, 0, 0, 0, 0],
+        }),
+        ...text("plain"),
+      ],
+      [{ packetType: 0x08, bytes: descriptorShapedBytes }], // General WP Text, not a font descriptor, despite the descriptor-shaped bytes
+    );
+    expect(paragraphsOf(document)[0]?.runs[0]).toEqual({ text: "plain" });
+  });
+
+  // A font face change that names an unreadable typeface must leave a PREVIOUSLY set font family in place for the run it starts, rather than clearing it -- the failed change contributes nothing, it does not reset what came before it.
+  it("keeps a previously set font family when a later font face change cannot be read", () => {
+    const document = readDocumentArea(
+      [
+        ...variableFunction({
+          group: 0xd4,
+          subgroup: 0x1a,
+          prefixIds: [1],
+          nonDeletable: [0, 0, 0, 0, 0, 0, 0, 0],
+        }),
+        ...text("first"),
+        0xf2, // ATTRIBUTE_ON (bold), forcing a run split independent of the font logic under test
+        12, // BOLD
+        0xf2,
+        ...variableFunction({
+          group: 0xd4,
+          subgroup: 0x1a,
+          prefixIds: [2],
+          nonDeletable: [0, 0, 0, 0, 0, 0, 0, 0],
+        }),
+        ...text("second"),
+      ],
+      [
+        fontDescriptorPacket("Georgia"),
+        { packetType: 0x55, bytes: new Uint8Array(0) }, // font descriptor packet type, but too short for a typeface name
+      ],
+    );
+    expect(
+      paragraphsOf(document)[0]?.runs.map((run) => [run.text, run.fontFamily]),
+    ).toEqual([
+      ["first", "Georgia"],
+      ["second", "Georgia"],
+    ]);
   });
 
   describe("style packet resolution", () => {
