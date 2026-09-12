@@ -5,7 +5,12 @@ import {
   sectionGroup,
   wordprocessingPackage,
 } from "../test-support/fixtures";
-import { canonicalise, sha256, stableContentHash } from "./hash";
+import {
+  canonicalise,
+  sha256,
+  stableContentHash,
+  writeBitLength,
+} from "./hash";
 
 // The SHA-256 implementation is pinned against the specification's own published digests (FIPS 180-4 example vectors): the empty string exercises the single-block padding, 'abc' a short message, and the 55-character string forces exactly two padded blocks with the length word in the second -- the padding edge a hand-rolled implementation most easily gets wrong.
 describe("sha256", () => {
@@ -26,6 +31,26 @@ describe("sha256", () => {
     expect(
       digest("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"),
     ).toBe("248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1");
+  });
+});
+
+describe("writeBitLength", () => {
+  // The high 32 bits only become nonzero once bitLength reaches 2^32 (a ~512 MiB message no unit test can afford to actually hash), so this is exercised directly against a synthetic bitLength rather than a real byte array reaching that size.
+  it("writes the high and low 32 bits of a 64-bit big-endian bit length", () => {
+    const buffer = new ArrayBuffer(8);
+    const view = new DataView(buffer);
+    const bitLength = 4294967296 * 3 + 123; // 3 full 2^32 wraps plus a low remainder
+    writeBitLength(view, 0, bitLength);
+    expect(view.getUint32(0)).toBe(3);
+    expect(view.getUint32(4)).toBe(123);
+  });
+
+  it("writes zero into the high 32 bits for any realistic (sub-2^32) bit length", () => {
+    const buffer = new ArrayBuffer(8);
+    const view = new DataView(buffer);
+    writeBitLength(view, 0, 512);
+    expect(view.getUint32(0)).toBe(0);
+    expect(view.getUint32(4)).toBe(512);
   });
 });
 
@@ -79,5 +104,11 @@ describe("canonicalise", () => {
     const nested = { z: [{ y: 1, x: 2 }] };
     expect(canonicalise(nested)).toEqual({ z: [{ x: 2, y: 1 }] });
     expect(canonicalise([3, 1, 2])).toEqual([3, 1, 2]);
+  });
+
+  // isRecord's own `value !== null` guard: typeof null === "object", so without this guard canonicalise's isRecord branch would be taken for null and Object.keys(null) would throw. A bare null and a null nested inside a record both have to pass through untouched rather than being treated as a record.
+  it("passes a bare null through untouched rather than treating it as a record", () => {
+    expect(canonicalise(null)).toBeNull();
+    expect(canonicalise({ a: null })).toEqual({ a: null });
   });
 });
