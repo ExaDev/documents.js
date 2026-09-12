@@ -99,9 +99,9 @@ function documentAreaEnd(
   header: WpdFileHeader,
 ): number {
   const { fileSize, documentAreaOffset } = header;
-  // Stryker disable next-line EqualityOperator: <= vs < only disagree when fileSize === bytes.length exactly, and at that exact point the two branches return the same number (fileSize and bytes.length are equal), so no input can ever observe which comparison ran.
-  if (fileSize > documentAreaOffset && fileSize <= bytes.length) {
-    return fileSize;
+  // The upper bound is expressed through Math.min rather than a second comparison: a `fileSize <= bytes.length` guard would disagree with `<` only when fileSize === bytes.length exactly, and at that exact point both branches return the same number, so a bare comparator here would be an unkillable equivalent mutant no test could ever distinguish. Math.min carries the identical fallback (bytes.length whenever fileSize would run past it) without emitting a comparison whose boundary case has no observable effect.
+  if (fileSize > documentAreaOffset) {
+    return Math.min(fileSize, bytes.length);
   }
   return bytes.length;
 }
