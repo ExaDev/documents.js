@@ -206,7 +206,7 @@ function coordinateAt(
   return uint32At(bytes, offset) / 0x10000;
 }
 
-// The characterisation flags word plus the walk past the optional data its low bits state -- exactly as far as this decoder needs: past the edit-lock descriptor and the Object ID. A record carrying any transformation flag (taper/translate/skew/scale/rotate) is refused whole, so the transformation elements themselves are never walked past. The returned `geometryAt` of -1 is the refusal marker; a flags word whose optional data runs past the record's own end cannot be stepped over, and also refuses.
+// The characterisation flags word plus the walk past the optional data its low bits state -- exactly as far as this decoder needs: past the edit-lock descriptor and the Object ID. A record carrying any transformation flag (taper/translate/skew/scale/rotate) is refused whole, so the transformation elements themselves are never walked past -- like every other refusal this function makes, that is undefined, not a sentinel value inside an otherwise-valid result for callers to separately test.
 function readCharacterization(
   bytes: Uint8Array,
   cursor: number,
@@ -219,7 +219,7 @@ function readCharacterization(
   const transformationFlags =
     FLAG_TAPER | FLAG_TRANSLATE | FLAG_SKEW | FLAG_SCALE | FLAG_ROTATE;
   if ((flags & transformationFlags) !== 0) {
-    return { flags, geometryAt: -1 };
+    return undefined;
   }
   let geometryAt = cursor + 2;
   if ((flags & FLAG_EDIT_LOCK) !== 0) {
@@ -370,9 +370,8 @@ export function decodeWpgGraphic(
   const recordName = (type: number): string =>
     RECORD_NAMES.get(type) ?? `record type 0x${type.toString(16)}`;
 
-  // Stryker disable next-line EqualityOperator: at the exact tie (cursor === bytes.length) the loop body's own very first check (cursor + 2 > bytes.length) is also true, breaking immediately either way -- so entering the loop body one extra time at this tie changes nothing observable.
-  while (cursor < bytes.length) {
-    // Stryker disable next-line EqualityOperator: at the exact tie (cursor + 2 === bytes.length) the 2-byte Class/Type header is read successfully either way, but with nothing left afterwards readCountField's own first byte read returns undefined immediately, breaking the walk on the very next check regardless of which operator gates this one.
+  // The loop's own termination: cursor + 2 > bytes.length catches both "no bytes left at all" and "one stray byte left", so there is no separate "cursor < bytes.length" bound to keep in step with it.
+  for (;;) {
     if (cursor + 2 > bytes.length) {
       break;
     }
@@ -541,8 +540,8 @@ export function decodeWpgGraphic(
       }
     }
 
-    // Stryker disable next-line ConditionalExpression,EqualityOperator: forcing the length check to always-true, or weakening > to >=, only ever matters when groups is empty (length 0) -- and there, `groups[groups.length - 1]` is already `groups[-1]`, so the optional-chained `?.remaining === 0` on the right independently evaluates to `undefined === 0`, false, regardless of the left operand. Both mutants agree with the original on every input.
-    while (groups.length > 0 && groups[groups.length - 1]?.remaining === 0) {
+    // groups[groups.length - 1] on an empty array is groups[-1], which is undefined -- the optional chain already answers false without a separate "groups.length > 0" guard.
+    while (groups[groups.length - 1]?.remaining === 0) {
       groups.pop();
     }
     if (extension.value > 0) {
@@ -588,8 +587,6 @@ function readTextBlockFrame(
   const characterization = readCharacterization(data, 0, data.length);
   if (
     characterization === undefined ||
-    // Stryker disable next-line EqualityOperator: readCharacterization is always called with cursor 0 here, so its own geometryAt is either the -1 refusal sentinel or cursor + 2 (at least 2); it can never be exactly 0, so < and <= agree on every reachable value.
-    characterization.geometryAt < 0 ||
     characterization.geometryAt + geometry.coordinateSize * 4 > data.length
   ) {
     return undefined;
@@ -640,8 +637,7 @@ function readPrimitiveVector(
   state: WpgRenditionState,
 ): ContentVector | undefined {
   const characterization = readCharacterization(data, 0, data.length);
-  // Stryker disable next-line EqualityOperator: readCharacterization is always called with cursor 0 here, so its own geometryAt is either the -1 refusal sentinel or cursor + 2 (at least 2); it can never be exactly 0, so < and <= agree on every reachable value.
-  if (characterization === undefined || characterization.geometryAt < 0) {
+  if (characterization === undefined) {
     return undefined;
   }
   const { flags, geometryAt } = characterization;
@@ -674,29 +670,27 @@ function readPolyline(
   stroke: ContentStroke | undefined,
   state: WpgRenditionState,
 ): ContentVector | undefined {
-  // Stryker disable next-line EqualityOperator: at the exact tie (geometryAt + 2 === data.length) the count field is read successfully either way -- but with zero bytes left for any point, a count of 0 empties `points` (refused below, no first point) and a count > 0 immediately fails the per-point room check on its first iteration, so both operators end in the identical refusal.
-  if (geometryAt + 2 > data.length) {
-    return undefined;
-  }
-  const count = uint16At(data, geometryAt);
-  let at = geometryAt + 2;
+  // uint16At and coordinateAt are both built on byteAt, whose own bounds check throws rather than returning undefined -- a count field or a point that runs past data's own end surfaces as one caught exception, not a separate manual "room for N more bytes" comparison at each read.
   const points: { xPt: number; yPt: number }[] = [];
-  for (let index = 0; index < count; index += 1) {
-    if (at + geometry.coordinateSize * 2 > data.length) {
-      return undefined;
-    }
-    points.push({
-      xPt: xToPt(geometry, coordinateAt(data, at, geometry.doublePrecision)),
-      yPt: yToPt(
-        geometry,
-        coordinateAt(
-          data,
-          at + geometry.coordinateSize,
-          geometry.doublePrecision,
+  try {
+    const count = uint16At(data, geometryAt);
+    let at = geometryAt + 2;
+    for (let index = 0; index < count; index += 1) {
+      points.push({
+        xPt: xToPt(geometry, coordinateAt(data, at, geometry.doublePrecision)),
+        yPt: yToPt(
+          geometry,
+          coordinateAt(
+            data,
+            at + geometry.coordinateSize,
+            geometry.doublePrecision,
+          ),
         ),
-      ),
-    });
-    at += geometry.coordinateSize * 2;
+      });
+      at += geometry.coordinateSize * 2;
+    }
+  } catch {
+    return undefined;
   }
   const firstPoint = points[0];
   if (firstPoint === undefined) {
