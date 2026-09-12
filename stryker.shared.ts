@@ -22,6 +22,8 @@ export interface PackageStrykerOptions {
   dryRunTimeoutMinutes?: number;
   // Stryker's thresholds.break for this package alone: the mutation score below which stryker exits non-zero and fails the mutation CI job. Derived, never picked -- the rule is documented alongside the thresholds key in packageStrykerConfig below, and a package that has never completed a full mutation run passes nothing and stays ungated until it does (a break guessed without a measured baseline is exactly the magic number this workspace refuses).
   breakThreshold?: number;
+  // Stryker's own worker-process concurrency, defaulting to 4. Lowered per-package only when a specific test in that package's own suite is expensive enough that running it inside several concurrent mutant-testing workers at once creates contention that pushes it past its own generous timeout (document-outline.js's graph.test.ts exhaustive LCS-reconciliation sweep is the measured case) -- a workspace-wide default change would slow every other package's mutation CI run for a cost only this one test actually has, so the override stays scoped to the package that needs it.
+  concurrency?: number;
 }
 
 /**
@@ -38,6 +40,7 @@ export function packageStrykerConfig(
     vitestConfigFile,
     dryRunTimeoutMinutes,
     breakThreshold,
+    concurrency = 4,
   } = options;
 
   return {
@@ -71,7 +74,7 @@ export function packageStrykerConfig(
     reporters: ["progress", "clear-text", "html"],
     tempDirName: ".stryker-tmp",
     cleanTempDir: true,
-    concurrency: 4,
+    concurrency,
     timeoutMS: 30000,
     ...(dryRunTimeoutMinutes === undefined ? {} : { dryRunTimeoutMinutes }),
   };
