@@ -263,8 +263,16 @@ describe("readTableFormula", () => {
     expect(readTableFormula(bytes)).toBe(text);
   });
 
-  it("treats code 47 (one below the range-reference range) as unrecognised", () => {
-    expect(readTableFormula(new Uint8Array([47]))).toBeUndefined();
+  it("treats code 47 (one below the range-reference range) as unrecognised, even with a full range reference's own bytes following it", () => {
+    // Full, well-formed range-reference bytes follow the code, so a lower bound that quietly slipped would decode a range instead of refusing it.
+    const bytes = new Uint8Array([
+      47,
+      ...word(0),
+      ...word(0),
+      ...word(2),
+      ...word(1),
+    ]);
+    expect(readTableFormula(bytes)).toBeUndefined();
   });
 
   it("decodes a range reference at 63, the top of its own code range", () => {
@@ -276,6 +284,39 @@ describe("readTableFormula", () => {
       ...word(1),
     ]);
     expect(readTableFormula(bytes)).toBe("$A$1:$B$3");
+  });
+
+  it("decodes a range reference at 48, the bottom of its own code range, with no absolute flags at all", () => {
+    const bytes = new Uint8Array([
+      48,
+      ...word(0),
+      ...word(0),
+      ...word(2),
+      ...word(1),
+    ]);
+    expect(readTableFormula(bytes)).toBe("A1:B3");
+  });
+
+  it("aborts a range reference (48-63) whose start cell's row is negative, even though the end cell is well-formed", () => {
+    const bytes = new Uint8Array([
+      48,
+      ...word(0xffff),
+      ...word(0), // start: row -1
+      ...word(2),
+      ...word(1), // end: B3, well-formed
+    ]);
+    expect(readTableFormula(bytes)).toBeUndefined();
+  });
+
+  it("aborts a range reference (48-63) whose end cell's row is negative, even though the start cell is well-formed", () => {
+    const bytes = new Uint8Array([
+      48,
+      ...word(0),
+      ...word(0), // start: A1, well-formed
+      ...word(0xffff),
+      ...word(1), // end: row -1
+    ]);
+    expect(readTableFormula(bytes)).toBeUndefined();
   });
 
   // Every one of the two absolute-reference flag bits an absolute cell reference (codes 64-67) carries, isolated one at a time.
@@ -292,7 +333,46 @@ describe("readTableFormula", () => {
     expect(readTableFormula(bytes)).toBe("$B$3");
   });
 
-  it("treats code 68 (one past the cell-reference range) as unrecognised", () => {
-    expect(readTableFormula(new Uint8Array([68]))).toBeUndefined();
+  it("treats code 68 (one past the cell-reference range) as unrecognised, even with a full cell reference's own bytes following it", () => {
+    const bytes = new Uint8Array([68, ...word(0), ...word(0)]);
+    expect(readTableFormula(bytes)).toBeUndefined();
+  });
+
+  it("aborts a length-prefixed word string with no room for its own 16-bit count", () => {
+    // Code 8 (number constant) is the simplest carrier of readLengthPrefixedWordString's shared boundary.
+    expect(readTableFormula(new Uint8Array([8]))).toBeUndefined();
+  });
+
+  it("reads a zero-length word string at the exact boundary where its own 16-bit count just fits", () => {
+    // Exactly 2 bytes remain for the count field itself, declaring zero characters -- the tie where "no room" and "just enough room" disagree.
+    expect(readTableFormula(new Uint8Array([8, ...word(0)]))).toBe("");
+  });
+
+  it("aborts a string constant (code 9) with no room for its own 16-bit count, rather than quoting the word 'undefined'", () => {
+    // Code 9 wraps its text in quotes unconditionally on the way out, so unlike code 8 this is the one carrier where a skipped abort would produce a defined (wrong) string instead of quietly converging back to undefined.
+    expect(readTableFormula(new Uint8Array([9]))).toBeUndefined();
+  });
+
+  it("aborts a length-prefixed word string whose declared length runs past the words actually present", () => {
+    // Declares 5 characters but supplies only one word's worth of bytes, so decodeWordString stops short of the declared length.
+    const bytes = new Uint8Array([8, ...word(5), ...word(65)]);
+    expect(readTableFormula(bytes)).toBeUndefined();
+  });
+
+  it("aborts a floating point constant's byte-string spelling that runs past the bytes actually present", () => {
+    // The length prefix itself is intact (declares 3 bytes) but only one byte of the spelling follows.
+    const bytes = new Uint8Array([30, ...doubleBytes(1), ...word(3), 0x31]);
+    expect(readTableFormula(bytes)).toBeUndefined();
+  });
+
+  it("aborts a floating point constant with no spelling data at all after its own double, rather than emitting the double's own text with no more tokens to fail on", () => {
+    // Nothing at all follows the 8-byte double -- not even the 2 bytes a spelling's own length prefix needs. With no further token left in the stream to independently fail on, this is the one case that actually observes whether the missing spelling aborts the whole token or is silently ignored.
+    const bytes = new Uint8Array([30, ...doubleBytes(1)]);
+    expect(readTableFormula(bytes)).toBeUndefined();
+  });
+
+  it("aborts a range reference (48-63) whose start cell has no room at all", () => {
+    const bytes = new Uint8Array([48, ...word(0)]); // 2 bytes: one short of the 4 a cell reference needs
+    expect(readTableFormula(bytes)).toBeUndefined();
   });
 });
