@@ -6,7 +6,12 @@ import type {
 import { bytesToBase64 } from "./bytes/base64";
 import { describe, expect, it } from "vitest";
 import { WpdDiagnosticCodes, type WpdDiagnostic } from "./diagnostics";
-import { assertDefined, readWpd, readWpdContent } from "./read";
+import {
+  assertDefined,
+  readWpd,
+  readWpdContent,
+  UNREACHABLE_CHARACTER_MAPPING_MESSAGE,
+} from "./read";
 import {
   buildWpdFile,
   fontDescriptorPacket,
@@ -54,6 +59,13 @@ describe("assertDefined", () => {
     }).toThrow("should not be undefined");
   });
 
+  // UNREACHABLE_CHARACTER_MAPPING_MESSAGE's own exact text, asserted against a hardcoded duplicate rather than by importing and comparing the constant to itself -- no real document byte can ever trigger this message at its one call site (applyToken's "character" case), so this is the only test that can catch a change to its actual wording.
+  it("carries UNREACHABLE_CHARACTER_MAPPING_MESSAGE's own exact text", () => {
+    expect(UNREACHABLE_CHARACTER_MAPPING_MESSAGE).toBe(
+      "A single-byte document-area character had no character mapping, which the tokeniser's own byte range should make unreachable.",
+    );
+  });
+
   it("does not throw for a defined value, including a falsy one", () => {
     expect(() => {
       assertDefined(0, "unreachable");
@@ -80,6 +92,20 @@ describe("readWpdContent", () => {
       "First",
       "Second",
     ]);
+  });
+
+  // A hard return's own case must actually end there in the switch, not fall through into the next case (hardEndOfColumn) and report a column-break diagnostic that never happened.
+  it("does not report a column break for a plain hard end of line", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(
+      buildWpdFile([...text("First"), HARD_EOL, ...text("Second")]),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    expect(
+      diagnostics.some(
+        (d) => d.code === WpdDiagnosticCodes.ColumnBreakFlattened,
+      ),
+    ).toBe(false);
   });
 
   // "Soft EOL: The formatter inserts a code at the end of a line. Its position changes automatically as text is added or deleted", and the End-of-Line group's own conversion table maps it to a space rather than a break.
@@ -174,7 +200,7 @@ describe("readWpdContent", () => {
     const document = readDocumentArea([
       ...text("un"),
       0xf1,
-      0,
+      12, // BOLD's own attribute number -- proves the gate actually excludes this code, since misreading this byte as an ATTRIBUTE_ON/OFF payload would turn bold on
       0,
       0,
       0xf1, // Undo: a genuine 5-byte fixed function, gated at both ends
@@ -414,6 +440,21 @@ describe("readWpdContent", () => {
       ...text("sized"),
     ]);
     expect(paragraphsOf(document)[0]?.runs[0]).toEqual({ text: "sized" });
+  });
+
+  it("reads a font size change whose non-deletable data is exactly the size word's own length", () => {
+    const document = readDocumentArea([
+      ...variableFunction({
+        group: 0xd4,
+        subgroup: 0x1b,
+        nonDeletable: [0x58, 0x02], // exactly two bytes, the size word itself and nothing more
+      }),
+      ...text("sized"),
+    ]);
+    expect(paragraphsOf(document)[0]?.runs[0]).toEqual({
+      text: "sized",
+      sizePt: 12,
+    });
   });
 
   it("ignores a font size change of exactly zero points", () => {
@@ -1185,6 +1226,31 @@ describe("boxes", () => {
     });
   });
 
+  it("does not treat an unrecognised content type as text-like, even with a readable General WP Text packet at its prefix ID", () => {
+    const UNKNOWN_CONTENT_TYPE = 5;
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile(
+        [...boxFunction(UNKNOWN_CONTENT_TYPE, [1, 2])],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          generalWpTextPacket(text("should not be lifted")),
+        ],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    expect(
+      document.sections[0]?.blocks.some((b) => b.kind === "embeddedObject"),
+    ).toBe(false);
+    expect(
+      diagnostics.some(
+        (d) => d.code === WpdDiagnosticCodes.BoxContentUnresolved,
+      ),
+    ).toBe(true);
+  });
+
   it("reports the exact box-content-unresolved message for a text-like box whose content packet is not General WP Text", () => {
     const diagnostics: WpdDiagnostic[] = [];
     readWpdContent(
@@ -1551,6 +1617,52 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
     }
   });
 
+  it("reports the exact could-not-resolve message for a header naming no packet, without setting a header slot", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile([
+        ...text("body"),
+        ...variableFunction({
+          group: 0xd6,
+          subgroup: 0x00,
+          prefixIds: [7], // names a prefix ID this document's index carries no packet for
+          nonDeletable: [1, 0],
+        }),
+      ]),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    expect(Object.hasOwn(document.sections[0] ?? {}, "headers")).toBe(false);
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.HeaderFooterDropped,
+    );
+    expect(found?.message).toBe(
+      "This document declares a header, footer, or watermark whose body packet this reader could not resolve; it was not lifted.",
+    );
+  });
+
+  it("reports the exact could-not-read message for a header whose body packet cannot be parsed", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile(
+        [...text("body"), ...headerFunction(0x00, 0x01)],
+        // General WP Text, the right packet type, but too short for even its own block-count word.
+        [{ packetType: 0x08, bytes: new Uint8Array(0) }],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    expect(Object.hasOwn(document.sections[0] ?? {}, "headers")).toBe(false);
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.HeaderFooterDropped,
+    );
+    expect(found?.message).toBe(
+      "This document declares a header, footer, or watermark whose body packet this reader could not read; it was not lifted.",
+    );
+  });
+
   it("lifts a header occurring on odd pages into the section's default header slot", () => {
     const document = readDocumentArea(
       [...text("body"), ...headerFunction(0x00, 0x01)],
@@ -1833,6 +1945,24 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
     );
     const definition = tree.definitions?.["note-1"];
     expect(definition?.kind).toBe("endnote");
+  });
+
+  // An unrelated subfunction sharing the D7 group (neither Footnote Off nor Endnote Off) must not be mistaken for a closing code and prematurely abandon a note already open -- the note must still resolve normally once its own real Off arrives.
+  it("does not abandon an open footnote for an unrelated subfunction sharing its own function group", () => {
+    const tree = readWpd(
+      buildWpdFile(
+        [
+          ...variableFunction({ group: 0xd7, subgroup: 0x00, prefixIds: [1] }), // Footnote On
+          ...text("mark"),
+          ...variableFunction({ group: 0xd7, subgroup: 0x04 }), // an unassigned D7 subfunction, neither an On nor an Off
+          ...variableFunction({ group: 0xd7, subgroup: 0x01 }), // Footnote Off
+        ],
+        [generalWpTextPacket(text("The fine print"))],
+      ),
+    );
+    const definition = tree.definitions?.["note-1"];
+    expect(definition?.kind).toBe("footnote");
+    expect(definition?.marker).toBe("mark");
   });
 });
 
