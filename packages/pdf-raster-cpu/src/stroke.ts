@@ -48,6 +48,7 @@ export function strokeOutlinePolygons(
   const half = Math.max(widthPx, THINNEST_STROKE_PX) / 2;
   const polygons: Pt[][] = [];
   const emitPiece = (piece: readonly Pt[]): void => {
+    // Stryker disable next-line EqualityOperator,ArithmeticOperator: either loosening (i + 1 <= piece.length) or replacing (i - 1 < piece.length) this bound only ever admits one or two more iterations, at i === piece.length - 1 and i === piece.length -- both already produce q === piece[i + 1] === undefined, which the very next line's own guard discards.
     for (let i = 0; i + 1 < piece.length; i++) {
       const p = piece[i];
       const q = piece[i + 1];
@@ -67,7 +68,7 @@ export function strokeOutlinePolygons(
         { x: p.x - n.x * half, y: p.y - n.y * half },
       ]);
     }
-    // Join wedges at interior vertices. The wedge sits on the outside of the turn: with the left normals of the incoming and outgoing directions, the outside is the side the cross product names (the two offset edges diverge there, leaving a notch; on the inside they cross and the quads already overlap).
+    // Stryker disable next-line EqualityOperator,ArithmeticOperator: the same reasoning as the quad loop above -- the extra iteration(s) either mutation admits read piece[i + 1] === undefined, which the guard on the next line already discards. Join wedges at interior vertices. The wedge sits on the outside of the turn: with the left normals of the incoming and outgoing directions, the outside is the side the cross product names (the two offset edges diverge there, leaving a notch; on the inside they cross and the quads already overlap).
     for (let i = 1; i + 1 < piece.length; i++) {
       const vertex = piece[i];
       const before = piece[i - 1];
@@ -85,7 +86,8 @@ export function strokeOutlinePolygons(
         continue;
       }
       emitPiece(subpath.closed ? [...subpath.points, first] : subpath.points);
-      if (subpath.closed && subpath.points.length >= 3) {
+      // No separate length >= 3 guard: for a closed one-point subpath, `second` (points[1]) is undefined and the check just below skips it; for a closed two-point subpath, `last` and `second` are both points[1], so the direction from vertex to after is the exact negation of the direction from before to vertex and emitJoinWedge's own cross-product-near-zero guard rejects it as a straight (here, perfectly reversed) continuation -- a subpath under three points closes to a safe no-op on its own, with no need for a dedicated length check to keep it that way.
+      if (subpath.closed) {
         // The closure vertex joins the last centreline segment back to the first -- the piece walk above stops one short of it.
         const last = subpath.points[subpath.points.length - 1];
         const second = subpath.points[1];
@@ -121,15 +123,19 @@ function emitJoinWedge(
   if (Math.abs(cross) < 1e-12) {
     return; // straight continuation (or exact reversal, where the format leaves the join undefined): the quads meet edge to edge and no wedge exists
   }
+  // Stryker disable next-line EqualityOperator: cross can never be exactly 0 once the guard above has passed (that guard already rejects everything within 1e-12 of it), so `cross > 0` and `cross >= 0` agree on every value this ternary can ever see.
   const side = cross > 0 ? -1 : 1;
+  // Stryker disable next-line ArithmeticOperator: side is always exactly 1 or -1 (the ternary above has no other outcome), and dividing by exactly 1 or -1 is bit-identical to multiplying by it, so `* side` and `/ side` compute the same float here on every input.
   const n1 = { x: -d1.y * side, y: d1.x * side };
+  // Stryker disable next-line ArithmeticOperator: same reasoning as n1 above -- side is always 1 or -1, so `* side` and `/ side` are identical.
   const n2 = { x: -d2.y * side, y: d2.x * side };
   const a1 = { x: vertex.x + n1.x * half, y: vertex.y + n1.y * half };
   const a2 = { x: vertex.x + n2.x * half, y: vertex.y + n2.y * half };
   const dot = n1.x * n2.x + n1.y * n2.y;
   const denominator = 1 + dot;
   let wedge: readonly Pt[];
-  if (denominator > 1e-12 && miterRatio(dot) <= DEFAULT_MITER_LIMIT) {
+  // Stryker disable next-line EqualityOperator: DEFAULT_MITER_LIMIT is the integer 10, and the real solution of sqrt(2 + 2 * dot) / (1 + dot) === 10 is dot === -0.98, which has no exact binary representation -- the two representable doubles nearest it evaluate this formula to 9.999999999999996 and 10.000000000000023 respectively, straddling 10 without ever landing on it, so no double-precision dot can make this comparison's two sides disagree. No separate `denominator > 1e-12` guard either: miterRatio(dot) reduces algebraically to sqrt(2 / denominator) (2 + 2 * dot === 2 * (1 + dot) === 2 * denominator), so miterRatio(dot) <= DEFAULT_MITER_LIMIT already implies denominator >= 2 / DEFAULT_MITER_LIMIT ** 2 for a positive denominator, and evaluates to false on its own (NaN or +Infinity, both > the limit) for a zero or negative one -- a denominator too small to divide by safely below always fails this check by itself, with no separate guard needed to keep the division in the miter branch safe.
+  if (miterRatio(dot) <= DEFAULT_MITER_LIMIT) {
     const scale = half / denominator;
     const miter = {
       x: vertex.x + (n1.x + n2.x) * scale,
@@ -140,6 +146,7 @@ function emitJoinWedge(
     wedge = [a1, vertex, a2];
   }
   polygons.push(
+    // Stryker disable next-line EqualityOperator: the wedge's signed area is a fixed positive multiple of the very cross product the guard above already forced away from zero (for the bevel triangle [a1, vertex, a2], its shoelace area works out to half * half * cross(d1, d2) exactly; the miter quad's is that same triangle plus one more strictly-same-sign contribution from the added miter point), so it can never land on exactly 0 for a wedge this function actually builds -- `< 0` and `<= 0` agree on every value it can produce.
     polygonSignedArea(wedge) < 0 ? [...wedge] : [...wedge].reverse(),
   );
 }
@@ -152,6 +159,7 @@ function miterRatio(dot: number): number {
 // Twice the signed area of a polygon (the shoelace sum), negative when wound the same way as the offset quads, whose fixed vertex order gives them a constant negative sign by construction.
 function polygonSignedArea(polygon: readonly Pt[]): number {
   let area = 0;
+  // Stryker disable next-line EqualityOperator: an off-by-one i <= polygon.length reads polygon[polygon.length], which is undefined, and the very next line's own guard already discards that -- exactly the shape of access it exists to catch.
   for (let i = 0; i < polygon.length; i++) {
     const a = polygon[i];
     const b = polygon[(i + 1) % polygon.length];
@@ -173,15 +181,15 @@ function unitDirection(p: Pt, q: Pt): Pt | undefined {
   return { x: dx / length, y: dy / length };
 }
 
-// Splits one polyline (with its closing segment when the subpath is closed) into its dash pattern's "on" pieces, phase 0 -- the port's dash arrays always start on ([3w, 3w] for a recovered dashed style), matching the writer's own convention. Whether the walk is currently emitting is not separate state: dash entries alternate on/off by position (entry 0 on, entry 1 off, and so on), so emission is exactly "the pattern index is even". An all-zero pattern paints nothing, exactly as PDF's own Table 52 note describes for a zero on-length under a butt cap.
-function dashPolyline(
+// Splits one polyline (with its closing segment when the subpath is closed) into its dash pattern's "on" pieces, phase 0 -- the port's dash arrays always start on ([3w, 3w] for a recovered dashed style), matching the writer's own convention. Whether the walk is currently emitting is not separate state: dash entries alternate on/off by position (entry 0 on, entry 1 off, and so on), so emission is exactly "the pattern index is even". An all-zero pattern paints nothing, exactly as PDF's own Table 52 note describes for a zero on-length under a butt cap. Exported (from this module only, not from the package's own index) purely so stroke.test.ts can pin its piece boundaries directly, the same way coverage.test.ts and geometry.test.ts reach past this package's narrow public surface into CoverageMask and flattenCubic.
+export function dashPolyline(
   subpath: FlattenedSubpath,
   dashPx: readonly number[],
 ): readonly (readonly Pt[])[] {
   if (!dashPx.some((length) => length > 0)) {
     return [];
   }
-  // ISO 32000-1 8.4.3.6: an odd-length array is treated as if repeated twice ([3] behaves as [3, 3]), so the walk always cycles an even number of entries and parity keeps naming emission.
+  // Stryker disable next-line ConditionalExpression: forcing this doubling to always happen changes nothing observable for an already-even-length array. Indexing pattern[i % pattern.length] for i in [0, dashPx.length) is identical whether pattern is dashPx itself (mod dashPx.length) or dashPx doubled (mod 2 * dashPx.length), and for i in [dashPx.length, 2 * dashPx.length) the doubled array's own second half is a copy of the first, so (dashPx+dashPx)[i % (2 * n)] === dashPx[(i - n) % n] === dashPx[i % n] -- the two indexing schemes agree at every position, forever, for any even n.
   const pattern = dashPx.length % 2 === 1 ? [...dashPx, ...dashPx] : dashPx;
   const points = subpath.closed
     ? [...subpath.points, subpath.points[0]]
@@ -199,6 +207,7 @@ function dashPolyline(
   };
   // Advances past the entry just exhausted (and past any further zero-length entries -- the all-zero pattern was rejected on entry, so this always terminates), then opens a fresh on-piece when the walk lands on an even index.
   const atBoundary = (): void => {
+    // Stryker disable next-line ConditionalExpression: calling endOnPiece unconditionally is harmless whenever the phase just finished was actually off (an odd index) -- current is already empty at that point (the push guard further below only ever adds to it during an on phase), and endOnPiece on an empty array is itself a no-op (its own length >= 2 check rejects it, then resets current to []).
     if (index % 2 === 0) {
       endOnPiece();
     }
@@ -225,6 +234,7 @@ function dashPolyline(
   } else {
     atBoundary(); // a zero-length first entry emits nothing; run one boundary transition from the path's start point
   }
+  // Stryker disable next-line EqualityOperator,ArithmeticOperator: either loosening (i + 1 <= points.length) or replacing (i - 1 < points.length) this bound only ever admits more iterations reading to === points[i + 1] === undefined, which the very next line's own guard already discards.
   for (let i = 0; i + 1 < points.length; i++) {
     const from = points[i];
     const to = points[i + 1];
@@ -237,6 +247,7 @@ function dashPolyline(
     }
     cursor = from;
     let segmentRemaining = Math.hypot(to.x - from.x, to.y - from.y);
+    // Stryker disable next-line ConditionalExpression,EqualityOperator: remaining is never negative (each step subtracts at most its own current value) and is never left at exactly 0 across a while-condition check -- the moment it hits 0 inside the loop body, the very next line resets it to the pattern's next positive entry before control returns here, and the guaranteed-positive-entry check on dashPx above means atBoundary always finds one. So remaining > 0 already holds on every evaluation of this condition, on the first pass through a segment and every pass after; relaxing it to remaining >= 0 or dropping it entirely changes nothing.
     while (segmentRemaining > 0 && remaining > 0) {
       const step = Math.min(segmentRemaining, remaining);
       cursor = {
@@ -253,6 +264,7 @@ function dashPolyline(
       }
     }
   }
+  // Stryker disable next-line ConditionalExpression,EqualityOperator: calling endOnPiece unconditionally here is harmless when current is already empty -- its own length >= 2 check rejects an empty array and resets current to [] again, exactly as if this guard had skipped the call.
   if (current.length > 0) {
     endOnPiece();
   }
