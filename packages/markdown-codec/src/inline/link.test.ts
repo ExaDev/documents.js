@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  isBlankRemainderOfLine,
   matchLinkLabel,
   normalizeLinkLabel,
   parseLinkDestination,
@@ -37,6 +38,10 @@ describe("matchLinkLabel", () => {
     expect(matchLinkLabel(`[${"a".repeat(999)}]`, 0)).toBe(1001);
     expect(matchLinkLabel(`[${"a".repeat(1000)}]`, 0)).toBe(0);
   });
+
+  it("returns 0 for text that does not open with '[' at all, even when a ']' appears later", () => {
+    expect(matchLinkLabel("abc]", 0)).toBe(0);
+  });
 });
 
 describe("parseLinkDestination", () => {
@@ -53,6 +58,17 @@ describe("parseLinkDestination", () => {
 
   it("rejects an angle-bracketed destination containing a line ending", () => {
     expect(parseLinkDestination("<a\nb>", 0)).toBeUndefined();
+  });
+
+  it("rejects an angle-bracketed destination containing an unescaped nested '<', even with no line ending", () => {
+    expect(parseLinkDestination("<a<b>", 0)).toBeUndefined();
+  });
+
+  it("treats a trailing, unescapable backslash as a literal character, not the start of an escape past the end", () => {
+    expect(parseLinkDestination("abc\\", 0)).toEqual({
+      value: "abc\\",
+      end: 4,
+    });
   });
 
   it("reads a bare destination with balanced parentheses", () => {
@@ -99,5 +115,23 @@ describe("skipInlineWhitespace", () => {
 
   it("stops at a blank line, which can never appear inside one inline construct", () => {
     expect(skipInlineWhitespace(" \n \n x", 0)).toBe(3);
+  });
+});
+
+describe("isBlankRemainderOfLine", () => {
+  it("is true at the very end of the text -- vacuously blank, nothing left to disqualify it", () => {
+    expect(isBlankRemainderOfLine("", 0)).toBe(true);
+  });
+
+  it("is true when only spaces/tabs remain all the way to the end of the text", () => {
+    expect(isBlankRemainderOfLine("   ", 0)).toBe(true);
+  });
+
+  it("is true as soon as a line ending is reached", () => {
+    expect(isBlankRemainderOfLine("  \nrest", 0)).toBe(true);
+  });
+
+  it("is false when a non-space character remains before any line ending", () => {
+    expect(isBlankRemainderOfLine("  x", 0)).toBe(false);
   });
 });
