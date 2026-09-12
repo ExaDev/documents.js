@@ -47,40 +47,38 @@ function encodeTypedPropertyValue(
 ): Uint8Array<ArrayBuffer> {
   switch (value.type) {
     case "VT_I2": {
+      // Padding (bytes 2-3) and the trailing alignment padding (bytes 6-7) both stay zero: `bytes` is fresh off `new Uint8Array`, which already zero-fills every byte this case does not itself set.
       const bytes = new Uint8Array(TYPED_VALUE_HEADER_SIZE + 4);
       const view = new DataView(bytes.buffer);
       view.setUint16(0, VT_I2, true);
-      // No littleEndian argument on either Padding write: both write the value 0, byte-identical under either byte order.
-      view.setUint16(2, 0);
       view.setInt16(4, value.value, true);
-      view.setUint16(6, 0);
       return bytes;
     }
     case "VT_I4": {
+      // Padding (bytes 2-3) stays zero: `bytes` is fresh off `new Uint8Array`, which already zero-fills every byte this case does not itself set.
       const bytes = new Uint8Array(TYPED_VALUE_HEADER_SIZE + 4);
       const view = new DataView(bytes.buffer);
       view.setUint16(0, VT_I4, true);
-      view.setUint16(2, 0);
       view.setInt32(4, value.value, true);
       return bytes;
     }
     case "VT_FILETIME": {
+      // Padding (bytes 2-3) stays zero: `bytes` is fresh off `new Uint8Array`, which already zero-fills every byte this case does not itself set.
       const { low, high } = dateToFiletime(value.value);
       const bytes = new Uint8Array(TYPED_VALUE_HEADER_SIZE + 8);
       const view = new DataView(bytes.buffer);
       view.setUint16(0, VT_FILETIME, true);
-      view.setUint16(2, 0);
       view.setUint32(4, low, true);
       view.setUint32(8, high, true);
       return bytes;
     }
     case "VT_LPWSTR": {
+      // Padding (bytes 2-3) stays zero: `bytes` is fresh off `new Uint8Array`, which already zero-fills every byte this case does not itself set.
       const characters = encodeUnicodeStringValue(value.value);
       const paddedLength = padTo4(characters.length);
       const bytes = new Uint8Array(TYPED_VALUE_HEADER_SIZE + 4 + paddedLength);
       const view = new DataView(bytes.buffer);
       view.setUint16(0, VT_LPWSTR, true);
-      view.setUint16(2, 0);
       view.setUint32(4, characters.length / 2, true); // Length is in 16-bit units, not bytes
       bytes.set(characters, TYPED_VALUE_HEADER_SIZE + 4);
       return bytes;
@@ -135,9 +133,7 @@ export function writePropertySetStream(
   const streamBytes = new Uint8Array(HEADER_SIZE + propertySetBytes.length);
   const view = new DataView(streamBytes.buffer);
   view.setUint16(0, BYTE_ORDER_MARK, true);
-  view.setUint16(2, 0); // Version 0: none of the types this writer emits need version 1's extra features; the value is 0, byte-identical under either endianness
-  view.setUint32(4, 0); // SystemIdentifier is implementation-specific and MUST be ignored by readers ([MS-OLEPS] 2.21); zero rather than impersonating a real OS identifier, and again endian-invariant at this value
-  // CLSID (bytes 8-23): this package has no notion of a property set's own associated CLSID to record, and GUID_NULL is all zero bytes -- exactly what streamBytes already holds fresh off `new Uint8Array`, so there is nothing to write here.
+  // Version (bytes 2-3, 0: none of the types this writer emits need version 1's extra features), SystemIdentifier (bytes 4-7, implementation-specific and MUST be ignored by readers per [MS-OLEPS] 2.21, so left at 0 rather than impersonating a real OS identifier), and CLSID (bytes 8-23, this package has no notion of a property set's own associated CLSID, and GUID_NULL is all zero bytes) all stay zero: streamBytes is fresh off `new Uint8Array`, which already zero-fills every byte none of these three fields is written a second time.
   view.setUint32(24, 1, true); // NumPropertySets
   writeGuid(view, 28, propertySet.formatId);
   view.setUint32(44, HEADER_SIZE, true); // Offset0
