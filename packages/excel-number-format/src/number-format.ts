@@ -1,22 +1,24 @@
-// A tokenizing classifier for Excel's number-format mini-language: the string carried by an xlsx style's <numFmt formatCode="..."> and by a BIFF8 Format record's own stFormat, per ECMA-376 Part 1 SS18.8.30. [MS-XLS] 2.4.126 defers to that same section for how a BIFF8 Format record's string is interpreted (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/300280fd-e4fe-4675-a924-4d383af48d3b) -- OOXML inherited the format codes from BIFF, so xlsx and .xls share the identical language rather than two similar ones. It answers exactly one question: what KIND of value does a numeric cell carrying this format actually hold -- a percentage, an amount of money, a date, a time of day, an elapsed duration, or a plain number? Extracted from ooxml.js's typed/xlsx/number-format.ts and xls-codec's number-format.ts, which had independently implemented the identical classifier (ExaDev/documents.js#848); this package is now the one shared implementation both depend on.
-//
-// This is a classifier, NOT a formatter: nothing here renders a value through a format code (that needs locale data, fill/alignment placeholder geometry, conditional-section evaluation, and colour handling neither consuming codec has asked for), only classifies one.
-//
-// Tokenizing rather than pattern-matching is load-bearing, not a stylistic preference -- every meaningful signal in this language is context-sensitive, and a regex over the raw string gets each of them wrong:
-//   * a 'd' inside "dollars" is literal text, not a day code, and so is every character inside a \-escape or an _x/*x placeholder;
-//   * '$' immediately followed by '-' inside a bracket is a LOCALE tag ([$-809], "English (United Kingdom)") carrying no currency meaning at all, while the same bracket with text before the dash ([$GBP-809], [$£-809]) genuinely is a currency marker -- one character apart, opposite meanings;
-//   * '[h]' is an elapsed-hours bucket (a duration that may exceed 24h) while a bare 'h' is an hour-of-day;
-//   * 'm' is minutes or months depending purely on the code runs around it;
-//   * and a ';' inside a quoted literal does not start a new section.
+/**
+ * A tokenizing classifier for Excel's number-format mini-language: the string carried by an xlsx style's `<numFmt formatCode="...">` and by a BIFF8 Format record's own stFormat, per ECMA-376 Part 1 SS18.8.30. [MS-XLS] 2.4.126 defers to that same section for how a BIFF8 Format record's string is interpreted (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/300280fd-e4fe-4675-a924-4d383af48d3b) -- OOXML inherited the format codes from BIFF, so xlsx and .xls share the identical language rather than two similar ones. It answers exactly one question: what KIND of value does a numeric cell carrying this format actually hold -- a percentage, an amount of money, a date, a time of day, an elapsed duration, or a plain number? Extracted from ooxml.js's typed/xlsx/number-format.ts and xls-codec's number-format.ts, which had independently implemented the identical classifier (ExaDev/documents.js#848); this package is now the one shared implementation both depend on.
+ *
+ * This is a classifier, NOT a formatter: nothing here renders a value through a format code (that needs locale data, fill/alignment placeholder geometry, conditional-section evaluation, and colour handling neither consuming codec has asked for), only classifies one.
+ *
+ * Tokenizing rather than pattern-matching is load-bearing, not a stylistic preference -- every meaningful signal in this language is context-sensitive, and a regex over the raw string gets each of them wrong:
+ *   * a 'd' inside "dollars" is literal text, not a day code, and so is every character inside a \-escape or an _x/*x placeholder;
+ *   * '$' immediately followed by '-' inside a bracket is a LOCALE tag ([$-809], "English (United Kingdom)") carrying no currency meaning at all, while the same bracket with text before the dash ([$GBP-809], [$£-809]) genuinely is a currency marker -- one character apart, opposite meanings;
+ *   * '[h]' is an elapsed-hours bucket (a duration that may exceed 24h) while a bare 'h' is an hour-of-day;
+ *   * 'm' is minutes or months depending purely on the code runs around it;
+ *   * and a ';' inside a quoted literal does not start a new section.
+ */
 
-// A single lexical unit of a format code. 'literal' covers every construct whose payload is TEXT rather than format codes -- a "..." quoted run, a \x escape, and the payload character of an _x (reserve the width of x) or *x (repeat x to fill the cell) placeholder -- so nothing inside one is ever read as a date/time/numeric code. Its text is still SCANNED for a currency symbol, because a literal currency symbol is exactly how ECMA-376's own built-in accounting formats (42/44, `_("$"* #,##0_)`) mark money.
+/** A single lexical unit of a format code. 'literal' covers every construct whose payload is TEXT rather than format codes -- a "..." quoted run, a \x escape, and the payload character of an _x (reserve the width of x) or *x (repeat x to fill the cell) placeholder -- so nothing inside one is ever read as a date/time/numeric code. Its text is still SCANNED for a currency symbol, because a literal currency symbol is exactly how ECMA-376's own built-in accounting formats (42/44, `_("$"* #,##0_)`) mark money. */
 export type NumberFormatToken =
   | { kind: "literal"; text: string }
   | { kind: "bracket"; body: string }
   | { kind: "separator" }
   | { kind: "code"; char: string };
 
-// Excel honours at most four sections (positive; negative; zero; text). A fifth would be malformed, and since this classifier reads only the first section it is dropped rather than guessed at.
+/** Excel honours at most four sections (positive; negative; zero; text). A fifth would be malformed, and since this classifier reads only the first section it is dropped rather than guessed at. */
 export const MAX_NUMBER_FORMAT_SECTIONS = 4;
 
 // Mirrors String.prototype.charAt's own past-the-end contract (the empty string, not undefined) but over a CODE POINT array rather than UTF-16 units, so a rare astral currency symbol stays one token instead of splitting into two lone surrogates.
@@ -25,6 +27,7 @@ function at(chars: readonly string[], index: number): string {
   return char ?? "";
 }
 
+/** Lexes a raw format code into a flat sequence of {@link NumberFormatToken}s -- quoted literals, escape/placeholder literals, bracketed markers, section separators, and bare code characters, in source order. */
 export function tokenizeNumberFormat(formatCode: string): NumberFormatToken[] {
   const chars = [...formatCode];
   const tokens: NumberFormatToken[] = [];
@@ -32,15 +35,11 @@ export function tokenizeNumberFormat(formatCode: string): NumberFormatToken[] {
   while (index < chars.length) {
     const char = at(chars, index);
     if (char === '"') {
-      // An unterminated quote runs to the end of the format code rather than throwing -- real producers never write one, but a malformed code must still tokenize into something classifiable.
-      let text = "";
-      index += 1;
-      // Stryker disable next-line EqualityOperator: index<=chars.length reads one past the end via at()'s "" fallback and appends it to text, a no-op string concatenation indistinguishable from stopping at index<chars.length -- the resulting token and final index (already past the outer loop's own bound either way) are identical under both.
-      while (index < chars.length && at(chars, index) !== '"') {
-        text += at(chars, index);
-        index += 1;
-      }
-      index += 1;
+      // An unterminated quote runs to the end of the format code rather than throwing -- real producers never write one, but a malformed code must still tokenize into something classifiable. The search starts at index + 1, past the opening quote itself, or it would immediately find that same character. closeIndex is chars.length (not -1) for an unterminated quote, since indexOf naturally reports "not found" as -1 and there is no closing quote to find -- joining from index + 1 to chars.length is exactly "the rest of the string".
+      const closeIndex = chars.indexOf('"', index + 1);
+      const textEnd = closeIndex === -1 ? chars.length : closeIndex;
+      const text = chars.slice(index + 1, textEnd).join("");
+      index = textEnd + 1;
       tokens.push({ kind: "literal", text });
       continue;
     }
@@ -51,14 +50,11 @@ export function tokenizeNumberFormat(formatCode: string): NumberFormatToken[] {
       continue;
     }
     if (char === "[") {
-      let body = "";
-      index += 1;
-      // Stryker disable next-line EqualityOperator: index<=chars.length reads one past the end via at()'s "" fallback and appends it to body, a no-op string concatenation indistinguishable from stopping at index<chars.length, for the same reason as the quote-consuming loop above.
-      while (index < chars.length && at(chars, index) !== "]") {
-        body += at(chars, index);
-        index += 1;
-      }
-      index += 1;
+      // An unterminated bracket runs to the end of the format code, for the same reason an unterminated quote does above.
+      const closeIndex = chars.indexOf("]", index + 1);
+      const bodyEnd = closeIndex === -1 ? chars.length : closeIndex;
+      const body = chars.slice(index + 1, bodyEnd).join("");
+      index = bodyEnd + 1;
       tokens.push({ kind: "bracket", body });
       continue;
     }
@@ -73,7 +69,7 @@ export function tokenizeNumberFormat(formatCode: string): NumberFormatToken[] {
   return tokens;
 }
 
-// Splits on separator tokens only -- a ';' inside a quoted literal or a bracket was already consumed as part of that token above, so it can never split a section here. Always returns at least one section (an empty one for an empty format code).
+/** Splits a token stream into sections at its top-level {@link NumberFormatToken} separators, capped at {@link MAX_NUMBER_FORMAT_SECTIONS}. A ';' inside a quoted literal or a bracket was already consumed as part of that token by {@link tokenizeNumberFormat}, so it can never split a section here. Always returns at least one section (an empty one for an empty format code). */
 export function splitNumberFormatSections(
   tokens: readonly NumberFormatToken[],
 ): NumberFormatToken[][] {
@@ -98,7 +94,11 @@ function containsCurrencySymbol(text: string): boolean {
   return CURRENCY_SYMBOL.test(text);
 }
 
-// [$GBP-809] carries an ISO 4217 alphabetic code; [$£-809] and [$R$-416] carry a display SYMBOL instead. Only the three-ASCII-letter shape is treated as a code -- a consuming codec's own currency field is documented as the ISO 4217 code, so a symbol must leave it absent rather than have a code invented for it (there is no faithful symbol-to-code mapping: '$' alone is USD, CAD, AUD, and a dozen others). Exported (not just used internally by classifyBracket above) because a codec's own writer needs the identical predicate to decide whether a currency string it is about to write is a real ISO code or a symbol that cannot go inside a [$...] bracket -- ooxml.js's typed/xlsx/number-format.ts's currencyNumberFormat is exactly this case, and reusing this function rather than a second copy is what keeps the read and write sides from drifting on what counts as a valid code.
+/**
+ * True when `marker` has the shape of an ISO 4217 alphabetic currency code: exactly three ASCII letters, case-insensitively.
+ *
+ * [$GBP-809] carries an ISO 4217 alphabetic code; [$£-809] and [$R$-416] carry a display SYMBOL instead. Only the three-ASCII-letter shape is treated as a code -- a consuming codec's own currency field is documented as the ISO 4217 code, so a symbol must leave it absent rather than have a code invented for it (there is no faithful symbol-to-code mapping: '$' alone is USD, CAD, AUD, and a dozen others). Exported (not just used internally by classifyBracket below) because a codec's own writer needs the identical predicate to decide whether a currency string it is about to write is a real ISO code or a symbol that cannot go inside a [$...] bracket -- ooxml.js's typed/xlsx/number-format.ts's currencyNumberFormat is exactly this case, and reusing this function rather than a second copy is what keeps the read and write sides from drifting on what counts as a valid code.
+ */
 export function isIsoCurrencyCodeShape(marker: string): boolean {
   if (marker.length !== 3) {
     return false;
@@ -169,13 +169,9 @@ function matchesAt(
 }
 
 function codeRunsOf(section: readonly NumberFormatToken[]): CodeRun[] {
-  // Stryker disable next-line ArrayDeclaration: a bogus seed element here becomes its own inert leading run -- no signal branch below recognizes an unrecognized multi-character "letter", and every distance-based lookup (nearestResolvingLetter) walks by relative offset, so a uniform +1 shift to every real run's index changes nothing observable.
-  const chars: string[] = [];
-  for (const token of section) {
-    if (token.kind === "code") {
-      chars.push(token.char);
-    }
-  }
+  const chars = section
+    .filter((token) => token.kind === "code")
+    .map((token) => token.char);
   const runs: CodeRun[] = [];
   let index = 0;
   while (index < chars.length) {
@@ -189,11 +185,8 @@ function codeRunsOf(section: readonly NumberFormatToken[]): CodeRun[] {
     }
     const char = at(chars, index).toLowerCase();
     let length = 0;
-    while (
-      // Stryker disable next-line ConditionalExpression,EqualityOperator,ArithmeticOperator: char is always a real, non-empty character here (index is already bounds-checked by the caller's own while), so the bounds clause is redundant -- at(chars, index+length) returning "" for any out-of-range read already fails the equality test against a non-empty char, stopping the loop at the identical length regardless of what this clause says.
-      index + length < chars.length &&
-      at(chars, index + length).toLowerCase() === char
-    ) {
+    // A plain array read past its own length is `undefined`, not a throw, and `undefined?.toLowerCase()` short-circuits to `undefined` -- which can never equal `char` (always a real, non-empty character here) -- so this single condition already stops the loop at the array's own end with no separate bounds check needed.
+    while (chars[index + length]?.toLowerCase() === char) {
       length += 1;
     }
     runs.push({ letter: char, length });
@@ -210,16 +203,13 @@ function nearestResolvingLetter(
   from: number,
   step: number,
 ): string | undefined {
-  for (
-    let index = from + step;
-    // Stryker disable next-line EqualityOperator: index<=runs.length lets the loop read one past the end via runs[index], which is plain `undefined` for an out-of-range array index (not a throw) -- the very next line's `run !== undefined` guard already discards it, so the loop reaches the identical outcome one iteration later either way.
-    index >= 0 && index < runs.length;
-    index += step
-  ) {
-    const run = runs[index];
-    if (run !== undefined && RESOLVING_LETTERS.includes(run.letter)) {
+  // A plain array read at any out-of-range index (negative or beyond the end) is `undefined`, never a throw, so checking the run itself is exactly the same test that already decides whether the walk has run off either end -- no separate bounds check is needed to keep it from reading forever.
+  let index = from + step;
+  for (let run = runs[index]; run !== undefined; run = runs[index]) {
+    if (RESOLVING_LETTERS.includes(run.letter)) {
       return run.letter;
     }
+    index += step;
   }
   return undefined;
 }
@@ -232,7 +222,7 @@ function monthRunIsMinutes(runs: readonly CodeRun[], index: number): boolean {
   );
 }
 
-// What a format code says the value is. 'elapsedTime' is kept distinct from 'time' because a duration may exceed 24 hours and so has no wall-clock spelling.
+/** What a format code says the value is. 'elapsedTime' is kept distinct from 'time' because a duration may exceed 24 hours and so has no wall-clock spelling. */
 export type NumberFormatClass =
   | { kind: "number" }
   | { kind: "text" }
@@ -300,10 +290,8 @@ function collectSignals(section: readonly NumberFormatToken[]): SectionSignals {
       return;
     }
     if (run.letter === "m") {
-      // Stryker disable next-line BlockStatement: signals.hasTime = true below is kept for clarity even though it's provably redundant -- monthRunIsMinutes only returns true when an 'h' precedes or an 's' follows this run in the same section, and that run's own turn through this same forEach already sets hasTime via the h/s branch above, so no input can make this assignment's removal observable.
-      if (run.length <= 2 && monthRunIsMinutes(runs, index)) {
-        signals.hasTime = true;
-      } else {
+      // A run that resolves to minutes here doesn't need its own hasTime = true: monthRunIsMinutes only returns true when an 'h' precedes or an 's' follows this run in the same section, and that neighbouring run's own turn through this same forEach already sets hasTime via the h/s branch above. Only the month case needs a signal set from here at all.
+      if (!(run.length <= 2 && monthRunIsMinutes(runs, index))) {
         signals.hasDate = true;
       }
       return;
@@ -362,7 +350,11 @@ function classifySection(
   return PLAIN_NUMBER;
 }
 
-// Classification reads the FIRST section only. Sections two through four are the negative/zero/text renderings of the same underlying value -- they can differ in colour, parentheses, and literal text, but never in what kind of thing the cell holds, and a cell whose value happens to be negative must not classify differently from the identical cell holding a positive one.
+/**
+ * Classifies a raw Excel number-format code (an xlsx `<numFmt formatCode>` string, a BIFF8 Format record's stFormat, or one of {@link BUILTIN_NUMBER_FORMATS}) into the {@link NumberFormatClass} of value it says a numeric cell holds.
+ *
+ * Classification reads the FIRST section only. Sections two through four are the negative/zero/text renderings of the same underlying value -- they can differ in colour, parentheses, and literal text, but never in what kind of thing the cell holds, and a cell whose value happens to be negative must not classify differently from the identical cell holding a positive one.
+ */
 export function classifyNumberFormat(formatCode: string): NumberFormatClass {
   const first = splitNumberFormatSections(tokenizeNumberFormat(formatCode))[0];
   return first === undefined ? PLAIN_NUMBER : classifySection(first);
