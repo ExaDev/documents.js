@@ -58,11 +58,34 @@ describe("parsePlc", () => {
     expect(() => parsePlc(new Uint8Array(3), 8, "PlcPcd")).toThrow(
       DocFormatError,
     );
+    expect(() => parsePlc(new Uint8Array(3), 8, "PlcPcd")).toThrow(
+      /PlcPcd is 3 bytes, too short/,
+    );
+  });
+
+  it("rejects a negative element size, naming it in the message", () => {
+    expect(() => parsePlc(new Uint8Array(8), -1, "PlcPcd")).toThrow(
+      /PlcPcd was parsed with an element size of -1, which is not a non-negative integer/,
+    );
+  });
+
+  it("rejects a non-integer element size", () => {
+    expect(() => parsePlc(new Uint8Array(8), 1.5, "PlcPcd")).toThrow(
+      /which is not a non-negative integer/,
+    );
   });
 
   it("rejects keys that are not in ascending order, which the spec requires of every PLC", () => {
     const bytes = plcBytes([10, 5], [new Array<number>(8).fill(0)]);
     expect(() => parsePlc(bytes, 8, "PlcPcd")).toThrow(/ascending/);
+  });
+
+  it("accepts two adjacent equal keys -- ascending order permits a non-decreasing run, not only a strictly increasing one", () => {
+    const bytes = plcBytes(
+      [5, 5, 10],
+      [new Array<number>(8).fill(0), new Array<number>(8).fill(0)],
+    );
+    expect(() => parsePlc(bytes, 8, "PlcPcd")).not.toThrow();
   });
 
   it("accepts an empty PLC of one terminating key and no data elements", () => {
@@ -79,6 +102,13 @@ describe("parsePlc", () => {
     );
     expect(() => plc.element(1)).toThrow(DocFormatError);
     expect(() => plc.element(-1)).toThrow(DocFormatError);
+  });
+
+  it("rejects element(count) even with a zero-byte element size, where slice's own bounds check alone could never catch it", () => {
+    // A zero-byte element makes every slice(bytes, offset, 0, ...) trivially satisfiable regardless of offset, so this is the one construction that isolates parsePlc's own index >= count guard from slice's independent bounds check.
+    const plc = parsePlc(plcBytes([0, 1, 2], []), 0, "PlcPcd");
+    expect(plc.count).toBe(2);
+    expect(() => plc.element(2)).toThrow(DocFormatError);
   });
 });
 
