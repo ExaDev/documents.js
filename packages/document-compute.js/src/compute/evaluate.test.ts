@@ -6,7 +6,7 @@ import type {
   MathUnparsed,
   SymbolTable,
 } from "document-schema.js";
-import { evaluate, isInterval } from "./evaluate";
+import { evaluate, evaluateQuantity, isInterval } from "./evaluate";
 import { interval } from "./interval";
 import { quantity } from "./quantity";
 import {
@@ -567,6 +567,43 @@ describe("evaluate: sum / prod binders -- error paths", () => {
     expect((caught as UnsupportedExpressionError).context).toBe("evaluate:sum");
     expect((caught as UnsupportedExpressionError).message).toBe(
       "evaluate:sum: this position requires a plain Quantity, not an Interval.",
+    );
+  });
+});
+
+describe("evaluateQuantity", () => {
+  it("returns the point value of an expression whose bindings are all point-valued, resolving units through the supplied symbol table", () => {
+    const bindings: FormulaBindings = { m: quantity(2, { mass: 1 }) };
+    const result = evaluateQuantity(
+      app("math:multiply", [
+        sym("m"),
+        qty({ numerator: "3", denominator: "1" }, "si:metre"),
+      ]),
+      bindings,
+      context,
+    );
+    expect(result).toEqual(quantity(6, { mass: 1, length: 1 }));
+  });
+
+  it("defaults to an empty symbol table, exactly as evaluate() does, for an expression that needs no unit lookup", () => {
+    expect(evaluateQuantity(num("7"), {})).toEqual(quantity(7, {}));
+  });
+
+  it("rejects an Interval-valued result under its own context rather than widening the return type", () => {
+    // The one way an Interval reaches this function at all: a binding that is itself one. A caller passing only Quantity bindings (the worked-example harness) can never see this, which is the whole point of the narrowing living here rather than being restated at each such call site.
+    const bindings: FormulaBindings = { phi: interval(1, 2, {}) };
+    let caught: unknown;
+    try {
+      evaluateQuantity(sym("phi"), bindings);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(UnsupportedExpressionError);
+    expect((caught as UnsupportedExpressionError).context).toBe(
+      "evaluateQuantity",
+    );
+    expect((caught as UnsupportedExpressionError).message).toBe(
+      "evaluateQuantity: this position requires a plain Quantity, not an Interval.",
     );
   });
 });
