@@ -1,7 +1,12 @@
 import type { ContentBlock } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { buildTextBody, collectFontFamilies } from "./content-write";
-import { ALIGN_CENTER, ALIGN_LEFT } from "./text/style";
+import {
+  ALIGN_CENTER,
+  ALIGN_JUSTIFY,
+  ALIGN_LEFT,
+  ALIGN_RIGHT,
+} from "./text/style";
 
 const noFonts = (): never => {
   throw new Error("no font family expected in this test");
@@ -81,6 +86,20 @@ describe("buildTextBody", () => {
       indentLevel: 3,
       alignment: undefined,
     });
+  });
+
+  it("maps every alignment value this writer states to its own [MS-PPT] TextAlignmentEnum member", () => {
+    const blocks: ContentBlock[] = [
+      { kind: "paragraph", runs: [{ text: "a" }], alignment: "left" },
+      { kind: "paragraph", runs: [{ text: "b" }], alignment: "right" },
+      { kind: "paragraph", runs: [{ text: "c" }], alignment: "justify" },
+    ];
+    const { style } = buildTextBody(blocks, noFonts);
+    expect(style.paragraphRuns.map((run) => run.properties.alignment)).toEqual([
+      ALIGN_LEFT,
+      ALIGN_RIGHT,
+      ALIGN_JUSTIFY,
+    ]);
   });
 
   it("leaves alignment undefined for a paragraph that states none", () => {
