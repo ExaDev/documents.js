@@ -18,6 +18,7 @@ import { isCompoundFile, readCompoundFile } from "archive-codec";
 import { describe, expect, it } from "vitest";
 
 import {
+  RECORD_CF12,
   RECORD_CONTINUE,
   RECORD_EXTERNSHEET,
   RECORD_LBL,
@@ -32,6 +33,7 @@ import type { XlsContentDocument } from "./content";
 import { readXls, readXlsContent } from "./content";
 import { isXlsFile } from "./container";
 import { writeXls, writeXlsContent } from "./write";
+import { writeSheetConditionalFormats } from "./workbook/conditional-format-write";
 
 // Genuine .xls bytes -- a real [MS-CFB] compound file holding a real BIFF8 Workbook stream -- built by this package's own writer and read back through its own reader, the "primary verification method" this session's writers use throughout (the CFB writer, rtf-codec, wpd-codec). Every test here is a round trip: build a ContentDocument, write it, read it back, and check the read result reflects what was written -- exercising the writer against a reader whose own correctness is independently pinned by content.test.ts's hand-built byte sequences.
 
@@ -2342,5 +2344,203 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
       cellIs,
       { ...textRule, priority: 1 },
     ]);
+  });
+
+  it("round-trips a data bar whose value is shown (the non-default of the earlier hidden-value test)", () => {
+    const rule: ContentSheetConditionalFormat = {
+      type: "dataBar",
+      ranges: [RANGE],
+      min: { type: "min" },
+      max: { type: "max" },
+      color: { r: 1, g: 0, b: 0 },
+    };
+    expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+  });
+
+  it("round-trips an icon set with showValue false and reverse absent (the opposite of the earlier reverse test)", () => {
+    const rule: ContentSheetConditionalFormat = {
+      type: "iconSet",
+      ranges: [RANGE],
+      iconSetType: "3Arrows",
+      showValue: false,
+      thresholds: [
+        { type: "min" },
+        { type: "percent", value: "50" },
+        { type: "max" },
+      ],
+    };
+    expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+  });
+
+  it("round-trips a top10 rule selecting from the top rather than the bottom, by count rather than percent", () => {
+    const rule: ContentSheetConditionalFormat = {
+      type: "top10",
+      ranges: [RANGE],
+      rank: 3,
+    };
+    expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+  });
+
+  it("round-trips every combination of aboveAverage/equalAverage", () => {
+    const aboveEqual: ContentSheetConditionalFormat = {
+      type: "aboveAverage",
+      ranges: [RANGE],
+      equalAverage: true,
+    };
+    const belowNotEqual: ContentSheetConditionalFormat = {
+      type: "aboveAverage",
+      ranges: [RANGE],
+      aboveAverage: false,
+    };
+    expect(roundTripped(aboveEqual)).toEqual([{ ...aboveEqual, priority: 1 }]);
+    expect(roundTripped(belowNotEqual)).toEqual([
+      { ...belowNotEqual, priority: 1 },
+    ]);
+  });
+
+  it("round-trips a rule declaring stopIfTrue", () => {
+    const rule: ContentSheetConditionalFormat = {
+      type: "top10",
+      ranges: [RANGE],
+      rank: 1,
+      stopIfTrue: true,
+    };
+    expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+  });
+
+  it("round-trips a colour-scale stop of every threshold kind, including percentile and formula", () => {
+    const rule: ContentSheetConditionalFormat = {
+      type: "colorScale",
+      ranges: [RANGE],
+      stops: [
+        {
+          value: { type: "percentile", value: "10" },
+          color: { r: 0, g: 0, b: 1 },
+        },
+        {
+          value: { type: "formula", value: "A1" },
+          color: { r: 1, g: 0, b: 0 },
+        },
+      ],
+    };
+    expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+  });
+
+  it("refuses a threshold of a value-bearing type carrying no value", () => {
+    expect(() =>
+      roundTripped({
+        type: "colorScale",
+        ranges: [RANGE],
+        stops: [
+          { value: { type: "percent" }, color: { r: 0, g: 0, b: 0 } },
+          { value: { type: "max" }, color: { r: 1, g: 1, b: 1 } },
+        ],
+      }),
+    ).toThrow(/carries no value/);
+  });
+});
+
+describe("writeSheetConditionalFormats: bytes the reader never inspects (#971/#1186)", () => {
+  const RANGE = { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 };
+  const NO_ICV = (): number => 0;
+
+  function cf12RecordDataOf(rule: ContentSheetConditionalFormat): Uint8Array {
+    const pieces = writeSheetConditionalFormats(
+      sheet("S", [], { conditionalFormats: [rule] }),
+      NO_ICV,
+    );
+    const total = pieces.reduce((sum, piece) => sum + piece.length, 0);
+    const stream = new Uint8Array(total);
+    let offset = 0;
+    for (const piece of pieces) {
+      stream.set(piece, offset);
+      offset += piece.length;
+    }
+    const cf12 = readRecords(stream).find(
+      (record) => record.type === RECORD_CF12,
+    );
+    if (cf12 === undefined) {
+      throw new Error("no CF12 record was written");
+    }
+    return cf12.data;
+  }
+
+  function u32At(data: Uint8Array, offset: number): number {
+    return new DataView(
+      data.buffer,
+      data.byteOffset,
+      data.byteLength,
+    ).getUint32(offset, true);
+  }
+
+  function f64At(data: Uint8Array, offset: number): number {
+    return new DataView(
+      data.buffer,
+      data.byteOffset,
+      data.byteLength,
+    ).getFloat64(offset, true);
+  }
+
+  // CF12's own skeleton up to and including cbDxf ([MS-XLS] 2.4.43): frtRefHeader.rt(2) + grbitFrt(2) + ref8(8) + ct(1) + cp(1) + cce1(2) + cce2(2) = 18 bytes, then cbDxf itself as a 4-byte field.
+  const CB_DXF_OFFSET = 18;
+
+  it("writes cbDxf as 0 for a rule stating no style at all", () => {
+    const data = cf12RecordDataOf({
+      type: "aboveAverage",
+      ranges: [RANGE],
+    });
+    expect(u32At(data, CB_DXF_OFFSET)).toBe(0);
+  });
+
+  it("writes a non-zero cbDxf for a rule stating a style", () => {
+    const data = cf12RecordDataOf({
+      type: "aboveAverage",
+      ranges: [RANGE],
+      style: { textColor: { r: 1, g: 0, b: 0 } },
+    });
+    expect(u32At(data, CB_DXF_OFFSET)).toBeGreaterThan(0);
+  });
+
+  // A colour-scale CF12's rgbCt (CFGradient, [MS-XLS] 2.5.32) starts right after the shared skeleton: cbDxf(4, always reading 0 here since ct 0x03 pins cbDxf to 0) + the empty dxf itself (0 bytes) + fmlaActive.cce(2) + fStopIfTrue(1) + ipriority(2) + icfTemplate(2) + cbTemplateParm(1) + templateParams(16) = 28 bytes after CB_DXF_OFFSET's own 4, i.e. CB_DXF_OFFSET + 4 + 28 = 50 is wrong -- rechecked directly below against the record's own declared cbDxf/cbTemplateParm fields rather than hardcoded a second time, so a change to any one of those fixed sizes cannot silently desync this offset from the real layout.
+  function gradientOffsetOf(data: Uint8Array): number {
+    const cbDxf = u32At(data, CB_DXF_OFFSET);
+    const cbTemplateParmOffset = CB_DXF_OFFSET + 4 + cbDxf + 2 + 1 + 2 + 2; // + fmlaActive.cce + fStopIfTrue + ipriority + icfTemplate
+    const cbTemplateParm = data[cbTemplateParmOffset] ?? 0;
+    return cbTemplateParmOffset + 1 + cbTemplateParm;
+  }
+
+  // CFGradient's own header (unused(2) + reserved1(1) + cInterpCurve(1) + cGradientCurve(1) + flags(1) = 6 bytes), then rgInterp: cInterpCurve entries of CFGradientInterpItem (a CFVO -- 3 bytes for a fixed min/max stop, cce=0 -- then the stop's own interpolation-position float, 8 bytes).
+  function interpFractionAt(data: Uint8Array, stopIndex: number): number {
+    const rgInterpStart = gradientOffsetOf(data) + 6;
+    const stopStart = rgInterpStart + stopIndex * (3 + 8);
+    return f64At(data, stopStart + 3);
+  }
+
+  it("writes a two-stop gradient's own fixed 0.0/1.0 interpolation fractions, not the three-stop set", () => {
+    const data = cf12RecordDataOf({
+      type: "colorScale",
+      ranges: [RANGE],
+      stops: [
+        { value: { type: "min" }, color: { r: 0, g: 0, b: 0 } },
+        { value: { type: "max" }, color: { r: 1, g: 1, b: 1 } },
+      ],
+    });
+    expect(interpFractionAt(data, 0)).toBe(0.0);
+    expect(interpFractionAt(data, 1)).toBe(1.0);
+  });
+
+  it("writes a three-stop gradient's own fixed 0.0/0.5/1.0 interpolation fractions, not the two-stop set", () => {
+    const data = cf12RecordDataOf({
+      type: "colorScale",
+      ranges: [RANGE],
+      stops: [
+        { value: { type: "min" }, color: { r: 0, g: 0, b: 0 } },
+        // "min" again (rather than a value-bearing type): every stop here must compile to the identical fixed 3-byte CFVO (cce 0, no rgce) for interpFractionAt's own fixed stride assumption to address the right byte offset -- the middle stop's own threshold value is irrelevant to what this test checks.
+        { value: { type: "min" }, color: { r: 0.5, g: 0.5, b: 0.5 } },
+        { value: { type: "max" }, color: { r: 1, g: 1, b: 1 } },
+      ],
+    });
+    expect(interpFractionAt(data, 0)).toBe(0.0);
+    expect(interpFractionAt(data, 1)).toBe(0.5);
   });
 });
