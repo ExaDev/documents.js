@@ -38,7 +38,8 @@ export function createNativeFileAccess(): FileAccessPort {
               description: "Document",
               accept: {
                 [options.mimeType]: [
-                  `.${options.suggestedName.split(".").pop() ?? "bin"}`,
+                  // String.split on any input, including one with no '.' at all, always returns at least one element, so pop() here can never be undefined -- there is no genuinely-extension-less case to fall back for.
+                  `.${options.suggestedName.split(".").pop()}`,
                 ],
               },
             },
