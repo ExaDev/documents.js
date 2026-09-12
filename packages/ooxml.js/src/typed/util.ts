@@ -95,16 +95,16 @@ export interface Relationship {
   targetMode?: string;
 }
 
-// The .rels part for a given part path: word/document.xml -> word/_rels/document.xml.rels.
-function relsPathFor(partPath: string): string {
+// The .rels part for a given part path: word/document.xml -> word/_rels/document.xml.rels. Exported purely for direct unit coverage -- resolveRelationships is its only real caller.
+export function relsPathFor(partPath: string): string {
   const lastSlash = partPath.lastIndexOf("/");
   const dir = lastSlash === -1 ? "" : partPath.slice(0, lastSlash);
   const fileName = lastSlash === -1 ? partPath : partPath.slice(lastSlash + 1);
   return `${dir}/_rels/${fileName}.rels`;
 }
 
-// Resolve a relationship Target (relative to the subject part's directory, or package-rooted with a leading slash) to a package-relative part path.
-function resolveRelTarget(partPath: string, target: string): string {
+// Resolve a relationship Target (relative to the subject part's directory, or package-rooted with a leading slash) to a package-relative part path. Exported purely for direct unit coverage -- resolveRelationships is its only real caller.
+export function resolveRelTarget(partPath: string, target: string): string {
   if (target.startsWith("/")) {
     return target.slice(1);
   }
