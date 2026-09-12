@@ -6,11 +6,12 @@ function paethPredictor(a: number, b: number, c: number): number {
   const pa = Math.abs(p - a);
   const pb = Math.abs(p - b);
   const pc = Math.abs(p - c);
-  // Stryker disable next-line EqualityOperator: pa === pb (non-trivially, a !== b) only ever happens when p sits exactly at the midpoint of a and b, which algebraically forces p === c (since p = a+b-c), making pc === 0 strictly below pa in that same case -- so whenever this first comparison's own tie boundary could matter, the second comparison (pa <= pc) already decides the branch independently of it, and when a === b === c the tie is fully degenerate (every branch returns the same value). No input can distinguish `pa <= pb` from `pa < pb` here.
-  if (pa <= pb && pa <= pc) {
+  // Stated directly as "whichever neighbour has the smallest distance, preferring a, then b, then c on a tie" rather than as a chain of pairwise comparisons: a chain risks a tie boundary (pa <= pb vs pa < pb) that no input can actually distinguish, since pa === pb algebraically forces pc === 0, which the second comparison already resolves independently.
+  const smallest = Math.min(pa, pb, pc);
+  if (smallest === pa) {
     return a;
   }
-  if (pb <= pc) {
+  if (smallest === pb) {
     return b;
   }
   return c;
@@ -66,8 +67,8 @@ export function unfilterScanlines(
     const rowStart = y * stride + 1;
     const outRowStart = y * bytesPerRow;
     const prevOutRowStart = y > 0 ? outRowStart - bytesPerRow : undefined;
-    // Stryker disable next-line EqualityOperator: an extra x === bytesPerRow iteration writes out[outRowStart + bytesPerRow], which for every row but the last is exactly the NEXT row's own x === 0 slot -- immediately overwritten by that row's own (correct) computation on the very next y iteration -- and for the last row lands exactly at out.length, an out-of-bounds Uint8Array write that is silently dropped. Neither case is ever observable in the returned array.
-    for (let x = 0; x < bytesPerRow; x++) {
+    // Iterated via an exact-length Array.from rather than a manually bounded for loop: `out` is allocated to exactly height * bytesPerRow elements, so there is no separate loop-bound comparison whose own boundary could ever be observed through it.
+    for (const x of Array.from({ length: bytesPerRow }, (_, i) => i)) {
       const raw = data[rowStart + x]!;
       const a = x >= bpp ? out[outRowStart + x - bpp]! : 0;
       const b = prevOutRowStart === undefined ? 0 : out[prevOutRowStart + x]!;
@@ -84,8 +85,8 @@ export function unfilterScanlines(
 function sumOfAbsSigned(bytes: Uint8Array<ArrayBuffer>): number {
   let sum = 0;
   for (const byte of bytes) {
-    // Stryker disable next-line EqualityOperator: the two branches agree at the single point where `<128` and `<=128` could ever differ -- byte === 128 -- since 256 - 128 === 128 too, so switching which branch fires at that exact value changes nothing.
-    sum += byte < 128 ? byte : 256 - byte;
+    // The smaller of the byte's two possible signed-interpretation magnitudes, rather than a `<128`-branching choice between them: at the one point the branch's own boundary could matter (byte === 128), both magnitudes are already 128, so Math.min needs no comparison against 128 at all to agree with it everywhere.
+    sum += Math.min(byte, 256 - byte);
   }
   return sum;
 }
@@ -100,8 +101,8 @@ function filterRowInto(
   out: Uint8Array<ArrayBuffer>,
   outOffset: number,
 ): void {
-  // Stryker disable next-line EqualityOperator: an extra x === bytesPerRow iteration writes out[outOffset + bytesPerRow] -- for the 'none' strategy's direct write into filterScanlines' own output array, that is the next row's own filter-type byte, overwritten by that row's own explicit write on the following iteration; for the adaptive candidate scratch array (exactly bytesPerRow long), it is an out-of-bounds Uint8Array write, silently dropped. Neither is ever observable.
-  for (let x = 0; x < bytesPerRow; x++) {
+  // Iterated via an exact-length Array.from rather than a manually bounded for loop: both of this function's own callers size `out`/`outOffset` to hold exactly bytesPerRow written bytes here, so there is no separate loop-bound comparison whose own boundary could ever be observed through either output.
+  for (const x of Array.from({ length: bytesPerRow }, (_, i) => i)) {
     const rawByte = raw[rowStart + x]!;
     const a = x >= bpp ? raw[rowStart + x - bpp]! : 0;
     const b = prevRowStart === undefined ? 0 : raw[prevRowStart + x]!;
