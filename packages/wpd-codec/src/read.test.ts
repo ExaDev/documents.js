@@ -27,6 +27,7 @@ const ATTRIBUTE_OFF = 0xf3;
 const BOLD = 12;
 const ITALICS = 8;
 const UNDERLINE = 14;
+const STRIKEOUT = 13;
 const DOUBLE_UNDERLINE = 11;
 const SMALL_CAPS = 15;
 
@@ -228,6 +229,34 @@ describe("readWpdContent", () => {
     expect(paragraphsOf(document)[0]?.runs).toEqual([{ text: "ab" }]);
   });
 
+  it("splits a run at strikeout, the same way as the other boolean attributes", () => {
+    const document = readDocumentArea([
+      ...text("a"),
+      ATTRIBUTE_ON,
+      STRIKEOUT,
+      ATTRIBUTE_ON,
+      ...text("b"),
+      ATTRIBUTE_OFF,
+      STRIKEOUT,
+      ATTRIBUTE_OFF,
+      ...text("c"),
+    ]);
+    expect(paragraphsOf(document)[0]?.runs).toEqual([
+      { text: "a" },
+      { text: "b", strike: true },
+      { text: "c" },
+    ]);
+  });
+
+  it("gives a plain run no optional keys at all, not keys holding undefined", () => {
+    const document = readDocumentArea([...text("plain")]);
+    const run = paragraphsOf(document)[0]?.runs[0];
+    expect(run).toBeDefined();
+    for (const key of ["strike", "fontFamily", "sizePt", "color"]) {
+      expect(run === undefined ? false : Object.hasOwn(run, key)).toBe(false);
+    }
+  });
+
   // "The surrounded text is passed over by the formatter and is not displayed."
   it("drops text between the Start and End of Text to Skip pair", () => {
     const document = readDocumentArea([
@@ -280,14 +309,15 @@ describe("readWpdContent", () => {
       ...variableFunction({
         group: 0xd4,
         subgroup: 0x18,
-        nonDeletable: [255, 0, 0],
+        // A distinct, non-zero, non-255 value on every channel: 0 or 255 would divide to the same result a stray multiplication would give.
+        nonDeletable: [102, 51, 204],
       }),
-      ...text("red"),
+      ...text("mix"),
     ]);
     expect(paragraphsOf(document)[0]?.runs[0]?.color).toEqual({
-      r: 1,
-      g: 0,
-      b: 0,
+      r: 102 / 255,
+      g: 51 / 255,
+      b: 204 / 255,
     });
   });
 
@@ -340,6 +370,62 @@ describe("readWpdContent", () => {
     expect(
       readWpdContent(compoundFileWithStream(PERFECT_OFFICE_MAIN_STREAM, bare)),
     ).toEqual(readWpdContent(bare));
+  });
+
+  it("abandons a footnote left open across a paragraph boundary and reports it", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    const bytes = buildWpdFile([
+      ...variableFunction({ group: 0xd7, subgroup: 0x00, prefixIds: [1] }), // FOOTNOTE_ON
+      ...text("1"),
+      HARD_EOL,
+      ...text("next"),
+      ...variableFunction({ group: 0xd7, subgroup: 0x01 }), // FOOTNOTE_OFF
+    ]);
+    const document = readWpdContent(bytes, {
+      sink: (d) => diagnostics.push(d),
+    });
+    const paragraphs = paragraphsOf(document);
+    expect(
+      paragraphs.every((paragraph) => paragraph.constructs === undefined),
+    ).toBe(true);
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.NoteSpansParagraphs,
+    );
+    expect(found?.message).toBe(
+      "A footnote or endnote's own On/Off pair straddled a paragraph boundary, which the run-scoped note anchor cannot express; its reference text became ordinary paragraph text with no note anchor.",
+    );
+  });
+
+  it("does not apply a font face change when the named packet is not a font descriptor", () => {
+    const document = readDocumentArea(
+      [
+        ...variableFunction({
+          group: 0xd4,
+          subgroup: 0x1a,
+          prefixIds: [1],
+          nonDeletable: [0, 0, 0, 0, 0, 0, 0, 0],
+        }),
+        ...text("plain"),
+      ],
+      [{ packetType: 0x08, bytes: new Uint8Array(0) }], // General WP Text, not a font descriptor
+    );
+    expect(paragraphsOf(document)[0]?.runs[0]).toEqual({ text: "plain" });
+  });
+
+  it("does not apply a font face change when the descriptor packet's own typeface name cannot be read", () => {
+    const document = readDocumentArea(
+      [
+        ...variableFunction({
+          group: 0xd4,
+          subgroup: 0x1a,
+          prefixIds: [1],
+          nonDeletable: [0, 0, 0, 0, 0, 0, 0, 0],
+        }),
+        ...text("plain"),
+      ],
+      [{ packetType: 0x55, bytes: new Uint8Array(0) }], // font descriptor packet type, but too short for a typeface name
+    );
+    expect(paragraphsOf(document)[0]?.runs[0]).toEqual({ text: "plain" });
   });
 
   describe("style packet resolution", () => {
@@ -1207,6 +1293,8 @@ describe("native OLE objects (#1191)", () => {
       name: "ole1-2",
       base64: bytesToBase64(new Uint8Array(ole1Data)),
     });
+    // No footnotes or endnotes rode along with the OLE object, so the tree carries no definitions table entry at all -- not merely an empty one.
+    expect(tree.definitions).toBeUndefined();
   });
 
   it("collapses two boxes naming the same OLE object into one attachment entry", () => {

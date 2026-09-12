@@ -633,3 +633,309 @@ describe("constructs this reader does not lift", () => {
     },
   );
 });
+
+describe("page geometry margin subgroup isolation", () => {
+  it("sets only the bottom margin from PAGE_BOTTOM_MARGIN_SET, leaving the top at its default", () => {
+    const section = sectionOf(
+      readDocumentArea([
+        ...marginFunction(PAGE_GROUP, 0x01, 900), // bottom only
+        ...text("x"),
+      ]),
+    );
+    expect(section.margins.bottomPt).toBe(54);
+    expect(section.margins.topPt).toBe(72); // default, not touched
+  });
+
+  it("sets only the right margin from COLUMN_RIGHT_MARGIN_SET, leaving the left at its default", () => {
+    const section = sectionOf(
+      readDocumentArea([
+        ...marginFunction(COLUMN_GROUP, 0x01, 2400), // right only
+        ...text("x"),
+      ]),
+    );
+    expect(section.margins.rightPt).toBe(144);
+    expect(section.margins.leftPt).toBe(72); // default, not touched
+  });
+
+  it("reports the exact PageGeometryChanged message", () => {
+    const { diagnostics } = (() => {
+      const diagnostics: WpdDiagnostic[] = [];
+      const document = readWpdContent(
+        buildWpdFile([
+          ...marginFunction(PAGE_GROUP, 0x00, 600),
+          ...text("first"),
+          HARD_EOL,
+          ...marginFunction(PAGE_GROUP, 0x00, 2400),
+          ...text("second"),
+        ]),
+        { sink: (d) => diagnostics.push(d) },
+      );
+      return { document, diagnostics };
+    })();
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.PageGeometryChanged,
+    );
+    expect(found?.message).toBe(
+      "This document changes its page size or margins partway through; the section carries the geometry the document opens with.",
+    );
+  });
+
+  it("reports the exact landscape-orientation message", () => {
+    const { document, diagnostics } = (() => {
+      const diagnostics: WpdDiagnostic[] = [];
+      const document = readWpdContent(
+        buildWpdFile([
+          ...pageForm({ lengthWpu: 10200, widthWpu: 13200, orientation: 1 }),
+          ...text("wide"),
+        ]),
+        { sink: (d) => diagnostics.push(d) },
+      );
+      return { document, diagnostics };
+    })();
+    void document;
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.LandscapeOrientationUnmapped,
+    );
+    expect(found?.message).toBe(
+      "The document's form declares a landscape orientation; the form's own stated width and length are used as written, since a page size carries no orientation.",
+    );
+  });
+});
+
+describe("table cell attribute gaps", () => {
+  const CELL_FORMULA = 0x81;
+
+  it("reports a truncated embedded subfunction list with the exact message", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile([
+        ...tableDefinition([1200]),
+        ...text("cell"),
+        ...variableFunction({
+          group: 0xd0,
+          subgroup: EOL_TABLE_ROW,
+          // deletableSize word claims 50 bytes of deletable data, but none follow -- overruns the function's own nonDeletable region.
+          nonDeletable: [...word(50)],
+        }),
+        ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+      ]),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    void document;
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.TableAttributesTruncated,
+    );
+    expect(found?.message).toBe(
+      "A cell's embedded attribute list held a record of undocumented length, so the attributes after it were not read.",
+    );
+  });
+
+  it("reports an unresolved table formula with the exact message, keeping the cell's own text", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile([
+        ...tableDefinition([1200]),
+        ...text("42"),
+        ...eolFunction({
+          subgroup: EOL_TABLE_ROW,
+          // A formula subfunction whose own token bytes readTableFormula cannot decode with confidence.
+          embedded: embeddedSubfunction(CELL_FORMULA, [
+            ...word(1),
+            0xff, // not a recognised formula token code
+            0,
+            0,
+          ]),
+        }),
+        ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+      ]),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    void document;
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.TableFormulaUnresolved,
+    );
+    expect(found?.message).toBe(
+      "A table cell carries a formula this reader could not decode with confidence, so the cell keeps its displayed text but not the formula that produced it.",
+    );
+  });
+
+  it("resolves a blended (pattern) cell fill and reports it", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile([
+        ...tableDefinition([1200]),
+        ...text("shaded"),
+        ...eolFunction({
+          subgroup: EOL_TABLE_ROW,
+          // foreground (10,20,30) shade 200 (unused), background (0,255,0), background shade 128 -- not FULL_SHADE (255), so the fill blends.
+          embedded: embeddedSubfunction(
+            CELL_FILL_COLORS,
+            [10, 20, 30, 200, 0, 255, 0, 128],
+          ),
+        }),
+        ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+      ]),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    const cell = tablesOf(document)[0]?.rows[0]?.cells[0];
+    expect(cell?.background?.kind).toBe("pattern");
+    expect(
+      diagnostics.some((d) => d.code === WpdDiagnosticCodes.CellFillBlended),
+    ).toBe(true);
+  });
+});
+
+describe("style resolution depth and scope handling", () => {
+  const GLOBAL_ON = 0x0a;
+  const GLOBAL_OFF = 0x0b;
+  const NORMAL_STYLE_PACKET_TYPE = 0x30;
+  const NO_SYSTEM_STYLE = 0xff;
+
+  function normalStylePacket(
+    prefixIdOfNextStyle: number | undefined,
+    beginBytes: readonly number[],
+  ) {
+    const headerSize = 2 + 2 + 16;
+    const bytes = new Uint8Array(headerSize + beginBytes.length);
+    bytes[2] = 4;
+    const putUint32 = (offset: number, value: number) => {
+      bytes[offset] = value & 0xff;
+      bytes[offset + 1] = (value >>> 8) & 0xff;
+      bytes[offset + 2] = (value >>> 16) & 0xff;
+      bytes[offset + 3] = (value >>> 24) & 0xff;
+    };
+    putUint32(4, headerSize);
+    putUint32(8, 0);
+    putUint32(12, beginBytes.length);
+    bytes.set(beginBytes, headerSize);
+    void prefixIdOfNextStyle;
+    return { packetType: NORMAL_STYLE_PACKET_TYPE, bytes };
+  }
+
+  // A style whose own begin block opens ANOTHER style scope (naming the same packet again, at a fresh prefix ID) recurses through applyStylePacketBegin; repeating that packet at every depth walks past MAX_STYLE_RESOLUTION_DEPTH (16) on genuinely self-referential input.
+  it("stops resolving a style chain deeper than MAX_STYLE_RESOLUTION_DEPTH and reports it", () => {
+    const prefixIds = Array.from({ length: 20 }, (_, i) => i + 1);
+    const packets = prefixIds.map((id) =>
+      normalStylePacket(
+        id,
+        variableFunction({
+          group: STYLE_GROUP,
+          subgroup: GLOBAL_ON,
+          prefixIds: [id + 1],
+          nonDeletable: [0, 0, NO_SYSTEM_STYLE],
+        }),
+      ),
+    );
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile(
+        [
+          ...variableFunction({
+            group: STYLE_GROUP,
+            subgroup: GLOBAL_ON,
+            prefixIds: [1],
+            nonDeletable: [0, 0, NO_SYSTEM_STYLE],
+          }),
+          ...text("deep"),
+        ],
+        packets,
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    void document;
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.StyleResolutionDepthExceeded,
+    );
+    expect(found?.message).toBe(
+      "A chain of styles resolving one another's own packets ran deeper than this reader will follow, so the deepest style's own direct formatting was not applied.",
+    );
+  });
+
+  // The four intermediate style subfunctions (per style.test.ts: 1, 2, 5, 6, 7, 8) delimit the style's own before/after codes but neither open nor close a scope -- one arriving mid-scope must not be mistaken for the scope's own closer.
+  it("does not close a style scope on an intermediate subfunction", () => {
+    const document = readDocumentArea([
+      ...variableFunction({
+        group: STYLE_GROUP,
+        subgroup: GLOBAL_ON,
+        prefixIds: [1],
+        nonDeletable: [0, 0, 68], // heading level 1
+      }),
+      ...variableFunction({ group: STYLE_GROUP, subgroup: 1 }), // intermediate, neither opener nor closer
+      ...text("Title"),
+      HARD_EOL,
+    ]);
+    expect(paragraphsOf(document)[0]?.headingLevel).toBe(1);
+  });
+
+  // restoreFormattingSnapshot's own for-of loop must carry every attribute the snapshot held, not just the first: bold AND italic both open before the style scope, the style's own begin block changes neither, and both must survive the scope's close.
+  it("restores every active attribute the snapshot held, not only one", () => {
+    const document = readDocumentArea(
+      [
+        0xf2,
+        12,
+        0xf2, // bold on (ATTRIBUTE_ON, BOLD, ATTRIBUTE_ON)
+        0xf2,
+        8,
+        0xf2, // italic on (ATTRIBUTE_ON, ITALICS, ATTRIBUTE_ON)
+        ...variableFunction({
+          group: STYLE_GROUP,
+          subgroup: GLOBAL_ON,
+          prefixIds: [1],
+          nonDeletable: [0, 0, NO_SYSTEM_STYLE],
+        }),
+        ...text("styled"),
+        ...variableFunction({ group: STYLE_GROUP, subgroup: GLOBAL_OFF }),
+        ...text("after"),
+      ],
+      [normalStylePacket(undefined, [0xf2, 14, 0xf2])], // begin block turns on underline too
+    );
+    const runs = paragraphsOf(document)[0]?.runs;
+    expect(runs?.[0]).toEqual({
+      text: "styled",
+      bold: true,
+      italic: true,
+      underline: true,
+    });
+    expect(runs?.[1]).toEqual({ text: "after", bold: true, italic: true });
+  });
+});
+
+describe("outline numbering gaps", () => {
+  it("keeps the first paragraph number display's level when a second one arrives before it closes", () => {
+    const document = readDocumentArea([
+      ...variableFunction({
+        group: DISPLAY_NUMBER_GROUP,
+        subgroup: 0x0c,
+        nonDeletable: [1],
+      }),
+      ...variableFunction({
+        group: DISPLAY_NUMBER_GROUP,
+        subgroup: 0x0c,
+        nonDeletable: [5], // a second On, nested -- must not overwrite the first level
+      }),
+      ...text("Item"),
+      HARD_EOL,
+    ]);
+    expect(paragraphsOf(document)[0]?.list).toEqual({ level: 1 });
+  });
+
+  it("does not let numberDisplayDepth go negative, which would wrongly suppress later text", () => {
+    const document = readDocumentArea([
+      ...variableFunction({ group: DISPLAY_NUMBER_GROUP, subgroup: 0x0d }), // Off with no matching On
+      ...variableFunction({ group: DISPLAY_NUMBER_GROUP, subgroup: 0x0d }), // a second stray Off
+      ...variableFunction({
+        group: DISPLAY_NUMBER_GROUP,
+        subgroup: 0x0c,
+        nonDeletable: [0],
+      }), // On: depth must become exactly 1, not climb out of a negative hole
+      ...text("hidden"),
+      ...variableFunction({ group: DISPLAY_NUMBER_GROUP, subgroup: 0x0d }),
+      ...text("shown"),
+    ]);
+    expect(
+      paragraphsOf(document)[0]
+        ?.runs.map((r) => r.text)
+        .join(""),
+    ).toBe("shown");
+  });
+});
