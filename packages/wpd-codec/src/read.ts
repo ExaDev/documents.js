@@ -397,15 +397,10 @@ function flushParagraphIfContent(
   flushParagraph(state, sink);
 }
 
-// The innermost open style scope that says something structural. An enclosing Global On naming the document's Normal style does not override a heading style opened inside it, and a scope with no meaning at all is transparent.
+// The innermost open style scope that says something structural. An enclosing Global On naming the document's Normal style does not override a heading style opened inside it, and a scope with no meaning at all is transparent. findLast walks the scope stack from its own last (innermost) entry backward toward the first (outermost), exactly the search order this needs, with no separate index arithmetic of its own to keep in step with the stack's own length.
 function effectiveStyle(state: ReaderState): WpdStyleSemantics | undefined {
-  for (let index = state.styleScopes.length - 1; index >= 0; index -= 1) {
-    const semantics = state.styleScopes[index]?.semantics;
-    if (semantics !== undefined) {
-      return semantics;
-    }
-  }
-  return undefined;
+  return state.styleScopes.findLast((scope) => scope.semantics !== undefined)
+    ?.semantics;
 }
 
 function appendText(state: ReaderState, text: string): void {

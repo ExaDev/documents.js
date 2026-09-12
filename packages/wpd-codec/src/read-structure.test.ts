@@ -392,6 +392,50 @@ describe("tables", () => {
     );
   });
 
+  // closeCell's own alignment walk narrows to paragraph blocks before setting alignment; a cell holding a non-paragraph block (a page break, here) alongside its paragraph must leave that other block alone rather than stamping an alignment field onto it too.
+  it("applies a cell's own justification only to its paragraph blocks, not a page break sharing the cell", () => {
+    const document = readDocumentArea([
+      ...tableDefinition([1200]),
+      ...text("centred"),
+      0xc7, // hard end of page
+      ...eolFunction({
+        subgroup: EOL_TABLE_ROW,
+        embedded: embeddedSubfunction(CELL_INFORMATION, [
+          0x02,
+          0x02,
+          0x00,
+          ...word(0),
+          ...word(0),
+        ]),
+      }),
+      ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+    ]);
+    const cell = tablesOf(document)[0]?.rows[0]?.cells[0];
+    const pageBreak = cell?.blocks.find((block) => block.kind === "pageBreak");
+    expect(pageBreak).toBeDefined();
+    expect(
+      pageBreak === undefined ? true : Object.hasOwn(pageBreak, "alignment"),
+    ).toBe(false);
+  });
+
+  it("gives a plain cell and row no optional keys at all, not keys holding undefined", () => {
+    const document = readDocumentArea([
+      ...tableDefinition([1200]),
+      ...text("plain"),
+      ...eolFunction({ subgroup: EOL_TABLE_ROW }),
+      ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+    ]);
+    const row = tablesOf(document)[0]?.rows[0];
+    const cell = row?.cells[0];
+    expect(cell).toBeDefined();
+    for (const key of ["colSpan", "rowSpan", "background", "formula"]) {
+      expect(cell === undefined ? false : Object.hasOwn(cell, key)).toBe(false);
+    }
+    expect(row === undefined ? false : Object.hasOwn(row, "heightPt")).toBe(
+      false,
+    );
+  });
+
   it("reads a fixed row height", () => {
     const document = readDocumentArea([
       ...tableDefinition([1200]),
@@ -465,6 +509,16 @@ describe("styles", () => {
     expect(paragraphsOf(document)[0]?.headingLevel).toBe(2);
   });
 
+  // The heading level is captured once, at the paragraph's own first character, and never re-derived from whatever style happens to be active later in the same paragraph -- a second, different structural style opening later must not overwrite it.
+  it("keeps the first style's own heading level, not a second style's, within one paragraph", () => {
+    const document = readDocumentArea([
+      ...styleScope(70, text("a")),
+      ...styleScope(69, text("b")),
+      HARD_EOL,
+    ]);
+    expect(paragraphsOf(document)[0]?.headingLevel).toBe(3);
+  });
+
   // "52 = level 1 style (indented)" -- an outline level, counted from zero by ContentListMembership.
   it("reads an outline level style as a list membership", () => {
     const document = readDocumentArea([
@@ -501,12 +555,13 @@ describe("outline numbering", () => {
     const paragraph = paragraphsOf(document)[0];
     expect(paragraph?.list).toEqual({ level: 2 });
     expect(paragraph?.runs.map((run) => run.text).join("")).toBe("Item text");
-    expect(
-      diagnostics.some(
-        (diagnostic) =>
-          diagnostic.code === WpdDiagnosticCodes.OutlineNumberRegenerated,
-      ),
-    ).toBe(true);
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === WpdDiagnosticCodes.OutlineNumberRegenerated,
+    );
+    expect(found?.message).toBe(
+      "An outline number's rendered digits were replaced by the list membership that regenerates them.",
+    );
   });
 
   // Every other member of the group displays a counter inside running text and carries no structure, so its digits stay exactly where they are.
@@ -610,13 +665,33 @@ describe("document metadata", () => {
 describe("constructs this reader does not lift", () => {
   // Each of these is recognised by the tokeniser and skipped by the fold, so a document containing it still reads -- and says what it lost rather than passing over it in silence. Group 0xD6 no longer appears here: a header, footer, or watermark function is LIFTED into ContentSection.headers/footers/watermarks (see the page-furniture describe below), and a function whose occurrence bits claim neither parity is suppressed in its own file and lifts nothing with nothing to report.
   it.each([
-    [0xdf, WpdDiagnosticCodes.BoxDropped, 0x00],
-    [0xd7, WpdDiagnosticCodes.NoteDropped, 0x00],
-    [0xd5, WpdDiagnosticCodes.CrossReferenceFlattened, 0x00],
-    [0xde, WpdDiagnosticCodes.MergeCodeDropped, 0x00],
+    [
+      0xdf,
+      WpdDiagnosticCodes.BoxDropped,
+      0x00,
+      "This document contains a box -- a figure, text box, equation, or graphic -- whose function-level override names no content this reader can resolve.",
+    ],
+    [
+      0xd7,
+      WpdDiagnosticCodes.NoteDropped,
+      0x00,
+      "This document contains a footnote or endnote whose body packet this reader could not resolve; only its reference text survived.",
+    ],
+    [
+      0xd5,
+      WpdDiagnosticCodes.CrossReferenceFlattened,
+      0x00,
+      "This document contains a cross-reference; its displayed text survives as ordinary text, and the reference's own target binding does not.",
+    ],
+    [
+      0xde,
+      WpdDiagnosticCodes.MergeCodeDropped,
+      0x00,
+      "This document contains merge codes, which are a form-letter template's placeholders rather than text.",
+    ],
   ])(
     "reports group %i through the diagnostic sink",
-    (group, code, subgroup) => {
+    (group, code, subgroup, message) => {
       const { document, diagnostics } = readWithDiagnostics([
         ...text("before"),
         ...variableFunction({ group, subgroup }),
@@ -627,9 +702,11 @@ describe("constructs this reader does not lift", () => {
           ?.runs.map((run) => run.text)
           .join(""),
       ).toBe("beforeafter");
-      expect(
-        diagnostics.filter((diagnostic) => diagnostic.code === code),
-      ).toHaveLength(1);
+      const matches = diagnostics.filter(
+        (diagnostic) => diagnostic.code === code,
+      );
+      expect(matches).toHaveLength(1);
+      expect(matches[0]?.message).toBe(message);
     },
   );
 });
@@ -776,9 +853,55 @@ describe("table cell attribute gaps", () => {
     );
     const cell = tablesOf(document)[0]?.rows[0]?.cells[0];
     expect(cell?.background?.kind).toBe("pattern");
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.CellFillBlended,
+    );
+    expect(found?.message).toBe(
+      "A cell is filled with a shaded blend of two colours, resolved to a 'pattern' fill whose density is this reader's own best-effort derivation, not a value confirmed against a specification.",
+    );
+  });
+
+  it("does not report an unresolved formula for a cell that carries no formula subfunction at all", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(
+      buildWpdFile([
+        ...tableDefinition([1200]),
+        ...text("plain"),
+        ...eolFunction({ subgroup: EOL_TABLE_ROW }),
+        ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+      ]),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    expect(
+      diagnostics.some(
+        (d) => d.code === WpdDiagnosticCodes.TableFormulaUnresolved,
+      ),
+    ).toBe(false);
+  });
+
+  it("does not report a blended fill for a cell with a full-shade (solid) fill", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile([
+        ...tableDefinition([1200]),
+        ...text("solid"),
+        ...eolFunction({
+          subgroup: EOL_TABLE_ROW,
+          // foreground unused (shade 0), background (0,0,255) at FULL_SHADE (255) -- a plain solid fill, not a blend.
+          embedded: embeddedSubfunction(
+            CELL_FILL_COLORS,
+            [0, 0, 0, 0, 0, 0, 255, 255],
+          ),
+        }),
+        ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+      ]),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    const cell = tablesOf(document)[0]?.rows[0]?.cells[0];
+    expect(cell?.background?.kind).toBe("solid");
     expect(
       diagnostics.some((d) => d.code === WpdDiagnosticCodes.CellFillBlended),
-    ).toBe(true);
+    ).toBe(false);
   });
 });
 
