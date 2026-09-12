@@ -1328,6 +1328,51 @@ describe("writeXlsContent", () => {
         }),
       ).toThrow(BiffWriteError);
     });
+
+    it("refuses a name past Lbl's own 255-character cch field", () => {
+      expect(() =>
+        writeXlsContent({
+          ...document([sheet("Sheet1", [])]),
+          names: [{ name: "x".repeat(256), refersTo: "Sheet1!$A$1" }],
+        }),
+      ).toThrow(BiffWriteError);
+      expect(() =>
+        writeXlsContent({
+          ...document([sheet("Sheet1", [])]),
+          names: [{ name: "x".repeat(255), refersTo: "Sheet1!$A$1" }],
+        }),
+      ).not.toThrow();
+    });
+
+    it("refuses a scopeSheetIndex past the end of the document's own sheets", () => {
+      expect(() =>
+        writeXlsContent({
+          ...document([sheet("Sheet1", [])]),
+          names: [
+            {
+              name: "Bad",
+              refersTo: "Sheet1!$A$1",
+              scopeSheetIndex: 1,
+            },
+          ],
+        }),
+      ).toThrow(BiffWriteError);
+    });
+
+    it("accepts a reference exactly at BIFF8's own grid boundary, and refuses one past it", () => {
+      expect(() =>
+        writeXlsContent({
+          ...document([sheet("Sheet1", [])]),
+          names: [{ name: "AtEdge", refersTo: "Sheet1!$A$65536" }],
+        }),
+      ).not.toThrow();
+      expect(() =>
+        writeXlsContent({
+          ...document([sheet("Sheet1", [])]),
+          names: [{ name: "PastEdge", refersTo: "Sheet1!$A$65537" }],
+        }),
+      ).toThrow(BiffWriteError);
+    });
   });
 
   describe("metadata", () => {
