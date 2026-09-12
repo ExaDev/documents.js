@@ -293,6 +293,11 @@ export function packageLintConfig(
         "@typescript-eslint/related-getter-setter-pairs": "off",
         "exadev/barrel-policy":
           barrelPolicy === "off" ? "off" : ["error", { mode: barrelPolicy }],
+        // Mirrors linterOptions.noInlineConfig's own ban on eslint-disable comments (bundled into exadevRecommendedTypeChecked above), extended to Stryker's own disable-comment mechanism: a mutant is either genuinely killed by a test or the code is restructured so the mutation opportunity doesn't exist, never suppressed by name. `no-warning-comments` is ESLint core, so this needs no extra dependency; `location: "anywhere"` catches the directive regardless of where in the comment it sits.
+        "no-warning-comments": [
+          "error",
+          { terms: ["stryker disable"], location: "anywhere" },
+        ],
       },
     },
     {
