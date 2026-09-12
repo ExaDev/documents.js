@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -54,20 +54,19 @@ describe("convertDocumentOperation", () => {
   });
 
   it("propagates an already-aborted signal for a path source", async () => {
-    const editor = createDocx();
-    editor.body.appendParagraph({ text: "Hello, world." });
-    const dir = mkdtempSync(join(tmpdir(), "convert-test-"));
-    const path = join(dir, "doc.docx");
-    writeFileSync(path, editor.toBytes());
+    // A path that does not exist, so a real fs error (not the conversion's own abort check) would result if resolveDocumentInput's own signal forwarding were ever dropped -- a real file's read would succeed either way, masking the difference behind the SAME signal still aborting the conversion downstream.
     const controller = new AbortController();
     controller.abort();
 
     await expect(
       convertDocumentOperation.run(
-        { source: { path }, targetFormat: "markdown" },
+        {
+          source: { path: "/tmp/does-not-exist-convert-test.docx" },
+          targetFormat: "markdown",
+        },
         { signal: controller.signal },
       ),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/abort/i);
   });
 
   it("writes the converted document to outputPath when one is given", async () => {

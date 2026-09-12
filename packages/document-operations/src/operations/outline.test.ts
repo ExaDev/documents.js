@@ -1,6 +1,3 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { bytesToBase64, createDocx } from "documents.js";
 import { describe, expect, it } from "vitest";
 import { odfFormulaBytes } from "../test-support/odf-formula-fixture";
@@ -62,19 +59,15 @@ describe("outlineDocumentOperation", () => {
   });
 
   it("propagates an already-aborted signal through to resolving a path source's own bytes", async () => {
-    const editor = createDocx();
-    editor.body.appendParagraph({ text: "Heading", headingLevel: 1 });
-    const dir = mkdtempSync(join(tmpdir(), "outline-test-"));
-    const path = join(dir, "doc.docx");
-    writeFileSync(path, editor.toBytes());
+    // A path that does not exist, so a real fs error (not the tree-read's own abort check) would result if resolveDocumentInput's own signal forwarding were ever dropped -- a real file's read would succeed either way, masking the difference behind the SAME signal still aborting the downstream tree read.
     const controller = new AbortController();
     controller.abort();
 
     await expect(
       outlineDocumentOperation.run(
-        { source: { path } },
+        { source: { path: "/tmp/does-not-exist-outline-test.docx" } },
         { signal: controller.signal },
       ),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/abort/i);
   });
 });

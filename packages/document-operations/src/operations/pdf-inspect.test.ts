@@ -1,6 +1,3 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { bytesToBase64, createPdf } from "documents.js";
 import { describe, expect, it } from "vitest";
 import { pdfInspectOperation } from "./pdf-inspect";
@@ -101,17 +98,15 @@ describe("pdfInspectOperation", () => {
   });
 
   it("propagates an already-aborted signal through to resolving a path source's own bytes", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "pdf-inspect-test-"));
-    const path = join(dir, "doc.pdf");
-    writeFileSync(path, createPdf().toBytes());
+    // A path that does not exist, so a real fs error (not readPdf's own abort check) would result if resolveDocumentInput's own signal forwarding were ever dropped -- a real file's read would succeed either way, masking the difference behind the SAME signal still aborting readPdf downstream.
     const controller = new AbortController();
     controller.abort();
 
     await expect(
       pdfInspectOperation.run(
-        { source: { path } },
+        { source: { path: "/tmp/does-not-exist-pdf-inspect-test.pdf" } },
         { signal: controller.signal },
       ),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/abort/i);
   });
 });
