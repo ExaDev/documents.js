@@ -167,15 +167,14 @@ export function isRowAlignedGrid(bands: readonly BoundedItem[][]): boolean {
   );
   const withLines = lineSets.filter((lines) => lines.length >= 2);
   if (withLines.length < 2) return false;
+  // withLines.length >= 2 is already established above, but noUncheckedIndexedAccess still types a destructured array element as possibly undefined regardless -- there is no way to encode ">= 2" as a type for a dynamically filtered array the way a fixed-length tuple can, so a plain non-null assertion (rather than a defensive branch no input can ever actually take) is the correct narrowing here.
   const [first, ...rest] = withLines;
-  // `first` is always defined here (withLines.length >= 2 is already established above), but TypeScript's noUncheckedIndexedAccess still types a destructured array element as possibly undefined -- this check exists purely for that narrowing, not as reachable business logic.
-  if (first === undefined) return false;
-  const matches = first.filter((y) =>
+  const matches = first!.filter((y) =>
     rest.every((lines) =>
       lines.some((other) => Math.abs(other - y) <= LINE_TOLERANCE_PT),
     ),
   );
-  return matches.length / first.length >= ROW_ALIGNMENT_FRACTION;
+  return matches.length / first!.length >= ROW_ALIGNMENT_FRACTION;
 }
 
 // Merges items' intervals on one axis into bands, and -- if two or more bands result -- partitions the items along every gap between consecutive bands that clears its own local, scale-derived threshold. Returns undefined when the axis offers no qualifying cut at all (a single band, every gap too narrow, or -- on the x-axis only -- a row-aligned grid the cut would otherwise fragment).
@@ -404,19 +403,18 @@ export function classifyFromLeafSignals(signals: LeafSignals): {
         : 0;
   }
 
-  const scored = (
-    [
-      { kind: "table", score: tableScore },
-      { kind: "column", score: columnScore },
-      { kind: "figure", score: figureScore },
-    ] satisfies { kind: RegionClassification; score: number }[]
-  ).sort((a, b) => b.score - a.score);
-  const top = scored[0];
-  const second = scored[1];
-  if (top === undefined || second === undefined) {
-    // Unreachable: the literal array above always has exactly three entries.
-    return { classification: "unknown", confidence: 1 };
-  }
+  // Typed as a fixed 3-tuple, not a general array, so scored[0]/scored[1] below are known-defined at the type level under noUncheckedIndexedAccess -- Array.prototype.sort's `this`-typed return preserves the tuple shape through the sort, so there is no "what if the array were some other length" case for TypeScript (or a mutation test) to ever have to guard against.
+  const scored: [
+    { kind: RegionClassification; score: number },
+    { kind: RegionClassification; score: number },
+    { kind: RegionClassification; score: number },
+  ] = [
+    { kind: "table", score: tableScore },
+    { kind: "column", score: columnScore },
+    { kind: "figure", score: figureScore },
+  ];
+  scored.sort((a, b) => b.score - a.score);
+  const [top, second] = scored;
 
   if (top.score < SIGNAL_THRESHOLD) {
     return { classification: "unknown", confidence: clamp01(1 - top.score) };
