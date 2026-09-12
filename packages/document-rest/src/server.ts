@@ -148,7 +148,8 @@ export function createRestServer(): Server {
         return;
       }
 
-      const name = url.pathname.replace(/^\//, "");
+      // WHATWG URL.pathname always begins with "/" for an http(s) URL, so slicing off exactly one leading character reaches the same result a `replace(/^\//, "")` would -- without a regex whose anchor a mutation test can never observe changing anything, since the first "/" is always at index 0.
+      const name = url.pathname.slice(1);
       const operation = OPERATIONS_BY_NAME.get(name);
       if (operation === undefined) {
         sendJson(res, 404, {
