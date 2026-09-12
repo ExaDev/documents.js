@@ -1926,6 +1926,152 @@ describe("WPG vector graphics embedded in an image box", () => {
     );
   });
 
+  it("flushes preceding text into its own paragraph before a decoded WPG's own drawing block", () => {
+    const wpg = wpgFile({});
+    const document = readWpdContent(
+      buildWpdFile(
+        [...text("before"), ...imageBoxFunction()],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          graphicsFilenamePacket(),
+          graphicsCachedFileDataPacket(wpg),
+        ],
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing");
+    }
+    const blocks = document.sections[0]?.blocks ?? [];
+    expect(
+      blocks.map((b) =>
+        b.kind === "paragraph"
+          ? "paragraph"
+          : b.kind === "embeddedObject"
+            ? "embeddedObject"
+            : b.kind,
+      ),
+    ).toEqual(["paragraph", "embeddedObject"]);
+    const paragraph = blocks.find((b) => b.kind === "paragraph");
+    expect(
+      paragraph?.kind === "paragraph"
+        ? paragraph.runs.map((run) => run.text).join("")
+        : undefined,
+    ).toBe("before");
+  });
+
+  it("carries a decoded WPG graphic's own text shapes alongside its vectors", () => {
+    const wpg = wpgFile({});
+    // A Text Block (with one extension, its Text Data) inserted before the trailing End WPG record, alongside the rectangle wpgFile({}) already carries as a vector.
+    const withShape = new Uint8Array([
+      ...wpg.subarray(0, wpg.length - 4),
+      0x0f,
+      0x1d,
+      1,
+      10, // extension count 1, [flags word, x, y, width, height]
+      ...word(0),
+      ...word(10),
+      ...word(10),
+      ...word(60),
+      ...word(50),
+      ...wpgRecord(0x0f, [...text("Hi"), 0xcc]),
+      ...wpgRecord(0x02, []),
+    ]);
+    const document = readWpdContent(
+      buildWpdFile(
+        [...imageBoxFunction()],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          graphicsFilenamePacket(),
+          graphicsCachedFileDataPacket(withShape),
+        ],
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing");
+    }
+    const block = document.sections[0]?.blocks.find(
+      (b) => b.kind === "embeddedObject",
+    );
+    if (block?.kind !== "embeddedObject" || block.document.kind !== "drawing") {
+      throw new Error("expected a drawing embeddedObject");
+    }
+    expect(block.document.pages[0]?.vectors).toHaveLength(1);
+    expect(block.document.pages[0]?.shapes).toHaveLength(1);
+  });
+
+  it("tries every Graphics Cached File Data child until one decodes as WPG, not just the first", () => {
+    const wpg = wpgFile({});
+    const document = readWpdContent(
+      buildWpdFile(
+        [...imageBoxFunction()],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          {
+            packetType: 0x40,
+            flags: 0x01,
+            // Two children (prefix IDs 3 and 4), not the usual one.
+            bytes: new Uint8Array([2, 0, 3, 0, 4, 0]),
+          },
+          {
+            packetType: PACKET_TYPE_GRAPHICS_CACHED_FILE_DATA,
+            bytes: new Uint8Array([1, 2, 3, 4]), // not a WPG signature at all
+          },
+          graphicsCachedFileDataPacket(wpg), // the real one, at the second child
+        ],
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing");
+    }
+    const block = document.sections[0]?.blocks.find(
+      (b) => b.kind === "embeddedObject",
+    );
+    expect(block?.kind).toBe("embeddedObject");
+  });
+
+  it("names more than one skipped WPG record type, joined by a comma and a space", () => {
+    // Polyspline (0x16) and Polycurve (0x17), both unrecognised by this reader, alongside the framed rectangle.
+    const wpg = wpgFile({});
+    const withSkips = new Uint8Array([
+      ...wpg.subarray(0, wpg.length - 4), // drop the trailing End WPG record
+      ...wpgRecord(0x16, [
+        ...word(0x8000),
+        ...word(2),
+        ...word(0),
+        ...word(0),
+        ...word(5),
+        ...word(5),
+      ]),
+      ...wpgRecord(0x17, [
+        ...word(0x8000),
+        ...word(2),
+        ...word(0),
+        ...word(0),
+        ...word(5),
+        ...word(5),
+      ]),
+      ...wpgRecord(0x02, []),
+    ]);
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(
+      buildWpdFile(
+        [...imageBoxFunction()],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          graphicsFilenamePacket(),
+          graphicsCachedFileDataPacket(withSkips),
+        ],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.WpgRecordsUndecoded,
+    );
+    expect(found?.message).toBe(
+      "This document embeds a WPG vector graphic that partially decoded; the following record types were skipped: Polyspline, Polycurve.",
+    );
+  });
+
   it("lifts a decoded WPG graphic with no skipped records, reporting nothing", () => {
     const wpg = wpgFile({});
     const diagnostics: WpdDiagnostic[] = [];
