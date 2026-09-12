@@ -89,6 +89,39 @@ describe("readDocContent inline pictures", () => {
     expect(after.runs.map((run) => run.text)).toEqual([" after"]);
   });
 
+  it("drops a picture anchor to an empty paragraph when the blip's own payload does not start with its format's own file signature", () => {
+    // A well-formed OfficeArtBlipPNG header, but the payload bytes it wraps do not actually start with the PNG signature -- a genuine wrapper-byte false positive this reader's own signature check exists to refuse (see this module's own top-of-file locating note).
+    const notReallyPng = new Uint8Array([1, 2, 3, 4, 5]);
+    const picLocation = 0x40;
+    const { dataStreamBytes, picLocationGrpprl } = buildInlinePictureBytes(
+      picLocation,
+      notReallyPng,
+      100,
+      100,
+    );
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: String.fromCharCode(INLINE_PICTURE),
+                grpprl: picLocationGrpprl,
+              },
+            ],
+          },
+        ],
+        data: dataStreamBytes,
+      }),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error("a .doc always reads as a wordprocessing document");
+    }
+    const blocks = document.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]?.kind).toBe("paragraph");
+  });
+
   it("drops a picture anchor to an empty paragraph, exactly as before, when the container carries no Data stream", () => {
     const document = readDocContent(
       buildDoc({
