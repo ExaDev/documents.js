@@ -33,7 +33,8 @@ export function matchLinkLabel(text: string, start: number): number {
     return 0;
   }
   let index = start + 1;
-  while (index < text.length) {
+  // text.charAt(index) !== "", not index < text.length: the two are equivalent for every real index, but charAt already returns "" one past the end, which none of this loop's own character comparisons below can ever match either -- so this is the one boundary spelling whose own mutation (flipping the operator, or the empty-string literal) is actually reachable by a real test, rather than always landing on the identical fallthrough either way.
+  while (text.charAt(index) !== "") {
     const char = text.charAt(index);
     if (char === "\\") {
       index += 2;
@@ -63,7 +64,8 @@ export function parseLinkDestination(
 ): ParsedSpan | undefined {
   if (text.charAt(start) === "<") {
     let index = start + 1;
-    while (index < text.length) {
+    // See matchLinkLabel's own note above on why this is charAt(index) !== "" rather than index < text.length.
+    while (text.charAt(index) !== "") {
       const char = text.charAt(index);
       if (char === "\\") {
         index += 2;
@@ -131,12 +133,11 @@ export function parseLinkTitle(
   start: number,
 ): ParsedSpan | undefined {
   const opener = text.charAt(start);
+  // No separate "closer === undefined, bail out now" guard: when `opener` isn't one of TITLE_DELIMITERS' own three keys, `closer` stays undefined, `char === closer` can never match a real character (charAt never returns the JS value undefined), and TITLE_DELIMITERS' own mapping means opener can only ever be "(" when closer IS defined -- so the loop below just scans to the end matching nothing and returns undefined regardless, on its own.
   const closer = TITLE_DELIMITERS.get(opener);
-  if (closer === undefined) {
-    return undefined;
-  }
   let index = start + 1;
-  while (index < text.length) {
+  // See matchLinkLabel's own note (src/inline/link.ts) on why this is charAt(index) !== "" rather than index < text.length.
+  while (text.charAt(index) !== "") {
     const char = text.charAt(index);
     if (char === "\\") {
       index += 2;
@@ -160,7 +161,8 @@ export function parseLinkTitle(
 export function skipInlineWhitespace(text: string, start: number): number {
   let index = start;
   let seenLineEnding = false;
-  while (index < text.length) {
+  // See matchLinkLabel's own note (src/inline/link.ts) on why this is charAt(index) !== "" rather than index < text.length.
+  while (text.charAt(index) !== "") {
     const char = text.charAt(index);
     if (char === "\n") {
       if (seenLineEnding) {
