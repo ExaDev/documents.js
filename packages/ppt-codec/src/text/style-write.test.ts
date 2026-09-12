@@ -115,6 +115,28 @@ describe("writeStyleTextPropAtom", () => {
     expect(roundTrip(style, 3).characterRuns).toEqual(style.characterRuns);
   });
 
+  it("writes bold/italic/underline as clear when a run explicitly states false for each, not merely when it states nothing", () => {
+    const style: StyleTextProps = {
+      paragraphRuns: [{ count: 3, properties: pfProps(0, undefined) }],
+      characterRuns: [
+        {
+          count: 3,
+          properties: {
+            bold: false,
+            italic: false,
+            underline: false,
+            shadow: undefined,
+            emboss: undefined,
+            fontRef: undefined,
+            sizePt: undefined,
+            color: undefined,
+          },
+        },
+      ],
+    };
+    expect(roundTrip(style, 3).characterRuns).toEqual(style.characterRuns);
+  });
+
   it("round-trips a character run's font reference, size, and literal colour", () => {
     const style: StyleTextProps = {
       paragraphRuns: [{ count: 3, properties: pfProps(0, undefined) }],
@@ -130,6 +152,29 @@ describe("writeStyleTextPropAtom", () => {
             fontRef: 2,
             sizePt: 18,
             color: { kind: "rgb", rgb: { red: 0x11, green: 0x22, blue: 0x33 } },
+          },
+        },
+      ],
+    };
+    expect(roundTrip(style, 3).characterRuns).toEqual(style.characterRuns);
+  });
+
+  it("round-trips a character run's colour-scheme slot reference, even though this writer's own content-write.ts caller never constructs one itself", () => {
+    // writeColorIndexStruct's own doc comment states it is the general mirror of readColorIndexStruct, covering both the literal and scheme-reference spellings -- a real contract of this module's exported writeStyleTextPropAtom, called here directly rather than only through buildTextBody, which happens to only ever build literal colours.
+    const style: StyleTextProps = {
+      paragraphRuns: [{ count: 3, properties: pfProps(0, undefined) }],
+      characterRuns: [
+        {
+          count: 3,
+          properties: {
+            bold: undefined,
+            italic: undefined,
+            underline: undefined,
+            shadow: undefined,
+            emboss: undefined,
+            fontRef: undefined,
+            sizePt: undefined,
+            color: { kind: "scheme", schemeIndex: 3 },
           },
         },
       ],
