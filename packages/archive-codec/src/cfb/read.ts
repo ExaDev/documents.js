@@ -179,9 +179,10 @@ export function readCompoundFile(
   }
   const fat = new DataView(fatBytes.buffer);
 
+  // No offset<0 guard: sector is always a chain's own start (a u32 header/entry read) or a prior fatEntry return (itself a u32 read), so it can never actually be negative -- a defensive check against an input this closure never receives.
   const fatEntry = (sector: number): number => {
     const offset = sector * 4;
-    if (offset < 0 || offset + 4 > fatBytes.length) {
+    if (offset + 4 > fatBytes.length) {
       throw new CompoundFileFormatError(
         `FAT entry for sector ${sector} lies beyond the sectors the DIFAT named`,
       );
