@@ -20,7 +20,7 @@ export interface PdfRegion {
   readonly confidence: number;
 }
 
-interface Bounds {
+export interface Bounds {
   readonly minX: number;
   readonly minY: number;
   readonly maxX: number;
@@ -28,7 +28,7 @@ interface Bounds {
 }
 
 // An item's axis-aligned bounds in page space, or undefined for link/internalLink: an annotation is an anchored, clickable region rather than painted stream content, the same line pdf-codec's own crop-visibility filter (read.ts's contentItemBounds) draws when deciding what a page's visible geometry actually is -- layout analysis over what a reader SEES should draw that line identically.
-function layoutItemBounds(item: LayoutItem): Bounds | undefined {
+export function layoutItemBounds(item: LayoutItem): Bounds | undefined {
   switch (item.kind) {
     case "link":
     case "internalLink":
@@ -64,10 +64,10 @@ function layoutItemBounds(item: LayoutItem): Bounds | undefined {
       let maxX = Number.NEGATIVE_INFINITY;
       let maxY = Number.NEGATIVE_INFINITY;
       const visit = (x: number, y: number): void => {
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
       };
       for (const subpath of item.subpaths) {
         visit(subpath.startXPt, subpath.startYPt);
@@ -85,7 +85,7 @@ function layoutItemBounds(item: LayoutItem): Bounds | undefined {
   }
 }
 
-interface BoundedItem {
+export interface BoundedItem {
   readonly item: LayoutItem;
   readonly bounds: Bounds;
 }
@@ -124,11 +124,12 @@ const GAP_RATIO = 1.5;
 // A small absolute floor under the ratio-derived threshold, guarding only against a degenerate near-zero scale (e.g. a cluster of single narrow characters or point-like graphics) -- comfortably under a single character's width at any realistic body text size, so it never itself decides a real cut.
 const MIN_GAP_FLOOR_PT = 3;
 
-function recursiveXYCut(
+export function recursiveXYCut(
   items: readonly BoundedItem[],
   depth: number,
 ): BoundedItem[][] {
-  if (items.length <= 1 || depth >= MAX_CUT_DEPTH) return [[...items]];
+  // No separate `items.length <= 1` guard: findCut can never split fewer than 2 items into two bands, so `chosen` below is already undefined for 0 or 1 items, and the fallback return two lines down already produces `[[...items]]` in that case. The depth bound alone still needs its own guard, since it must stop genuinely splittable content too.
+  if (depth >= MAX_CUT_DEPTH) return [[...items]];
 
   const verticalCut = findCut(items, "x");
   const horizontalCut = findCut(items, "y");
@@ -141,19 +142,16 @@ function recursiveXYCut(
       : horizontalCut;
   if (chosen === undefined) return [[...items]];
 
-  return chosen.groups.flatMap((group) =>
-    group.length === items.length
-      ? [group] // the cut degenerated to a single group (shouldn't happen given >=2 bands, but guards against infinite recursion if it ever does)
-      : recursiveXYCut(group, depth + 1),
-  );
+  // No degenerate-single-group branch: findCut only returns a CutResult when cutSomewhere is true, meaning `groups` holds at least two genuinely non-empty partitions of `items` (every group is built from a non-empty band), so no individual group's length can ever equal the full `items.length` -- every group here is always a genuine, strictly smaller subset, safe to recurse into unconditionally.
+  return chosen.groups.flatMap((group) => recursiveXYCut(group, depth + 1));
 }
 
 // An item's representative scale for gap-threshold purposes: the SMALLER of its own two axis extents. For a text run this is almost always its font size (a line is normally wider than it is tall), independent of how long the run's text happens to be -- so a whole-line text item and a single-word one contribute the same scale, which is what lets a narrow column gutter register as a structural break even when the lines either side of it are themselves much wider than the gutter. For a graphic item it is whichever of width/height is smaller (a thin rule's own thickness, a squarish photo's shorter side).
-function itemScale(bounds: Bounds): number {
+export function itemScale(bounds: Bounds): number {
   return Math.min(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY);
 }
 
-interface CutResult {
+export interface CutResult {
   readonly groups: BoundedItem[][];
   readonly maxGap: number;
 }
@@ -162,17 +160,16 @@ interface CutResult {
 const ROW_ALIGNMENT_FRACTION = 0.6;
 
 // A vertical cut whose bands each carry the SAME set of row y-positions is a table's columns, not independent multi-column body text: two genuinely separate flowing-text columns each keep their own paragraph's line rhythm, which is essentially never synchronised row-for-row with an unrelated column beside it, whereas a table's "columns" are by definition the same rows read at different x-positions. Rejecting the cut in that case leaves the whole grid as one leaf, which is what lets classifyLeaf's own per-line cell-counting recognise it as a table at all -- a vertical cut taken eagerly would instead fragment it into as many single-column leaves as the table has columns, each looking like ordinary prose.
-function isRowAlignedGrid(bands: readonly BoundedItem[][]): boolean {
-  const lineSets = bands.map((band) => {
-    const textItems = band
-      .map((entry) => entry.item)
-      .filter((item) => item.kind === "text");
-    return groupIntoLines(textItems).map((line) => line.yPt);
-  });
+export function isRowAlignedGrid(bands: readonly BoundedItem[][]): boolean {
+  // No separate text-only filter here: groupIntoLines already skips any non-text item itself (`if (item.kind !== "text") continue;`), so handing it a band's raw items unfiltered produces the identical line set.
+  const lineSets = bands.map((band) =>
+    groupIntoLines(band.map((entry) => entry.item)).map((line) => line.yPt),
+  );
   const withLines = lineSets.filter((lines) => lines.length >= 2);
   if (withLines.length < 2) return false;
   const [first, ...rest] = withLines;
-  if (first === undefined || first.length === 0) return false;
+  // `first` is always defined here (withLines.length >= 2 is already established above), but TypeScript's noUncheckedIndexedAccess still types a destructured array element as possibly undefined -- this check exists purely for that narrowing, not as reachable business logic.
+  if (first === undefined) return false;
   const matches = first.filter((y) =>
     rest.every((lines) =>
       lines.some((other) => Math.abs(other - y) <= LINE_TOLERANCE_PT),
@@ -182,7 +179,7 @@ function isRowAlignedGrid(bands: readonly BoundedItem[][]): boolean {
 }
 
 // Merges items' intervals on one axis into bands, and -- if two or more bands result -- partitions the items along every gap between consecutive bands that clears its own local, scale-derived threshold. Returns undefined when the axis offers no qualifying cut at all (a single band, every gap too narrow, or -- on the x-axis only -- a row-aligned grid the cut would otherwise fragment).
-function findCut(
+export function findCut(
   items: readonly BoundedItem[],
   axis: "x" | "y",
 ): CutResult | undefined {
@@ -196,7 +193,8 @@ function findCut(
   const bands: BoundedItem[][] = [];
   let bandMax = Number.NEGATIVE_INFINITY;
   for (const entry of sorted) {
-    if (bands.length === 0 || minOf(entry) > bandMax) {
+    // No separate `bands.length === 0` clause: `bandMax` starts at -Infinity, so `minOf(entry) > bandMax` is already true for the very first entry on its own, starting the first band without needing a length check.
+    if (minOf(entry) > bandMax) {
       bands.push([entry]);
     } else {
       const current = bands[bands.length - 1];
@@ -204,8 +202,8 @@ function findCut(
     }
     bandMax = Math.max(bandMax, maxOf(entry));
   }
-  if (bands.length < 2) return undefined;
-  if (axis === "x" && isRowAlignedGrid(bands)) return undefined;
+  // No separate `bands.length < 2` guard: for 0 or 1 bands, the loop below (bounded by the real `bands.length`) never runs, `cutSomewhere` stays false, and the `if (!cutSomewhere) return undefined` guard further down already returns undefined by that route. Not restricted to `axis === "x"`: bands built along the y-axis are, by construction, separated from each other by a gap of at least `threshold` (>= MIN_GAP_FLOOR_PT, 3pt), which already exceeds isRowAlignedGrid's own LINE_TOLERANCE_PT (2pt) match window, so it can never find a recurring row across genuinely different y-bands -- checking it unconditionally costs nothing extra for a real y-axis call and keeps this guard's own logic in one place rather than duplicated per axis.
+  if (isRowAlignedGrid(bands)) return undefined;
 
   const bandStats = bands.map((band) => ({
     min: Math.min(...band.map(minOf)),
@@ -216,12 +214,12 @@ function findCut(
   const groups: BoundedItem[][] = [bands[0] ?? []];
   let maxGap = Number.NEGATIVE_INFINITY;
   let cutSomewhere = false;
-  for (let index = 1; index < bands.length; index++) {
+  // Iterating bands.entries() rather than a manually bounded `for` loop means `band` is always a real, defined element -- there is no separately-mutable upper-bound comparison to get subtly wrong, and no need to guard against an undefined `band`.
+  for (const [index, band] of bands.entries()) {
+    if (index === 0) continue;
     const previous = bandStats[index - 1];
     const current = bandStats[index];
-    const band = bands[index];
-    if (previous === undefined || current === undefined || band === undefined)
-      continue;
+    if (previous === undefined || current === undefined) continue;
     const gap = current.min - previous.max;
     const threshold = Math.max(
       MIN_GAP_FLOOR_PT,
@@ -230,7 +228,7 @@ function findCut(
     if (gap >= threshold) {
       groups.push([...band]);
       cutSomewhere = true;
-      if (gap > maxGap) maxGap = gap;
+      maxGap = Math.max(maxGap, gap);
     } else {
       const last = groups[groups.length - 1];
       last?.push(...band);
@@ -240,7 +238,7 @@ function findCut(
   return { groups, maxGap };
 }
 
-function median(values: readonly number[]): number {
+export function median(values: readonly number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   if (sorted.length % 2 === 1) return sorted[mid] ?? 0;
@@ -249,16 +247,16 @@ function median(values: readonly number[]): number {
   return (lower + upper) / 2;
 }
 
-function boundingBox(items: readonly BoundedItem[]): PdfRegionBounds {
+export function boundingBox(items: readonly BoundedItem[]): PdfRegionBounds {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
   let maxY = Number.NEGATIVE_INFINITY;
   for (const { bounds } of items) {
-    if (bounds.minX < minX) minX = bounds.minX;
-    if (bounds.minY < minY) minY = bounds.minY;
-    if (bounds.maxX > maxX) maxX = bounds.maxX;
-    if (bounds.maxY > maxY) maxY = bounds.maxY;
+    minX = Math.min(minX, bounds.minX);
+    minY = Math.min(minY, bounds.minY);
+    maxX = Math.max(maxX, bounds.maxX);
+    maxY = Math.max(maxY, bounds.maxY);
   }
   return { xPt: minX, yPt: minY, widthPt: maxX - minX, heightPt: maxY - minY };
 }
@@ -266,12 +264,12 @@ function boundingBox(items: readonly BoundedItem[]): PdfRegionBounds {
 // A text baseline cluster: items in one leaf whose vertical anchor (LayoutText.yPt) falls within LINE_TOLERANCE_PT of each other, sorted left to right. Two items on the same visual line rarely share an identical yPt (rounding, mixed font sizes on one baseline), so clustering needs a tolerance rather than an exact match.
 const LINE_TOLERANCE_PT = 2;
 
-interface TextLine {
+export interface TextLine {
   readonly items: LayoutItem[];
   readonly yPt: number;
 }
 
-function groupIntoLines(textItems: readonly LayoutItem[]): TextLine[] {
+export function groupIntoLines(textItems: readonly LayoutItem[]): TextLine[] {
   const sorted = [...textItems].sort((a, b) => {
     const ay = a.kind === "text" ? a.yPt : 0;
     const by = b.kind === "text" ? b.yPt : 0;
@@ -303,12 +301,13 @@ function groupIntoLines(textItems: readonly LayoutItem[]): TextLine[] {
 const CELL_GAP_EM = 1.2;
 
 // Counts the distinct horizontally-gapped clusters ("cells") on one line -- 1 for an ordinary run of prose, >1 when the line itself contains internal gaps wide enough to be separate table cells or aligned columns.
-function cellsInLine(line: TextLine): number {
+export function cellsInLine(line: TextLine): number {
   let cells = 1;
-  for (let index = 1; index < line.items.length; index++) {
+  // Iterating line.items.entries() rather than a manually bounded `for` loop means `current` is always a real, defined element -- no separately-mutable upper-bound comparison to get subtly wrong.
+  for (const [index, current] of line.items.entries()) {
+    if (index === 0) continue;
     const previous = line.items[index - 1];
-    const current = line.items[index];
-    if (previous?.kind !== "text" || current?.kind !== "text") continue;
+    if (previous?.kind !== "text" || current.kind !== "text") continue;
     const previousEnd = previous.xPt + (previous.widthPt ?? 0);
     const gap = current.xPt - previousEnd;
     if (gap > CELL_GAP_EM * current.sizePt) cells++;
@@ -323,22 +322,17 @@ const SIGNAL_THRESHOLD = 0.35;
 // How close the top two candidates must be, both already past SIGNAL_THRESHOLD, before the leaf is 'mixed' rather than confidently the top candidate -- mirrors regions.ts's MIXED_MARGIN.
 const MIXED_MARGIN = 0.15;
 
-function classifyLeaf(items: readonly BoundedItem[]): {
-  classification: RegionClassification;
-  confidence: number;
-} {
-  if (items.length < MIN_ITEMS_FOR_SIGNAL) {
-    const only = items[0];
-    // A single painted graphic (an image, or a standalone vector shape) is unambiguously a figure on its own -- unlike a lone table cell or a lone word, one photograph is not missing context, it simply IS the whole figure. This is the one exception to "too few items to have a signal": a lone TEXT item genuinely could be anything (a page number, a stray label), which is why that case still falls through to 'unknown' below.
-    if (only !== undefined && only.item.kind !== "text") {
-      return {
-        classification: "figure",
-        confidence: only.item.kind === "image" ? 0.9 : 0.6,
-      };
-    }
-    return { classification: "unknown", confidence: 1 };
-  }
+// The geometric/content measurements classifyFromLeafSignals' heuristics read, split out from classifyLeaf below purely for direct unit testing -- the same "extract for testability" rationale regions.ts's own computeSignals/classifyRegion split already follows, since hand-picking these signal VALUES directly is far more precise than reverse-engineering a BoundedItem layout that happens to produce a given avgCells/cellRegularity/xStartRegularity combination.
+export interface LeafSignals {
+  readonly graphicFraction: number;
+  readonly hasImage: boolean;
+  readonly lineCount: number;
+  readonly avgCells: number;
+  readonly cellRegularity: number;
+  readonly xStartRegularity: number;
+}
 
+export function computeLeafSignals(items: readonly BoundedItem[]): LeafSignals {
   const textItems = items
     .map((entry) => entry.item)
     .filter((item) => item.kind === "text");
@@ -349,20 +343,48 @@ function classifyLeaf(items: readonly BoundedItem[]): {
   const lines = groupIntoLines(textItems);
   const lineCount = lines.length;
 
+  let avgCells = 0;
+  let cellRegularity = 1;
+  let xStartRegularity = 1;
+  if (lineCount > 1) {
+    const cellsPerLine = lines.map(cellsInLine);
+    avgCells = mean(cellsPerLine);
+    cellRegularity = regularity(cellsPerLine);
+    const leftStarts = lines.map((line) =>
+      line.items[0]?.kind === "text" ? line.items[0].xPt : 0,
+    );
+    xStartRegularity = regularity(leftStarts);
+  }
+
+  return {
+    graphicFraction,
+    hasImage,
+    lineCount,
+    avgCells,
+    cellRegularity,
+    xStartRegularity,
+  };
+}
+
+export function classifyFromLeafSignals(signals: LeafSignals): {
+  classification: RegionClassification;
+  confidence: number;
+} {
+  const {
+    graphicFraction,
+    hasImage,
+    lineCount,
+    avgCells,
+    cellRegularity,
+    xStartRegularity,
+  } = signals;
+
   // figure: dominated by non-text painted content (images, vector art) rather than text -- a raster image's presence is a stronger figure signal than vector decoration alone, since a ruled table's grid lines are also non-text but never carry an image.
   const figureScore = clamp01(graphicFraction + (hasImage ? 0.15 : 0));
 
   let tableScore = 0;
   let columnScore = 0;
   if (lineCount > 1) {
-    const cellsPerLine = lines.map(cellsInLine);
-    const avgCells = mean(cellsPerLine);
-    const cellRegularity = regularity(cellsPerLine);
-    const leftStarts = lines.map((line) =>
-      line.items[0]?.kind === "text" ? line.items[0].xPt : 0,
-    );
-    const xStartRegularity = regularity(leftStarts);
-
     // table: most lines split into multiple cells, and that cell count is consistent line to line -- the geometric signature of a grid, whether or not it is also ruled with visible border graphics.
     const gridGraphicBonus =
       graphicFraction > 0 && graphicFraction < 0.5 ? 0.15 : 0;
@@ -411,13 +433,31 @@ function classifyLeaf(items: readonly BoundedItem[]): {
   return { classification: top.kind, confidence: clamp01(top.score) };
 }
 
+export function classifyLeaf(items: readonly BoundedItem[]): {
+  classification: RegionClassification;
+  confidence: number;
+} {
+  if (items.length < MIN_ITEMS_FOR_SIGNAL) {
+    const only = items[0];
+    // A single painted graphic (an image, or a standalone vector shape) is unambiguously a figure on its own -- unlike a lone table cell or a lone word, one photograph is not missing context, it simply IS the whole figure. This is the one exception to "too few items to have a signal": a lone TEXT item genuinely could be anything (a page number, a stray label), which is why that case still falls through to 'unknown' below.
+    if (only !== undefined && only.item.kind !== "text") {
+      return {
+        classification: "figure",
+        confidence: only.item.kind === "image" ? 0.9 : 0.6,
+      };
+    }
+    return { classification: "unknown", confidence: 1 };
+  }
+  return classifyFromLeafSignals(computeLeafSignals(items));
+}
+
 // A short text run is treated as caption-length up to this many characters -- roughly a one-line figure label ("Figure 1: quarterly revenue by region"), not a full paragraph; chosen as a rough sentence-fragment length the same way regions.ts's PROSE_LENGTH_NORM is, not a corpus-fitted constant.
 const CAPTION_MAX_CHARS = 160;
 // A caption must sit within this many points of the figure it labels, vertically -- comfortably wider than normal line leading (so a caption immediately under a figure still qualifies) but narrow enough that an unrelated block several lines away is never claimed as this figure's caption.
 const CAPTION_GAP_PT = 24;
 
 // Second pass: a short text leaf classified 'column' or 'unknown' that sits immediately above or below a 'figure' leaf, and horizontally overlaps it, is a caption -- captions are a RELATIONSHIP to a figure, not a standalone geometric signature, so this can only run after every leaf already has its own first-pass classification.
-function attachCaptions(regions: readonly PdfRegion[]): PdfRegion[] {
+export function attachCaptions(regions: readonly PdfRegion[]): PdfRegion[] {
   const figures = regions.filter(
     (region) => region.classification === "figure",
   );
@@ -434,17 +474,15 @@ function attachCaptions(regions: readonly PdfRegion[]): PdfRegion[] {
       .trim();
     if (text.length === 0 || text.length > CAPTION_MAX_CHARS) return region;
 
-    let nearest: PdfRegion | undefined;
-    let nearestGap = Number.POSITIVE_INFINITY;
-    for (const figure of figures) {
-      if (!horizontallyOverlaps(region.bounds, figure.bounds)) continue;
-      const gap = verticalGap(region.bounds, figure.bounds);
-      if (gap !== undefined && gap <= CAPTION_GAP_PT && gap < nearestGap) {
-        nearest = figure;
-        nearestGap = gap;
-      }
-    }
-    if (nearest === undefined) return region;
+    // Only the NUMBER of the nearest qualifying gap ever feeds into this region's own output (confidence below) -- which figure it came from is never observable, so there is no need to track a `nearest` figure at all, only the minimum qualifying gap itself.
+    const qualifyingGaps = figures
+      .filter((figure) => horizontallyOverlaps(region.bounds, figure.bounds))
+      .map((figure) => verticalGap(region.bounds, figure.bounds))
+      .filter(
+        (gap): gap is number => gap !== undefined && gap <= CAPTION_GAP_PT,
+      );
+    if (qualifyingGaps.length === 0) return region;
+    const nearestGap = Math.min(...qualifyingGaps);
     return {
       ...region,
       classification: "caption",
@@ -453,12 +491,15 @@ function attachCaptions(regions: readonly PdfRegion[]): PdfRegion[] {
   });
 }
 
-function horizontallyOverlaps(a: PdfRegionBounds, b: PdfRegionBounds): boolean {
+export function horizontallyOverlaps(
+  a: PdfRegionBounds,
+  b: PdfRegionBounds,
+): boolean {
   return a.xPt < b.xPt + b.widthPt && b.xPt < a.xPt + a.widthPt;
 }
 
 // The vertical whitespace between two bounds when they are stacked with no overlap, or undefined when they overlap on the y-axis (a caption is beside, not inside, its figure).
-function verticalGap(
+export function verticalGap(
   a: PdfRegionBounds,
   b: PdfRegionBounds,
 ): number | undefined {
@@ -471,14 +512,14 @@ function verticalGap(
   return undefined;
 }
 
-function mean(values: readonly number[]): number {
+export function mean(values: readonly number[]): number {
   if (values.length === 0) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
 // A coefficient-of-variation-style uniformity score, identical in shape to regions.ts's rowRegularity: 1 for a constant sequence, decaying toward 0 as the spread grows relative to the mean. A single-value sequence is trivially regular.
-function regularity(values: readonly number[]): number {
-  if (values.length <= 1) return 1;
+export function regularity(values: readonly number[]): number {
+  // No separate zero-or-one-value early return: for zero values, mean([]) is 0 and `values.every(...)` below is vacuously true, so the average-0 branch already returns 1; for exactly one value, its own variance against its own mean is trivially 0, so the final expression already reduces to 1 on its own. A single- or empty-value sequence is trivially regular through the SAME arithmetic every other sequence goes through, not a special case.
   const average = mean(values);
   if (average === 0) return values.every((value) => value === 0) ? 1 : 0;
   const variance =
