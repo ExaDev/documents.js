@@ -790,6 +790,23 @@ describe("readWpdContent", () => {
       ]);
     });
 
+    it("joins a field instruction split across more than one run with no separator", () => {
+      const document = readDocumentArea([
+        ...variableFunction({ group: MERGE_GROUP, subgroup: FIELD_ON }),
+        ...text("Company"),
+        0xf2, // ATTRIBUTE_ON (bold), splitting the instruction across two runs
+        12, // BOLD
+        0xf2,
+        ...text("Name"),
+        ...variableFunction({ group: MERGE_GROUP, subgroup: FIELD_OFF }),
+      ]);
+      const construct = paragraphsOf(document)[0]?.constructs?.[0]?.descriptor;
+      expect(construct).toEqual({
+        kind: "field",
+        instruction: "CompanyName",
+      });
+    });
+
     it("reports every other merge subfunction through the diagnostic sink, unchanged", () => {
       const diagnostics: WpdDiagnostic[] = [];
       const bytes = buildWpdFile([
@@ -988,6 +1005,41 @@ describe("boxes", () => {
     expect(block.document.formula.source).toEqual({
       format: "wpd",
       xml: "a+b",
+    });
+  });
+
+  // plainTextOf must only ever read paragraph blocks -- a non-paragraph block folded alongside them (a page break, here) carries no `runs` field at all and must be skipped rather than read as one. It must also join a paragraph's own runs with no separator, and join separate paragraphs with a newline.
+  it("builds an equation's plain-text residue from only its paragraph blocks, joined correctly", () => {
+    const document = readDocumentArea(
+      [...boxFunction(BOX_CONTENT_TYPE_EQUATION, [1, 2])],
+      [
+        { packetType: 0x41, bytes: new Uint8Array(0) },
+        generalWpTextPacket([
+          ...text("a"),
+          0xf2, // ATTRIBUTE_ON (bold), splitting the first paragraph across two runs
+          12, // BOLD
+          0xf2,
+          ...text("b"),
+          0xcc, // HARD_EOL: ends the first paragraph
+          0xc7, // hard end of page: a non-paragraph block between the two paragraphs
+          ...text("c"),
+        ]),
+      ],
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    const block = document.sections[0]?.blocks.find(
+      (b) => b.kind === "embeddedObject",
+    );
+    if (block?.kind !== "embeddedObject")
+      throw new Error("expected embeddedObject");
+    if (block.document.kind !== "formula") {
+      throw new Error("expected a formula document");
+    }
+    // The hard end of page unconditionally flushes a paragraph before it, which is empty here (the hard return just before it already flushed the pending text) -- so the join sees three paragraphs ("ab", "", "c"), with the intervening page break filtered out entirely rather than read as a fourth.
+    expect(block.document.formula.source).toEqual({
+      format: "wpd",
+      xml: "ab\n\nc",
     });
   });
 
@@ -1366,6 +1418,56 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
         },
       ],
     });
+  });
+
+  it("reports the exact could-not-read message for a note whose body packet is the wrong type", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(
+      buildWpdFile(
+        [
+          ...text("See this"),
+          ...variableFunction({ group: 0xd7, subgroup: 0x00, prefixIds: [1] }),
+          ...text("1"),
+          ...variableFunction({ group: 0xd7, subgroup: 0x01 }),
+        ],
+        [{ packetType: 0x55, bytes: new Uint8Array(0) }], // a real packet, but not General WP Text
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.NoteDropped,
+    );
+    expect(found?.message).toBe(
+      "This document contains a footnote or endnote whose body packet this reader could not read; its reference anchor survives and its body does not.",
+    );
+  });
+
+  // The marker text is built from every run between a note's On and Off, flushing whatever text is still pending first -- and only falls back to a generated numeral when that text is genuinely empty. A marker that IS real text, spanning more than one run and happening to be truthy, must be used as-is rather than replaced by the numeral, and the numeral itself must come from the notes already carried plus one, not minus one.
+  it("builds a multi-run marker over the generated-numeral fallback, and numbers a genuinely empty marker correctly", () => {
+    const bodies = [
+      generalWpTextPacket(text("first body")),
+      generalWpTextPacket(text("second body")),
+    ];
+    const tree = readWpd(
+      buildWpdFile(
+        [
+          // Note A: an empty reference marker -- must fall back to the generated numeral "1" (state.notes.length is 0 at this point).
+          ...variableFunction({ group: 0xd7, subgroup: 0x00, prefixIds: [1] }),
+          ...variableFunction({ group: 0xd7, subgroup: 0x01 }),
+          // Note B: a genuine, non-empty, two-run marker ("star") that must win over the fallback numeral ("2").
+          ...variableFunction({ group: 0xd7, subgroup: 0x00, prefixIds: [2] }),
+          ...text("st"),
+          0xf2, // ATTRIBUTE_ON (bold), splitting the marker across two runs
+          12, // BOLD
+          0xf2,
+          ...text("ar"),
+          ...variableFunction({ group: 0xd7, subgroup: 0x01 }),
+        ],
+        bodies,
+      ),
+    );
+    expect(tree.definitions?.["note-1"]?.marker).toBe("1");
+    expect(tree.definitions?.["note-2"]?.marker).toBe("star");
   });
 
   it("carries an endnote pair as the endnote tenant", () => {
