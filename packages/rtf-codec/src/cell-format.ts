@@ -63,6 +63,14 @@ export const CELL_BORDER_SIDES: ReadonlyMap<string, CellBorderSide> = new Map([
   ["clbrdrr", "right"],
 ]);
 
+// The inverse of CELL_BORDER_SIDES, keyed by side rather than by control word -- a total mapping over CellBorderSide's own four members, so borderControlWords below can look a side's word up directly rather than searching CELL_BORDER_SIDES for the entry whose value matches, which would need a defensive "not found" branch for a side that can structurally never fail to resolve.
+const CELL_BORDER_SIDE_WORDS: Readonly<Record<CellBorderSide, string>> = {
+  top: "clbrdrt",
+  left: "clbrdrl",
+  bottom: "clbrdrb",
+  right: "clbrdrr",
+};
+
 // The <brdrk> keywords, narrowed onto ContentStrokeStyle's four members. RTF names about thirty; most are decorative variants of one of the four (every \brdrdash* spelling is a dash, every thick-thin combination is a double rule), and a keyword with no member here is read as the 'solid' the field's own "absent means solid" default already states rather than being invented into a member it does not have.
 const BORDER_STYLES: ReadonlyMap<string, ContentStrokeStyle> = new Map([
   ["brdrs", "solid"],
@@ -290,12 +298,7 @@ export function borderControlWords(
   border: ContentBorder,
   colorIndex: number | undefined,
 ): string {
-  const sideWord = [...CELL_BORDER_SIDES].find(
-    ([, value]) => value === side,
-  )?.[0];
-  if (sideWord === undefined) {
-    return "";
-  }
+  const sideWord = CELL_BORDER_SIDE_WORDS[side];
   const style = BORDER_STYLE_CONTROL_WORDS[border.style ?? "solid"];
   const width = Math.max(1, pointsToTwips(border.widthPt));
   return (
