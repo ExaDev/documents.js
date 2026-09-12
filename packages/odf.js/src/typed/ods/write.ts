@@ -1208,12 +1208,15 @@ function writeSheet(sheet: ContentSheet, state: OdsWriteState): XmlElement {
 
 // --- the canonical form: what reading this writer's own output back produces ----------------------------------------
 
-function canonicalColor(color: Color): Color {
+// Exported alongside normaliseOdsContent purely for direct unit coverage: normaliseOdsContent applies every canonical* helper below identically to BOTH sides of a round-trip equality check (the actual, real-reader-produced document and the expected, original-document-normalised-the-same-way), so a mutation to one of these helpers alone cannot be observed through that comparison -- it changes both sides in lockstep. Each is therefore also pinned directly, against a literal expected return value, in write.test.ts.
+export function canonicalColor(color: Color): Color {
   return rgbHexToColor(colorToRgbHex(color));
 }
 
 // A cell fill written and read back through this writer: always a 'solid' ContentCellFill, since fo:background-color has no two-colour pattern-fill vocabulary at all (ExaDev/documents.js#951) -- sheetCellStyle above resolves a 'pattern' fill to resolveCellFillColor's own single representative colour before it ever reaches ODF, and undefined when that resolves to nothing (a pattern stating neither of its own colours), matching an absent background exactly.
-function canonicalCellFill(fill: ContentCellFill): ContentCellFill | undefined {
+export function canonicalCellFill(
+  fill: ContentCellFill,
+): ContentCellFill | undefined {
   const color = resolveCellFillColor(fill);
   return color === undefined
     ? undefined
@@ -1221,7 +1224,7 @@ function canonicalCellFill(fill: ContentCellFill): ContentCellFill | undefined {
 }
 
 // A ContentRun carrying only the fields it actually states -- the same spelled-only canonical form typed/odt/write.ts's own canonicalRun establishes for wordprocessing runs, restated here rather than imported: the two writers are independent codec modules, and this is a small, self-contained defaulting function rather than a shared abstraction worth coupling them over.
-function canonicalRun(run: ContentRun): ContentRun {
+export function canonicalRun(run: ContentRun): ContentRun {
   const canonical: ContentRun = { text: run.text };
   if (run.bold !== undefined) canonical.bold = run.bold;
   if (run.italic !== undefined) canonical.italic = run.italic;
@@ -1235,7 +1238,7 @@ function canonicalRun(run: ContentRun): ContentRun {
 }
 
 // The exact runs reading this writer's own cell text back produces: each planCellTextGroups group canonicalised through segmentOdfParagraphRuns (the same fixed point typed/shared/paragraph.ts's own writeOdfParagraph/readOdfParagraph pair already establishes for any ODF text:p), rejoined with a bare {text:'\n'} at every group boundary -- exactly the shape readCellText's own synthetic separator produces, regardless of what a same-valued source run originally carried (see isBareNewlineRun's own note on why that asymmetry is unavoidable).
-function canonicalCellRuns(cell: ContentSheetCell): ContentRun[] {
+export function canonicalCellRuns(cell: ContentSheetCell): ContentRun[] {
   const groups = planCellTextGroups(cell).map((group) =>
     segmentOdfParagraphRuns(group).map(canonicalRun),
   );
@@ -1250,7 +1253,7 @@ function canonicalCellRuns(cell: ContentSheetCell): ContentRun[] {
 }
 
 // The exact ContentCellValue reading this writer's own written cell back produces. exactValue never survives -- readCellValue has no field for it, only ever reading office:value back into the nearest-double `value` -- and a 'time' cell reads back as the raw xsd:duration string this writer wrote, per this module's own top-of-file note on that forced, pre-existing asymmetry.
-function canonicalCellValue(value: ContentCellValue): ContentCellValue {
+export function canonicalCellValue(value: ContentCellValue): ContentCellValue {
   switch (value.kind) {
     case "number":
       return { kind: "number", value: Number(formatCellNumberLiteral(value)) };
@@ -1286,7 +1289,9 @@ function canonicalCellValue(value: ContentCellValue): ContentCellValue {
 }
 
 // One cell's canonical form, or undefined when readOdsContent's own trailing-empty-cell skip drops it entirely: a cell carrying no formula, no office:value-type-bearing value (kind 'empty'), and no rendered text is never materialised by the reader at all, regardless of what colSpan/background/borders it stated -- readTable's own skip test (`!hasValueType && formula === undefined && displayText.length === 0`) runs before any of those attributes are even considered. This is a real, forced normalisation, not a writer choice: any of those facts on such a cell is lost on the round trip because ODF's own trailing-empty-cell compression convention has nowhere else to put them.
-function canonicalCell(cell: ContentSheetCell): ContentSheetCell | undefined {
+export function canonicalCell(
+  cell: ContentSheetCell,
+): ContentSheetCell | undefined {
   const runs = canonicalCellRuns(cell);
   const displayText = runs.map((run) => run.text).join("");
   if (
@@ -1345,7 +1350,7 @@ function canonicalCell(cell: ContentSheetCell): ContentSheetCell | undefined {
   return canonical;
 }
 
-function canonicalCells(
+export function canonicalCells(
   sheet: ContentSheet,
   maxRow: number | undefined,
   maxColumn: number | undefined,
@@ -1378,7 +1383,7 @@ function canonicalCells(
 }
 
 // Dense from 0 to maxColumn/maxRow, an undeclared position stamped with readColumnLayout/readRowLayout's own DEFAULT_COLUMN_WIDTH_PT/DEFAULT_ROW_HEIGHT_PT default -- ContentSheetColumn/RowSchema's own "absent widthPt/heightPt means no declared size" cannot be written as a genuinely absent style, since an unstyled table:table-column/-row still resolves to that same reader-side default. A sparse input `columns`/`rows` array is therefore densified on the round trip, one entry per position, exactly as this writer's own dense table:table-column/-row output reads back.
-function canonicalColumns(
+export function canonicalColumns(
   sheet: ContentSheet,
   maxColumn: number | undefined,
 ): ContentSheetColumn[] {
@@ -1400,7 +1405,7 @@ function canonicalColumns(
   return result;
 }
 
-function canonicalRows(
+export function canonicalRows(
   sheet: ContentSheet,
   maxRow: number | undefined,
 ): ContentSheetRow[] {
@@ -1420,7 +1425,9 @@ function canonicalRows(
   return result;
 }
 
-function canonicalSheetImage(image: ContentSheetImage): ContentSheetImage {
+export function canonicalSheetImage(
+  image: ContentSheetImage,
+): ContentSheetImage {
   const canonical: ContentSheetImage = {
     kind: "image",
     format: image.format,
@@ -1439,7 +1446,7 @@ function canonicalSheetImage(image: ContentSheetImage): ContentSheetImage {
 }
 
 // Images read back in row-major anchor-position document order (top-to-bottom, then left-to-right), the order readTable's own cell walk discovers them in -- never the input array's own order, which this writer's per-position placement does not preserve when several images share no ordering relationship across positions.
-function canonicalImages(sheet: ContentSheet): ContentSheetImage[] {
+export function canonicalImages(sheet: ContentSheet): ContentSheetImage[] {
   return sheet.images
     .map((image, originalIndex) => ({ image, originalIndex }))
     .sort(
@@ -1451,7 +1458,7 @@ function canonicalImages(sheet: ContentSheet): ContentSheetImage[] {
     .map(({ image }) => canonicalSheetImage(image));
 }
 
-function canonicalPrintSettings(
+export function canonicalPrintSettings(
   printSettings: ContentSheetPrintSettings,
 ): ContentSheetPrintSettings {
   const canonical: ContentSheetPrintSettings = {
@@ -1484,7 +1491,7 @@ function canonicalPrintSettings(
 
 // What a sheet's dataValidations read back as, per the read side's own established behaviour rather than chosen here: rules sharing one interned definition merge into one rule carrying the union of their ranges; every range expands to one 1x1 range per stamped cell (readOdsContent's own collect step, one entry per referencing cell, never merged); a position covered by another cell's span carries no reference and so drops out; rules order and range order follow the row-major walk order of first reference; allowBlank is always explicit (the reader's own default); the display flags appear only when true (the reader sets them only on table:display="true"); a list rule always reads an operator of "equal" and a custom rule never reads one (data-validation.ts's own CONDITION_INFOS fixed mappings); a list or custom rule with no formula1 has no condition to write and reads back as a bare custom rule; and a rule whose every position sat under a span is referenced by nothing and vanishes.
 // The merge key for canonicalisation is the rule's WRITTEN content -- see canonicalValidationKey's own note above.
-function canonicalDataValidations(
+export function canonicalDataValidations(
   sheet: ContentSheet,
 ): ContentSheetDataValidation[] | undefined {
   if (sheet.dataValidations === undefined) {
@@ -1558,7 +1565,7 @@ function canonicalDataValidations(
 }
 
 // What one conditional-format style reads back as: the two colour properties that actually round-trip through a minted named style, or no style field at all when neither is present (the read side resolves no style from a style element carrying no colour properties -- a source-only style is indistinguishable from none).
-function canonicalConditionalFormatStyle(
+export function canonicalConditionalFormatStyle(
   style: ContentSheetConditionalFormatStyle | undefined,
 ):
   | { textColor: Color; background?: never }
@@ -1574,7 +1581,7 @@ function canonicalConditionalFormatStyle(
 }
 
 // What a sheet's conditionalFormats read back as: the writer's own emission order preserved (the read side promotes each wrapper's children in document order), each rule's quarantined source dropped, and each style narrowed per canonicalConditionalFormatStyle. The precedence fields never appear here because the writer refuses a rule carrying them before any of this runs.
-function canonicalConditionalFormats(
+export function canonicalConditionalFormats(
   sheet: ContentSheet,
 ): ContentSheetConditionalFormat[] | undefined {
   if (sheet.conditionalFormats === undefined) {
@@ -1682,7 +1689,7 @@ function canonicalConditionalFormats(
   });
 }
 
-function canonicalSheet(sheet: ContentSheet): ContentSheet {
+export function canonicalSheet(sheet: ContentSheet): ContentSheet {
   const { maxRow, maxColumn } = computeUsedRange(sheet);
   const canonical: ContentSheet = {
     name: sheet.name,
