@@ -12,8 +12,8 @@ import { encodeXmlText } from "../../xml/entities";
 const THREADED_COMMENTS_NS =
   "http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments";
 
-// A deterministic, sequential ST_Guid-shaped id. A real producer mints a genuine random GUID per thread and reply; nothing this writer or its own reader (readThreadedComments' parentId matching) needs beyond uniqueness within the part and a reply's parentId correctly naming its own thread's root id, so a zero-padded counter in the same braced-hex shape is exactly as correct while keeping this writer's output reproducible.
-function threadedCommentId(counter: number): string {
+// A deterministic, sequential ST_Guid-shaped id. A real producer mints a genuine random GUID per thread and reply; nothing this writer or its own reader (readThreadedComments' parentId matching) needs beyond uniqueness within the part and a reply's parentId correctly naming its own thread's root id, so a zero-padded counter in the same braced-hex shape is exactly as correct while keeping this writer's output reproducible. Exported purely for direct unit coverage of its own exact hex formatting.
+export function threadedCommentId(counter: number): string {
   return `{00000000-0000-0000-0000-${counter.toString(16).padStart(12, "0").toUpperCase()}}`;
 }
 
