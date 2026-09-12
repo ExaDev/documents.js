@@ -77,6 +77,12 @@ describe("color table", () => {
     );
     expect(colors[1]).toEqual({ r: 174 / 255, g: 150 / 255, b: 56 / 255 });
   });
+
+  it("is a real colour, not the auto entry, when only one of red/green/blue is stated", () => {
+    // Only \red is present here -- green and blue are genuinely absent from the entry, not merely zero -- so this must still resolve to a real (defaulted-to-0) colour rather than being mistaken for the auto entry, which requires all three to be absent.
+    const { colors } = headerOf("{\\rtf1{\\colortbl;\\red200;}}");
+    expect(colors[1]).toEqual({ r: 200 / 255, g: 0, b: 0 });
+  });
 });
 
 describe("style sheet", () => {
@@ -259,5 +265,24 @@ describe("document properties", () => {
     );
     expect(header.metadata.title).toBe("A Document");
     expect(header.metadata.author).toBe("John Doe");
+  });
+
+  it("reads the {\\info ...} group's subject, keywords, and operator too", () => {
+    const header = headerOf(
+      "{\\rtf1\\ansi{\\info{\\subject A Subject}{\\keywords one, two;three}{\\operator Jane Roe}}}",
+    );
+    expect(header.metadata.subject).toBe("A Subject");
+    expect(header.metadata.keywords).toEqual(["one", "two", "three"]);
+    expect(header.metadata.creator).toBe("Jane Roe");
+  });
+
+  it("drops an empty entry a keywords list's own delimiter run produces", () => {
+    const header = headerOf("{\\rtf1\\ansi{\\info{\\keywords one;;two}}}");
+    expect(header.metadata.keywords).toEqual(["one", "two"]);
+  });
+
+  it("leaves every {\\info ...} field entirely absent when its own value is empty", () => {
+    const header = headerOf("{\\rtf1\\ansi{\\info{\\title}}}");
+    expect(header.metadata).not.toHaveProperty("title");
   });
 });
