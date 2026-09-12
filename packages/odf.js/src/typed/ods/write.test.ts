@@ -980,7 +980,7 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
     expect(
       canonicalCellFill({
         kind: "pattern",
-        patternType: "gray50",
+        patternType: "mediumGray",
         foregroundColor: { r: 1, g: 0, b: 0 },
         backgroundColor: { r: 0, g: 0, b: 1 },
       }),
@@ -991,7 +991,7 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
     expect(
       canonicalCellFill({
         kind: "pattern",
-        patternType: "gray50",
+        patternType: "mediumGray",
         backgroundColor: { r: 0, g: 0, b: 1 },
       }),
     ).toEqual({ kind: "solid", color: { r: 0, g: 0, b: 1 } });
@@ -999,7 +999,7 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
 
   it("canonicalCellFill: undefined when a pattern states neither colour", () => {
     expect(
-      canonicalCellFill({ kind: "pattern", patternType: "gray50" }),
+      canonicalCellFill({ kind: "pattern", patternType: "mediumGray" }),
     ).toBeUndefined();
   });
 
@@ -1239,18 +1239,18 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
         ...required,
         printRange: { startRow: 0, startColumn: 0, endRow: 1, endColumn: 1 },
         scalePercent: 80,
-        fitToPages: { widthPages: 1, heightPages: 1 },
-        repeatRows: { startRow: 0, endRow: 0 },
-        repeatColumns: { startColumn: 0, endColumn: 0 },
+        fitToPages: { width: 1, height: 1 },
+        repeatRows: { start: 0, end: 0 },
+        repeatColumns: { start: 0, end: 0 },
         manualBreaks: { rows: [1], columns: [1] },
       }),
     ).toEqual({
       ...required,
       printRange: { startRow: 0, startColumn: 0, endRow: 1, endColumn: 1 },
       scalePercent: 80,
-      fitToPages: { widthPages: 1, heightPages: 1 },
-      repeatRows: { startRow: 0, endRow: 0 },
-      repeatColumns: { startColumn: 0, endColumn: 0 },
+      fitToPages: { width: 1, height: 1 },
+      repeatRows: { start: 0, end: 0 },
+      repeatColumns: { start: 0, end: 0 },
       manualBreaks: { rows: [1], columns: [1] },
     });
   });
