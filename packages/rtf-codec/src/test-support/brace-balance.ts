@@ -11,8 +11,12 @@ function countGroupBraces(rtf: string): {
   let open = 0;
   let close = 0;
   let index = 0;
-  while (index < rtf.length) {
+  // No explicit index < rtf.length bound: index's own step varies (1 or 2 characters per iteration), but a string index at or past its own length always reads back undefined rather than throwing, and undefined matches none of the branches below -- so the character === undefined check is already the one true stopping condition, exactly the way decodeDbcsBytes's identical lead/trail loop in ../codepage.ts states it.
+  for (;;) {
     const character = rtf[index];
+    if (character === undefined) {
+      break;
+    }
     if (character === "\\") {
       const next = rtf[index + 1];
       if (next === "\\" || next === "{" || next === "}") {

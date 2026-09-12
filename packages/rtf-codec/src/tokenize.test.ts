@@ -62,6 +62,47 @@ describe("control word tokenization", () => {
     const [token] = tokenizeRtf(bytes(`\\${overlong}`));
     expect(token).toEqual({ kind: "controlWord", name: "a".repeat(32) });
   });
+
+  it("reads an uppercase letter as part of a control word's name, not just lowercase", () => {
+    expect(tokenizeRtf(bytes("\\PARD"))).toEqual([
+      { kind: "controlWord", name: "PARD" },
+    ]);
+  });
+
+  it("includes the letters at both ends of each ASCII letter range", () => {
+    // 'A'/'Z' and 'a'/'z' are the exact boundaries isAsciiLetter checks -- an off-by-one there would exclude exactly these four letters.
+    expect(tokenizeRtf(bytes("\\AzaZ"))).toEqual([
+      { kind: "controlWord", name: "AzaZ" },
+    ]);
+  });
+
+  it("terminates a control word's name at the byte just past 'Z', which is not a letter", () => {
+    // '[' (0x5b) is the byte immediately after 'Z' (0x5a); a boundary error in isAsciiLetter's own upper-case range would swallow it into the name.
+    expect(tokenizeRtf(bytes("\\ab[cd"))).toEqual([
+      { kind: "controlWord", name: "ab" },
+      { kind: "text", bytes: bytes("[cd") },
+    ]);
+  });
+
+  it("terminates a control word's name at the byte just before 'A', which is not a letter", () => {
+    // '@' (0x40) is the byte immediately before 'A' (0x41).
+    expect(tokenizeRtf(bytes("\\@ab"))).toEqual([
+      { kind: "controlSymbol", symbol: "@" },
+      { kind: "text", bytes: bytes("ab") },
+    ]);
+  });
+
+  it("puts a lone minus sign back as text when no digit follows it", () => {
+    expect(tokenizeRtf(bytes("\\pard-x"))).toEqual([
+      { kind: "controlWord", name: "pard" },
+      { kind: "text", bytes: bytes("-x") },
+    ]);
+  });
+
+  it("carries no param property at all for a parameterless control word", () => {
+    const [token] = tokenizeRtf(bytes("\\par"));
+    expect(token).not.toHaveProperty("param");
+  });
 });
 
 describe("control symbol tokenization", () => {
@@ -94,11 +135,60 @@ describe("control symbol tokenization", () => {
     expect(tokenizeRtf(bytes("\\'e9"))).toEqual([{ kind: "hex", byte: 0xe9 }]);
   });
 
+  it("reads an uppercase hex digit too, not only lowercase", () => {
+    expect(tokenizeRtf(bytes("\\'E9"))).toEqual([{ kind: "hex", byte: 0xe9 }]);
+  });
+
+  it("includes the digits at both ends of the lowercase and uppercase hex letter ranges", () => {
+    // 'a'/'f' and 'A'/'F' are the exact boundaries hexDigitValue checks.
+    expect(tokenizeRtf(bytes("\\'af"))).toEqual([{ kind: "hex", byte: 0xaf }]);
+    expect(tokenizeRtf(bytes("\\'AF"))).toEqual([{ kind: "hex", byte: 0xaf }]);
+  });
+
+  it("falls back to a control symbol when the byte just past 'f'/'F' isn't a hex digit", () => {
+    // 'g' (0x67) and 'G' (0x47) are the bytes immediately past hexDigitValue's own lowercase/uppercase ranges -- a boundary error would misread them as valid hex digits instead of falling through to the ordinary control-symbol production.
+    expect(tokenizeRtf(bytes("\\'gg"))).toEqual([
+      { kind: "controlSymbol", symbol: "'" },
+      { kind: "text", bytes: bytes("gg") },
+    ]);
+  });
+
   it("treats a backslash before a line break as \\par, per the spec's carriage-return rule", () => {
     expect(tokenizeRtf(bytes("a\\\r\nb"))).toEqual([
       { kind: "text", bytes: bytes("a") },
       { kind: "controlWord", name: "par" },
       { kind: "text", bytes: bytes("b") },
+    ]);
+  });
+
+  it("treats a backslash before a bare LF (no CR) as \\par too", () => {
+    expect(tokenizeRtf(bytes("a\\\nb"))).toEqual([
+      { kind: "text", bytes: bytes("a") },
+      { kind: "controlWord", name: "par" },
+      { kind: "text", bytes: bytes("b") },
+    ]);
+  });
+
+  it("treats a backslash before a bare CR (no following LF) as \\par, consuming only the CR", () => {
+    expect(tokenizeRtf(bytes("a\\\rb"))).toEqual([
+      { kind: "text", bytes: bytes("a") },
+      { kind: "controlWord", name: "par" },
+      { kind: "text", bytes: bytes("b") },
+    ]);
+  });
+
+  it("does not fold an LF-then-CR (the reverse order) into a single \\par consumption", () => {
+    // Only a CR immediately followed by an LF collapses into one \par; here the backslash-LF is its own \par and the CR that follows is an ordinary ignorable bare CR, not a second character \par swallows.
+    expect(tokenizeRtf(bytes("a\\\n\rb"))).toEqual([
+      { kind: "text", bytes: bytes("a") },
+      { kind: "controlWord", name: "par" },
+      { kind: "text", bytes: bytes("b") },
+    ]);
+  });
+
+  it("treats a trailing lone backslash with nothing after it as literal text", () => {
+    expect(tokenizeRtf(bytes("abc\\"))).toEqual([
+      { kind: "text", bytes: bytes("abc\\") },
     ]);
   });
 });
@@ -136,6 +226,13 @@ describe("group and text tokenization", () => {
   it("stops a \\binN run at end of input rather than reading past it", () => {
     expect(tokenizeRtf(bytes("\\bin9 ab"))).toEqual([
       { kind: "binary", bytes: bytes("ab") },
+    ]);
+  });
+
+  it("does not treat \\bin0 as a binary run at all -- N must be strictly positive", () => {
+    expect(tokenizeRtf(bytes("\\bin0 x"))).toEqual([
+      { kind: "controlWord", name: "bin", param: 0 },
+      { kind: "text", bytes: bytes("x") },
     ]);
   });
 });

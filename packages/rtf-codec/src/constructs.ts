@@ -342,9 +342,12 @@ export function coalesceRunConstructs(
     { descriptor: ConstructDescriptor; start: number }
   >();
   const out: RunConstructExtent[] = [];
-  const close = (key: string, end: number): void => {
-    const entry = open.get(key);
-    if (entry === undefined) return;
+  // Takes the entry itself, not a key to re-look-up: both call sites below already hold it from iterating `open` directly, so there is no "key not found" case to guard against here -- Map.get would only ever repeat a lookup the caller has already done.
+  const close = (
+    key: string,
+    entry: { descriptor: ConstructDescriptor; start: number },
+    end: number,
+  ): void => {
     out.push({
       descriptor: entry.descriptor,
       startRun: entry.start,
@@ -356,9 +359,9 @@ export function coalesceRunConstructs(
     const present = new Map(
       descriptors.map((descriptor) => [JSON.stringify(descriptor), descriptor]),
     );
-    for (const key of [...open.keys()]) {
+    for (const [key, entry] of [...open]) {
       if (!present.has(key)) {
-        close(key, index);
+        close(key, entry, index);
       }
     }
     for (const [key, descriptor] of present) {
@@ -367,8 +370,8 @@ export function coalesceRunConstructs(
       }
     }
   }
-  for (const key of [...open.keys()]) {
-    close(key, perRun.length);
+  for (const [key, entry] of [...open]) {
+    close(key, entry, perRun.length);
   }
   // Document order by where each extent starts, so a paragraph's constructs array reads the way the source did.
   return out.sort(

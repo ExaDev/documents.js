@@ -181,15 +181,12 @@ export function isSupportedCodepage(codepage: number): boolean {
 
 // Decodes one run of ANSI bytes through `codepage`. A run, not a byte, because \ansicpg65001 is UTF-8 and a stateful multi-byte encoding cannot be decoded a byte at a time -- see this module's own header.
 //
-// An unsupported page decodes through cp1252 and reports rtf/unsupported-codepage once per run rather than throwing: the rest of the document is still readable, and cp1252 agrees with every supported page on the ASCII range, so a document whose non-ASCII content is incidental still reads correctly. The sink is what makes that visible instead of silent.
+// An unsupported page decodes through cp1252 and reports rtf/unsupported-codepage once per run rather than throwing: the rest of the document is still readable, and cp1252 agrees with every supported page on the ASCII range, so a document whose non-ASCII content is incidental still reads correctly. The sink is what makes that visible instead of silent. An empty input needs no dedicated fast path: TextDecoder.decode, the DBCS state machine, and the single-byte for-of loop below all already produce "" on their own for zero bytes, with no codepage lookup or diagnostic ever triggered along the way.
 export function decodeCodepageBytes(
   input: Uint8Array,
   codepage: number,
   sink: RtfDiagnosticSink,
 ): string {
-  if (input.length === 0) {
-    return "";
-  }
   if (codepage === UTF8_CODEPAGE) {
     return new TextDecoder("utf-8").decode(input);
   }
@@ -208,8 +205,8 @@ export function decodeCodepageBytes(
   }
   let out = "";
   for (const byte of input) {
-    out +=
-      byte < 0x80 ? String.fromCharCode(byte) : (table[byte - 0x80] ?? "�");
+    // charAt, not a bracket read: every entry in SINGLE_BYTE_PAGES is exactly 128 characters (0x80..0xFF, generated and verified against Python's own codec library -- see this module's own header), so `byte - 0x80` is always in range and a `?? "�"` fallback for the bracket-read's own `string | undefined` type would be pretending an unreachable case is real, per this family's no-defensive-over-engineering convention (base64.ts's own bytesToBase64 states the identical charAt-over-bracket-read reasoning).
+    out += byte < 0x80 ? String.fromCharCode(byte) : table.charAt(byte - 0x80);
   }
   return out;
 }
@@ -223,7 +220,8 @@ function decodeDbcsBytes(
   const singleByteExtras = DBCS_SINGLE_BYTE_EXTRAS.get(codepage);
   let out = "";
   let i = 0;
-  while (i < input.length) {
+  // No explicit i < input.length bound: i's own step varies (1 or 2 bytes per iteration), but a Uint8Array index at or past its own length always reads back undefined rather than throwing, so the byte === undefined check below is already the one true stopping condition -- a separate length comparison would only ever fire in lockstep with it.
+  for (;;) {
     const byte = input[i];
     if (byte === undefined) {
       break;
@@ -236,11 +234,17 @@ function decodeDbcsBytes(
     const trailTable = leadTable.get(byte);
     if (trailTable !== undefined) {
       const trail = input[i + 1];
-      out += trail === undefined ? "�" : (trailTable[trail] ?? "�");
-      i += trail === undefined ? 1 : 2;
+      // charAt, not a bracket read: trailTable is always a dense 256-character string (DBCS_LEAD_BYTE_TABLES's own header comment), so a trail byte (0x00-0xFF) is always in range, and a `?? "�"` fallback for the bracket-read's own `string | undefined` type would be pretending an unreachable case is real -- the same reasoning decodeCodepageBytes's own single-byte loop already states for SINGLE_BYTE_PAGES.
+      out += trail === undefined ? "�" : trailTable.charAt(trail);
+      // Always 2, even when trail is undefined: trail is only ever undefined when i + 1 is already past input's own end, meaning i was already the last index -- advancing by 1 or by 2 from there both land past input.length either way, so there is no real pair left to skip over by advancing the full 2.
+      i += 2;
       continue;
     }
-    out += singleByteExtras?.[byte - 0x80] ?? "�";
+    // charAt, not a bracket read, for the identical reason: DBCS_SINGLE_BYTE_EXTRAS's own header comment states each entry is a dense 128-character string, so byte - 0x80 is always in range once singleByteExtras itself is known to exist.
+    out +=
+      singleByteExtras === undefined
+        ? "�"
+        : singleByteExtras.charAt(byte - 0x80);
     i += 1;
   }
   return out;

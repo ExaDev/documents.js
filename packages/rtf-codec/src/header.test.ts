@@ -77,6 +77,12 @@ describe("color table", () => {
     );
     expect(colors[1]).toEqual({ r: 174 / 255, g: 150 / 255, b: 56 / 255 });
   });
+
+  it("is a real colour, not the auto entry, when only one of red/green/blue is stated", () => {
+    // Only \red is present here -- green and blue are genuinely absent from the entry, not merely zero -- so this must still resolve to a real (defaulted-to-0) colour rather than being mistaken for the auto entry, which requires all three to be absent.
+    const { colors } = headerOf("{\\rtf1{\\colortbl;\\red200;}}");
+    expect(colors[1]).toEqual({ r: 200 / 255, g: 0, b: 0 });
+  });
 });
 
 describe("style sheet", () => {
@@ -107,6 +113,20 @@ describe("style sheet", () => {
       "{\\rtf1{\\stylesheet{\\s7\\outlinelevel1\\snext0 My Subhead;}}}",
     );
     expect(styles.get(7)?.headingLevel).toBe(2);
+  });
+
+  it("prefers \\outlinelevelN over a conflicting 'heading N' style name", () => {
+    const { styles } = headerOf(
+      "{\\rtf1{\\stylesheet{\\s5\\outlinelevel3\\snext0 heading 1;}}}",
+    );
+    expect(styles.get(5)?.headingLevel).toBe(4);
+  });
+
+  it("leaves headingLevel undefined when neither \\outlinelevelN nor a 'heading N' name is present", () => {
+    const { styles } = headerOf(
+      "{\\rtf1{\\stylesheet{\\s4\\snext0 Body Text;}}}",
+    );
+    expect(styles.get(4)?.headingLevel).toBeUndefined();
   });
 
   it("skips a character style, which the spec requires be written as {\\*\\csN ...}", () => {
@@ -259,5 +279,51 @@ describe("document properties", () => {
     );
     expect(header.metadata.title).toBe("A Document");
     expect(header.metadata.author).toBe("John Doe");
+  });
+
+  it("reads the {\\info ...} group's subject, keywords, and operator too", () => {
+    const header = headerOf(
+      "{\\rtf1\\ansi{\\info{\\subject A Subject}{\\keywords one, two;three}{\\operator Jane Roe}}}",
+    );
+    expect(header.metadata.subject).toBe("A Subject");
+    expect(header.metadata.keywords).toEqual(["one", "two", "three"]);
+    expect(header.metadata.creator).toBe("Jane Roe");
+  });
+
+  it("drops an empty entry a keywords list's own delimiter run produces", () => {
+    const header = headerOf("{\\rtf1\\ansi{\\info{\\keywords one;;two}}}");
+    expect(header.metadata.keywords).toEqual(["one", "two"]);
+  });
+
+  it("leaves every {\\info ...} field entirely absent when its own value is empty", () => {
+    const header = headerOf("{\\rtf1\\ansi{\\info{\\title}}}");
+    expect(header.metadata).not.toHaveProperty("title");
+  });
+});
+
+describe("bodyStartIndex", () => {
+  it("does not advance past a group whose own destination is not one of HEADER_DESTINATIONS", () => {
+    const tokens = tokenizeRtf(
+      bytes(
+        "{\\rtf1\\ansi{\\fonttbl{\\f0\\froman Tms Rmn;}}{\\unknowndest x}Body}",
+      ),
+    );
+    const header = readRtfHeader(tokens, () => {
+      /* not asserted here */
+    });
+    // bodyStartIndex must land exactly on the {\unknowndest x} group's own opening brace -- immediately after \fonttbl's matching close -- rather than being pushed past that whole group too.
+    expect(tokens[header.bodyStartIndex]).toEqual({ kind: "groupStart" });
+    expect(tokens[header.bodyStartIndex - 1]).toEqual({ kind: "groupEnd" });
+  });
+
+  it("does not advance past a group that opens with no destination control word at all", () => {
+    const tokens = tokenizeRtf(
+      bytes("{\\rtf1\\ansi{\\fonttbl{\\f0\\froman Tms Rmn;}}{plain text}Body}"),
+    );
+    const header = readRtfHeader(tokens, () => {
+      /* not asserted here */
+    });
+    expect(tokens[header.bodyStartIndex]).toEqual({ kind: "groupStart" });
+    expect(tokens[header.bodyStartIndex - 1]).toEqual({ kind: "groupEnd" });
   });
 });

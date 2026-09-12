@@ -19,7 +19,8 @@ export function matchingGroupEnd(
   start: number,
 ): number {
   let depth = 0;
-  for (let index = start; index < tokens.length; index += 1) {
+  // index increments by exactly 1 every iteration, so it can never skip past tokens.length -- !== is exactly equivalent to < here, and unlike <, an off-by-one mutation of it (=== in place of !==) stops the loop from running at all instead of surviving unobserved.
+  for (let index = start; index !== tokens.length; index += 1) {
     const kind = tokens[index]?.kind;
     if (kind === "groupStart") {
       depth += 1;
