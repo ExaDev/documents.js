@@ -282,10 +282,31 @@ describe("readNotesListWithText", () => {
     ]);
   });
 
+  it("skips a sibling record of some other type between two NotesPersistAtoms", () => {
+    // RT_NotesAtom shares no bytes with a NotesPersistAtom, so a reader that failed to skip it (or misread its own type check) would either crash on it or contribute a spurious persist entry.
+    const bytes = container(
+      RT_SlideListWithText,
+      [
+        notesPersistAtom(7, 0x0100),
+        notesAtom(0x0104),
+        notesPersistAtom(8, 0x0101),
+      ],
+      { recInstance: SLIDE_LIST_INSTANCE_NOTES },
+    );
+    expect(
+      readNotesListWithText(readRecordAt(bytes, 0)).map(
+        (persist) => persist.persistIdRef,
+      ),
+    ).toEqual([7, 8]);
+  });
+
   it("rejects a container whose type is not RT_SlideListWithText", () => {
     expect(() =>
       readNotesListWithText(readRecordAt(container(RT_Notes, []), 0)),
     ).toThrow(PptFormatError);
+    expect(() =>
+      readNotesListWithText(readRecordAt(container(RT_Notes, []), 0)),
+    ).toThrow(/expected RT_SlideListWithText/);
   });
 
   it("rejects a NotesPersistAtom shorter than its mandated 0x14 bytes", () => {
@@ -296,6 +317,9 @@ describe("readNotesListWithText", () => {
     );
     expect(() => readNotesListWithText(readRecordAt(bytes, 0))).toThrow(
       PptFormatError,
+    );
+    expect(() => readNotesListWithText(readRecordAt(bytes, 0))).toThrow(
+      "carries 5 bytes, fewer than the mandated 0x14",
     );
   });
 });
