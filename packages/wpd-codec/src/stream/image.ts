@@ -18,6 +18,7 @@ function indexOf(
   needle: readonly number[],
   from: number,
 ): number | undefined {
+  // Stryker disable next-line ArithmeticOperator: this loop bound only ever decides how many extra, harmless iterations run past the point where a real match could still fit -- the inner loop's own `bytes[i + j] !== needle[j]` compares a concrete needle byte against `undefined` for any out-of-range read and always disagrees, so `continue outer` fires regardless of how far past the true end `i` runs. Subtracting instead of adding widens (or removes) this loop's own upper bound, but can never manufacture a match that is not really there, so the function's returned value is identical either way for every input.
   outer: for (let i = from; i + needle.length <= bytes.length; i += 1) {
     for (let j = 0; j < needle.length; j += 1) {
       if (bytes[i + j] !== needle[j]) {
@@ -37,6 +38,7 @@ function scanPng(
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let cursor = signatureAt + PNG_SIGNATURE.length;
   for (;;) {
+    // Stryker disable next-line EqualityOperator: at the exact tie (cursor + 8 === bytes.length) there are precisely 8 bytes left, enough to read this chunk's own header -- but `length` (an unsigned 32-bit read) is never negative, so the very next overrun check below (cursor + 8 + length + 4 > bytes.length) always fails at that same point regardless of what the header says, refusing the chunk either way. The two operators can only disagree at this tie, and both routes end in the identical refusal.
     if (cursor + 8 > bytes.length) {
       return undefined;
     }
@@ -87,10 +89,12 @@ function scanJpeg(
     if (marker === 0xd9) {
       return { format: "jpeg", bytes: bytes.subarray(soiAt, cursor) };
     }
+    // Stryker disable next-line EqualityOperator: at the exact tie (cursor + 2 === bytes.length) there are precisely the 2 bytes left this length field itself needs, so reading it always succeeds either way -- but whatever value it declares, the walk always ends in the same refusal afterwards: a length of exactly 2 leaves the cursor sitting at bytes.length, caught by the next iteration's own cursor >= bytes.length check (or, for SOS, by indexOf finding no room left to search); any other length either trips the overrun check right below or the same next-iteration bounds check. Every path converges on undefined regardless of which operator gates this tie.
     if (cursor + 2 > bytes.length) {
       return undefined;
     }
     const length = view.getUint16(cursor);
+    // Stryker disable next-line EqualityOperator: at the exact tie (cursor + length === bytes.length) the segment consumes precisely the rest of the buffer -- cursor lands exactly on bytes.length afterwards, which the very next loop iteration's own cursor >= bytes.length check catches (or, for SOS, indexOf searching an empty remainder finds nothing), so both operators end in the identical refusal.
     if (length < 2 || cursor + length > bytes.length) {
       return undefined;
     }
