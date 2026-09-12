@@ -233,4 +233,13 @@ describe("readStyleBeginBlock", () => {
     bytes[42] = 5; // only reachable, and only turns into a real answer, if afterPids is mis-computed
     expect(readStyleBeginBlock(new Uint8Array(bytes))).toBeUndefined();
   });
+
+  // The text-block header exactly fills the packet (afterPids + TEXT_BLOCK_HEADER_SIZE === packet.length), with no bytes to spare -- the one boundary where "runs past" and "fits exactly" disagree. The begin block's own relative offset points back into the header's own bytes here (harmless: this function only cares about bounds, not what the header fields themselves say), so a real, in-bounds slice is still the correct answer.
+  it("reads a begin block from a packet whose header exactly fills it, with nothing to spare", () => {
+    const bytes = new Array<number>(20).fill(0); // pid count (2) + TEXT_BLOCK_HEADER_SIZE (18) = 20, exactly
+    putUint32(bytes, 12, 5); // beginningStyleTextSize = 5; relativeOffset and paragraphTextSize stay 0
+    expect(readStyleBeginBlock(new Uint8Array(bytes))).toEqual(
+      new Uint8Array(bytes.slice(0, 5)),
+    );
+  });
 });

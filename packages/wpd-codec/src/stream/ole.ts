@@ -81,10 +81,10 @@ export function readOleDescriptor(
     marker += String.fromCharCode(byteAt(bytes, index));
   }
   if (marker === OLE2_MARKER) {
-    // Stryker disable next-line ArithmeticOperator: bytes IS the whole packet, so there is never real data beyond bytes.length for a larger word budget to reach -- decodeWordString's own bounds check stops at the true end of bytes regardless of how large a maxWords this expression computes, making * or + here behave identically to the correct / and -.
     const { text } = decodeWordString(
       bytes,
       payloadOffset,
+      // Stryker disable next-line ArithmeticOperator: bytes IS the whole packet, so there is never real data beyond bytes.length for a larger word budget to reach -- decodeWordString's own bounds check stops at the true end of bytes regardless of how large a maxWords this expression computes, making * or + here behave identically to the correct / and -.
       (bytes.length - payloadOffset) / 2,
     );
     // "If Ole 2, wordstring will be 7-8 characters and the null terminator indicating the ole stream." An empty or missing name is a descriptor that names no stream -- nothing to resolve.

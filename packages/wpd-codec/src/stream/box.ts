@@ -132,6 +132,7 @@ function readPositionOverride(
     // bit 10: height, 3 bytes -- <flags>[height].
     if (!need(3)) return undefined;
     heightWpu = uint16At(positionBlock, cursor + 1);
+    // Stryker disable next-line AssignmentOperator: height is always the last bit this walk processes, and cursor is never read again after this line (the function returns unconditionally next), so no input can observe which direction this moves it.
     cursor += 3;
   }
   return { widthWpu, heightWpu, xWpu, yWpu };

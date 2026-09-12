@@ -208,7 +208,8 @@ describe("readBoxContent", () => {
     const nonDeletable = boxNonDeletable({
       overrideFlags: 0x6000,
       blocks: new Map([
-        [14, [0x00, 0x20, 0, 0, 0]], // bit 13 (horizontal) claimed, only 3 of its 5 bytes present
+        // bit 13 (horizontal) claimed: flags word, then one more byte -- not even the three (flags, offset) this code actually reads, let alone the declared five.
+        [14, [0x00, 0x20, 0]],
         [13, contentBlock(BOX_CONTENT_TYPE_TEXT)],
       ]),
     });
@@ -283,6 +284,7 @@ describe("readBoxContent", () => {
     });
   });
 
+  // Width and height are also set here (unlike a bare "no other bits set" case), because frame is only ever computed at all once both are defined -- otherwise a version that wrongly resolved x regardless of the offset's own type would still report frame: undefined, for the unrelated reason that width and height were never supplied, and the bug would go unnoticed.
   it("does not resolve x from a horizontal offset whose own type is not absolute-from-page", () => {
     const nonDeletable = boxNonDeletable({
       overrideFlags: 0x6000,
@@ -291,18 +293,28 @@ describe("readBoxContent", () => {
           14,
           [
             0x00,
-            0x20, // bit 13 (horizontal) only
+            0x2c, // bits 13 (horizontal), 11 (width), 10 (height)
             0x01,
             ...word16(1000),
             0,
             0, // horizontal flags = 1 (not absolute), offset = 1000
+            0x00,
+            ...word16(1200), // width
+            0x00,
+            ...word16(600), // height
           ],
         ],
         [13, contentBlock(BOX_CONTENT_TYPE_TEXT)],
       ]),
     });
     const result = readBoxContent(nonDeletable, [41, 42]);
-    expect(result?.frame).toBeUndefined();
+    expect(result?.frame).toEqual({
+      xPt: pointsFromWpuForTest(0),
+      yPt: pointsFromWpuForTest(0),
+      widthPt: pointsFromWpuForTest(1200),
+      heightPt: pointsFromWpuForTest(600),
+      positionResolved: false,
+    });
   });
 
   it("does not resolve y from a vertical offset whose own type is not absolute-from-page", () => {
@@ -313,16 +325,79 @@ describe("readBoxContent", () => {
           14,
           [
             0x00,
-            0x10, // bit 12 (vertical) only
+            0x1c, // bits 12 (vertical), 11 (width), 10 (height)
             0x01,
             ...word16(500), // vertical flags = 1 (not absolute), offset = 500
+            0x00,
+            ...word16(1200), // width
+            0x00,
+            ...word16(600), // height
           ],
         ],
         [13, contentBlock(BOX_CONTENT_TYPE_TEXT)],
       ]),
     });
     const result = readBoxContent(nonDeletable, [41, 42]);
-    expect(result?.frame).toBeUndefined();
+    expect(result?.frame).toEqual({
+      xPt: pointsFromWpuForTest(0),
+      yPt: pointsFromWpuForTest(0),
+      widthPt: pointsFromWpuForTest(1200),
+      heightPt: pointsFromWpuForTest(600),
+      positionResolved: false,
+    });
+  });
+
+  // Exactly one of x/y resolved -- the existing "full house" test resolves both, which cannot tell positionResolved's && from ||, and neither non-absolute case above ever reaches this field at all (frame's xWpu/yWpu stay undefined there for an unrelated reason upstream).
+  it("reports positionResolved false when only x resolved, not just when neither did", () => {
+    const nonDeletable = boxNonDeletable({
+      overrideFlags: 0x6000,
+      blocks: new Map([
+        [
+          14,
+          [
+            0x00,
+            0x2c, // bits 13 (horizontal, absolute), 11 (width), 10 (height)
+            0x00,
+            ...word16(1000),
+            0,
+            0,
+            0x00,
+            ...word16(1200),
+            0x00,
+            ...word16(600),
+          ],
+        ],
+        [13, contentBlock(BOX_CONTENT_TYPE_TEXT)],
+      ]),
+    });
+    expect(
+      readBoxContent(nonDeletable, [41, 42])?.frame?.positionResolved,
+    ).toBe(false);
+  });
+
+  it("reports positionResolved false when only y resolved, not just when neither did", () => {
+    const nonDeletable = boxNonDeletable({
+      overrideFlags: 0x6000,
+      blocks: new Map([
+        [
+          14,
+          [
+            0x00,
+            0x1c, // bits 12 (vertical, absolute), 11 (width), 10 (height)
+            0x00,
+            ...word16(500),
+            0x00,
+            ...word16(1200),
+            0x00,
+            ...word16(600),
+          ],
+        ],
+        [13, contentBlock(BOX_CONTENT_TYPE_TEXT)],
+      ]),
+    });
+    expect(
+      readBoxContent(nonDeletable, [41, 42])?.frame?.positionResolved,
+    ).toBe(false);
   });
 
   // Width is not set in the override flags at all; the walk must never read a phantom width from bytes that in fact belong entirely to the (genuinely set) height sub-block, even when there happen to be enough trailing bytes for such a misread to succeed silently.
