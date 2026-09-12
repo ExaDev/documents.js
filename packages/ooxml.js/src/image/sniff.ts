@@ -12,13 +12,11 @@ const GIF89A_SIGNATURE: readonly number[] = [
   0x47, 0x49, 0x46, 0x38, 0x39, 0x61,
 ];
 
+// No separate length guard needed: bytes[i] is `undefined` for any index at or past bytes.length (an out-of-range read never throws), and undefined can never equal a real signature byte value -- so bytes shorter than the signature already fail this loop's own comparison at the first index past their own end.
 function startsWith(
   bytes: Uint8Array<ArrayBuffer>,
   signature: readonly number[],
 ): boolean {
-  if (bytes.length < signature.length) {
-    return false;
-  }
   for (let i = 0; i < signature.length; i++) {
     if (bytes[i] !== signature[i]) {
       return false;
