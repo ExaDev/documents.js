@@ -68,6 +68,12 @@ function passwordToAsciiBytes(password: string): Uint8Array<ArrayBuffer> {
     );
   }
   const bytes = new Uint8Array(password.length);
+  // A DataView write, not raw indexed assignment: an out-of-range DataView offset throws, where a plain `bytes[i] = …` past the array's own end silently does nothing -- so a loop bound one iteration too long fails loudly here instead of leaving the same, indistinguishable output.
+  const bytesView = new DataView(
+    bytes.buffer,
+    bytes.byteOffset,
+    bytes.byteLength,
+  );
   for (let i = 0; i < password.length; i += 1) {
     const code = password.charCodeAt(i);
     if (code > 0xff) {
@@ -75,7 +81,7 @@ function passwordToAsciiBytes(password: string): Uint8Array<ArrayBuffer> {
         `XOR obfuscation passwords must be single-byte ASCII/Latin-1 characters, got code point ${code} at index ${i}`,
       );
     }
-    bytes[i] = code;
+    bytesView.setUint8(i, code);
   }
   return bytes;
 }
@@ -137,18 +143,19 @@ export function createXorObfuscationArray(
 ): Uint8Array<ArrayBuffer> {
   const passwordBytes = passwordToAsciiBytes(password);
   const array = new Uint8Array(XOR_OBFUSCATION_ARRAY_LENGTH);
-  array.set(passwordBytes, 0);
-  for (let i = passwordBytes.length; i < XOR_OBFUSCATION_ARRAY_LENGTH; i += 1) {
-    array[i] = PAD_ARRAY.getUint8(i - passwordBytes.length);
-  }
-  const xorKey = createXorObfuscationKey(password);
-  const keyLow = xorKey & 0xff;
-  const keyHigh = (xorKey >>> 8) & 0xff;
   const arrayView = new DataView(
     array.buffer,
     array.byteOffset,
     array.byteLength,
   );
+  array.set(passwordBytes, 0);
+  // A DataView write for the padding fill, not raw indexed assignment: an out-of-range DataView offset throws, where a plain `array[i] = …` past the array's own 16-byte end silently does nothing -- so a loop bound one iteration too long fails loudly here instead of leaving the same, indistinguishable 16-byte array.
+  for (let i = passwordBytes.length; i < XOR_OBFUSCATION_ARRAY_LENGTH; i += 1) {
+    arrayView.setUint8(i, PAD_ARRAY.getUint8(i - passwordBytes.length));
+  }
+  const xorKey = createXorObfuscationKey(password);
+  const keyLow = xorKey & 0xff;
+  const keyHigh = (xorKey >>> 8) & 0xff;
   for (let i = 0; i < XOR_OBFUSCATION_ARRAY_LENGTH; i += 1) {
     const withKey = arrayView.getUint8(i) ^ (i % 2 === 0 ? keyLow : keyHigh);
     array[i] = rotateLeft8(withKey, rotateDistance);
