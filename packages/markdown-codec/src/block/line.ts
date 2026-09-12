@@ -16,7 +16,8 @@ export class LineCursor {
   private readonly cursor: MarkdownScanCursor;
   private nextNonspaceMark: MarkdownScanMark;
   private nextNonspaceColumn = 0;
-  private lineIsBlank = false;
+  // No default value: the constructor unconditionally calls findNextNonspace() below, which always assigns this before any getter can read it, so a placeholder default would be overwritten on every construction path and could never be observed to differ.
+  private lineIsBlank!: boolean;
 
   constructor(text: string) {
     this.text = text;
@@ -78,10 +79,9 @@ export class LineCursor {
 
   // Advances up to `columns` columns, stopping at end of line. A tab straddling the target is consumed only as far as needed, leaving its remaining columns for rest() to materialise -- which is exactly how `>\tfoo` puts three columns of indentation, not a whole tab, into the block quote's content.
   advance(columns: number): void {
+    // No early exit at end of line: MarkdownScanCursor.next() is already a side-effect-free no-op once rawOffset reaches the source length (src/scan/scan.ts), so looping the remaining count down regardless produces the identical end state as returning early -- an early-return branch here would be unobservable by any test, on purpose or not.
     for (let remaining = columns; remaining > 0; remaining -= 1) {
-      if (this.cursor.next() === undefined) {
-        return;
-      }
+      this.cursor.next();
     }
   }
 
