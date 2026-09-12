@@ -144,6 +144,11 @@ describe("readNotesAtom", () => {
     expect(() =>
       readNotesAtom(readRecordAt(atom(RT_TextHeaderAtom, u32le(0)), 0)),
     ).toThrow(PptFormatError);
+    expect(() =>
+      readNotesAtom(readRecordAt(atom(RT_TextHeaderAtom, u32le(0)), 0)),
+    ).toThrow(
+      `expected RT_NotesAtom (0x${RT_NotesAtom.toString(16)}), found record type 0x${RT_TextHeaderAtom.toString(16)}`,
+    );
   });
 
   it("rejects a NotesAtom shorter than its mandated 0x8 bytes", () => {
@@ -152,6 +157,11 @@ describe("readNotesAtom", () => {
         readRecordAt(atom(RT_NotesAtom, u32le(0x0104), { recVer: 0x1 }), 0),
       ),
     ).toThrow(PptFormatError);
+    expect(() =>
+      readNotesAtom(
+        readRecordAt(atom(RT_NotesAtom, u32le(0x0104), { recVer: 0x1 }), 0),
+      ),
+    ).toThrow("NotesAtom carries 4 bytes, fewer than the mandated 0x8");
   });
 });
 
@@ -169,12 +179,22 @@ describe("readNotesContainerAtom", () => {
     expect(() =>
       readNotesContainerAtom(readRecordAt(container(RT_Drawing, []), 0)),
     ).toThrow(PptFormatError);
+    expect(() =>
+      readNotesContainerAtom(readRecordAt(container(RT_Drawing, []), 0)),
+    ).toThrow(
+      `expected RT_Notes (0x${RT_Notes.toString(16)}), found record type 0x${RT_Drawing.toString(16)}`,
+    );
   });
 
   it("rejects a NotesContainer with no NotesAtom, since nothing else states which slide it belongs to", () => {
     expect(() =>
       readNotesContainerAtom(readRecordAt(container(RT_Notes, []), 0)),
     ).toThrow(PptFormatError);
+    expect(() =>
+      readNotesContainerAtom(readRecordAt(container(RT_Notes, []), 0)),
+    ).toThrow(
+      "the NotesContainer at offset 0 has no NotesAtom, so the presentation slide its notes belong to is unstated",
+    );
   });
 });
 
@@ -215,6 +235,11 @@ describe("readNotesText", () => {
     ]);
     expect(readNotesText(readRecordAt(other, 0))).toBe("Written by Impress");
     expect(readNotesText(readRecordAt(notes, 0))).toBe("Written by PowerPoint");
+  });
+
+  it("skips a shape whose text atom is present but empty, distinctly from one carrying no text atom at all", () => {
+    const bytes = notesContainer(0x0100, [notesShape({ spid: 2, text: "" })]);
+    expect(readNotesText(readRecordAt(bytes, 0))).toBe("");
   });
 
   it("skips a placeholder whose client textbox carries a header but no text atom", () => {
