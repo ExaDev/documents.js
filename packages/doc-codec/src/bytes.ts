@@ -20,13 +20,10 @@ function checkRange(
   }
 }
 
+// DataView.prototype.getUint8 rather than a plain bytes[offset] index: checkRange has already proven offset is a valid, in-bounds position, but a typed-array index still types as `number | undefined` under this project's noUncheckedIndexedAccess -- DataView's own accessor returns a bare number instead, with no absent case left to guard against, matching how every sibling read in this file already goes through `view(bytes)` rather than indexing directly.
 export function readUint8(bytes: Uint8Array, offset: number): number {
   checkRange(bytes, offset, 1, "uint8");
-  const value = bytes[offset];
-  if (value === undefined) {
-    throw new DocFormatError(`uint8 read at offset ${offset} found no byte`);
-  }
-  return value;
+  return view(bytes).getUint8(offset);
 }
 
 export function readUint16LE(bytes: Uint8Array, offset: number): number {
