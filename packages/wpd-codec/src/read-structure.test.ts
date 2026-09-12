@@ -247,6 +247,86 @@ describe("page geometry", () => {
       ),
     ).toBe(true);
   });
+
+  it("does not report a landscape orientation for a portrait form", () => {
+    const { diagnostics } = readWithDiagnostics([
+      ...pageForm({ lengthWpu: 14031, widthWpu: 9921, orientation: 0 }),
+      ...text("A4"),
+    ]);
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === WpdDiagnosticCodes.LandscapeOrientationUnmapped,
+      ),
+    ).toBe(false);
+  });
+
+  it("does not report a page geometry change when the same value is stated twice", () => {
+    const { diagnostics } = readWithDiagnostics([
+      ...marginFunction(PAGE_GROUP, 0x00, 600),
+      ...text("first"),
+      HARD_EOL,
+      ...marginFunction(PAGE_GROUP, 0x00, 600),
+      ...text("second"),
+    ]);
+    expect(
+      diagnostics.filter(
+        (diagnostic) =>
+          diagnostic.code === WpdDiagnosticCodes.PageGeometryChanged,
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("reports a page geometry change only once across more than one later change", () => {
+    const { diagnostics } = readWithDiagnostics([
+      ...marginFunction(PAGE_GROUP, 0x00, 600),
+      ...text("first"),
+      HARD_EOL,
+      ...marginFunction(PAGE_GROUP, 0x00, 1200),
+      ...text("second"),
+      HARD_EOL,
+      ...marginFunction(PAGE_GROUP, 0x00, 2400),
+      ...text("third"),
+    ]);
+    expect(
+      diagnostics.filter(
+        (diagnostic) =>
+          diagnostic.code === WpdDiagnosticCodes.PageGeometryChanged,
+      ),
+    ).toHaveLength(1);
+  });
+
+  // applyPageGroup's own top/bottom dispatch must actually gate on the subgroup, not fall into the bottom-margin branch for any subgroup it does not recognise as either margin.
+  it("does not apply a page margin function whose subgroup is neither top nor bottom", () => {
+    const section = sectionOf(
+      readDocumentArea([
+        ...marginFunction(PAGE_GROUP, 0x02, 600),
+        ...text("x"),
+      ]),
+    );
+    expect(section.margins).toEqual({
+      topPt: 72,
+      rightPt: 72,
+      bottomPt: 72,
+      leftPt: 72,
+    });
+  });
+
+  // applyColumnGroup's own left/right dispatch must actually gate on the subgroup, not fall into the right-margin branch for any subgroup it does not recognise as either margin.
+  it("does not apply a column margin function whose subgroup is neither left nor right", () => {
+    const section = sectionOf(
+      readDocumentArea([
+        ...marginFunction(COLUMN_GROUP, 0x02, 600),
+        ...text("x"),
+      ]),
+    );
+    expect(section.margins).toEqual({
+      topPt: 72,
+      rightPt: 72,
+      bottomPt: 72,
+      leftPt: 72,
+    });
+  });
 });
 
 describe("tables", () => {
@@ -434,6 +514,117 @@ describe("tables", () => {
     expect(row === undefined ? false : Object.hasOwn(row, "heightPt")).toBe(
       false,
     );
+    // closeCell's alignment walk must never run at all for a cell with no stated justification -- not run and assign `undefined`, which the shared schema's own optional field cannot tell apart from "never set".
+    const paragraph = cell?.blocks[0];
+    expect(
+      paragraph === undefined ? false : Object.hasOwn(paragraph, "alignment"),
+    ).toBe(false);
+  });
+
+  // readCellAttributes only reports a truncated attribute list when the walk actually stopped early; an ordinary cell with a well-formed (or absent) attribute list must never trigger it.
+  it("does not report a truncated attribute list for a cell with well-formed attributes", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(
+      buildWpdFile([
+        ...tableDefinition([1200]),
+        ...text("fine"),
+        ...eolFunction({
+          subgroup: EOL_TABLE_ROW,
+          embedded: embeddedSubfunction(CELL_SPANNING, [1, 1]),
+        }),
+        ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+      ]),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    expect(
+      diagnostics.some(
+        (d) => d.code === WpdDiagnosticCodes.TableAttributesTruncated,
+      ),
+    ).toBe(false);
+  });
+
+  // A table definition the document never fills with a single row is dropped entirely -- an empty grid the author never actually built is not real content.
+  it("drops a table definition that closes with no rows at all", () => {
+    const document = readDocumentArea([
+      ...tableDefinition([1200]),
+      ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+    ]);
+    expect(tablesOf(document)).toHaveLength(0);
+  });
+
+  // A fixed row height set on an earlier cell within the same row must survive to the row's own close even when a later cell in that row carries no row-information subfunction of its own -- the absence of a later statement is not itself a statement that clears the height.
+  it("keeps a fixed row height set by an earlier cell once a later cell in the same row states none", () => {
+    const document = readDocumentArea([
+      ...tableDefinition([1200, 1200]),
+      ...text("A"),
+      ...eolFunction({
+        subgroup: EOL_TABLE_CELL,
+        embedded: embeddedSubfunction(ROW_INFORMATION, [0x02, ...word(1200)]),
+      }),
+      ...text("B"),
+      ...eolFunction({ subgroup: EOL_TABLE_ROW }),
+      ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+    ]);
+    expect(tablesOf(document)[0]?.rows[0]?.heightPt).toBe(72);
+  });
+
+  // A cell boundary must still close a cell whose pending text is empty but whose runs are not (a run already split off by an attribute change) -- checking only pending text and accumulated cell blocks would wrongly drop it, even at Table Off, which otherwise skips closing an already-closed cell.
+  it("closes a Table Off cell whose pending text is empty but whose runs are not", () => {
+    const document = readDocumentArea([
+      ...tableDefinition([1200]),
+      ...text("a"),
+      0xf2, // ATTRIBUTE_ON (bold), a 3-byte fixed function: gate, attribute id, gate
+      12, // BOLD
+      0xf2,
+      ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+    ]);
+    expect(tablesOf(document)[0]?.rows[0]?.cells.map(cellText)).toEqual(["a"]);
+  });
+
+  // A cell boundary must still close a cell whose pending text and runs are both empty but which already holds a flushed paragraph (a hard return inside the cell) -- Table Off otherwise skips closing an already-closed cell, and must not mistake "nothing pending" for "nothing to close".
+  it("closes a Table Off cell holding only an already-flushed paragraph", () => {
+    const document = readDocumentArea([
+      ...tableDefinition([1200]),
+      ...text("first"),
+      HARD_EOL,
+      ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+    ]);
+    const cell = tablesOf(document)[0]?.rows[0]?.cells[0];
+    expect(
+      cell?.blocks.map((block) =>
+        block.kind === "paragraph" ? block.runs[0]?.text : undefined,
+      ),
+    ).toEqual(["first"]);
+  });
+
+  // The definition function is not recursive: an already-open table is closed, and any paragraph mid-flight in the enclosing document is flushed, before a second Table Definition starts a fresh grid.
+  it("closes an already-open table and flushes its paragraph when a new Table Definition arrives", () => {
+    const document = readDocumentArea([
+      ...tableDefinition([1200]),
+      ...text("first"),
+      ...tableDefinition([1200]),
+      ...text("second"),
+      ...eolFunction({ subgroup: EOL_TABLE_ROW }),
+      ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+    ]);
+    const tables = tablesOf(document);
+    expect(tables).toHaveLength(1);
+    expect(tables[0]?.rows[0]?.cells.map(cellText)).toEqual(["second"]);
+    expect(paragraphsOf(document).map((p) => p.runs[0]?.text)).toEqual([
+      "first",
+    ]);
+  });
+
+  // Define Table End must clear the table's own "still defining columns" flag even when it fires directly rather than through a fresh Table Definition, so a Table Column function appearing after it (a document a hand-edit left in a state the format does not expect) is ignored rather than appended as a genuine extra column.
+  it("ignores a Table Column function that arrives after Define Table End", () => {
+    const document = readDocumentArea([
+      ...tableDefinition([1200]),
+      ...tableColumn(2400),
+      ...text("row"),
+      ...eolFunction({ subgroup: EOL_TABLE_ROW }),
+      ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+    ]);
+    expect(tablesOf(document)[0]?.columnWidthsPt).toEqual([72]);
   });
 
   it("reads a fixed row height", () => {
@@ -528,10 +719,31 @@ describe("styles", () => {
     expect(paragraphsOf(document)[0]?.list).toEqual({ level: 1 });
   });
 
+  // Both structural facts (heading level and list membership) are captured together, at the paragraph's first character, from whichever single style is active then -- not independently, each from whatever style happens to be active when its own first non-undefined value shows up. A list style at the first character must keep the paragraph's own list membership even once a later, heading-only style becomes active in the same paragraph.
+  it("keeps the first style's own list membership once a later style sets a heading instead", () => {
+    const document = readDocumentArea([
+      ...styleScope(53, text("a")),
+      ...styleScope(68, text("b")),
+      HARD_EOL,
+    ]);
+    const paragraph = paragraphsOf(document)[0];
+    expect(paragraph?.list).toEqual({ level: 1 });
+    expect(paragraph?.headingLevel).toBeUndefined();
+  });
+
   // An enclosing Global On naming the document's own Normal style must not override a heading opened inside it.
   it("takes the innermost style that says something structural", () => {
     const document = readDocumentArea([
       ...styleScope(1, styleScope(68, text("Heading"))),
+      HARD_EOL,
+    ]);
+    expect(paragraphsOf(document)[0]?.headingLevel).toBe(1);
+  });
+
+  // The reverse nesting: a structural style opened OUTSIDE a later, transparent one. effectiveStyle's own findLast walk must skip the innermost (Normal) scope, whose semantics are undefined, to reach the outer heading style rather than stopping at the first scope it sees regardless of what it means.
+  it("reaches past an innermost style with no structural meaning to an outer heading style", () => {
+    const document = readDocumentArea([
+      ...styleScope(68, styleScope(1, text("Heading"))),
       HARD_EOL,
     ]);
     expect(paragraphsOf(document)[0]?.headingLevel).toBe(1);
@@ -833,26 +1045,36 @@ describe("table cell attribute gaps", () => {
     );
   });
 
-  it("carries a resolved table formula onto the cell", () => {
+  it("carries a resolved table formula onto the cell, reporting nothing", () => {
     // A1+B1: a cell reference (code 64, absolute-flag word, row word, column word) for A1, the binary "+" token (1), then the same cell-reference shape for B1 -- the identical byte pattern stream/formula.test.ts proves readTableFormula resolves to "A1+B1" on its own, here wrapped in the embedded subfunction's own leading and trailing length-word framing.
     const cellA1 = [64, ...word(0), ...word(0)];
     const cellB1 = [64, ...word(0), ...word(1)];
     const formulaTokens = [...cellA1, 1, ...cellB1];
-    const document = readDocumentArea([
-      ...tableDefinition([1200]),
-      ...text("5"),
-      ...eolFunction({
-        subgroup: EOL_TABLE_ROW,
-        embedded: embeddedSubfunction(CELL_FORMULA, [
-          ...word(formulaTokens.length),
-          ...formulaTokens,
-          ...word(formulaTokens.length),
-        ]),
-      }),
-      ...eolFunction({ subgroup: EOL_TABLE_OFF }),
-    ]);
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile([
+        ...tableDefinition([1200]),
+        ...text("5"),
+        ...eolFunction({
+          subgroup: EOL_TABLE_ROW,
+          embedded: embeddedSubfunction(CELL_FORMULA, [
+            ...word(formulaTokens.length),
+            ...formulaTokens,
+            ...word(formulaTokens.length),
+          ]),
+        }),
+        ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+      ]),
+      { sink: (d) => diagnostics.push(d) },
+    );
     const cell = tablesOf(document)[0]?.rows[0]?.cells[0];
     expect(cell?.formula).toBe("A1+B1");
+    // A formula that DID resolve must not also trigger the "could not decode with confidence" diagnostic -- the two are mutually exclusive outcomes of the same read.
+    expect(
+      diagnostics.some(
+        (d) => d.code === WpdDiagnosticCodes.TableFormulaUnresolved,
+      ),
+    ).toBe(false);
   });
 
   it("resolves a blended (pattern) cell fill and reports it", () => {
