@@ -29,6 +29,16 @@ describe("inferFormatFromExtension", () => {
     expect(inferFormatFromExtension(".gitignore")).toBeUndefined();
   });
 
+  it("returns undefined for a bare filename that happens to spell a recognised extension, since there is no dot at all", () => {
+    // Distinguishes the dotIndex < 0 case from an equivalent-looking mutant that only skips the early return for a genuinely unrecognised tail: without a dot, the whole filename ("docx") is itself what a mutated fallthrough would look up, and "docx" IS a recognised extension -- so this fails loudly under that mutant rather than coincidentally returning undefined either way.
+    expect(inferFormatFromExtension("docx")).toBeUndefined();
+  });
+
+  it("returns undefined for a leading-dot-only name whose own tail happens to spell a recognised extension", () => {
+    // Distinguishes dotIndex === 0 from an equivalent-looking mutant the same way: ".docx"'s tail after the leading dot is itself "docx", a recognised extension, so a mutant that skips the early return here would wrongly resolve a format instead of coincidentally landing on undefined.
+    expect(inferFormatFromExtension(".docx")).toBeUndefined();
+  });
+
   it("returns undefined for an unrecognised extension", () => {
     expect(inferFormatFromExtension("archive.notaformat")).toBeUndefined();
   });
