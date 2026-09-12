@@ -63,7 +63,7 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheets).toEqual([
+    expect(globals.sheets).toStrictEqual([
       { name: "Summary", hidden: false, sheetType: 0, bofPosition: 0x0200 },
       { name: "Detail", hidden: false, sheetType: 0, bofPosition: 0x0400 },
     ]);
@@ -142,7 +142,7 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sharedStrings).toEqual(["Alpha", "Beta"]);
+    expect(globals.sharedStrings).toStrictEqual(["Alpha", "Beta"]);
   });
 
   it("reads a shared string table spanning a Continue record", () => {
@@ -161,7 +161,7 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sharedStrings).toEqual(["Alpha", "Abcdef"]);
+    expect(globals.sharedStrings).toStrictEqual(["Alpha", "Abcdef"]);
   });
 
   it("rejects an SST declaring more strings than its bytes could carry", () => {
@@ -217,7 +217,7 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.cellFormats).toEqual([
+    expect(globals.cellFormats).toStrictEqual([
       {
         fontIndex: 0,
         formatId: 0,
@@ -253,7 +253,7 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.cellFormats[0]?.decoration).toEqual({
+    expect(globals.cellFormats[0]?.decoration).toStrictEqual({
       fillPattern: 1,
       fillForegroundIcv: 12,
       fillBackgroundIcv: 0x41, // Automatic -- cellXfTrailer's own default when the caller states no background icv.
@@ -280,8 +280,8 @@ describe("readWorkbookGlobals", () => {
     );
 
     expect(globals.palette?.length).toBe(PALETTE_ENTRY_COUNT);
-    expect(globals.palette?.[0]).toEqual({ r: 1, g: 0, b: 0 });
-    expect(globals.palette?.[1]).toEqual({ r: 0, g: 1, b: 0 });
+    expect(globals.palette?.[0]).toStrictEqual({ r: 1, g: 0, b: 0 });
+    expect(globals.palette?.[1]).toStrictEqual({ r: 0, g: 1, b: 0 });
   });
 
   it("refuses a Palette record declaring a ccv other than the 56 the spec requires", () => {
@@ -355,7 +355,7 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([
+    expect(globals.sheetRanges).toStrictEqual([
       { firstSheetIndex: 1, lastSheetIndex: 2 },
     ]);
   });
@@ -380,7 +380,7 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([
+    expect(globals.sheetRanges).toStrictEqual([
       { label: "[Budget.xlsx]Sheet1", diagnostic: false },
     ]);
   });
@@ -405,7 +405,7 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([
+    expect(globals.sheetRanges).toStrictEqual([
       { label: "[Budget.xlsx]Sheet1", diagnostic: false },
     ]);
   });
@@ -430,7 +430,7 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([
+    expect(globals.sheetRanges).toStrictEqual([
       { label: "[Budget.xlsx]Sheet1", diagnostic: false },
     ]);
   });
@@ -455,7 +455,7 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([
+    expect(globals.sheetRanges).toStrictEqual([
       { label: "[EXTERNAL]Sheet1", diagnostic: true },
     ]);
   });
@@ -480,7 +480,7 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([
+    expect(globals.sheetRanges).toStrictEqual([
       { label: "[EXTERNAL]Sheet1", diagnostic: true },
     ]);
   });
@@ -505,7 +505,7 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([
+    expect(globals.sheetRanges).toStrictEqual([
       { label: "[EXTERNAL]Sheet1", diagnostic: true },
     ]);
   });
@@ -529,7 +529,7 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([
+    expect(globals.sheetRanges).toStrictEqual([
       { label: "[EXTERNAL]Sheet1", diagnostic: true },
     ]);
   });
@@ -555,7 +555,7 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([
+    expect(globals.sheetRanges).toStrictEqual([
       { label: "[Book.xlsx]Jan:Mar", diagnostic: false },
     ]);
   });
@@ -580,7 +580,7 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([
+    expect(globals.sheetRanges).toStrictEqual([
       { label: "[EXTERNAL]Sheet1", diagnostic: true },
     ]);
   });
@@ -599,7 +599,7 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([
+    expect(globals.sheetRanges).toStrictEqual([
       { label: "#REF!(add-in function reference)", diagnostic: true },
     ]);
   });
@@ -623,7 +623,7 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([
+    expect(globals.sheetRanges).toStrictEqual([
       { label: "#REF!(DDE or OLE data source reference)", diagnostic: true },
     ]);
   });
@@ -644,13 +644,13 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([
+    expect(globals.sheetRanges).toStrictEqual([
       { label: "#REF!(sheet not found)", diagnostic: true },
     ]);
   });
 
   it("defaults sheetRanges to empty when the substream carries no EXTERNSHEET record", () => {
-    expect(readWorkbookGlobals(groupsOf()).sheetRanges).toEqual([]);
+    expect(readWorkbookGlobals(groupsOf()).sheetRanges).toStrictEqual([]);
   });
 
   it("degrades a SupBook whose rgst is shorter than its own declared ctab to a diagnostic, rather than aborting the whole workbook read", () => {
@@ -679,10 +679,10 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([
+    expect(globals.sheetRanges).toStrictEqual([
       { label: "#REF!(malformed supporting link)", diagnostic: true },
     ]);
-    expect(globals.sheets).toEqual([
+    expect(globals.sheets).toStrictEqual([
       { name: "Summary", hidden: false, sheetType: 0, bofPosition: 0x0200 },
     ]);
   });

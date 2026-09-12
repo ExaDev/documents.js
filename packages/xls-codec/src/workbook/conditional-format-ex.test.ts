@@ -153,7 +153,7 @@ describe("readCfEx", () => {
 
     const result = readCfEx(cfExGroup, targets, NO_SHEETS);
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       kind: "containsText",
       text: "needle",
       priority: 3,
@@ -382,7 +382,7 @@ describe("readCondFmtGroup + readCfEx integration", () => {
 
     const result = readCfEx(cfExGroup, targets, NO_SHEETS);
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       kind: "containsText",
       text: "needle",
       priority: 0,

@@ -31,15 +31,15 @@ import {
 
 describe("resolveIcvColor", () => {
   it("resolves icv 0-7 to the eight fixed built-in colours", () => {
-    expect(resolveIcvColor(0, undefined)).toEqual({ r: 0, g: 0, b: 0 }); // Black
-    expect(resolveIcvColor(2, undefined)).toEqual({ r: 1, g: 0, b: 0 }); // Red
-    expect(resolveIcvColor(7, undefined)).toEqual({ r: 0, g: 1, b: 1 }); // Cyan
+    expect(resolveIcvColor(0, undefined)).toStrictEqual({ r: 0, g: 0, b: 0 }); // Black
+    expect(resolveIcvColor(2, undefined)).toStrictEqual({ r: 1, g: 0, b: 0 }); // Red
+    expect(resolveIcvColor(7, undefined)).toStrictEqual({ r: 0, g: 1, b: 1 }); // Cyan
   });
 
   it("resolves icv 8-63 through the fixed default table when no Palette is given", () => {
     // icv 8: rgColor[0]'s own default (0,0,0); icv 24 (0x18): rgColor[16]'s own default (153,153,255) -- [MS-XLS] "Icv"'s own table.
-    expect(resolveIcvColor(8, undefined)).toEqual({ r: 0, g: 0, b: 0 });
-    expect(resolveIcvColor(24, undefined)).toEqual({
+    expect(resolveIcvColor(8, undefined)).toStrictEqual({ r: 0, g: 0, b: 0 });
+    expect(resolveIcvColor(24, undefined)).toStrictEqual({
       r: 153 / 255,
       g: 153 / 255,
       b: 1,
@@ -49,7 +49,7 @@ describe("resolveIcvColor", () => {
   it("resolves icv 8-63 through a real Palette's own entries when one is given", () => {
     const palette = Array.from({ length: 56 }, () => ({ r: 0, g: 0, b: 0 }));
     palette[0] = { r: 1, g: 0.5, b: 0 };
-    expect(resolveIcvColor(8, palette)).toEqual({ r: 1, g: 0.5, b: 0 });
+    expect(resolveIcvColor(8, palette)).toStrictEqual({ r: 1, g: 0.5, b: 0 });
   });
 
   it("does not resolve the Automatic foreground/background special values", () => {
@@ -81,7 +81,7 @@ describe("DEFAULT_PALETTE_HEX_TO_ICV", () => {
         resolvedIcv === undefined
           ? undefined
           : resolveIcvColor(resolvedIcv, undefined),
-      ).toEqual(color);
+      ).toStrictEqual(color);
     }
   });
 });
@@ -96,13 +96,17 @@ describe("resolveBorderEdge / borderStyleTokenFor", () => {
   it("resolves a thin solid border with no explicit style member (solid is the omitted default)", () => {
     expect(
       resolveBorderEdge({ style: BORDER_STYLE_THIN, icv: 10 }, undefined),
-    ).toEqual({ color: { r: 1, g: 0, b: 0 }, widthPt: 0.75 });
+    ).toStrictEqual({ color: { r: 1, g: 0, b: 0 }, widthPt: 0.75 });
   });
 
   it("resolves a double border with its own style member", () => {
     expect(
       resolveBorderEdge({ style: BORDER_STYLE_DOUBLE, icv: 10 }, undefined),
-    ).toEqual({ color: { r: 1, g: 0, b: 0 }, widthPt: 0.75, style: "double" });
+    ).toStrictEqual({
+      color: { r: 1, g: 0, b: 0 },
+      widthPt: 0.75,
+      style: "double",
+    });
   });
 
   it("does not resolve a border whose colour does not resolve to a fixed RGB value", () => {
@@ -157,12 +161,12 @@ describe("resolveBorderEdge / borderStyleTokenFor", () => {
 
 describe("resolveFillBackground", () => {
   it("resolves a solid fill's own foreground colour", () => {
-    expect(resolveFillBackground(FILL_PATTERN_SOLID, 10, 0, undefined)).toEqual(
-      {
-        kind: "solid",
-        color: { r: 1, g: 0, b: 0 },
-      },
-    );
+    expect(
+      resolveFillBackground(FILL_PATTERN_SOLID, 10, 0, undefined),
+    ).toStrictEqual({
+      kind: "solid",
+      color: { r: 1, g: 0, b: 0 },
+    });
   });
 
   it("resolves nothing for FLSNULL (no fill pattern)", () => {
@@ -173,7 +177,9 @@ describe("resolveFillBackground", () => {
 
   it("resolves a genuine two-colour pattern fill instead of dropping it (ExaDev/documents.js#951)", () => {
     const GRAY_50_PERCENT = 0x02;
-    expect(resolveFillBackground(GRAY_50_PERCENT, 10, 11, undefined)).toEqual({
+    expect(
+      resolveFillBackground(GRAY_50_PERCENT, 10, 11, undefined),
+    ).toStrictEqual({
       kind: "pattern",
       patternType: "mediumGray",
       foregroundColor: { r: 1, g: 0, b: 0 },
@@ -185,7 +191,7 @@ describe("resolveFillBackground", () => {
     const THICK_DIAGONAL_CROSSHATCH = 0x0a;
     expect(
       resolveFillBackground(THICK_DIAGONAL_CROSSHATCH, 10, 11, undefined),
-    ).toEqual({
+    ).toStrictEqual({
       kind: "pattern",
       patternType: "darkTrellis",
       foregroundColor: { r: 1, g: 0, b: 0 },
@@ -206,7 +212,7 @@ describe("resolveFillBackground", () => {
       11,
       undefined,
     );
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       kind: "pattern",
       patternType: "mediumGray",
       backgroundColor: { r: 0, g: 1, b: 0 },
@@ -226,7 +232,7 @@ describe("packXfDecorationWords / unpackXfDecoration", () => {
       bottom: { style: BORDER_STYLE_NONE, icv: 0 },
     };
     const { word2, word3, word4 } = packXfDecorationWords(decoration);
-    expect(unpackXfDecoration(word2, word3, word4)).toEqual(decoration);
+    expect(unpackXfDecoration(word2, word3, word4)).toStrictEqual(decoration);
   });
 
   it("round-trips a genuine two-colour pattern's own foreground and background icv, both real", () => {
@@ -237,7 +243,7 @@ describe("packXfDecorationWords / unpackXfDecoration", () => {
       fillBackgroundIcv: 13,
     };
     const { word2, word3, word4 } = packXfDecorationWords(decoration);
-    expect(unpackXfDecoration(word2, word3, word4)).toEqual(decoration);
+    expect(unpackXfDecoration(word2, word3, word4)).toStrictEqual(decoration);
   });
 
   it("packs the exact undecorated defaults ([MS-XLS]'s own 'no border, no fill' state) with no argument", () => {
@@ -247,7 +253,7 @@ describe("packXfDecorationWords / unpackXfDecoration", () => {
     expect(word3).toBe(0);
     // word4: icvFore (0x40, Automatic foreground) | icvBack (0x41, Automatic background) << 7.
     expect(word4).toBe(0x40 | (0x41 << 7));
-    expect(unpackXfDecoration(word2, word3, word4).left).toEqual({
+    expect(unpackXfDecoration(word2, word3, word4).left).toStrictEqual({
       style: BORDER_STYLE_NONE,
       icv: 0,
     });
@@ -280,7 +286,7 @@ describe("applyTint", () => {
   const red = { r: 1, g: 0, b: 0 };
 
   it("returns the colour unchanged for a zero tint", () => {
-    expect(applyTint(red, 0)).toEqual(red);
+    expect(applyTint(red, 0)).toStrictEqual(red);
   });
 
   it("tints a colour toward white for a positive value", () => {

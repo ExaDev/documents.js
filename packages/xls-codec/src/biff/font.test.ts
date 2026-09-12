@@ -33,11 +33,11 @@ describe("writeFontRecord", () => {
       underline: true,
       colorIcv: 10,
     };
-    expect(readBack(writeFontRecord(fields))).toEqual(fields);
+    expect(readBack(writeFontRecord(fields))).toStrictEqual(fields);
   });
 
   it("writes the Normal font's own fields verbatim", () => {
-    expect(readBack(writeFontRecord(NORMAL_FONT_FIELDS))).toEqual(
+    expect(readBack(writeFontRecord(NORMAL_FONT_FIELDS))).toStrictEqual(
       NORMAL_FONT_FIELDS,
     );
   });
@@ -72,11 +72,11 @@ describe("xfFontFieldsOf", () => {
   const icvOf = (color: { readonly r: number }) => (color.r === 1 ? 10 : 12);
 
   it("normalises an absent, empty, or all-default font to the Normal font's own fields", () => {
-    expect(xfFontFieldsOf(undefined, icvOf)).toEqual(NORMAL_FONT_FIELDS);
-    expect(xfFontFieldsOf({}, icvOf)).toEqual(NORMAL_FONT_FIELDS);
+    expect(xfFontFieldsOf(undefined, icvOf)).toStrictEqual(NORMAL_FONT_FIELDS);
+    expect(xfFontFieldsOf({}, icvOf)).toStrictEqual(NORMAL_FONT_FIELDS);
     expect(
       xfFontFieldsOf({ bold: false, fontFamily: "Arial", sizePt: 10 }, icvOf),
-    ).toEqual(NORMAL_FONT_FIELDS);
+    ).toStrictEqual(NORMAL_FONT_FIELDS);
   });
 
   it("resolves each stated property and defaults each unstated one", () => {
@@ -85,7 +85,7 @@ describe("xfFontFieldsOf", () => {
         { bold: true, fontFamily: "Courier New", sizePt: 12 },
         icvOf,
       ),
-    ).toEqual({
+    ).toStrictEqual({
       ...NORMAL_FONT_FIELDS,
       bold: true,
       name: "Courier New",

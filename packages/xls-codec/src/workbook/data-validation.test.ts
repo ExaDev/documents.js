@@ -104,7 +104,7 @@ describe("readDv", () => {
       [{ startRow: 0, endRow: 9, startColumn: 0, endColumn: 0 }],
     );
 
-    expect(readDv(group, NO_SHEETS)).toEqual({
+    expect(readDv(group, NO_SHEETS)).toStrictEqual({
       type: "whole",
       operator: "between",
       formula1: "1",
@@ -236,7 +236,7 @@ describe("readDv", () => {
       ],
     );
 
-    expect(readDv(group, NO_SHEETS)?.ranges).toEqual([
+    expect(readDv(group, NO_SHEETS)?.ranges).toStrictEqual([
       { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 },
       { startRow: 2, endRow: 4, startColumn: 1, endColumn: 3 },
     ]);

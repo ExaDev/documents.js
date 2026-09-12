@@ -9,12 +9,12 @@ function view(bytes: Uint8Array<ArrayBuffer>): DataView {
 describe("RecordBuilder", () => {
   it("writes a u8 as a single byte", () => {
     const bytes = new RecordBuilder().u8(0xab).build();
-    expect(Array.from(bytes)).toEqual([0xab]);
+    expect(Array.from(bytes)).toStrictEqual([0xab]);
   });
 
   it("writes a u16 little-endian", () => {
     const bytes = new RecordBuilder().u16(0x1234).build();
-    expect(Array.from(bytes)).toEqual([0x34, 0x12]);
+    expect(Array.from(bytes)).toStrictEqual([0x34, 0x12]);
   });
 
   it("truncates a u16 to its own 16 bits", () => {
@@ -39,7 +39,7 @@ describe("RecordBuilder", () => {
       .bytes(new Uint8Array([0xaa, 0xbb]))
       .u8(0x02)
       .build();
-    expect(Array.from(bytes)).toEqual([0x01, 0xaa, 0xbb, 0x02]);
+    expect(Array.from(bytes)).toStrictEqual([0x01, 0xaa, 0xbb, 0x02]);
   });
 
   it("chains fields in call order into one contiguous buffer", () => {

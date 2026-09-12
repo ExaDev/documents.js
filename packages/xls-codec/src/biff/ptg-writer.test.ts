@@ -54,37 +54,37 @@ function compiled(text: string): number[] {
 describe("compileFormulaText", () => {
   describe("whitespace", () => {
     it("skips a leading space", () => {
-      expect(compiled(" 1")).toEqual(compiled("1"));
+      expect(compiled(" 1")).toStrictEqual(compiled("1"));
     });
 
     it("skips a leading tab", () => {
-      expect(compiled("\t1")).toEqual(compiled("1"));
+      expect(compiled("\t1")).toStrictEqual(compiled("1"));
     });
 
     it("skips a leading newline", () => {
-      expect(compiled("\n1")).toEqual(compiled("1"));
+      expect(compiled("\n1")).toStrictEqual(compiled("1"));
     });
 
     it("skips a leading carriage return", () => {
-      expect(compiled("\r1")).toEqual(compiled("1"));
+      expect(compiled("\r1")).toStrictEqual(compiled("1"));
     });
 
     it("skips whitespace of every kind between tokens", () => {
-      expect(compiled(" 1 \t+\n2\r ")).toEqual(compiled("1+2"));
+      expect(compiled(" 1 \t+\n2\r ")).toStrictEqual(compiled("1+2"));
     });
   });
 
   describe("integer literals", () => {
     it("compiles a plain integer as PtgInt", () => {
-      expect(compiled("42")).toEqual([PTG_INT, ...u16le(42)]);
+      expect(compiled("42")).toStrictEqual([PTG_INT, ...u16le(42)]);
     });
 
     it("compiles zero as PtgInt", () => {
-      expect(compiled("0")).toEqual([PTG_INT, ...u16le(0)]);
+      expect(compiled("0")).toStrictEqual([PTG_INT, ...u16le(0)]);
     });
 
     it("compiles PTG_INT_MAX itself as PtgInt", () => {
-      expect(compiled(String(PTG_INT_MAX))).toEqual([
+      expect(compiled(String(PTG_INT_MAX))).toStrictEqual([
         PTG_INT,
         ...u16le(PTG_INT_MAX),
       ]);
@@ -92,30 +92,30 @@ describe("compileFormulaText", () => {
 
     it("compiles one above PTG_INT_MAX as PtgNum, not PtgInt", () => {
       const value = PTG_INT_MAX + 1;
-      expect(compiled(String(value))).toEqual([PTG_NUM, ...f64le(value)]);
+      expect(compiled(String(value))).toStrictEqual([PTG_NUM, ...f64le(value)]);
     });
 
     it("compiles a decimal literal as PtgNum even when its value is a whole number", () => {
-      expect(compiled("4.0")).toEqual([PTG_NUM, ...f64le(4)]);
+      expect(compiled("4.0")).toStrictEqual([PTG_NUM, ...f64le(4)]);
     });
 
     it("compiles a fractional literal as PtgNum", () => {
-      expect(compiled("3.14159")).toEqual([PTG_NUM, ...f64le(3.14159)]);
+      expect(compiled("3.14159")).toStrictEqual([PTG_NUM, ...f64le(3.14159)]);
     });
 
     it("compiles an exponent literal as PtgNum", () => {
-      expect(compiled("1e3")).toEqual([PTG_NUM, ...f64le(1000)]);
+      expect(compiled("1e3")).toStrictEqual([PTG_NUM, ...f64le(1000)]);
     });
 
     it("writes PtgNum's own float64 in little-endian byte order", () => {
       // 3.14159's IEEE 754 double is not byte-palindromic, so a big-endian writer would produce a different byte sequence than f64le's own little-endian reference encoding.
-      expect(compiled("3.14159").slice(1)).toEqual(f64le(3.14159));
+      expect(compiled("3.14159").slice(1)).toStrictEqual(f64le(3.14159));
     });
   });
 
   describe("string literals", () => {
     it("compiles a plain string as PtgStr", () => {
-      expect(compiled('"hi"')).toEqual([
+      expect(compiled('"hi"')).toStrictEqual([
         PTG_STR,
         2,
         0x00,
@@ -125,11 +125,11 @@ describe("compileFormulaText", () => {
     });
 
     it("compiles the empty string", () => {
-      expect(compiled('""')).toEqual([PTG_STR, 0, 0x00]);
+      expect(compiled('""')).toStrictEqual([PTG_STR, 0, 0x00]);
     });
 
     it("un-escapes a doubled quote inside a string literal", () => {
-      expect(compiled('"it""s"')).toEqual([
+      expect(compiled('"it""s"')).toStrictEqual([
         PTG_STR,
         4,
         0x00,
@@ -152,18 +152,18 @@ describe("compileFormulaText", () => {
 
   describe("boolean literals", () => {
     it("compiles TRUE as PtgBool true", () => {
-      expect(compiled("TRUE")).toEqual([PTG_BOOL, 1]);
+      expect(compiled("TRUE")).toStrictEqual([PTG_BOOL, 1]);
     });
 
     it("compiles FALSE as PtgBool false", () => {
-      expect(compiled("FALSE")).toEqual([PTG_BOOL, 0]);
+      expect(compiled("FALSE")).toStrictEqual([PTG_BOOL, 0]);
     });
   });
 
   describe("error literals", () => {
     it("compiles a recognised error literal as PtgErr", () => {
       // #REF! is BIFF8's own 0x17 error code ([MS-XLS] 2.5.10).
-      expect(compiled("#REF!")).toEqual([PTG_ERR, 0x17]);
+      expect(compiled("#REF!")).toStrictEqual([PTG_ERR, 0x17]);
     });
 
     it("compiles every one of BIFF8's eight error literals to its own documented code", () => {
@@ -178,7 +178,7 @@ describe("compileFormulaText", () => {
         ["#GETTING_DATA", 0x2b],
       ];
       for (const [text, code] of expected) {
-        expect(compiled(text)).toEqual([PTG_ERR, code]);
+        expect(compiled(text)).toStrictEqual([PTG_ERR, code]);
       }
     });
 
@@ -249,7 +249,7 @@ describe("compileFormulaText", () => {
 
   describe("cell references", () => {
     it("compiles a fully relative reference", () => {
-      expect(compiled("A1")).toEqual([
+      expect(compiled("A1")).toStrictEqual([
         PTG_REF_VALUE,
         ...u16le(0),
         ...u16le(0 | COLUMN_RELATIVE_BIT | ROW_RELATIVE_BIT),
@@ -257,7 +257,7 @@ describe("compileFormulaText", () => {
     });
 
     it("compiles a fully absolute reference", () => {
-      expect(compiled("$A$1")).toEqual([
+      expect(compiled("$A$1")).toStrictEqual([
         PTG_REF_VALUE,
         ...u16le(0),
         ...u16le(0),
@@ -265,7 +265,7 @@ describe("compileFormulaText", () => {
     });
 
     it("compiles a column-absolute, row-relative reference", () => {
-      expect(compiled("$A1")).toEqual([
+      expect(compiled("$A1")).toStrictEqual([
         PTG_REF_VALUE,
         ...u16le(0),
         ...u16le(0 | ROW_RELATIVE_BIT),
@@ -273,7 +273,7 @@ describe("compileFormulaText", () => {
     });
 
     it("compiles a column-relative, row-absolute reference", () => {
-      expect(compiled("A$1")).toEqual([
+      expect(compiled("A$1")).toStrictEqual([
         PTG_REF_VALUE,
         ...u16le(0),
         ...u16le(0 | COLUMN_RELATIVE_BIT),
@@ -282,7 +282,7 @@ describe("compileFormulaText", () => {
 
     it("resolves a multi-letter column and multi-digit row", () => {
       // BC77: column "BC" is 0-indexed 54 ((1*26)+2), row 77 is 0-indexed 76.
-      expect(compiled("BC77")).toEqual([
+      expect(compiled("BC77")).toStrictEqual([
         PTG_REF_VALUE,
         ...u16le(76),
         ...u16le(54 | COLUMN_RELATIVE_BIT | ROW_RELATIVE_BIT),
@@ -290,7 +290,7 @@ describe("compileFormulaText", () => {
     });
 
     it("compiles a relative area (range)", () => {
-      expect(compiled("A1:B2")).toEqual([
+      expect(compiled("A1:B2")).toStrictEqual([
         PTG_AREA_VALUE,
         ...u16le(0),
         ...u16le(1),
@@ -300,7 +300,7 @@ describe("compileFormulaText", () => {
     });
 
     it("compiles an area whose two corners carry independent absolute/relative flags", () => {
-      expect(compiled("$A$1:B2")).toEqual([
+      expect(compiled("$A$1:B2")).toStrictEqual([
         PTG_AREA_VALUE,
         ...u16le(0),
         ...u16le(1),
@@ -369,7 +369,7 @@ describe("compileFormulaText", () => {
       [">", PTG_GT],
       ["<>", PTG_NE],
     ] as const)("compiles the %s comparison operator", (op, opcode) => {
-      expect(compiled(`1${op}2`)).toEqual([
+      expect(compiled(`1${op}2`)).toStrictEqual([
         PTG_INT,
         ...u16le(1),
         PTG_INT,
@@ -379,7 +379,7 @@ describe("compileFormulaText", () => {
     });
 
     it("compiles string concatenation", () => {
-      expect(compiled("1&2")).toEqual([
+      expect(compiled("1&2")).toStrictEqual([
         PTG_INT,
         ...u16le(1),
         PTG_INT,
@@ -392,7 +392,7 @@ describe("compileFormulaText", () => {
       ["+", PTG_ADD],
       ["-", PTG_SUB],
     ] as const)("compiles the binary %s operator", (op, opcode) => {
-      expect(compiled(`1${op}2`)).toEqual([
+      expect(compiled(`1${op}2`)).toStrictEqual([
         PTG_INT,
         ...u16le(1),
         PTG_INT,
@@ -405,7 +405,7 @@ describe("compileFormulaText", () => {
       ["*", PTG_MUL],
       ["/", PTG_DIV],
     ] as const)("compiles the %s operator", (op, opcode) => {
-      expect(compiled(`1${op}2`)).toEqual([
+      expect(compiled(`1${op}2`)).toStrictEqual([
         PTG_INT,
         ...u16le(1),
         PTG_INT,
@@ -415,7 +415,7 @@ describe("compileFormulaText", () => {
     });
 
     it("compiles exponentiation", () => {
-      expect(compiled("1^2")).toEqual([
+      expect(compiled("1^2")).toStrictEqual([
         PTG_INT,
         ...u16le(1),
         PTG_INT,
@@ -425,18 +425,18 @@ describe("compileFormulaText", () => {
     });
 
     it("compiles a trailing percent operator", () => {
-      expect(compiled("1%")).toEqual([PTG_INT, ...u16le(1), PTG_PERCENT]);
+      expect(compiled("1%")).toStrictEqual([PTG_INT, ...u16le(1), PTG_PERCENT]);
     });
 
     it.each([
       ["+", PTG_UPLUS],
       ["-", PTG_UMINUS],
     ] as const)("compiles a unary %s operator", (op, opcode) => {
-      expect(compiled(`${op}1`)).toEqual([PTG_INT, ...u16le(1), opcode]);
+      expect(compiled(`${op}1`)).toStrictEqual([PTG_INT, ...u16le(1), opcode]);
     });
 
     it("compiles explicit parentheses", () => {
-      expect(compiled("(1+2)")).toEqual([
+      expect(compiled("(1+2)")).toStrictEqual([
         PTG_INT,
         ...u16le(1),
         PTG_INT,
@@ -449,7 +449,7 @@ describe("compileFormulaText", () => {
 
   describe("precedence", () => {
     it("binds unary minus tighter than exponentiation", () => {
-      expect(compiled("-1^2")).toEqual([
+      expect(compiled("-1^2")).toStrictEqual([
         PTG_INT,
         ...u16le(1),
         PTG_UMINUS,
@@ -460,7 +460,7 @@ describe("compileFormulaText", () => {
     });
 
     it("binds additive operators tighter than concatenation", () => {
-      expect(compiled("1&2+3")).toEqual([
+      expect(compiled("1&2+3")).toStrictEqual([
         PTG_INT,
         ...u16le(1),
         PTG_INT,
@@ -473,7 +473,7 @@ describe("compileFormulaText", () => {
     });
 
     it("binds multiplicative operators tighter than additive", () => {
-      expect(compiled("1+2*3")).toEqual([
+      expect(compiled("1+2*3")).toStrictEqual([
         PTG_INT,
         ...u16le(1),
         PTG_INT,
@@ -486,7 +486,7 @@ describe("compileFormulaText", () => {
     });
 
     it("binds exponentiation tighter than multiplication", () => {
-      expect(compiled("2*3^2")).toEqual([
+      expect(compiled("2*3^2")).toStrictEqual([
         PTG_INT,
         ...u16le(2),
         PTG_INT,
@@ -499,7 +499,7 @@ describe("compileFormulaText", () => {
     });
 
     it("binds percent tighter than exponentiation", () => {
-      expect(compiled("2^3%")).toEqual([
+      expect(compiled("2^3%")).toStrictEqual([
         PTG_INT,
         ...u16le(2),
         PTG_INT,
@@ -510,7 +510,7 @@ describe("compileFormulaText", () => {
     });
 
     it("binds comparison operators looser than every arithmetic operator", () => {
-      expect(compiled("1+2<3*4")).toEqual([
+      expect(compiled("1+2<3*4")).toStrictEqual([
         PTG_INT,
         ...u16le(1),
         PTG_INT,
@@ -529,7 +529,7 @@ describe("compileFormulaText", () => {
   describe("function calls", () => {
     it("compiles a fixed-arity call as PtgFunc", () => {
       // ABS is [MS-XLS] 2.5.198.17's own Ftab entry 0x0018, fixed arity 1.
-      expect(compiled("ABS(1)")).toEqual([
+      expect(compiled("ABS(1)")).toStrictEqual([
         PTG_INT,
         ...u16le(1),
         PTG_FUNC_VALUE,
@@ -539,12 +539,15 @@ describe("compileFormulaText", () => {
 
     it("compiles a zero-argument fixed-arity call", () => {
       // PI is Ftab entry 0x0013, fixed arity 0.
-      expect(compiled("PI()")).toEqual([PTG_FUNC_VALUE, ...u16le(0x0013)]);
+      expect(compiled("PI()")).toStrictEqual([
+        PTG_FUNC_VALUE,
+        ...u16le(0x0013),
+      ]);
     });
 
     it("compiles a variable-arity call with no arguments as PtgFuncVar", () => {
       // SUM is Ftab entry 0x0004, variable arity.
-      expect(compiled("SUM()")).toEqual([
+      expect(compiled("SUM()")).toStrictEqual([
         PTG_FUNCVAR_VALUE,
         0,
         ...u16le(0x0004),
@@ -552,7 +555,7 @@ describe("compileFormulaText", () => {
     });
 
     it("compiles a variable-arity call with several arguments", () => {
-      expect(compiled("SUM(1,2,3)")).toEqual([
+      expect(compiled("SUM(1,2,3)")).toStrictEqual([
         PTG_INT,
         ...u16le(1),
         PTG_INT,
@@ -566,7 +569,7 @@ describe("compileFormulaText", () => {
     });
 
     it("compiles an omitted middle argument as PtgMissArg", () => {
-      expect(compiled("IF(1,,3)")).toEqual([
+      expect(compiled("IF(1,,3)")).toStrictEqual([
         PTG_INT,
         ...u16le(1),
         PTG_MISSARG,
@@ -580,7 +583,7 @@ describe("compileFormulaText", () => {
     });
 
     it("compiles an omitted leading argument as PtgMissArg", () => {
-      expect(compiled("IF(,1,2)")).toEqual([
+      expect(compiled("IF(,1,2)")).toStrictEqual([
         PTG_MISSARG,
         PTG_INT,
         ...u16le(1),
@@ -593,7 +596,7 @@ describe("compileFormulaText", () => {
     });
 
     it("compiles an omitted trailing argument as PtgMissArg", () => {
-      expect(compiled("IF(1,2,)")).toEqual([
+      expect(compiled("IF(1,2,)")).toStrictEqual([
         PTG_INT,
         ...u16le(1),
         PTG_INT,
@@ -632,7 +635,7 @@ describe("compileFormulaText", () => {
 
   describe("nested function calls", () => {
     it("compiles a function call nested inside another as an argument", () => {
-      expect(compiled('IF(1=1,"yes","no")')).toEqual([
+      expect(compiled('IF(1=1,"yes","no")')).toStrictEqual([
         PTG_INT,
         ...u16le(1),
         PTG_INT,
