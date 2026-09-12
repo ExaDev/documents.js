@@ -1,32 +1,21 @@
 // Little-endian integer readers over raw zip bytes, shared by every test that walks a zip's physical local-file-header layout rather than trusting a round trip through unzipPackage's Record (which makes no ordering promise of its own to test against). Never imported by src/index.ts and never reaches dist/ -- test-only, mirroring the same test-only, never-exported convention as this family's other test-support helpers.
 
+// A DataView read, not a hand-rolled undefined-checking one: DataView's own getUint16/getUint32 already throw a RangeError for an offset whose read would run past the buffer's own end, so there is no separate bounds check to hand-write (and no separate error message to keep in sync with it).
+
 export function readUint16LE(bytes: Uint8Array, offset: number): number {
-  const b0 = bytes[offset];
-  const b1 = bytes[offset + 1];
-  if (b0 === undefined || b1 === undefined) {
-    throw new Error(
-      `truncated zip bytes while reading a uint16 at offset ${offset}`,
-    );
-  }
-  return b0 | (b1 << 8);
+  return new DataView(
+    bytes.buffer,
+    bytes.byteOffset,
+    bytes.byteLength,
+  ).getUint16(offset, true);
 }
 
 export function readUint32LE(bytes: Uint8Array, offset: number): number {
-  const b0 = bytes[offset];
-  const b1 = bytes[offset + 1];
-  const b2 = bytes[offset + 2];
-  const b3 = bytes[offset + 3];
-  if (
-    b0 === undefined ||
-    b1 === undefined ||
-    b2 === undefined ||
-    b3 === undefined
-  ) {
-    throw new Error(
-      `truncated zip bytes while reading a uint32 at offset ${offset}`,
-    );
-  }
-  return (b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)) >>> 0;
+  return new DataView(
+    bytes.buffer,
+    bytes.byteOffset,
+    bytes.byteLength,
+  ).getUint32(offset, true);
 }
 
 // Walks local file headers (signature 0x04034b50) from the start of a zip, in physical emission order, returning each entry's declared filename. This is the byte-level ordering oracle zipPackage's ordered-entries contract exists to provide: the caller supplies the order, and this proves the produced bytes carry it.
