@@ -87,6 +87,160 @@ describe("readCompoundFile", () => {
   it("returns an empty listing for a compound file with no streams", () => {
     expect(readCompoundFile(compoundFile([]))).toEqual([]);
   });
+
+  it("writes ENDOFCHAIN as the root entry's own starting sector when there is no mini stream at all", () => {
+    // header (512) + one FAT sector (512) + the root entry (id 0) at the directory sector's own start.
+    const bytes = compoundFile([]);
+    expect(new DataView(bytes.buffer).getUint32(512 * 2 + 0x74, true)).toBe(
+      0xfffffffe,
+    );
+  });
+
+  it("extracts several mini-resident streams from the same mini stream, each at its own sequential mini sector", () => {
+    // Four same-length names (so length-first sibling ordering, mirrored from [MS-CFB] 2.6.4, leaves them in plain alphabetical/insertion order) with individually distinguishable mini-sector counts: 1, 2, 1, and 3 mini sectors (64 bytes each).
+    const streams = readCompoundFile(
+      compoundFile([
+        { path: "Aaa", bytes: enc("a".repeat(30)) }, // ceil(30/64) = 1
+        { path: "Bbb", bytes: enc("b".repeat(100)) }, // ceil(100/64) = 2
+        { path: "Ccc", bytes: enc("c".repeat(10)) }, // ceil(10/64) = 1
+        { path: "Ddd", bytes: enc("d".repeat(150)) }, // ceil(150/64) = 3
+      ]),
+    );
+    expect(streams.map((s) => s.path)).toEqual(["Aaa", "Bbb", "Ccc", "Ddd"]);
+    expect(streams.find((s) => s.path === "Aaa")?.bytes).toEqual(
+      enc("a".repeat(30)),
+    );
+    expect(streams.find((s) => s.path === "Bbb")?.bytes).toEqual(
+      enc("b".repeat(100)),
+    );
+    expect(streams.find((s) => s.path === "Ccc")?.bytes).toEqual(
+      enc("c".repeat(10)),
+    );
+    expect(streams.find((s) => s.path === "Ddd")?.bytes).toEqual(
+      enc("d".repeat(150)),
+    );
+  });
+
+  it("extracts several FAT-resident streams, each occupying its own run of whole sectors", () => {
+    const streams = readCompoundFile(
+      compoundFile([
+        { path: "One", bytes: enc("1".repeat(5000)) },
+        { path: "Two", bytes: enc("2".repeat(6000)) },
+        { path: "Three", bytes: enc("3".repeat(4200)) },
+      ]),
+    );
+    expect(streams.find((s) => s.path === "One")?.bytes).toEqual(
+      enc("1".repeat(5000)),
+    );
+    expect(streams.find((s) => s.path === "Two")?.bytes).toEqual(
+      enc("2".repeat(6000)),
+    );
+    expect(streams.find((s) => s.path === "Three")?.bytes).toEqual(
+      enc("3".repeat(4200)),
+    );
+  });
+
+  it("extracts a storage with several sibling children, not just one", () => {
+    const streams = readCompoundFile(
+      compoundFile([
+        { path: "Pool/First", bytes: enc("1") },
+        { path: "Pool/Second", bytes: enc("2") },
+        { path: "Pool/Third", bytes: enc("3") },
+      ]),
+    );
+    expect(streams.map((s) => s.path).sort()).toEqual([
+      "Pool/First",
+      "Pool/Second",
+      "Pool/Third",
+    ]);
+  });
+
+  it("reads every stream of a file needing more than one 512-byte directory sector (more than 4 entries)", () => {
+    // 4 entries per 512-byte directory sector ([MS-CFB] 2.6.1's 128-byte entry): 10 streams plus the root need 3 directory sectors.
+    const inputs = Array.from({ length: 10 }, (_unused, index) => ({
+      path: `Stream${index}`,
+      bytes: enc(`payload ${index}`),
+    }));
+    const streams = readCompoundFile(compoundFile(inputs));
+    expect(streams).toHaveLength(10);
+    for (const input of inputs) {
+      expect(streams.find((s) => s.path === input.path)?.bytes).toEqual(
+        input.bytes,
+      );
+    }
+  });
+
+  it("reads a file large enough to need more than one FAT sector", () => {
+    // A 512-byte-sector FAT sector maps 128 sectors (64 KiB); a 300 KiB stream forces the fixed-point FAT-sector-count loop to grow past 1 and reach a genuine fixed point.
+    const payload = new Uint8Array(300 * 1024);
+    for (let i = 0; i < payload.length; i++) {
+      payload[i] = (i * 13 + 5) & 0xff;
+    }
+    const bytes = compoundFile([{ path: "Big", bytes: payload }]);
+    expect(new DataView(bytes.buffer).getUint32(0x2c, true)).toBeGreaterThan(1);
+    const streams = readCompoundFile(bytes);
+    expect(streams[0]?.bytes).toEqual(payload);
+  });
+
+  it("needs a second mini FAT sector once the mini stream passes 128 mini sectors", () => {
+    const miniSectorsNeeded = 129;
+    const inputs = Array.from({ length: miniSectorsNeeded }, (_unused, i) => ({
+      path: `M${i}`,
+      bytes: new Uint8Array(64), // exactly one mini sector each
+    }));
+    const bytes = compoundFile(inputs);
+    expect(new DataView(bytes.buffer).getUint32(0x40, true)).toBe(2);
+    expect(readCompoundFile(bytes)).toHaveLength(miniSectorsNeeded);
+  });
+
+  it("writes 0 as the directory-sector count for a version 3 file, and the real count for version 4", () => {
+    const inputs = Array.from({ length: 10 }, (_unused, index) => ({
+      path: `Stream${index}`,
+      bytes: enc("x"),
+    }));
+    const v3 = compoundFile(inputs, { majorVersion: 3 });
+    const v4 = compoundFile(inputs, { majorVersion: 4 });
+    expect(new DataView(v3.buffer).getUint32(0x28, true)).toBe(0);
+    expect(new DataView(v4.buffer).getUint32(0x28, true)).toBeGreaterThan(0);
+  });
+});
+
+describe("compoundFile input validation", () => {
+  it("rejects a storage or stream name that is empty", () => {
+    expect(() => compoundFile([{ path: "", bytes: enc("x") }])).toThrow();
+  });
+
+  it("rejects a storage or stream name longer than 31 characters", () => {
+    expect(() =>
+      compoundFile([{ path: "N".repeat(32), bytes: enc("x") }]),
+    ).toThrow(/at most 31 characters/);
+    expect(() =>
+      compoundFile([{ path: "N".repeat(31), bytes: enc("x") }]),
+    ).not.toThrow();
+  });
+
+  it("rejects a storage or stream name holding a non-ASCII byte", () => {
+    expect(() => compoundFile([{ path: "café", bytes: enc("x") }])).toThrow(
+      /non-empty ASCII/,
+    );
+  });
+
+  it("rejects an empty path segment", () => {
+    for (const path of ["/Leading", "Trailing/", "Double//Segment"]) {
+      expect(() => compoundFile([{ path, bytes: enc("x") }])).toThrow(
+        /no empty segments/,
+      );
+    }
+  });
+
+  it("rejects the same path supplied twice", () => {
+    expect(() =>
+      compoundFile([
+        { path: "Dup", bytes: enc("1") },
+        { path: "Dup", bytes: enc("2") },
+      ]),
+    ).toThrow(/used twice/);
+  });
 });
 
 describe("readCompoundFile malformed-input handling", () => {
