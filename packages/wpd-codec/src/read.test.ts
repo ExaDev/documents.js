@@ -142,8 +142,11 @@ describe("readWpdContent", () => {
     readWpdContent(buildWpdFile([...text("x"), 0xf0, 0, 12, 0xf0]), {
       sink: (diagnostic) => diagnostics.push(diagnostic),
     });
-    expect(diagnostics.map((diagnostic) => diagnostic.code)).toContain(
-      WpdDiagnosticCodes.UnmappedCharacter,
+    const found = diagnostics.find(
+      (diagnostic) => diagnostic.code === WpdDiagnosticCodes.UnmappedCharacter,
+    );
+    expect(found?.message).toBe(
+      "Character 0 of WordPerfect character set 12 has no mapping in this package and was rendered as U+FFFD.",
     );
   });
 
@@ -257,6 +260,17 @@ describe("readWpdContent", () => {
     }
   });
 
+  it("gives a plain paragraph no optional keys at all, not keys holding undefined", () => {
+    const document = readDocumentArea([...text("plain")]);
+    const paragraph = paragraphsOf(document)[0];
+    expect(paragraph).toBeDefined();
+    for (const key of ["alignment", "headingLevel", "list", "constructs"]) {
+      expect(
+        paragraph === undefined ? false : Object.hasOwn(paragraph, key),
+      ).toBe(false);
+    }
+  });
+
   // "The surrounded text is passed over by the formatter and is not displayed."
   it("drops text between the Start and End of Text to Skip pair", () => {
     const document = readDocumentArea([
@@ -347,6 +361,23 @@ describe("readWpdContent", () => {
   });
 
   // A cell or row boundary with no Table Definition open has no grid to belong to, which a stray code left behind by an edit can produce. The text on either side still survives as paragraphs, in reading order.
+  // flushParagraphIfContent must still flush when the pending text is empty but a run has already been split off it (here, by an attribute change) -- checking only state.text.length would wrongly drop that already-built run.
+  it("flushes a paragraph at a boundary whose pending text is empty but whose runs are not", () => {
+    const document = readDocumentArea([
+      ...text("plain"),
+      ATTRIBUTE_ON,
+      BOLD,
+      ATTRIBUTE_ON,
+      0xc6,
+      ...text("next"),
+      0xbf,
+    ]);
+    expect(paragraphsOf(document).map((p) => p.runs[0]?.text)).toEqual([
+      "plain",
+      "next",
+    ]);
+  });
+
   it("flattens an orphaned cell boundary into paragraphs and says so", () => {
     const diagnostics: WpdDiagnostic[] = [];
     const document = readWpdContent(
@@ -357,11 +388,13 @@ describe("readWpdContent", () => {
       "cell",
       "next",
     ]);
-    expect(
-      diagnostics.filter(
-        (diagnostic) => diagnostic.code === WpdDiagnosticCodes.TableFlattened,
-      ),
-    ).toHaveLength(1);
+    const matches = diagnostics.filter(
+      (diagnostic) => diagnostic.code === WpdDiagnosticCodes.TableFlattened,
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.message).toBe(
+      "A table cell or row boundary appeared with no table definition open; its text became a paragraph.",
+    );
   });
 
   // The same document in both containers must read identically: a WordPerfect 6.x file writes the byte stream straight to disk, and WP7 onwards may wrap the identical stream in an OLE compound file.
@@ -570,12 +603,14 @@ describe("readWpdContent", () => {
       expect(
         paragraphs.every((paragraph) => paragraph.constructs === undefined),
       ).toBe(true);
-      expect(
-        diagnostics.filter(
-          (diagnostic) =>
-            diagnostic.code === WpdDiagnosticCodes.MergeFieldSpansParagraphs,
-        ),
-      ).toHaveLength(1);
+      const matches = diagnostics.filter(
+        (diagnostic) =>
+          diagnostic.code === WpdDiagnosticCodes.MergeFieldSpansParagraphs,
+      );
+      expect(matches).toHaveLength(1);
+      expect(matches[0]?.message).toBe(
+        "A merge field's own On/Off pair straddled a paragraph boundary, which the run-scoped field construct cannot express; its text became ordinary paragraph text with no field tag.",
+      );
     });
   });
 });
@@ -748,12 +783,14 @@ describe("boxes", () => {
       ],
     );
     readWpdContent(bytes, { sink: (d) => diagnostics.push(d) });
-    expect(
-      diagnostics.filter(
-        (diagnostic) =>
-          diagnostic.code === WpdDiagnosticCodes.BoxContentUnresolved,
-      ),
-    ).toHaveLength(1);
+    const matches = diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.code === WpdDiagnosticCodes.BoxContentUnresolved,
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.message).toBe(
+      "This document contains an image box whose content packet carries no decodable PNG or JPEG payload -- a WPG graphic or other image spelling this reader does not decode.",
+    );
   });
 
   // A minimal well-formed 1x1 white PNG: signature, IHDR, IDAT, IEND -- hand-built here as bytes so the fixture needs no encoder dependency, and structurally complete so stream/image.ts's chunk walk bounds it exactly.
@@ -1054,9 +1091,12 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
         b.kind === "paragraph" ? b.runs.map((run) => run.text).join("") : "",
       ),
     ).toEqual(["First header"]);
-    expect(
-      diagnostics.some((d) => d.code === "wpd/header-footer-dropped"),
-    ).toBe(true);
+    const found = diagnostics.find(
+      (d) => d.code === "wpd/header-footer-dropped",
+    );
+    expect(found?.message).toBe(
+      "This document declares a second header for the default slot -- WordPerfect's own A/B two-slot-per-kind mechanism, which the shared one-flow-per-slot page-furniture vocabulary does not carry; the first header to claim the slot is the one lifted.",
+    );
   });
 
   it("anchors a footnote reference in the flat form and carries its body in the tree's definitions table", () => {
@@ -1088,9 +1128,13 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
       throw new Error("expected an anchor descriptor");
     }
     // The flat form reports the body it cannot carry.
-    expect(
-      diagnostics.filter((d) => d.code === "wpd/note-dropped"),
-    ).toHaveLength(1);
+    const noteDroppedMatches = diagnostics.filter(
+      (d) => d.code === "wpd/note-dropped",
+    );
+    expect(noteDroppedMatches).toHaveLength(1);
+    expect(noteDroppedMatches[0]?.message).toBe(
+      "This document contains a footnote whose body the flat ContentDocument has no home for; its reference anchor survives and readWpd lifts the body into the tree form's definitions table.",
+    );
 
     const tree = readWpd(buildWpdFile(documentArea, [noteBody]));
     // The definitions table is deliberately tenant-loose (document-schema.js's own design), so the whole entry is asserted in one toEqual rather than through typed field access.
@@ -1262,9 +1306,13 @@ describe("native OLE objects (#1191)", () => {
     // The flat read recovers the bytes but has no field for them, and says so through the OLE-specific code rather than the generic box-content-unresolved one.
     const diagnostics: WpdDiagnostic[] = [];
     readWpdContent(compound, { sink: (d) => diagnostics.push(d) });
-    expect(
-      diagnostics.filter((d) => d.code === WpdDiagnosticCodes.OleObjectDropped),
-    ).toHaveLength(1);
+    const oleDroppedMatches = diagnostics.filter(
+      (d) => d.code === WpdDiagnosticCodes.OleObjectDropped,
+    );
+    expect(oleDroppedMatches).toHaveLength(1);
+    expect(oleDroppedMatches[0]?.message).toBe(
+      "This document embeds a native OLE object ('OLE10') whose bytes the flat ContentDocument has no home for; readWpd lifts them into the tree form's attachments table.",
+    );
     expect(
       diagnostics.filter(
         (d) => d.code === WpdDiagnosticCodes.BoxContentUnresolved,
