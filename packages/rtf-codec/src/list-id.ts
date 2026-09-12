@@ -40,6 +40,7 @@ export function parseRtfListNumId(numId: string): RtfListNumIdInfo | undefined {
   if (match === null) {
     return undefined;
   }
+  // NUMID_PATTERN's first capture group, (\d+), is required (not optional in the pattern), so a successful match always populates match[1] in practice -- TypeScript nonetheless types every numeric index into a regex match array as possibly undefined, since the type system has no way to express "this element always exists for a required group". Guarded explicitly rather than asserted, matching this codebase's own narrowing convention (see e.g. document-schema.js's rgbHexToColor) for the identical shape of invariant.
   const index = match[1];
   const type = match[2];
   if (index === undefined) {
