@@ -4,6 +4,7 @@ import {
   CELL_INFORMATION_SUBFUNCTION,
   CELL_SPANNING_SUBFUNCTION,
   findEmbeddedSubfunction,
+  nearestPercentType,
   readCellFill,
   readCellInformation,
   readCellSpanning,
@@ -287,6 +288,15 @@ describe("readCellSpanning", () => {
     expect(
       readCellSpanning(new Uint8Array([0x01, 0x82]))?.coveredFromAbove,
     ).toBe(true);
+  });
+});
+
+describe("nearestPercentType", () => {
+  // readCellFill's own shade byte always comes from a Uint8Array read (0-255), so this is unreachable from every real caller -- proven directly here rather than left as a promise no real caller could ever keep.
+  it("throws for a shade outside the 0-255 range a fill's own shading byte can ever hold", () => {
+    expect(() => nearestPercentType(256)).toThrow(
+      "Shade byte 256 is outside the 0-255 range a fill's own shading byte can ever hold.",
+    );
   });
 });
 
