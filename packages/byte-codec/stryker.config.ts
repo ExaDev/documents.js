@@ -1,6 +1,6 @@
 import { packageStrykerConfig } from "../../stryker.shared.ts";
 
 export default packageStrykerConfig({
-  // Every valid mutant is either killed or excluded via a justified Stryker disable comment (see crc32.ts/reader.ts/writer.ts/flate.ts/jpeg-info.ts/png-decode.ts/png-encode.ts/png-filter.ts for each one's equivalence proof), so the gate is the literal maximum rather than a derived-with-slack figure.
+  // Every mutant this package produces is killed by a real test, and nothing is suppressed by name: where a mutation was genuinely unobservable, the source states the same behaviour in a form that has no such mutation to make -- a loop bounded by the data it consumes rather than by a count kept in step with it, an exact iteration count rather than an inclusive-versus-exclusive comparison, a packed-bitfield key rather than a sum of scaled terms, the smallest of three distances rather than a chain of pairwise ties. So the gate is the literal maximum rather than a derived-with-slack figure.
   breakThreshold: 100,
 });
