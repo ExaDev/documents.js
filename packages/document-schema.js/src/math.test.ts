@@ -401,6 +401,13 @@ describe("the MathExpression grammar", () => {
     };
     expect(MathMatrixSchema.safeParse(ragged).success).toBe(false);
     expect(MathExpressionSchema.safeParse(ragged).success).toBe(false);
+
+    const raggedResult = MathMatrixSchema.safeParse(ragged);
+    if (raggedResult.success)
+      throw new Error("expected the ragged matrix to fail");
+    expect(raggedResult.error.issues[0]?.message).toBe(
+      "matrix rows must all have the same number of columns",
+    );
   });
 
   it("keeps unparsed a first-class fallback rather than a parse failure", () => {
@@ -507,6 +514,52 @@ describe("isMathExpression", () => {
     ).toBe(false);
   });
 
+  it("rejects an uncertainty whose own unit is not a string, and accepts one that is", () => {
+    const base = {
+      kind: "qty" as const,
+      value: { numerator: "5", denominator: "1" },
+      unit: "si:metre",
+    };
+    expect(
+      isMathExpression({
+        ...base,
+        uncertainty: {
+          magnitude: { numerator: "1", denominator: "10" },
+          unit: 5,
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isMathExpression({
+        ...base,
+        uncertainty: {
+          magnitude: { numerator: "1", denominator: "10" },
+          unit: "si:percent",
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects an uncertainty whose coverageFactor is not a positive number, and accepts one that is", () => {
+    const base = {
+      kind: "qty" as const,
+      value: { numerator: "5", denominator: "1" },
+      unit: "si:metre",
+    };
+    const withCoverageFactor = (coverageFactor: unknown) =>
+      isMathExpression({
+        ...base,
+        uncertainty: {
+          magnitude: { numerator: "1", denominator: "10" },
+          coverageFactor,
+        },
+      });
+    expect(withCoverageFactor("2")).toBe(false);
+    expect(withCoverageFactor(0)).toBe(false);
+    expect(withCoverageFactor(-1)).toBe(false);
+    expect(withCoverageFactor(2)).toBe(true);
+  });
+
   it("accepts a valid sym, and rejects a non-string id", () => {
     expect(isMathExpression({ kind: "sym", id: "symbols:mass" })).toBe(true);
     expect(isMathExpression({ kind: "sym", id: 5 })).toBe(false);
@@ -592,9 +645,28 @@ describe("isMathExpression", () => {
     ).toBe(false);
   });
 
+  it("rejects a row with even one invalid cell, not just when every cell is invalid", () => {
+    const cell = { kind: "num", numerator: "1", denominator: "1" };
+    expect(
+      isMathExpression({
+        kind: "matrix",
+        rows: [[cell, { kind: "bogus" }]],
+      }),
+    ).toBe(false);
+  });
+
   it("accepts a valid unparsed fallback, and rejects a non-string latex", () => {
     expect(isMathExpression({ kind: "unparsed", latex: "\\oint" })).toBe(true);
     expect(isMathExpression({ kind: "unparsed", latex: 5 })).toBe(false);
+  });
+
+  it("never falls through to the unparsed check for a kind the grammar does not recognise, even when the value happens to carry a string latex field", () => {
+    expect(
+      isMathExpression({
+        kind: "totally-bogus",
+        latex: "looks unparsed-shaped",
+      }),
+    ).toBe(false);
   });
 
   it("rejects an unrecognised kind and every non-record input", () => {
@@ -658,14 +730,28 @@ describe("IntervalSchema", () => {
   });
 
   it("rejects a min that exceeds its max", () => {
+    const result = IntervalSchema.safeParse({
+      kind: "interval",
+      min: 2,
+      max: 1,
+      dimension: {},
+    });
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error("expected min > max to fail");
+    expect(result.error.issues[0]?.message).toBe(
+      "interval min must not exceed max",
+    );
+  });
+
+  it("accepts a min exactly equal to max -- both bounds are inclusive", () => {
     expect(
       IntervalSchema.safeParse({
         kind: "interval",
-        min: 2,
+        min: 1,
         max: 1,
         dimension: {},
       }).success,
-    ).toBe(false);
+    ).toBe(true);
   });
 });
 
