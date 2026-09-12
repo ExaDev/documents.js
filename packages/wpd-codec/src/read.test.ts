@@ -585,6 +585,20 @@ describe("readWpd", () => {
     const tree = readWpd(buildWpdFile(text("Hello")));
     expect(tree.kind).toBe("wordprocessing");
   });
+
+  it("gives a plain document's own section no headers, footers, or watermarks keys at all", () => {
+    const tree = readWpd(buildWpdFile(text("plain")));
+    if (tree.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing");
+    }
+    const section = tree.children[0]?.node;
+    expect(section).toBeDefined();
+    for (const key of ["headers", "footers", "watermarks"]) {
+      expect(section === undefined ? false : Object.hasOwn(section, key)).toBe(
+        false,
+      );
+    }
+  });
 });
 
 describe("boxes", () => {
