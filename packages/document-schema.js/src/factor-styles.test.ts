@@ -1522,6 +1522,8 @@ describe("factorStyles minting", () => {
     const mintedPage = minted.children[0];
     if (mintedPage === undefined) throw new Error("expected the draw page");
     expect(mintedPage).not.toBe(drawPageGroup);
+    // The draw page's own extent shares no key across both shapes (bold isn't on pristineShape's run at all), so its own candidate search finds nothing and its ref stays undefined -- it must not carry a style property just because a NESTED shape changed.
+    expect(mintedPage).not.toHaveProperty("style");
     expect(mintedPage.children[1]).toBe(pristineShape);
   });
 
