@@ -93,28 +93,28 @@ interface ResidentStream {
   readonly bytes: Uint8Array<ArrayBuffer>;
 }
 
-// [MS-CFB] 2.6.4 uppercases one UTF-16 code point at a time using the simple (single-code-point) case mapping. JavaScript's toUpperCase applies the FULL mapping, which can expand one code unit into several ('ß' becomes 'SS'); wherever it does, the simple mapping is the identity, so an expansion means the code unit is left alone. Surrogates are never uppercased, because the spec's mapping is per code point and a surrogate is half of one.
+// [MS-CFB] 2.6.4 uppercases one UTF-16 code point at a time using the simple (single-code-point) case mapping. JavaScript's toUpperCase applies the FULL mapping, which can expand one code unit into several ('ß' becomes 'SS'); wherever it does, the simple mapping is the identity, so an expansion means the code unit is left alone. No special-casing for a lone surrogate half (0xD800-0xDFFF): toUpperCase() already leaves every one of the 2048 surrogate code units completely unchanged (verified directly against every value in the range, not merely assumed), since none of them has a case mapping of its own, so the length-1 fallback below already returns exactly the same unit an explicit surrogate guard would.
 function upperCodeUnit(value: string, index: number): number {
   const unit = value.charCodeAt(index);
-  if (unit >= 0xd800 && unit <= 0xdfff) {
-    return unit;
-  }
   const upper = String.fromCharCode(unit).toUpperCase();
   return upper.length === 1 ? upper.charCodeAt(0) : unit;
 }
 
-// The [MS-CFB] 2.6.4 sorting relationship: a shorter name is less than a longer one, and equal-length names compare by uppercased UTF-16 code point. Length is compared as the code-unit count rather than the Directory Entry Name Length field the spec names, because that field is exactly (code units + 1) * 2 -- a strictly increasing function of the same quantity, so the two orderings are identical. Names that compare equal are the same name to the format, which is why this doubles as the sibling-uniqueness test.
+// The [MS-CFB] 2.6.4 sorting relationship: a shorter name is less than a longer one, and equal-length names compare by uppercased UTF-16 code point. Length is compared as the code-unit count rather than the Directory Entry Name Length field the spec names, because that field is exactly (code units + 1) * 2 -- a strictly increasing function of the same quantity, so the two orderings are identical. Names that compare equal are the same name to the format, which is why this doubles as the sibling-uniqueness test. Walks left.split("") rather than a `for` loop bound by left.length: since both strings are already known equal-length here, an out-of-range comparison one iteration too long would compare charCodeAt(left.length) against itself on both sides (NaN against NaN, by construction identical), an equivalent mutant no input could ever distinguish -- split("") has no such bound to mismeasure in the first place, and .every's own short-circuit on returning false reproduces the early-return-on-first-difference behavior.
 function compareEntryNames(left: string, right: string): number {
   if (left.length !== right.length) {
     return left.length - right.length;
   }
-  for (let i = 0; i < left.length; i++) {
+  let result = 0;
+  left.split("").every((_unit, i) => {
     const difference = upperCodeUnit(left, i) - upperCodeUnit(right, i);
     if (difference !== 0) {
-      return difference;
+      result = difference;
+      return false;
     }
-  }
-  return 0;
+    return true;
+  });
+  return result;
 }
 
 function checkedSegment(name: string, path: string): string {
@@ -174,8 +174,8 @@ function addStream(
   }
 }
 
-// The depth of the deepest node in the balanced tree linkSiblings builds over `count` siblings. Each recursion halves the sibling count, so the deepest node sits at floor(log2(count)) -- computed by bit length rather than Math.log2, which is a float operation whose rounding at exact powers of two would silently mis-colour a whole level.
-function deepestDepth(count: number): number {
+// The depth of the deepest node in the balanced tree linkSiblings builds over `count` siblings. Each recursion halves the sibling count, so the deepest node sits at floor(log2(count)) -- computed by bit length rather than Math.log2, which is a float operation whose rounding at exact powers of two would silently mis-colour a whole level. Exported for direct testing: its sole call site is deepestDepth(children.length), and when children.length is genuinely 0 (an empty storage, e.g. writeCompoundFile([])'s own root), linkSiblings returns undefined before ever reading the `deepest` argument at all -- so that one real call site can never observe whether count === 0 is handled correctly.
+export function deepestDepth(count: number): number {
   return count === 0 ? 0 : 31 - Math.clz32(count);
 }
 
@@ -251,6 +251,14 @@ function planDirectory(root: StorageNode): DirectoryPlan {
   return { rootPlan, plans };
 }
 
+// [MS-CFB] 2.6.1: a version 3 stream's size field has no high (>32-bit) half, so its byte length cannot exceed 0x80000000. Exported for direct testing against plain numbers: proving this boundary end to end would otherwise need constructing and writing an actual 2 GiB+ stream for every mutant of the condition itself, not merely the one real test that must still exist for the thrown message's own exact text.
+export function exceedsVersion3StreamCeiling(
+  majorVersion: 3 | 4,
+  byteLength: number,
+): boolean {
+  return majorVersion === 3 && byteLength > MAX_VERSION_3_STREAM_BYTES;
+}
+
 // Writes the streams as a compound file. Version 3 (512-byte sectors) unless options say otherwise. Throws CompoundFileWriteError when the request itself cannot be expressed -- an illegal name, an empty path segment, colliding siblings, or a version 3 stream past the 2 GB the format allows one -- rather than emitting a file that only looks valid.
 export function writeCompoundFile(
   streams: readonly CompoundFileStream[],
@@ -266,7 +274,7 @@ export function writeCompoundFile(
 
   const root: StorageNode = { name: ROOT_ENTRY_NAME, children: [] };
   for (const { path, bytes } of streams) {
-    if (majorVersion === 3 && bytes.length > MAX_VERSION_3_STREAM_BYTES) {
+    if (exceedsVersion3StreamCeiling(majorVersion, bytes.length)) {
       throw new CompoundFileWriteError(
         `stream ${JSON.stringify(path)} is ${bytes.length} bytes, past the ${MAX_VERSION_3_STREAM_BYTES}-byte ceiling [MS-CFB] 2.6.1 puts on a version 3 stream; write the file as version 4 instead`,
       );
