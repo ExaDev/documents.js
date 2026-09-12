@@ -175,6 +175,17 @@ describe("deriveNeighbourLabels", () => {
     expect(deriveNeighbourLabels(cells)).toHaveLength(cells.length);
   });
 
+  it("keeps the first candidate on a genuine position tie, never the second", () => {
+    // Two distinct text cells sharing the identical row and column: real documents never produce two cells at the same coordinate, but nothing in ContentSheetCell's own shape forbids a hand-built array from carrying one, and nearestTextCell's tie-break reduce must still be pinned to a specific, deterministic winner rather than left to whichever comparison direction happens to compile.
+    const cells = [
+      textCell(2, 0, "First"),
+      textCell(2, 0, "Second"),
+      numberCell(4, 0, 1), // target
+    ];
+    const label = labelFor(deriveNeighbourLabels(cells), 4, 0);
+    expect(label.above?.text).toBe("First");
+  });
+
   it("never mutates its input", () => {
     const cells = [textCell(0, 0, "Header"), numberCell(1, 0, 1)];
     const snapshot = structuredClone(cells);
