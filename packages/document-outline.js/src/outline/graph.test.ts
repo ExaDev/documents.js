@@ -16,20 +16,24 @@ import { OrderKeyBudgetExhaustedError } from "./order-keys";
 import {
   AmbiguousEdgeError,
   AmbiguousSiblingError,
+  boundedOrderKey,
   contentHashV1,
   ContainsCycleError,
   defaultExtractionPolicy,
   insertEdge,
   insertNode,
   NodeKindMismatchError,
+  orderKeyAscComparator,
   orderKeys,
   projectDocumentGraph,
   removeEdge,
   replaceEdge,
+  runOrRebalance,
   UnknownEdgeError,
   UnknownSiblingError,
   walkPropertyGraph,
   type ExtractionPolicy,
+  type GraphEdge,
   type GraphNode,
   type PropertyGraph,
 } from "./graph";
@@ -3523,7 +3527,8 @@ describe("write API: reconcileChildren reproduces every requested children list 
   it("agrees with an independently-modelled reference algorithm across arbitrary (not just genuinely-subsequence) existing wirings, over every combination of a 3-label pool", () => {
     const { graph: baseGraph, pool } = mintLeafPool(3);
     const byLabel = { a: pool[0]!, b: pool[1]!, c: pool[2]! };
-    const existingSeqs = allLabelSequences(3); // every arbitrary existing wiring up to length 3, subsequence or not
+    // Length 4, not 3: the anti-inflation pass's own multi-occurrence reuse (a bucket holding MORE than one leftover index for the same id, and a pointer advancing past its first entry to a second) can only ever matter to the final output when existing carries at least two UNMATCHED occurrences of the same id that children also asks for again -- and forcing even one existing occurrence of a repeated id to go unmatched by direct LCS already needs a THIRD, differently-labelled element interspersed to break the trivial full match a homogeneous run would otherwise get for free (see this suite's own comment on the exhaustive-subsequence sweep above about full-length matches masking wrong-choice bugs). Two such occurrences plus one interleaved break needs four existing slots (e.g. [a,a,x,a]), one more than a length-3 wiring can ever hold -- confirmed directly: a bucket.push/leftover-pointer-advance mutation on this pass survived the length-3 sweep untouched, killed only once existingSeqs reached length 4.
+    const existingSeqs = allLabelSequences(4); // every arbitrary existing wiring up to length 4, subsequence or not
     const childrenSeqs = allLabelSequences(4).filter((seq) => seq.length > 0);
     let casesRun = 0;
     for (const existingSeq of existingSeqs) {
@@ -3882,5 +3887,146 @@ describe("named error classes: identity and message text", () => {
     expect(error.message).toBe(
       'insertEdge: attaching CONTAINS "from1" -> "to1" would close a cycle -- "to1" already reaches "from1"',
     );
+  });
+});
+
+describe("orderKeyAscComparator", () => {
+  it("returns -1 when a sorts before b, 1 when after, and 0 when equal", () => {
+    expect(orderKeyAscComparator({ orderKey: "1" }, { orderKey: "2" })).toBe(
+      -1,
+    );
+    expect(orderKeyAscComparator({ orderKey: "2" }, { orderKey: "1" })).toBe(1);
+    expect(orderKeyAscComparator({ orderKey: "1" }, { orderKey: "1" })).toBe(0);
+  });
+
+  it("actually sorts a shuffled list into ascending orderKey order", () => {
+    const items = [{ orderKey: "c" }, { orderKey: "a" }, { orderKey: "b" }];
+    expect([...items].sort(orderKeyAscComparator)).toEqual([
+      { orderKey: "a" },
+      { orderKey: "b" },
+      { orderKey: "c" },
+    ]);
+  });
+});
+
+describe("runOrRebalance", () => {
+  it("returns the attempt's own result when it succeeds, never calling onExhausted", () => {
+    let exhaustedCalled = false;
+    expect(
+      runOrRebalance(
+        () => "ok",
+        () => {
+          exhaustedCalled = true;
+          return "rebalanced";
+        },
+      ),
+    ).toBe("ok");
+    expect(exhaustedCalled).toBe(false);
+  });
+
+  it("answers an OrderKeyBudgetExhaustedError with the rebalance callback's own result", () => {
+    expect(
+      runOrRebalance(
+        () => {
+          throw new OrderKeyBudgetExhaustedError("no room");
+        },
+        () => "rebalanced",
+      ),
+    ).toBe("rebalanced");
+  });
+
+  it("rethrows any error that isn't OrderKeyBudgetExhaustedError, never calling onExhausted", () => {
+    expect(() =>
+      runOrRebalance(
+        () => {
+          throw new Error("boom");
+        },
+        () => "never",
+      ),
+    ).toThrow("boom");
+  });
+});
+
+describe("boundedOrderKey", () => {
+  it("throws the exact tied-siblings message when two adjacent siblings already share one orderKey", () => {
+    const tie = orderKeys.orderKeyForIndex(0);
+    const siblings: GraphEdge[] = [
+      { from: "p", to: "a", kind: "PROPERTY", orderKey: tie },
+      { from: "p", to: "b", kind: "PROPERTY", orderKey: tie },
+    ];
+    expect(() => boundedOrderKey(siblings, 1)).toThrow(
+      "boundedOrderKey: adjacent siblings share one orderKey, leaving no room to bisect; rebalance with renumberedOrderKeys",
+    );
+  });
+});
+
+describe("project() entry-node ordering", () => {
+  it("emits multiple policy-extracted table entries sorted ascending by id, not by definition order", () => {
+    const doc = wordprocessingPackage(
+      [
+        sectionGroup([
+          headingGroup("H1", 1, [], { style: "s1" }),
+          headingGroup("H2", 1, [], { style: "s2" }),
+          headingGroup("H3", 1, [], { style: "s3" }),
+        ]),
+      ],
+      {
+        styles: {
+          s1: { paragraph: { indentLeftPt: 1 } },
+          s2: { paragraph: { indentLeftPt: 2 } },
+          s3: { paragraph: { indentLeftPt: 3 } },
+        },
+      },
+    );
+    const graph = projectDocumentGraph([{ id: "doc", package: doc }]);
+    const entryIds = graph.nodes
+      .filter((node) => node.kind === "styleEntry")
+      .map((node) => node.id);
+    expect(entryIds).toHaveLength(3);
+    // A default (string) sort is exactly the ascending order pendingEntryNodes.sort's own comparator must produce -- if the real comparator were flipped, tied at 0 unconditionally, or otherwise wrong, entryIds would not already come out matching its own re-sorted copy.
+    expect(entryIds).toEqual([...entryIds].sort());
+  });
+});
+
+describe("insertEdge sibling filtering by kind, not just from", () => {
+  const EMPTY_GRAPH: PropertyGraph = { nodes: [], edges: [] };
+
+  it("resolves a before/after position against only the named kind's own siblings, ignoring a CONTAINS sibling to the same id at the same position", () => {
+    // Two edges from the same "parent", to the same two targets, but of DIFFERENT kinds -- CONTAINS and STYLED_BY -- interleaved so that filtering by the wrong (hardcoded) kind would see a different sibling list than filtering by the real `kind` parameter, and therefore resolve `{ at: 'after', siblingId: a.id }` to a different position.
+    const a = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const b = insertNode(a.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "B." }] },
+    });
+    const c = insertNode(b.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "C." }] },
+    });
+    // Wire two STYLED_BY siblings (a then b) and a THIRD, unrelated CONTAINS sibling to c -- if siblingInsertIndex's own kind filter were replaced by a hardcoded "CONTAINS" (or any other single literal), it would see only the CONTAINS sibling to c and resolve the position against that instead of the real STYLED_BY pair.
+    const wired = insertEdge(
+      insertEdge(
+        insertEdge(b.graph, "parent", a.id, { kind: "STYLED_BY" }),
+        "parent",
+        b.id,
+        {
+          kind: "STYLED_BY",
+        },
+      ),
+      "parent",
+      c.id,
+    );
+    const result = insertEdge(wired, "parent", c.id, {
+      kind: "STYLED_BY",
+      position: { at: "after", siblingId: a.id },
+    });
+    const styledBy = result.edges
+      .filter((edge) => edge.from === "parent" && edge.kind === "STYLED_BY")
+      .sort((x, y) => (x.orderKey < y.orderKey ? -1 : 1))
+      .map((edge) => edge.to);
+    // c lands right after a (between a and b), among the STYLED_BY siblings specifically -- not appended past the single unrelated CONTAINS sibling, and not refused as ambiguous by conflating the two kinds.
+    expect(styledBy).toEqual([a.id, c.id, b.id]);
   });
 });
