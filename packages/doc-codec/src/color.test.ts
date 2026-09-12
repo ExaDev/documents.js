@@ -6,6 +6,7 @@ import {
   decorativeIcoColor,
   icoColor,
   nearestIco,
+  nearestIcoColor,
   readColorRef,
 } from "./color";
 
@@ -65,6 +66,21 @@ describe("nearestIco", () => {
   it("picks the closer of two candidates rather than the first or last examined", () => {
     // Slightly nearer to white (0x08) than to silver (0x10).
     expect(nearestIco({ r: 0.99, g: 0.99, b: 0.99 })).toBe(0x08);
+  });
+});
+
+describe("nearestIcoColor", () => {
+  it("names the exact colour of the same palette entry nearestIco returns", () => {
+    const color = { r: 0.99, g: 0.99, b: 0.99 };
+    expect(nearestIcoColor(color)).toEqual(icoColor(nearestIco(color)));
+  });
+
+  it("returns a genuine palette colour, never cvAuto's own absence, even at the tie-broken duplicate entry", () => {
+    expect(nearestIcoColor({ r: 0x80 / 255, g: 0, b: 0x80 / 255 })).toEqual({
+      r: 0x80 / 255,
+      g: 0,
+      b: 0x80 / 255,
+    });
   });
 });
 
