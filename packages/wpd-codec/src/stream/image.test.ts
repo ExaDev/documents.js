@@ -65,6 +65,17 @@ describe("scanImagePayload", () => {
   });
 
   describe("PNG", () => {
+    it("rejects an IEND chunk whose own declared length runs past the buffer, rather than accepting a truncated span", () => {
+      // The IEND check itself sits right after the overrun guard: skipping that guard would let a lying IEND chunk (declaring far more data than the buffer actually holds) slip through and return a truncated-but-defined span instead of refusing.
+      const bytes = new Uint8Array([
+        ...PNG_SIGNATURE,
+        ...u32be(1000), // claims 1000 bytes of chunk data
+        ...Array.from("IEND", (c) => c.charCodeAt(0)),
+        // no data, no crc -- the buffer ends immediately after the type
+      ]);
+      expect(scanImagePayload(bytes)).toBeUndefined();
+    });
+
     it("lifts a well-formed PNG payload, bounded exactly by its own chunk chain", () => {
       const png = tinyPng();
       const bytes = new Uint8Array([9, 9, 9, ...png, 7, 7, 7]); // real prefix/suffix garbage
@@ -180,6 +191,40 @@ describe("scanImagePayload", () => {
       expect(scanImagePayload(new Uint8Array(jpeg))).toBeUndefined();
     });
 
+    it("rejects a bare EOI byte value that never had its own 0xFF marker prefix", () => {
+      // Skipping the marker-prefix guard would let this 0xD9 byte itself be read as the next marker, wrongly matching the EOI case and returning a defined (truncated) payload instead of refusing.
+      const jpeg = [0xff, 0xd8, 0xd9];
+      expect(scanImagePayload(new Uint8Array(jpeg))).toBeUndefined();
+    });
+
+    it("treats 0xD7, the top of the restart range, as standalone", () => {
+      const jpeg = [
+        0xff,
+        0xd8,
+        0xff,
+        0xd7, // RST7, the restart range's own upper bound
+        ...jpegSegment(0xe0, [0x00]),
+        0xff,
+        0xd9,
+      ];
+      const result = scanImagePayload(new Uint8Array(jpeg));
+      expect(result?.format).toBe("jpeg");
+    });
+
+    it("treats SOI (0xD8) reappearing mid-stream as standalone, not a length-carrying marker", () => {
+      const jpeg = [
+        0xff,
+        0xd8,
+        0xff,
+        0xd8, // SOI again, mid-stream
+        ...jpegSegment(0xe0, [0x00]),
+        0xff,
+        0xd9,
+      ];
+      const result = scanImagePayload(new Uint8Array(jpeg));
+      expect(result?.format).toBe("jpeg");
+    });
+
     it("rejects a JPEG that ends right after SOI, with no marker at all", () => {
       expect(scanImagePayload(new Uint8Array([0xff, 0xd8]))).toBeUndefined();
     });
@@ -201,6 +246,65 @@ describe("scanImagePayload", () => {
 
     it("rejects a marker whose own stated length runs past the buffer", () => {
       const jpeg = [0xff, 0xd8, 0xff, 0xe0, ...u16be(100)]; // claims 100 bytes total, far more than remain
+      expect(scanImagePayload(new Uint8Array(jpeg))).toBeUndefined();
+    });
+
+    it("rejects a length-too-small marker even with plenty of trailing bytes, isolating that check from the overrun check", () => {
+      // length 1 alone must refuse this, with none of the overrun arithmetic coming into play (there is ample room left).
+      const jpeg = [
+        0xff,
+        0xd8,
+        0xff,
+        0xe0,
+        ...u16be(1),
+        0,
+        0,
+        0,
+        0,
+        0xff,
+        0xd9,
+      ];
+      expect(scanImagePayload(new Uint8Array(jpeg))).toBeUndefined();
+    });
+
+    it("rejects a length that is at least 2 but still overruns the buffer, isolating that check from the too-small check", () => {
+      const jpeg = [0xff, 0xd8, 0xff, 0xe0, ...u16be(3)]; // length 3 (not < 2), but nothing follows the length field at all
+      expect(scanImagePayload(new Uint8Array(jpeg))).toBeUndefined();
+    });
+
+    it("accepts a segment whose own length is exactly 2 (no data at all), proving the boundary is < 2 and not <= 2", () => {
+      const jpeg = [0xff, 0xd8, 0xff, 0xe0, ...u16be(2), 0xff, 0xd9];
+      const result = scanImagePayload(new Uint8Array(jpeg));
+      expect(result?.format).toBe("jpeg");
+    });
+
+    it("refuses a malformed SOS length rather than searching arbitrarily far ahead for an EOI that happens to exist", () => {
+      // A length of 1 is invalid (smaller than the length field's own two bytes); skipping that guard for SOS specifically would let the entropy-search fall through to indexOf and find this later, genuine FF D9 -- masking the real malformed-length defect with a false decode.
+      const jpeg = [
+        0xff,
+        0xd8,
+        0xff,
+        0xda,
+        ...u16be(1),
+        0x12,
+        0x34,
+        0xff,
+        0xd9,
+      ];
+      expect(scanImagePayload(new Uint8Array(jpeg))).toBeUndefined();
+    });
+
+    it("refuses garbage following an ordinary segment rather than searching ahead for an EOI as if it were SOS", () => {
+      // If the ordinary APP0 marker were ever treated as SOS, the entropy search would ignore that the very next byte is not a valid marker prefix at all, and would instead find this later, genuine FF D9.
+      const jpeg = [
+        0xff,
+        0xd8,
+        ...jpegSegment(0xe0, [0x00]),
+        0x11,
+        0x22, // garbage: not a marker prefix
+        0xff,
+        0xd9,
+      ];
       expect(scanImagePayload(new Uint8Array(jpeg))).toBeUndefined();
     });
 
