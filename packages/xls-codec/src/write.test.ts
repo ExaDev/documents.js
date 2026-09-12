@@ -34,6 +34,7 @@ import { readXls, readXlsContent } from "./content";
 import { isXlsFile } from "./container";
 import { writeXls, writeXlsContent } from "./write";
 import { writeSheetConditionalFormats } from "./workbook/conditional-format-write";
+import { writeSheetDataValidations } from "./workbook/data-validation-write";
 
 // Genuine .xls bytes -- a real [MS-CFB] compound file holding a real BIFF8 Workbook stream -- built by this package's own writer and read back through its own reader, the "primary verification method" this session's writers use throughout (the CFB writer, rtf-codec, wpd-codec). Every test here is a round trip: build a ContentDocument, write it, read it back, and check the read result reflects what was written -- exercising the writer against a reader whose own correctness is independently pinned by content.test.ts's hand-built byte sequences.
 
@@ -2003,6 +2004,125 @@ describe("writeXlsContent: data validations written (#971)", () => {
         ]),
       ),
     ).toThrow(/no second formula/);
+  });
+
+  it("refuses a data-validation type or operator the schema's own closed vocabularies never name", () => {
+    expect(() =>
+      writeXlsContent(
+        document([
+          sheet("S", [], {
+            dataValidations: [
+              {
+                ranges: [
+                  { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 },
+                ],
+                type: "notARealType",
+                formula1: "5",
+              } as unknown as ContentSheetDataValidation,
+            ],
+          }),
+        ]),
+      ),
+    ).toThrow(/has no Dv valType value/);
+    expect(() =>
+      writeXlsContent(
+        document([
+          sheet("S", [], {
+            dataValidations: [
+              {
+                ranges: [
+                  { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 },
+                ],
+                type: "whole",
+                operator: "notARealOperator",
+                formula1: "5",
+              } as unknown as ContentSheetDataValidation,
+            ],
+          }),
+        ]),
+      ),
+    ).toThrow(/has no Dv typOperator value/);
+  });
+
+  it("refuses a non-two-operand rule carrying a second formula", () => {
+    expect(() =>
+      writeXlsContent(
+        document([
+          sheet("S", [], {
+            dataValidations: [
+              {
+                ranges: [
+                  { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 },
+                ],
+                type: "whole",
+                operator: "greaterThan",
+                formula1: "5",
+                formula2: "10",
+              },
+            ],
+          }),
+        ]),
+      ),
+    ).toThrow(/carries a second formula/);
+  });
+
+  it("refuses a rule carrying no range", () => {
+    expect(() =>
+      writeXlsContent(
+        document([
+          sheet("S", [], {
+            dataValidations: [
+              {
+                ranges: [],
+                type: "whole",
+                operator: "greaterThan",
+                formula1: "5",
+              },
+            ],
+          }),
+        ]),
+      ),
+    ).toThrow(/carrying no range states nothing/);
+  });
+
+  it("refuses a range outside BIFF8's own grid, at each of its four edges", () => {
+    const base = {
+      type: "whole" as const,
+      operator: "greaterThan" as const,
+      formula1: "5",
+    };
+    const overRow: ContentSheetDataValidation = {
+      ...base,
+      ranges: [
+        { startRow: 0x10000, endRow: 0x10000, startColumn: 0, endColumn: 0 },
+      ],
+    };
+    const overEndRow: ContentSheetDataValidation = {
+      ...base,
+      ranges: [{ startRow: 0, endRow: 0x10000, startColumn: 0, endColumn: 0 }],
+    };
+    const overColumn: ContentSheetDataValidation = {
+      ...base,
+      ranges: [{ startRow: 0, endRow: 0, startColumn: 0x100, endColumn: 0 }],
+    };
+    const overEndColumn: ContentSheetDataValidation = {
+      ...base,
+      ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0x100 }],
+    };
+    for (const rule of [overRow, overEndRow, overColumn, overEndColumn]) {
+      expect(() =>
+        writeXlsContent(
+          document([sheet("S", [], { dataValidations: [rule] })]),
+        ),
+      ).toThrow(/outside BIFF8's own grid/);
+    }
+  });
+
+  it("writes no Dval/Dv records at all for a sheet stating an empty dataValidations array", () => {
+    // A round trip through readXlsContent cannot distinguish this from a Dval-with-zero-Dv-records: mapDataValidations's own result is an empty array either way, and content.ts already omits the field for an empty array regardless of whether a genuinely empty Dval record was written at all. Calling the writer directly is the only way to check that no record is written in the first place.
+    expect(
+      writeSheetDataValidations(sheet("S", [], { dataValidations: [] })),
+    ).toStrictEqual([]);
   });
 });
 
