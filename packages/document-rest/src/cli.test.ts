@@ -1,6 +1,15 @@
 import type { Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { main } from "./cli";
+import { DEFAULT_PORT, main } from "./cli";
+
+// Reads back the TCP port a listening server actually bound, failing loudly if it somehow bound a pipe/Unix socket instead -- every test below only ever binds a numeric port, so this can never legitimately see anything else.
+function boundPort(server: Server): number {
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    throw new Error("expected a TCP address");
+  }
+  return address.port;
+}
 
 describe("main", () => {
   const originalArgv = process.argv;
@@ -28,7 +37,7 @@ describe("main", () => {
     server = await main();
     expect(console.error).toHaveBeenCalledWith(
       expect.stringContaining(
-        "document-rest listening on http://127.0.0.1:3100",
+        `document-rest listening on http://127.0.0.1:${String(DEFAULT_PORT)}`,
       ),
     );
   });
@@ -47,7 +56,35 @@ describe("main", () => {
   it("accepts --port=<value> form", async () => {
     process.argv = ["node", "bin.js", "--port=0"];
     server = await main();
-    expect(console.error).toHaveBeenCalled();
+    // An OS-assigned ephemeral port is never the fixed default -- this fails if the "--port=" flag form is silently ignored and the server falls back to DEFAULT_PORT instead of actually parsing "0".
+    expect(boundPort(server)).not.toBe(DEFAULT_PORT);
+  });
+
+  it("rejects a non-canonical --port string, such as a leading zero", async () => {
+    process.argv = ["node", "bin.js", "--port", "007"];
+    await expect(main()).rejects.toThrow(/--port must be an integer/);
+  });
+
+  it("accepts a --port value with surrounding whitespace", async () => {
+    process.argv = ["node", "bin.js", "--port", " 0"];
+    server = await main();
+    expect(boundPort(server)).toBeGreaterThanOrEqual(0);
+  });
+
+  it("rejects a negative --port", async () => {
+    process.argv = ["node", "bin.js", "--port", "-1"];
+    await expect(main()).rejects.toThrow(/--port must be an integer/);
+  });
+
+  it("rejects a --port value greater than 65535", async () => {
+    process.argv = ["node", "bin.js", "--port", "70000"];
+    await expect(main()).rejects.toThrow(/--port must be an integer/);
+  });
+
+  it("accepts the maximum valid --port value of 65535", async () => {
+    process.argv = ["node", "bin.js", "--port", "65535"];
+    server = await main();
+    expect(boundPort(server)).toBe(65535);
   });
 
   it("rejects a non-integer --port", async () => {
@@ -58,6 +95,13 @@ describe("main", () => {
   it("rejects --port with no value", async () => {
     process.argv = ["node", "bin.js", "--port"];
     await expect(main()).rejects.toThrow(/--port requires a value/);
+  });
+
+  it("ignores argv[0]/argv[1], the node binary and script path, rather than treating them as flags", async () => {
+    // Standing in for the real ["node", "/path/to/bin.js", ...userArgs] shape: exactly two elements here, so `.slice(2)` leaves no arguments at all -- if it silently stopped slicing, these two entries would be searched for flags in their own right.
+    process.argv = ["--port", "9999"];
+    server = await main();
+    expect(boundPort(server)).toBe(DEFAULT_PORT);
   });
 
   it("binds the given --host instead of the loopback default", async () => {
