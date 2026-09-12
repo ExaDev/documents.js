@@ -24,24 +24,34 @@ const COLOR_SCHEME_OPTIONS = [
   { value: "auto", label: "System", icon: IconDeviceDesktop },
 ] as const;
 
-// A computed index into a fixed-length array is `T | undefined` under noUncheckedIndexedAccess even when the arithmetic guarantees it's always in range (modulo COLOR_SCHEME_OPTIONS.length) -- this asserts that invariant explicitly rather than papering over it with a fallback option, which would silently substitute a different-but-valid choice if the arithmetic were ever wrong.
-function optionAt(index: number) {
+// A computed index into a fixed-length array is `T | undefined` under noUncheckedIndexedAccess even when the arithmetic guarantees it's always in range (modulo COLOR_SCHEME_OPTIONS.length) -- this asserts that invariant explicitly rather than papering over it with a fallback option, which would silently substitute a different-but-valid choice if the arithmetic were ever wrong. Exported so __root.test.ts can drive the throw path directly with a genuinely out-of-range index, the only way to exercise it at all: RootLayout's own two call sites never produce one.
+export function optionAt(index: number) {
   const option = COLOR_SCHEME_OPTIONS[index];
   if (option === undefined)
     throw new Error(`Color scheme option index ${index} out of range`);
   return option;
 }
 
+// The header button's own cycle-and-lookup logic, factored out of RootLayout so __root.test.ts can drive every branch (an unrecognised current value falling back to index 0, and the wrap-around from the last option back to the first) without mounting the real AppShell/RouterProvider tree neither of these pure lookups needs.
+export function activeColorSchemeOption(currentValue: string) {
+  const activeIndex = COLOR_SCHEME_OPTIONS.findIndex(
+    (option) => option.value === currentValue,
+  );
+  return optionAt(activeIndex === -1 ? 0 : activeIndex);
+}
+
+export function nextColorSchemeOption(currentValue: string) {
+  const activeIndex = COLOR_SCHEME_OPTIONS.findIndex(
+    (option) => option.value === currentValue,
+  );
+  return optionAt((Math.max(activeIndex, 0) + 1) % COLOR_SCHEME_OPTIONS.length);
+}
+
 function RootLayout() {
   const [navOpened, { toggle: toggleNav }] = useDisclosure();
   const { colorScheme, setColorScheme } = useMantineColorScheme();
-  const activeIndex = COLOR_SCHEME_OPTIONS.findIndex(
-    (option) => option.value === colorScheme,
-  );
-  const activeOption = optionAt(activeIndex === -1 ? 0 : activeIndex);
-  const nextOption = optionAt(
-    (Math.max(activeIndex, 0) + 1) % COLOR_SCHEME_OPTIONS.length,
-  );
+  const activeOption = activeColorSchemeOption(colorScheme);
+  const nextOption = nextColorSchemeOption(colorScheme);
   const cycleColorScheme = () => {
     setColorScheme(nextOption.value);
   };
