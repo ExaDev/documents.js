@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ContentParagraph } from "document-schema.js";
+import type { ContentParagraph, ContentTable } from "document-schema.js";
 import { buildOutline } from "./build";
 import { effectivePackage } from "./effective";
 import { flattenOutline, leafContentHash, outlineLeafText } from "./helpers";
@@ -67,6 +67,38 @@ describe("outlineLeafText", () => {
         ]),
       ),
     ).toBe("a b\nc d");
+  });
+
+  it("joins multiple blocks within one table cell by space, and multiple runs within one cell paragraph with no separator", () => {
+    const multiRunParagraph: ContentParagraph = {
+      kind: "paragraph",
+      runs: [{ text: "Hello " }, { text: "World" }],
+    };
+    const twoBlockCellTable: ContentTable = {
+      kind: "table",
+      rows: [{ cells: [{ blocks: [paragraph("first"), multiRunParagraph] }] }],
+      columnWidthsPt: [80],
+    };
+    expect(outlineLeafText(twoBlockCellTable)).toBe("first Hello World");
+  });
+
+  it("recurses into a nested table's own cells, joining a cell's own multiple blocks by space", () => {
+    // The nested cell carries TWO paragraph blocks so blockTexts(cell.blocks).join(" ") (the nested-table branch's own join, distinct from outlineLeafText's top-level row/cell joins) has more than one element to actually separate -- a single-block cell can't distinguish a space join from a no-separator join.
+    const nested: ContentTable = {
+      kind: "table",
+      rows: [
+        {
+          cells: [{ blocks: [paragraph("x1"), paragraph("x2")] }],
+        },
+      ],
+      columnWidthsPt: [80],
+    };
+    const outer: ContentTable = {
+      kind: "table",
+      rows: [{ cells: [{ blocks: [nested] }] }],
+      columnWidthsPt: [80],
+    };
+    expect(outlineLeafText(outer)).toBe("x1 x2");
   });
 
   it("returns an image altText, empty when absent", () => {
