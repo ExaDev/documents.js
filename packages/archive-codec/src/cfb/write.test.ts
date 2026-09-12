@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { type CompoundFileStream, readCompoundFile } from "./read";
-import { CompoundFileWriteError, writeCompoundFile } from "./write";
+import {
+  CompoundFileWriteError,
+  deepestDepth,
+  exceedsVersion3StreamCeiling,
+  writeCompoundFile,
+} from "./write";
 
 // Coverage for the [MS-CFB] writer (src/cfb/write.ts). Two kinds of check, deliberately kept separate:
 //
@@ -636,5 +641,184 @@ describe("writeCompoundFile input validation", () => {
     expect(() => writeCompoundFile([stream("bad:name", enc("x"))])).toThrow(
       /bad:name/,
     );
+  });
+
+  it("names every thrown error CompoundFileWriteError, not merely an instance of it", () => {
+    let caught: unknown;
+    try {
+      writeCompoundFile([stream("bad:name", enc("x"))]);
+    } catch (error) {
+      caught = error;
+    }
+    expect((caught as Error).name).toBe("CompoundFileWriteError");
+  });
+
+  it("rejects a version 3 stream one byte past the 0x80000000 ceiling, naming its exact size", () => {
+    // A real allocation, not a mock: V8 zero-fills a fresh Uint8Array lazily, so this is a fast, cheap way to prove the boundary and its thrown message against the writer's actual real input type, not a stand-in for it.
+    const oversized = new Uint8Array(0x80000000 + 1);
+    expect(() => writeCompoundFile([stream("Big", oversized)])).toThrow(
+      'stream "Big" is 2147483649 bytes, past the 2147483648-byte ceiling [MS-CFB] 2.6.1 puts on a version 3 stream; write the file as version 4 instead',
+    );
+  });
+});
+
+describe("exceedsVersion3StreamCeiling", () => {
+  it("is false for a version 3 stream at or under the ceiling", () => {
+    expect(exceedsVersion3StreamCeiling(3, 0x80000000)).toBe(false);
+    expect(exceedsVersion3StreamCeiling(3, 0)).toBe(false);
+  });
+
+  it("is true for a version 3 stream one byte past the ceiling", () => {
+    expect(exceedsVersion3StreamCeiling(3, 0x80000001)).toBe(true);
+  });
+
+  it("is always false for version 4, whatever the byte length", () => {
+    expect(exceedsVersion3StreamCeiling(4, 0x80000001)).toBe(false);
+    expect(exceedsVersion3StreamCeiling(4, Number.MAX_SAFE_INTEGER)).toBe(
+      false,
+    );
+  });
+});
+
+describe("deepestDepth", () => {
+  it("is 0 for a count of 0 or 1", () => {
+    expect(deepestDepth(0)).toBe(0);
+    expect(deepestDepth(1)).toBe(0);
+  });
+
+  it("is floor(log2(count)) for every count up to a few levels deep", () => {
+    expect(deepestDepth(2)).toBe(1);
+    expect(deepestDepth(3)).toBe(1);
+    expect(deepestDepth(4)).toBe(2);
+    expect(deepestDepth(7)).toBe(2);
+    expect(deepestDepth(8)).toBe(3);
+    expect(deepestDepth(63)).toBe(5);
+    expect(deepestDepth(64)).toBe(6);
+  });
+});
+
+describe("writeCompoundFile sibling-name case mapping", () => {
+  it("sorts by the simple (single-code-point) uppercase mapping, not the lowercase one", () => {
+    // The Kelvin sign (U+212A) uppercases to itself (0x212A) but lowercases to plain 'k' (0x6B) -- verified directly against V8's own Intl-backed toUpperCase/toLowerCase. Comparing it against 'L' (0x4C upper, 0x6C lower) gives opposite orderings under the two mappings: uppercase puts the Kelvin sign after 'L' (0x212A > 0x4C), lowercase would put it before (0x6B < 0x6C).
+    const streams = readCompoundFile(
+      writeCompoundFile([stream("L", enc("1")), stream("K", enc("2"))]),
+    );
+    expect(streams.map((s) => s.path)).toEqual(["L", "K"]);
+  });
+
+  it("leaves a code unit whose simple uppercase mapping expands to more than one character unchanged, rather than taking the expansion's first character", () => {
+    // 'ß' (U+00DF) uppercases to the two-character string "SS" under JS's FULL case mapping; [MS-CFB] 2.6.4's own SIMPLE (single-code-point) mapping leaves such a code unit as itself (0xDF) instead. Compared against 'T' (0x54 upper): the real, unexpanded 0xDF sorts after 'T', but the expansion's first character 'S' (0x53) would sort before it.
+    const streams = readCompoundFile(
+      writeCompoundFile([stream("T", enc("1")), stream("ß", enc("2"))]),
+    );
+    expect(streams.map((s) => s.path)).toEqual(["T", "ß"]);
+  });
+});
+
+describe("writeCompoundFile mini-stream sector allocation", () => {
+  it("writes ENDOFCHAIN as a zero-length entry's own starting sector, not a mini-stream offset", () => {
+    const entries = parseDirectory(
+      writeCompoundFile([stream("Empty", new Uint8Array(0))]),
+    );
+    const entry = entries.find((e) => e.name === "Empty");
+    expect(entry?.startSector).toBe(ENDOFCHAIN);
+  });
+
+  it("allocates each mini-resident stream's own starting mini sector sequentially, by its own byte length divided by the 64-byte mini sector, not multiplied by it", () => {
+    // Three same-length names (so [MS-CFB] 2.6.4's length-first ordering leaves them in plain alphabetical, i.e. insertion, order) whose mini-sector counts (ceil(length / 64)) are each individually distinguishable: 1, 2, and 1 mini sectors. A multiplication instead of division would inflate the running total by orders of magnitude after the very first stream, corrupting every later stream's own starting mini sector.
+    const entries = parseDirectory(
+      writeCompoundFile([
+        stream("Aaa", new Uint8Array(30)), // ceil(30/64) = 1 mini sector
+        stream("Bbb", new Uint8Array(100)), // ceil(100/64) = 2 mini sectors
+        stream("Ccc", new Uint8Array(10)), // ceil(10/64) = 1 mini sector
+      ]),
+    );
+    const startSectorOf = (name: string): number | undefined =>
+      entries.find((e) => e.name === name)?.startSector;
+    expect(startSectorOf("Aaa")).toBe(0);
+    expect(startSectorOf("Bbb")).toBe(1);
+    expect(startSectorOf("Ccc")).toBe(3);
+  });
+
+  it("needs a second mini FAT sector once the mini stream passes 128 mini sectors, dividing not multiplying to compute it", () => {
+    // entriesPerFatSector is sectorSize / 4 = 128 for a version 3 (512-byte-sector) file, so a mini stream of exactly 129 mini sectors needs ceil(129 / 128) = 2 mini FAT sectors, not 1 -- and a multiplication in that division would instead compute an enormous, clearly-wrong sector count.
+    const miniSectorsNeeded = 129;
+    const streams = Array.from(
+      { length: miniSectorsNeeded },
+      (_unused, i) => stream(`M${i}`, new Uint8Array(64)), // exactly one mini sector each
+    );
+    const bytes = writeCompoundFile(streams);
+    const miniFatSectorCount = u32(bytes, 0x40);
+    expect(miniFatSectorCount).toBe(2);
+    const roundTripped = readCompoundFile(bytes);
+    expect(roundTripped).toHaveLength(miniSectorsNeeded);
+  });
+});
+
+describe("writeCompoundFile FAT, mini-FAT, and DIFAT region padding", () => {
+  // A payload past the header's own 109-entry DIFAT array (6.875 MiB, [MS-CFB] 2.5), forcing a real chained DIFAT sector and several FAT sectors -- the shape every arithmetic mutant around sector-region boundaries needs to actually differ from the minimal, single-FAT-sector fixture above.
+  const payload = new Uint8Array(8 * 1024 * 1024);
+  const bytes = writeCompoundFile([stream("WordDocument", payload)]);
+  const fatSectorCount = u32(bytes, 0x2c);
+  const difatSectorCount = u32(bytes, 0x48);
+  const difatStart = u32(bytes, 0x44);
+  const miniFatSectorCount = u32(bytes, 0x40);
+  const sectorSize = 512;
+  const sectorOffset = (sector: number): number => (sector + 1) * sectorSize;
+
+  it("needs more than one FAT sector and at least one DIFAT sector for this fixture", () => {
+    // Sanity check on the fixture itself before trusting the boundary assertions below against it.
+    expect(fatSectorCount).toBeGreaterThan(1);
+    expect(difatSectorCount).toBeGreaterThan(0);
+  });
+
+  it("fills the FAT's own unused tail entries with FREESECT, past the file's real total sector count", () => {
+    // The FAT addresses fatSectorCount * 128 sectors total (128 entries per 512-byte FAT sector); the file itself occupies exactly (bytes.length / sectorSize) - 1 real sectors (the header takes the first sectorSize bytes, uncounted). Every FAT entry beyond that real count is unused padding, and must read FREESECT. This writer lays FAT sectors out as physical sectors 0..fatSectorCount-1 (an identity mapping the header DIFAT array and any chained DIFAT sectors both merely restate), so the FAT sector holding a given sector's own entry is that sector's ordinal FAT-sector index directly, with no indirection needed.
+    const entriesPerFatSector = sectorSize / 4;
+    const totalRealSectors = bytes.length / sectorSize - 1;
+    const totalAddressableSectors = fatSectorCount * entriesPerFatSector;
+    expect(totalAddressableSectors).toBeGreaterThan(totalRealSectors); // otherwise this fixture has no padding tail left to check at all
+    for (
+      let sector = totalRealSectors;
+      sector < totalAddressableSectors;
+      sector++
+    ) {
+      const holder = Math.floor(sector / entriesPerFatSector);
+      expect(
+        u32(bytes, sectorOffset(holder) + (sector % entriesPerFatSector) * 4),
+      ).toBe(FREESECT);
+    }
+  });
+
+  it("chains every DIFAT sector correctly: each names a run of FAT sector indices then the next DIFAT sector or ENDOFCHAIN", () => {
+    const entriesPerFatSector = sectorSize / 4;
+    const difatEntriesPerSector = entriesPerFatSector - 1;
+    for (let sector = 0; sector < difatSectorCount; sector++) {
+      const base = sectorOffset(difatStart + sector);
+      for (let i = 0; i < difatEntriesPerSector; i++) {
+        const fatIndex = 109 + sector * difatEntriesPerSector + i;
+        if (fatIndex < fatSectorCount) {
+          expect(u32(bytes, base + i * 4)).toBe(fatIndex);
+        }
+      }
+      const terminator = u32(bytes, base + difatEntriesPerSector * 4);
+      if (sector === difatSectorCount - 1) {
+        expect(terminator).toBe(ENDOFCHAIN);
+      } else {
+        expect(terminator).toBe(difatStart + sector + 1);
+      }
+    }
+  });
+
+  it("needs no mini FAT sector at all when nothing is mini-resident", () => {
+    // This fixture's one stream is well past the mini-stream cutoff, so miniSectorCount is 0 and miniFatSectorCount (ceil(0 / 128)) must be 0 too -- a division-to-multiplication mutant on that same ceil would instead compute a large, clearly-wrong sector count from a genuinely zero numerator.
+    expect(miniFatSectorCount).toBe(0);
+    expect(u32(bytes, 0x3c)).toBe(ENDOFCHAIN); // first mini FAT sector: none needed
+  });
+
+  it("fills the DIFAT region's own reserved header array slots with FREESECT past the real FAT sector count", () => {
+    for (let i = fatSectorCount; i < 109; i++) {
+      expect(u32(bytes, 0x4c + i * 4)).toBe(FREESECT);
+    }
   });
 });
