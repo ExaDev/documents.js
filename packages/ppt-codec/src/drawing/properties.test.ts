@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { PptFormatError } from "../errors";
 import { type PptRecord, readRecordAt } from "../record/tree";
 import {
   OfficeArtFOPT,
+  OfficeArtSecondaryFOPT,
   OfficeArtSpContainer,
   OfficeArtTertiaryFOPT,
+  RT_TextHeaderAtom,
 } from "../record/types";
 import {
   concatBytes,
@@ -116,6 +119,90 @@ describe("readShapeProperties", () => {
       PptFormatErrorMatch,
     );
   });
+
+  it("skips a child record that is not one of the three property-table types", () => {
+    // A shape can carry other children (a client anchor, a text box) alongside its property tables; only OfficeArtFOPT/SecondaryFOPT/TertiaryFOPT are property tables at all.
+    const shape = container(OfficeArtSpContainer, [
+      atom(RT_TextHeaderAtom, u32le(0)),
+      atom(OfficeArtFOPT, concatBytes(opid(PROPERTY_ROTATION), u32le(1)), {
+        recVer: 0x3,
+        recInstance: 1,
+      }),
+    ]);
+    const properties = readShapeProperties(readRecordAt(shape, 0));
+    expect(properties.size).toBe(1);
+    expect(properties.get(PROPERTY_ROTATION)?.value).toBe(1);
+  });
+
+  it("reads OfficeArtSecondaryFOPT, the second of the three table positions", () => {
+    const shape = container(OfficeArtSpContainer, [
+      atom(
+        OfficeArtSecondaryFOPT,
+        concatBytes(opid(PROPERTY_ROTATION), u32le(7)),
+        { recVer: 0x3, recInstance: 1 },
+      ),
+    ]);
+    expect(
+      readShapeProperties(readRecordAt(shape, 0)).get(PROPERTY_ROTATION)?.value,
+    ).toBe(7);
+  });
+
+  it("resolves two complex properties' payloads sequentially, each from where the previous one ended", () => {
+    const firstComplex = writeIMsoArray([1], 4);
+    const secondComplex = writeIMsoArray([2, 3], 4);
+    const shape = shapeWithTable(
+      OfficeArtTertiaryFOPT,
+      [
+        concatBytes(
+          opid(PROPERTY_TABLE_PROPERTIES, F_COMPLEX),
+          u32le(firstComplex.length),
+        ),
+        concatBytes(
+          opid(PROPERTY_TABLE_ROW_PROPERTIES, F_COMPLEX),
+          u32le(secondComplex.length),
+        ),
+        firstComplex,
+        secondComplex,
+      ],
+      2,
+    );
+    const properties = readShapeProperties(shape);
+    expect(
+      readIMsoArray(
+        properties.get(PROPERTY_TABLE_PROPERTIES)?.complex ?? new Uint8Array(),
+      ),
+    ).toEqual([1]);
+    expect(
+      readIMsoArray(
+        properties.get(PROPERTY_TABLE_ROW_PROPERTIES)?.complex ??
+          new Uint8Array(),
+      ),
+    ).toEqual([2, 3]);
+  });
+
+  it("throws with the exact declared/available byte counts when the entry run itself is too short", () => {
+    const shapeBytes = container(OfficeArtSpContainer, [
+      atom(OfficeArtFOPT, concatBytes(opid(PROPERTY_ROTATION), u32le(0)), {
+        recVer: 0x3,
+        recInstance: 2,
+      }),
+    ]);
+    expect(() => readShapeProperties(readRecordAt(shapeBytes, 0))).toThrow(
+      "a shape property table declares 2 properties but its 6 bytes of data cannot hold the 12 its entries need",
+    );
+  });
+
+  it("throws with the exact byte counts when a complex property's declared length runs past the table", () => {
+    const shape = shapeWithTable(
+      OfficeArtTertiaryFOPT,
+      [concatBytes(opid(PROPERTY_TABLE_ROW_PROPERTIES, F_COMPLEX), u32le(100))],
+      1,
+    );
+    expect(() => readShapeProperties(shape)).toThrow(PptFormatError);
+    expect(() => readShapeProperties(shape)).toThrow(
+      "a shape property table's complex data declares 106 bytes in total but the table carries only 6",
+    );
+  });
 });
 
 const PptFormatErrorMatch = /cannot hold/;
@@ -148,6 +235,28 @@ describe("writeShapePropertyTable / readShapeProperties round trip", () => {
       readShapeProperties(readRecordAt(shapeBytes, 0)).get(0x0104)?.value,
     ).toBe(1);
   });
+
+  it("leaves fBid clear when an entry does not set it", () => {
+    // opid 0x0004 (rotation) never carries fBid; asserting the raw entry word (not just the stripped-down read side) proves the writer states it as clear rather than merely never checking it.
+    const table = writeShapePropertyTable(OfficeArtFOPT, [
+      { opid: PROPERTY_ROTATION, op: 0 },
+    ]);
+    const view = new DataView(table.buffer, table.byteOffset);
+    // 8-byte record header, then the one entry's 2-byte opid word.
+    expect(view.getUint16(8, true)).toBe(PROPERTY_ROTATION);
+  });
+
+  it("emits entries in ascending opid order on the wire, regardless of the order they were given in", () => {
+    const table = writeShapePropertyTable(OfficeArtFOPT, [
+      { opid: 0x0100, op: 1 },
+      { opid: 0x0004, op: 2 },
+      { opid: 0x0050, op: 3 },
+    ]);
+    const view = new DataView(table.buffer, table.byteOffset);
+    const opidAt = (entryIndex: number) =>
+      view.getUint16(8 + entryIndex * 6, true);
+    expect([opidAt(0), opidAt(1), opidAt(2)]).toEqual([0x0004, 0x0050, 0x0100]);
+  });
 });
 
 describe("fixed-point conversion", () => {
@@ -165,5 +274,24 @@ describe("readIMsoArray / writeIMsoArray", () => {
     expect(readIMsoArray(writeIMsoArray([576, -288, 0], 4))).toEqual([
       576, -288, 0,
     ]);
+  });
+
+  it("rejects a complex payload too short for its own three count fields", () => {
+    expect(() => readIMsoArray(new Uint8Array(5))).toThrow(PptFormatError);
+    expect(() => readIMsoArray(new Uint8Array(5))).toThrow(
+      "a complex property's IMsoArray carries 5 bytes, fewer than the 6 its three count fields need",
+    );
+  });
+
+  it("rejects a complex payload declaring more elements than it actually carries", () => {
+    // nElems=3, cbElem=4 (12 bytes needed), but only 4 bytes of data follow the 6-byte header.
+    const bytes = writeIMsoArray([1], 4);
+    const truncated = bytes.subarray(0, bytes.length - 4);
+    const withWrongCount = new Uint8Array(truncated);
+    new DataView(withWrongCount.buffer).setUint16(0, 3, true);
+    expect(() => readIMsoArray(withWrongCount)).toThrow(PptFormatError);
+    expect(() => readIMsoArray(withWrongCount)).toThrow(
+      "a complex property's IMsoArray declares 3 elements of 4 bytes but only 0 remain",
+    );
   });
 });
