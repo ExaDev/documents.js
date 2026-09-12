@@ -70,7 +70,8 @@ export interface CellRange {
 export function parseRangeReference(ref: string): CellRange | undefined {
   const separatorIndex = ref.indexOf(":");
   const startRaw = separatorIndex === -1 ? ref : ref.slice(0, separatorIndex);
-  const endRaw = separatorIndex === -1 ? ref : ref.slice(separatorIndex + 1);
+  // Unconditional, unlike startRaw above: when separatorIndex is -1, separatorIndex + 1 is 0, so ref.slice(separatorIndex + 1) is ref.slice(0), which is ref itself -- the same value the startRaw-style ternary would have picked for this half anyway.
+  const endRaw = ref.slice(separatorIndex + 1);
   const start = parseCellReference(startRaw);
   const end = parseCellReference(endRaw);
   if (start === undefined || end === undefined) {
