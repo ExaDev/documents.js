@@ -62,9 +62,33 @@ describe("readPageForm", () => {
     expect(readPageForm(new Uint8Array(20))).toBeUndefined();
   });
 
+  // A field list one byte shy of eighty-two, but long enough that every field it declares (including the orientation byte at offset 8) still reads a genuine, non-zero value -- so a version of readPageForm that dropped the length guard entirely would still build a real form from these same bytes, rather than failing some other way.
+  it("declines a short form even though the bytes it can reach would otherwise parse as a real size", () => {
+    const bytes = new Uint8Array(9);
+    bytes.set(word(100), 3);
+    bytes.set(word(200), 5);
+    expect(readPageForm(bytes)).toBeUndefined();
+  });
+
   it("declines a form that states no size", () => {
     expect(
       readPageForm(formNonDeletable({ lengthWpu: 0, widthWpu: 0 })),
+    ).toBeUndefined();
+  });
+
+  it("declines a form that states a length but no width", () => {
+    expect(
+      readPageForm(
+        formNonDeletable({ lengthWpu: LETTER_LENGTH_WPU, widthWpu: 0 }),
+      ),
+    ).toBeUndefined();
+  });
+
+  it("declines a form that states a width but no length", () => {
+    expect(
+      readPageForm(
+        formNonDeletable({ lengthWpu: 0, widthWpu: LETTER_WIDTH_WPU }),
+      ),
     ).toBeUndefined();
   });
 });

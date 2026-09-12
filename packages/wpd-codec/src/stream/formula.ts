@@ -1,4 +1,4 @@
-import { int16At, uint16At } from "../bytes/view";
+import { int16At, sliceAt, uint16At } from "../bytes/view";
 import { decodeWordString } from "./characters";
 
 // -- Table formulas, per WPFF Table Formula Functions --
@@ -209,21 +209,12 @@ function readLengthPrefixedWordString(
   return text;
 }
 
-// Code 30's own byte string: identical length convention, one byte per character instead of two.
-function readLengthPrefixedByteString(
-  cursor: FormulaCursor,
-): string | undefined {
-  if (cursor.offset + 2 > cursor.bytes.length) {
-    return undefined;
-  }
-  const length = uint16At(cursor.bytes, cursor.offset);
+// Code 30's own byte string: identical length convention, one byte per character instead of two. Its only caller (the floating point constant below) discards the decoded text and checks only whether this consumed the spelling successfully -- the double it already read is the value it reports -- so this validates and advances the cursor without building a string nothing reads. Throws (via sliceAt) rather than returning a sentinel when the length prefix or the spelling itself does not fit; the caller wraps the whole token in a try/catch.
+function skipLengthPrefixedByteString(cursor: FormulaCursor): void {
+  const length = uint16At(sliceAt(cursor.bytes, cursor.offset, 2), 0);
   cursor.offset += 2;
-  if (cursor.offset + length > cursor.bytes.length) {
-    return undefined;
-  }
-  const slice = cursor.bytes.subarray(cursor.offset, cursor.offset + length);
+  sliceAt(cursor.bytes, cursor.offset, length);
   cursor.offset += length;
-  return Array.from(slice, (byte) => String.fromCharCode(byte)).join("");
 }
 
 function readCellNumber(
@@ -304,9 +295,9 @@ function readToken(cursor: FormulaCursor): string | undefined {
         : cellReferenceText(cell.row, cell.column, false, false);
     }
     case 28: {
-      // range reference (documented "not used"): two plain cell references joined by ":".
+      // range reference (documented "not used"): two plain cell references joined by ":". readCellNumber's own insufficient-bytes check returns before advancing cursor.offset, so always attempting the second read even when the first failed is safe -- it reads from the identical position and fails identically.
       const start = readCellNumber(cursor);
-      const end = start === undefined ? undefined : readCellNumber(cursor);
+      const end = readCellNumber(cursor);
       if (start === undefined || end === undefined) {
         return undefined;
       }
@@ -323,18 +314,20 @@ function readToken(cursor: FormulaCursor): string | undefined {
     }
     case 30: {
       // floating point constant: an 8-byte double, then its own byte-string spelling. The double is authoritative; the string is the user's own typed spelling and is skipped past rather than re-decoded, since JavaScript's own number-to-string conversion already gives a faithful textual value.
-      if (cursor.offset + 8 > cursor.bytes.length) {
+      try {
+        const doubleBytes = sliceAt(cursor.bytes, cursor.offset, 8);
+        const view = new DataView(
+          doubleBytes.buffer,
+          doubleBytes.byteOffset,
+          8,
+        );
+        const value = view.getFloat64(0, true);
+        cursor.offset += 8;
+        skipLengthPrefixedByteString(cursor);
+        return String(value);
+      } catch {
         return undefined;
       }
-      const view = new DataView(
-        cursor.bytes.buffer,
-        cursor.bytes.byteOffset + cursor.offset,
-        8,
-      );
-      const value = view.getFloat64(0, true);
-      cursor.offset += 8;
-      const spelling = readLengthPrefixedByteString(cursor);
-      return spelling === undefined ? undefined : String(value);
     }
     case 31: {
       // user argument reference: [argument number].
@@ -350,13 +343,9 @@ function readToken(cursor: FormulaCursor): string | undefined {
       return readLengthPrefixedWordString(cursor);
     }
     case 41:
-    case 42: {
-      // attribute on/off: a formatting marker inside the formula's own displayed spelling, contributing no text to its computed meaning.
-      cursor.offset += 2;
-      return "";
-    }
+    case 42:
     case 43: {
-      // total attribute mask.
+      // attribute on/off and the total attribute mask: formatting markers inside the formula's own displayed spelling, contributing no text to its computed meaning.
       cursor.offset += 2;
       return "";
     }
@@ -365,10 +354,11 @@ function readToken(cursor: FormulaCursor): string | undefined {
       return "";
     default: {
       if (code >= 48 && code <= 63) {
-        // range reference, absolute-flag bits per the SDK's own NOTE: bit0/1 on the bottom-right cell, bit2/3 on the top-left cell.
-        const flags = code - 48;
+        // range reference, absolute-flag bits per the SDK's own NOTE: bit0/1 on the bottom-right cell, bit2/3 on the top-left cell. Codes in this range share a fixed high nibble, so their own low 4 bits (code & 0x0f) are exactly code - 48 -- a mask on the bits this flags value is ever actually read through, not an offsetting subtraction.
+        const flags = code & 0x0f;
+        // readCellNumber's own insufficient-bytes check returns before advancing cursor.offset, so always attempting the second read even when the first failed is safe -- it reads from the identical position and fails identically.
         const start = readCellNumber(cursor);
-        const end = start === undefined ? undefined : readCellNumber(cursor);
+        const end = readCellNumber(cursor);
         if (start === undefined || end === undefined) {
           return undefined;
         }
@@ -389,8 +379,8 @@ function readToken(cursor: FormulaCursor): string | undefined {
           : `${startText}:${endText}`;
       }
       if (code >= 64 && code <= 67) {
-        // cell reference, absolute-flag bits per the same NOTE: bit0 column, bit1 row.
-        const flags = code - 64;
+        // cell reference, absolute-flag bits per the same NOTE: bit0 column, bit1 row. Codes in this range share a fixed high bit pattern, so their own low 2 bits (code & 0x03) are exactly code - 64 -- a mask on the bits this flags value is ever actually read through, not an offsetting subtraction.
+        const flags = code & 0x03;
         const cell = readCellNumber(cursor);
         return cell === undefined
           ? undefined

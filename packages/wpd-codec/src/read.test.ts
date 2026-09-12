@@ -6,7 +6,12 @@ import type {
 import { bytesToBase64 } from "./bytes/base64";
 import { describe, expect, it } from "vitest";
 import { WpdDiagnosticCodes, type WpdDiagnostic } from "./diagnostics";
-import { readWpd, readWpdContent } from "./read";
+import {
+  assertDefined,
+  readWpd,
+  readWpdContent,
+  UNREACHABLE_CHARACTER_MAPPING_MESSAGE,
+} from "./read";
 import {
   buildWpdFile,
   fontDescriptorPacket,
@@ -27,6 +32,7 @@ const ATTRIBUTE_OFF = 0xf3;
 const BOLD = 12;
 const ITALICS = 8;
 const UNDERLINE = 14;
+const STRIKEOUT = 13;
 const DOUBLE_UNDERLINE = 11;
 const SMALL_CAPS = 15;
 
@@ -46,6 +52,30 @@ function readDocumentArea(
   return readWpdContent(buildWpdFile(documentArea, packets));
 }
 
+describe("assertDefined", () => {
+  it("throws with the exact given message for an undefined value", () => {
+    expect(() => {
+      assertDefined(undefined, "should not be undefined");
+    }).toThrow("should not be undefined");
+  });
+
+  // UNREACHABLE_CHARACTER_MAPPING_MESSAGE's own exact text, asserted against a hardcoded duplicate rather than by importing and comparing the constant to itself -- no real document byte can ever trigger this message at its one call site (applyToken's "character" case), so this is the only test that can catch a change to its actual wording.
+  it("carries UNREACHABLE_CHARACTER_MAPPING_MESSAGE's own exact text", () => {
+    expect(UNREACHABLE_CHARACTER_MAPPING_MESSAGE).toBe(
+      "A single-byte document-area character had no character mapping, which the tokeniser's own byte range should make unreachable.",
+    );
+  });
+
+  it("does not throw for a defined value, including a falsy one", () => {
+    expect(() => {
+      assertDefined(0, "unreachable");
+    }).not.toThrow();
+    expect(() => {
+      assertDefined("", "unreachable");
+    }).not.toThrow();
+  });
+});
+
 describe("readWpdContent", () => {
   it("reads a wordprocessing document", () => {
     const document = readDocumentArea(text("Hello"));
@@ -62,6 +92,20 @@ describe("readWpdContent", () => {
       "First",
       "Second",
     ]);
+  });
+
+  // A hard return's own case must actually end there in the switch, not fall through into the next case (hardEndOfColumn) and report a column-break diagnostic that never happened.
+  it("does not report a column break for a plain hard end of line", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(
+      buildWpdFile([...text("First"), HARD_EOL, ...text("Second")]),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    expect(
+      diagnostics.some(
+        (d) => d.code === WpdDiagnosticCodes.ColumnBreakFlattened,
+      ),
+    ).toBe(false);
   });
 
   // "Soft EOL: The formatter inserts a code at the end of a line. Its position changes automatically as text is added or deleted", and the End-of-Line group's own conversion table maps it to a space rather than a break.
@@ -138,12 +182,50 @@ describe("readWpdContent", () => {
   it("renders an unmapped character visibly and reports it", () => {
     const diagnostics: WpdDiagnostic[] = [];
     // Character 0 of set 12 (Tibetan): libwpd's own tibetanMap1 table has no entry below character number 33, so this position genuinely has no mapping in the cited source rather than being a gap this package introduced.
-    readWpdContent(buildWpdFile([...text("x"), 0xf0, 0, 12, 0xf0]), {
-      sink: (diagnostic) => diagnostics.push(diagnostic),
-    });
-    expect(diagnostics.map((diagnostic) => diagnostic.code)).toContain(
-      WpdDiagnosticCodes.UnmappedCharacter,
+    const document = readWpdContent(
+      buildWpdFile([...text("x"), 0xf0, 0, 12, 0xf0]),
+      { sink: (diagnostic) => diagnostics.push(diagnostic) },
     );
+    expect(paragraphsOf(document)[0]?.runs[0]?.text).toBe("x�");
+    const found = diagnostics.find(
+      (diagnostic) => diagnostic.code === WpdDiagnosticCodes.UnmappedCharacter,
+    );
+    expect(found?.message).toBe(
+      "Character 0 of WordPerfect character set 12 has no mapping in this package and was rendered as U+FFFD.",
+    );
+  });
+
+  // A fixed-length function code this reader names no specific meaning for at all -- Undo (0xF1), reserved by the format but not one applyFixedFunction handles -- must contribute neither a character nor an attribute change.
+  it("contributes nothing for a fixed-length function code with no named meaning", () => {
+    const document = readDocumentArea([
+      ...text("un"),
+      0xf1,
+      0,
+      0,
+      0,
+      0xf1, // Undo: a genuine 5-byte fixed function, gated at both ends
+      ...text("broken"),
+    ]);
+    expect(paragraphsOf(document)[0]?.runs).toEqual([{ text: "unbroken" }]);
+  });
+
+  // A fixed-length function code with no named meaning must not be misread as an ATTRIBUTE_ON/OFF payload even when its own data byte happens to look like a real attribute number: since its own code is neither ATTRIBUTE_ON nor ATTRIBUTE_OFF, misreading it would take the ATTRIBUTE_OFF branch (deleting the attribute) regardless of which real code opened it, silently turning bold back off.
+  it("does not clear an active attribute for a fixed-length function code with no named meaning", () => {
+    const document = readDocumentArea([
+      0xf2, // ATTRIBUTE_ON (bold)
+      12,
+      0xf2,
+      ...text("before"),
+      0xf1,
+      12, // BOLD's own attribute number, in a code this reader does not treat as an attribute code at all
+      0,
+      0,
+      0xf1, // Undo: a genuine 5-byte fixed function, gated at both ends
+      ...text("after"),
+    ]);
+    expect(paragraphsOf(document)[0]?.runs).toEqual([
+      { text: "beforeafter", bold: true },
+    ]);
   });
 
   it("splits runs at an attribute boundary", () => {
@@ -228,6 +310,45 @@ describe("readWpdContent", () => {
     expect(paragraphsOf(document)[0]?.runs).toEqual([{ text: "ab" }]);
   });
 
+  it("splits a run at strikeout, the same way as the other boolean attributes", () => {
+    const document = readDocumentArea([
+      ...text("a"),
+      ATTRIBUTE_ON,
+      STRIKEOUT,
+      ATTRIBUTE_ON,
+      ...text("b"),
+      ATTRIBUTE_OFF,
+      STRIKEOUT,
+      ATTRIBUTE_OFF,
+      ...text("c"),
+    ]);
+    expect(paragraphsOf(document)[0]?.runs).toEqual([
+      { text: "a" },
+      { text: "b", strike: true },
+      { text: "c" },
+    ]);
+  });
+
+  it("gives a plain run no optional keys at all, not keys holding undefined", () => {
+    const document = readDocumentArea([...text("plain")]);
+    const run = paragraphsOf(document)[0]?.runs[0];
+    expect(run).toBeDefined();
+    for (const key of ["strike", "fontFamily", "sizePt", "color"]) {
+      expect(run === undefined ? false : Object.hasOwn(run, key)).toBe(false);
+    }
+  });
+
+  it("gives a plain paragraph no optional keys at all, not keys holding undefined", () => {
+    const document = readDocumentArea([...text("plain")]);
+    const paragraph = paragraphsOf(document)[0];
+    expect(paragraph).toBeDefined();
+    for (const key of ["alignment", "headingLevel", "list", "constructs"]) {
+      expect(
+        paragraph === undefined ? false : Object.hasOwn(paragraph, key),
+      ).toBe(false);
+    }
+  });
+
   // "The surrounded text is passed over by the formatter and is not displayed."
   it("drops text between the Start and End of Text to Skip pair", () => {
     const document = readDocumentArea([
@@ -238,6 +359,43 @@ describe("readWpdContent", () => {
       ...text("keep"),
     ]);
     expect(paragraphsOf(document)[0]?.runs[0]?.text).toBe("keepkeep");
+  });
+
+  // An End of Text to Skip with no matching Start (a stray or duplicated code, possible in a document edited by a third-party writer) must not drive the skip depth negative: clamping at zero means the very next Start still raises it to exactly one, so the region it opens is skipped as normal. Without the clamp, an unmatched End would leave the depth one lower than it should be, and the following Start/End pair's own text would wrongly leak into the document instead of being dropped.
+  it("clamps skip depth at zero so an unmatched End of Text to Skip cannot leak a later skip region's text", () => {
+    const document = readDocumentArea([
+      ...text("keep"),
+      0x8d, // START_OF_TEXT_TO_SKIP
+      ...text("drop"),
+      0x8e, // END_OF_TEXT_TO_SKIP -- balances the Start above
+      0x8e, // an extra, unmatched END_OF_TEXT_TO_SKIP
+      0x8d, // START_OF_TEXT_TO_SKIP again
+      ...text("hidden"),
+      0x8e, // END_OF_TEXT_TO_SKIP
+      ...text("keep"),
+    ]);
+    expect(paragraphsOf(document)[0]?.runs[0]?.text).toBe("keepkeep");
+  });
+
+  // A font face change must split off whatever text already accumulated before it into its own run, so that earlier text keeps its own (absent) font family rather than being retroactively folded into the new one.
+  it("splits the run at a font face change, leaving earlier text without the new font family", () => {
+    const document = readDocumentArea(
+      [
+        ...text("before"),
+        ...variableFunction({
+          group: 0xd4,
+          subgroup: 0x1a,
+          prefixIds: [1],
+          nonDeletable: [0, 0, 0, 0, 0, 0, 0, 0],
+        }),
+        ...text("after"),
+      ],
+      [fontDescriptorPacket("Courier New")],
+    );
+    expect(paragraphsOf(document)[0]?.runs).toEqual([
+      { text: "before" },
+      { text: "after", fontFamily: "Courier New" },
+    ]);
   });
 
   it("takes a run's font family from the descriptor packet a font face change names", () => {
@@ -275,19 +433,106 @@ describe("readWpdContent", () => {
     });
   });
 
+  it("splits the run at a font size change, leaving earlier text without the new size", () => {
+    const document = readDocumentArea([
+      ...text("before"),
+      ...variableFunction({
+        group: 0xd4,
+        subgroup: 0x1b,
+        nonDeletable: [0x58, 0x02, 0, 0, 0, 0, 0, 0],
+      }),
+      ...text("after"),
+    ]);
+    expect(paragraphsOf(document)[0]?.runs).toEqual([
+      { text: "before" },
+      { text: "after", sizePt: 12 },
+    ]);
+  });
+
+  it("ignores a font size change whose non-deletable data is too short to hold a size word", () => {
+    const document = readDocumentArea([
+      ...variableFunction({
+        group: 0xd4,
+        subgroup: 0x1b,
+        nonDeletable: [0x58], // one byte -- not enough for the size word
+      }),
+      ...text("sized"),
+    ]);
+    expect(paragraphsOf(document)[0]?.runs[0]).toEqual({ text: "sized" });
+  });
+
+  it("reads a font size change whose non-deletable data is exactly the size word's own length", () => {
+    const document = readDocumentArea([
+      ...variableFunction({
+        group: 0xd4,
+        subgroup: 0x1b,
+        nonDeletable: [0x58, 0x02], // exactly two bytes, the size word itself and nothing more
+      }),
+      ...text("sized"),
+    ]);
+    expect(paragraphsOf(document)[0]?.runs[0]).toEqual({
+      text: "sized",
+      sizePt: 12,
+    });
+  });
+
+  it("ignores a font size change of exactly zero points", () => {
+    const document = readDocumentArea([
+      ...variableFunction({
+        group: 0xd4,
+        subgroup: 0x1b,
+        nonDeletable: [0, 0, 0, 0, 0, 0, 0, 0],
+      }),
+      ...text("sized"),
+    ]);
+    expect(paragraphsOf(document)[0]?.runs[0]).toEqual({ text: "sized" });
+  });
+
+  it("splits the run at a character colour change, leaving earlier text without the new colour", () => {
+    const document = readDocumentArea([
+      ...text("before"),
+      ...variableFunction({
+        group: 0xd4,
+        subgroup: 0x18,
+        nonDeletable: [102, 51, 204],
+      }),
+      ...text("after"),
+    ]);
+    expect(paragraphsOf(document)[0]?.runs).toEqual([
+      { text: "before" },
+      {
+        text: "after",
+        color: { r: 102 / 255, g: 51 / 255, b: 204 / 255 },
+      },
+    ]);
+  });
+
+  // applyCharacterGroup's own switch must fall through its default case, contributing nothing, for a character-group subgroup this reader names no handling for at all.
+  it("contributes nothing for a character-group subgroup with no named case", () => {
+    const document = readDocumentArea([
+      ...text("un"),
+      ...variableFunction({ group: 0xd4, subgroup: 0x19 }), // an unassigned character-group subgroup
+      ...text("broken"),
+    ]);
+    const paragraphs = paragraphsOf(document);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.runs[0]?.text).toBe("unbroken");
+  });
+
   it("reads a character colour change", () => {
     const document = readDocumentArea([
       ...variableFunction({
         group: 0xd4,
         subgroup: 0x18,
-        nonDeletable: [255, 0, 0],
+        // A distinct, non-zero, non-255 value on every channel: 0 or 255 would divide to the same result a stray multiplication would give.
+        nonDeletable: [102, 51, 204],
       }),
-      ...text("red"),
+      ...text("mix"),
     ]);
     expect(paragraphsOf(document)[0]?.runs[0]?.color).toEqual({
-      r: 1,
-      g: 0,
-      b: 0,
+      r: 102 / 255,
+      g: 51 / 255,
+      b: 204 / 255,
     });
   });
 
@@ -303,6 +548,19 @@ describe("readWpdContent", () => {
     expect(paragraphsOf(document)[0]?.alignment).toBe("center");
   });
 
+  // applyVariableFunction's own paragraph-group dispatch must actually gate on the subgroup being PARAGRAPH_SET_JUSTIFICATION -- a different subfunction in the same group, even one whose own first byte happens to look like a justification mode, must not be misread as one.
+  it("does not apply a justification change for an unrelated paragraph-group subfunction", () => {
+    const document = readDocumentArea([
+      ...variableFunction({
+        group: 0xd3,
+        subgroup: 0x01, // not PARAGRAPH_SET_JUSTIFICATION
+        nonDeletable: [2], // happens to look like "center" if misread as a justification mode
+      }),
+      ...text("plain"),
+    ]);
+    expect(paragraphsOf(document)[0]?.alignment).toBeUndefined();
+  });
+
   // "Subfunctions 0 to 28 (0x1C) of this group are interchangeable with the single-byte function codes 180 (0xB4) to 207 (0xCF) ... A program reading WP 7.0 documents must handle both."
   it("handles the multi-byte spelling of a hard end of line", () => {
     const document = readDocumentArea([
@@ -316,7 +574,142 @@ describe("readWpdContent", () => {
     ]);
   });
 
+  // applyVariableFunction's own group dispatch must fall through its default case, contributing nothing, for a variable-function group this reader names no handling for at all.
+  it("contributes nothing for a variable-function group with no named case", () => {
+    const document = readDocumentArea([
+      ...text("un"),
+      ...variableFunction({ group: 0xd8, subgroup: 0 }), // an unassigned variable-function group
+      ...text("broken"),
+    ]);
+    const paragraphs = paragraphsOf(document);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.runs[0]?.text).toBe("unbroken");
+  });
+
+  // Subfunction 0, Beginning of File, is the one End-of-Line subfunction with no single-byte spelling at all -- it exists solely as this group's own subgroup 0 -- and the SDK's own conversion table maps it to nothing: it contributes neither a character nor a paragraph break.
+  it("ignores the Beginning-of-File End-of-Line subfunction, reachable only through its multi-byte spelling", () => {
+    const document = readDocumentArea([
+      ...text("before"),
+      ...variableFunction({ group: 0xd0, subgroup: 0 }),
+      ...text("after"),
+    ]);
+    const paragraphs = paragraphsOf(document);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.runs[0]?.text).toBe("beforeafter");
+  });
+
+  // The shared content schema has no column-break block, so a hard end of column becomes a paragraph break instead, and the diagnostic sink is told exactly what was flattened away.
+  it("reports a column break becoming a paragraph break", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile([
+        ...text("first"),
+        ...variableFunction({ group: 0xd0, subgroup: 7 }),
+        ...text("second"),
+      ]),
+      { sink: (diagnostic) => diagnostics.push(diagnostic) },
+    );
+    expect(paragraphsOf(document).map((p) => p.runs[0]?.text)).toEqual([
+      "first",
+      "second",
+    ]);
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === WpdDiagnosticCodes.ColumnBreakFlattened,
+    );
+    expect(found?.message).toBe("A column break became a paragraph break.");
+  });
+
+  // "Both mark a permitted break point that is not currently taken, and neither shows a character": the invisible return contributes no text and does not split the run it sits in, exactly like the soft hyphen it is documented alongside.
+  it("contributes nothing for an invisible return in line", () => {
+    const document = readDocumentArea([
+      ...text("un"),
+      0x86, // INVISIBLE_RETURN_IN_LINE
+      ...text("broken"),
+    ]);
+    const paragraphs = paragraphsOf(document);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.runs[0]?.text).toBe("unbroken");
+  });
+
+  // "An auto-hyphen was inserted by the formatter at the end of a line" -- displayed exactly like the other end-of-line hyphen functions.
+  it("appends a hyphen for an auto-hyphen at the end of a line", () => {
+    const document = readDocumentArea([
+      ...text("auto"),
+      0x85, // AUTO_HYPHEN_AT_END_OF_LINE
+      ...text("mated"),
+    ]);
+    expect(paragraphsOf(document)[0]?.runs[0]?.text).toBe("auto-mated");
+  });
+
+  // "Whenever a [HRt] code appears alone at the top of a page that starts with a soft page break, the formatter changes the Hard Return code into a Dormant Hard Return code." The paragraph boundary the author typed is still there, so it still closes the paragraph.
+  it("splits paragraphs at a dormant hard return", () => {
+    const document = readDocumentArea([
+      ...text("first"),
+      0x87, // DORMANT_HARD_RETURN
+      ...text("second"),
+    ]);
+    expect(paragraphsOf(document).map((p) => p.runs[0]?.text)).toEqual([
+      "first",
+      "second",
+    ]);
+  });
+
+  // "The formatter inserts a soft End of Line, which causes centering to end, but not the paragraph" -- a wrap, so it becomes the same space every other soft end of line converts to.
+  it("appends a space for a soft end of center align", () => {
+    const document = readDocumentArea([
+      ...text("centred"),
+      0x88, // SOFT_END_OF_CENTER_ALIGN
+      ...text("text"),
+    ]);
+    const paragraphs = paragraphsOf(document);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.runs[0]?.text).toBe("centred text");
+  });
+
+  // "The Enter key is pressed, ending the line, the centering, and the paragraph."
+  it("splits paragraphs at a hard end of center align", () => {
+    const document = readDocumentArea([
+      ...text("first"),
+      0x89, // HARD_END_OF_CENTER_ALIGN
+      ...text("second"),
+    ]);
+    expect(paragraphsOf(document).map((p) => p.runs[0]?.text)).toEqual([
+      "first",
+      "second",
+    ]);
+  });
+
+  // A single-byte function code this switch names no case for at all -- one of the format's own formatting/bookkeeping markers this reader has no specific behaviour for -- must fall through to the default case and contribute neither characters nor structure, exactly like the codes with an explicit no-op case.
+  it("contributes nothing for a single-byte function code with no named case", () => {
+    const document = readDocumentArea([
+      ...text("un"),
+      0x8a, // an unassigned single-byte function code between INVISIBLE_RETURN_IN_LINE (0x86) and START_OF_TEXT_TO_SKIP (0x8d)
+      ...text("broken"),
+    ]);
+    const paragraphs = paragraphsOf(document);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.runs[0]?.text).toBe("unbroken");
+  });
+
   // A cell or row boundary with no Table Definition open has no grid to belong to, which a stray code left behind by an edit can produce. The text on either side still survives as paragraphs, in reading order.
+  // flushParagraphIfContent must still flush when the pending text is empty but a run has already been split off it (here, by an attribute change) -- checking only state.text.length would wrongly drop that already-built run.
+  it("flushes a paragraph at a boundary whose pending text is empty but whose runs are not", () => {
+    const document = readDocumentArea([
+      ...text("plain"),
+      ATTRIBUTE_ON,
+      BOLD,
+      ATTRIBUTE_ON,
+      0xc6,
+      ...text("next"),
+      0xbf,
+    ]);
+    expect(paragraphsOf(document).map((p) => p.runs[0]?.text)).toEqual([
+      "plain",
+      "next",
+    ]);
+  });
+
   it("flattens an orphaned cell boundary into paragraphs and says so", () => {
     const diagnostics: WpdDiagnostic[] = [];
     const document = readWpdContent(
@@ -327,11 +720,13 @@ describe("readWpdContent", () => {
       "cell",
       "next",
     ]);
-    expect(
-      diagnostics.filter(
-        (diagnostic) => diagnostic.code === WpdDiagnosticCodes.TableFlattened,
-      ),
-    ).toHaveLength(1);
+    const matches = diagnostics.filter(
+      (diagnostic) => diagnostic.code === WpdDiagnosticCodes.TableFlattened,
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.message).toBe(
+      "A table cell or row boundary appeared with no table definition open; its text became a paragraph.",
+    );
   });
 
   // The same document in both containers must read identically: a WordPerfect 6.x file writes the byte stream straight to disk, and WP7 onwards may wrap the identical stream in an OLE compound file.
@@ -340,6 +735,137 @@ describe("readWpdContent", () => {
     expect(
       readWpdContent(compoundFileWithStream(PERFECT_OFFICE_MAIN_STREAM, bare)),
     ).toEqual(readWpdContent(bare));
+  });
+
+  it("abandons a footnote left open across a paragraph boundary and reports it", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    const bytes = buildWpdFile([
+      ...variableFunction({ group: 0xd7, subgroup: 0x00, prefixIds: [1] }), // FOOTNOTE_ON
+      ...text("1"),
+      HARD_EOL,
+      ...text("next"),
+      ...variableFunction({ group: 0xd7, subgroup: 0x01 }), // FOOTNOTE_OFF
+    ]);
+    const document = readWpdContent(bytes, {
+      sink: (d) => diagnostics.push(d),
+    });
+    const paragraphs = paragraphsOf(document);
+    expect(
+      paragraphs.every((paragraph) => paragraph.constructs === undefined),
+    ).toBe(true);
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.NoteSpansParagraphs,
+    );
+    expect(found?.message).toBe(
+      "A footnote or endnote's own On/Off pair straddled a paragraph boundary, which the run-scoped note anchor cannot express; its reference text became ordinary paragraph text with no note anchor.",
+    );
+  });
+
+  it("reports the exact missing-prefix-packet message for a font face change naming an unknown prefix ID", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(
+      buildWpdFile([
+        ...variableFunction({
+          group: 0xd4,
+          subgroup: 0x1a,
+          prefixIds: [7],
+          nonDeletable: [0, 0, 0, 0, 0, 0, 0, 0],
+        }),
+        ...text("plain"),
+      ]),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.MissingPrefixPacket,
+    );
+    expect(found?.message).toBe(
+      "A font face change names prefix ID 7, which this document's index does not carry.",
+    );
+  });
+
+  it("does not apply a font face change when the named packet is not a font descriptor", () => {
+    const document = readDocumentArea(
+      [
+        ...variableFunction({
+          group: 0xd4,
+          subgroup: 0x1a,
+          prefixIds: [1],
+          nonDeletable: [0, 0, 0, 0, 0, 0, 0, 0],
+        }),
+        ...text("plain"),
+      ],
+      [{ packetType: 0x08, bytes: new Uint8Array(0) }], // General WP Text, not a font descriptor
+    );
+    expect(paragraphsOf(document)[0]?.runs[0]).toEqual({ text: "plain" });
+  });
+
+  it("does not apply a font face change when the descriptor packet's own typeface name cannot be read", () => {
+    const document = readDocumentArea(
+      [
+        ...variableFunction({
+          group: 0xd4,
+          subgroup: 0x1a,
+          prefixIds: [1],
+          nonDeletable: [0, 0, 0, 0, 0, 0, 0, 0],
+        }),
+        ...text("plain"),
+      ],
+      [{ packetType: 0x55, bytes: new Uint8Array(0) }], // font descriptor packet type, but too short for a typeface name
+    );
+    expect(paragraphsOf(document)[0]?.runs[0]).toEqual({ text: "plain" });
+  });
+
+  // The packet-type check must actually gate the read, not just happen to agree with it: a packet whose own bytes would decode as a valid typeface if read as a font descriptor, but which is not one, must not have its bytes read that way at all.
+  it("does not read a non-font-descriptor packet's bytes as a typeface even when they would decode as one", () => {
+    const descriptorShapedBytes = fontDescriptorPacket("Courier New").bytes;
+    const document = readDocumentArea(
+      [
+        ...variableFunction({
+          group: 0xd4,
+          subgroup: 0x1a,
+          prefixIds: [1],
+          nonDeletable: [0, 0, 0, 0, 0, 0, 0, 0],
+        }),
+        ...text("plain"),
+      ],
+      [{ packetType: 0x08, bytes: descriptorShapedBytes }], // General WP Text, not a font descriptor, despite the descriptor-shaped bytes
+    );
+    expect(paragraphsOf(document)[0]?.runs[0]).toEqual({ text: "plain" });
+  });
+
+  // A font face change that names an unreadable typeface must leave a PREVIOUSLY set font family in place for the run it starts, rather than clearing it -- the failed change contributes nothing, it does not reset what came before it.
+  it("keeps a previously set font family when a later font face change cannot be read", () => {
+    const document = readDocumentArea(
+      [
+        ...variableFunction({
+          group: 0xd4,
+          subgroup: 0x1a,
+          prefixIds: [1],
+          nonDeletable: [0, 0, 0, 0, 0, 0, 0, 0],
+        }),
+        ...text("first"),
+        0xf2, // ATTRIBUTE_ON (bold), forcing a run split independent of the font logic under test
+        12, // BOLD
+        0xf2,
+        ...variableFunction({
+          group: 0xd4,
+          subgroup: 0x1a,
+          prefixIds: [2],
+          nonDeletable: [0, 0, 0, 0, 0, 0, 0, 0],
+        }),
+        ...text("second"),
+      ],
+      [
+        fontDescriptorPacket("Georgia"),
+        { packetType: 0x55, bytes: new Uint8Array(0) }, // font descriptor packet type, but too short for a typeface name
+      ],
+    );
+    expect(
+      paragraphsOf(document)[0]?.runs.map((run) => [run.text, run.fontFamily]),
+    ).toEqual([
+      ["first", "Georgia"],
+      ["second", "Georgia"],
+    ]);
   });
 
   describe("style packet resolution", () => {
@@ -453,6 +979,23 @@ describe("readWpdContent", () => {
       ]);
     });
 
+    it("joins a field instruction split across more than one run with no separator", () => {
+      const document = readDocumentArea([
+        ...variableFunction({ group: MERGE_GROUP, subgroup: FIELD_ON }),
+        ...text("Company"),
+        0xf2, // ATTRIBUTE_ON (bold), splitting the instruction across two runs
+        12, // BOLD
+        0xf2,
+        ...text("Name"),
+        ...variableFunction({ group: MERGE_GROUP, subgroup: FIELD_OFF }),
+      ]);
+      const construct = paragraphsOf(document)[0]?.constructs?.[0]?.descriptor;
+      expect(construct).toEqual({
+        kind: "field",
+        instruction: "CompanyName",
+      });
+    });
+
     it("reports every other merge subfunction through the diagnostic sink, unchanged", () => {
       const diagnostics: WpdDiagnostic[] = [];
       const bytes = buildWpdFile([
@@ -484,12 +1027,14 @@ describe("readWpdContent", () => {
       expect(
         paragraphs.every((paragraph) => paragraph.constructs === undefined),
       ).toBe(true);
-      expect(
-        diagnostics.filter(
-          (diagnostic) =>
-            diagnostic.code === WpdDiagnosticCodes.MergeFieldSpansParagraphs,
-        ),
-      ).toHaveLength(1);
+      const matches = diagnostics.filter(
+        (diagnostic) =>
+          diagnostic.code === WpdDiagnosticCodes.MergeFieldSpansParagraphs,
+      );
+      expect(matches).toHaveLength(1);
+      expect(matches[0]?.message).toBe(
+        "A merge field's own On/Off pair straddled a paragraph boundary, which the run-scoped field construct cannot express; its text became ordinary paragraph text with no field tag.",
+      );
     });
   });
 });
@@ -499,12 +1044,75 @@ describe("readWpd", () => {
     const tree = readWpd(buildWpdFile(text("Hello")));
     expect(tree.kind).toBe("wordprocessing");
   });
+
+  it("gives a plain document's own section no headers, footers, or watermarks keys at all", () => {
+    const tree = readWpd(buildWpdFile(text("plain")));
+    if (tree.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing");
+    }
+    const section = tree.children[0]?.node;
+    expect(section).toBeDefined();
+    for (const key of ["headers", "footers", "watermarks"]) {
+      expect(section === undefined ? false : Object.hasOwn(section, key)).toBe(
+        false,
+      );
+    }
+  });
+
+  // The tree-form section must actually carry a header, footer, and watermark when the document declares them -- proving readWpd's own headers/footers/watermarks spreads fire when non-empty, not just that they stay absent when empty.
+  it("carries a header, footer, and watermark on the tree-form section", () => {
+    function furniturePacket(text_: string) {
+      const documentArea = text(text_);
+      const header = [
+        1,
+        0,
+        6,
+        0,
+        documentArea.length & 0xff,
+        (documentArea.length >>> 8) & 0xff,
+      ];
+      return {
+        packetType: 0x08,
+        bytes: new Uint8Array([...header, ...documentArea]),
+      };
+    }
+    function furnitureFunction(subgroup: number, prefixId: number): number[] {
+      return variableFunction({
+        group: 0xd6,
+        subgroup,
+        prefixIds: [prefixId],
+        nonDeletable: [1, 0], // occurrence: odd/default pages
+      });
+    }
+    const tree = readWpd(
+      buildWpdFile(
+        [
+          ...text("body"),
+          ...furnitureFunction(0x00, 1), // header
+          ...furnitureFunction(0x02, 2), // footer
+          ...furnitureFunction(0x04, 3), // watermark
+        ],
+        [furniturePacket("H"), furniturePacket("F"), furniturePacket("W")],
+      ),
+    );
+    if (tree.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing");
+    }
+    const section = tree.children[0]?.node;
+    if (section?.kind !== "section") {
+      throw new Error("expected a section node");
+    }
+    expect(Object.hasOwn(section, "headers")).toBe(true);
+    expect(Object.hasOwn(section, "footers")).toBe(true);
+    expect(Object.hasOwn(section, "watermarks")).toBe(true);
+  });
 });
 
 describe("boxes", () => {
   const BOX_GROUP = 0xdf;
   const PAGE_ANCHORED_BOX = 0x02;
   const BOX_CONTENT_TYPE_TEXT = 1;
+  const BOX_CONTENT_TYPE_LINKED_TEXT = 2;
   const BOX_CONTENT_TYPE_EQUATION = 4;
   const BOX_CONTENT_TYPE_IMAGE = 3;
 
@@ -612,6 +1220,130 @@ describe("boxes", () => {
     });
   });
 
+  it("lifts a linked-text box's own content the same way as a plain text box", () => {
+    const document = readDocumentArea(
+      [...boxFunction(BOX_CONTENT_TYPE_LINKED_TEXT, [1, 2])],
+      [
+        { packetType: 0x41, bytes: new Uint8Array(0) },
+        generalWpTextPacket(text("linked text")),
+      ],
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    const block = document.sections[0]?.blocks.find(
+      (b) => b.kind === "embeddedObject",
+    );
+    if (
+      block?.kind !== "embeddedObject" ||
+      block.document.kind !== "wordprocessing"
+    ) {
+      throw new Error("expected a nested wordprocessing document");
+    }
+    expect(block.document.sections[0]?.blocks[0]).toMatchObject({
+      kind: "paragraph",
+      runs: [{ text: "linked text" }],
+    });
+  });
+
+  it("does not treat an unrecognised content type as text-like, even with a readable General WP Text packet at its prefix ID", () => {
+    const UNKNOWN_CONTENT_TYPE = 5;
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile(
+        [...boxFunction(UNKNOWN_CONTENT_TYPE, [1, 2])],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          generalWpTextPacket(text("should not be lifted")),
+        ],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    expect(
+      document.sections[0]?.blocks.some((b) => b.kind === "embeddedObject"),
+    ).toBe(false);
+    expect(
+      diagnostics.some(
+        (d) => d.code === WpdDiagnosticCodes.BoxContentUnresolved,
+      ),
+    ).toBe(true);
+  });
+
+  it("reports the exact box-content-unresolved message for a text-like box whose content packet is not General WP Text", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(
+      buildWpdFile(
+        [...boxFunction(BOX_CONTENT_TYPE_TEXT, [1, 2])],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          { packetType: 0x55, bytes: new Uint8Array(0) }, // font descriptor, not General WP Text
+        ],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.BoxContentUnresolved,
+    );
+    expect(found?.message).toBe(
+      "This document contains a box whose content this reader could not read -- an image, OLE object, or other content type this reader does not yet decode into the shared schema.",
+    );
+  });
+
+  it("reports the exact box-frame-unresolved message for a text-like box stating no width or height", () => {
+    const noFrameBox = variableFunction({
+      group: BOX_GROUP,
+      subgroup: PAGE_ANCHORED_BOX,
+      prefixIds: [1, 2],
+      nonDeletable: boxNonDeletable(
+        0x2000, // bit 13 (content) only -- no position/size override at all
+        new Map([[13, contentBlock(BOX_CONTENT_TYPE_TEXT)]]),
+      ),
+    });
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile(
+        [...noFrameBox],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          generalWpTextPacket(text("boxed")),
+        ],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    expect(
+      document.sections[0]?.blocks.some((b) => b.kind === "embeddedObject"),
+    ).toBe(false);
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.BoxFrameUnresolved,
+    );
+    expect(found?.message).toBe(
+      "This document contains a box whose content this reader could read, but whose function-level override states no width and height this reader can trust, so its content was not lifted.",
+    );
+  });
+
+  it("flushes preceding text into its own paragraph before a text-like box's own embedded document", () => {
+    const document = readDocumentArea(
+      [...text("before"), ...boxFunction(BOX_CONTENT_TYPE_TEXT, [1, 2])],
+      [
+        { packetType: 0x41, bytes: new Uint8Array(0) },
+        generalWpTextPacket(text("boxed")),
+      ],
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    const blocks = document.sections[0]?.blocks ?? [];
+    expect(blocks.map((b) => b.kind)).toEqual(["paragraph", "embeddedObject"]);
+    const paragraph = blocks[0];
+    expect(
+      paragraph?.kind === "paragraph"
+        ? paragraph.runs.map((run) => run.text).join("")
+        : undefined,
+    ).toBe("before");
+  });
+
   it("lifts an equation box's own content as unparsed residue, not fabricated MathML", () => {
     const document = readDocumentArea(
       [...boxFunction(BOX_CONTENT_TYPE_EQUATION, [1, 2])],
@@ -638,6 +1370,41 @@ describe("boxes", () => {
     });
   });
 
+  // plainTextOf must only ever read paragraph blocks -- a non-paragraph block folded alongside them (a page break, here) carries no `runs` field at all and must be skipped rather than read as one. It must also join a paragraph's own runs with no separator, and join separate paragraphs with a newline.
+  it("builds an equation's plain-text residue from only its paragraph blocks, joined correctly", () => {
+    const document = readDocumentArea(
+      [...boxFunction(BOX_CONTENT_TYPE_EQUATION, [1, 2])],
+      [
+        { packetType: 0x41, bytes: new Uint8Array(0) },
+        generalWpTextPacket([
+          ...text("a"),
+          0xf2, // ATTRIBUTE_ON (bold), splitting the first paragraph across two runs
+          12, // BOLD
+          0xf2,
+          ...text("b"),
+          0xcc, // HARD_EOL: ends the first paragraph
+          0xc7, // hard end of page: a non-paragraph block between the two paragraphs
+          ...text("c"),
+        ]),
+      ],
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    const block = document.sections[0]?.blocks.find(
+      (b) => b.kind === "embeddedObject",
+    );
+    if (block?.kind !== "embeddedObject")
+      throw new Error("expected embeddedObject");
+    if (block.document.kind !== "formula") {
+      throw new Error("expected a formula document");
+    }
+    // The hard end of page unconditionally flushes a paragraph before it, which is empty here (the hard return just before it already flushed the pending text) -- so the join sees three paragraphs ("ab", "", "c"), with the intervening page break filtered out entirely rather than read as a fourth.
+    expect(block.document.formula.source).toEqual({
+      format: "wpd",
+      xml: "ab\n\nc",
+    });
+  });
+
   it("reports an image box through the diagnostic sink rather than guessing at its content", () => {
     const diagnostics: WpdDiagnostic[] = [];
     const bytes = buildWpdFile(
@@ -648,12 +1415,14 @@ describe("boxes", () => {
       ],
     );
     readWpdContent(bytes, { sink: (d) => diagnostics.push(d) });
-    expect(
-      diagnostics.filter(
-        (diagnostic) =>
-          diagnostic.code === WpdDiagnosticCodes.BoxContentUnresolved,
-      ),
-    ).toHaveLength(1);
+    const matches = diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.code === WpdDiagnosticCodes.BoxContentUnresolved,
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.message).toBe(
+      "This document contains an image box whose content packet carries no decodable PNG or JPEG payload -- a WPG graphic or other image spelling this reader does not decode.",
+    );
   });
 
   // A minimal well-formed 1x1 white PNG: signature, IHDR, IDAT, IEND -- hand-built here as bytes so the fixture needs no encoder dependency, and structurally complete so stream/image.ts's chunk walk bounds it exactly.
@@ -709,6 +1478,62 @@ describe("boxes", () => {
     expect(block.widthPt).toBeCloseTo(86.4);
     expect(block.heightPt).toBeCloseTo(43.2);
     expect(block.floatPosition).toBeUndefined();
+  });
+
+  it("reports the exact box-frame-unresolved message for an image box stating no width or height", () => {
+    const png = tinyPng();
+    const noFrameBox = variableFunction({
+      group: BOX_GROUP,
+      subgroup: PAGE_ANCHORED_BOX,
+      prefixIds: [1, 2],
+      nonDeletable: boxNonDeletable(
+        0x2000, // bit 13 (content) only -- no position/size override at all
+        new Map([[13, contentBlock(BOX_CONTENT_TYPE_IMAGE)]]),
+      ),
+    });
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile(
+        [...noFrameBox],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          { packetType: 0x42, bytes: png },
+        ],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    expect(document.sections[0]?.blocks.some((b) => b.kind === "image")).toBe(
+      false,
+    );
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.BoxFrameUnresolved,
+    );
+    expect(found?.message).toBe(
+      "This document contains a box whose content this reader could read, but whose function-level override states no width and height this reader can trust, so its content was not lifted.",
+    );
+  });
+
+  it("flushes preceding text into its own paragraph before an image box's own image block", () => {
+    const png = tinyPng();
+    const document = readDocumentArea(
+      [...text("before"), ...boxFunction(BOX_CONTENT_TYPE_IMAGE, [1, 2])],
+      [
+        { packetType: 0x41, bytes: new Uint8Array(0) },
+        { packetType: 0x42, bytes: png },
+      ],
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    const blocks = document.sections[0]?.blocks ?? [];
+    expect(blocks.map((b) => b.kind)).toEqual(["paragraph", "image"]);
+    const paragraph = blocks[0];
+    expect(
+      paragraph?.kind === "paragraph"
+        ? paragraph.runs.map((run) => run.text).join("")
+        : undefined,
+    ).toBe("before");
   });
 
   it("carries an image box's absolute page position as the image's floatPosition", () => {
@@ -796,6 +1621,66 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
       nonDeletable: [occurrence, 0],
     });
   }
+
+  it("gives a plain flat document's own section no headers, footers, or watermarks keys at all", () => {
+    const document = readDocumentArea(text("plain"));
+    if (document.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing");
+    }
+    const section = document.sections[0];
+    expect(section).toBeDefined();
+    for (const key of ["headers", "footers", "watermarks"]) {
+      expect(section === undefined ? false : Object.hasOwn(section, key)).toBe(
+        false,
+      );
+    }
+  });
+
+  it("reports the exact could-not-resolve message for a header naming no packet, without setting a header slot", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile([
+        ...text("body"),
+        ...variableFunction({
+          group: 0xd6,
+          subgroup: 0x00,
+          prefixIds: [7], // names a prefix ID this document's index carries no packet for
+          nonDeletable: [1, 0],
+        }),
+      ]),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    expect(Object.hasOwn(document.sections[0] ?? {}, "headers")).toBe(false);
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.HeaderFooterDropped,
+    );
+    expect(found?.message).toBe(
+      "This document declares a header, footer, or watermark whose body packet this reader could not resolve; it was not lifted.",
+    );
+  });
+
+  it("reports the exact could-not-read message for a header whose body packet cannot be parsed", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile(
+        [...text("body"), ...headerFunction(0x00, 0x01)],
+        // General WP Text, the right packet type, but too short for even its own block-count word.
+        [{ packetType: 0x08, bytes: new Uint8Array(0) }],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    expect(Object.hasOwn(document.sections[0] ?? {}, "headers")).toBe(false);
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.HeaderFooterDropped,
+    );
+    expect(found?.message).toBe(
+      "This document declares a header, footer, or watermark whose body packet this reader could not read; it was not lifted.",
+    );
+  });
 
   it("lifts a header occurring on odd pages into the section's default header slot", () => {
     const document = readDocumentArea(
@@ -954,9 +1839,12 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
         b.kind === "paragraph" ? b.runs.map((run) => run.text).join("") : "",
       ),
     ).toEqual(["First header"]);
-    expect(
-      diagnostics.some((d) => d.code === "wpd/header-footer-dropped"),
-    ).toBe(true);
+    const found = diagnostics.find(
+      (d) => d.code === "wpd/header-footer-dropped",
+    );
+    expect(found?.message).toBe(
+      "This document declares a second header for the default slot -- WordPerfect's own A/B two-slot-per-kind mechanism, which the shared one-flow-per-slot page-furniture vocabulary does not carry; the first header to claim the slot is the one lifted.",
+    );
   });
 
   it("anchors a footnote reference in the flat form and carries its body in the tree's definitions table", () => {
@@ -988,9 +1876,13 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
       throw new Error("expected an anchor descriptor");
     }
     // The flat form reports the body it cannot carry.
-    expect(
-      diagnostics.filter((d) => d.code === "wpd/note-dropped"),
-    ).toHaveLength(1);
+    const noteDroppedMatches = diagnostics.filter(
+      (d) => d.code === "wpd/note-dropped",
+    );
+    expect(noteDroppedMatches).toHaveLength(1);
+    expect(noteDroppedMatches[0]?.message).toBe(
+      "This document contains a footnote whose body the flat ContentDocument has no home for; its reference anchor survives and readWpd lifts the body into the tree form's definitions table.",
+    );
 
     const tree = readWpd(buildWpdFile(documentArea, [noteBody]));
     // The definitions table is deliberately tenant-loose (document-schema.js's own design), so the whole entry is asserted in one toEqual rather than through typed field access.
@@ -1004,6 +1896,58 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
         },
       ],
     });
+    // No OLE objects anywhere in this document -- the attachments table must not appear at all, not even empty.
+    expect(tree.attachments).toBeUndefined();
+  });
+
+  it("reports the exact could-not-read message for a note whose body packet is the wrong type", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(
+      buildWpdFile(
+        [
+          ...text("See this"),
+          ...variableFunction({ group: 0xd7, subgroup: 0x00, prefixIds: [1] }),
+          ...text("1"),
+          ...variableFunction({ group: 0xd7, subgroup: 0x01 }),
+        ],
+        [{ packetType: 0x55, bytes: new Uint8Array(0) }], // a real packet, but not General WP Text
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.NoteDropped,
+    );
+    expect(found?.message).toBe(
+      "This document contains a footnote or endnote whose body packet this reader could not read; its reference anchor survives and its body does not.",
+    );
+  });
+
+  // The marker text is built from every run between a note's On and Off, flushing whatever text is still pending first -- and only falls back to a generated numeral when that text is genuinely empty. A marker that IS real text, spanning more than one run and happening to be truthy, must be used as-is rather than replaced by the numeral, and the numeral itself must come from the notes already carried plus one, not minus one.
+  it("builds a multi-run marker over the generated-numeral fallback, and numbers a genuinely empty marker correctly", () => {
+    const bodies = [
+      generalWpTextPacket(text("first body")),
+      generalWpTextPacket(text("second body")),
+    ];
+    const tree = readWpd(
+      buildWpdFile(
+        [
+          // Note A: an empty reference marker -- must fall back to the generated numeral "1" (state.notes.length is 0 at this point).
+          ...variableFunction({ group: 0xd7, subgroup: 0x00, prefixIds: [1] }),
+          ...variableFunction({ group: 0xd7, subgroup: 0x01 }),
+          // Note B: a genuine, non-empty, two-run marker ("star") that must win over the fallback numeral ("2").
+          ...variableFunction({ group: 0xd7, subgroup: 0x00, prefixIds: [2] }),
+          ...text("st"),
+          0xf2, // ATTRIBUTE_ON (bold), splitting the marker across two runs
+          12, // BOLD
+          0xf2,
+          ...text("ar"),
+          ...variableFunction({ group: 0xd7, subgroup: 0x01 }),
+        ],
+        bodies,
+      ),
+    );
+    expect(tree.definitions?.["note-1"]?.marker).toBe("1");
+    expect(tree.definitions?.["note-2"]?.marker).toBe("star");
   });
 
   it("carries an endnote pair as the endnote tenant", () => {
@@ -1020,6 +1964,24 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
     );
     const definition = tree.definitions?.["note-1"];
     expect(definition?.kind).toBe("endnote");
+  });
+
+  // An unrelated subfunction sharing the D7 group (neither Footnote Off nor Endnote Off) must not be mistaken for a closing code and prematurely abandon a note already open -- the note must still resolve normally once its own real Off arrives.
+  it("does not abandon an open footnote for an unrelated subfunction sharing its own function group", () => {
+    const tree = readWpd(
+      buildWpdFile(
+        [
+          ...variableFunction({ group: 0xd7, subgroup: 0x00, prefixIds: [1] }), // Footnote On
+          ...text("mark"),
+          ...variableFunction({ group: 0xd7, subgroup: 0x04 }), // an unassigned D7 subfunction, neither an On nor an Off
+          ...variableFunction({ group: 0xd7, subgroup: 0x01 }), // Footnote Off
+        ],
+        [generalWpTextPacket(text("The fine print"))],
+      ),
+    );
+    const definition = tree.definitions?.["note-1"];
+    expect(definition?.kind).toBe("footnote");
+    expect(definition?.marker).toBe("mark");
   });
 });
 
@@ -1162,9 +2124,13 @@ describe("native OLE objects (#1191)", () => {
     // The flat read recovers the bytes but has no field for them, and says so through the OLE-specific code rather than the generic box-content-unresolved one.
     const diagnostics: WpdDiagnostic[] = [];
     readWpdContent(compound, { sink: (d) => diagnostics.push(d) });
-    expect(
-      diagnostics.filter((d) => d.code === WpdDiagnosticCodes.OleObjectDropped),
-    ).toHaveLength(1);
+    const oleDroppedMatches = diagnostics.filter(
+      (d) => d.code === WpdDiagnosticCodes.OleObjectDropped,
+    );
+    expect(oleDroppedMatches).toHaveLength(1);
+    expect(oleDroppedMatches[0]?.message).toBe(
+      "This document embeds a native OLE object ('OLE10') whose bytes the flat ContentDocument has no home for; readWpd lifts them into the tree form's attachments table.",
+    );
     expect(
       diagnostics.filter(
         (d) => d.code === WpdDiagnosticCodes.BoxContentUnresolved,
@@ -1178,6 +2144,8 @@ describe("native OLE objects (#1191)", () => {
       name: "OLE10",
       base64: bytesToBase64(nativeBytes),
     });
+    // No notes anywhere in this document -- the definitions table must not appear at all, not even empty.
+    expect(tree.definitions).toBeUndefined();
   });
 
   it("carries an OLE 1 object's inline descriptor bytes as a tree-form attachment in a bare file", () => {
@@ -1207,6 +2175,8 @@ describe("native OLE objects (#1191)", () => {
       name: "ole1-2",
       base64: bytesToBase64(new Uint8Array(ole1Data)),
     });
+    // No footnotes or endnotes rode along with the OLE object, so the tree carries no definitions table entry at all -- not merely an empty one.
+    expect(tree.definitions).toBeUndefined();
   });
 
   it("collapses two boxes naming the same OLE object into one attachment entry", () => {
@@ -1246,5 +2216,481 @@ describe("native OLE objects (#1191)", () => {
     expect(
       diagnostics.filter((d) => d.code === WpdDiagnosticCodes.OleObjectDropped),
     ).toHaveLength(0);
+  });
+});
+
+describe("WPG vector graphics embedded in an image box", () => {
+  const BOX_GROUP = 0xdf;
+  const PAGE_ANCHORED_BOX = 0x02;
+  const BOX_CONTENT_TYPE_IMAGE = 3;
+  const PACKET_TYPE_GRAPHICS_CACHED_FILE_DATA = 0x6f;
+
+  function putUint16(bytes: number[], offset: number, value: number): void {
+    bytes[offset] = value & 0xff;
+    bytes[offset + 1] = (value >>> 8) & 0xff;
+  }
+
+  function contentBlock(contentType: number): number[] {
+    const flags: number[] = [0, 0];
+    putUint16(flags, 0, 0x4000);
+    return [...flags, contentType];
+  }
+
+  function positionBlock(widthWpu: number, heightWpu: number): number[] {
+    const flags: number[] = [0, 0];
+    putUint16(flags, 0, 0x0c00);
+    const width = [0, 0, 0];
+    putUint16(width, 1, widthWpu);
+    const height = [0, 0, 0];
+    putUint16(height, 1, heightWpu);
+    return [...flags, ...width, ...height];
+  }
+
+  function boxNonDeletable(
+    overrideFlags: number,
+    blocks: ReadonlyMap<number, readonly number[]>,
+  ): number[] {
+    const bytes = new Array<number>(18).fill(0);
+    putUint16(bytes, 18, overrideFlags);
+    for (let bit = 15; bit >= 5; bit -= 1) {
+      const data = blocks.get(bit);
+      if (data === undefined) {
+        continue;
+      }
+      putUint16(bytes, bytes.length, data.length);
+      bytes.push(...data);
+    }
+    return bytes;
+  }
+
+  // An image box naming a Graphics Filename packet at prefix ID 2, itself naming one Graphics Cached File Data child at prefix ID 3 -- the one path stream/wpg.ts's own decoder is reached through. `withFrame` false omits the position override entirely, for the "no trustworthy frame" branch.
+  function imageBoxFunction(withFrame = true): number[] {
+    const blocks = new Map<number, readonly number[]>([
+      [13, contentBlock(BOX_CONTENT_TYPE_IMAGE)],
+    ]);
+    if (withFrame) {
+      blocks.set(14, positionBlock(1440, 720));
+    }
+    return variableFunction({
+      group: BOX_GROUP,
+      subgroup: PAGE_ANCHORED_BOX,
+      prefixIds: [1, 2],
+      nonDeletable: boxNonDeletable(withFrame ? 0x6000 : 0x2000, blocks),
+    });
+  }
+
+  function graphicsFilenamePacket() {
+    return {
+      packetType: 0x40,
+      flags: 0x01,
+      bytes: new Uint8Array([1, 0, 3, 0, 0, 0, 0, 0]),
+    };
+  }
+
+  function graphicsCachedFileDataPacket(wpgBytes: Uint8Array) {
+    return {
+      packetType: PACKET_TYPE_GRAPHICS_CACHED_FILE_DATA,
+      bytes: wpgBytes,
+    };
+  }
+
+  function word(value: number): number[] {
+    return [value & 0xff, (value >>> 8) & 0xff];
+  }
+
+  function dword(value: number): number[] {
+    return [...word(value & 0xffff), ...word((value >>> 16) & 0xffff)];
+  }
+
+  function wpgRecord(type: number, data: readonly number[]): number[] {
+    return [0x0f, type, 0, data.length, ...data];
+  }
+
+  // A minimal, well-formed WPG 2.x stream: the 26-byte prefix, a Start WPG stating a 288x144pt extent at 72ppi, one framed Rectangle vector, and End WPG.
+  function wpgFile(options: {
+    readonly majorVersion?: number;
+    readonly encrypted?: boolean;
+    readonly withRecordStream?: boolean;
+    readonly withVector?: boolean;
+  }): Uint8Array {
+    const majorVersion = options.majorVersion ?? 2;
+    const startWpgData = [
+      ...word(72),
+      ...word(72),
+      0,
+      ...word(0),
+      ...word(0),
+      ...word(0x7fff),
+      ...word(0x7fff),
+      ...word(0),
+      ...word(0),
+      ...word(288),
+      ...word(144),
+    ];
+    const records =
+      options.withRecordStream === false
+        ? []
+        : [
+            ...wpgRecord(0x01, startWpgData),
+            ...(options.withVector === false
+              ? []
+              : wpgRecord(0x18, [
+                  ...word(0x8000),
+                  ...word(0),
+                  ...word(0),
+                  ...word(10),
+                  ...word(10),
+                  ...word(0),
+                  ...word(0),
+                ])),
+            ...wpgRecord(0x02, []),
+          ];
+    const head = [
+      0xff,
+      0x57,
+      0x50,
+      0x43,
+      ...dword(26),
+      1,
+      0x16,
+      majorVersion,
+      0,
+      ...word(options.encrypted ? 1 : 0),
+      ...word(26),
+      0,
+      0,
+      ...word(0),
+      ...dword(26 + records.length),
+      ...word(0),
+    ];
+    return new Uint8Array([...head, ...records]);
+  }
+
+  it("lifts a decoded WPG graphic as a nested drawing embeddedObject, naming its one skipped record", () => {
+    // A Polyspline record (0x16, unrecognised by this reader) rides alongside the framed rectangle, so the decode both succeeds and reports a skipped record.
+    const wpg = wpgFile({});
+    const withSkip = new Uint8Array([
+      ...wpg.subarray(0, wpg.length - 4), // drop the trailing End WPG record
+      ...wpgRecord(0x16, [
+        ...word(0x8000),
+        ...word(2),
+        ...word(0),
+        ...word(0),
+        ...word(5),
+        ...word(5),
+      ]),
+      ...wpgRecord(0x02, []),
+    ]);
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile(
+        [...imageBoxFunction()],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          graphicsFilenamePacket(),
+          graphicsCachedFileDataPacket(withSkip),
+        ],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing");
+    }
+    const block = document.sections[0]?.blocks.find(
+      (b) => b.kind === "embeddedObject",
+    );
+    if (block?.kind !== "embeddedObject") {
+      throw new Error("expected an embeddedObject block");
+    }
+    expect(block.objectKind).toBe("drawing");
+    expect(block.frame).toEqual({
+      xPt: 0,
+      yPt: 0,
+      widthPt: 86.4,
+      heightPt: 43.2,
+    });
+    if (block.document.kind !== "drawing") {
+      throw new Error("expected a drawing document");
+    }
+    expect(block.document.pages).toHaveLength(1);
+    expect(block.document.pages[0]?.size).toEqual({
+      widthPt: 288,
+      heightPt: 144,
+    });
+    expect(block.document.pages[0]?.vectors).toHaveLength(1);
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.WpgRecordsUndecoded,
+    );
+    expect(found?.message).toBe(
+      "This document embeds a WPG vector graphic that partially decoded; the following record types were skipped: Polyspline.",
+    );
+  });
+
+  it("flushes preceding text into its own paragraph before a decoded WPG's own drawing block", () => {
+    const wpg = wpgFile({});
+    const document = readWpdContent(
+      buildWpdFile(
+        [...text("before"), ...imageBoxFunction()],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          graphicsFilenamePacket(),
+          graphicsCachedFileDataPacket(wpg),
+        ],
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing");
+    }
+    const blocks = document.sections[0]?.blocks ?? [];
+    expect(
+      blocks.map((b) =>
+        b.kind === "paragraph"
+          ? "paragraph"
+          : b.kind === "embeddedObject"
+            ? "embeddedObject"
+            : b.kind,
+      ),
+    ).toEqual(["paragraph", "embeddedObject"]);
+    const paragraph = blocks.find((b) => b.kind === "paragraph");
+    expect(
+      paragraph?.kind === "paragraph"
+        ? paragraph.runs.map((run) => run.text).join("")
+        : undefined,
+    ).toBe("before");
+  });
+
+  it("carries a decoded WPG graphic's own text shapes alongside its vectors", () => {
+    const wpg = wpgFile({});
+    // A Text Block (with one extension, its Text Data) inserted before the trailing End WPG record, alongside the rectangle wpgFile({}) already carries as a vector.
+    const withShape = new Uint8Array([
+      ...wpg.subarray(0, wpg.length - 4),
+      0x0f,
+      0x1d,
+      1,
+      10, // extension count 1, [flags word, x, y, width, height]
+      ...word(0),
+      ...word(10),
+      ...word(10),
+      ...word(60),
+      ...word(50),
+      ...wpgRecord(0x0f, [...text("Hi"), 0xcc]),
+      ...wpgRecord(0x02, []),
+    ]);
+    const document = readWpdContent(
+      buildWpdFile(
+        [...imageBoxFunction()],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          graphicsFilenamePacket(),
+          graphicsCachedFileDataPacket(withShape),
+        ],
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing");
+    }
+    const block = document.sections[0]?.blocks.find(
+      (b) => b.kind === "embeddedObject",
+    );
+    if (block?.kind !== "embeddedObject" || block.document.kind !== "drawing") {
+      throw new Error("expected a drawing embeddedObject");
+    }
+    expect(block.document.pages[0]?.vectors).toHaveLength(1);
+    expect(block.document.pages[0]?.shapes).toHaveLength(1);
+  });
+
+  it("tries every Graphics Cached File Data child until one decodes as WPG, not just the first", () => {
+    const wpg = wpgFile({});
+    const document = readWpdContent(
+      buildWpdFile(
+        [...imageBoxFunction()],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          {
+            packetType: 0x40,
+            flags: 0x01,
+            // Two children (prefix IDs 3 and 4), not the usual one.
+            bytes: new Uint8Array([2, 0, 3, 0, 4, 0]),
+          },
+          {
+            packetType: PACKET_TYPE_GRAPHICS_CACHED_FILE_DATA,
+            bytes: new Uint8Array([1, 2, 3, 4]), // not a WPG signature at all
+          },
+          graphicsCachedFileDataPacket(wpg), // the real one, at the second child
+        ],
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing");
+    }
+    const block = document.sections[0]?.blocks.find(
+      (b) => b.kind === "embeddedObject",
+    );
+    expect(block?.kind).toBe("embeddedObject");
+  });
+
+  it("names more than one skipped WPG record type, joined by a comma and a space", () => {
+    // Polyspline (0x16) and Polycurve (0x17), both unrecognised by this reader, alongside the framed rectangle.
+    const wpg = wpgFile({});
+    const withSkips = new Uint8Array([
+      ...wpg.subarray(0, wpg.length - 4), // drop the trailing End WPG record
+      ...wpgRecord(0x16, [
+        ...word(0x8000),
+        ...word(2),
+        ...word(0),
+        ...word(0),
+        ...word(5),
+        ...word(5),
+      ]),
+      ...wpgRecord(0x17, [
+        ...word(0x8000),
+        ...word(2),
+        ...word(0),
+        ...word(0),
+        ...word(5),
+        ...word(5),
+      ]),
+      ...wpgRecord(0x02, []),
+    ]);
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(
+      buildWpdFile(
+        [...imageBoxFunction()],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          graphicsFilenamePacket(),
+          graphicsCachedFileDataPacket(withSkips),
+        ],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.WpgRecordsUndecoded,
+    );
+    expect(found?.message).toBe(
+      "This document embeds a WPG vector graphic that partially decoded; the following record types were skipped: Polyspline, Polycurve.",
+    );
+  });
+
+  it("lifts a decoded WPG graphic with no skipped records, reporting nothing", () => {
+    const wpg = wpgFile({});
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile(
+        [...imageBoxFunction()],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          graphicsFilenamePacket(),
+          graphicsCachedFileDataPacket(wpg),
+        ],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing");
+    }
+    const block = document.sections[0]?.blocks.find(
+      (b) => b.kind === "embeddedObject",
+    );
+    expect(block?.kind).toBe("embeddedObject");
+    expect(
+      diagnostics.some(
+        (d) => d.code === WpdDiagnosticCodes.WpgRecordsUndecoded,
+      ),
+    ).toBe(false);
+  });
+
+  it("reports a decoded WPG graphic with no trustworthy frame, lifting nothing", () => {
+    const wpg = wpgFile({});
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile(
+        [...imageBoxFunction(false)],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          graphicsFilenamePacket(),
+          graphicsCachedFileDataPacket(wpg),
+        ],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing");
+    }
+    expect(
+      document.sections[0]?.blocks.some((b) => b.kind === "embeddedObject"),
+    ).toBe(false);
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.BoxFrameUnresolved,
+    );
+    expect(found?.message).toBe(
+      "This document contains a box whose content this reader could read, but whose function-level override states no width and height this reader can trust, so its content was not lifted.",
+    );
+  });
+
+  it("reports a WPG 1.0 graphic through the diagnostic sink with its own exact message", () => {
+    const wpg = wpgFile({ majorVersion: 1 });
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(
+      buildWpdFile(
+        [...imageBoxFunction()],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          graphicsFilenamePacket(),
+          graphicsCachedFileDataPacket(wpg),
+        ],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.WpgRecordsUndecoded,
+    );
+    expect(found?.message).toBe(
+      "This document embeds a WPG 1.0 vector graphic, whose type-and-length record vocabulary predates the framed WPG 2.x stream this reader decodes, so it was not lifted.",
+    );
+  });
+
+  it("reports an encrypted WPG graphic through the diagnostic sink with its own exact message", () => {
+    const wpg = wpgFile({ encrypted: true });
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(
+      buildWpdFile(
+        [...imageBoxFunction()],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          graphicsFilenamePacket(),
+          graphicsCachedFileDataPacket(wpg),
+        ],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.WpgRecordsUndecoded,
+    );
+    expect(found?.message).toBe(
+      "This document embeds an encrypted WPG vector graphic, which this reader does not decrypt, so it was not lifted.",
+    );
+  });
+
+  it("reports a malformed WPG graphic (no walkable Start WPG record) with its own exact message", () => {
+    const wpg = wpgFile({ withRecordStream: false });
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(
+      buildWpdFile(
+        [...imageBoxFunction()],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          graphicsFilenamePacket(),
+          graphicsCachedFileDataPacket(wpg),
+        ],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.WpgRecordsUndecoded,
+    );
+    expect(found?.message).toBe(
+      "This document embeds a WPG graphic whose record stream this reader could not walk (no well-formed Start WPG record), so it was not lifted.",
+    );
   });
 });
