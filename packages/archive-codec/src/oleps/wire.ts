@@ -51,16 +51,19 @@ export function readGuid(view: DataView, offset: number): string {
   return `{${data1}-${data2}-${data3}-${data4a}-${data4b}}`.toUpperCase();
 }
 
+// One Data4 byte's own two hex characters, starting at charIndex: kept as a single shared expression (rather than writeGuid computing a start and an independently-derived end) so a wrong charIndex always extracts a genuinely different two-character window, never one that merely gains extra leading digits setUint8's own mod-256 truncation would silently discard.
+function hexByte(digits: string, charIndex: number): number {
+  return Number.parseInt(digits.slice(charIndex, charIndex + 2), 16);
+}
+
 export function writeGuid(view: DataView, offset: number, guid: string): void {
   const digits = guid.replace(/[{}-]/g, "");
   view.setUint32(offset, Number.parseInt(digits.slice(0, 8), 16), true);
   view.setUint16(offset + 4, Number.parseInt(digits.slice(8, 12), 16), true);
   view.setUint16(offset + 6, Number.parseInt(digits.slice(12, 16), 16), true);
-  for (let i = 0; i < 8; i++) {
-    view.setUint8(
-      offset + 8 + i,
-      Number.parseInt(digits.slice(16 + i * 2, 18 + i * 2), 16),
-    );
+  // Data4's own 8 bytes, over a literal index list rather than a `for` loop's own comparison bound: a bound one iteration too long or short would otherwise land on the byte immediately past the GUID's own 16 bytes, which every real call site overwrites with its own next field regardless, leaving the off-by-one silently unobservable.
+  for (const i of [0, 1, 2, 3, 4, 5, 6, 7]) {
+    view.setUint8(offset + 8 + i, hexByte(digits, 16 + i * 2));
   }
 }
 
