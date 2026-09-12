@@ -1,7 +1,17 @@
-import type { ContentSheetCell } from "document-schema.js";
+import type {
+  Color,
+  ContentBorder,
+  ContentSheetCell,
+} from "document-schema.js";
 import { describe, expect, it } from "vitest";
 
 import { cellCarriesFormatting, writesCellRecord } from "./written-cells";
+
+const RED: Color = { r: 1, g: 0, b: 0 };
+
+function border(): ContentBorder {
+  return { color: RED, widthPt: 1 };
+}
 
 function emptyCell(
   overrides: Partial<ContentSheetCell> = {},
@@ -24,7 +34,7 @@ describe("cellCarriesFormatting", () => {
     expect(
       cellCarriesFormatting(
         emptyCell({
-          background: { kind: "solid", color: { rgbHex: "FF0000" } },
+          background: { kind: "solid", color: RED },
         }),
       ),
     ).toBe(true);
@@ -64,31 +74,25 @@ describe("cellCarriesFormatting", () => {
 
   it("is true when only the left border is set", () => {
     expect(
-      cellCarriesFormatting(
-        emptyCell({ borders: { left: { style: "thin" } } }),
-      ),
+      cellCarriesFormatting(emptyCell({ borders: { left: border() } })),
     ).toBe(true);
   });
 
   it("is true when only the right border is set", () => {
     expect(
-      cellCarriesFormatting(
-        emptyCell({ borders: { right: { style: "thin" } } }),
-      ),
+      cellCarriesFormatting(emptyCell({ borders: { right: border() } })),
     ).toBe(true);
   });
 
   it("is true when only the top border is set", () => {
     expect(
-      cellCarriesFormatting(emptyCell({ borders: { top: { style: "thin" } } })),
+      cellCarriesFormatting(emptyCell({ borders: { top: border() } })),
     ).toBe(true);
   });
 
   it("is true when only the bottom border is set", () => {
     expect(
-      cellCarriesFormatting(
-        emptyCell({ borders: { bottom: { style: "thin" } } }),
-      ),
+      cellCarriesFormatting(emptyCell({ borders: { bottom: border() } })),
     ).toBe(true);
   });
 });
