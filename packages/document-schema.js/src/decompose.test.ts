@@ -25,6 +25,7 @@ import {
   isHeadingGroupNode,
   isListGroupNode,
   isSectionConstructGroupNode,
+  isSlideGroupNode,
   type SheetGroupNode,
 } from "./package-node";
 
@@ -196,6 +197,90 @@ describe("wordprocessing decomposition", () => {
     ]);
   });
 
+  it("pops a single open heading of equal level -- two consecutive H1s are siblings, not nested", () => {
+    // With exactly one heading on the stack when the second H1 arrives, the pop loop must read that one entry (stack top, not stack[1] -- an empty read past a single-element stack would never enter the loop at all, leaving the first H1 wrongly still open).
+    const h1a = paragraph("First", { headingLevel: 1 });
+    const h1b = paragraph("Second", { headingLevel: 1 });
+    const doc = wordprocessingDoc([[h1a, h1b]]);
+    expect(decompose(doc)).toEqual([
+      {
+        node: { kind: "section", ...SECTION_GEOMETRY },
+        children: [
+          { node: h1a, children: [] },
+          { node: h1b, children: [] },
+        ],
+      },
+    ]);
+  });
+
+  it("pops two open headings in a row -- the pop loop's own re-check (not just its first read) must see the stack shrink to one element and keep popping", () => {
+    // H1 -> H2 (nested under it) -> H1: the second H1 must pop BOTH the H2 and the first H1, ending as a sibling of the first H1 at the section root. After the loop's first pop (H2 gone, stack now [h1a], length 1), the loop's own re-check re-reads the stack top -- a wrong index there (reading position 1 of a 1-element array) would see undefined and stop after only one pop, wrongly leaving the new H1 nested under the first one instead of a sibling of it.
+    const h1a = paragraph("First", { headingLevel: 1 });
+    const h2 = paragraph("Nested", { headingLevel: 2 });
+    const h1b = paragraph("Second", { headingLevel: 1 });
+    const doc = wordprocessingDoc([[h1a, h2, h1b]]);
+    expect(decompose(doc)).toEqual([
+      {
+        node: { kind: "section", ...SECTION_GEOMETRY },
+        children: [
+          { node: h1a, children: [{ node: h2, children: [] }] },
+          { node: h1b, children: [] },
+        ],
+      },
+    ]);
+  });
+
+  it("pops a single open list item of equal level -- two consecutive same-level items are siblings, not nested", () => {
+    const first = paragraph("First item", { listLevel: 0 });
+    const second = paragraph("Second item", { listLevel: 0 });
+    const doc = wordprocessingDoc([[first, second]]);
+    expect(decompose(doc)).toEqual([
+      {
+        node: { kind: "section", ...SECTION_GEOMETRY },
+        children: [
+          { node: first, children: [] },
+          { node: second, children: [] },
+        ],
+      },
+    ]);
+  });
+
+  it("pops two open list items in a row -- the pop loop's own re-check must see the stack shrink to one element and keep popping", () => {
+    // level0 -> level1 (nested) -> level0: the same multi-pop boundary as the heading test above, on the list stack this time.
+    const first = paragraph("First", { listLevel: 0 });
+    const nested = paragraph("Nested", { listLevel: 1 });
+    const second = paragraph("Second", { listLevel: 0 });
+    const doc = wordprocessingDoc([[first, nested, second]]);
+    expect(decompose(doc)).toEqual([
+      {
+        node: { kind: "section", ...SECTION_GEOMETRY },
+        children: [
+          { node: first, children: [{ node: nested, children: [] }] },
+          { node: second, children: [] },
+        ],
+      },
+    ]);
+  });
+
+  it("attaches a non-paragraph leaf inside a single open list item's own children, not at the section root", () => {
+    // Exactly one list item open (stack length 1) when the leaf is encountered -- the same single-element-stack boundary the heading/list pop loops above are pinned against, this time for the plain top-of-stack read walkSectionBlocks uses to route a non-paragraph leaf.
+    const item = paragraph("Item", { listLevel: 0 });
+    const img: ContentBlock = {
+      kind: "image",
+      format: "png",
+      base64: "aW1hZ2U=",
+      widthPt: 10,
+      heightPt: 10,
+    };
+    const doc = wordprocessingDoc([[item, img]]);
+    expect(decompose(doc)).toEqual([
+      {
+        node: { kind: "section", ...SECTION_GEOMETRY },
+        children: [{ node: item, children: [img] }],
+      },
+    ]);
+  });
+
   it("decomposes an empty document to an empty root array (the envelope carries the kind)", () => {
     expect(
       decompose({ kind: "wordprocessing", metadata: {}, sections: [] }),
@@ -207,6 +292,38 @@ describe("wordprocessing decomposition", () => {
 });
 
 describe("presentation decomposition", () => {
+  it("attaches a non-paragraph leaf inside a shape's own single open list item, not at the shape root", () => {
+    // The shape-flow analogue of the identical section-flow boundary test above: exactly one list item open on the shape's own list stack when the leaf is encountered.
+    const item = paragraph("Item", { listLevel: 0 });
+    const img: ContentBlock = {
+      kind: "image",
+      format: "png",
+      base64: "aW1hZ2U=",
+      widthPt: 10,
+      heightPt: 10,
+    };
+    const doc: ContentDocument = {
+      kind: "presentation",
+      metadata: {},
+      slides: [
+        {
+          size: { widthPt: 960, heightPt: 540 },
+          shapes: [shape([item, img])],
+          notes: "",
+        },
+      ],
+    };
+    const [slideGroup] = decompose(doc);
+    if (
+      slideGroup === undefined ||
+      !isSlideGroupNode(slideGroup) ||
+      slideGroup.children.length !== 1
+    )
+      throw new Error("expected one shape group back");
+    const [shapeGroup] = slideGroup.children;
+    expect(shapeGroup?.children).toEqual([{ node: item, children: [img] }]);
+  });
+
   it("groups each shape separately and never flattens a slide across its shapes", () => {
     const shapeA = shape([
       paragraph("A top", { listLevel: 0 }),
@@ -743,6 +860,10 @@ describe("construct marker imbalance", () => {
     } catch (error) {
       if (!(error instanceof ConstructMarkerImbalanceError)) throw error;
       expect(error.imbalance).toEqual({ kind: "unmatchedEnd", index: 1 });
+      expect(error.name).toBe("ConstructMarkerImbalanceError");
+      expect(error.message).toBe(
+        "decompose: the constructEnd marker at index 1 of this container's block flow closes no open construct",
+      );
     }
   });
 
@@ -759,6 +880,9 @@ describe("construct marker imbalance", () => {
     } catch (error) {
       if (!(error instanceof ConstructMarkerImbalanceError)) throw error;
       expect(error.imbalance).toEqual({ kind: "unclosedStart", index: 0 });
+      expect(error.message).toBe(
+        "decompose: the constructStart marker at index 0 of this container's block flow is never closed",
+      );
     }
   });
 
