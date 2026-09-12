@@ -12,17 +12,13 @@ export type Color = z.infer<typeof ColorSchema>;
 
 export const COLOR_BLACK: Color = { r: 0, g: 0, b: 0 };
 
-const HEX_COLOR_PATTERN = /^#?([0-9a-fA-F]{6})$/;
+const HEX_DIGITS_PATTERN = /^[0-9a-fA-F]{6}$/;
 const HEX_BYTE_MAX = 255;
 
-// Parses a 6-digit hex colour (OOXML's w:color/@w:val, a:srgbClr/@val; ODF's fo:color), with or without a leading '#', into a Color. Throws on malformed input rather than substituting a default -- callers are expected to have already validated the attribute is present.
+// Parses a 6-digit hex colour (OOXML's w:color/@w:val, a:srgbClr/@val; ODF's fo:color), with or without a leading '#', into a Color. Throws on malformed input rather than substituting a default -- callers are expected to have already validated the attribute is present. Strips a leading '#' by its own literal position rather than a regex capture group, so there is no capture-group result to separately check for absence -- `digits` is validated as a plain string, never indexed out of a match array.
 export function rgbHexToColor(hex: string): Color {
-  const match = HEX_COLOR_PATTERN.exec(hex);
-  if (match === null) {
-    throw new Error(`not a 6-digit hex colour: ${hex}`);
-  }
-  const digits = match[1];
-  if (digits === undefined) {
+  const digits = hex.startsWith("#") ? hex.slice(1) : hex;
+  if (!HEX_DIGITS_PATTERN.test(digits)) {
     throw new Error(`not a 6-digit hex colour: ${hex}`);
   }
   const r = Number.parseInt(digits.slice(0, 2), 16);
