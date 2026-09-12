@@ -6,19 +6,39 @@ import {
   documentCreateOperation,
 } from "./editor";
 
-describe("documentCreateOperation", () => {
-  it("creates a blank docx and returns inline bytes", async () => {
-    const result = await documentCreateOperation.run({ format: "docx" });
-    expect("bytesBase64" in result).toBe(true);
-    expect(result.byteLength).toBeGreaterThan(0);
-  });
+// A byte-level signature unique to each writable format's own real output -- checked against the raw bytes so a wrong createDocumentBytes() case (a fallthrough to the wrong writer, or the wrong writer entirely) is caught even though every writer's output is equally non-empty. OOXML formats are identified by a real zip entry name (uncompressed in every zip's local-file-header/central-directory, unlike a compressed entry's own content); ODF formats by their own "mimetype" entry's content-type string; PDF by its literal header.
+const FORMAT_SIGNATURES = {
+  docx: "word/document.xml",
+  pptx: "ppt/presentation.xml",
+  odt: "opendocument.text",
+  odp: "opendocument.presentation",
+  ods: "opendocument.spreadsheet",
+  odg: "opendocument.graphics",
+  pdf: "%PDF",
+} as const;
 
-  it.each(["pptx", "odt", "odp", "ods", "odg", "pdf"] as const)(
-    "creates a blank %s and returns inline bytes",
-    async (format) => {
+function bytesContain(bytes: Uint8Array, needle: string): boolean {
+  return Buffer.from(bytes).toString("latin1").includes(needle);
+}
+
+describe("documentCreateOperation", () => {
+  it.each(
+    Object.entries(FORMAT_SIGNATURES) as [
+      keyof typeof FORMAT_SIGNATURES,
+      string,
+    ][],
+  )(
+    "creates a genuine blank %s, not just non-empty bytes",
+    async (format, signature) => {
       const result = await documentCreateOperation.run({ format });
-      expect("bytesBase64" in result).toBe(true);
+      if (!("bytesBase64" in result)) {
+        throw new Error("expected inline bytes");
+      }
       expect(result.byteLength).toBeGreaterThan(0);
+      const bytes = Uint8Array.from(atob(result.bytesBase64), (char) =>
+        char.charCodeAt(0),
+      );
+      expect(bytesContain(bytes, signature)).toBe(true);
     },
   );
 });
@@ -125,7 +145,8 @@ describe("documentAppendParagraphsOperation", () => {
       targetFormat: "markdown",
       paragraphs: [
         {
-          styleId: "Normal",
+          // Heading1, not a plain style: proves body.appendParagraph's own styleId argument genuinely reached the editor (a plain paragraph and a heading are otherwise indistinguishable by run content alone) -- markdown lowers it to a real "# " heading, read back as headingLevel below.
+          styleId: "Heading1",
           runs: [
             {
               text: "formatted",
@@ -161,6 +182,7 @@ describe("documentAppendParagraphsOperation", () => {
     if (appended?.kind !== "paragraph") {
       throw new Error("expected an appended paragraph block");
     }
+    expect(appended.headingLevel).toBe(1);
     expect(appended.runs).toEqual([
       expect.objectContaining({
         text: "formatted",
