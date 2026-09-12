@@ -61,6 +61,17 @@ export function splitBitLength64(bitLength: number): {
   };
 }
 
+// RFC 1321 3.1/3.2's own 64-bit little-endian bit-length field, as its two 32-bit halves. A dedicated function (rather than padMessage's own inline pair of writes) so the high half's own byte order is directly testable: high is non-zero only for a message past 512 MiB, and hashing an actual buffer that large just to reach it through padMessage would make the test suite itself pathologically slow.
+export function writeBitLength64(
+  view: DataView,
+  offset: number,
+  bitLength: number,
+): void {
+  const { low, high } = splitBitLength64(bitLength);
+  view.setUint32(offset, low, true);
+  view.setUint32(offset + 4, high, true);
+}
+
 // RFC 1321 3.1/3.2: append 0x80, then zero bytes until the length is 56 mod 64, then the original bit length as a 64-bit little-endian integer (DataView's own setUint32 handles the byte order, rather than a hand-rolled per-byte shift-and-mask loop).
 function padMessage(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
   const paddedLength =
@@ -69,9 +80,7 @@ function padMessage(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
   padded.set(bytes);
   padded[bytes.length] = 0x80;
   const view = new DataView(padded.buffer);
-  const { low, high } = splitBitLength64(bytes.length * 8);
-  view.setUint32(paddedLength - 8, low, true);
-  view.setUint32(paddedLength - 4, high, true);
+  writeBitLength64(view, paddedLength - 8, bytes.length * 8);
   return padded;
 }
 
