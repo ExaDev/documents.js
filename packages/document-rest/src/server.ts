@@ -18,38 +18,40 @@ interface RestErrorMapping {
   readonly body: Record<string, unknown>;
 }
 
-// Keyed by operation name rather than a per-operation registration call (document-mcp's own convention): document-rest has no per-operation registration step of its own to hang a mapError option off, since every operation is dispatched generically through OPERATIONS_BY_NAME.
-const ERROR_MAPPERS: ReadonlyMap<
+// Keyed by operation name rather than a per-operation registration call (document-mcp's own convention): document-rest has no per-operation registration step of its own to hang a mapError option off, since every operation is dispatched generically through OPERATIONS_BY_NAME. Built fresh on every call rather than once as a module-level constant: a Map built at module scope executes exactly once, at import time, before any test's per-test coverage instrumentation is active, which makes a mutation to its contents structurally invisible to Stryker's per-test mutant testing (the code runs, correctly, but never on a run a specific test's active-mutant flag can attribute to it). Calling this inside the request path costs building two Map entries per erroring request, which is immaterial next to the document conversion work each request is already doing.
+function buildErrorMappers(): ReadonlyMap<
   string,
   (error: unknown) => RestErrorMapping | undefined
-> = new Map([
-  [
-    "odb_render_report",
-    (error: unknown): RestErrorMapping | undefined => {
-      if (!(error instanceof OdbReportNotSpecifiedError)) return undefined;
-      return {
-        status: 400,
-        body: {
-          error: error.message,
-          availableReports: error.availableReports,
-        },
-      };
-    },
-  ],
-  [
-    "odm_to_pdf",
-    (error: unknown): RestErrorMapping | undefined => {
-      if (!(error instanceof OdmUnresolvedSectionError)) return undefined;
-      return {
-        status: 400,
-        body: {
-          error: `${error.message} Pass chaptersDir containing these files, or an explicit chapters override, for each href.`,
-          hrefs: error.hrefs,
-        },
-      };
-    },
-  ],
-]);
+> {
+  return new Map([
+    [
+      "odb_render_report",
+      (error: unknown): RestErrorMapping | undefined => {
+        if (!(error instanceof OdbReportNotSpecifiedError)) return undefined;
+        return {
+          status: 400,
+          body: {
+            error: error.message,
+            availableReports: error.availableReports,
+          },
+        };
+      },
+    ],
+    [
+      "odm_to_pdf",
+      (error: unknown): RestErrorMapping | undefined => {
+        if (!(error instanceof OdmUnresolvedSectionError)) return undefined;
+        return {
+          status: 400,
+          body: {
+            error: `${error.message} Pass chaptersDir containing these files, or an explicit chapters override, for each href.`,
+            hrefs: error.hrefs,
+          },
+        };
+      },
+    ],
+  ]);
+}
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -110,7 +112,7 @@ async function handleOperationRequest(
     });
     sendJson(res, 200, { result: result });
   } catch (error) {
-    const mapped = ERROR_MAPPERS.get(operation.name)?.(error);
+    const mapped = buildErrorMappers().get(operation.name)?.(error);
     if (mapped !== undefined) {
       sendJson(res, mapped.status, mapped.body);
       return;
