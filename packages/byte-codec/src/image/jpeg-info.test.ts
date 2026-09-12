@@ -224,6 +224,14 @@ describe("readJpegInfo: marker padding and scanning", () => {
     );
   });
 
+  it("stops once the scan runs out of bytes entirely, with no EOI and no marker lead-in to end on", () => {
+    // Trailing non-marker bytes with nothing after them: the scan advances one byte at a time and must stop when there is no byte left to read at all, rather than continuing past the end of the buffer.
+    const jpeg = new Uint8Array([0xff, 0xd8, 0x00, 0x00]);
+    expect(() => readJpegInfo(jpeg)).toThrow(
+      "no SOF marker found in JPEG file",
+    );
+  });
+
   it("must genuinely skip a non-0xff byte rather than treat its own position as a marker lead-in", () => {
     // If the non-0xff skip were disabled, position 2 (0xab) would itself be read as if it led a marker: markerOffset=3 lands on 0xc0 (a real SOF0 code, but here just incidental scan bytes), and the encoder would misparse the following junk bytes as a bogus SOF payload -- returning wildly wrong dimensions instead of ever reaching the real, later SOF0 segment.
     const bogusIfMisparsed = [1, 2, 3, 4, 5, 6];
