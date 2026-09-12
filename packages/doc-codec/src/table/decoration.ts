@@ -12,8 +12,8 @@ import {
   autoColorRefBytes,
   colorRefBytes,
   decorativeIcoColor,
-  icoColor,
   nearestIco,
+  nearestIcoColor,
   readColorRef,
 } from "../color";
 import { DocFormatError, DocUnsupportedError } from "../errors";
@@ -132,24 +132,11 @@ function borderFrom(
   return border;
 }
 
-/** Whether all `length` bytes from `offset` are 0xFF -- the all-bits-set form both nil-border spellings are defined in terms of. */
-function allBitsSet(
-  bytes: Uint8Array,
-  offset: number,
-  length: number,
-): boolean {
-  for (let index = 0; index < length; index += 1) {
-    if (readUint8(bytes, offset + index) !== 0xff) return false;
-  }
-  return true;
-}
-
-/** One TC80 border field: a Brc80MayBeNil ([MS-DOC] 2.9.18) -- a Brc80 whose all-bits-set value "specifies that the region in question has no border". Returns undefined for that sentinel, for brcType 0x00 ("No border", the spelling LibreOffice writes instead), and for any brcType outside the cell-border range BRC_TYPE_STYLE covers. An ico outside the palette's own bound resolves through decorativeIcoColor to the automatic-colour fallback (borderFrom's own AUTOMATIC_BORDER_COLOR) rather than aborting the whole document read over one cosmetic byte -- see decorativeIcoColor's own note in color.ts. */
+/** One TC80 border field: a Brc80MayBeNil ([MS-DOC] 2.9.18) -- a Brc80 whose all-bits-set value "specifies that the region in question has no border". That sentinel is never checked explicitly: its own brcType byte is necessarily 0xFF too (every byte is 0xFF by the sentinel's own definition), and 0xFF is the one brcType [MS-DOC] itself states "MUST be ignored" -- already absent from BRC_TYPE_STYLE below for that reason -- so the ordinary brcType-lookup fallback already resolves the sentinel to undefined on its own, the identical answer an explicit all-bits-set check could only ever restate. Returns undefined for that sentinel, for brcType 0x00 ("No border", the spelling LibreOffice writes instead), and for any brcType outside the cell-border range BRC_TYPE_STYLE covers. An ico outside the palette's own bound resolves through decorativeIcoColor to the automatic-colour fallback (borderFrom's own AUTOMATIC_BORDER_COLOR) rather than aborting the whole document read over one cosmetic byte -- see decorativeIcoColor's own note in color.ts. */
 export function readBrc80(
   bytes: Uint8Array,
   offset: number,
 ): ContentBorder | undefined {
-  if (allBitsSet(bytes, offset, BRC80_SIZE)) return undefined;
   const brcType = readUint8(bytes, offset + 1);
   if (brcType === BRC_TYPE_NONE) return undefined;
   return borderFrom(
@@ -159,12 +146,11 @@ export function readBrc80(
   );
 }
 
-/** The eight bytes of one TableBrcOperand.brc field: a BrcMayBeNil ([MS-DOC] 2.9.20) -- "If the last four bytes are 0xFFFFFFFF, the BrcMayBeNil is a NilBrc that specifies that the table cells in question have no border", otherwise a Brc ([MS-DOC] 2.9.16) whose own cv states the colour exactly. */
+/** The eight bytes of one TableBrcOperand.brc field: a BrcMayBeNil ([MS-DOC] 2.9.20) -- "If the last four bytes are 0xFFFFFFFF, the BrcMayBeNil is a NilBrc that specifies that the table cells in question have no border", otherwise a Brc ([MS-DOC] 2.9.16) whose own cv states the colour exactly. As with Brc80MayBeNil above, the NilBrc sentinel is never checked explicitly: its own brcType byte (one of the "last four bytes", all 0xFF by the sentinel's own definition) is 0xFF, the one brcType value BRC_TYPE_STYLE has no entry for, so the ordinary brcType-lookup fallback already resolves it to undefined identically. */
 export function readBrc(
   bytes: Uint8Array,
   offset: number,
 ): ContentBorder | undefined {
-  if (allBitsSet(bytes, offset + 4, BRC_SIZE - 4)) return undefined;
   const brcType = readUint8(bytes, offset + 5);
   if (brcType === BRC_TYPE_NONE) return undefined;
   return borderFrom(
@@ -258,10 +244,9 @@ export function writeBrc(border: ContentBorder): number[] {
   ];
 }
 
-/** Whether this border's colour survives the Ico palette Brc80 is limited to. When it does, TC80's own Brc80 already states the border exactly and the sprmTSetBrc precision layer would be pure duplication; when it does not, that layer is the only place the real colour can be stated. Compared on the written byte values rather than the floating-point components, so a colour that round-trips through colorRefBytes to the identical palette entry counts as exact. */
+/** Whether this border's colour survives the Ico palette Brc80 is limited to. When it does, TC80's own Brc80 already states the border exactly and the sprmTSetBrc precision layer would be pure duplication; when it does not, that layer is the only place the real colour can be stated. Compared on the written byte values rather than the floating-point components, so a colour that round-trips through colorRefBytes to the identical palette entry counts as exact. nearestIcoColor, not icoColor(nearestIco(...)), names the comparison colour directly: nearestIco never returns cvAuto's own index (0x00), so re-resolving its result through icoColor would only ever hit that function's own real-colour branch, never the undefined one its return type still carries. */
 export function borderNeedsExactColor(border: ContentBorder): boolean {
-  const palette = icoColor(nearestIco(border.color));
-  if (palette === undefined) return true;
+  const palette = nearestIcoColor(border.color);
   const wanted = colorRefBytes(border.color);
   const approximated = colorRefBytes(palette);
   return (

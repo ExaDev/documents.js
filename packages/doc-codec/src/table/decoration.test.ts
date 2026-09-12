@@ -6,6 +6,7 @@ import {
   BRC80_SIZE,
   BRC_SIZE,
   SHD_SIZE,
+  cellBordersFrom,
   readBrc,
   readBrc80,
   readShd,
@@ -128,6 +129,20 @@ describe("Brc80", () => {
     );
     expect(() => writeBrc80({ color: RED, widthPt: 0.1 })).toThrow(
       DocFormatError,
+    );
+  });
+
+  it("does not append the double-border clause to a single-line border's own refusal message", () => {
+    expect(() => writeBrc80({ color: RED, widthPt: 0.1 })).not.toThrow(
+      /one line's own width/,
+    );
+  });
+
+  it("appends the double-border clause to a double border's own refusal message", () => {
+    expect(() =>
+      writeBrc80({ color: RED, widthPt: 0.1, style: "double" }),
+    ).toThrow(
+      /outside the 0\.1875\.\.95\.8125pt range .* of one line's own width, a double border's field being one third of its total rendered width/,
     );
   });
 
@@ -519,6 +534,44 @@ describe("Shd80", () => {
       foregroundColor: { r: 1, g: 0, b: 0 },
       backgroundColor: { r: 1, g: 1, b: 1 },
     });
+  });
+});
+
+describe("cellBordersFrom", () => {
+  it("returns undefined when no side states a border at all", () => {
+    expect(
+      cellBordersFrom({
+        top: undefined,
+        left: undefined,
+        bottom: undefined,
+        right: undefined,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("carries only the sides that state a border, in CELL_BORDER_SIDES order", () => {
+    const top: ContentBorder = { color: RED, widthPt: 1 };
+    const right: ContentBorder = { color: BLACK, widthPt: 0.5 };
+    expect(
+      cellBordersFrom({
+        top,
+        left: undefined,
+        bottom: undefined,
+        right,
+      }),
+    ).toEqual({ top, right });
+  });
+
+  it("carries all four sides when every one states a border", () => {
+    const border: ContentBorder = { color: RED, widthPt: 1 };
+    expect(
+      cellBordersFrom({
+        top: border,
+        left: border,
+        bottom: border,
+        right: border,
+      }),
+    ).toEqual({ top: border, left: border, bottom: border, right: border });
   });
 });
 
