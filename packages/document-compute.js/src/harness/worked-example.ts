@@ -104,14 +104,11 @@ function asEquality(expression: MathExpression): EqualityShape | undefined {
   return { targetSymbol: lhs.id, rhs };
 }
 
+// "num", "qty", and "unparsed" are the three MathExpression leaves that can never contain a symbol, but they carry no structure worth recursing into either -- so rather than three separate case labels each independently returning `false` (three string-literal AST nodes a mutation can flip to an identical no-op, since every consumer below only ever coerces this function's result through a truthy/falsy check and can never distinguish `false` from a mutated case simply not matching), they fall through to the same `default: return false` that covers them structurally: any kind not explicitly listed as symbol-bearing above is one.
 function containsSymbol(expression: MathExpression): boolean {
   switch (expression.kind) {
     case "sym":
       return true;
-    case "num":
-    case "qty":
-    case "unparsed":
-      return false;
     case "app":
       return expression.args.some(containsSymbol);
     case "sum":
@@ -123,6 +120,8 @@ function containsSymbol(expression: MathExpression): boolean {
       );
     case "matrix":
       return expression.rows.some((row) => row.some(containsSymbol));
+    default:
+      return false;
   }
 }
 
