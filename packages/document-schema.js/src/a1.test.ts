@@ -32,6 +32,13 @@ describe("columnLettersToIndex / columnIndexToLetters", () => {
     expect(columnLettersToIndex("A1")).toBeUndefined();
     expect(columnLettersToIndex("")).toBeUndefined();
   });
+
+  it("rejects the character immediately past 'Z' in code-point order, not just past it", () => {
+    // '[' is charCode 91, exactly ALPHABET_START_CODE (65) + ALPHABET_SIZE (26) -- the boundary itself, not one past it. 'Z' (90) must still be accepted.
+    expect(columnLettersToIndex("Z")).toBe(25);
+    expect(columnLettersToIndex("[")).toBeUndefined();
+    expect(columnLettersToIndex("A[")).toBeUndefined();
+  });
 });
 
 describe("parseCellReference / cellReference", () => {
@@ -51,6 +58,16 @@ describe("parseCellReference / cellReference", () => {
     expect(parseCellReference("1A")).toBeUndefined();
     expect(parseCellReference("A0")).toBeUndefined();
     expect(parseCellReference("")).toBeUndefined();
+  });
+
+  it("requires the letters to start at the very beginning of the string", () => {
+    // Without the regex's leading anchor, "A1" embedded after a leading digit would still match.
+    expect(parseCellReference("1A1")).toBeUndefined();
+  });
+
+  it("requires the digits to run to the very end of the string", () => {
+    // Without the regex's trailing anchor, a leading "A1" would still match despite trailing junk.
+    expect(parseCellReference("A1B")).toBeUndefined();
   });
 });
 
