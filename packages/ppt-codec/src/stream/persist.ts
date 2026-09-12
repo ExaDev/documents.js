@@ -105,38 +105,32 @@ export function buildPersistDirectory(
   streamBytes: Uint8Array<ArrayBuffer>,
   offsetToCurrentEdit: number,
 ): PersistDirectory {
-  const edits: UserEdit[] = [];
+  // The current edit is read directly rather than through the loop below and pulled back out of an `edits` array afterwards: the walk always visits it first, so capturing it here gives it a real UserEdit type the compiler can see is never absent, instead of a defensive `edits[0] === undefined` check for an array that can, in fact, never be empty.
   let at = offsetToCurrentEdit;
+  const currentEdit = readUserEditAtom(readRecordAt(streamBytes, at));
+  const edits: UserEdit[] = [currentEdit];
+  let edit = currentEdit;
   // The chain is bounded without a visited set: the spec requires each offsetLastEdit to be strictly less than its own atom's offset, so enforcing that makes every step move towards the start of the stream and the walk terminate.
-  while (true) {
-    const edit = readUserEditAtom(readRecordAt(streamBytes, at));
-    edits.push(edit);
-    if (edit.offsetLastEdit === 0) {
-      break;
-    }
+  while (edit.offsetLastEdit !== 0) {
     if (edit.offsetLastEdit >= at) {
       throw new PptFormatError(
         `UserEditAtom at offset ${at} points at a previous edit at offset ${edit.offsetLastEdit}, which is not earlier in the stream; the edit chain would cycle`,
       );
     }
     at = edit.offsetLastEdit;
+    edit = readUserEditAtom(readRecordAt(streamBytes, at));
+    edits.push(edit);
   }
 
   const directory = new Map<number, number>();
-  for (const edit of [...edits].reverse()) {
+  for (const historicalEdit of [...edits].reverse()) {
     for (const [persistId, offset] of readPersistDirectoryAtom(
-      readRecordAt(streamBytes, edit.offsetPersistDirectory),
+      readRecordAt(streamBytes, historicalEdit.offsetPersistDirectory),
     )) {
       directory.set(persistId, offset);
     }
   }
 
-  const currentEdit = edits[0];
-  if (currentEdit === undefined) {
-    throw new PptFormatError(
-      "the user edit chain produced no edits, so no document persist object can be located",
-    );
-  }
   return { directory, currentEdit };
 }
 
