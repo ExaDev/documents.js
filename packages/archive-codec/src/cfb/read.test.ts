@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { compoundFile } from "../test-support/cfb";
 import { CompoundFileFormatError, readCompoundFile } from "./read";
+import { writeCompoundFile } from "./write";
 
 // Coverage for the bounded [MS-CFB] reader (src/cfb/read.ts): header/sector-size parsing, DIFAT/FAT chain walking, the directory entry tree, stream extraction from both the FAT and the mini stream, and the guards. Fixtures come from src/test-support/cfb.ts -- a hand-built minimal compound-file writer whose construction is documented there -- because the reader under test consumes actual compound-file bytes (a hand-built in-memory model would skip the parse entirely).
 
@@ -256,31 +257,101 @@ describe("readCompoundFile malformed-input handling", () => {
     }
   };
 
-  it("throws for bytes without the compound-file signature", () => {
-    expectFormatError(enc("not a compound file at all"));
+  // Layout constants for the single-stream, single-FAT-sector fixtures below: header (512) + one FAT sector (512) puts the directory at byte 1024, entry 0 (root) at 1024, entry 1 (the one stream) at 1024 + 128.
+  const HEADER_BYTES = 512;
+  const FAT_SECTOR_BYTES = 512;
+  const DIRECTORY_START = HEADER_BYTES + FAT_SECTOR_BYTES;
+  const entryOffset = (id: number): number => DIRECTORY_START + id * 128;
+
+  it("names its own error class CompoundFileFormatError, not merely an instance of it", () => {
+    let caught: unknown;
+    try {
+      readCompoundFile(enc("not a compound file at all"));
+    } catch (error) {
+      caught = error;
+    }
+    expect((caught as Error).name).toBe("CompoundFileFormatError");
   });
 
-  it("throws for input shorter than the 512-byte header", () => {
-    expectFormatError(
-      new Uint8Array([
-        0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x00, 0x00,
-      ]),
+  it("throws its exact message for bytes without the compound-file signature", () => {
+    expect(() => readCompoundFile(enc("not a compound file at all"))).toThrow(
+      "readCompoundFile input does not carry the compound-file signature (leading magic bytes are not D0 CF 11 E0 A1 B1 1A E1)",
     );
   });
 
-  it("throws for a header whose sector shift contradicts its major version", () => {
-    const bytes = compoundFile([{ path: "A", bytes: enc("x".repeat(5000)) }]);
-    bytes[0x1a] = 4; // major version 4 ...
-    bytes[0x1e] = 9; // ... still declaring 512-byte sectors, which version 4 forbids
-    expectFormatError(bytes);
+  it("throws naming the exact byte count for input shorter than the 512-byte header", () => {
+    const bytes = new Uint8Array([
+      0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x00, 0x00,
+    ]);
+    expect(() => readCompoundFile(bytes)).toThrow(
+      `compound file is ${bytes.length} bytes, shorter than the fixed 512-byte header`,
+    );
   });
 
-  it("throws for a big-endian byte-order field", () => {
-    const bytes = compoundFile([{ path: "A", bytes: enc("x".repeat(5000)) }]);
+  it("throws naming the exact declared major version when it is neither 3 nor 4", () => {
+    const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
+    bytes[0x1a] = 5;
+    expect(() => readCompoundFile(bytes)).toThrow(
+      "compound file major version 5 is not 3 or 4",
+    );
+  });
+
+  it("throws its exact message for a big-endian byte-order field", () => {
+    const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
     // The field holds FE FF (little-endian 0xFFFE); swapping to FF FE reads as 0xFEFF, the big-endian marker this reader refuses.
     bytes[0x1c] = 0xff;
     bytes[0x1d] = 0xfe;
-    expectFormatError(bytes);
+    expect(() => readCompoundFile(bytes)).toThrow(
+      "compound file byte order is not little-endian",
+    );
+  });
+
+  it("throws naming both the found sector shift and the major version it contradicts, in both directions", () => {
+    const v3 = compoundFile([{ path: "A", bytes: enc("x") }], {
+      majorVersion: 3,
+    });
+    v3[0x1e] = 12; // version 3 declaring 4096-byte sectors, which version 3 forbids
+    expect(() => readCompoundFile(v3)).toThrow(
+      "compound file sector shift 2^12 does not match major version 3 (version 3 requires 512-byte sectors, version 4 requires 4096-byte)",
+    );
+
+    const v4 = compoundFile([{ path: "A", bytes: enc("x") }], {
+      majorVersion: 4,
+    });
+    v4[0x1e] = 9; // version 4 declaring 512-byte sectors, which version 4 forbids
+    expect(() => readCompoundFile(v4)).toThrow(
+      "compound file sector shift 2^9 does not match major version 4 (version 3 requires 512-byte sectors, version 4 requires 4096-byte)",
+    );
+  });
+
+  it("throws naming the exact mini sector shift when it is not the mandated 64-byte mini sector", () => {
+    const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
+    bytes[0x20] = 5; // 2^5 = 32, not the mandated 64
+    expect(() => readCompoundFile(bytes)).toThrow(
+      "compound file mini sector shift 2^5 is not the mandated 64-byte mini sector",
+    );
+  });
+
+  it("accepts a mini stream cutoff exactly at the mini sector size, and rejects one byte below it", () => {
+    const atCutoff = compoundFile([{ path: "A", bytes: enc("x") }]);
+    new DataView(atCutoff.buffer).setUint32(0x38, 64, true); // exactly the 64-byte mini sector
+    expect(() => readCompoundFile(atCutoff)).not.toThrow();
+
+    const belowCutoff = compoundFile([{ path: "A", bytes: enc("x") }]);
+    new DataView(belowCutoff.buffer).setUint32(0x38, 63, true);
+    expect(() => readCompoundFile(belowCutoff)).toThrow(
+      "compound file mini stream cutoff 63 is smaller than the 64-byte mini sector itself",
+    );
+  });
+
+  it("throws naming the exact sector size when the file holds no complete sector after its header", () => {
+    const bytes = compoundFile([{ path: "A", bytes: enc("x") }]).slice(
+      0,
+      HEADER_BYTES + 100, // less than one whole 512-byte sector past the header
+    );
+    expect(() => readCompoundFile(bytes)).toThrow(
+      "compound file holds no complete 512-byte sector after its header",
+    );
   });
 
   it("throws for a truncated file (sectors the header references are gone)", () => {
@@ -288,11 +359,88 @@ describe("readCompoundFile malformed-input handling", () => {
     expectFormatError(bytes.slice(0, 700));
   });
 
-  it("throws for a DIFAT entry naming a sector outside the file", () => {
+  it("throws naming the header DIFAT array by name, and the exact sector/count, one sector past the file's own total", () => {
+    const bytes = compoundFile([{ path: "A", bytes: enc("x".repeat(5000)) }]);
+    // This fixture's own file-total sector count (computed the same way the reader itself derives it: whole sectorSize-byte sectors after the header).
+    const sectorCount = Math.floor(bytes.length / 512) - 1;
+    const view = new DataView(bytes.buffer);
+    view.setUint32(0x4c, sectorCount, true); // header DIFAT[0] -> exactly one past the last valid sector
+    expect(() => readCompoundFile(bytes)).toThrow(
+      `the header DIFAT array names FAT sector ${sectorCount}, which is outside the file's ${sectorCount} sectors`,
+    );
+  });
+
+  it("throws for a DIFAT chain entry naming a sector outside the file", () => {
+    // test-support/cfb.ts's own compoundFile never chains a DIFAT sector (its header comment says so: the DIFAT always fits the header's 109-entry array). Corrupting a DIFAT-chain entry specifically needs a file that genuinely has one, so this reaches for ../cfb/write.ts's writeCompoundFile instead -- not to test a round trip (write.test.ts already does that), but purely as a source of valid DIFAT-chained bytes to corrupt one byte of, exactly like every other case in this block corrupts a compoundFile()-built fixture.
+    const payload = new Uint8Array(8 * 1024 * 1024);
+    const bytes = writeCompoundFile([{ path: "WordDocument", bytes: payload }]);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const sectorShift = view.getUint16(0x1e, true);
+    const sectorSize = 1 << sectorShift;
+    const firstDifatSector = view.getUint32(0x44, true);
+    expect(firstDifatSector).not.toBe(0xfffffffe); // sanity: this fixture really does chain a DIFAT sector
+    const sectorCount = Math.floor(bytes.length / sectorSize) - 1;
+    const entriesPerDifatSector = sectorSize / 4 - 1;
+    // Corrupt the chained DIFAT sector's own final slot -- its next-DIFAT-sector pointer, ENDOFCHAIN in this one-DIFAT-sector fixture -- to point past the file. This is the DIFAT chain-walk's own sector-number check (on the sector named IN the chain), not acceptFatSector's check on an ordinary FAT-index entry within it.
+    view.setUint32(
+      (firstDifatSector + 1) * sectorSize + entriesPerDifatSector * 4,
+      sectorCount,
+      true,
+    );
+    expect(() => readCompoundFile(bytes)).toThrow(
+      `the DIFAT chain names sector ${sectorCount}, which is outside the file's ${sectorCount} sectors`,
+    );
+  });
+
+  it("throws when the DIFAT chain visits more sectors than the file holds", () => {
+    // Same rationale as the case above: a genuine DIFAT-chained fixture is needed to corrupt, which only ../cfb/write.ts's writer currently produces.
+    const payload = new Uint8Array(8 * 1024 * 1024);
+    const bytes = writeCompoundFile([{ path: "WordDocument", bytes: payload }]);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const sectorShift = view.getUint16(0x1e, true);
+    const sectorSize = 1 << sectorShift;
+    const firstDifatSector = view.getUint32(0x44, true);
+    const entriesPerDifatSector = sectorSize / 4 - 1;
+    // The chained DIFAT sector's own final slot (its own next-DIFAT-sector pointer), corrupted to point back at itself rather than ENDOFCHAIN or a genuinely later sector -- an infinite chain that must trip the visited-sector-count guard rather than looping forever.
+    view.setUint32(
+      (firstDifatSector + 1) * sectorSize + entriesPerDifatSector * 4,
+      firstDifatSector,
+      true,
+    );
+    expect(() => readCompoundFile(bytes)).toThrow(
+      "the DIFAT chain visits more sectors than the file holds, so it must cycle",
+    );
+  });
+
+  it("throws its exact message when every header DIFAT slot is FREESECT and no DIFAT chain names any FAT sector", () => {
+    const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
+    const view = new DataView(bytes.buffer);
+    for (let i = 0; i < 109; i++) {
+      view.setUint32(0x4c + i * 4, 0xffffffff, true); // FREESECT
+    }
+    expect(() => readCompoundFile(bytes)).toThrow(
+      "compound file declares no FAT sectors, so no sector chain can be walked",
+    );
+  });
+
+  it("throws naming the exact sector and count for a FAT chain stepping outside the file", () => {
+    const bytes = compoundFile([{ path: "A", bytes: enc("x".repeat(5000)) }]);
+    const sectorCount = Math.floor(bytes.length / 512) - 1;
+    const view = new DataView(bytes.buffer);
+    // The stream's first data sector is sector 2 (FAT at 0, directory at 1); point its own FAT entry one sector past the file's own total.
+    view.setUint32(512 + 2 * 4, sectorCount, true);
+    expect(() => readCompoundFile(bytes)).toThrow(
+      `a FAT chain steps to sector ${sectorCount}, which is outside the file's ${sectorCount} sectors`,
+    );
+  });
+
+  it("throws naming the exact sector and its role-marker entry for a FAT chain stepping onto a FATSECT/DIFSECT slot", () => {
     const bytes = compoundFile([{ path: "A", bytes: enc("x".repeat(5000)) }]);
     const view = new DataView(bytes.buffer);
-    view.setUint32(0x4c, 0x0000ff00, true); // header DIFAT[0] -> far beyond the file's sector count
-    expectFormatError(bytes);
+    view.setUint32(512 + 2 * 4, 0xfffffffd, true); // FATSECT, not a chain continuation
+    expect(() => readCompoundFile(bytes)).toThrow(
+      "a FAT chain steps to sector 2's entry 4294967293, which is a sector-role marker, not a chain continuation",
+    );
   });
 
   it("throws for a FAT chain that cycles", () => {
@@ -300,16 +448,116 @@ describe("readCompoundFile malformed-input handling", () => {
     // The stream's first data sector is sector 2 (FAT at 0, directory at 1); point its FAT entry back at itself so the chain never reaches ENDOFCHAIN.
     const view = new DataView(bytes.buffer);
     view.setUint32(512 + 2 * 4, 2, true);
-    expectFormatError(bytes);
+    expect(() => readCompoundFile(bytes)).toThrow(
+      "a FAT chain visits more sectors than the file holds, so it must cycle",
+    );
   });
 
-  it("throws for a stream whose declared size exceeds its chain", () => {
+  it("throws its exact message for an empty directory chain", () => {
+    // A directory whose own single sector's chain entry is corrupted straight to ENDOFCHAIN, making chainBytes(firstDirectorySector) return zero bytes -- the directory's FAT chain, not its content, is what determines emptiness here.
+    const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
+    const view = new DataView(bytes.buffer);
+    view.setUint32(0x30, 0xfffffffe, true); // firstDirectorySector := ENDOFCHAIN
+    expect(() => readCompoundFile(bytes)).toThrow(
+      "compound file has an empty directory chain",
+    );
+  });
+
+  it("throws its exact message when the first directory entry is not the root storage type", () => {
+    const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
+    bytes[entryOffset(0) + 0x42] = 1; // root entry's own object type, corrupted from 5 (root) to 1 (storage)
+    expect(() => readCompoundFile(bytes)).toThrow(
+      "the first directory entry is not the root storage entry (object type 5), as [MS-CFB] 2.6.1 requires",
+    );
+  });
+
+  it("throws naming the exact mini sector and count for a mini-FAT chain stepping outside the mini stream", () => {
+    const bytes = compoundFile([{ path: "A", bytes: enc("x") }]); // 1 byte -> 1 mini sector
+    const view = new DataView(bytes.buffer);
+    const miniFatStart = view.getUint32(0x3c, true);
+    view.setUint32((miniFatStart + 1) * 512, 5, true); // the one real mini sector's own entry, pointed 5 mini sectors past the mini stream's single sector
+    expect(() => readCompoundFile(bytes)).toThrow(
+      "a mini-FAT chain steps to mini sector 5, which is outside the mini stream's 1 mini sectors",
+    );
+  });
+
+  it("throws its exact message for a mini-FAT chain that cycles", () => {
+    const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
+    const view = new DataView(bytes.buffer);
+    const miniFatStart = view.getUint32(0x3c, true);
+    view.setUint32((miniFatStart + 1) * 512, 0, true); // the one mini sector's own entry, pointed back at itself
+    expect(() => readCompoundFile(bytes)).toThrow(
+      "a mini-FAT chain visits more mini sectors than the mini stream holds, so it must cycle",
+    );
+  });
+
+  it("throws naming the exact mini sector and its role-marker entry for a mini-FAT chain stepping onto a FATSECT/DIFSECT slot", () => {
+    const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
+    const view = new DataView(bytes.buffer);
+    const miniFatStart = view.getUint32(0x3c, true);
+    view.setUint32((miniFatStart + 1) * 512, 0xfffffffc, true); // DIFSECT
+    expect(() => readCompoundFile(bytes)).toThrow(
+      "a mini-FAT chain steps to mini sector 0's entry 4294967292, which is a sector-role marker, not a chain continuation",
+    );
+  });
+
+  it("throws naming the entry, its declared size, and its chain's real length when the declared size exceeds it", () => {
     const bytes = compoundFile([{ path: "A", bytes: enc("x".repeat(5000)) }]);
     // Entry 1 is the stream; inflate its declared size to a figure no chain in this small file can fill.
     const view = new DataView(bytes.buffer);
-    const entryOffset = 512 + 512 + 1 * 128; // header + FAT sector + directory sector, entry 1
-    view.setUint32(entryOffset + 0x78, 0x00ffffff, true);
-    expectFormatError(bytes);
+    view.setUint32(entryOffset(1) + 0x78, 0x00ffffff, true);
+    expect(() => readCompoundFile(bytes)).toThrow(
+      "stream 'A' declares 16777215 bytes but its chain holds only",
+    );
+  });
+
+  it("throws naming the exact entry id and directory size when the directory tree links outside the directory's own entries", () => {
+    const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
+    // The root's own child link (its sole real entry, id 1) corrupted to name an entry id past this file's directory. entryCount reflects the whole padded 512-byte directory sector (4 entries of 128 bytes each), not just the 2 real ones (root + A), so it is 4, not 2.
+    const view = new DataView(bytes.buffer);
+    view.setUint32(entryOffset(0) + 0x4c, 9, true);
+    expect(() => readCompoundFile(bytes)).toThrow(
+      "the directory tree links to entry 9, which is outside the directory's 4 entries",
+    );
+  });
+
+  it("throws its exact message when the directory tree reaches the same entry twice", () => {
+    const bytes = compoundFile([
+      { path: "A", bytes: enc("x") },
+      { path: "B", bytes: enc("y") },
+    ]);
+    // A's own right sibling (entry 1's rightId) already names B (entry 2); make B's own right sibling point back at A too, so the tree visits entry 1 a second time.
+    const view = new DataView(bytes.buffer);
+    view.setUint32(entryOffset(2) + 0x48, 1, true);
+    expect(() => readCompoundFile(bytes)).toThrow(
+      "the directory tree reaches entry 1 twice, so its sibling and child links cycle",
+    );
+  });
+
+  it("throws naming the exact entry id and declared name length when it is out of the valid 2-64 even-byte range", () => {
+    const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
+    const view = new DataView(bytes.buffer);
+    view.setUint16(entryOffset(1) + 0x40, 65, true); // odd, and past 64
+    expect(() => readCompoundFile(bytes)).toThrow(
+      "directory entry 1 declares name length 65, which is not an even byte count between 2 and 64",
+    );
+  });
+
+  it("throws naming the exact entry id, name, and object type for an unsupported directory entry type", () => {
+    const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
+    bytes[entryOffset(1) + 0x42] = 9; // neither storage (1), stream (2), nor root (5)
+    expect(() => readCompoundFile(bytes)).toThrow(
+      "directory entry 1 ('A') carries object type 9, which is not a storage (1), stream (2), or root (5) entry",
+    );
+  });
+
+  it("throws its exact message when the tree reaches a second root-typed (object type 5) entry", () => {
+    // Object type 5 passes the descend-stage's own storage/stream/root check (line ~384) unchanged, since ROOT is one of the three types it accepts -- it is only the self-stage's own switch, which explicitly handles STREAM and STORAGE alone, that has no case for a second type-5 entry reached anywhere but the directory's own id-0 slot. A's own name and length stay genuinely valid, so this exercises that check in isolation from the name-length and object-type-acceptance checks above it.
+    const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
+    bytes[entryOffset(1) + 0x42] = 5; // A's own object type, corrupted from STREAM (2) to ROOT (5)
+    expect(() => readCompoundFile(bytes)).toThrow(
+      "the directory tree reaches entry A, which is not a storage or stream entry",
+    );
   });
 
   it("throws for a directory tree whose sibling links cycle", () => {
@@ -319,19 +567,18 @@ describe("readCompoundFile malformed-input handling", () => {
     ]);
     // Entries 1 (A) and 2 (B) are siblings chained 1 -> 2; point B's right sibling back at A.
     const view = new DataView(bytes.buffer);
-    const entryOffset = (id: number) => 512 + 512 + id * 128;
     view.setUint32(entryOffset(2) + 0x48, 1, true);
     expectFormatError(bytes);
   });
 
-  it("throws when the cumulative extracted size exceeds the configured budget", () => {
+  it("throws naming the exact budget and entry name when the cumulative extracted size exceeds it", () => {
     // Two 5000-byte streams with a 6000-byte budget: the second extraction tips the cumulative total over, so the whole read fails rather than returning a partial listing -- the same stance archive-codec's ZIP walk takes on its guards, and for the same reason (a hostile FAT can alias one sector into many streams, multiplying extraction beyond the file's own size).
     const bytes = compoundFile([
       { path: "A", bytes: enc("x".repeat(5000)) },
       { path: "B", bytes: enc("y".repeat(5000)) },
     ]);
     expect(() => readCompoundFile(bytes, { maxTotalBytes: 6000 })).toThrow(
-      CompoundFileFormatError,
+      "cumulative extracted stream size exceeded the 6000-byte budget at 'B'",
     );
     // The same file under the default budget reads fine -- the guard fires on the budget, not on the structure.
     expect(readCompoundFile(bytes)).toHaveLength(2);
