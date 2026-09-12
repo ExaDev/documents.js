@@ -64,6 +64,14 @@ export interface PropertyGraph {
   readonly edges: readonly GraphEdge[];
 }
 
+// Ascending orderKey comparator, shared by every sort site in this module (walkPropertyGraph's per-node outgoing-edge order, reconcileChildren's and insertEdge's own sibling lists) rather than three separately-typed-out copies: one definition means one set of mutants to kill, not three identical sets, and one caller change (were the comparison ever wrong) fixes every sort site at once. Exported purely for the direct unit test below pinning its exact -1/0/1 return values, not for use outside this module.
+export function orderKeyAscComparator(
+  a: { readonly orderKey: string },
+  b: { readonly orderKey: string },
+): number {
+  return a.orderKey < b.orderKey ? -1 : a.orderKey > b.orderKey ? 1 : 0;
+}
+
 // The dedup/identity key for one edge -- (from, to, kind, orderKey, path) -- shared by DocumentProjection's own addEdge below and the write API's rebalancing insert further down, so the two never drift into two different notions of "the same edge".
 function edgeKey(edge: GraphEdge): string {
   // No special-casing for a missing `path`: JSON.stringify(undefined) is the JS value `undefined`, which interpolates as the literal text "undefined" here -- a placeholder that can never collide with a genuine JSON.stringify(path) output, since PropertyPath is always a JSON array and JSON.stringify of an array always starts with `[`.
@@ -619,9 +627,7 @@ export function walkPropertyGraph(
     else bucket.push(edge);
   }
   for (const bucket of outgoingByFrom.values())
-    bucket.sort((a, b) =>
-      a.orderKey < b.orderKey ? -1 : a.orderKey > b.orderKey ? 1 : 0,
-    );
+    bucket.sort(orderKeyAscComparator);
 
   // Always allocated, even for a CONTAINS-only walk where it is provably never needed (every CONTAINS edge projectDocumentGraph itself mints is hash-derived and therefore acyclic, per this function's own module comment): the guard's own on-path Set tracks only the CURRENT DFS ancestors, never nodes finished and popped off it, so it costs nothing but a few unused Set operations for a graph that can never actually cycle on CONTAINS alone.
   const onPath = new Set<string>();
@@ -702,13 +708,10 @@ function reconcileChildren(
 ): PropertyGraph {
   if (children === undefined) return graph;
 
-  const byOrderKeyAsc = (a: GraphEdge, b: GraphEdge): number =>
-    a.orderKey < b.orderKey ? -1 : a.orderKey > b.orderKey ? 1 : 0;
-
   // The fixed reference list every classification and anchor below resolves against: `id`'s existing CONTAINS edges, sorted once. This array is never mutated or reordered by this function -- an index into it names one specific, unchanging existing edge for the rest of the call.
   const originalSiblings = graph.edges
     .filter((edge) => edge.from === id && edge.kind === "CONTAINS")
-    .sort(byOrderKeyAsc);
+    .sort(orderKeyAscComparator);
 
   const existingSeq = originalSiblings.map((edge) => edge.to);
 
@@ -716,32 +719,39 @@ function reconcileChildren(
   const dp: number[][] = Array.from({ length: existingSeq.length + 1 }, () =>
     new Array<number>(children.length + 1).fill(0),
   );
+  // Bounds-checked in place of a bare `row[index]!`: every legitimate row/column pair the backtrack below computes stays within dp's own real dimensions, so this can only ever throw if the backtrack's own loop bounds were themselves wrong -- a genuine correctness bug, not a defensive "just in case". That throw is exactly what makes a boundary mutation of the backtrack's own `i`/`j` loop conditions (e.g. `<` weakened to `<=`) an observable failure instead of a silently-absorbed one-past-the-end no-op: `row[index]` alone would just read `undefined` and carry on.
+  const dpAt = (row: readonly number[], index: number): number => {
+    if (index < 0 || index >= row.length) {
+      throw new Error(
+        `reconcileChildren: dp lookup index ${String(index)} out of bounds (0..${String(row.length - 1)})`,
+      );
+    }
+    return row[index]!;
+  };
   for (let i = existingSeq.length - 1; i >= 0; i -= 1) {
     for (let j = children.length - 1; j >= 0; j -= 1) {
       dp[i]![j] =
         existingSeq[i] === children[j]
-          ? dp[i + 1]![j + 1]! + 1
-          : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
+          ? dpAt(dp[i + 1]!, j + 1) + 1
+          : Math.max(dpAt(dp[i + 1]!, j), dpAt(dp[i]!, j + 1));
     }
   }
 
   // Forward backtrack from (0, 0): a matching pair is taken the instant both sequences agree at the current pointers -- not because it is the only move an optimal assignment could ever take there (existingSeq [A, B] against children [A, A] has more than one assignment reaching a maximum common subsequence), but because the standard LCS recurrence guarantees taking an agreeing pair is always part of AT LEAST ONE maximum common subsequence, which is all a single deterministic backtrack needs. Otherwise whichever pointer leads to the branch the table says still carries the larger remaining match advances -- a genuine tie breaks toward advancing `i` (the existing side), so a requested position matches as early as any optimal assignment allows.
-  const matchedIndex = new Array<number | undefined>(children.length).fill(
-    undefined,
-  );
-  const matchedByOriginal = new Array<number | undefined>(
-    existingSeq.length,
-  ).fill(undefined);
+  //
+  // Both maps below are keyed by index rather than sized arrays: neither key space is ever read by `.length` or iterated as a whole, only ever looked up by a specific position/index and checked for presence, so a Map's own "no entry" semantics already say everything a pre-sized, pre-filled array's "still holds its initial fill value" would -- there is no separate "was this ever populated" fact a fixed initial size could add.
+  const matchedIndex = new Map<number, number>();
+  const matchedByOriginal = new Map<number, number>();
   {
     let i = 0;
     let j = 0;
     while (i < existingSeq.length && j < children.length) {
       if (existingSeq[i] === children[j]) {
-        matchedIndex[j] = i;
-        matchedByOriginal[i] = j;
+        matchedIndex.set(j, i);
+        matchedByOriginal.set(i, j);
         i += 1;
         j += 1;
-      } else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) {
+      } else if (dpAt(dp[i + 1]!, j) >= dpAt(dp[i]!, j + 1)) {
         i += 1;
       } else {
         j += 1;
@@ -752,26 +762,27 @@ function reconcileChildren(
   // Anti-inflation pass: pairs every existing edge the LCS match above left unmatched against a remaining unmatched requested occurrence of the identical id, front to back on each side -- see this function's own doc comment above for why this cannot preserve global order (no order-preserving assignment of these specific edges exists, or the LCS pass would already have found it) and why it must run anyway (capping each id's final multiplicity at max(existingCount, requestedCount), never minting a fresh edge for a position an existing one could satisfy).
   const unmatchedExistingByTarget = new Map<string, number[]>();
   originalSiblings.forEach((edge, index) => {
-    if (matchedByOriginal[index] !== undefined) return;
+    if (matchedByOriginal.has(index)) return;
     const bucket = unmatchedExistingByTarget.get(edge.to);
     if (bucket === undefined) unmatchedExistingByTarget.set(edge.to, [index]);
     else bucket.push(index);
   });
   const leftoverPointer = new Map<string, number>();
   children.forEach((childId, position) => {
-    if (matchedIndex[position] !== undefined) return;
+    if (matchedIndex.has(position)) return;
     const leftovers = unmatchedExistingByTarget.get(childId);
     if (leftovers === undefined) return;
     const pointer = leftoverPointer.get(childId) ?? 0;
     if (pointer >= leftovers.length) return;
-    matchedIndex[position] = leftovers[pointer]!;
+    matchedIndex.set(position, leftovers[pointer]!);
     leftoverPointer.set(childId, pointer + 1);
   });
 
-  // A missing position's anchor: the `originalSiblings` index of the nearest LATER requested position already matched, or `originalSiblings.length` (past the end) when nothing later matched.
+  // A missing position's anchor: the `originalSiblings` index of the nearest LATER requested position already matched, or `originalSiblings.length` (past the end) when nothing later matched. Iterating `children.entries()` rather than a separately-bounded `for` loop ties the scan's own end directly to the real array it walks, so there is no independent "later < children.length" comparison left for a boundary mutation to weaken without also changing what `.entries()` itself iterates.
   const anchorFor = (position: number): number => {
-    for (let later = position + 1; later < children.length; later += 1) {
-      const candidate = matchedIndex[later];
+    for (const [later] of children.entries()) {
+      if (later <= position) continue;
+      const candidate = matchedIndex.get(later);
       if (candidate !== undefined) return candidate;
     }
     return originalSiblings.length;
@@ -781,7 +792,7 @@ function reconcileChildren(
   const insertedAtOrBefore: number[] = [];
 
   return children.reduce((acc, childId, position) => {
-    if (matchedIndex[position] !== undefined) return acc; // already matched to a specific existing edge -- never moved
+    if (matchedIndex.has(position)) return acc; // already matched to a specific existing edge -- never moved
     assertNoContainsCycle(acc.edges, id, childId);
     const anchorIndex = anchorFor(position);
     const insertIndex =
@@ -790,28 +801,29 @@ function reconcileChildren(
     insertedAtOrBefore.push(anchorIndex);
     const currentSiblings = acc.edges
       .filter((edge) => edge.from === id && edge.kind === "CONTAINS")
-      .sort(byOrderKeyAsc);
-    try {
-      const orderKey = boundedOrderKey(currentSiblings, insertIndex);
-      const edge: GraphEdge = {
-        from: id,
-        to: childId,
-        kind: "CONTAINS",
-        orderKey,
-      };
-      return { nodes: acc.nodes, edges: [...acc.edges, edge] };
-    } catch (error) {
-      if (!(error instanceof OrderKeyBudgetExhaustedError)) throw error;
-      return rebalancedInsert(
-        acc,
-        id,
-        childId,
-        "CONTAINS",
-        currentSiblings,
-        insertIndex,
-        undefined,
-      );
-    }
+      .sort(orderKeyAscComparator);
+    return runOrRebalance(
+      () => {
+        const orderKey = boundedOrderKey(currentSiblings, insertIndex);
+        const edge: GraphEdge = {
+          from: id,
+          to: childId,
+          kind: "CONTAINS",
+          orderKey,
+        };
+        return { nodes: acc.nodes, edges: [...acc.edges, edge] };
+      },
+      () =>
+        rebalancedInsert(
+          acc,
+          id,
+          childId,
+          "CONTAINS",
+          currentSiblings,
+          insertIndex,
+          undefined,
+        ),
+    );
   }, graph);
 }
 
@@ -950,8 +962,8 @@ function siblingInsertIndex(
 
 // The fast path: bisect between whichever of `siblings[index - 1]`/`siblings[index]` exist, falling back to orderKeyForIndex(0) only when NEITHER does (a genuinely empty sibling list -- the same wide key a fresh projection mints for its own first child, not a defensive default masking a lookup failure). Throws OrderKeyBudgetExhaustedError when the two neighbours have no room left, which insertEdge below catches and answers with a full rebalance rather than surfacing to the caller -- exactly what a real sibling list needs to keep working once bisection is exhausted, most commonly `start` against a first child that (like every first child projectDocumentGraph itself ever mints) already sits at the scheme's own floor.
 //
-// Two adjacent siblings sharing one orderKey are a SEPARATE no-room case from a narrow-but-nonempty interval, and are checked for explicitly, before ever calling orderKeyBetween: this module's own emitWalkEdges mints every PROPERTY/DEFINED_BY edge from one owner at the uniform floor key, by design, since those edges carry no real document-order sequence for orderKey to encode (only `path` disambiguates them) -- so a tied pair here is an expected shape this module itself produces, not a malformed graph. orderKeyBetween's own precondition ("low must sort strictly before high") is written for a genuine caller error -- a reversed pair, low > high -- and throws a plain Error for that; asking it to also cover the tied case would make one precondition violation throw two different error classes depending on which of "equal" or "reversed" produced it. Recognising the tie here instead, ahead of the call, keeps that plain-Error/OrderKeyBudgetExhaustedError split consistent (genuine misuse vs. legitimate no-room-left) and routes the tie through the identical rebalance fallback insertEdge already has for a narrow interval.
-function boundedOrderKey(
+// Two adjacent siblings sharing one orderKey are a SEPARATE no-room case from a narrow-but-nonempty interval, and are checked for explicitly, before ever calling orderKeyBetween: this module's own emitWalkEdges mints every PROPERTY/DEFINED_BY edge from one owner at the uniform floor key, by design, since those edges carry no real document-order sequence for orderKey to encode (only `path` disambiguates them) -- so a tied pair here is an expected shape this module itself produces, not a malformed graph. orderKeyBetween's own precondition ("low must sort strictly before high") is written for a genuine caller error -- a reversed pair, low > high -- and throws a plain Error for that; asking it to also cover the tied case would make one precondition violation throw two different error classes depending on which of "equal" or "reversed" produced it. Recognising the tie here instead, ahead of the call, keeps that plain-Error/OrderKeyBudgetExhaustedError split consistent (genuine misuse vs. legitimate no-room-left) and routes the tie through the identical rebalance fallback insertEdge already has for a narrow interval. Exported purely for the direct unit test below pinning this exact tied-siblings message: insertEdge's own catch swallows it into a silent rebalance, so no test reaching this function only through insertEdge/reconcileChildren ever observes the string itself.
+export function boundedOrderKey(
   siblings: readonly GraphEdge[],
   index: number,
 ): string {
@@ -967,6 +979,16 @@ function boundedOrderKey(
     );
   }
   return orderKeys.orderKeyBetween(before.orderKey, after.orderKey);
+}
+
+// Runs `attempt`, answering an OrderKeyBudgetExhaustedError alone with a full rebalance via `onExhausted`; any other error propagates unchanged. Shared by reconcileChildren's and insertEdge's own identical try/catch, both built around this exact call shape (bisect via boundedOrderKey, rebalance on its one named exhaustion signal). The rethrow branch is a defensive guard no legitimate call through either of those two call sites can ever actually trigger: boundedOrderKey's own tied-key check runs before orderKeyBetween is ever called, and the sibling list handed to it is freshly sorted ascending immediately before every call, so orderKeyBetween's "low must sort strictly before high" precondition can never fail here -- exported purely so the direct unit test below can prove the rethrow itself works, the same reasoning effective.ts's assertResolvedHeadingAnchor already documents for an equivalent unreachable-in-practice guard.
+export function runOrRebalance<T>(attempt: () => T, onExhausted: () => T): T {
+  try {
+    return attempt();
+  } catch (error) {
+    if (!(error instanceof OrderKeyBudgetExhaustedError)) throw error;
+    return onExhausted();
+  }
 }
 
 // The rebalance fallback: mints a fresh, evenly spaced key for every one of `from`'s existing `kind` edges plus the new one, in the same relative order (renumberedOrderKeys -- the identical rebalance orderKeyBetween's own exhaustion already names as the answer), then replaces exactly those existing edges in `graph` with their rebuilt versions. Every OTHER edge in `graph` -- a different `from`, a different `kind`, or a wholly unrelated edge -- is carried over untouched; only the one sibling group that ran out of room is ever rewritten.
@@ -1070,33 +1092,23 @@ export function insertEdge(
   const position = options.position ?? { at: "end" };
   const siblings = graph.edges
     .filter((edge) => edge.from === from && edge.kind === kind)
-    .sort((a, b) =>
-      a.orderKey < b.orderKey ? -1 : a.orderKey > b.orderKey ? 1 : 0,
-    );
+    .sort(orderKeyAscComparator);
   const index = siblingInsertIndex(siblings, position, from, kind);
-  let orderKey: string;
-  try {
-    orderKey = boundedOrderKey(siblings, index);
-  } catch (error) {
-    if (!(error instanceof OrderKeyBudgetExhaustedError)) throw error;
-    return rebalancedInsert(
-      graph,
-      from,
-      to,
-      kind,
-      siblings,
-      index,
-      options.path,
-    );
-  }
-  const edge: GraphEdge = {
-    from,
-    to,
-    kind,
-    orderKey,
-    ...(options.path === undefined ? {} : { path: options.path }),
-  };
-  return { nodes: graph.nodes, edges: [...graph.edges, edge] };
+  return runOrRebalance(
+    () => {
+      const orderKey = boundedOrderKey(siblings, index);
+      const edge: GraphEdge = {
+        from,
+        to,
+        kind,
+        orderKey,
+        ...(options.path === undefined ? {} : { path: options.path }),
+      };
+      return { nodes: graph.nodes, edges: [...graph.edges, edge] };
+    },
+    () =>
+      rebalancedInsert(graph, from, to, kind, siblings, index, options.path),
+  );
 }
 
 // Whether two edges' own `path` fields name the same property path -- `undefined` matches only `undefined` (an edge with no path is not "the same path" as one carrying an empty array), otherwise structural equality via JSON.stringify, the same comparison edgeKey itself already relies on for its own dedup key. No separate undefined special-case is needed: JSON.stringify(undefined) is the JS value `undefined` itself, not a string, so comparing the two stringified results already agrees with `a === b` whenever either argument is undefined (both undefined: undefined === undefined; exactly one undefined: undefined === "[...]", always false).
