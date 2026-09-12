@@ -628,4 +628,18 @@ describe("coalesceRunConstructs", () => {
       { descriptor: other, startRun: 0, endRun: 2 },
     ]);
   });
+
+  it("sorts two overlapping extents by startRun even though the shorter one closes -- and is pushed -- first", () => {
+    // "a" opens at run 0 and stays open the whole time; "b" opens at run 1 and closes at run 2, before "a" does at run 3 -- so the per-run close pushes b's extent onto `out` before a's own extent reaches the end-of-paragraph cleanup, making raw insertion order [b, a], the reverse of the startRun order the sort must produce.
+    const result = coalesceRunConstructs([
+      [anchor],
+      [anchor, other],
+      [anchor],
+      [anchor],
+    ]);
+    expect(result).toEqual([
+      { descriptor: anchor, startRun: 0, endRun: 4 },
+      { descriptor: other, startRun: 1, endRun: 2 },
+    ]);
+  });
 });
