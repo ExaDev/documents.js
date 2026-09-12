@@ -76,7 +76,7 @@ export const CELL_FILL_COLORS_SUBFUNCTION = 0x86;
 
 export interface WpdEmbeddedSubfunction {
   readonly code: number;
-  // The payload between the two gates, or an empty view for the one gateless member.
+  // The payload between the two gates, or an empty view for the one gateless member. For CELL_FORMULA_SUBFUNCTION specifically, this is the tokenised formula alone -- the leading and trailing length words either side of it are framing, not payload, and are stripped here rather than left for a caller to skip.
   readonly data: Uint8Array;
 }
 
@@ -115,10 +115,14 @@ export function readEmbeddedSubfunctions(
         continue;
       }
       // uint16At throws (via byteAt) when the formula subfunction's own 2-byte length field does not fit, caught below exactly as the size-overrun case just after it already is: neither is a stream out of step, both are a record with no readable attributes left.
-      const size =
+      const formulaLength =
         code === CELL_FORMULA_SUBFUNCTION
-          ? uint16At(nonDeletable, cursor + 1) + CELL_FORMULA_FRAMING_SIZE
-          : EMBEDDED_SUBFUNCTION_SIZES.get(code);
+          ? uint16At(nonDeletable, cursor + 1)
+          : undefined;
+      const size =
+        formulaLength === undefined
+          ? EMBEDDED_SUBFUNCTION_SIZES.get(code)
+          : formulaLength + CELL_FORMULA_FRAMING_SIZE;
       if (size === undefined) {
         return { subfunctions, truncated: true };
       }
@@ -129,7 +133,11 @@ export function readEmbeddedSubfunctions(
       }
       subfunctions.push({
         code,
-        data: nonDeletable.subarray(cursor + 1, cursor + size - 1),
+        // The formula subfunction's own length word brackets the token region on both sides (length, tokens, length again); every other subfunction's payload is simply what sits between its two code gates.
+        data:
+          formulaLength === undefined
+            ? nonDeletable.subarray(cursor + 1, cursor + size - 1)
+            : nonDeletable.subarray(cursor + 3, cursor + 3 + formulaLength),
       });
       cursor += size;
     }
