@@ -200,13 +200,32 @@ describe("readWpdContent", () => {
     const document = readDocumentArea([
       ...text("un"),
       0xf1,
-      12, // BOLD's own attribute number -- proves the gate actually excludes this code, since misreading this byte as an ATTRIBUTE_ON/OFF payload would turn bold on
+      0,
       0,
       0,
       0xf1, // Undo: a genuine 5-byte fixed function, gated at both ends
       ...text("broken"),
     ]);
     expect(paragraphsOf(document)[0]?.runs).toEqual([{ text: "unbroken" }]);
+  });
+
+  // A fixed-length function code with no named meaning must not be misread as an ATTRIBUTE_ON/OFF payload even when its own data byte happens to look like a real attribute number: since its own code is neither ATTRIBUTE_ON nor ATTRIBUTE_OFF, misreading it would take the ATTRIBUTE_OFF branch (deleting the attribute) regardless of which real code opened it, silently turning bold back off.
+  it("does not clear an active attribute for a fixed-length function code with no named meaning", () => {
+    const document = readDocumentArea([
+      0xf2, // ATTRIBUTE_ON (bold)
+      12,
+      0xf2,
+      ...text("before"),
+      0xf1,
+      12, // BOLD's own attribute number, in a code this reader does not treat as an attribute code at all
+      0,
+      0,
+      0xf1, // Undo: a genuine 5-byte fixed function, gated at both ends
+      ...text("after"),
+    ]);
+    expect(paragraphsOf(document)[0]?.runs).toEqual([
+      { text: "beforeafter", bold: true },
+    ]);
   });
 
   it("splits runs at an attribute boundary", () => {
