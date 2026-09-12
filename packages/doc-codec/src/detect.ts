@@ -1,4 +1,4 @@
-import { isCompoundFile, readCompoundFile } from "archive-codec";
+import { readCompoundFile } from "archive-codec";
 import { readUint16LE } from "./bytes";
 import { FIB_W_IDENT } from "./fib/offsets";
 
@@ -15,12 +15,12 @@ export const DATA_STREAM = "Data";
 //
 // This reads the whole container to answer, which is the honest cost of a correct answer: a compound file's directory is not at a fixed offset, so there is no cheaper place to look for a named stream. A caller with a path or a MIME type already in hand should use that instead of paying for this.
 export function isDocBytes(bytes: Uint8Array<ArrayBuffer>): boolean {
-  if (!isCompoundFile(bytes)) return false;
   let streams;
   try {
+    // readCompoundFile's own first check is the identical compound-file signature test this function would otherwise repeat -- a separate, earlier isCompoundFile guard would only ever save the cost of one already-cheap 8-byte comparison, at the price of a mutation-testing-visible AST node with no test able to observe any difference from removing it, so it is not repeated here.
     streams = readCompoundFile(bytes);
   } catch {
-    // A malformed container is not a .doc, and a detector's contract is to answer rather than to throw. The error is deliberately not rethrown or reported: a caller that wants the failure explained calls the reader, which surfaces it.
+    // A malformed container (including one that never carried the compound-file signature at all) is not a .doc, and a detector's contract is to answer rather than to throw. The error is deliberately not rethrown or reported: a caller that wants the failure explained calls the reader, which surfaces it.
     return false;
   }
   const wordDocument = streams.find(
