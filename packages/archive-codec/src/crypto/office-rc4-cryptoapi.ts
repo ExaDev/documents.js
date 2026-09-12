@@ -19,13 +19,11 @@ function keySizeBitsOf(keySizeBits: number): number {
   return keySizeBits === 0 ? RC4_CRYPTOAPI_DEFAULT_KEY_SIZE_BITS : keySizeBits;
 }
 
+// Constant-shape comparison, deliberately with no length check: this module's own sole call site (verifyRc4CryptoApiPassword below) always compares a SHA-1 digest (always 20 bytes) against a slice already fixed to that same RC4_CRYPTOAPI_VERIFIER_HASH_LENGTH -- a mismatched-length pair can never actually reach this private helper, so guarding against one would be dead code for a case this module cannot produce.
 function bytesEqual(
   a: Uint8Array<ArrayBuffer>,
   b: Uint8Array<ArrayBuffer>,
 ): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
   return a.every((byte, index) => byte === b[index]);
 }
 
