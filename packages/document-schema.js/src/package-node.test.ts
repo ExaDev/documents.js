@@ -849,3 +849,53 @@ describe("the package tree rejects near-misses", () => {
     expect(isTreeLeaf(wrapper)).toBe(false);
   });
 });
+
+describe("a group wrapper's own `node` must be a plain, non-null, non-array record", () => {
+  it("rejects a wrapper whose node is null", () => {
+    expect(
+      SectionGroupSchema.safeParse({ node: null, children: [] }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a wrapper whose node is an array, even though typeof an array is 'object'", () => {
+    expect(
+      SectionGroupSchema.safeParse({ node: [], children: [] }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a wrapper whose node is a primitive", () => {
+    expect(
+      SectionGroupSchema.safeParse({ node: "not-a-record", children: [] })
+        .success,
+    ).toBe(false);
+    expect(
+      SectionGroupSchema.safeParse({ node: 42, children: [] }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a wrapper with no node field at all", () => {
+    expect(SectionGroupSchema.safeParse({ children: [] }).success).toBe(false);
+  });
+});
+
+describe("every group guard rejects a wrapper VALUE that isn't itself a plain record, before ever reading its own .node", () => {
+  // Each guard's own top-level isRecord(value) check runs before value.node is ever read -- for null/undefined specifically, skipping straight to `value.node` would throw a TypeError rather than return false, so this is the one guard clause a malformed non-object input actually depends on for a clean `false` rather than a crash. A node-only test (the describe block above) can never reach this: SectionDescriptorSchema.safeParse(value.node) already requires value.node to be a real object to succeed at all, so by the time isGroupWrapper's own isRecord(value.node) check would run, value.node is already guaranteed to satisfy it.
+  it("rejects null and undefined without throwing", () => {
+    expect(() => SectionGroupSchema.safeParse(null)).not.toThrow();
+    expect(SectionGroupSchema.safeParse(null).success).toBe(false);
+    expect(SectionGroupSchema.safeParse(undefined).success).toBe(false);
+    expect(isTreeNode(null)).toBe(false);
+    expect(isTreeGroup(null)).toBe(false);
+  });
+
+  it("rejects an array, even though typeof an array is 'object'", () => {
+    expect(SectionGroupSchema.safeParse([]).success).toBe(false);
+    expect(isTreeGroup([])).toBe(false);
+  });
+
+  it("rejects a primitive", () => {
+    expect(SectionGroupSchema.safeParse("a string").success).toBe(false);
+    expect(SectionGroupSchema.safeParse(42).success).toBe(false);
+    expect(isTreeGroup("a string")).toBe(false);
+  });
+});
