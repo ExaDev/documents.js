@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { DocumentTreeSchema, type DocumentTree } from "document-schema.js";
+import {
+  DocumentTreeSchema,
+  type DocumentTree,
+  type HeadingGroupNode,
+} from "document-schema.js";
 import { buildOutline } from "./build";
 import {
   drawPageGroup,
@@ -110,6 +114,37 @@ describe("wordprocessing outlines", () => {
         children: [
           { text: "Aside", level: 3, children: [] },
           { text: "Section", level: 2, children: [body] },
+        ],
+      },
+    ]);
+  });
+
+  it("pops only the deepest of three open heading groups, keeping the shallower two open", () => {
+    // A three-deep open heading stack ([Chapter, Section, Aside]) at the moment 'Follow' arrives is what distinguishes popping from the ACTUAL top of the stack from popping based on some other, shallower element: a check that (wrongly) reads the stack's second element (Section, level 2) would see 2 >= 3 as false and never pop Aside at all, nesting 'Follow' as Aside's own child instead of Aside's sibling under Section.
+    const pkg = wordprocessingPackage([
+      sectionGroup([
+        headingGroup("Chapter", 1, [
+          headingGroup("Section", 2, [
+            headingGroup("Aside", 4, []),
+            headingGroup("Follow", 3, []),
+          ]),
+        ]),
+      ]),
+    ]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([
+      {
+        text: "Chapter",
+        level: 1,
+        children: [
+          {
+            text: "Section",
+            level: 2,
+            children: [
+              { text: "Aside", level: 4, children: [] },
+              { text: "Follow", level: 3, children: [] },
+            ],
+          },
         ],
       },
     ]);
@@ -234,6 +269,87 @@ describe("wordprocessing outlines", () => {
         level: 0,
         children: [{ text: "C", level: 2, children: [] }],
       },
+    ]);
+  });
+
+  it("pops only the deepest of three open list groups, keeping the shallower two open", () => {
+    // The list-stack mirror of the heading test above: a three-deep open list stack ([A, B, D]) at the moment sibling 'E' arrives is what distinguishes popping from the stack's ACTUAL top from popping based on some other, shallower element -- a check that (wrongly) reads the stack's second element (B, level 1) would see 1 >= 2 as false and never pop D, nesting 'E' as D's own child instead of D's sibling under B.
+    const pkg = wordprocessingPackage([
+      sectionGroup([
+        listGroup("A", 0, [
+          listGroup("B", 1, [listGroup("D", 3, []), listGroup("E", 2, [])]),
+        ]),
+      ]),
+    ]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([
+      {
+        text: "A",
+        level: 0,
+        children: [
+          {
+            text: "B",
+            level: 1,
+            children: [
+              { text: "D", level: 3, children: [] },
+              { text: "E", level: 2, children: [] },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("attaches a construct group's own content, and a plain leaf, to the innermost of three open list groups", () => {
+    // A three-deep open list stack ([A, B, C]) is what distinguishes reading the stack's actual last (current, innermost) element from reading some other, shallower element -- both the construct group's flattened content and the following page break must land under C, the innermost item, not under B.
+    const pkg = wordprocessingPackage([
+      sectionGroup([
+        listGroup("A", 0, [
+          listGroup("B", 1, [
+            listGroup("C", 2, [
+              shapeConstructGroup([paragraph("construct-content")]),
+              pageBreak(),
+            ]),
+          ]),
+        ]),
+      ]),
+    ]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([
+      {
+        text: "A",
+        level: 0,
+        children: [
+          {
+            text: "B",
+            level: 1,
+            children: [
+              {
+                text: "C",
+                level: 2,
+                children: [paragraph("construct-content"), pageBreak()],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("concatenates a heading anchor's multiple runs with no separator for the group's label", () => {
+    // The fixtures' own paragraph() builder always produces a single-run anchor, which cannot distinguish paragraphText's own no-separator join from a separator-inserting one -- this anchor is built directly to carry more than one run.
+    const multiRunHeading: HeadingGroupNode = {
+      node: {
+        kind: "paragraph",
+        runs: [{ text: "Chap " }, { text: "One" }],
+        headingLevel: 1,
+      },
+      children: [],
+    };
+    const pkg = wordprocessingPackage([sectionGroup([multiRunHeading])]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([
+      { text: "Chap One", level: 1, children: [] },
     ]);
   });
 
@@ -386,6 +502,48 @@ describe("presentation outlines", () => {
         text: "Slide 1",
         level: 1,
         children: [before, { text: "nested", level: 0, children: [] }, after],
+      },
+    ]);
+  });
+  it("attaches a shape construct group's own content to the innermost of three open list groups", () => {
+    // The shape-flow mirror of wordprocessing's own equivalent test above: a three-deep open list stack ([A, B, C]) is what distinguishes the stack's actual last (innermost) element from some other, shallower one -- the construct group's flattened content must land under C, not under B.
+    const pkg = presentationPackage([
+      slideGroup([
+        shapeGroup([
+          listGroup("A", 0, [
+            listGroup("B", 1, [
+              listGroup("C", 2, [
+                shapeConstructGroup([paragraph("construct-content")]),
+              ]),
+            ]),
+          ]),
+        ]),
+      ]),
+    ]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([
+      {
+        text: "Slide 1",
+        level: 1,
+        children: [
+          {
+            text: "A",
+            level: 0,
+            children: [
+              {
+                text: "B",
+                level: 1,
+                children: [
+                  {
+                    text: "C",
+                    level: 2,
+                    children: [paragraph("construct-content")],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
       },
     ]);
   });
