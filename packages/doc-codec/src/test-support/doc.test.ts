@@ -100,6 +100,19 @@ describe("buildDoc", () => {
     expect(runs[1]?.bold).toBeUndefined();
   });
 
+  it("does not merge an unformatted run followed by a formatted one", () => {
+    const doc = build({
+      paragraphs: [
+        { runs: [{ text: "Plain" }, { text: "Bold", grpprl: BOLD_ON }] },
+      ],
+    });
+    const block = doc.sections[0]?.blocks[0];
+    const runs = block?.kind === "paragraph" ? block.runs : [];
+    expect(runs).toHaveLength(2);
+    expect(runs[0]?.bold).toBeUndefined();
+    expect(runs[1]).toMatchObject({ bold: true });
+  });
+
   it("skips an empty-text run entirely rather than emitting a zero-length formatting exception", () => {
     const doc = build({
       paragraphs: [
@@ -207,6 +220,57 @@ describe("buildDoc", () => {
       (story) => story.slot === "oddHeader",
     );
     expect(oddHeader).toBeUndefined();
+  });
+
+  it("produces no header/footer document at all when headerFooterStories is omitted", () => {
+    const doc = build({
+      paragraphs: [{ runs: [{ text: "Main" }] }],
+    });
+    expect(doc.headerFooterStories).toHaveLength(0);
+  });
+
+  it("produces no comment document at all when comments is omitted", () => {
+    const doc = build({
+      paragraphs: [{ runs: [{ text: "Main" }] }],
+    });
+    expect(doc.comments).toHaveLength(0);
+  });
+
+  it("produces no endnote document at all when endnotes is omitted", () => {
+    const doc = build({
+      paragraphs: [{ runs: [{ text: "Main" }] }],
+    });
+    expect(doc.endnotes).toHaveLength(0);
+  });
+
+  it("round-trips a bare (guard-less) comment story identically to a guarded one", () => {
+    const guarded = build({
+      paragraphs: [{ runs: [{ text: "Main" }] }],
+      comments: [[{ runs: [{ text: "Comment text" }] }]],
+      bareNoteStories: false,
+    });
+    const bare = build({
+      paragraphs: [{ runs: [{ text: "Main" }] }],
+      comments: [[{ runs: [{ text: "Comment text" }] }]],
+      bareNoteStories: true,
+    });
+    expect(guarded.comments[0]?.text).toBe("Comment text");
+    expect(bare.comments[0]?.text).toBe("Comment text");
+  });
+
+  it("round-trips a bare (guard-less) endnote story identically to a guarded one", () => {
+    const guarded = build({
+      paragraphs: [{ runs: [{ text: "Main" }] }],
+      endnotes: [[{ runs: [{ text: "Endnote text" }] }]],
+      bareNoteStories: false,
+    });
+    const bare = build({
+      paragraphs: [{ runs: [{ text: "Main" }] }],
+      endnotes: [[{ runs: [{ text: "Endnote text" }] }]],
+      bareNoteStories: true,
+    });
+    expect(guarded.endnotes[0]?.text).toBe("Endnote text");
+    expect(bare.endnotes[0]?.text).toBe("Endnote text");
   });
 
   it("round-trips footnotes, comments, and endnotes together with a preceding header/footer document, exercising every subdocument's own ccp arithmetic", () => {
@@ -328,6 +392,46 @@ describe("buildDoc", () => {
         }),
       ),
     ).toThrow(/row-ending mark/);
+  });
+
+  it("round-trips a character style (stk 2) whose own sti differs from its istd", () => {
+    // style.sti defaults to istd when absent; giving it an explicit, different value exercises the STSHI word0 (style.sti ?? istd) branch genuinely, rather than the two always coinciding.
+    const doc = build({
+      paragraphs: [
+        { runs: [{ text: "Run", grpprl: [0x30, 0x4a, 1, 0] }] }, // sprmCIstd -> istd 1.
+      ],
+      styles: [
+        { name: "Normal", stk: 1 },
+        { name: "CharStyle", stk: 2, sti: 200, chpxGrpprl: BOLD_ON },
+      ],
+    });
+    const block = doc.sections[0]?.blocks[0];
+    const run = block?.kind === "paragraph" ? block.runs[0] : undefined;
+    expect(run?.bold).toBe(true);
+  });
+
+  it("round-trips a style that inherits from another by istdBase", () => {
+    const doc = build({
+      paragraphs: [{ runs: [{ text: "Styled" }], istd: 2 }],
+      styles: [
+        { name: "Normal", stk: 1 },
+        { name: "Base", stk: 1, chpxGrpprl: BOLD_ON },
+        { name: "Derived", stk: 1, istdBase: 1 },
+      ],
+    });
+    const block = doc.sections[0]?.blocks[0];
+    expect(block?.kind === "paragraph" ? block.styleId : undefined).toBe(
+      "Derived",
+    );
+  });
+
+  it("splits text into an odd number of pieces that does not divide the character count evenly", () => {
+    const text = "an odd length piece split across five pieces exactly";
+    const doc = build({ pieces: 5, paragraphs: [{ runs: [{ text }] }] });
+    const block = doc.sections[0]?.blocks[0];
+    expect(block?.kind === "paragraph" ? block.runs[0]?.text : undefined).toBe(
+      text,
+    );
   });
 
   it("round-trips a paragraph whose own mark defaults to PARAGRAPH_MARK when unstated", () => {
