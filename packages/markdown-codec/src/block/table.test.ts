@@ -29,6 +29,37 @@ describe("splitTableRow", () => {
   it("splits after a doubled backslash, which escapes itself rather than the pipe", () => {
     expect(splitTableRow("a\\\\|b")).toEqual(["a\\\\", "b"]);
   });
+
+  it("trims leading/trailing whitespace from the whole line before reading its pipes", () => {
+    expect(splitTableRow("  | a | b |  ")).toEqual(["a", "b"]);
+  });
+
+  it("strips a leading pipe without requiring a trailing one, and vice versa", () => {
+    expect(splitTableRow("| a | b")).toEqual(["a", "b"]);
+    expect(splitTableRow("a | b |")).toEqual(["a", "b"]);
+  });
+
+  it("treats a single trailing backslash with nothing after it as a literal character", () => {
+    expect(splitTableRow("a\\")).toEqual(["a\\"]);
+  });
+});
+
+describe("endsWithUnescapedPipe (via splitTableRow's own trailing-pipe handling)", () => {
+  it("does not strip the trailing pipe when it is escaped by an odd run of backslashes", () => {
+    expect(splitTableRow("a\\|")).toEqual(["a|"]);
+  });
+
+  it("does strip the trailing pipe when it is preceded by an even run of backslashes", () => {
+    expect(splitTableRow("a\\\\|")).toEqual(["a\\\\"]);
+  });
+
+  it("counts a run of three trailing backslashes as odd (escaped), not stopping after one", () => {
+    expect(splitTableRow("a\\\\\\|")).toEqual(["a\\\\|"]);
+  });
+
+  it("counts a run of four trailing backslashes as even (unescaped), not stopping after one", () => {
+    expect(splitTableRow("a\\\\\\\\|")).toEqual(["a\\\\\\\\"]);
+  });
 });
 
 describe("parseTableDelimiterRow", () => {
