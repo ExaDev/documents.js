@@ -17,6 +17,7 @@ import type {
 import { assembleTree } from "document-schema.js";
 import { bytesToBase64 } from "./bytes/base64";
 import { uint16At } from "./bytes/view";
+import { WpdFormatError } from "./errors";
 import { readFurnitureClaim } from "./stream/furniture";
 import {
   openWpdDocument,
@@ -332,6 +333,16 @@ function flushRun(state: ReaderState): void {
   }
   state.runs.push(buildRun(state));
   state.text = "";
+}
+
+// Narrows a value this reader has already proven cannot genuinely be undefined at its one call site, throwing loudly rather than silently substituting a sentinel if that proof is ever wrong. Exported for this package's own tests only: a real caller reaches it through applyToken's "character" case, never directly.
+export function assertDefined<T>(
+  value: T | undefined,
+  message: string,
+): asserts value is T {
+  if (value === undefined) {
+    throw new WpdFormatError(message);
+  }
 }
 
 // Where a closed block belongs: a table's current cell while one is open, the section's own list otherwise.
@@ -1591,14 +1602,11 @@ function applyToken(
   switch (token.kind) {
     case "character": {
       const character = decodeSingleByteCharacter(token.byte);
-      if (character === undefined) {
-        sink({
-          code: WpdDiagnosticCodes.UnmappedCharacter,
-          message: `Byte ${token.byte} in the document area has no character mapping and was rendered as U+FFFD.`,
-        });
-        appendText(state, UNMAPPED_CHARACTER);
-        return;
-      }
+      // decodeSingleByteCharacter's own domain (1..127) is exhaustively covered by its shorthand table (bytes 1..32) plus its literal ASCII range (33..127) -- proven by iterating every byte in 1..127 and confirming none decode to undefined (stream/characters.test.ts's own exhaustiveness check) -- and the tokeniser only ever mints a "character" token for a byte already restricted to exactly that domain (0 is skipped upstream, 0x80 and above becomes a function instead, per tokenise.ts's own FIRST_SINGLE_BYTE_FUNCTION cutoff). So this can never actually be undefined for a byte this reader hands it; assertDefined states that proven fact as a real, throwing check rather than a silent cast.
+      assertDefined(
+        character,
+        `Byte ${token.byte} in the document area has no character mapping, which the tokeniser's own byte range should make unreachable.`,
+      );
       appendText(state, character);
       return;
     }

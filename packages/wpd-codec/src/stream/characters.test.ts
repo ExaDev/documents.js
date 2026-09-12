@@ -133,6 +133,17 @@ describe("decodeSingleByteCharacter", () => {
   it("rejects a byte one above the ASCII range", () => {
     expect(decodeSingleByteCharacter(0x80)).toBeUndefined();
   });
+
+  // The document area's own tokeniser only ever mints a "character" token for a byte in exactly this range (0 is skipped upstream, 0x80 and above becomes a function instead), and read.ts's applyToken relies on this range being gap-free to treat a decode as never failing for a byte it hands in. This is the test that invariant actually rests on: if the shorthand table and the ASCII range ever drifted apart and left a gap, this is what would catch it.
+  it("has no gap anywhere across its own documented domain (1 through 127)", () => {
+    const gaps: number[] = [];
+    for (let byte = 1; byte <= 0x7f; byte += 1) {
+      if (decodeSingleByteCharacter(byte) === undefined) {
+        gaps.push(byte);
+      }
+    }
+    expect(gaps).toEqual([]);
+  });
 });
 
 describe("decodeWordString", () => {
