@@ -98,23 +98,18 @@ export function readMarkdown(
     detail.frontMatterSource === undefined
       ? undefined
       : { format: "markdown", xml: detail.frontMatterSource };
-  const documentPackage: DocumentTree =
-    definitions === undefined && frontMatterResidue === undefined
-      ? assembled
-      : {
-          ...assembled,
-          ...(definitions !== undefined
-            ? { definitions: { ...assembled.definitions, ...definitions } }
-            : {}),
-          ...(frontMatterResidue !== undefined
-            ? {
-                source: {
-                  ...(assembled.source ?? {}),
-                  frontmatter: frontMatterResidue,
-                },
-              }
-            : {}),
-        };
+  // No shortcut returning `assembled` unchanged when neither splice applies: the spread below is already a no-op in that case (spreading `undefined`/an absent key adds nothing), so the shortcut bought only reference identity a DocumentTree's own contract never promises, at the cost of a branch no value-level test could ever tell apart from always spreading.
+  const documentPackage: DocumentTree = {
+    ...assembled,
+    ...(definitions !== undefined
+      ? { definitions: { ...assembled.definitions, ...definitions } }
+      : {}),
+    ...(frontMatterResidue !== undefined
+      ? {
+          source: { ...assembled.source, frontmatter: frontMatterResidue },
+        }
+      : {}),
+  };
   return { documentPackage, diagnostics: detail.diagnostics };
 }
 
