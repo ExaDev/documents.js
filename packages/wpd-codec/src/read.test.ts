@@ -875,6 +875,7 @@ describe("boxes", () => {
   const BOX_GROUP = 0xdf;
   const PAGE_ANCHORED_BOX = 0x02;
   const BOX_CONTENT_TYPE_TEXT = 1;
+  const BOX_CONTENT_TYPE_LINKED_TEXT = 2;
   const BOX_CONTENT_TYPE_EQUATION = 4;
   const BOX_CONTENT_TYPE_IMAGE = 3;
 
@@ -980,6 +981,105 @@ describe("boxes", () => {
       kind: "paragraph",
       runs: [{ text: "boxed text" }],
     });
+  });
+
+  it("lifts a linked-text box's own content the same way as a plain text box", () => {
+    const document = readDocumentArea(
+      [...boxFunction(BOX_CONTENT_TYPE_LINKED_TEXT, [1, 2])],
+      [
+        { packetType: 0x41, bytes: new Uint8Array(0) },
+        generalWpTextPacket(text("linked text")),
+      ],
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    const block = document.sections[0]?.blocks.find(
+      (b) => b.kind === "embeddedObject",
+    );
+    if (
+      block?.kind !== "embeddedObject" ||
+      block.document.kind !== "wordprocessing"
+    ) {
+      throw new Error("expected a nested wordprocessing document");
+    }
+    expect(block.document.sections[0]?.blocks[0]).toMatchObject({
+      kind: "paragraph",
+      runs: [{ text: "linked text" }],
+    });
+  });
+
+  it("reports the exact box-content-unresolved message for a text-like box whose content packet is not General WP Text", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(
+      buildWpdFile(
+        [...boxFunction(BOX_CONTENT_TYPE_TEXT, [1, 2])],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          { packetType: 0x55, bytes: new Uint8Array(0) }, // font descriptor, not General WP Text
+        ],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.BoxContentUnresolved,
+    );
+    expect(found?.message).toBe(
+      "This document contains a box whose content this reader could not read -- an image, OLE object, or other content type this reader does not yet decode into the shared schema.",
+    );
+  });
+
+  it("reports the exact box-frame-unresolved message for a text-like box stating no width or height", () => {
+    const noFrameBox = variableFunction({
+      group: BOX_GROUP,
+      subgroup: PAGE_ANCHORED_BOX,
+      prefixIds: [1, 2],
+      nonDeletable: boxNonDeletable(
+        0x2000, // bit 13 (content) only -- no position/size override at all
+        new Map([[13, contentBlock(BOX_CONTENT_TYPE_TEXT)]]),
+      ),
+    });
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile(
+        [...noFrameBox],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          generalWpTextPacket(text("boxed")),
+        ],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    expect(
+      document.sections[0]?.blocks.some((b) => b.kind === "embeddedObject"),
+    ).toBe(false);
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.BoxFrameUnresolved,
+    );
+    expect(found?.message).toBe(
+      "This document contains a box whose content this reader could read, but whose function-level override states no width and height this reader can trust, so its content was not lifted.",
+    );
+  });
+
+  it("flushes preceding text into its own paragraph before a text-like box's own embedded document", () => {
+    const document = readDocumentArea(
+      [...text("before"), ...boxFunction(BOX_CONTENT_TYPE_TEXT, [1, 2])],
+      [
+        { packetType: 0x41, bytes: new Uint8Array(0) },
+        generalWpTextPacket(text("boxed")),
+      ],
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    const blocks = document.sections[0]?.blocks ?? [];
+    expect(blocks.map((b) => b.kind)).toEqual(["paragraph", "embeddedObject"]);
+    const paragraph = blocks[0];
+    expect(
+      paragraph?.kind === "paragraph"
+        ? paragraph.runs.map((run) => run.text).join("")
+        : undefined,
+    ).toBe("before");
   });
 
   it("lifts an equation box's own content as unparsed residue, not fabricated MathML", () => {
@@ -1116,6 +1216,62 @@ describe("boxes", () => {
     expect(block.widthPt).toBeCloseTo(86.4);
     expect(block.heightPt).toBeCloseTo(43.2);
     expect(block.floatPosition).toBeUndefined();
+  });
+
+  it("reports the exact box-frame-unresolved message for an image box stating no width or height", () => {
+    const png = tinyPng();
+    const noFrameBox = variableFunction({
+      group: BOX_GROUP,
+      subgroup: PAGE_ANCHORED_BOX,
+      prefixIds: [1, 2],
+      nonDeletable: boxNonDeletable(
+        0x2000, // bit 13 (content) only -- no position/size override at all
+        new Map([[13, contentBlock(BOX_CONTENT_TYPE_IMAGE)]]),
+      ),
+    });
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile(
+        [...noFrameBox],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          { packetType: 0x42, bytes: png },
+        ],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    expect(document.sections[0]?.blocks.some((b) => b.kind === "image")).toBe(
+      false,
+    );
+    const found = diagnostics.find(
+      (d) => d.code === WpdDiagnosticCodes.BoxFrameUnresolved,
+    );
+    expect(found?.message).toBe(
+      "This document contains a box whose content this reader could read, but whose function-level override states no width and height this reader can trust, so its content was not lifted.",
+    );
+  });
+
+  it("flushes preceding text into its own paragraph before an image box's own image block", () => {
+    const png = tinyPng();
+    const document = readDocumentArea(
+      [...text("before"), ...boxFunction(BOX_CONTENT_TYPE_IMAGE, [1, 2])],
+      [
+        { packetType: 0x41, bytes: new Uint8Array(0) },
+        { packetType: 0x42, bytes: png },
+      ],
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    const blocks = document.sections[0]?.blocks ?? [];
+    expect(blocks.map((b) => b.kind)).toEqual(["paragraph", "image"]);
+    const paragraph = blocks[0];
+    expect(
+      paragraph?.kind === "paragraph"
+        ? paragraph.runs.map((run) => run.text).join("")
+        : undefined,
+    ).toBe("before");
   });
 
   it("carries an image box's absolute page position as the image's floatPosition", () => {
