@@ -25,11 +25,9 @@ function readZeroTerminated(
   offset: number,
   fieldName: string,
 ): { readonly value: string; readonly next: number } {
-  let end = offset;
-  while (end < bytes.length && bytes[end] !== 0) {
-    end++;
-  }
-  if (end >= bytes.length) {
+  // indexOf, not a hand-rolled scanning loop with its own bounds check: it already reports "not found" as a single -1 sentinel, so there is exactly one place (below) that decides whether the terminator was found, not two redundant bounds checks that could disagree.
+  const end = bytes.indexOf(0, offset);
+  if (end === -1) {
     throw new OlePackageFormatError(
       `Package stream ends inside its ${fieldName} string with no terminator`,
     );
@@ -85,6 +83,8 @@ function asciiZeroTerminated(
   fieldName: string,
 ): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(value.length + 1); // +1 for the terminator, already zero from the Uint8Array's own zero-fill
+  // A DataView write, not raw indexed assignment: an out-of-range DataView offset throws, where a plain `bytes[index] = …` past the array's own end silently does nothing -- so a loop bound one iteration too long fails loudly here instead of leaving the same, indistinguishable output.
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   for (let index = 0; index < value.length; index++) {
     const code = value.charCodeAt(index);
     if (code === 0) {
@@ -97,7 +97,7 @@ function asciiZeroTerminated(
         `Package stream's ${fieldName} contains a character (U+${code.toString(16).padStart(4, "0")}) outside ASCII; encoding it to an arbitrary windows-1252 byte would need a full codepage table this package does not carry`,
       );
     }
-    bytes[index] = code;
+    view.setUint8(index, code);
   }
   return bytes;
 }
