@@ -1,5 +1,8 @@
 /// <reference lib="dom" />
 
+// jsdom implements no IndexedDB of its own, and src/db/dexie.ts constructs its Dexie instance at module scope -- every test that imports it (directly, or transitively via a hook) needs a real IndexedDB implementation already installed globally before that import runs, not just within the one test file that happens to exercise it.
+import "fake-indexeddb/auto";
+
 declare global {
   // React's own opt-in flag (no ambient type ships for it) -- see the assignment below for what it does. eslint-disable-next-line no-var
   var IS_REACT_ACT_ENVIRONMENT: boolean;
