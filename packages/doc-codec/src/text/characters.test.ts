@@ -91,7 +91,78 @@ describe("readTextRange", () => {
   it("rejects an inverted range rather than silently reading nothing", () => {
     expect(() =>
       readTextRange(specExampleStream(), SPEC_EXAMPLE_TABLE, 8, 3),
+    ).toThrow(/ends before it begins/);
+  });
+
+  it("names the exact out-of-range span when a range extends past the piece table's last CP", () => {
+    expect(() =>
+      readTextRange(specExampleStream(), SPEC_EXAMPLE_TABLE, 0, 15),
+    ).toThrow(
+      /extends past character position 14, the last the piece table defines/,
+    );
+  });
+
+  it("rejects a non-integer cpStart", () => {
+    expect(() =>
+      readTextRange(specExampleStream(), SPEC_EXAMPLE_TABLE, 1.5, 3),
+    ).toThrow(/not a pair of non-negative integer character positions/);
+  });
+
+  it("rejects a non-integer cpEnd", () => {
+    expect(() =>
+      readTextRange(specExampleStream(), SPEC_EXAMPLE_TABLE, 0, 3.5),
     ).toThrow(DocFormatError);
+  });
+
+  it("rejects a negative cpStart", () => {
+    expect(() =>
+      readTextRange(specExampleStream(), SPEC_EXAMPLE_TABLE, -1, 3),
+    ).toThrow(DocFormatError);
+  });
+
+  it("accepts cpEnd exactly at the piece table's own last CP", () => {
+    expect(() =>
+      readTextRange(specExampleStream(), SPEC_EXAMPLE_TABLE, 0, 14),
+    ).not.toThrow();
+  });
+
+  it("rejects a character position that falls before the piece table's own first key", () => {
+    // A piece table whose own first key is not 0 (structurally unusual, but not something this function's own type enforces) leaves an earlier CP outside every piece.
+    const table = parseClx(clx([5, 10], [pcdBytes(0x400, false)]));
+    expect(() => readTextRange(new Uint8Array(0x600), table, 0, 3)).toThrow(
+      /character position 0 falls outside every piece in the piece table/,
+    );
+  });
+
+  it("rejects a piece table whose own pieces array does not match its cpKeys, rather than reading past its end", () => {
+    // PieceTable is a plain data shape, not something only parseClx can construct -- a caller assembling one with mismatched arrays (pieces shorter than cpKeys implies) is a real, if unusual, way to reach this guard.
+    const mismatched = {
+      pieces: [],
+      cpKeys: [0, 5],
+      lastCp: 5,
+    };
+    expect(() => readTextRange(new Uint8Array(0x10), mismatched, 0, 3)).toThrow(
+      /piece 0 is absent from a piece table of 0 pieces/,
+    );
+  });
+
+  it("reads text long enough to span String.fromCharCode's own chunking boundary", () => {
+    // A single uncompressed piece of 5000 characters -- comfortably past the 4096-character chunk size fromCodeUnits splits on, so this exercises more than one chunk and the exact boundary between them.
+    const length = 5000;
+    const stream = new Uint8Array(0x400 + length * 2);
+    const view = new DataView(stream.buffer);
+    for (let index = 0; index < length; index += 1) {
+      view.setUint16(0x400 + index * 2, 0x41 + (index % 26), true);
+    }
+    const table = parseClx(clx([0, length], [pcdBytes(0x400, false)]));
+    const range = readTextRange(stream, table, 0, length);
+    expect(range.text).toHaveLength(length);
+    expect(range.text[0]).toBe("A");
+    expect(range.text[4095]).toBe(String.fromCharCode(0x41 + (4095 % 26)));
+    expect(range.text[4096]).toBe(String.fromCharCode(0x41 + (4096 % 26)));
+    expect(range.text[length - 1]).toBe(
+      String.fromCharCode(0x41 + ((length - 1) % 26)),
+    );
   });
 });
 
