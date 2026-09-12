@@ -20,10 +20,12 @@ import { describe, expect, it } from "vitest";
 import {
   RECORD_CF12,
   RECORD_CONTINUE,
+  RECORD_DIMENSIONS,
   RECORD_EXTERNSHEET,
   RECORD_LBL,
   RECORD_MSODRAWING,
   RECORD_MSODRAWINGGROUP,
+  RECORD_SETUP,
   RECORD_SUPBOOK,
 } from "./biff/record-types";
 import { readRecords } from "./biff/records";
@@ -35,6 +37,7 @@ import { isXlsFile } from "./container";
 import { writeXls, writeXlsContent } from "./write";
 import { writeSheetConditionalFormats } from "./workbook/conditional-format-write";
 import { writeSheetDataValidations } from "./workbook/data-validation-write";
+import { buildWorksheetSubstream } from "./workbook/sheet-writer";
 
 // Genuine .xls bytes -- a real [MS-CFB] compound file holding a real BIFF8 Workbook stream -- built by this package's own writer and read back through its own reader, the "primary verification method" this session's writers use throughout (the CFB writer, rtf-codec, wpd-codec). Every test here is a round trip: build a ContentDocument, write it, read it back, and check the read result reflects what was written -- exercising the writer against a reader whose own correctness is independently pinned by content.test.ts's hand-built byte sequences.
 
@@ -1006,6 +1009,56 @@ describe("writeXlsContent", () => {
     ).toThrow(BiffWriteError);
   });
 
+  it("refuses a cell whose row alone is outside the grid", () => {
+    expect(() =>
+      writeXlsContent(
+        document([
+          sheet("Sheet1", [cell(65536, 0, { kind: "number", value: 1 })]),
+        ]),
+      ),
+    ).toThrow(BiffWriteError);
+  });
+
+  it("accepts a cell exactly at BIFF8's own last row and column", () => {
+    expect(() =>
+      writeXlsContent(
+        document([
+          sheet("Sheet1", [cell(65535, 255, { kind: "number", value: 1 })]),
+        ]),
+      ),
+    ).not.toThrow();
+  });
+
+  it("leaves rows and columns empty for a sheet whose cells carry no declared row/column metadata", () => {
+    const bytes = writeXlsContent(
+      document([
+        sheet("Sheet1", [
+          cell(0, 0, { kind: "number", value: 1 }),
+          cell(3, 2, { kind: "number", value: 2 }),
+        ]),
+      ]),
+    );
+    const content = readXlsContent(bytes);
+    expect(content.sheets[0]?.rows).toStrictEqual([]);
+    expect(content.sheets[0]?.columns).toStrictEqual([]);
+  });
+
+  it("round-trips a merge spanning only rows, and one spanning only columns", () => {
+    const bytes = writeXlsContent(
+      document([
+        sheet("Sheet1", [
+          cell(0, 0, { kind: "number", value: 1 }, { rowSpan: 2 }),
+          cell(2, 0, { kind: "number", value: 2 }, { colSpan: 2 }),
+        ]),
+      ]),
+    );
+    const content = readXlsContent(bytes);
+    expect(findCell(content, 0, 0, 0)?.rowSpan).toBe(2);
+    expect(findCell(content, 0, 0, 0)?.colSpan).toBeUndefined();
+    expect(findCell(content, 0, 2, 0)?.colSpan).toBe(2);
+    expect(findCell(content, 0, 2, 0)?.rowSpan).toBeUndefined();
+  });
+
   describe("per-cell fonts", () => {
     it("round-trips a workbook mixing several distinct cell fonts with plain cells", () => {
       const bytes = writeXlsContent(
@@ -1443,6 +1496,33 @@ describe("print settings", () => {
     expect(read?.cells).toHaveLength(1);
   });
 
+  it("states the Setup record's own fPortrait bit from a custom page size's own dimensions, since no paper code survives to carry it", () => {
+    // Custom page sizes never round-trip their dimensions at all (the reader falls back to Letter regardless, per the test above), so the orientation flag this specific case writes is invisible to any round trip through readXlsContent -- reading the raw Setup record's own grbit word is the only way to check it.
+    function grbitFor(widthPt: number, heightPt: number): number {
+      const bytes = buildWorksheetSubstream(
+        sheet("S", [cell(0, 0, { kind: "number", value: 1 })], {
+          printSettings: { ...PRINT_SETTINGS, pageSize: { widthPt, heightPt } },
+        }),
+        { icvOf: () => 0, xfIndexForCell: () => 0, sstIndexFor: () => 0 },
+        { msoDrawingRecords: [], objRecords: [] },
+      );
+      const setup = readRecords(bytes).find(
+        (record) => record.type === RECORD_SETUP,
+      );
+      if (setup === undefined) {
+        throw new Error("no Setup record was written");
+      }
+      return new DataView(
+        setup.data.buffer,
+        setup.data.byteOffset,
+        setup.data.byteLength,
+      ).getUint16(10, true);
+    }
+    const SETUP_FLAG_PORTRAIT = 0x0002;
+    expect(grbitFor(400, 500) & SETUP_FLAG_PORTRAIT).not.toBe(0); // taller than wide
+    expect(grbitFor(500, 400) & SETUP_FLAG_PORTRAIT).toBe(0); // wider than tall
+  });
+
   it("clamps a scale and a fit-to-page count past what their own Setup fields can hold", () => {
     // ContentSheetPrintSettings bounds neither from above, and Setup's own fields are 16-bit -- so an unclamped value would wrap and state a different intent confidently. [MS-XLS] 2.4.257 caps iFitWidth/iFitHeight at 32767; iScale has only its field's own width.
     expect(
@@ -1492,6 +1572,21 @@ describe("print settings", () => {
       rows: [10],
       columns: [3],
     });
+  });
+
+  it("round-trips a row-only manual break with no column break, and a column-only one with no row break", () => {
+    expect(
+      roundTripped({
+        ...PRINT_SETTINGS,
+        manualBreaks: { rows: [7], columns: [] },
+      })?.manualBreaks,
+    ).toStrictEqual({ rows: [7], columns: [] });
+    expect(
+      roundTripped({
+        ...PRINT_SETTINGS,
+        manualBreaks: { rows: [], columns: [4] },
+      })?.manualBreaks,
+    ).toStrictEqual({ rows: [], columns: [4] });
   });
 
   it("writes no defined name at all for a workbook declaring no print range or band", () => {
@@ -1563,9 +1658,33 @@ describe("formula records", () => {
   });
 
   it("round-trips a formula whose cached result is an error", () => {
-    expect(
-      roundTrippedFormula("A1/A2", { kind: "error", value: "#DIV/0!" }),
-    ).toBe("A1/A2");
+    const content = document([
+      sheet("Sheet1", [
+        cell(0, 0, { kind: "error", value: "#DIV/0!" }, { formula: "A1/A2" }),
+      ]),
+    ]);
+    const written = findCell(readXlsContent(writeXlsContent(content)), 0, 0, 0);
+    expect(written?.formula).toBe("A1/A2");
+    expect(written?.value).toStrictEqual({ kind: "error", value: "#DIV/0!" });
+  });
+
+  it("round-trips a formula whose cached result is a date, a time, and a date-time", () => {
+    for (const value of [
+      { kind: "date", value: "2026-09-03" },
+      { kind: "time", value: "13:45:30" },
+      { kind: "dateTime", value: "2026-09-03T13:45:30" },
+    ] as const) {
+      const content = document([
+        sheet("Sheet1", [cell(0, 0, value, { formula: "A1" })]),
+      ]);
+      const written = findCell(
+        readXlsContent(writeXlsContent(content)),
+        0,
+        0,
+        0,
+      );
+      expect(written?.value).toStrictEqual(value);
+    }
   });
 
   it("round-trips explicit parentheses exactly as written", () => {
@@ -2587,6 +2706,68 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
         ],
       }),
     ).toThrow(/carries no value/);
+  });
+});
+
+describe("buildWorksheetSubstream: Dimensions bytes content.ts never reads back", () => {
+  // content.ts's own readSheetRecords stores RECORD_DIMENSIONS into usedRange, but nothing downstream of that ever reads the field back into a ContentSheet -- so no round trip through readXlsContent can distinguish a correct Dimensions record from a subtly wrong one, and these tests call the writer directly instead.
+  const NO_DRAWING = { msoDrawingRecords: [], objRecords: [] };
+  const NO_STYLE_CTX = {
+    icvOf: () => 0,
+    xfIndexForCell: () => 0,
+    sstIndexFor: () => 0,
+  };
+
+  function dimensionsDataOf(cells: readonly ContentSheetCell[]): Uint8Array {
+    const bytes = buildWorksheetSubstream(
+      sheet("S", cells),
+      NO_STYLE_CTX,
+      NO_DRAWING,
+    );
+    const dimensions = readRecords(bytes).find(
+      (record) => record.type === RECORD_DIMENSIONS,
+    );
+    if (dimensions === undefined) {
+      throw new Error("no Dimensions record was written");
+    }
+    return dimensions.data;
+  }
+
+  function u32AtOffset(data: Uint8Array, offset: number): number {
+    return new DataView(
+      data.buffer,
+      data.byteOffset,
+      data.byteLength,
+    ).getUint32(offset, true);
+  }
+
+  function u16AtOffset(data: Uint8Array, offset: number): number {
+    return new DataView(
+      data.buffer,
+      data.byteOffset,
+      data.byteLength,
+    ).getUint16(offset, true);
+  }
+
+  it("writes Dimensions as one past the true max row/column, and the true min, across several cells", () => {
+    const data = dimensionsDataOf([
+      cell(3, 5, { kind: "number", value: 1 }),
+      cell(1, 9, { kind: "number", value: 2 }),
+      cell(7, 2, { kind: "number", value: 3 }),
+    ]);
+    // rwMic(4) rwMac(4) colMic(2) colMac(2)
+    expect(u32AtOffset(data, 0)).toBe(1); // rwMic: the smallest row (1)
+    expect(u32AtOffset(data, 4)).toBe(8); // rwMac: the largest row (7) + 1
+    expect(u16AtOffset(data, 8)).toBe(2); // colMic: the smallest column (2)
+    expect(u16AtOffset(data, 10)).toBe(10); // colMac: the largest column (9) + 1
+  });
+
+  it("writes Dimensions as all zero for a sheet with no written cells", () => {
+    const data = dimensionsDataOf([]);
+    expect(u32AtOffset(data, 0)).toBe(0);
+    expect(u32AtOffset(data, 4)).toBe(0);
+    expect(u16AtOffset(data, 8)).toBe(0);
+    expect(u16AtOffset(data, 10)).toBe(0);
   });
 });
 
