@@ -305,6 +305,58 @@ describe("writeMarkdown: DocumentTree -> markdown text", () => {
     ).toHaveLength(0);
     expect(written).toBe(writeMarkdown(base));
   });
+
+  it("reports nothing for a present but genuinely EMPTY table -- the guard is a real emptiness check, not merely 'is the key present'", () => {
+    const base = readMarkdown(SAMPLE).documentPackage;
+    const withEmptyTables = {
+      ...base,
+      definitions: {},
+      layers: {},
+      attachments: {},
+      destinations: {},
+      pages: [],
+    };
+    const collector = createDiagnosticCollector();
+
+    writeMarkdown(withEmptyTables, { sink: collector.sink });
+
+    expect(collector.has(MarkdownDiagnosticCodes.PACKAGE_TABLE_DROPPED)).toBe(
+      false,
+    );
+  });
+
+  it("names the specific table in each PACKAGE_TABLE_DROPPED diagnostic's own message", () => {
+    const base = readMarkdown(SAMPLE).documentPackage;
+    const withExtraTables = {
+      ...base,
+      definitions: { d1: { kind: "bookmark" } },
+      layers: { l1: { kind: "layer" } },
+      attachments: { a1: { kind: "file" } },
+      destinations: { dest1: { kind: "anchor" } },
+      pages: [{ widthPt: 100, heightPt: 100 }],
+    };
+    const collector = createDiagnosticCollector();
+
+    writeMarkdown(withExtraTables, { sink: collector.sink });
+
+    const messages = collector.diagnostics
+      .filter(
+        (diagnostic) =>
+          diagnostic.code === MarkdownDiagnosticCodes.PACKAGE_TABLE_DROPPED,
+      )
+      .map((diagnostic) => diagnostic.message);
+    for (const name of [
+      "definitions",
+      "layers",
+      "attachments",
+      "destinations",
+      "pages",
+    ]) {
+      expect(messages.some((message) => message.includes(`"${name}"`))).toBe(
+        true,
+      );
+    }
+  });
 });
 
 describe("the construct-group path over footnote shapes beyond SAMPLE's single case", () => {
@@ -379,6 +431,14 @@ describe("tree-only carries: reference definitions and front-matter residue", ()
     });
   });
 
+  it("splices a titleless link reference definition with no title key at all, not an undefined one", () => {
+    const { documentPackage } = readMarkdown("[foo]: /url\n\n[foo]");
+    expect(documentPackage.definitions).toEqual({
+      FOO: { kind: "link", destination: "/url" },
+    });
+    expect(documentPackage.definitions?.FOO).not.toHaveProperty("title");
+  });
+
   it("leaves definitions and the package source table absent for a document with neither, so the package is exactly assembleTree of the flat document", () => {
     const { documentPackage } = readMarkdown("plain body");
     expect(documentPackage.definitions).toBeUndefined();
@@ -398,6 +458,27 @@ describe("tree-only carries: reference definitions and front-matter residue", ()
     expect(collector.codes()).not.toContain(
       MarkdownDiagnosticCodes.PACKAGE_TABLE_DROPPED,
     );
+  });
+
+  it("renders a titleless link definition with no trailing title clause at all", () => {
+    const written = writeMarkdown(
+      readMarkdown("[foo]: /url\n\n[foo]").documentPackage,
+    );
+    expect(written).toBe("[foo](/url)\n\n[FOO]: /url");
+  });
+
+  it("joins two rendered link definitions with a real newline, one per line", () => {
+    const written = writeMarkdown(
+      readMarkdown("[foo]: /url1\n\n[bar]: /url2\n\n[foo] and [bar]")
+        .documentPackage,
+    );
+    const definitionLines = written.split("\n\n").at(-1)?.split("\n");
+    expect(definitionLines).toEqual(["[FOO]: /url1", "[BAR]: /url2"]);
+  });
+
+  it("renders bare definitions with no leading blank line when the document's own body is empty", () => {
+    const written = writeMarkdown(readMarkdown("[foo]: /url").documentPackage);
+    expect(written).toBe("[FOO]: /url");
   });
 
   it("round-trips text -> package -> text -> package to the identical package and text, definitions included", () => {
