@@ -2682,6 +2682,17 @@ describe("images", () => {
     );
     expect(emitMarkdown(doc([image]), { images: false })).toBe("![alt]()");
   });
+
+  it("emits an empty alt attribute for an image block with no altText at all", () => {
+    const image: ContentImageBlock = {
+      kind: "image",
+      format: "png",
+      base64: "AA==",
+      widthPt: 1,
+      heightPt: 1,
+    };
+    expect(emitMarkdown(doc([image]))).toBe("![](data:image/png;base64,AA==)");
+  });
 });
 
 describe("round trip through src/lower", () => {
