@@ -106,6 +106,12 @@ export function sha256(bytes: Uint8Array): Uint8Array {
       const w2 = w[i - 2]!;
       const s0 = rotr(w15, 7) ^ rotr(w15, 18) ^ (w15 >>> 3);
       const s1 = rotr(w2, 17) ^ rotr(w2, 19) ^ (w2 >>> 10);
+      // Bounds-checked rather than a bare `w[i] = ...`: Uint32Array silently drops an out-of-range write and returns `undefined` (not a throw) for an out-of-range read, so a loop bound weakened by one (i <= 64 instead of i < 64) would otherwise write to index 64 -- one past the array's own 64-element length -- with no observable effect at all, since nothing ever reads that index back. Throwing here is what turns that boundary into a genuine, catchable failure instead of a silently-absorbed no-op.
+      if (i >= w.length) {
+        throw new Error(
+          `sha256: message schedule index ${String(i)} out of bounds (0..${String(w.length - 1)})`,
+        );
+      }
       w[i] = (w[i - 16]! + s0 + w[i - 7]! + s1) >>> 0;
     }
     let a = h0;
