@@ -101,6 +101,9 @@ export function decodeSingleByteCharacter(byte: number): string | undefined {
   return undefined;
 }
 
+// A caller with no separate length prefix of its own to bound the read -- it just wants "the rest of this buffer, read as a word string" -- passes this rather than computing its own arithmetic bound from the buffer's own remaining length: decodeWordString already stops at the first null word or the moment `bytes[]` itself answers undefined past the buffer's real end (see its own comment below), so any caller-computed cap merely restates that same stopping point and can never be observed to change the text decoded. `Number.POSITIVE_INFINITY` is a genuine sentinel for "no separate bound", not a magic number: the while loop's own `wordsRead < maxWords` holds for every finite wordsRead, exactly the "keep going until the buffer itself ends" behaviour these callers want.
+export const UNBOUNDED_WORDS = Number.POSITIVE_INFINITY;
+
 // Decodes a WP word string: a run of 16-bit values, each "the high byte is the number of the WordPerfect character set, the low byte contains an offset value into the character set", terminated by a null word. Used by packet data (a typeface name, a comment, a bookmark name), never by the document area's own byte stream.
 //
 // Reads at most `maxWords` words and stops at the first null word or at the end of the available bytes, whichever comes first -- an unterminated string is the packet running out, not a failure to raise, since a WordPerfect packet's own last string legitimately abuts the packet's end.

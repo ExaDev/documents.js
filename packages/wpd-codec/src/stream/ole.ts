@@ -1,6 +1,6 @@
 import { byteAt, uint16At, uint32At } from "../bytes/view";
 import { packetByPrefixId, type WpdPrefixPacket } from "../container/prefix";
-import { decodeWordString } from "./characters";
+import { decodeWordString, UNBOUNDED_WORDS } from "./characters";
 
 // -- Native OLE objects, per WPFF Prefix Packet Type 64 (0x40) "Graphics Filename" and Packet Type 112 (0x70) "OLE Object Descriptor" --
 //
@@ -81,12 +81,8 @@ export function readOleDescriptor(
     marker += String.fromCharCode(byteAt(bytes, index));
   }
   if (marker === OLE2_MARKER) {
-    const { text } = decodeWordString(
-      bytes,
-      payloadOffset,
-      // Stryker disable next-line ArithmeticOperator: bytes IS the whole packet, so there is never real data beyond bytes.length for a larger word budget to reach -- decodeWordString's own bounds check stops at the true end of bytes regardless of how large a maxWords this expression computes, making * or + here behave identically to the correct / and -.
-      (bytes.length - payloadOffset) / 2,
-    );
+    // There is no separate length prefix here to bound the read to (the OLE 2 stream name is just "however much of the packet is left"), so this passes UNBOUNDED_WORDS rather than computing a bound from bytes.length itself -- see that constant's own comment.
+    const { text } = decodeWordString(bytes, payloadOffset, UNBOUNDED_WORDS);
     // "If Ole 2, wordstring will be 7-8 characters and the null terminator indicating the ole stream." An empty or missing name is a descriptor that names no stream -- nothing to resolve.
     if (text.length === 0) {
       return undefined;
