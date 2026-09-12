@@ -141,26 +141,27 @@ const TEXT_BLOCK_HEADER_SIZE = 2 + 4 * 4; // [number of text blocks] then four L
 export function readStyleBeginBlock(
   packet: Uint8Array,
 ): Uint8Array | undefined {
-  // Stryker disable next-line EqualityOperator: at packet.length exactly 2, pidCount can be any value a 2-byte packet can state, but afterPids + TEXT_BLOCK_HEADER_SIZE (at least 2 + 18 = 20) always exceeds a 2-byte packet regardless -- the check below always rejects it too, so whether this breaks one check early makes no observable difference.
-  if (packet.length < 2) {
+  // uint16At throws (via byteAt) rather than returning undefined for a read that runs past packet's own end, caught below -- so the PID count word itself needs no separate room check ahead of reading it. The afterPids + TEXT_BLOCK_HEADER_SIZE guard just below stays a plain comparison, not a throw-and-catch substitute: it checks room for the whole four-LONG text-block header even though only three of those four longs are ever read here, so a bare throw on the actual reads alone cannot stand in for it.
+  try {
+    const pidCount = uint16At(packet, PID_COUNT_OFFSET);
+    const afterPids = 2 + pidCount * 2;
+    if (afterPids + TEXT_BLOCK_HEADER_SIZE > packet.length) {
+      return undefined;
+    }
+    const relativeOffset = uint32At(packet, afterPids + 2);
+    const paragraphTextSize = uint32At(packet, afterPids + 6);
+    const beginningStyleTextSize = uint32At(packet, afterPids + 10);
+    if (beginningStyleTextSize === 0) {
+      return undefined;
+    }
+    const start = relativeOffset + paragraphTextSize;
+    const end = start + beginningStyleTextSize;
+    // No separate start < 0 guard is needed: relativeOffset and paragraphTextSize are both unsigned 32-bit reads, so start can never be negative.
+    if (end > packet.length) {
+      return undefined;
+    }
+    return packet.subarray(start, end);
+  } catch {
     return undefined;
   }
-  const pidCount = uint16At(packet, PID_COUNT_OFFSET);
-  const afterPids = 2 + pidCount * 2;
-  if (afterPids + TEXT_BLOCK_HEADER_SIZE > packet.length) {
-    return undefined;
-  }
-  const relativeOffset = uint32At(packet, afterPids + 2);
-  const paragraphTextSize = uint32At(packet, afterPids + 6);
-  const beginningStyleTextSize = uint32At(packet, afterPids + 10);
-  if (beginningStyleTextSize === 0) {
-    return undefined;
-  }
-  const start = relativeOffset + paragraphTextSize;
-  const end = start + beginningStyleTextSize;
-  // No separate start < 0 guard is needed: relativeOffset and paragraphTextSize are both unsigned 32-bit reads, so start can never be negative.
-  if (end > packet.length) {
-    return undefined;
-  }
-  return packet.subarray(start, end);
 }
