@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { dashPolyline, strokeOutlinePolygons } from "./stroke";
+import {
+  dashPolyline,
+  strokeOutlinePolygons,
+  takesMiterBranch,
+  turnsOutwardPositive,
+  withNegativeWinding,
+} from "./stroke";
 import type { FlattenedSubpath } from "./stroke";
 
 // Direct unit tests for the stroke outline geometry, distinct from rasteriser.test.ts's pixel-level assertions: these pin the exact vertex coordinates strokeOutlinePolygons produces for its join and offset arithmetic, including several corner shapes (a right-angle miter, a sharp bevel, a straight run, a closed triangle's own closure) rasteriser.test.ts never constructs.
@@ -10,6 +16,40 @@ function subpath(
 ): FlattenedSubpath {
   return { points, closed };
 }
+
+// These three functions each decide one join-wedge boundary from an already-reduced numeric input (a cross product, a miter denominator, a polygon) rather than from n1/n2 or a real corner, exactly so the boundary itself -- not just a value near it -- can be driven with a literal: a cross product from real unit-vector arithmetic gets arbitrarily close to 0 but next to never lands on it exactly, and a miter denominator landing on the sqrt-based ratio's own exact limit is analytically almost unreachable in double precision (see stroke.ts's own comment on takesMiterBranch).
+describe("join-wedge boundary decisions", () => {
+  it("names the wedge's outward side positive only when cross is strictly greater than zero", () => {
+    expect(turnsOutwardPositive(0)).toBe(false);
+    expect(turnsOutwardPositive(-0.0001)).toBe(false);
+    expect(turnsOutwardPositive(0.0001)).toBe(true);
+  });
+
+  it("takes the miter branch at exactly the reduced boundary denominator, and the bevel branch a single ULP short of it", () => {
+    // DEFAULT_MITER_LIMIT is 10, so the reduced boundary denominator is 2 / 10**2 = 0.02 exactly (a double both sides of this comparison reach without rounding, unlike the un-reduced sqrt-based ratio).
+    expect(takesMiterBranch(0.02)).toBe(true);
+    expect(takesMiterBranch(0.019999999999999997)).toBe(false);
+    // A zero or negative denominator (n1 and n2 at or past exact opposites) always falls back to a bevel.
+    expect(takesMiterBranch(0)).toBe(false);
+  });
+
+  it("reverses a polygon whose own signed area is exactly zero, the same as a positive one", () => {
+    // Three collinear points: shoelace area is exactly 0 in floating point (no rounding to cancel), the one wedge shape emitJoinWedge itself can never actually build (it always starts from a cross product already forced away from zero).
+    const collinear = [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 2, y: 0 },
+    ];
+    expect(withNegativeWinding(collinear)).toEqual([...collinear].reverse());
+    // A polygon already wound negative is returned as-is.
+    const negative = [
+      { x: 0, y: 0 },
+      { x: 0, y: 1 },
+      { x: 1, y: 0 },
+    ];
+    expect(withNegativeWinding(negative)).toEqual(negative);
+  });
+});
 
 describe("strokeOutlinePolygons: offset quads", () => {
   it("offsets a straight run's quad by the half-width on both sides, perpendicular to the run", () => {
@@ -151,6 +191,40 @@ describe("strokeOutlinePolygons: joins", () => {
     expect(miter?.y).toBeCloseTo(2.786829, 5);
     expect(a1?.x).toBeCloseTo(10.557086, 5);
     expect(a1?.y).toBeCloseTo(2.607285, 5);
+  });
+
+  it("miters a generic corner turning the other way, exercising the wedge's own opposite-sign normal branch", () => {
+    // before=(0,0), vertex=(10,4), after=(25,2): the same vertex as the left-turning corner above, but after sits on the other side of the d1-d2 line, giving a negative cross product (a right turn) and taking the opposite branch of the outward-normal choice -- the one an axis-aligned right-angle corner's own zero y-component leaves untested.
+    const polys = strokeOutlinePolygons(
+      [
+        subpath(
+          [
+            { x: 0, y: 0 },
+            { x: 10, y: 4 },
+            { x: 25, y: 2 },
+          ],
+          false,
+        ),
+      ],
+      3,
+      undefined,
+    );
+    expect(polys).toHaveLength(3);
+    const wedge = polys[2];
+    expect(wedge).toBeDefined();
+    if (wedge === undefined) {
+      throw new Error("fixture setup: wedge count already asserted above");
+    }
+    expect(wedge).toHaveLength(4);
+    // This corner's own geometry keeps the natural [a1, miter, a2, vertex] order, the mirror image of the left-turning corner's reversed one.
+    const [a1, miter, a2, vertex] = wedge;
+    expect(vertex).toEqual({ x: 10, y: 4 });
+    expect(a1?.x).toBeCloseTo(9.442914, 5);
+    expect(a1?.y).toBeCloseTo(5.392715, 5);
+    expect(miter?.x).toBeCloseTo(9.808235, 5);
+    expect(miter?.y).toBeCloseTo(5.538843, 5);
+    expect(a2?.x).toBeCloseTo(10.198246, 5);
+    expect(a2?.y).toBeCloseTo(5.486842, 5);
   });
 
   it("falls back to a bevel past the default miter limit, at a corner turning nearly all the way back on itself", () => {
