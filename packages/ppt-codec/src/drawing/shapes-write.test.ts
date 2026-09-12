@@ -126,6 +126,8 @@ describe("writeSlideDrawing: insets", () => {
               kind: "image",
               format: "png",
               base64: "AA==",
+              widthPt: 10,
+              heightPt: 10,
             },
           ],
         }),
