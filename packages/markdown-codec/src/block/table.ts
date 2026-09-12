@@ -27,9 +27,13 @@ export function splitTableRow(line: string): string[] {
   const cells: string[] = [];
   let current = "";
   let index = 0;
-  while (index < text.length) {
+  // text.charAt(index) !== "", not index < text.length: the two are equivalent for every real index (charAt already returns "" one past the end, which none of this loop's own branches below can ever match either), but only this spelling's own mutation is actually reachable by a test rather than always landing on the identical fallthrough either way.
+  while (text.charAt(index) !== "") {
     const char = text.charAt(index);
-    if (char === "\\" && index + 1 < text.length) {
+    // text.charAt(index + 1) !== "", not index + 1 < text.length: same reasoning -- when the
+    // backslash is the very last character, charAt(index + 1) is already "", which is never "|"
+    // either, so the escaped-pipe branch below would add the identical single backslash either way; this spelling is the one whose own mutation an escaped-pipe test can actually catch.
+    if (char === "\\" && text.charAt(index + 1) !== "") {
       // An escaped pipe is resolved HERE rather than left for the inline phase's own backslash handling, because a cell's content may put it somewhere that handling never reaches: GFM's own example escapes a pipe inside a code span (`` | b `\|` az | ``), and a code span's literal is never backslash-processed. Every other escape is passed through untouched for the inline phase to resolve as usual.
       const escaped = text.charAt(index + 1);
       current += escaped === "|" ? escaped : char + escaped;
@@ -54,10 +58,8 @@ function endsWithUnescapedPipe(text: string): boolean {
     return false;
   }
   let backslashes = 0;
-  while (
-    backslashes + 1 < text.length &&
-    text.charAt(text.length - 2 - backslashes) === "\\"
-  ) {
+  // No separate `backslashes + 1 < text.length` bound: charAt(text.length - 2 - backslashes) reads before the start of `text` once backslashes grows past text.length - 2, and charAt already returns "" for a negative index, which is never "\\" either -- so the loop already stops there on its own, on exactly the same iteration a length-based bound would have forced.
+  while (text.charAt(text.length - 2 - backslashes) === "\\") {
     backslashes += 1;
   }
   return backslashes % 2 === 0;
@@ -85,10 +87,8 @@ export function parseTableDelimiterRow(
   if (!line.includes("|")) {
     return undefined;
   }
+  // No `cells.length === 0` guard: splitTableRow always pushes its own trailing `current.trim()` unconditionally, even over empty input, so it can never return an empty array for this function to guard against.
   const cells = splitTableRow(line);
-  if (cells.length === 0) {
-    return undefined;
-  }
   const alignments: MarkdownTableAlignment[] = [];
   for (const cell of cells) {
     if (!DELIMITER_CELL_PATTERN.test(cell)) {
