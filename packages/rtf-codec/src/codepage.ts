@@ -208,8 +208,8 @@ export function decodeCodepageBytes(
   }
   let out = "";
   for (const byte of input) {
-    out +=
-      byte < 0x80 ? String.fromCharCode(byte) : (table[byte - 0x80] ?? "�");
+    // charAt, not a bracket read: every entry in SINGLE_BYTE_PAGES is exactly 128 characters (0x80..0xFF, generated and verified against Python's own codec library -- see this module's own header), so `byte - 0x80` is always in range and a `?? "�"` fallback for the bracket-read's own `string | undefined` type would be pretending an unreachable case is real, per this family's no-defensive-over-engineering convention (base64.ts's own bytesToBase64 states the identical charAt-over-bracket-read reasoning).
+    out += byte < 0x80 ? String.fromCharCode(byte) : table.charAt(byte - 0x80);
   }
   return out;
 }
