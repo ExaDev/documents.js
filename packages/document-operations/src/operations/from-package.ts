@@ -82,8 +82,9 @@ export const fromPackageOperation = defineOperation({
         );
       }
       if (error instanceof z.ZodError) {
+        // documentFromJson only ever reaches *Schema.parse() (the sole source of a ZodError here) after it has already resolved parsed's own $schema to a real DocumentSchemaKind via this identical function -- so documentSchemaKindOf(parsed) cannot itself be undefined at this point, and a "document schema" placeholder for a case that cannot occur would only mask a real regression in that guarantee rather than surface one.
         throw new Error(
-          `'source' failed ${documentSchemaKindOf(parsed) ?? "document schema"} validation: ${error.message}`,
+          `'source' failed ${documentSchemaKindOf(parsed)} validation: ${error.message}`,
           { cause: error },
         );
       }

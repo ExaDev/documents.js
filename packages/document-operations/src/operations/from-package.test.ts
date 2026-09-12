@@ -12,7 +12,27 @@ import { flattenTree } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { fromPackageOperation } from "./from-package";
 
+async function captureRejection(promise: Promise<unknown>): Promise<unknown> {
+  try {
+    await promise;
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected the promise to reject");
+}
+
 describe("fromPackageOperation", () => {
+  it("propagates a raw decode failure for invalid UTF-8 bytes, distinct from the 'not valid JSON' wrapper", async () => {
+    const invalidUtf8 = new Uint8Array([0xff, 0xfe, 0x7b, 0x7d]);
+
+    await expect(
+      fromPackageOperation.run({
+        source: { bytesBase64: bytesToBase64(invalidUtf8), format: "docx" },
+        targetFormat: "docx",
+      }),
+    ).rejects.toThrow(/not valid for encoding/);
+  });
+
   it("rebuilds a docx from a DocumentTree dump of the same document", async () => {
     const editor = createDocx();
     editor.body.appendParagraph({ text: "Round trip me." });
@@ -32,8 +52,8 @@ describe("fromPackageOperation", () => {
     expect(result.byteLength).toBeGreaterThan(0);
   });
 
-  it("rejects source bytes that are not valid JSON", async () => {
-    await expect(
+  it("rejects source bytes that are not valid JSON, carrying the original parse error as its cause", async () => {
+    const error = await captureRejection(
       fromPackageOperation.run({
         source: {
           bytesBase64: bytesToBase64(new TextEncoder().encode("not json")),
@@ -41,11 +61,14 @@ describe("fromPackageOperation", () => {
         },
         targetFormat: "docx",
       }),
-    ).rejects.toThrow(/not valid JSON/);
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toMatch(/not valid JSON/);
+    expect((error as Error).cause).toBeInstanceOf(Error);
   });
 
-  it("rejects a value with no recognised $schema", async () => {
-    await expect(
+  it("rejects a value with no recognised $schema, carrying the original error as its cause", async () => {
+    const error = await captureRejection(
       fromPackageOperation.run({
         source: {
           bytesBase64: bytesToBase64(new TextEncoder().encode("{}")),
@@ -53,7 +76,10 @@ describe("fromPackageOperation", () => {
         },
         targetFormat: "docx",
       }),
-    ).rejects.toThrow(/no recognised \$schema/);
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toMatch(/no recognised \$schema/);
+    expect((error as Error).cause).toBeInstanceOf(Error);
   });
 
   it("reads a DocumentTree dump from a real filesystem path", async () => {
@@ -83,7 +109,7 @@ describe("fromPackageOperation", () => {
     // A DocumentTree's own kind must be a recognised literal -- corrupting it keeps $schema pointing at a real, current DocumentTree schema (so the version/stem checks all pass) while failing DocumentTreeSchema.parse itself with a genuine ZodError.
     const corrupted = { ...dump, kind: "not-a-real-kind" };
 
-    await expect(
+    const error = await captureRejection(
       fromPackageOperation.run({
         source: {
           bytesBase64: bytesToBase64(
@@ -93,7 +119,12 @@ describe("fromPackageOperation", () => {
         },
         targetFormat: "docx",
       }),
-    ).rejects.toThrow(/'source' failed DocumentTree validation/);
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toMatch(
+      /'source' failed DocumentTree validation/,
+    );
+    expect((error as Error).cause).toBeInstanceOf(Error);
   });
 
   it("rejects a value carrying a real ContentDocument $schema, naming it as not a DocumentTree", async () => {
