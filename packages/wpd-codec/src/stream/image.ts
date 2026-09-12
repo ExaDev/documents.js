@@ -12,31 +12,34 @@ export interface WpdImagePayload {
   readonly bytes: Uint8Array;
 }
 
-// Whether `signature` occurs at exactly `index`. Safe for an index near the buffer's own end with no separate "does it fit" pre-check of its own: an out-of-range position reads back `undefined` from the plain index, which never equals one of a signature's own concrete byte values.
+// Whether `signature` occurs at exactly `index`. Deliberately NOT safe for an index too close to the buffer's own end: byteAt throws rather than silently reading back `undefined`, so both of this function's own callers must -- and do -- check "does the signature still fit here" themselves before ever calling this, the same way every other bounds-checked read in this package works. A raw bracket read here instead would make that same fit check unobservably redundant with a would-be `undefined` comparison, exactly the equivalent-mutant trap this package's own byteAt/uint16At-based reads elsewhere are already built to avoid.
 function bytesMatchAt(
   bytes: Uint8Array,
   index: number,
   signature: readonly number[],
 ): boolean {
-  return signature.every((byte, offset) => bytes[index + offset] === byte);
+  return signature.every(
+    (byte, offset) => byteAt(bytes, index + offset) === byte,
+  );
 }
 
-// The first byte offset at which `needle` occurs in `bytes` at or after `from`, or undefined. A plain scan: packet payloads are small (an embedded figure), and no container this module knows of would justify a fancier search.
+// The first byte offset at which `needle` occurs in `bytes` at or after `from`. A plain scan: packet payloads are small (an embedded figure), and no container this module knows of would justify a fancier search. Carries no "ran off the end, give up" check of its own: bytesMatchAt throws once a position genuinely has no room left for needle, and this function's one real caller (scanJpeg's own entropy-coded-data search) already wraps its whole walk in a try/catch that answers undefined for exactly that case -- a second, separate bounds check here would only ever be exercised on inputs the outer catch already handles identically, an unobservable, unkillable duplicate of it.
 function indexOf(
   bytes: Uint8Array,
   needle: readonly number[],
   from: number,
-): number | undefined {
-  for (let index = from; index < bytes.length; index += 1) {
+): number {
+  for (let index = from; ; index += 1) {
     if (bytesMatchAt(bytes, index, needle)) {
       return index;
     }
   }
-  return undefined;
 }
 
 // Big-endian (network byte order) reads: both PNG chunk lengths and JPEG segment lengths use this convention, the opposite of the little-endian convention every read in this package's own bytes/view.ts assumes for WordPerfect's own fields -- so these live here, not there. Built on byteAt, whose own bounds check throws rather than returning undefined, so a truncated read anywhere in either scan below surfaces as one caught exception instead of a separate manual length comparison at every call site.
-function bigEndianUint32At(bytes: Uint8Array, offset: number): number {
+//
+// Exported for this package's own tests only, so each byte's own place value is proven directly with a distinct, nonzero digit in every position -- every real PNG/JPEG fixture this module's own tests otherwise construct keeps its chunk/segment lengths small, meaning every byte but the last stays zero and a wrong sign or operator on one of those upper-byte terms would go unobserved (0 added, subtracted, multiplied, or divided is still 0).
+export function bigEndianUint32At(bytes: Uint8Array, offset: number): number {
   return (
     byteAt(bytes, offset) * 0x1000000 +
     byteAt(bytes, offset + 1) * 0x10000 +
@@ -45,7 +48,7 @@ function bigEndianUint32At(bytes: Uint8Array, offset: number): number {
   );
 }
 
-function bigEndianUint16At(bytes: Uint8Array, offset: number): number {
+export function bigEndianUint16At(bytes: Uint8Array, offset: number): number {
   return byteAt(bytes, offset) * 0x100 + byteAt(bytes, offset + 1);
 }
 
@@ -111,10 +114,8 @@ function scanJpeg(
       cursor += sliceAt(bytes, cursor, length).length;
       if (marker === 0xda) {
         // Entropy-coded data: scan byte-wise for the EOI marker (a preceding 0xff run is the marker prefix). A stuffed FF inside the entropy stream is always followed by a non-zero byte, so FF D9 can only be EOI.
+        // indexOf itself throws (caught by this function's own try/catch, below) rather than returning undefined for entropy-coded data that never reaches an EOI.
         const eoi = indexOf(bytes, [0xff, 0xd9], cursor);
-        if (eoi === undefined) {
-          return undefined;
-        }
         return { format: "jpeg", bytes: bytes.subarray(soiAt, eoi + 2) };
       }
     }
@@ -127,13 +128,21 @@ function scanJpeg(
 export function scanImagePayload(
   bytes: Uint8Array,
 ): WpdImagePayload | undefined {
-  for (let index = 0; index < bytes.length; index += 1) {
-    if (bytesMatchAt(bytes, index, PNG_SIGNATURE)) {
-      return scanPng(bytes, index);
+  // No `index < bytes.length` bound of its own, and no `index + PNG_SIGNATURE.length <= bytes.length` room check either: both would be genuinely unobservable arithmetic (scanPng/scanJpeg always need at least one more byte after a signature to ever answer anything but undefined, so the one boundary position such a check would even change the answer for -- a signature exactly filling what remains -- can never produce a defined result via either path). PNG_SIGNATURE's own longer, 8-byte check is wrapped in its own try/catch instead: JPEG_SOI (2 bytes) is checked second and unguarded, and once even IT cannot fit -- the shortest either signature could ever need -- its own throw is exactly the "no signature could start anywhere in what remains" signal, caught once, below, ending the whole scan rather than one position of it.
+  try {
+    for (let index = 0; ; index += 1) {
+      try {
+        if (bytesMatchAt(bytes, index, PNG_SIGNATURE)) {
+          return scanPng(bytes, index);
+        }
+      } catch {
+        // PNG_SIGNATURE's own 8 bytes don't fit this close to the end; JPEG_SOI's shorter 2 might still.
+      }
+      if (bytesMatchAt(bytes, index, JPEG_SOI)) {
+        return scanJpeg(bytes, index);
+      }
     }
-    if (bytesMatchAt(bytes, index, JPEG_SOI)) {
-      return scanJpeg(bytes, index);
-    }
+  } catch {
+    return undefined;
   }
-  return undefined;
 }
