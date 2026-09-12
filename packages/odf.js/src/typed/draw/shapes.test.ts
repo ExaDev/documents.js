@@ -1953,3 +1953,259 @@ describe("readDrawPageContent: stroke style (solid/dashed) from draw:stroke", ()
     expect(vector.stroke.style).toBe("dashed");
   });
 });
+
+describe("readDrawPageContent: fixed-preset and regular-polygon exact vertex coordinates", () => {
+  function customShape(name: string, type: string): XmlElement {
+    return el(
+      "draw:custom-shape",
+      {
+        "draw:name": name,
+        "svg:x": "0pt",
+        "svg:y": "0pt",
+        "svg:width": "50pt",
+        "svg:height": "30pt",
+      },
+      [el("draw:enhanced-geometry", { "draw:type": type })],
+    );
+  }
+
+  function pathVertices(type: string): { xPt: number; yPt: number }[] {
+    const { vectors } = readDrawPageContent(
+      [customShape(`Custom${type}`, type)],
+      { parts: {} },
+    );
+    const vector = vectors[0];
+    if (vector?.kind !== "path") {
+      throw new Error(`expected a path vector for preset "${type}"`);
+    }
+    const subpath = vector.subpaths[0];
+    return [
+      subpath!.start,
+      ...subpath!.segments.map((s) =>
+        s.kind === "line" ? s.to : { xPt: NaN, yPt: NaN },
+      ),
+    ];
+  }
+
+  it("isosceles-triangle's own three vertices: apex at top-centre, base spanning the full frame width at the bottom", () => {
+    expect(pathVertices("isosceles-triangle")).toEqual([
+      { xPt: 25, yPt: 0 },
+      { xPt: 50, yPt: 30 },
+      { xPt: 0, yPt: 30 },
+    ]);
+  });
+
+  it("right-triangle's own three vertices: the right angle at the bottom-left corner", () => {
+    expect(pathVertices("right-triangle")).toEqual([
+      { xPt: 0, yPt: 0 },
+      { xPt: 0, yPt: 30 },
+      { xPt: 50, yPt: 30 },
+    ]);
+  });
+
+  it("hexagon's own six vertices are evenly spaced around the frame's own centre, point-up", () => {
+    const vertices = pathVertices("hexagon");
+    expect(vertices).toHaveLength(6);
+    const cx = 25;
+    const cy = 15;
+    const expected = Array.from({ length: 6 }, (_, i) => {
+      const angle = -Math.PI / 2 + (2 * Math.PI * i) / 6;
+      return { xPt: cx + cx * Math.cos(angle), yPt: cy + cy * Math.sin(angle) };
+    });
+    vertices.forEach((v, i) => {
+      expect(v.xPt).toBeCloseTo(expected[i]!.xPt, 9);
+      expect(v.yPt).toBeCloseTo(expected[i]!.yPt, 9);
+    });
+    // The topmost vertex sits at dead centre horizontally, at the very top of the frame.
+    expect(vertices[0]!.xPt).toBeCloseTo(25, 9);
+    expect(vertices[0]!.yPt).toBeCloseTo(0, 9);
+    // The bottommost vertex (index 3, halfway round) sits at dead centre horizontally, at the very bottom.
+    expect(vertices[3]!.xPt).toBeCloseTo(25, 9);
+    expect(vertices[3]!.yPt).toBeCloseTo(30, 9);
+  });
+
+  it("round-rectangle's real rounded path carries every one of its 8 segments' own exact coordinates, not just the start point", () => {
+    const shape = el(
+      "draw:custom-shape",
+      {
+        "svg:x": "0pt",
+        "svg:y": "0pt",
+        "svg:width": "50pt",
+        "svg:height": "30pt",
+      },
+      [
+        el(
+          "draw:enhanced-geometry",
+          {
+            "svg:viewBox": "0 0 21600 21600",
+            "draw:type": "round-rectangle",
+            "draw:modifiers": "3600",
+          },
+          [el("draw:handle", { "draw:handle-position": "$0 0" })],
+        ),
+      ],
+    );
+    const { vectors } = readDrawPageContent([shape], { parts: {} });
+    const vector = vectors[0];
+    if (vector?.kind !== "path") {
+      throw new Error("expected a path vector");
+    }
+    const r = (3600 / 21600) * 50; // ~8.333333pt
+    const k = r * 0.5522847498307936;
+    const w = 50;
+    const h = 30;
+    const subpath = vector.subpaths[0]!;
+    expect(subpath.start).toEqual({ xPt: r, yPt: 0 });
+    expect(subpath.segments).toEqual([
+      { kind: "line", to: { xPt: w - r, yPt: 0 } },
+      {
+        kind: "cubic",
+        control1: { xPt: w - r + k, yPt: 0 },
+        control2: { xPt: w, yPt: r - k },
+        to: { xPt: w, yPt: r },
+      },
+      { kind: "line", to: { xPt: w, yPt: h - r } },
+      {
+        kind: "cubic",
+        control1: { xPt: w, yPt: h - r + k },
+        control2: { xPt: w - r + k, yPt: h },
+        to: { xPt: w - r, yPt: h },
+      },
+      { kind: "line", to: { xPt: r, yPt: h } },
+      {
+        kind: "cubic",
+        control1: { xPt: r - k, yPt: h },
+        control2: { xPt: 0, yPt: h - r + k },
+        to: { xPt: 0, yPt: h - r },
+      },
+      { kind: "line", to: { xPt: 0, yPt: r } },
+      {
+        kind: "cubic",
+        control1: { xPt: 0, yPt: r - k },
+        control2: { xPt: r - k, yPt: 0 },
+        to: { xPt: r, yPt: 0 },
+      },
+    ]);
+  });
+
+  it("round-rectangle degrades to a plain rect when the shape's own svg:viewBox has a zero or negative width", () => {
+    const shape = el(
+      "draw:custom-shape",
+      {
+        "svg:x": "0pt",
+        "svg:y": "0pt",
+        "svg:width": "50pt",
+        "svg:height": "30pt",
+      },
+      [
+        el(
+          "draw:enhanced-geometry",
+          {
+            "svg:viewBox": "0 0 0 21600",
+            "draw:type": "round-rectangle",
+            "draw:modifiers": "3600",
+          },
+          [el("draw:handle", { "draw:handle-position": "$0 0" })],
+        ),
+      ],
+    );
+    const { vectors } = readDrawPageContent([shape], { parts: {} });
+    expect(vectors[0]?.kind).toBe("rect");
+  });
+
+  it("round-rectangle degrades to a plain rect when the resolved radius is zero or negative", () => {
+    const shape = el(
+      "draw:custom-shape",
+      {
+        "svg:x": "0pt",
+        "svg:y": "0pt",
+        "svg:width": "50pt",
+        "svg:height": "30pt",
+      },
+      [
+        el(
+          "draw:enhanced-geometry",
+          {
+            "svg:viewBox": "0 0 21600 21600",
+            "draw:type": "round-rectangle",
+            "draw:modifiers": "0",
+          },
+          [el("draw:handle", { "draw:handle-position": "$0 0" })],
+        ),
+      ],
+    );
+    const { vectors } = readDrawPageContent([shape], { parts: {} });
+    expect(vectors[0]?.kind).toBe("rect");
+  });
+});
+
+describe("readDrawPageContent: fillPattern/fillOpacity carried through every vector kind, not only rect", () => {
+  it("draw:ellipse carries fillOpacity through, the same as draw:rect", () => {
+    const gr1 = graphicStyle("gr1", {
+      "draw:fill-color": "#ff0000",
+      "draw:opacity": "50%",
+    });
+    const pkg: Package = { parts: { "content.xml": contentPackage([gr1]) } };
+    const ellipse = el("draw:ellipse", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([ellipse], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "ellipse") {
+      throw new Error("expected an ellipse vector");
+    }
+    expect(vector.fillOpacity).toBeCloseTo(0.5, 6);
+  });
+
+  it("draw:path carries fillOpacity through, the same as draw:rect", () => {
+    const gr1 = graphicStyle("gr1", {
+      "draw:fill-color": "#ff0000",
+      "draw:opacity": "50%",
+    });
+    const pkg: Package = { parts: { "content.xml": contentPackage([gr1]) } };
+    const path = el("draw:path", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+      "svg:viewBox": "0 0 100 100",
+      "svg:d": "M0 0h100v100z",
+    });
+    const { vectors } = readDrawPageContent([path], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "path") {
+      throw new Error("expected a path vector");
+    }
+    expect(vector.fillOpacity).toBeCloseTo(0.5, 6);
+  });
+
+  it("a recognised custom-shape preset carries fillOpacity through, the same as a plain draw:rect", () => {
+    const gr1 = graphicStyle("gr1", {
+      "draw:fill-color": "#ff0000",
+      "draw:opacity": "50%",
+    });
+    const pkg: Package = { parts: { "content.xml": contentPackage([gr1]) } };
+    const shape = el(
+      "draw:custom-shape",
+      {
+        "draw:style-name": "gr1",
+        "svg:x": "0pt",
+        "svg:y": "0pt",
+        "svg:width": "10pt",
+        "svg:height": "10pt",
+      },
+      [el("draw:enhanced-geometry", { "draw:type": "ellipse" })],
+    );
+    const { vectors } = readDrawPageContent([shape], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "ellipse") {
+      throw new Error("expected an ellipse vector");
+    }
+    expect(vector.fillOpacity).toBeCloseTo(0.5, 6);
+  });
+});
