@@ -8,6 +8,7 @@ import {
   type DocumentTree,
   type DocumentTreeJson,
   type LayoutMetadata,
+  type SectionGroupNode,
   type StylesTable,
 } from "document-schema.js";
 import { effectivePackage } from "./effective";
@@ -39,6 +40,7 @@ import {
   formulaPackage,
   headingGroup,
   listGroup,
+  minimalSymbolTable,
   paragraph,
   presentationPackage,
   sectionConstructGroup,
@@ -48,6 +50,7 @@ import {
   sheetImage,
   slideGroup,
   spreadsheetPackage,
+  table,
   vectorLine,
   vectorRect,
   wordprocessingPackage,
@@ -420,6 +423,20 @@ describe("definitions tables", () => {
       "footnote",
       "layer",
     ]);
+    // Table-entry nodes are flushed sorted by their own content-hash id (project()'s own pendingEntryNodes.sort), so two differently-spelled key sets emit these four nodes in the same, id-ascending order -- comparing the emitted order against a FRESH, independent default sort of the same ids (rather than re-deriving expected ids by hand, which the hash recipe makes impractical) is what actually distinguishes a genuinely-sorted emission from an unsorted or wrongly-ordered one.
+    const ids = entries.map((node) => node.id);
+    expect(ids).toEqual([...ids].sort());
+  });
+
+  it("walks a null-valued property in a definitions entry as a scalar, never as a record", () => {
+    // A generic definitions entry is a z.looseObject, so an extra key can carry any JSON value including a bare null -- isRecord's own `value !== null` guard is what keeps typeof null === "object" from being walked as a record (which would throw on Object.keys(null)).
+    const pkg = wordprocessingPackage([sectionGroup([paragraph("Body.")])], {
+      definitions: { n1: { kind: "footnote", note: null } },
+    });
+    expectSchemaValid(pkg, "null-valued definitions entry");
+    const graph = projectDocumentGraph([{ id: "doc", package: pkg }]);
+    const entry = graph.nodes.find((node) => node.kind === "definitionEntry");
+    expect(entry?.note).toBeNull();
   });
 
   it("refuses a ref the table does not carry, loudly", () => {
@@ -622,6 +639,67 @@ describe("definitions tables", () => {
       projectDocumentGraph([{ id: "doc", package: mutual }]),
     ).toThrow(/definitions table entry "n1" is reachable from its own body/);
   });
+
+  it("folds an inlined definitions-entry ref's own walked content into the anchor's hash and face, never the bare local key", () => {
+    // Mirrors the existing "custom: inlining style entries" coverage, but for the DEFINITIONS tenant specifically: a custom policy that inlines every definitions-table entry takes the anchor's resolveDefinitionRef down the "inline" branch (resolved.id === undefined), which folds resolved.walked.hash/properties directly rather than substituting a DEFINED_BY-edge id.
+    const inlineDefinitions: ExtractionPolicy = (path, value) =>
+      path.length === 2 && path[0] === "definitions"
+        ? "inline"
+        : defaultExtractionPolicy(path, value);
+    const pkg = wordprocessingPackage(
+      [
+        sectionGroup([
+          {
+            node: {
+              kind: "anchor",
+              anchorType: "footnote",
+              name: "1",
+              definition: "n1",
+            },
+            children: [],
+          },
+        ]),
+      ],
+      { definitions: { n1: NOTE_BODY } },
+    );
+    expectSchemaValid(pkg, "inlined definitions ref");
+    const graph = projectDocumentGraph([{ id: "doc", package: pkg }], {
+      policy: inlineDefinitions,
+    });
+    // No definitionEntry node was ever minted (the entry was never extracted), and no DEFINED_BY edge exists (an inlined position contributes no edge, per this module's own styleChainEdges-adjacent design note).
+    expect(
+      graph.nodes.filter((node) => node.kind === "definitionEntry"),
+    ).toEqual([]);
+    expect(graph.edges.filter((edge) => edge.kind === "DEFINED_BY")).toEqual(
+      [],
+    );
+    // The anchor's own face instead carries the entry's walked content directly under `definition`.
+    const anchorNode = graph.nodes.find((node) => node.kind === "anchor")!;
+    expect(anchorNode.definition).toEqual(NOTE_BODY);
+  });
+
+  it("recordOf refuses a non-record payload loudly rather than silently walking it (a walk bug, not a valid document shape)", () => {
+    // A hand-built, deliberately non-schema-valid leaf: TreeLeaf's own type never actually allows an array, so this can only be reached by bypassing the type system exactly as this test does -- the invariant recordOf's own comment names ("every schema payload is a plain record") holds for every real DocumentTree, and this proves the guard actually fires rather than silently walking Object.keys([]) or similar if it were ever violated.
+    const malformedPkg = wordprocessingPackage([
+      [] as unknown as SectionGroupNode,
+    ]);
+    expect(() =>
+      projectDocumentGraph([{ id: "doc", package: malformedPkg }]),
+    ).toThrow(/schema payload is not a plain record/);
+  });
+
+  it("decideEntry refuses an entry whose own table slot is explicitly undefined, the same defensive invariant recordOf enforces for non-record payloads", () => {
+    // Every real call site (resolveStyleRef/resolveDefinitionRef's own pre-checks, and the root table walk's own Object.keys(table) enumeration) already guarantees a defined entry before decideEntry ever runs -- so this, like the test above, can only be reached by hand-building a table whose value is explicitly `undefined` for one of its own keys, bypassing the type system exactly as this test does.
+    const malformedPkg = wordprocessingPackage(
+      [sectionGroup([paragraph("Body.")])],
+      {
+        definitions: { n1: undefined as unknown as DefinitionEntry },
+      },
+    );
+    expect(() =>
+      projectDocumentGraph([{ id: "doc", package: malformedPkg }]),
+    ).toThrow(/definitions table entry "n1" referenced but not present/);
+  });
 });
 
 describe("factoring and node identity", () => {
@@ -774,6 +852,71 @@ describe("extraction policy", () => {
       graph.nodes.find((node) => node.kind === "documentTree")!.styles,
     ).toEqual({ s1: entry });
   });
+
+  it("emits a DEFINED_BY edge discovered inside a policy-extracted record value nested in a table entry's own body", () => {
+    const extractMeta: ExtractionPolicy = (path, value) =>
+      path.length === 3 && path[0] === "definitions" && path[2] === "meta"
+        ? "extract"
+        : defaultExtractionPolicy(path, value);
+    const pkg = wordprocessingPackage([sectionGroup([paragraph("Body.")])], {
+      definitions: {
+        n1: {
+          kind: "footnote",
+          blocks: [],
+          meta: {
+            kind: "anchor",
+            anchorType: "footnote",
+            name: "y",
+            definition: "n2",
+          },
+        },
+        n2: { kind: "footnote", blocks: [{ kind: "paragraph", runs: [] }] },
+      },
+    });
+    expectSchemaValid(pkg, "nested extracted anchor");
+    const graph = projectDocumentGraph([{ id: "doc", package: pkg }], {
+      policy: extractMeta,
+    });
+    const valueNode = graph.nodes.find((node) => node.kind === "value")!;
+    const edges = graph.edges.filter(
+      (edge) => edge.kind === "DEFINED_BY" && edge.from === valueNode.id,
+    );
+    expect(edges).toHaveLength(1);
+  });
+
+  it("emits a DEFINED_BY edge discovered inside a policy-extracted ARRAY value's own elements", () => {
+    // mintValueNode's non-record branch (isRecord(value) === false) also covers arrays -- walk() recurses into each element and accumulates their own edges, unlike a genuine scalar which never carries any.
+    const extractMeta: ExtractionPolicy = (path, value) =>
+      path.length === 3 && path[0] === "definitions" && path[2] === "meta"
+        ? "extract"
+        : defaultExtractionPolicy(path, value);
+    const pkg = wordprocessingPackage([sectionGroup([paragraph("Body.")])], {
+      definitions: {
+        n1: {
+          kind: "footnote",
+          blocks: [],
+          meta: [
+            {
+              kind: "anchor",
+              anchorType: "footnote",
+              name: "y",
+              definition: "n2",
+            },
+          ],
+        },
+        n2: { kind: "footnote", blocks: [{ kind: "paragraph", runs: [] }] },
+      },
+    });
+    expectSchemaValid(pkg, "nested extracted anchor array");
+    const graph = projectDocumentGraph([{ id: "doc", package: pkg }], {
+      policy: extractMeta,
+    });
+    const valueNode = graph.nodes.find((node) => node.kind === "value")!;
+    const edges = graph.edges.filter(
+      (edge) => edge.kind === "DEFINED_BY" && edge.from === valueNode.id,
+    );
+    expect(edges).toHaveLength(1);
+  });
 });
 
 describe("every document kind projects", () => {
@@ -917,6 +1060,33 @@ describe("every document kind projects", () => {
 });
 
 describe("projectDocumentGraph", () => {
+  it("includes symbolTable and source on the root only when the package actually carries them", () => {
+    const bare = wordprocessingPackage([sectionGroup([paragraph("Body.")])]);
+    const bareRoot = projectDocumentGraph([
+      { id: "doc", package: bare },
+    ]).nodes.find((node) => node.kind === "documentTree")!;
+    expect("symbolTable" in bareRoot).toBe(false);
+    expect("source" in bareRoot).toBe(false);
+    expect("pages" in bareRoot).toBe(false);
+
+    const withEnvelope: DocumentTree = {
+      ...wordprocessingPackage([sectionGroup([paragraph("Body.")])], {
+        symbolTable: minimalSymbolTable(),
+        pages: [{ widthPt: 595, heightPt: 842 }],
+      }),
+      source: { part1: { format: "docx", xml: "<a/>" } },
+    };
+    expectSchemaValid(withEnvelope, "withEnvelope");
+    const fullRoot = projectDocumentGraph([
+      { id: "doc", package: withEnvelope },
+    ]).nodes.find((node) => node.kind === "documentTree")!;
+    expect(fullRoot.symbolTable).toEqual(minimalSymbolTable());
+    expect(fullRoot.source).toEqual({
+      part1: { format: "docx", xml: "<a/>" },
+    });
+    expect(fullRoot.pages).toEqual([{ widthPt: 595, heightPt: 842 }]);
+  });
+
   it("is deterministic: the same input projects to the same graph, nodes and edges in the same order", () => {
     const boilerplate = paragraph("Please see attached.");
     const first = projectDocumentGraph([
@@ -1026,6 +1196,8 @@ describe("projectDocumentGraph", () => {
     expect(styleNodes).toEqual([
       { id: styleNodes[0]?.id, kind: "styleEntry", run: H1_BOLD_RUN },
     ]);
+    // A StyleEntry never carries its own `kind` field (only a generic definitions-table entry does), so the face's tenantKind key must be genuinely ABSENT here, not merely undefined-valued -- toEqual alone treats {tenantKind: undefined} as equal to no key at all.
+    expect("tenantKind" in styleNodes[0]!).toBe(false);
     expect(styleNodes[0]!.id).toMatch(/^[0-9a-f]{64}$/);
 
     // Each document keeps its own section (its subtree differs), carrying its own payload.
@@ -1132,6 +1304,40 @@ describe("projectDocumentGraph", () => {
     expect(projectDocumentGraph([{ id: "doc", package: stamped }])).toEqual(
       projectDocumentGraph([{ id: "doc", package: pkg }]),
     );
+  });
+
+  it("excludes a $schema key discovered inside a table entry's own body from both the id and the face", () => {
+    // documentTreeWithSchema only ever stamps $schema at the document ROOT, which project()'s own hand-built envelope never copies from `this.pkg` in the first place -- so a root-level $schema is excluded structurally, not by walkRecord's own key check. This test instead puts $schema INSIDE a definitions-entry body (a genuine z.looseObject, so an arbitrary extra key is schema-valid), the one place walkRecord's own "$schema" exclusion is actually exercised.
+    const withSchemaKey = wordprocessingPackage(
+      [sectionGroup([paragraph("Body.")])],
+      {
+        definitions: {
+          n1: {
+            kind: "footnote",
+            blocks: [],
+            $schema: "https://example.test/should-be-stripped",
+          },
+        },
+      },
+    );
+    const withoutSchemaKey = wordprocessingPackage(
+      [sectionGroup([paragraph("Body.")])],
+      { definitions: { n1: { kind: "footnote", blocks: [] } } },
+    );
+    const graphWith = projectDocumentGraph([
+      { id: "doc", package: withSchemaKey },
+    ]);
+    const graphWithout = projectDocumentGraph([
+      { id: "doc", package: withoutSchemaKey },
+    ]);
+    const entryWith = graphWith.nodes.find(
+      (node) => node.kind === "definitionEntry",
+    )!;
+    const entryWithout = graphWithout.nodes.find(
+      (node) => node.kind === "definitionEntry",
+    )!;
+    expect("$schema" in entryWith).toBe(false);
+    expect(entryWith.id).toBe(entryWithout.id);
   });
 
   it("dereferences a run-level anchor extent definition through the owning paragraph node", () => {
@@ -1431,6 +1637,22 @@ describe("ordered STYLED_BY chains (#660)", () => {
     ]);
   });
 
+  it("emits no STYLED_BY edge for a non-paragraph leaf sitting in the identical styled scope", () => {
+    const cells = table([["cell"]]);
+    const pkg = wordprocessingPackage(
+      [sectionGroup([cells], { style: "s1" })],
+      {
+        styles: { s1: { run: { bold: true } } },
+      },
+    );
+    const graph = projectDocumentGraph([{ id: "doc", package: pkg }]);
+    const tableNode = graph.nodes.find((node) => node.kind === "table")!;
+    const edges = graph.edges.filter(
+      (edge) => edge.kind === "STYLED_BY" && edge.from === tableNode.id,
+    );
+    expect(edges).toEqual([]);
+  });
+
   it("threads the chain through three levels of nested anchors down to a bare leaf", () => {
     const pkg = wordprocessingPackage(
       [
@@ -1565,6 +1787,48 @@ describe("ordered STYLED_BY chains (#660)", () => {
 });
 
 describe("walkPropertyGraph (#660)", () => {
+  it("sorts outgoing edges by orderKey ascending regardless of the array's own insertion order", () => {
+    // Six edges deliberately inserted in a fully reverse-of-ascending order (f, e, d, c, b, a) -- wide enough that no small-array sort implementation quirk (insertion sort, binary insertion, or otherwise) can coincidentally reproduce ascending order from an already-favourable insertion sequence; every adjacent pair in the insertion order is itself a descending pair, so a genuinely-ascending comparator is the only way to reach the expected order.
+    const graph: PropertyGraph = {
+      nodes: [
+        { id: "root", kind: "test" },
+        { id: "a", kind: "test" },
+        { id: "b", kind: "test" },
+        { id: "c", kind: "test" },
+        { id: "d", kind: "test" },
+        { id: "e", kind: "test" },
+        { id: "f", kind: "test" },
+      ],
+      edges: [
+        { from: "root", to: "f", kind: "CONTAINS", orderKey: "f" },
+        { from: "root", to: "e", kind: "CONTAINS", orderKey: "e" },
+        { from: "root", to: "d", kind: "CONTAINS", orderKey: "d" },
+        { from: "root", to: "c", kind: "CONTAINS", orderKey: "c" },
+        { from: "root", to: "b", kind: "CONTAINS", orderKey: "b" },
+        { from: "root", to: "a", kind: "CONTAINS", orderKey: "a" },
+      ],
+    };
+    const visited = walkPropertyGraph(graph, "root").map(({ node }) => node.id);
+    expect(visited).toEqual(["root", "a", "b", "c", "d", "e", "f"]);
+  });
+
+  it("still guards a genuine cycle when the requested kinds exclude CONTAINS entirely, not just when CONTAINS is included alongside another kind", () => {
+    // needsGuard's own kind-filter check (kinds.some((kind) => kind !== "CONTAINS")) must genuinely test "is some requested kind NOT CONTAINS", not "is CONTAINS among the requested kinds" -- the two conditions agree whenever CONTAINS sits alongside another kind (both true), which is all the sibling test above this one exercises, but they diverge sharply when CONTAINS is excluded from `kinds` altogether: the correct condition is still true (STYLED_BY !== "CONTAINS"), while the swapped one is false (no element equals "CONTAINS"), wrongly skipping the cycle guard's on-path Set entirely.
+    const nodes = [
+      { id: "a", kind: "x" },
+      { id: "b", kind: "x" },
+    ];
+    const edges = [
+      { from: "a", to: "b", kind: "STYLED_BY", orderKey: "k0" },
+      { from: "b", to: "a", kind: "STYLED_BY", orderKey: "k0" },
+    ];
+    const walked = walkPropertyGraph({ nodes, edges }, "a", {
+      kinds: ["STYLED_BY"],
+    });
+    // Without the guard this recurses forever; the assertion below is only reachable at all if the guard genuinely engaged and suppressed the revisit.
+    expect(walked.filter(({ node }) => node.id === "a").length).toBe(1);
+  });
+
   it("walks containment-only in document order without a cycle guard (a Merkle DAG is provably acyclic), revisiting a shared node once per path", () => {
     const shared = paragraph("Shared.");
     const pkg = wordprocessingPackage([sectionGroup([shared, shared])]);
@@ -1640,6 +1904,42 @@ describe("walkPropertyGraph (#660)", () => {
     expect(new Set(visited.map(({ node }) => node.id))).toEqual(
       new Set(graph.nodes.map((node) => node.id)),
     );
+  });
+
+  it("restricting kinds excludes edges of a kind actually present, not just kinds absent from the graph", () => {
+    const pkg = wordprocessingPackage(
+      [
+        sectionGroup([
+          headingGroup("T", 1, [paragraph("Body.")], { style: "s1" }),
+        ]),
+      ],
+      { styles: { s1: { run: { bold: true } } } },
+    );
+    const graph = projectDocumentGraph([{ id: "doc", package: pkg }]);
+    const heading = graph.nodes.find(
+      (node) => node.kind === "paragraph" && node.headingLevel === 1,
+    )!;
+    const body = nodeByText(graph, "Body.");
+    // The heading has both a CONTAINS edge to its own body paragraph and a STYLED_BY edge to its style entry -- restricting to STYLED_BY must never surface the CONTAINS-reached body, even though the graph genuinely has CONTAINS edges to filter out.
+    const walked = walkPropertyGraph(graph, heading.id, {
+      kinds: ["STYLED_BY"],
+    });
+    expect(walked.map(({ node }) => node.id)).not.toContain(body.id);
+  });
+
+  it("still guards a genuine cycle among non-CONTAINS edges even when CONTAINS is also included in the requested kinds", () => {
+    const nodes = [
+      { id: "a", kind: "x" },
+      { id: "b", kind: "x" },
+    ];
+    const edges = [
+      { from: "a", to: "b", kind: "STYLED_BY", orderKey: "k0" },
+      { from: "b", to: "a", kind: "STYLED_BY", orderKey: "k0" },
+    ];
+    const walked = walkPropertyGraph({ nodes, edges }, "a", {
+      kinds: ["CONTAINS", "STYLED_BY"],
+    });
+    expect(walked.filter(({ node }) => node.id === "a").length).toBe(1);
   });
 
   it("walking STYLED_BY alone in orderKey order reconstructs the resolution chain from a starting anchor", () => {
@@ -1799,6 +2099,49 @@ describe("write API: insertNode / insertEdge (#935)", () => {
     expect(again.graph).toEqual(group.graph);
   });
 
+  it('hasPriorContainsEdges\' own (from === id && kind === "CONTAINS") check ignores a decoy edge satisfying only one clause, still taking the wide-key fresh-mint fast path rather than reconciliation', () => {
+    const leafA = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const leafB = insertNode(leafA.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "B." }] },
+    });
+    const sectionId = contentHashV1({
+      kind: "section",
+      children: [leafA.id, leafB.id],
+    });
+    // Two decoys, each satisfying exactly one clause: a STYLED_BY edge FROM sectionId (right owner, wrong kind) and a CONTAINS edge from an unrelated id (wrong owner, right kind). Neither is a genuine prior CONTAINS edge from sectionId itself, so hasPriorContainsEdges must read false and insertNode must still take its own plain, wide-key mint loop -- reconcileChildren's bisection-based insertion would produce different (though still validly ordered) keys for a first-ever child, which the exact orderKeyForIndex equality below would catch.
+    const withDecoys = insertEdge(
+      insertEdge(leafB.graph, sectionId, leafA.id, { kind: "STYLED_BY" }),
+      "unrelated-id",
+      leafA.id,
+    );
+    const group = insertNode(withDecoys, {
+      kind: "section",
+      properties: { kind: "section" },
+      children: [leafA.id, leafB.id],
+    });
+    const childEdges = group.graph.edges.filter(
+      (edge) => edge.from === group.id && edge.kind === "CONTAINS",
+    );
+    expect(childEdges).toEqual([
+      {
+        from: group.id,
+        to: leafA.id,
+        kind: "CONTAINS",
+        orderKey: orderKeys.orderKeyForIndex(0),
+      },
+      {
+        from: group.id,
+        to: leafB.id,
+        kind: "CONTAINS",
+        orderKey: orderKeys.orderKeyForIndex(1),
+      },
+    ]);
+  });
+
   it("re-projecting after insertion is consistent: a subtree built via insertNode/insertEdge mints the identical ids and edges projectDocumentGraph mints for the equivalent DocumentTree", () => {
     const pkg = wordprocessingPackage([
       sectionGroup([paragraph("First."), paragraph("Second.")]),
@@ -1867,7 +2210,9 @@ describe("write API: insertNode / insertEdge (#935)", () => {
       kind: "paragraph",
       properties: { kind: "paragraph", runs: [{ text: "A." }] },
     });
-    const rebalanced = insertEdge(a.graph, "parent", a.id, {
+    // An edge that must survive the rebalance untouched: a different `from`, sharing nothing with "parent"'s own sibling group being rebalanced -- proves rebalancedInsert's own `kept` filter genuinely carries over every OTHER edge in the graph, not just happening to end up empty because every edge present was part of the rebalanced group.
+    const withUnrelated = insertEdge(a.graph, "unrelated-parent", a.id);
+    const rebalanced = insertEdge(withUnrelated, "parent", a.id, {
       position: { at: "start" },
     });
 
@@ -1882,6 +2227,12 @@ describe("write API: insertNode / insertEdge (#935)", () => {
     expect(contains.map((edge) => edge.orderKey)).toEqual(
       orderKeys.renumberedOrderKeys(2),
     );
+    // Neither edge carried a path, so the rebuilt edges must genuinely omit the key, not carry it as `undefined`.
+    for (const edge of contains) expect("path" in edge).toBe(false);
+    // The unrelated edge is untouched: still present, unchanged.
+    expect(
+      rebalanced.edges.filter((edge) => edge.from === "unrelated-parent"),
+    ).toHaveLength(1);
   });
 
   it("insertEdge: start/end/before/after mint keys that sort into the requested position, and reject a sibling id the parent does not carry", () => {
@@ -1914,11 +2265,18 @@ describe("write API: insertNode / insertEdge (#935)", () => {
       position: { at: "after", siblingId: b.id },
     }); // a, b, c, d, e
 
-    const ordered = graph.edges
+    const orderedEdges = graph.edges
       .filter((edge) => edge.from === "parent" && edge.kind === "CONTAINS")
-      .sort((x, y) => (x.orderKey < y.orderKey ? -1 : 1))
-      .map((edge) => edge.to);
-    expect(ordered).toEqual([a.id, b.id, c.id, d.id, e.id]);
+      .sort((x, y) => (x.orderKey < y.orderKey ? -1 : 1));
+    expect(orderedEdges.map((edge) => edge.to)).toEqual([
+      a.id,
+      b.id,
+      c.id,
+      d.id,
+      e.id,
+    ]);
+    // None of these calls passed a `path` option, so every minted edge must genuinely omit the key.
+    for (const edge of orderedEdges) expect("path" in edge).toBe(false);
 
     let caught: unknown;
     try {
@@ -2038,6 +2396,66 @@ describe("write API: insertNode / insertEdge (#935)", () => {
     )!;
     expect(originalAfterInsert.orderKey).not.toBe(original[0]!.orderKey);
     expect(originalAfterInsert.path).toEqual(original[0]!.path);
+  });
+});
+
+describe("containsWouldReach internals (#935)", () => {
+  it("only follows CONTAINS edges, never a STYLED_BY edge that happens to point the same direction", () => {
+    const graph: PropertyGraph = {
+      nodes: [
+        { id: "a", kind: "x" },
+        { id: "b", kind: "x" },
+      ],
+      edges: [{ from: "a", to: "b", kind: "STYLED_BY", orderKey: "k0" }],
+    };
+    expect(() => insertEdge(graph, "b", "a")).not.toThrow();
+  });
+
+  it("checks every CONTAINS child of a node with more than one, not only the first", () => {
+    const graph: PropertyGraph = {
+      nodes: [
+        { id: "x", kind: "t" },
+        { id: "p", kind: "t" },
+        { id: "q", kind: "t" },
+        { id: "target", kind: "t" },
+      ],
+      edges: [
+        { from: "x", to: "p", kind: "CONTAINS", orderKey: "k0" },
+        { from: "x", to: "q", kind: "CONTAINS", orderKey: "k1" },
+        { from: "q", to: "target", kind: "CONTAINS", orderKey: "k0" },
+      ],
+    };
+    // x reaches target only through its SECOND child q -- a check that only ever recorded the first CONTAINS child per node would miss this path entirely.
+    expect(() => insertEdge(graph, "target", "x")).toThrow(ContainsCycleError);
+  });
+
+  it("terminates instead of looping forever when the existing edges already contain a genuine CONTAINS cycle unrelated to the new attachment", () => {
+    const graph: PropertyGraph = {
+      nodes: [
+        { id: "p", kind: "t" },
+        { id: "q", kind: "t" },
+        { id: "x", kind: "t" },
+      ],
+      edges: [
+        { from: "p", to: "q", kind: "CONTAINS", orderKey: "k0" },
+        { from: "q", to: "p", kind: "CONTAINS", orderKey: "k0" },
+      ],
+    };
+    expect(() => insertEdge(graph, "x", "p")).not.toThrow();
+  });
+
+  it("a dead-end search (the target has no CONTAINS children of its own) genuinely finds nothing, not a fabricated match", () => {
+    // childrenOf.get(current) is undefined at a genuine dead end (a leaf with no CONTAINS children recorded at all), and the DFS's own `?? []` must contribute nothing further to the stack there. Naming the new edge's own `from` "Stryker was here" turns any fallback OTHER than a genuinely empty array into a self-fulfilling false positive: a placeholder array whose element happens to equal `from` would make the dead-end's own popped placeholder satisfy `current === from` on the very next iteration, incorrectly reporting a cycle that doesn't exist.
+    const leaf = insertNode(
+      { nodes: [], edges: [] },
+      {
+        kind: "paragraph",
+        properties: { kind: "paragraph", runs: [{ text: "Leaf." }] },
+      },
+    );
+    expect(() =>
+      insertEdge(leaf.graph, "Stryker was here", leaf.id),
+    ).not.toThrow();
   });
 });
 
@@ -2174,6 +2592,50 @@ describe("write API: insertEdge refuses a CONTAINS cycle (#935)", () => {
 
 describe("write API: insertNode's fresh-mint children-wiring reconciles pre-existing dangling CONTAINS edges (#935)", () => {
   const EMPTY_GRAPH: PropertyGraph = { nodes: [], edges: [] };
+
+  it("reconciles against pre-existing dangling edges by their own sorted orderKey, not by the edges array's own creation order", () => {
+    const leafA = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const leafB = insertNode(leafA.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "B." }] },
+    });
+    const leafC = insertNode(leafB.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "C." }] },
+    });
+    const sectionId = contentHashV1({
+      kind: "section",
+      children: [leafA.id, leafB.id, leafC.id],
+    });
+    // Attached in an order that scrambles the edges ARRAY relative to sorted orderKey: C first (appended, gets the widest/earliest key), then A at the very start, then B spliced between A and C -- so the array's own creation order is [C, A, B] even though the orderKeys sort as A, B, C.
+    const withC = insertEdge(leafC.graph, sectionId, leafC.id);
+    const withA = insertEdge(withC, sectionId, leafA.id, {
+      position: { at: "start" },
+    });
+    const withDangling = insertEdge(withA, sectionId, leafB.id, {
+      position: { at: "before", siblingId: leafC.id },
+    });
+
+    const result = insertNode(withDangling, {
+      kind: "section",
+      properties: { kind: "section" },
+      children: [leafA.id, leafB.id, leafC.id],
+    });
+    // A correct sorted read recognises every requested child as already wired in the requested order and inserts nothing new; a broken sort could fail to match the existing subsequence and mint spurious duplicate edges instead.
+    const contains = result.graph.edges.filter(
+      (edge) => edge.from === sectionId && edge.kind === "CONTAINS",
+    );
+    expect(contains).toHaveLength(3);
+    // Genuinely exercises byOrderKeyAsc, not just "no duplicates": reading originalSiblings by CREATION order (unsorted) would see [C, A, B], which is NOT a subsequence of the requested [A, B, C] (C can never precede A in a subsequence of [A,B,C]) -- so a broken sort would fail to match at least one requested position against its existing edge and mint a spurious extra one, changing this exact final order.
+    expect(
+      contains
+        .sort((x, y) => (x.orderKey < y.orderKey ? -1 : 1))
+        .map((edge) => edge.to),
+    ).toEqual([leafA.id, leafB.id, leafC.id]);
+  });
 
   it("insertNode does not duplicate a CONTAINS edge that insertEdge already attached onto this id before it had a node", () => {
     const leafA = insertNode(EMPTY_GRAPH, {
@@ -2360,6 +2822,70 @@ describe("write API: insertNode's fresh-mint children-wiring reconciles pre-exis
         orderKey: orderKeys.orderKeyForIndex(1),
       },
     ]);
+  });
+
+  it("reconciliation counts only this id's own CONTAINS edges as pre-existing siblings, never a differently-kinded or differently-owned edge that happens to sit in the same graph", () => {
+    const leafA = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const leafB = insertNode(leafA.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "B." }] },
+    });
+    const sectionId = contentHashV1({
+      kind: "section",
+      children: [leafA.id, leafB.id],
+    });
+    // Three decoys, each satisfying exactly one clause of the (from === id && kind === "CONTAINS") filter and not the other: a STYLED_BY edge FROM this id (right owner, wrong kind), a CONTAINS edge from a wholly unrelated id TO leafA (wrong owner, right kind, right target), and a CONTAINS edge from this id's own dangling attachment reused for a genuinely different (unrequested) child. A filter with either clause dropped, or swapped to `||`, would miscount `originalSiblings`/`currentSiblings` against these decoys.
+    const withDecoys = insertEdge(
+      insertEdge(
+        insertEdge(leafB.graph, sectionId, leafA.id, { kind: "STYLED_BY" }),
+        "unrelated-id",
+        leafA.id,
+      ),
+      sectionId,
+      leafA.id,
+    );
+    const reconciled = insertNode(withDecoys, {
+      kind: "section",
+      properties: { kind: "section" },
+      children: [leafA.id, leafB.id],
+    });
+    expect(reconciled.id).toBe(sectionId);
+    const contains = reconciled.graph.edges.filter(
+      (edge) => edge.from === sectionId && edge.kind === "CONTAINS",
+    );
+    // Exactly one edge to A (the genuine pre-wired CONTAINS decoy is reused, not duplicated) and one freshly inserted to B -- the STYLED_BY and unrelated-id decoys must never have been treated as part of this id's own CONTAINS sibling set.
+    expect(contains).toHaveLength(2);
+    expect(contains.filter((edge) => edge.to === leafA.id)).toHaveLength(1);
+    expect(contains.filter((edge) => edge.to === leafB.id)).toHaveLength(1);
+  });
+
+  it("reconciliation refuses a CONTAINS cycle when an unmatched child would close one, exactly as insertEdge's own attachment does", () => {
+    const leafA = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const loopNode = insertNode(leafA.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "Loop." }] },
+    });
+    const sectionId = contentHashV1({
+      kind: "section",
+      children: [leafA.id, loopNode.id],
+    });
+    // Pre-wire the section's genuine first child (A), so hasPriorContainsEdges is true and insertNode's fresh mint routes through reconcileChildren rather than its own plain forEach loop -- reconcileChildren's OWN assertNoContainsCycle call (for a child position the LCS pass left unmatched, requiring a fresh insertion) is what this test targets, not insertNode's separate check for the no-prior-edges case (already covered elsewhere).
+    const withA = insertEdge(loopNode.graph, sectionId, leafA.id);
+    // loopNode already dangles a CONTAINS edge back at the not-yet-existing sectionId: attaching sectionId's own second, genuinely unmatched child (loopNode) would close that cycle.
+    const cyclic = insertEdge(withA, loopNode.id, sectionId);
+    expect(() =>
+      insertNode(cyclic, {
+        kind: "section",
+        properties: { kind: "section" },
+        children: [leafA.id, loopNode.id],
+      }),
+    ).toThrow(ContainsCycleError);
   });
 });
 
@@ -2903,6 +3429,135 @@ describe("write API: reconcileChildren reproduces every requested children list 
     expect(bOnlyContains.filter((edge) => edge.to === a)).toHaveLength(2);
     expect(bOnlyContains.filter((edge) => edge.to === b)).toHaveLength(1);
   });
+
+  // An independent reference model of the exact algorithm reconcileChildren's own doc comment describes (LCS classification, then the anti-inflation multiplicity pass, then anchor-relative insertion), written from that prose rather than copied from graph.ts's own implementation, so it fails to agree with graph.ts whenever graph.ts's own dp/backtrack/anti-inflation/anchor arithmetic diverges from the documented algorithm -- including every off-by-one in the dp table's own bounds, the matchedIndex/matchedByOriginal array sizes, the backtrack's tie-break direction, and the anti-inflation pass's own bookkeeping. Genuinely distinct from the "every genuine-subsequence pre-wiring" exhaustive sweep above: that sweep only ever pre-wires SELECTED positions of `children` itself (by construction always a genuine subsequence of the request), a shape under which the module's own stronger guarantee (reconciliation reproduces `children` exactly) makes many internal wrong-choice bugs unobservable -- any valid maximum-length assignment reconstructs the identical final order, so a backtrack tie-break bug or a dp off-by-one that still finds SOME maximum assignment slips through undetected. Order-INCONSISTENT existing wiring (arbitrary sequences the request cannot embed as a subsequence) carries no such masking guarantee, which is exactly where a wrong dp value or a wrong tie-break produces a genuinely different, independently-checkable final order.
+  function reconcileOracle(
+    existingSeq: readonly string[],
+    children: readonly string[],
+  ): string[] {
+    const dp: number[][] = Array.from({ length: existingSeq.length + 1 }, () =>
+      new Array<number>(children.length + 1).fill(0),
+    );
+    for (let i = existingSeq.length - 1; i >= 0; i -= 1) {
+      for (let j = children.length - 1; j >= 0; j -= 1) {
+        dp[i]![j] =
+          existingSeq[i] === children[j]
+            ? dp[i + 1]![j + 1]! + 1
+            : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
+      }
+    }
+    const matchedIndex = new Array<number | undefined>(children.length).fill(
+      undefined,
+    );
+    const matchedByOriginal = new Array<number | undefined>(
+      existingSeq.length,
+    ).fill(undefined);
+    let i = 0;
+    let j = 0;
+    while (i < existingSeq.length && j < children.length) {
+      if (existingSeq[i] === children[j]) {
+        matchedIndex[j] = i;
+        matchedByOriginal[i] = j;
+        i += 1;
+        j += 1;
+      } else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) {
+        i += 1;
+      } else {
+        j += 1;
+      }
+    }
+    const unmatchedExistingByTarget = new Map<string, number[]>();
+    existingSeq.forEach((value, index) => {
+      if (matchedByOriginal[index] !== undefined) return;
+      const bucket = unmatchedExistingByTarget.get(value);
+      if (bucket === undefined) unmatchedExistingByTarget.set(value, [index]);
+      else bucket.push(index);
+    });
+    const leftoverPointer = new Map<string, number>();
+    children.forEach((value, position) => {
+      if (matchedIndex[position] !== undefined) return;
+      const leftovers = unmatchedExistingByTarget.get(value);
+      if (leftovers === undefined) return;
+      const pointer = leftoverPointer.get(value) ?? 0;
+      if (pointer >= leftovers.length) return;
+      matchedIndex[position] = leftovers[pointer]!;
+      leftoverPointer.set(value, pointer + 1);
+    });
+    const anchorFor = (position: number): number => {
+      for (let later = position + 1; later < children.length; later += 1) {
+        const candidate = matchedIndex[later];
+        if (candidate !== undefined) return candidate;
+      }
+      return existingSeq.length;
+    };
+    const insertedAtOrBefore: number[] = [];
+    let current: string[] = [...existingSeq];
+    for (let position = 0; position < children.length; position += 1) {
+      if (matchedIndex[position] !== undefined) continue;
+      const anchorIndex = anchorFor(position);
+      const insertIndex =
+        anchorIndex +
+        insertedAtOrBefore.filter((inserted) => inserted <= anchorIndex).length;
+      insertedAtOrBefore.push(anchorIndex);
+      current = [
+        ...current.slice(0, insertIndex),
+        children[position]!,
+        ...current.slice(insertIndex),
+      ];
+    }
+    return current;
+  }
+
+  // Every sequence over a 3-label pool up to the given length -- deliberately including sequences no `children` value could ever "pre-wire" as a genuine subsequence, unlike the exhaustive sweep above.
+  function allLabelSequences(maxLength: number): string[][] {
+    const alphabet = ["a", "b", "c"];
+    const sequences: string[][] = [[]];
+    for (let length = 1; length <= maxLength; length += 1) {
+      for (const seq of allLabelSequences(length - 1)) {
+        for (const label of alphabet) sequences.push([...seq, label]);
+      }
+    }
+    return sequences;
+  }
+
+  it("agrees with an independently-modelled reference algorithm across arbitrary (not just genuinely-subsequence) existing wirings, over every combination of a 3-label pool", () => {
+    const { graph: baseGraph, pool } = mintLeafPool(3);
+    const byLabel = { a: pool[0]!, b: pool[1]!, c: pool[2]! };
+    const existingSeqs = allLabelSequences(3); // every arbitrary existing wiring up to length 3, subsequence or not
+    const childrenSeqs = allLabelSequences(4).filter((seq) => seq.length > 0);
+    let casesRun = 0;
+    for (const existingSeq of existingSeqs) {
+      for (const children of childrenSeqs) {
+        const sectionId = contentHashV1({
+          kind: "section",
+          children: children.map((label) => byLabel[label as "a"]),
+        });
+        const wired = existingSeq.reduce(
+          (acc, label) => insertEdge(acc, sectionId, byLabel[label as "a"]),
+          baseGraph,
+        );
+        const reconciled = insertNode(wired, {
+          kind: "section",
+          properties: { kind: "section" },
+          children: children.map((label) => byLabel[label as "a"]),
+        });
+        const actual = reconciled.graph.edges
+          .filter((edge) => edge.from === sectionId && edge.kind === "CONTAINS")
+          .sort((x, y) => (x.orderKey < y.orderKey ? -1 : 1))
+          .map((edge) => edge.to);
+        const expected = reconcileOracle(
+          existingSeq.map((label) => byLabel[label as "a"]),
+          children.map((label) => byLabel[label as "a"]),
+        );
+        expect(
+          actual,
+          `existing=[${existingSeq.join(",")}] children=[${children.join(",")}]`,
+        ).toEqual(expected);
+        casesRun += 1;
+      }
+    }
+    expect(casesRun).toBe(existingSeqs.length * childrenSeqs.length);
+  });
 });
 
 describe("write API: removeEdge / replaceEdge (#1004)", () => {
@@ -2918,7 +3573,17 @@ describe("write API: removeEdge / replaceEdge (#1004)", () => {
       properties: { kind: "paragraph", runs: [{ text: "B." }] },
     });
     const wired = insertEdge(
-      insertEdge(b.graph, "parent", a.id),
+      insertEdge(
+        // Two decoys, each satisfying exactly one clause of selectEdge's own (from, to, kind) match and not the other: a CONTAINS edge to A from a DIFFERENT owner (right to/kind, wrong from), and a STYLED_BY edge from "parent" to A (right from/to, wrong kind). Neither may count as a match for removeEdge(wired, "parent", a.id) -- a filter with either clause forced true would over-match one of these and either throw AmbiguousEdgeError or detach the wrong edge.
+        insertEdge(
+          insertEdge(b.graph, "unrelated-parent", a.id),
+          "parent",
+          a.id,
+          { kind: "STYLED_BY" },
+        ),
+        "parent",
+        a.id,
+      ),
       "parent",
       b.id,
     );
@@ -2932,6 +3597,20 @@ describe("write API: removeEdge / replaceEdge (#1004)", () => {
       (edge) => edge.from === "parent" && edge.kind === "CONTAINS",
     );
     expect(contains).toEqual([bEdgeBefore]);
+    // The two decoys survive untouched: only the genuine (parent, a, CONTAINS) match was ever removed.
+    expect(
+      result.edges.some(
+        (edge) => edge.from === "unrelated-parent" && edge.to === a.id,
+      ),
+    ).toBe(true);
+    expect(
+      result.edges.some(
+        (edge) =>
+          edge.from === "parent" &&
+          edge.to === a.id &&
+          edge.kind === "STYLED_BY",
+      ),
+    ).toBe(true);
     // Nodes are never pruned by removeEdge -- the detached edge's own target, however unreferenced it may now be, is exactly the orphan this module's own top comment already treats as intentional free version history.
     expect(result.nodes).toEqual(wired.nodes);
   });
@@ -3034,6 +3713,8 @@ describe("write API: removeEdge / replaceEdge (#1004)", () => {
     ]);
     const replaced = ordered.find((edge) => edge.to === replacement.id)!;
     expect(replaced.orderKey).toBe(before.orderKey);
+    // The old edge carried no path, so the replacement must genuinely omit the key too.
+    expect("path" in replaced).toBe(false);
     // The old edge to b is gone; b itself is still an untouched, unreferenced orphan in graph.nodes.
     expect(result.edges.some((edge) => edge.to === b.id)).toBe(false);
     expect(result.nodes.some((node) => node.id === b.id)).toBe(true);
@@ -3103,5 +3784,103 @@ describe("write API: removeEdge / replaceEdge (#1004)", () => {
       UnknownEdgeError,
     );
     expect(b.graph.edges.some((edge) => edge.from === "parent")).toBe(false);
+  });
+
+  it("never runs the CONTAINS-cycle check for a non-CONTAINS replacement, even when the new target genuinely has an unrelated CONTAINS path back to `from`", () => {
+    // A hand-built graph (bypassing insertEdge's own CONTAINS-attachment check, which is not what this test targets) where "b" already CONTAINS-reaches "a": a -[CONTAINS]-> b -[CONTAINS]-> a is a genuine, pre-existing cycle in the raw edge data. replaceEdge's own STYLED_BY replacement below repoints a to "b", which (were the CONTAINS-cycle check to wrongly run for a non-CONTAINS kind) would be refused since "b" already reaches "a" -- but a STYLED_BY replacement has nothing to do with CONTAINS reachability at all, and must succeed.
+    const graph: PropertyGraph = {
+      nodes: [
+        { id: "a", kind: "t" },
+        { id: "b", kind: "t" },
+        { id: "c", kind: "t" },
+      ],
+      edges: [
+        { from: "a", to: "b", kind: "CONTAINS", orderKey: "k0" },
+        { from: "b", to: "a", kind: "CONTAINS", orderKey: "k0" },
+        { from: "a", to: "c", kind: "STYLED_BY", orderKey: "k0" },
+      ],
+    };
+    const replaced = replaceEdge(graph, "a", "c", "b", { kind: "STYLED_BY" });
+    expect(
+      replaced.edges.filter(
+        (edge) => edge.from === "a" && edge.kind === "STYLED_BY",
+      ),
+    ).toEqual([{ from: "a", to: "b", kind: "STYLED_BY", orderKey: "k0" }]);
+  });
+});
+
+// Every named error class's own `.name` and message text, checked directly against a real construction rather than only via `toThrow(SomeClass)` (which never reads either field) -- each class's own module comment explains why the message is worded the way it is.
+describe("named error classes: identity and message text", () => {
+  it("NodeKindMismatchError", () => {
+    const error = new NodeKindMismatchError("id1", "paragraph", "table");
+    expect(error.name).toBe("NodeKindMismatchError");
+    expect(error.message).toBe(
+      'insertNode: id "id1" already names a node of kind "paragraph", cannot also be kind "table"',
+    );
+  });
+
+  it("UnknownSiblingError", () => {
+    const error = new UnknownSiblingError("from1", "CONTAINS", "sib1");
+    expect(error.name).toBe("UnknownSiblingError");
+    expect(error.message).toBe(
+      'insertEdge: sibling "sib1" names no existing CONTAINS edge from "from1"',
+    );
+  });
+
+  it("AmbiguousSiblingError", () => {
+    const error = new AmbiguousSiblingError("from1", "CONTAINS", "sib1", 3);
+    expect(error.name).toBe("AmbiguousSiblingError");
+    expect(error.message).toBe(
+      'insertEdge: sibling "sib1" names 3 existing CONTAINS edges from "from1", not exactly one -- before/after has no single position to resolve against',
+    );
+  });
+
+  it("UnknownEdgeError, with and without a path", () => {
+    const withoutPath = new UnknownEdgeError(
+      "from1",
+      "to1",
+      "CONTAINS",
+      undefined,
+    );
+    expect(withoutPath.name).toBe("UnknownEdgeError");
+    expect(withoutPath.message).toBe(
+      'no CONTAINS edge from "from1" to "to1" exists to select',
+    );
+    const withPath = new UnknownEdgeError("from1", "to1", "PROPERTY", ["a", 0]);
+    expect(withPath.message).toBe(
+      'no PROPERTY edge from "from1" to "to1" at path ["a",0] exists to select',
+    );
+  });
+
+  it("AmbiguousEdgeError, with and without a path", () => {
+    const withoutPath = new AmbiguousEdgeError(
+      "from1",
+      "to1",
+      "CONTAINS",
+      undefined,
+      2,
+    );
+    expect(withoutPath.name).toBe("AmbiguousEdgeError");
+    expect(withoutPath.message).toBe(
+      '2 CONTAINS edges from "from1" to "to1" match -- pass `path` to disambiguate',
+    );
+    const withPath = new AmbiguousEdgeError(
+      "from1",
+      "to1",
+      "PROPERTY",
+      ["a"],
+      2,
+    );
+    expect(withPath.message).toBe(
+      '2 PROPERTY edges from "from1" to "to1" at path ["a"] match -- these edges are identical in every field removeEdge/replaceEdge can compare, so none of them can be selected unambiguously',
+    );
+  });
+
+  it("ContainsCycleError", () => {
+    const error = new ContainsCycleError("from1", "to1");
+    expect(error.name).toBe("ContainsCycleError");
+    expect(error.message).toBe(
+      'insertEdge: attaching CONTAINS "from1" -> "to1" would close a cycle -- "to1" already reaches "from1"',
+    );
   });
 });

@@ -66,7 +66,8 @@ export interface PropertyGraph {
 
 // The dedup/identity key for one edge -- (from, to, kind, orderKey, path) -- shared by DocumentProjection's own addEdge below and the write API's rebalancing insert further down, so the two never drift into two different notions of "the same edge".
 function edgeKey(edge: GraphEdge): string {
-  return `${edge.from}\u0000${edge.to}\u0000${edge.kind}\u0000${edge.orderKey}\u0000${edge.path === undefined ? "" : JSON.stringify(edge.path)}`;
+  // No special-casing for a missing `path`: JSON.stringify(undefined) is the JS value `undefined`, which interpolates as the literal text "undefined" here -- a placeholder that can never collide with a genuine JSON.stringify(path) output, since PropertyPath is always a JSON array and JSON.stringify of an array always starts with `[`.
+  return `${edge.from}\u0000${edge.to}\u0000${edge.kind}\u0000${edge.orderKey}\u0000${JSON.stringify(edge.path)}`;
 }
 
 // The fractional/lexicographic order-key primitive (src/outline/order-keys.ts), re-exported under one namespace so a caller minting edges of their own (an editor inserting a sibling into an already-projected graph) reaches every operation through `orderKeys.*` rather than a second subpath import -- the projection itself only ever calls `orderKeyForIndex`, but `orderKeyBetween`/`orderKeyBefore`/`orderKeyAfter`/`renumberedOrderKeys` are this module's published answer to "how do I add one more between", "how do I extend past either end", and "how do I rebalance" for exactly that consumer.
@@ -228,19 +229,18 @@ class DocumentProjection {
         `projectDocumentGraph: ${field} table entry "${key}" referenced but not present`,
       );
     }
+    // this.decidingEntries never needs a matching delete once decided: every path below unconditionally populates this.tableDecisions for memoKey before returning, and the memo check at the top of this method always short-circuits any later call for the same key before it could ever reach the decidingEntries.has(memoKey) cycle check above -- so a stale "still deciding" marker for an already-decided key is never read again.
     this.decidingEntries.add(memoKey);
     const walked = this.walkRecord(recordOf(entry), [field, key]);
-    this.decidingEntries.delete(memoKey);
     if (this.policy([field, key], entry) === "extract") {
       const id = contentHashV1(walked.hash);
       const decided = { status: "extract" as const, id, walked };
-      this.tableDecisions.set(memoKey, decided);
       this.pendingEntryNodes.push(entryNodeFace(id, field, walked.properties));
-      return decided;
+      // Chained through .get() (rather than a bare .set() statement) so the memoisation write is inseparable from the value this method returns: this Map is decideEntry's only cache, so a caller reads back exactly what was just stored.
+      return this.tableDecisions.set(memoKey, decided).get(memoKey)!;
     }
     const decided = { status: "inline" as const, walked };
-    this.tableDecisions.set(memoKey, decided);
-    return decided;
+    return this.tableDecisions.set(memoKey, decided).get(memoKey)!;
   }
 
   // Resolves a style ref from a group wrapper: the entry's decided fate, with the loud refusal on a ref the table does not carry (a malformed package, in the family's all-or-nothing resolution tradition).
@@ -272,13 +272,14 @@ class DocumentProjection {
       : { walked: decided.walked };
   }
 
+  // Unconditional set, not an upsert-once guard: two mint sites computing the identical `node.id` necessarily walked identical content through the identical recipe (contentHashV1 is a pure function of that content) -- for the two entry-tenant families that could otherwise collide, a StyleEntry never carries its own `kind` field while every generic-table entry (DefinitionEntrySchema) always requires one, so a styles-table id can never coincide with a definitions/layers/attachments/destinations-table id, and any two entries WITHIN the generic-table family already map to the identical graph `kind` ("definitionEntry") regardless of which tenant table minted them. Overwriting an existing entry for the same id therefore writes back the identical value.
   private addNode(node: GraphNode): void {
-    if (!this.nodes.has(node.id)) this.nodes.set(node.id, node);
+    this.nodes.set(node.id, node);
   }
 
+  // Unconditional set, not an upsert-once guard: edgeKey's own five components (from, to, kind, orderKey, path) are exactly GraphEdge's whole field set, so two edges producing the identical key are already structurally identical objects -- overwriting one with the other writes back the identical value.
   private addEdge(edge: GraphEdge): void {
-    const key = edgeKey(edge);
-    if (!this.edges.has(key)) this.edges.set(key, edge);
+    this.edges.set(edgeKey(edge), edge);
   }
 
   // The generic own-content walk: records rebuild key by key (asking the policy at every property, array elements are never extraction candidates -- a whole element cannot move to a node without breaking its position, while its properties stay addressable), arrays walk their elements, scalars pass through. The one typed ref inside content is an anchor descriptor's `definition` key, recognised by the containing record's own `kind: 'anchor'` discriminator -- the discriminator, not the key name alone, because the walk reads definitions-table bodies too and those bodies are tenant vocabulary where a same-named key is content (a glossary entry's `definition` is the term's meaning, and one that coincidentally names a real key must stay content rather than silently enter a hash as a ref id). Dereferenced per the module's rule: the referenced entry's hash for the hash input, never the bare local key.
@@ -390,7 +391,8 @@ class DocumentProjection {
       const table = this.tableOf(field);
       if (table === undefined) continue;
       const leftover: Record<string, unknown> = {};
-      for (const key of Object.keys(table).sort()) {
+      // Visiting order need not be sorted: decideEntry is memoised and its own per-entry decision never depends on which OTHER entry was decided first (a reference to another entry resolves through the identical deref regardless of outer iteration order, and object key order is never itself compared by any equality check downstream), so plain Object.keys(table) decides the identical set of entries with the identical values.
+      for (const key of Object.keys(table)) {
         const decided = this.decideEntry(field, key);
         if (decided.status === "inline")
           leftover[key] = decided.walked.properties;
@@ -532,7 +534,8 @@ class DocumentProjection {
 type AnyChild = TreeGroup | TreeLeaf;
 
 function isGroupChild(child: AnyChild): child is TreeGroup {
-  return "node" in child && "children" in child;
+  // A single field check, not a pair: for any schema-valid TreeGroup | TreeLeaf value, `node` and `children` are always co-present (every TreeGroup carries both, by its own type) or co-absent (no TreeLeaf variant carries either), so checking one is exactly as discriminating as checking both.
+  return "node" in child;
 }
 
 // A projected node's graph kind: the payload's own kind tag when it carries one (paragraph, section, slide, sheet, drawPage, the construct kinds, the vector kinds, image, pageBreak, table, embeddedObject as a block leaf); the three kind-less payloads get structural names -- a sheet-anchored embedded object, a formula document's single leaf, and a shape group's frame descriptor.
@@ -599,7 +602,7 @@ export interface WalkPropertyGraphOptions {
 
 // A shared pre-order depth-first walker over a PropertyGraph (ExaDev/documents.js#660), so every consumer of this projection's output -- an outline renderer walking CONTAINS, a style-chain reader walking STYLED_BY, a generic graph browser walking everything -- shares one traversal and one cycle policy instead of each hand-rolling its own. At each node, outgoing edges (edge.from === node.id) are filtered to `options.kinds` when given, else every kind present, and visited sorted ascending by orderKey -- which is what makes a CONTAINS walk reproduce document order and a STYLED_BY walk reproduce the resolution chain in order (#660's whole point for ordering keys).
 //
-// The cycle guard is derived from the kinds being traversed, never separately configured: CONTAINS alone needs no guard at all -- every CONTAINS edge minted directly by projectDocumentGraph's own tree walk points from a node whose hash already covers the target's hash, so a path built purely from those edges can never lead back to its own ancestor. A CONTAINS edge insertEdge or insertNode attaches onto an already-existing PropertyGraph carries no such hash relationship by itself -- an id can be the target of an insertEdge call before any node with that id exists, and a later insertNode call can mint exactly that id, so hash-folding alone cannot rule out a cycle closing across two calls -- so both of those attachment sites refuse any CONTAINS attachment that would close a cycle back to one of `to`'s own descendants (ContainsCycleError), via one shared, edge-only reachability check that works correctly whether or not the endpoints are nodes yet (see the note above ContainsCycleError for why node presence cannot be the test). The acyclicity this fast path relies on is upheld by that shared refusal being the ONLY way a CONTAINS edge ever enters a graph outside of projectDocumentGraph's own tree walk, not by every CONTAINS edge remaining hash-derived. The on-stack set is not even allocated for a CONTAINS-only walk, purely as an optimisation that refusal keeps safe, never a behavioural branch. Traversing any other kind (including the default "every kind present", since STYLED_BY/DEFINED_BY/PROPERTY edges carry no acyclicity guarantee of their own -- a hand-built or malicious graph can point them anywhere) maintains a Set of the current DFS path's node ids; descending into a neighbour already on that path is skipped entirely (no WalkedNode emitted, no recursion), which suppresses a true cycle while still visiting a node reached via two different, non-nested paths once per path, because neither occurrence is an ancestor of the other -- exactly the same multi-parent sharing a CONTAINS walk already relies on.
+// The cycle guard is derived from the kinds being traversed, never separately configured: CONTAINS alone needs no guard at all -- every CONTAINS edge minted directly by projectDocumentGraph's own tree walk points from a node whose hash already covers the target's hash, so a path built purely from those edges can never lead back to its own ancestor. A CONTAINS edge insertEdge or insertNode attaches onto an already-existing PropertyGraph carries no such hash relationship by itself -- an id can be the target of an insertEdge call before any node with that id exists, and a later insertNode call can mint exactly that id, so hash-folding alone cannot rule out a cycle closing across two calls -- so both of those attachment sites refuse any CONTAINS attachment that would close a cycle back to one of `to`'s own descendants (ContainsCycleError), via one shared, edge-only reachability check that works correctly whether or not the endpoints are nodes yet (see the note above ContainsCycleError for why node presence cannot be the test). The acyclicity this fast path relies on is upheld by that shared refusal being the ONLY way a CONTAINS edge ever enters a graph outside of projectDocumentGraph's own tree walk, not by every CONTAINS edge remaining hash-derived. The on-stack set below is allocated and maintained unconditionally, including for a CONTAINS-only walk where it can provably never actually suppress anything -- a few unused Set operations, not a behavioural branch. Traversing any other kind (including the default "every kind present", since STYLED_BY/DEFINED_BY/PROPERTY edges carry no acyclicity guarantee of their own -- a hand-built or malicious graph can point them anywhere) maintains a Set of the current DFS path's node ids; descending into a neighbour already on that path is skipped entirely (no WalkedNode emitted, no recursion), which suppresses a true cycle while still visiting a node reached via two different, non-nested paths once per path, because neither occurrence is an ancestor of the other -- exactly the same multi-parent sharing a CONTAINS walk already relies on.
 export function walkPropertyGraph(
   graph: GraphLike,
   startId: string,
@@ -607,8 +610,6 @@ export function walkPropertyGraph(
 ): readonly WalkedNode[] {
   const kinds = options?.kinds;
   const kindSet = kinds === undefined ? undefined : new Set<string>(kinds);
-  const needsGuard =
-    kinds === undefined || kinds.some((kind) => kind !== "CONTAINS");
   const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
   const outgoingByFrom = new Map<string, GraphEdgeLike[]>();
   for (const edge of graph.edges) {
@@ -622,19 +623,20 @@ export function walkPropertyGraph(
       a.orderKey < b.orderKey ? -1 : a.orderKey > b.orderKey ? 1 : 0,
     );
 
-  const onPath = needsGuard ? new Set<string>() : undefined;
+  // Always allocated, even for a CONTAINS-only walk where it is provably never needed (every CONTAINS edge projectDocumentGraph itself mints is hash-derived and therefore acyclic, per this function's own module comment): the guard's own on-path Set tracks only the CURRENT DFS ancestors, never nodes finished and popped off it, so it costs nothing but a few unused Set operations for a graph that can never actually cycle on CONTAINS alone.
+  const onPath = new Set<string>();
   const visited: WalkedNode[] = [];
 
   function visit(nodeId: string, edge: GraphEdgeLike | undefined): void {
     const node = nodesById.get(nodeId);
     if (node === undefined) return; // an edge naming a node absent from this graph is not this walker's concern to diagnose
     visited.push({ node, edge });
-    onPath?.add(nodeId);
+    onPath.add(nodeId);
     for (const outgoing of outgoingByFrom.get(nodeId) ?? []) {
-      if (onPath?.has(outgoing.to) === true) continue; // already an ancestor on this path: a genuine cycle, suppressed rather than recursed into
+      if (onPath.has(outgoing.to)) continue; // already an ancestor on this path: a genuine cycle, suppressed rather than recursed into
       visit(outgoing.to, outgoing);
     }
-    onPath?.delete(nodeId);
+    onPath.delete(nodeId);
   }
 
   visit(startId, undefined);
@@ -813,7 +815,7 @@ function reconcileChildren(
   }, graph);
 }
 
-// Mints one new node with the identical discipline as every read-side mint site: `id` is computed from content alone via contentHashV1 and spread into the face AFTER the content (`{ ...properties, id, kind }`), so a `properties` field named `id` or `kind` is shadowed unconditionally, and `InsertNodeContent` carries no `id` field at all -- there is no parameter a caller-supplied id could occupy. `kind` is deliberately excluded from the hash INPUT itself, the same reason mintValueNode's own `kind: 'value'` and entryNodeFace's graph-vocabulary kind are never folded into their hashes either: it is the graph vocabulary's word for what a node IS, asked for explicitly because this module's own mint sites decide it four different ways, not a fact about the node's content that identity should hinge on. Content identical to a node already present in `graph` dedupes to the existing node rather than minting a duplicate (addNode's own upsert-once rule) -- checked against the existing node's own `kind` first (NodeKindMismatchError above covers a genuine collision across kinds), then reconciled against its own CONTAINS edges at each child's OWN requested position (reconcileChildren above) rather than assumed to already match or simply appended, since two differently spelled calls can hash identically while only one of them declared `children` at all.
+// Mints one new node with the identical discipline as every read-side mint site: `id` is computed from content alone via contentHashV1 and spread into the face AFTER the content (`{ ...properties, id, kind }`), so a `properties` field named `id` or `kind` is shadowed unconditionally, and `InsertNodeContent` carries no `id` field at all -- there is no parameter a caller-supplied id could occupy. `kind` is deliberately excluded from the hash INPUT itself, the same reason mintValueNode's own `kind: 'value'` and entryNodeFace's graph-vocabulary kind are never folded into their hashes either: it is the graph vocabulary's word for what a node IS, asked for explicitly because this module's own mint sites decide it four different ways, not a fact about the node's content that identity should hinge on. Content identical to a node already present in `graph` dedupes to the existing node rather than minting a duplicate (this function's own `existing` lookup below) -- checked against the existing node's own `kind` first (NodeKindMismatchError above covers a genuine collision across kinds), then reconciled against its own CONTAINS edges at each child's OWN requested position (reconcileChildren above) rather than assumed to already match or simply appended, since two differently spelled calls can hash identically while only one of them declared `children` at all.
 //
 // When `children` is given for a genuinely fresh id -- one no earlier `insertEdge` call has ever pointed a dangling CONTAINS edge onto (the common case, checked by scanning `graph.edges` for `from === id` before minting anything) -- this mints one CONTAINS edge per child at `orderKeys.orderKeyForIndex(index)`, the WIDE, evenly spaced keys a fresh mint wants (exactly as projectGroup mints them for a freshly walked TreeGroup), leaving room for a later insertEdge to bisect between them without a rebalance; each of those child edges is still checked with `assertNoContainsCycle` first, exactly like insertEdge's own CONTAINS attachment, and throws `ContainsCycleError` when `to` (the child) already reaches `from` (this node's own about-to-be-minted id) -- folding the child's hash into this node's hash proves this id could never have existed before now, but says nothing about an edge some EARLIER call already pointed at this not-yet-existing id (insertEdge tolerates exactly that), so the check cannot be skipped just because this is a fresh mint. But when `graph` already carries one or more CONTAINS edges from this id -- exactly the dangling-edge shape the cycle check above exists to catch, an id named by an `insertEdge` call before any node with that id existed -- minting every child at its own bare `orderKeyForIndex(index)` regardless of what is already there is unsafe: an already-attached edge can sit at a key a fresh mint is about to hand to an unrelated sibling (an order-key TIE, the exact degenerate shape `boundedOrderKey` and `siblingInsertIndex` refuse everywhere else in this module) or can already BE the edge a fresh mint is about to re-mint (a byte-identical duplicate, violating `addEdge`'s own one-edge-per-tuple invariant on the read side). So a fresh mint with pre-existing CONTAINS edges routes every child through the identical `reconcileChildren` machinery the dedup-hit branch above already uses: a child already wired is left exactly as it is, and a genuinely new one is inserted at its own requested position via the same bisection (or automatic rebalance) `insertEdge` itself uses, anchored to a SPECIFIC existing edge by index rather than to a bare id value, which cannot produce a tie, a duplicate, or a misplaced anchor by construction.
 export function insertNode(
@@ -932,16 +934,15 @@ function siblingInsertIndex(
   if (matches.length === 0) {
     throw new UnknownSiblingError(from, kind, position.siblingId);
   }
-  if (matches.length > 1) {
-    const matchedOrderKeys = matches.map((index) => siblings[index]!.orderKey);
-    if (new Set(matchedOrderKeys).size !== matchedOrderKeys.length) {
-      throw new AmbiguousSiblingError(
-        from,
-        kind,
-        position.siblingId,
-        matches.length,
-      );
-    }
+  // No separate matches.length > 1 guard: by this point matches.length is already >= 1 (the zero case just refused above), and for a single-element array `new Set([x]).size` is trivially 1, equal to matchedOrderKeys.length, so running this check unconditionally never throws for a single match either.
+  const matchedOrderKeys = matches.map((index) => siblings[index]!.orderKey);
+  if (new Set(matchedOrderKeys).size !== matchedOrderKeys.length) {
+    throw new AmbiguousSiblingError(
+      from,
+      kind,
+      position.siblingId,
+      matches.length,
+    );
   }
   const index = matches[0]!;
   return position.at === "before" ? index : index + 1;
@@ -1098,12 +1099,11 @@ export function insertEdge(
   return { nodes: graph.nodes, edges: [...graph.edges, edge] };
 }
 
-// Whether two edges' own `path` fields name the same property path -- `undefined` matches only `undefined` (an edge with no path is not "the same path" as one carrying an empty array, exactly as edgeKey's own `path === undefined ? "" : JSON.stringify(path)` split already treats the two differently), otherwise structural equality via JSON.stringify, the same comparison edgeKey itself already relies on for its own dedup key.
+// Whether two edges' own `path` fields name the same property path -- `undefined` matches only `undefined` (an edge with no path is not "the same path" as one carrying an empty array), otherwise structural equality via JSON.stringify, the same comparison edgeKey itself already relies on for its own dedup key. No separate undefined special-case is needed: JSON.stringify(undefined) is the JS value `undefined` itself, not a string, so comparing the two stringified results already agrees with `a === b` whenever either argument is undefined (both undefined: undefined === undefined; exactly one undefined: undefined === "[...]", always false).
 function pathsEqual(
   a: PropertyPath | undefined,
   b: PropertyPath | undefined,
 ): boolean {
-  if (a === undefined || b === undefined) return a === b;
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
