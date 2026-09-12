@@ -31,19 +31,17 @@ export function readSlideSchemeColorSchemeAtom(
       `SlideSchemeColorSchemeAtom at offset ${record.offset} carries ${record.data.length} bytes, not the mandated ${expectedLength} (${COLOR_SCHEME_SLOT_COUNT} four-byte scheme slots)`,
     );
   }
+  // Read through a DataView rather than indexing `data` directly: the length check above already guarantees every slot's three bytes fall within bounds (max index 28+2 = 30 < 32), so a getUint8 call -- which never returns undefined, only throws on a genuinely out-of-range offset -- states that invariant in a form the type checker can see, rather than a defensive `undefined` guard on an index that can never actually be missing.
   const { data } = record;
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const colors: RgbColor[] = [];
   for (let slot = 0; slot < COLOR_SCHEME_SLOT_COUNT; slot += 1) {
     const at = slot * COLOR_STRUCT_SIZE;
-    const red = data[at];
-    const green = data[at + 1];
-    const blue = data[at + 2];
-    if (red === undefined || green === undefined || blue === undefined) {
-      throw new PptFormatError(
-        `SlideSchemeColorSchemeAtom slot ${slot} at offset ${record.offset + at} is missing bytes`,
-      );
-    }
-    colors.push({ red, green, blue });
+    colors.push({
+      red: view.getUint8(at),
+      green: view.getUint8(at + 1),
+      blue: view.getUint8(at + 2),
+    });
   }
   return colors;
 }
