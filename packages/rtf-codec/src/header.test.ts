@@ -115,6 +115,20 @@ describe("style sheet", () => {
     expect(styles.get(7)?.headingLevel).toBe(2);
   });
 
+  it("prefers \\outlinelevelN over a conflicting 'heading N' style name", () => {
+    const { styles } = headerOf(
+      "{\\rtf1{\\stylesheet{\\s5\\outlinelevel3\\snext0 heading 1;}}}",
+    );
+    expect(styles.get(5)?.headingLevel).toBe(4);
+  });
+
+  it("leaves headingLevel undefined when neither \\outlinelevelN nor a 'heading N' name is present", () => {
+    const { styles } = headerOf(
+      "{\\rtf1{\\stylesheet{\\s4\\snext0 Body Text;}}}",
+    );
+    expect(styles.get(4)?.headingLevel).toBeUndefined();
+  });
+
   it("skips a character style, which the spec requires be written as {\\*\\csN ...}", () => {
     const { styles } = headerOf(
       "{\\rtf1{\\stylesheet{\\s0 Normal;}{\\*\\cs10\\additive Default Paragraph Font;}}}",
