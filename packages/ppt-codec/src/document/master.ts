@@ -70,8 +70,9 @@ function orderedMasterLevels(
     if (levels === undefined || levels.length === 0) {
       return [];
     }
-    const clampedLevel = Math.min(indentLevel, levels.length - 1);
-    return levels.slice(0, clampedLevel + 1).reverse();
+    // How many of the atom's own levels (from level 0) fall within the run's stated indentLevel -- indentLevel + 1 of them, unless the atom itself carries fewer, in which case every level it has is in range. Stated this way (clamping the take-count itself, not indentLevel against an off-by-one bound) rather than the mirror-image `Math.min(indentLevel, levels.length - 1) + 1`: that phrasing carries a genuinely equivalent mutant here, since Array.prototype.slice silently clips an end index past the array's own length, so swapping its "- 1" for "+ 1" produces byte-identical output for every indentLevel a real caller can supply -- no test could ever tell the two apart. This phrasing puts the arithmetic on indentLevel itself, where a "+ 1"/"- 1" swap changes a genuinely reachable take-count instead.
+    const takeCount = Math.min(indentLevel + 1, levels.length);
+    return levels.slice(0, takeCount).reverse();
   };
   const fallbackType = typeFamilyFallback(textType);
   return fallbackType === undefined
