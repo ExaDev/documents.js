@@ -71,10 +71,10 @@ function sendJson(
   res.end(text);
 }
 
-// A signal that aborts if the client disconnects before the operation finishes -- node:http's IncomingMessage carries no AbortSignal of its own, only a 'close' event, so this bridges the two the same way Node's own fetch-adjacent APIs (e.g. Request.signal in undici) are built internally.
-function abortSignalFor(req: IncomingMessage): AbortSignal {
+// A signal that aborts if the client disconnects before the operation finishes -- node:http's ServerResponse carries no AbortSignal of its own, only a 'close' event, so this bridges the two the same way Node's own fetch-adjacent APIs (e.g. Request.signal in undici) are built internally. Deliberately keyed off the *response*, not the request: an IncomingMessage's own 'close' fires as soon as its body has been fully read, which happens well before a handler like this one is done with it, regardless of whether the client is still connected -- it is not a genuine "client went away" signal once the body is no longer being streamed. A ServerResponse's 'close' fires only when the underlying connection is torn down before res.end() completes it, which is exactly the condition this function exists to detect.
+function abortSignalFor(res: ServerResponse): AbortSignal {
   const controller = new AbortController();
-  req.once("close", () => {
+  res.once("close", () => {
     controller.abort();
   });
   return controller.signal;
@@ -106,7 +106,7 @@ async function handleOperationRequest(
 
   try {
     const result = await operation.run(parsed.data, {
-      signal: abortSignalFor(req),
+      signal: abortSignalFor(res),
     });
     sendJson(res, 200, { result: result });
   } catch (error) {
