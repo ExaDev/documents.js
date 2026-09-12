@@ -45,13 +45,11 @@ export function i32le(value: number): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
-// Each byte is one character's code unit, the way [MS-PPT]'s PrintableAnsiString stores text -- an indexed loop rather than a spread or split, which would decompose by code point or UTF-16 unit and mean something different for text outside the ASCII range this function is used for (the writer's own hardcoded producer user name).
+// Each byte is one character's code unit, the way [MS-PPT]'s PrintableAnsiString stores text -- indexed by `Uint8Array.from`'s own array-like length rather than a spread or split, which would decompose by code point or UTF-16 unit and mean something different for text outside the ASCII range this function is used for (the writer's own hardcoded producer user name). A hand-written bounds-checked loop here would carry a genuinely equivalent off-by-one mutant: a Uint8Array silently drops an out-of-range index write rather than throwing, so `i <= text.length` produces byte-identical output to `i < text.length` and no test could ever tell them apart. Building from an object literally sized to `text.length` removes the comparison from the code entirely instead of relying on a test that cannot exist.
 export function asciiBytes(text: string): Uint8Array<ArrayBuffer> {
-  const bytes = new Uint8Array(text.length);
-  for (let i = 0; i < text.length; i++) {
-    bytes[i] = text.charCodeAt(i);
-  }
-  return bytes;
+  return Uint8Array.from({ length: text.length }, (_unused, i) =>
+    text.charCodeAt(i),
+  );
 }
 
 export function utf16le(text: string): Uint8Array<ArrayBuffer> {
