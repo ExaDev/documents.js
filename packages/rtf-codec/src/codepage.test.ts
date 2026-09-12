@@ -111,10 +111,30 @@ describe("decodeCodepageBytes: East Asian DBCS pages", () => {
 });
 
 describe("decodeCodepageBytes: general behaviour", () => {
-  it("decodes an empty input as an empty string without touching the codepage at all", () => {
+  it("decodes an empty input as an empty string", () => {
     expect(
       decodeCodepageBytes(new Uint8Array(0), 1252, NOOP_RTF_DIAGNOSTIC_SINK),
     ).toBe("");
+  });
+
+  it("decodes an empty input as an empty string through the UTF-8 path too", () => {
+    expect(
+      decodeCodepageBytes(
+        new Uint8Array(0),
+        UTF8_CODEPAGE,
+        NOOP_RTF_DIAGNOSTIC_SINK,
+      ),
+    ).toBe("");
+  });
+
+  it("decodes an empty input as an empty string through the DBCS path too, with no diagnostic reported", () => {
+    let called = false;
+    expect(
+      decodeCodepageBytes(new Uint8Array(0), 932, () => {
+        called = true;
+      }),
+    ).toBe("");
+    expect(called).toBe(false);
   });
 
   it("decodes through the platform's own UTF-8 decoder for \\ansicpg65001", () => {
