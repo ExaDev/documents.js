@@ -94,4 +94,49 @@ describe("paperSizeCodeToPageSize / pageSizeToPaperSizeCode", () => {
       }),
     ).toBe("9");
   });
+
+  it("tolerates a difference of EXACTLY the half-point boundary, not just short of it", () => {
+    expect(
+      pageSizeToPaperSizeCode({
+        widthPt: PAGE_SIZE_LETTER.widthPt + 0.5,
+        heightPt: PAGE_SIZE_LETTER.heightPt,
+      }),
+    ).toBe("1");
+  });
+
+  it("rejects a page size matching Letter's width but not its height, proving both dimensions are checked", () => {
+    expect(
+      pageSizeToPaperSizeCode({
+        widthPt: PAGE_SIZE_LETTER.widthPt,
+        heightPt: PAGE_SIZE_LETTER.heightPt + 50,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("rejects a page size matching Letter's height but not its width, proving both dimensions are checked", () => {
+    expect(
+      pageSizeToPaperSizeCode({
+        widthPt: PAGE_SIZE_LETTER.widthPt + 50,
+        heightPt: PAGE_SIZE_LETTER.heightPt,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("rejects a page size matching A4's width but not its height, proving both dimensions are checked", () => {
+    expect(
+      pageSizeToPaperSizeCode({
+        widthPt: PAGE_SIZE_A4.widthPt,
+        heightPt: PAGE_SIZE_A4.heightPt + 50,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("rejects a page size matching A4's height but not its width, proving both dimensions are checked", () => {
+    expect(
+      pageSizeToPaperSizeCode({
+        widthPt: PAGE_SIZE_A4.widthPt + 50,
+        heightPt: PAGE_SIZE_A4.heightPt,
+      }),
+    ).toBeUndefined();
+  });
 });
