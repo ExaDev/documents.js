@@ -53,7 +53,8 @@ function writeLengthPrefixedAnsiString(value: string): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(4 + length);
   const view = new DataView(out.buffer);
   view.setUint32(0, length, true);
-  for (let index = 0; index < value.length; index++) {
+  // index increments by exactly 1 every iteration, so it can never skip past value.length -- !== is exactly equivalent to < here, and unlike <, an off-by-one mutation of it (=== in place of !==) stops the loop from running at all instead of surviving unobserved.
+  for (let index = 0; index !== value.length; index++) {
     out[4 + index] = value.charCodeAt(index);
   }
   // out[4 + value.length] is already zero -- the terminating null character.
@@ -68,36 +69,26 @@ function readLengthPrefixedAnsiString(
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const length = view.getUint32(offset, true);
   offset += 4;
-  if (length === 0) {
-    return offset;
-  }
-  // length includes the terminating null character -- LengthPrefixedAnsiString's own definition -- so the field's total byte span is exactly `length` past this point.
+  // length includes the terminating null character -- LengthPrefixedAnsiString's own definition -- so the field's total byte span is exactly `length` past this point. No dedicated zero-length case: offset + 0 is already offset, the exact value an empty string's own dedicated early return would have produced.
   return offset + length;
 }
 
-// Builds an [MS-OLEDS] 2.2.4 ObjectHeader for an EmbeddedObject: OLEVersion, FormatID (fixed at 0x00000002 -- this module never writes a LinkedObject), then ClassName/TopicName/ItemName as LengthPrefixedAnsiStrings. TopicName and ItemName are both empty: "If the ObjectHeader structure is contained by an EmbeddedObject structure ... the TopicName [ItemName] field SHOULD contain an empty string and MUST be ignored on processing" -- both are LinkedObject-only fields.
+// Builds an [MS-OLEDS] 2.2.4 ObjectHeader for an EmbeddedObject: OLEVersion, FormatID (fixed at 0x00000002 -- this module never writes a LinkedObject), then ClassName/TopicName/ItemName as LengthPrefixedAnsiStrings. TopicName and ItemName are both empty: "If the ObjectHeader structure is contained by an EmbeddedObject structure ... the TopicName [ItemName] field SHOULD contain an empty string and MUST be ignored on processing" -- both are LinkedObject-only fields. An empty LengthPrefixedAnsiString is 4 zero bytes (writeLengthPrefixedAnsiString's own empty-string case), which `out`'s own zero-initialization already provides, so there is nothing to actually write for either -- only their 4-byte span needs accounting for.
 function writeObjectHeader(): Uint8Array<ArrayBuffer> {
   const classNameBytes = writeLengthPrefixedAnsiString(
     OBJECT_HEADER_CLASS_NAME,
   );
-  const topicNameBytes = writeLengthPrefixedAnsiString("");
-  const itemNameBytes = writeLengthPrefixedAnsiString("");
+  const emptyNameFieldBytes = 4 + 4; // TopicName's own 4-byte zero length, then ItemName's
   const out = new Uint8Array(
     4 + // OLEVersion
       4 + // FormatID
       classNameBytes.length +
-      topicNameBytes.length +
-      itemNameBytes.length,
+      emptyNameFieldBytes,
   );
   const view = new DataView(out.buffer);
   view.setUint32(0, OBJECT_HEADER_OLE_VERSION, true);
   view.setUint32(4, OBJECT_HEADER_FORMAT_ID_EMBEDDED, true);
-  let offset = 8;
-  out.set(classNameBytes, offset);
-  offset += classNameBytes.length;
-  out.set(topicNameBytes, offset);
-  offset += topicNameBytes.length;
-  out.set(itemNameBytes, offset);
+  out.set(classNameBytes, 8);
   return out;
 }
 
@@ -292,8 +283,9 @@ function knownContentEmbeddedObjectFields(
   };
 }
 
+// No Array.isArray exclusion: this is only ever called on a JSON.parse result within withoutInvalidSource below, and a JSON array never carries a "source" own-property to strip in the first place (JSON.stringify only ever serialises an array's numeric indices) -- so treating an array as record-shaped here changes nothing observable, and ContentEmbeddedObjectSchema.safeParse still rejects it for not being the object shape the schema requires.
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null;
 }
 
 // A hostile or malformed \objdata JSON payload's own `source` value used to reach knownContentEmbeddedObjectFields untouched, because isContentEmbeddedObject's guard never inspected it -- that function validated and dropped it independently. Now that ContentEmbeddedObjectSchema validates `source` as a genuine field of its own (see that schema's own comment in document-schema.js's src/content.ts), a hostile source would instead fail the WHOLE object's validation at the safeParse call below, discarding an otherwise perfectly well-formed embedded object over one bad metadata field -- a real behavioural regression from the original, more lenient "drop the bad field, keep the rest" contract this reader has always offered. Stripping an invalid `source` key before that validation runs restores it: a payload whose `source` doesn't parse loses only that field, exactly as before, rather than the whole read.
