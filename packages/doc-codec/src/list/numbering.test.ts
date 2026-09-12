@@ -312,4 +312,40 @@ describe("readNumberingDefinitions", () => {
     const definitions = readNumberingDefinitions(table, fib);
     expect(definitions["1"]?.levels["0"]?.format).toBe("decimal");
   });
+
+  it("skips an LFO entry whose own lsid matches no LSTF at all, rather than throwing", () => {
+    const { table, fib } = tableStreamWithNumbering(
+      [{ lsid: 10, levels: [{ nfc: 0x00, text: [{ char: "A" }] }] }],
+      [999], // No LSTF carries lsid 999.
+    );
+    const definitions = readNumberingDefinitions(table, fib);
+    expect(definitions).toEqual({});
+  });
+
+  it("rejects a negative PlfLst.cLst", () => {
+    const { table, fib } = tableStreamWithNumbering([], []);
+    const view = new DataView(table.buffer, table.byteOffset, table.byteLength);
+    view.setInt16(fib.fcPlfLst, -1, true);
+    expect(() => readNumberingDefinitions(table, fib)).toThrow(
+      /negative LSTF count/,
+    );
+  });
+
+  it("rejects a negative PlfLfo.lfoMac", () => {
+    const { table, fib } = tableStreamWithNumbering([], []);
+    const view = new DataView(table.buffer, table.byteOffset, table.byteLength);
+    view.setInt32(fib.fcPlfLfo, -1, true);
+    expect(() => readNumberingDefinitions(table, fib)).toThrow(
+      /negative LFO count/,
+    );
+  });
+
+  it("rejects a PlfLfo whose own declared lfoMac names more LFO entries than its buffer has room for", () => {
+    const { table, fib } = tableStreamWithNumbering([], [1]);
+    const view = new DataView(table.buffer, table.byteOffset, table.byteLength);
+    view.setInt32(fib.fcPlfLfo, 2, true); // lfoMac 2, but lcbPlfLfo only sized for 1.
+    expect(() => readNumberingDefinitions(table, fib)).toThrow(
+      /has room for only 1/,
+    );
+  });
 });
