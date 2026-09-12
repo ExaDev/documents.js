@@ -286,3 +286,30 @@ describe("document properties", () => {
     expect(header.metadata).not.toHaveProperty("title");
   });
 });
+
+describe("bodyStartIndex", () => {
+  it("does not advance past a group whose own destination is not one of HEADER_DESTINATIONS", () => {
+    const tokens = tokenizeRtf(
+      bytes(
+        "{\\rtf1\\ansi{\\fonttbl{\\f0\\froman Tms Rmn;}}{\\unknowndest x}Body}",
+      ),
+    );
+    const header = readRtfHeader(tokens, () => {
+      /* not asserted here */
+    });
+    // bodyStartIndex must land exactly on the {\unknowndest x} group's own opening brace -- immediately after \fonttbl's matching close -- rather than being pushed past that whole group too.
+    expect(tokens[header.bodyStartIndex]).toEqual({ kind: "groupStart" });
+    expect(tokens[header.bodyStartIndex - 1]).toEqual({ kind: "groupEnd" });
+  });
+
+  it("does not advance past a group that opens with no destination control word at all", () => {
+    const tokens = tokenizeRtf(
+      bytes("{\\rtf1\\ansi{\\fonttbl{\\f0\\froman Tms Rmn;}}{plain text}Body}"),
+    );
+    const header = readRtfHeader(tokens, () => {
+      /* not asserted here */
+    });
+    expect(tokens[header.bodyStartIndex]).toEqual({ kind: "groupStart" });
+    expect(tokens[header.bodyStartIndex - 1]).toEqual({ kind: "groupEnd" });
+  });
+});
