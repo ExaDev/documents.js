@@ -7,7 +7,13 @@ import {
   minimalPptxBytes,
   minimalXlsxBytes,
 } from "../test-support/embedded";
-import { readEmbeddedOoxmlPayload } from "./embedded";
+import {
+  detectFlavour,
+  hasDocxBody,
+  readEmbeddedOoxmlPayload,
+} from "./embedded";
+import { el } from "../xml/fragment";
+import { packageFromEntries } from "../package-io/read";
 
 // Coverage for the shared embedded-object decode (src/typed/embedded.ts): nested-ZIP payload bytes -> flavour detection -> the matching typed reader -> the ContentEmbeddedObject payload (objectKind + a genuinely recovered nested ContentDocument). Fixtures come from src/test-support/embedded.ts -- real minimal OOXML packages zipped inline, because the pipeline under test unzips actual bytes (a hand-built Package value would skip the parse step entirely).
 
@@ -134,5 +140,51 @@ describe("readEmbeddedOoxmlPayload", () => {
       "word/embeddings/deep.bin": chain,
     });
     expect(readEmbeddedOoxmlPayload(bombShaped)).toBeUndefined();
+  });
+});
+
+describe("hasDocxBody", () => {
+  it("is true for a w:document root carrying a w:body child", () => {
+    expect(hasDocxBody(el("w:document", {}, [el("w:body")]))).toBe(true);
+  });
+
+  it("is false for a w:document root with no w:body child at all", () => {
+    expect(hasDocxBody(el("w:document"))).toBe(false);
+  });
+});
+
+describe("detectFlavour", () => {
+  it("detects a wordprocessing flavour only when word/document.xml genuinely carries a w:body", () => {
+    const nested = packageFromEntries({
+      "word/document.xml": new TextEncoder().encode(
+        "<w:document><w:body/></w:document>",
+      ),
+    });
+    expect(detectFlavour(nested)).toBe("wordprocessing");
+  });
+
+  it("detects no flavour for a word/document.xml with no w:body, rather than falling through to a wrong dispatch", () => {
+    const nested = packageFromEntries({
+      "word/document.xml": new TextEncoder().encode("<w:document/>"),
+    });
+    expect(detectFlavour(nested)).toBeUndefined();
+  });
+
+  it("detects a presentation flavour from ppt/presentation.xml alone (no precondition of its own)", () => {
+    const nested = packageFromEntries({
+      "ppt/presentation.xml": new TextEncoder().encode("<p:presentation/>"),
+    });
+    expect(detectFlavour(nested)).toBe("presentation");
+  });
+
+  it("detects a spreadsheet flavour from xl/workbook.xml alone (no precondition of its own)", () => {
+    const nested = packageFromEntries({
+      "xl/workbook.xml": new TextEncoder().encode("<workbook/>"),
+    });
+    expect(detectFlavour(nested)).toBe("spreadsheet");
+  });
+
+  it("detects no flavour when none of the three entry parts is present", () => {
+    expect(detectFlavour(packageFromEntries({}))).toBeUndefined();
   });
 });
