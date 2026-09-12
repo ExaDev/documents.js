@@ -359,6 +359,27 @@ describe("GFM tables", () => {
       runs: [{ text: "1" }],
     });
   });
+
+  it("divides the section's own content width evenly across columns, not some other arithmetic on the same two numbers", () => {
+    const [table] = blocks("| a | b |\n| - | - |\n| 1 | 2 |", {
+      pageSize: { widthPt: 220, heightPt: 800 },
+      margins: { topPt: 72, rightPt: 10, bottomPt: 72, leftPt: 10 },
+    });
+    if (table?.kind !== "table") throw new Error("expected a table block");
+    expect(table.columnWidthsPt).toEqual([100, 100]);
+  });
+
+  it("carries no constructs key on a cell with no run-level constructs of its own", () => {
+    const [table] = blocks("| a |\n| - |\n| 1 |");
+    if (table?.kind !== "table") throw new Error("expected a table block");
+    expect(table.rows[0]?.cells[0]?.blocks[0]).not.toHaveProperty("constructs");
+  });
+
+  it("carries no alignment key on a column the delimiter row leaves unaligned", () => {
+    const [table] = blocks("| a |\n| - |\n| 1 |");
+    if (table?.kind !== "table") throw new Error("expected a table block");
+    expect(table.rows[0]?.cells[0]?.blocks[0]).not.toHaveProperty("alignment");
+  });
 });
 
 describe("images", () => {
