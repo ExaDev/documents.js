@@ -121,6 +121,75 @@ describe("isMathMlNode", () => {
     expect(isMathMlNode("a string")).toBe(false);
     expect(isMathMlNode(undefined)).toBe(false);
   });
+
+  it("rejects a declaration whose attributes array carries even one malformed entry, not just when every entry is malformed", () => {
+    expect(
+      isMathMlNode({
+        type: "declaration",
+        attributes: [
+          { name: "good", value: "1" },
+          { name: 2, value: "bad" },
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it("rejects a pi node whose target is not a string, even when content is", () => {
+    expect(isMathMlNode({ type: "pi", target: 5, content: "c" })).toBe(false);
+  });
+
+  it("never falls through to the element check for a type the vocabulary does not recognise, even when the value happens to carry element-shaped fields", () => {
+    expect(
+      isMathMlNode({
+        type: "bogus",
+        tag: "m",
+        attributes: [],
+        children: [],
+      }),
+    ).toBe(false);
+  });
+
+  it("rejects an element whose tag is not a string, even when attributes and children are otherwise valid", () => {
+    expect(
+      isMathMlNode({ type: "element", tag: 5, attributes: [], children: [] }),
+    ).toBe(false);
+  });
+
+  it("rejects an element whose attributes is not an array, even when tag and children are otherwise valid", () => {
+    expect(
+      isMathMlNode({
+        type: "element",
+        tag: "m",
+        attributes: "not-an-array",
+        children: [],
+      }),
+    ).toBe(false);
+  });
+
+  it("rejects an element whose attributes array carries even one malformed entry", () => {
+    expect(
+      isMathMlNode({
+        type: "element",
+        tag: "m",
+        attributes: [
+          { name: "good", value: "1" },
+          { name: 2, value: "bad" },
+        ],
+        children: [],
+      }),
+    ).toBe(false);
+  });
+
+  it("rejects an element whose children array carries even one malformed entry, not just when every entry is malformed", () => {
+    expect(
+      isMathMlNode({
+        type: "element",
+        tag: "m",
+        attributes: [],
+        children: [{ type: "text", value: "ok" }, { type: "bogus" }],
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("MathMlNodeSchema", () => {
