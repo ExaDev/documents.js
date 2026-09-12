@@ -34,8 +34,8 @@ export interface EmbeddedOoxmlPayload {
   readonly document: ContentDocument;
 }
 
-// readDocxContent is the only one of the three readers with a precondition beyond its entry part existing: it throws when word/document.xml carries no w:body to walk. Detection verifies that precondition up front, so a malformed nested docx degrades to no flavour at detection time rather than reaching a dispatch that would throw. The presentation and spreadsheet readers have no throw preconditions of their own.
-function hasDocxBody(root: XmlElement): boolean {
+// readDocxContent is the only one of the three readers with a precondition beyond its entry part existing: it throws when word/document.xml carries no w:body to walk. Detection verifies that precondition up front, so a malformed nested docx degrades to no flavour at detection time rather than reaching a dispatch that would throw. The presentation and spreadsheet readers have no throw preconditions of their own. Exported (alongside detectFlavour below) purely for direct unit coverage: readEmbeddedOoxmlPayload's own outer catch would swallow either function's own precondition mistakes just as gracefully as a genuine no-flavour result, so testing only through that public entry point cannot tell "correctly detected no flavour" apart from "wrongly detected a flavour, then threw reading it."
+export function hasDocxBody(root: XmlElement): boolean {
   return childrenWithTag(root, "w:body").length > 0;
 }
 
@@ -54,7 +54,7 @@ const ENTRY_PARTS: readonly {
 ];
 
 // A real OOXML package has exactly one main document part, so at most one entry part is ever present; a fixed probe order keeps detection deterministic even for a hand-built package that somehow carries two. A row only matches when its reader's own precondition holds too, so flavour detection genuinely guarantees the chosen reader's precondition already holds and the dispatch below cannot throw for precondition reasons.
-function detectFlavour(nested: Package): EmbeddedOoxmlKind | undefined {
+export function detectFlavour(nested: Package): EmbeddedOoxmlKind | undefined {
   return ENTRY_PARTS.find((candidate) => {
     const root = rootElement(nested.parts[candidate.partPath]);
     return (
