@@ -16,14 +16,14 @@ describe("fontsOperation", () => {
 });
 
 describe("describeFontFileOperation", () => {
-  it("propagates a parse failure for bytes that are not a real font", async () => {
+  it("propagates a parse failure for bytes that are not a real font, labelling the source 'inline font bytes'", async () => {
     await expect(
       describeFontFileOperation.run({
         source: {
           bytesBase64: bytesToBase64(new TextEncoder().encode("not a font")),
         },
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/^inline font bytes is not a TrueType\/OpenType font/);
   });
 
   it("propagates a parse failure identically for a font file read from a path, naming the real path in the error", async () => {
