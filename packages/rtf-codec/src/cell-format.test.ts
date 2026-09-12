@@ -103,11 +103,15 @@ describe("applyCellDefinitionControlWord", () => {
 
   it("sets verticalAlign to center for clvertalc and bottom for clvertalb", () => {
     const centered = newPendingCell();
-    applyCellDefinitionControlWord("clvertalc", undefined, centered);
+    expect(
+      applyCellDefinitionControlWord("clvertalc", undefined, centered),
+    ).toBe(true);
     expect(centered.verticalAlign).toBe("center");
 
     const bottomed = newPendingCell();
-    applyCellDefinitionControlWord("clvertalb", undefined, bottomed);
+    expect(
+      applyCellDefinitionControlWord("clvertalb", undefined, bottomed),
+    ).toBe(true);
     expect(bottomed.verticalAlign).toBe("bottom");
   });
 
@@ -419,10 +423,12 @@ describe("borderControlWords", () => {
   });
 
   it("appends the colour control word only when a colour index is given", () => {
-    expect(borderControlWords("top", solidBorder, undefined)).not.toContain(
-      "\\brdrcf",
+    expect(borderControlWords("top", solidBorder, undefined)).toBe(
+      "\\clbrdrt\\brdrs\\brdrw20",
     );
-    expect(borderControlWords("top", solidBorder, 3)).toContain("\\brdrcf3");
+    expect(borderControlWords("top", solidBorder, 3)).toBe(
+      "\\clbrdrt\\brdrs\\brdrw20\\brdrcf3",
+    );
   });
 });
 
