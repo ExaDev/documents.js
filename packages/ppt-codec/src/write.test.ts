@@ -1293,6 +1293,9 @@ describe("writePptContent / readPptContent round trip", () => {
       expect(() => writePptContent(document)).toThrow(
         PptUnsupportedContentError,
       );
+      expect(() => writePptContent(document)).toThrow(
+        'LayoutMetadata.createdIso "not-a-real-date" is not a valid date string',
+      );
     });
 
     it("throws a PptUnsupportedContentError, not a raw RangeError, for a malformed modifiedIso", () => {
@@ -1302,6 +1305,9 @@ describe("writePptContent / readPptContent round trip", () => {
       };
       expect(() => writePptContent(document)).toThrow(
         PptUnsupportedContentError,
+      );
+      expect(() => writePptContent(document)).toThrow(
+        'LayoutMetadata.modifiedIso "not-a-real-date" is not a valid date string',
       );
     });
   });
