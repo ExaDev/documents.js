@@ -291,7 +291,8 @@ const PATTERN_TYPE_BY_SHADE: readonly ContentCellPatternType[] = Array.from(
   },
 );
 
-function nearestPercentType(shade: number): ContentCellPatternType {
+// Exported for this package's own tests only, so the throw below is proven genuine by a direct, out-of-range call rather than left as a promise the one real caller (readCellFill, always passing a Uint8Array byte read) could never actually keep.
+export function nearestPercentType(shade: number): ContentCellPatternType {
   const patternType = PATTERN_TYPE_BY_SHADE[shade];
   if (patternType === undefined) {
     // PATTERN_TYPE_BY_SHADE has exactly 256 entries, one for every possible byte value 0-255, and shade is always a Uint8Array byte read -- this is an invariant violation, not a truncated-input case, so it is thrown rather than degraded from.
