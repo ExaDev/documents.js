@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import type * as ZodModule from "zod";
 import { TreeEmbeddedFontSchema } from "./package";
 import { ColorSchema } from "./color";
 import {
@@ -61,7 +62,12 @@ import {
   ContentCellValueSchema,
   ContentPageFurnitureSchema,
 } from "./content";
-import { CONTENT_DEFS } from "./content-json-schema-defs";
+import {
+  CONTENT_DEFS,
+  CONTENT_DOCUMENT_URI,
+  EMBEDDED_OBJECT_KINDS,
+  MAX_SAFE_INTEGER,
+} from "./content-json-schema-defs";
 import {
   AnchorDescriptorSchema,
   ConstructDescriptorSchema,
@@ -419,5 +425,308 @@ describe("CONTENT_DEFS's MathML entries are computed lazily, not at module load"
     expect(afterRead?.value).toBe(firstRead);
     // A second read reuses the cached value rather than recomputing it.
     expect(fresh.CONTENT_DEFS.MathMlAttribute).toBe(firstRead);
+  });
+
+  it("builds the registry and calls z.toJSONSchema() only once total, even though three separate getters each trigger the same underlying computation", async () => {
+    // getMathMlJsonSchemas() is called independently by each of the three getters (via mathMlDef), and its own cachedMathMlJsonSchemas check is what stops the second and third calls from re-registering the schemas and re-invoking z.toJSONSchema() -- a functional check on the returned VALUES alone can't distinguish "recomputed but happened to produce the same result" from "reused the cache", since z.toJSONSchema() is deterministic either way. zod's own namespace export can't be vi.spyOn'd directly (ESM module namespaces are non-configurable), so this counts calls through vi.doMock over the whole 'zod' module instead, wrapping the real toJSONSchema.
+    let callCount = 0;
+    vi.doMock("zod", async (importOriginal) => {
+      const actual = await importOriginal<typeof ZodModule>();
+      return {
+        ...actual,
+        z: {
+          ...actual.z,
+          toJSONSchema: (...args: Parameters<typeof actual.z.toJSONSchema>) => {
+            callCount += 1;
+            return actual.z.toJSONSchema(...args);
+          },
+        },
+      };
+    });
+    vi.resetModules();
+    try {
+      const fresh = await import("./content-json-schema-defs");
+      expect(fresh.CONTENT_DEFS.MathMlAttribute).toBeDefined();
+      expect(fresh.CONTENT_DEFS.MathMlElement).toBeDefined();
+      expect(fresh.CONTENT_DEFS.MathMlNode).toBeDefined();
+      expect(callCount).toBe(1);
+    } finally {
+      vi.doUnmock("zod");
+      vi.resetModules();
+    }
+  });
+
+  it("computes the exact shape on first read, against a genuinely fresh module instance", async () => {
+    // Every describe block above this one reads .MathMlAttribute/.MathMlElement/.MathMlNode on the file's own shared top-level CONTENT_DEFS import, caching the getters' computed value the first time any of them runs. A test reading that already-cached value never re-executes getMathMlJsonSchemas/mathMlDef/cacheMathMlDef itself, so Stryker's own per-test coverage never attributes those functions' lines to such a test -- only the test that FIRST computes the value (whichever runs earliest in file order) gets credited, and every later assertion against the resulting value, however exact, is invisible to a mutant confined to those lines. A fresh module instance forces the computation to happen here, inside this test's own coverage, which is what actually lets an assertion here kill a mutation to that code.
+    vi.resetModules();
+    const fresh = await import("./content-json-schema-defs");
+    expect(fresh.CONTENT_DEFS.MathMlAttribute).toStrictEqual({
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        value: { type: "string" },
+      },
+      required: ["name", "value"],
+      additionalProperties: false,
+    });
+    expect(fresh.CONTENT_DEFS.MathMlElement).toStrictEqual({
+      type: "object",
+      properties: {
+        type: { type: "string", const: "element" },
+        tag: { type: "string" },
+        attributes: {
+          type: "array",
+          items: { $ref: "#/$defs/MathMlAttribute" },
+        },
+        children: { type: "array", items: { $ref: "#/$defs/MathMlNode" } },
+      },
+      required: ["type", "tag", "attributes", "children"],
+      additionalProperties: false,
+    });
+    // The cached value is a plain, non-enumerable-defeating, non-writable, configurable property -- exactly what cacheMathMlDef's own Object.defineProperty call states.
+    const descriptor = Object.getOwnPropertyDescriptor(
+      fresh.CONTENT_DEFS,
+      "MathMlAttribute",
+    );
+    expect(descriptor?.enumerable).toBe(true);
+    expect(descriptor?.configurable).toBe(true);
+    expect(descriptor?.writable).toBe(false);
+    // The cached property is still enumerable, so a plain Object.keys/spread over CONTENT_DEFS still sees it once resolved -- it never silently drops out of the object's own key set.
+    expect(Object.keys(fresh.CONTENT_DEFS)).toContain("MathMlAttribute");
+  });
+});
+
+describe("EMBEDDED_OBJECT_KINDS", () => {
+  it("is the exact six-member vocabulary, in declared order", () => {
+    expect(EMBEDDED_OBJECT_KINDS).toStrictEqual([
+      "formula",
+      "wordprocessing",
+      "presentation",
+      "spreadsheet",
+      "drawing",
+      "chart",
+    ]);
+  });
+});
+
+// Genuine, independent coverage for the fragments this file's own top comment says the live z.toJSONSchema() comparison cannot reach: the nine package-tree group wrappers (recursive through their own children arrays, downstream of package-node.ts's z.custom() guards) and ContentEmbeddedObject/ContentEmbeddedObjectBlock (excluded from the comparison for the documented cross-file-cycle reason). Each expectation below is hand-transcribed from this file's own CONTENT_DEFS literal -- the same "pin the exact fixed shape" treatment the MathML describe block above gives the three entries the comparison also cannot reach, so a literal genuinely edited here (a wrong $ref, a dropped required key, additionalProperties flipped) fails one of these instead of silently surviving.
+describe("CONTENT_DEFS's package-tree and embedded-object fragments (hard-coded shape, outside the live comparison's reach)", () => {
+  it("ContentEmbeddedObject carries the shared embedded-object fields minus the block-level kind discriminant", () => {
+    expect(CONTENT_DEFS.ContentEmbeddedObject).toStrictEqual({
+      type: "object",
+      properties: {
+        objectKind: { type: "string", enum: EMBEDDED_OBJECT_KINDS },
+        document: { $ref: CONTENT_DOCUMENT_URI },
+        frame: { $ref: "#/$defs/Box" },
+        anchorRow: { type: "integer", minimum: 0, maximum: MAX_SAFE_INTEGER },
+        anchorColumn: {
+          type: "integer",
+          minimum: 0,
+          maximum: MAX_SAFE_INTEGER,
+        },
+        offsetXPt: { type: "number" },
+        offsetYPt: { type: "number" },
+        source: { $ref: "#/$defs/SourceResidue" },
+      },
+      required: ["objectKind", "document", "frame"],
+      additionalProperties: false,
+    });
+  });
+
+  it("ContentEmbeddedObjectBlock adds the block-level kind discriminant, sourcePath, and frames", () => {
+    expect(CONTENT_DEFS.ContentEmbeddedObjectBlock).toStrictEqual({
+      type: "object",
+      properties: {
+        kind: { type: "string", const: "embeddedObject" },
+        objectKind: { type: "string", enum: EMBEDDED_OBJECT_KINDS },
+        document: { $ref: CONTENT_DOCUMENT_URI },
+        frame: { $ref: "#/$defs/Box" },
+        sourcePath: { type: "string" },
+        source: { $ref: "#/$defs/SourceResidue" },
+        frames: { type: "array", items: { $ref: "#/$defs/LayoutFrame" } },
+        anchorRow: { type: "integer", minimum: 0, maximum: MAX_SAFE_INTEGER },
+        anchorColumn: {
+          type: "integer",
+          minimum: 0,
+          maximum: MAX_SAFE_INTEGER,
+        },
+        offsetXPt: { type: "number" },
+        offsetYPt: { type: "number" },
+      },
+      required: ["kind", "objectKind", "document", "frame"],
+      additionalProperties: false,
+    });
+  });
+
+  it("ContentBlock is a oneOf over the seven ContentBlock variants, in declared order", () => {
+    expect(CONTENT_DEFS.ContentBlock).toStrictEqual({
+      oneOf: [
+        { $ref: "#/$defs/ContentParagraph" },
+        { $ref: "#/$defs/ContentTable" },
+        { $ref: "#/$defs/ContentImageBlock" },
+        { $ref: "#/$defs/ContentPageBreak" },
+        { $ref: "#/$defs/ContentEmbeddedObjectBlock" },
+        { $ref: "#/$defs/ContentConstructStart" },
+        { $ref: "#/$defs/ContentConstructEnd" },
+      ],
+    });
+  });
+
+  it("TreeBlockLeaf is ContentBlock minus the two construct boundary markers", () => {
+    expect(CONTENT_DEFS.TreeBlockLeaf).toStrictEqual({
+      oneOf: [
+        { $ref: "#/$defs/ContentParagraph" },
+        { $ref: "#/$defs/ContentTable" },
+        { $ref: "#/$defs/ContentImageBlock" },
+        { $ref: "#/$defs/ContentPageBreak" },
+        { $ref: "#/$defs/ContentEmbeddedObjectBlock" },
+      ],
+    });
+  });
+
+  const SECTION_FLOW_CHILDREN = [
+    { $ref: "#/$defs/HeadingGroup" },
+    { $ref: "#/$defs/ListGroup" },
+    { $ref: "#/$defs/SectionConstructGroup" },
+    { $ref: "#/$defs/TreeBlockLeaf" },
+  ];
+
+  it("SectionGroup wraps a SectionDescriptor over the section-flow child vocabulary", () => {
+    expect(CONTENT_DEFS.SectionGroup).toStrictEqual({
+      type: "object",
+      properties: {
+        node: { $ref: "#/$defs/SectionDescriptor" },
+        style: { type: "string" },
+        children: { type: "array", items: { oneOf: SECTION_FLOW_CHILDREN } },
+      },
+      required: ["node", "children"],
+      additionalProperties: false,
+    });
+  });
+
+  it("HeadingGroup wraps a HeadingParagraph over the identical section-flow child vocabulary", () => {
+    expect(CONTENT_DEFS.HeadingGroup).toStrictEqual({
+      type: "object",
+      properties: {
+        node: { $ref: "#/$defs/HeadingParagraph" },
+        style: { type: "string" },
+        children: { type: "array", items: { oneOf: SECTION_FLOW_CHILDREN } },
+      },
+      required: ["node", "children"],
+      additionalProperties: false,
+    });
+  });
+
+  const LIST_FLOW_CHILDREN = [
+    { $ref: "#/$defs/ListGroup" },
+    { $ref: "#/$defs/ShapeConstructGroup" },
+    { $ref: "#/$defs/TreeBlockLeaf" },
+  ];
+
+  it("ListGroup wraps a ListParagraph over the list/shape-flow child vocabulary -- never HeadingGroup", () => {
+    expect(CONTENT_DEFS.ListGroup).toStrictEqual({
+      type: "object",
+      properties: {
+        node: { $ref: "#/$defs/ListParagraph" },
+        style: { type: "string" },
+        children: { type: "array", items: { oneOf: LIST_FLOW_CHILDREN } },
+      },
+      required: ["node", "children"],
+      additionalProperties: false,
+    });
+  });
+
+  it("SlideGroup wraps a SlideDescriptor over shape groups only, never a bare leaf", () => {
+    expect(CONTENT_DEFS.SlideGroup).toStrictEqual({
+      type: "object",
+      properties: {
+        node: { $ref: "#/$defs/SlideDescriptor" },
+        style: { type: "string" },
+        children: { type: "array", items: { $ref: "#/$defs/ShapeGroup" } },
+      },
+      required: ["node", "children"],
+      additionalProperties: false,
+    });
+  });
+
+  it("ShapeGroup wraps a ShapeDescriptor over the list/shape-flow child vocabulary", () => {
+    expect(CONTENT_DEFS.ShapeGroup).toStrictEqual({
+      type: "object",
+      properties: {
+        node: { $ref: "#/$defs/ShapeDescriptor" },
+        style: { type: "string" },
+        children: { type: "array", items: { oneOf: LIST_FLOW_CHILDREN } },
+      },
+      required: ["node", "children"],
+      additionalProperties: false,
+    });
+  });
+
+  it("SheetGroup wraps a SheetDescriptor over sheet images then whole embedded objects", () => {
+    expect(CONTENT_DEFS.SheetGroup).toStrictEqual({
+      type: "object",
+      properties: {
+        node: { $ref: "#/$defs/SheetDescriptor" },
+        style: { type: "string" },
+        children: {
+          type: "array",
+          items: {
+            oneOf: [
+              { $ref: "#/$defs/ContentSheetImage" },
+              { $ref: "#/$defs/ContentEmbeddedObject" },
+            ],
+          },
+        },
+      },
+      required: ["node", "children"],
+      additionalProperties: false,
+    });
+  });
+
+  it("DrawPageGroup wraps a DrawPageDescriptor over shape groups then vector leaves", () => {
+    expect(CONTENT_DEFS.DrawPageGroup).toStrictEqual({
+      type: "object",
+      properties: {
+        node: { $ref: "#/$defs/DrawPageDescriptor" },
+        style: { type: "string" },
+        children: {
+          type: "array",
+          items: {
+            oneOf: [
+              { $ref: "#/$defs/ShapeGroup" },
+              { $ref: "#/$defs/ContentVector" },
+            ],
+          },
+        },
+      },
+      required: ["node", "children"],
+      additionalProperties: false,
+    });
+  });
+
+  it("SectionConstructGroup wraps a ConstructDescriptor over the section-flow child vocabulary", () => {
+    expect(CONTENT_DEFS.SectionConstructGroup).toStrictEqual({
+      type: "object",
+      properties: {
+        node: { $ref: "#/$defs/ConstructDescriptor" },
+        style: { type: "string" },
+        children: { type: "array", items: { oneOf: SECTION_FLOW_CHILDREN } },
+      },
+      required: ["node", "children"],
+      additionalProperties: false,
+    });
+  });
+
+  it("ShapeConstructGroup wraps a ConstructDescriptor over the list/shape-flow child vocabulary", () => {
+    expect(CONTENT_DEFS.ShapeConstructGroup).toStrictEqual({
+      type: "object",
+      properties: {
+        node: { $ref: "#/$defs/ConstructDescriptor" },
+        style: { type: "string" },
+        children: { type: "array", items: { oneOf: LIST_FLOW_CHILDREN } },
+      },
+      required: ["node", "children"],
+      additionalProperties: false,
+    });
   });
 });
