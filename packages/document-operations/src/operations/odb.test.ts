@@ -1,6 +1,9 @@
 import { bytesToBase64 } from "documents.js";
 import { describe, expect, it } from "vitest";
-import { loadFormAndReportOdbBytes } from "../test-support/odb-fixture";
+import {
+  FORM_AND_REPORT_ODB_PATH,
+  loadFormAndReportOdbBytes,
+} from "../test-support/odb-fixture";
 import {
   odbFormsOperation,
   odbQueryOperation,
@@ -18,6 +21,13 @@ const source = {
 describe("odbTablesOperation", () => {
   it("lists the fixture's own SALES table", async () => {
     const tables = await odbTablesOperation.run({ source });
+    expect(tables.some((table) => table.tableName === "SALES")).toBe(true);
+  });
+
+  it("reads the identical tables from a real filesystem path", async () => {
+    const tables = await odbTablesOperation.run({
+      source: { path: FORM_AND_REPORT_ODB_PATH },
+    });
     expect(tables.some((table) => table.tableName === "SALES")).toBe(true);
   });
 });
@@ -47,6 +57,22 @@ describe("odbQueryOperation", () => {
     expect(result.rows.length).toBeGreaterThan(0);
   });
 
+  it("runs a saved query by name, resolving it against the .odb's own declared queries", async () => {
+    const result = await odbQueryOperation.run({
+      source,
+      query: "HighValueSales",
+    });
+    expect(result.rows.length).toBeGreaterThan(0);
+  });
+
+  it("rejects a saved query name the .odb declares no such query for, naming every available one", async () => {
+    await expect(
+      odbQueryOperation.run({ source, query: "NoSuchSavedQuery" }),
+    ).rejects.toThrow(
+      'This .odb declares no saved query named "NoSuchSavedQuery". Available: HighValueSales.',
+    );
+  });
+
   it("rejects supplying both sql and query", async () => {
     await expect(
       odbQueryOperation.run({
@@ -70,6 +96,18 @@ describe("odbToCsvOperation", () => {
     expect("bytesBase64" in result).toBe(true);
     expect(result.byteLength).toBeGreaterThan(0);
   });
+
+  it("propagates an already-aborted signal", async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      odbToCsvOperation.run(
+        { source, table: "SALES" },
+        { signal: controller.signal },
+      ),
+    ).rejects.toThrow();
+  });
 });
 
 describe("odbToXlsxOperation", () => {
@@ -77,5 +115,14 @@ describe("odbToXlsxOperation", () => {
     const result = await odbToXlsxOperation.run({ source });
     expect("bytesBase64" in result).toBe(true);
     expect(result.byteLength).toBeGreaterThan(0);
+  });
+
+  it("propagates an already-aborted signal", async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      odbToXlsxOperation.run({ source }, { signal: controller.signal }),
+    ).rejects.toThrow();
   });
 });
