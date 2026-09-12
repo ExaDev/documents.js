@@ -1816,9 +1816,7 @@ export function readWpd(
       { kind: note.anchorType, marker: note.marker, blocks: note.blocks },
     ]),
   );
-  if (Object.keys(attachments).length === 0 && notes.length === 0) {
-    return assembled;
-  }
+  // No separate "neither table has anything to add" early return is needed: when both are empty, the spread below produces an object with exactly assembled's own keys and values -- a shallow copy indistinguishable from assembled itself to any caller, since nothing here ever mutates assembled afterwards.
   return {
     ...assembled,
     ...(Object.keys(attachments).length > 0
