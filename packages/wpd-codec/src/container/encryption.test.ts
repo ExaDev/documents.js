@@ -13,6 +13,7 @@ import {
   decryptWpdDocument,
   encryptWpdDocumentForTests,
   normaliseWpdPassword,
+  passwordByteAt,
   wpdPasswordChecksum16,
 } from "./encryption";
 
@@ -119,6 +120,20 @@ describe("applyWpdStandardEncryption", () => {
     expect(() => applyWpdStandardEncryption(filled(520), [], 512)).toThrow(
       "The WordPerfect cipher is keyed by the password's own bytes, so an empty password decrypts nothing.",
     );
+  });
+});
+
+describe("passwordByteAt", () => {
+  // applyWpdStandardEncryption's own empty-password guard means no real caller ever reaches this with an empty array, but the function is a plain exported contract with its own behaviour to prove directly, the same way decryptWpdDocument is tested on its own terms above.
+  it("throws when the password it is asked to cycle through is empty", () => {
+    expect(() => passwordByteAt([], 0)).toThrow(
+      "The password normalised to no bytes, which the cipher cannot key with.",
+    );
+  });
+
+  it("wraps around the password's own length rather than reading past it", () => {
+    expect(passwordByteAt([0x41, 0x42, 0x43], 3)).toBe(0x41);
+    expect(passwordByteAt([0x41, 0x42, 0x43], 4)).toBe(0x42);
   });
 });
 
