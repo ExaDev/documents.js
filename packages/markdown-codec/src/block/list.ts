@@ -27,16 +27,6 @@ const NON_SPACE_PATTERN = /[^ \t\f\v\r\n]/;
 // An ordered list may interrupt a paragraph only when it starts at 1 (spec 0.31.2: "In order for a list to interrupt a paragraph, it must start with 1").
 const INTERRUPTING_ORDERED_START = 1;
 
-function isBulletMarker(char: string): char is MarkdownBulletMarker {
-  return char === "-" || char === "*" || char === "+";
-}
-
-function isOrderedDelimiter(
-  char: string,
-): char is MarkdownOrderedListDelimiter {
-  return char === "." || char === ")";
-}
-
 interface MarkerMatch {
   readonly length: number;
   readonly data: Omit<ListMarkerData, "padding">;
@@ -49,10 +39,8 @@ function matchMarker(
 ): MarkerMatch | undefined {
   const bullet = BULLET_MARKER_PATTERN.exec(rest);
   if (bullet !== null) {
-    const char = bullet[0];
-    if (!isBulletMarker(char)) {
-      return undefined;
-    }
+    // BULLET_MARKER_PATTERN's own character class (`[*+-]`) is exactly MarkdownBulletMarker's three members, so a match's own char is never anything else -- no runtime check could ever see the "else" side of that, only TypeScript's own indexed-access typing needs told.
+    const char = bullet[0] as MarkdownBulletMarker;
     return {
       length: bullet[0].length,
       data: { type: "bullet", bulletChar: char, markerOffset: indent },
@@ -60,13 +48,9 @@ function matchMarker(
   }
   const ordered = ORDERED_MARKER_PATTERN.exec(rest);
   const digits = ordered?.[1];
-  const delimiter = ordered?.[2];
-  if (
-    ordered === null ||
-    digits === undefined ||
-    delimiter === undefined ||
-    !isOrderedDelimiter(delimiter)
-  ) {
+  // Same reasoning as the bullet branch above: ORDERED_MARKER_PATTERN's own second capturing group is the character class `[.)]`, so a populated capture is never anything but one of MarkdownOrderedListDelimiter's two members.
+  const delimiter = ordered?.[2] as MarkdownOrderedListDelimiter | undefined;
+  if (ordered === null || digits === undefined || delimiter === undefined) {
     return undefined;
   }
   const start = Number.parseInt(digits, 10);
@@ -110,29 +94,22 @@ export function parseListMarker(
   line.advanceToNextNonspace();
   line.advance(match.length);
 
-  // Measure the spaces following the marker in COLUMNS, stopping at the code-indent threshold: past that point the exact count no longer changes the answer, and a single tab can supply all of them at once. The threshold IS the code indent, not a number of its own -- spaces past it make the content indented code rather than the item's own content indent.
+  // Measure the spaces following the marker in COLUMNS. No cap at the code-indent threshold here -- the branch below already resets the cursor back to afterMarkerMark and re-derives the item's own content indent from scratch whenever followingSpaces turns out to exceed it (or the rest of the line is blank), so a mid-scan cap would only change how many spaces this loop itself walks past, never the value parseListMarker returns or the cursor position it leaves behind.
   const afterMarkerMark = line.mark();
   const afterMarkerColumn = line.column;
   // LineCursor.peek() reports a tab as a single space, one column at a time (src/scan), so testing for a space alone covers both -- there is no '\t' to compare against at this level.
   do {
     line.advance(1);
-  } while (
-    line.column - afterMarkerColumn <= CODE_INDENT_COLUMNS &&
-    line.peek() === " "
-  );
+  } while (line.peek() === " ");
   const followingSpaces = line.column - afterMarkerColumn;
   const startsBlank = line.atEnd;
 
-  if (
-    followingSpaces > CODE_INDENT_COLUMNS ||
-    followingSpaces < 1 ||
-    startsBlank
-  ) {
+  // No separate `followingSpaces < 1` disjunct: the do-while above always runs its body at least once, and LineCursor.advance() only ever leaves `line.column` unchanged when the cursor was already at the absolute end of input before that call -- so followingSpaces can never come out to 0 without startsBlank also being true, and a disjunct that can never be true on its own is not a real second condition.
+  if (followingSpaces > CODE_INDENT_COLUMNS || startsBlank) {
     // Either the content is indented code (5+ columns past the marker) or there is no content on this line at all: the item's own content indent is the marker plus a single column, and everything past that is content.
     line.reset(afterMarkerMark);
-    if (line.peek() === " ") {
-      line.advance(1);
-    }
+    // Unconditional, not `if (line.peek() === " ") line.advance(1)`: the marker-follows-by check above already guarantees the character right after the marker is a space/tab or end of line, so this is either consuming that one space/tab (the followingSpaces > 4 case) or a no-op past the end of input (the startsBlank case) -- never a third, unguarded shape.
+    line.advance(1);
     return { ...match.data, padding: match.length + 1 };
   }
   return { ...match.data, padding: match.length + followingSpaces };
