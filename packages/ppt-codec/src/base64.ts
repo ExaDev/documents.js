@@ -15,9 +15,10 @@ export function bytesToBase64(bytes: Uint8Array): string {
   let out = "";
   const len = bytes.length;
   for (let index = 0; index < len; index += 3) {
+    // A length check ahead of each of these would be redundant: reading a Uint8Array past its own end already yields undefined, so `?? 0` alone already produces the identical fallback the check would have -- there is no index for which the two ever disagree.
     const b0 = bytes[index] ?? 0;
-    const b1 = index + 1 < len ? (bytes[index + 1] ?? 0) : 0;
-    const b2 = index + 2 < len ? (bytes[index + 2] ?? 0) : 0;
+    const b1 = bytes[index + 1] ?? 0;
+    const b2 = bytes[index + 2] ?? 0;
     out += TABLE.charAt(b0 >> 2);
     out += TABLE.charAt(((b0 & 0x03) << 4) | (b1 >> 4));
     out += index + 1 < len ? TABLE.charAt(((b1 & 0x0f) << 2) | (b2 >> 6)) : "=";
@@ -29,7 +30,8 @@ export function bytesToBase64(bytes: Uint8Array): string {
 export function base64ToBytes(base64: string): Uint8Array<ArrayBuffer> {
   const clean = base64.replace(/[^A-Za-z0-9+/=]/g, "");
   const len = clean.length;
-  const out = new Uint8Array(((len * 3) / 4) | 0);
+  // A generous upper bound rather than the exact len*3/4 decoded byte count: base64 can only ever decode to at most as many bytes as input characters (every 4 characters decode to at most 3 bytes, always fewer), and the exact figure is never observable anyway -- the function always returns a subarray trimmed to the real `position` reached, so an oversized allocation here changes nothing a caller can see.
+  const out = new Uint8Array(len);
   let position = 0;
   for (let index = 0; index < len; index += 4) {
     const c0 = DECODE[clean.charCodeAt(index)] ?? 255;
