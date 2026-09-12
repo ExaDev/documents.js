@@ -86,6 +86,14 @@ describe("associateFigureCaptions", () => {
     ).toEqual(["Figure 1: Lowercased"]);
   });
 
+  it("leaves both figures uncaptioned when neither neighbour is a paragraph at all", () => {
+    expect(captionsOf([image(), image(), image()])).toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
+  });
+
   it("preserves the block count and order, which the extent indices depend on", () => {
     const blocks = [
       paragraph("A"),
