@@ -116,6 +116,8 @@ export const convertDocumentOperation = defineOperation({
     const signal = context?.signal;
     const { bytes, format } = await resolveDocumentInput(source, { signal });
 
+    // Computed once and reused for both the callback wiring below and the output shape at the end of this function, rather than repeating `onSubstitutionDiagnostics === true` at each site independently -- the two must never disagree about whether the caller asked for structured font-substitution diagnostics.
+    const wantsFontSubstitutionDiagnostics = onSubstitutionDiagnostics === true;
     const fontSubstitutions: FontSubstitution[] = [];
     // ConversionOptions.signal is mandatory on the DocumentConverter port (see documents.js's own port.ts: "the contract is async and cancellable regardless of the local implementation's synchronicity"), unlike DocumentOperationContext.signal, which is optional -- a caller with nothing to cancel (a CLI invocation, a test) supplies no context at all. A fresh, never-aborting AbortController's signal satisfies the port's contract in that case without this operation itself needing to care whether cancellation was ever wired up.
     const conversionSignal = signal ?? new AbortController().signal;
@@ -130,11 +132,10 @@ export const convertDocumentOperation = defineOperation({
           bytes: base64ToBytes(font.bytesBase64),
         })),
         // Only wired under the flag: the local converter already records every substitution as a `font/substituted` Diagnostic in result.diagnostics below regardless of whether a callback is supplied, so an unconditional callback here would report the same event twice, once per channel.
-        onFontSubstitution:
-          onSubstitutionDiagnostics === true
-            ? (substitution: FontSubstitution) =>
-                fontSubstitutions.push(substitution)
-            : undefined,
+        onFontSubstitution: wantsFontSubstitutionDiagnostics
+          ? (substitution: FontSubstitution) =>
+              fontSubstitutions.push(substitution)
+          : undefined,
         // A caller with no filesystem context supplies any non-data: markdown image bytes explicitly as a destination -> base64 map; a destination absent from the map degrades to alt text, exactly as documents.js's MarkdownImageResolver port defines.
         images:
           images === undefined
@@ -157,7 +158,7 @@ export const convertDocumentOperation = defineOperation({
       targetFormat: result.document.format,
       output: resolvedOutput,
       diagnostics: [...result.diagnostics],
-      ...(onSubstitutionDiagnostics === true
+      ...(wantsFontSubstitutionDiagnostics
         ? { fontSubstitutions: [...fontSubstitutions] }
         : {}),
     };
