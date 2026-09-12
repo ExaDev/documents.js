@@ -6,6 +6,7 @@ function paethPredictor(a: number, b: number, c: number): number {
   const pa = Math.abs(p - a);
   const pb = Math.abs(p - b);
   const pc = Math.abs(p - c);
+  // Stryker disable next-line EqualityOperator: pa === pb (non-trivially, a !== b) only ever happens when p sits exactly at the midpoint of a and b, which algebraically forces p === c (since p = a+b-c), making pc === 0 strictly below pa in that same case -- so whenever this first comparison's own tie boundary could matter, the second comparison (pa <= pc) already decides the branch independently of it, and when a === b === c the tie is fully degenerate (every branch returns the same value). No input can distinguish `pa <= pb` from `pa < pb` here.
   if (pa <= pb && pa <= pc) {
     return a;
   }
@@ -65,6 +66,7 @@ export function unfilterScanlines(
     const rowStart = y * stride + 1;
     const outRowStart = y * bytesPerRow;
     const prevOutRowStart = y > 0 ? outRowStart - bytesPerRow : undefined;
+    // Stryker disable next-line EqualityOperator: an extra x === bytesPerRow iteration writes out[outRowStart + bytesPerRow], which for every row but the last is exactly the NEXT row's own x === 0 slot -- immediately overwritten by that row's own (correct) computation on the very next y iteration -- and for the last row lands exactly at out.length, an out-of-bounds Uint8Array write that is silently dropped. Neither case is ever observable in the returned array.
     for (let x = 0; x < bytesPerRow; x++) {
       const raw = data[rowStart + x]!;
       const a = x >= bpp ? out[outRowStart + x - bpp]! : 0;
@@ -82,6 +84,7 @@ export function unfilterScanlines(
 function sumOfAbsSigned(bytes: Uint8Array<ArrayBuffer>): number {
   let sum = 0;
   for (const byte of bytes) {
+    // Stryker disable next-line EqualityOperator: the two branches agree at the single point where `<128` and `<=128` could ever differ -- byte === 128 -- since 256 - 128 === 128 too, so switching which branch fires at that exact value changes nothing.
     sum += byte < 128 ? byte : 256 - byte;
   }
   return sum;
@@ -97,6 +100,7 @@ function filterRowInto(
   out: Uint8Array<ArrayBuffer>,
   outOffset: number,
 ): void {
+  // Stryker disable next-line EqualityOperator: an extra x === bytesPerRow iteration writes out[outOffset + bytesPerRow] -- for the 'none' strategy's direct write into filterScanlines' own output array, that is the next row's own filter-type byte, overwritten by that row's own explicit write on the following iteration; for the adaptive candidate scratch array (exactly bytesPerRow long), it is an out-of-bounds Uint8Array write, silently dropped. Neither is ever observable.
   for (let x = 0; x < bytesPerRow; x++) {
     const rawByte = raw[rowStart + x]!;
     const a = x >= bpp ? raw[rowStart + x - bpp]! : 0;
