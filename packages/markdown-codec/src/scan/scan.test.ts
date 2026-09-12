@@ -68,10 +68,26 @@ describe("MarkdownScanCursor", () => {
     expect(cursor.position.column).toBe(1);
   });
 
+  it("peek() normalises a raw '\\r' to '\\n', matching next()'s own line-ending normalisation", () => {
+    expect(new MarkdownScanCursor("\rx").peek()).toBe("\n");
+  });
+
+  it("peek() returns undefined at the true end of input, with no pending tab", () => {
+    expect(new MarkdownScanCursor("").peek()).toBeUndefined();
+  });
+
   it("peekRaw() reads real source characters, ignoring pending tab-expansion state", () => {
     const cursor = new MarkdownScanCursor("\tfoo");
     cursor.next(); // consume the first of the tab's expanded columns; rawOffset stays at the tab itself
     expect(cursor.peekRaw(4)).toBe("\tfoo");
+  });
+
+  it("peekRaw() returns only the requested slice, not the whole remaining source", () => {
+    const cursor = new MarkdownScanCursor("abcdef");
+    expect(cursor.peekRaw(2)).toBe("ab");
+    cursor.next();
+    cursor.next();
+    expect(cursor.peekRaw(2)).toBe("cd");
   });
 
   it("treats LF, CRLF, and lone CR as a single logical newline, resetting column and advancing line", () => {
@@ -103,6 +119,16 @@ describe("MarkdownScanCursor", () => {
     expect(cursor.next()).toBe(" ");
     expect(cursor.next()).toBe(" ");
     expect(cursor.next()).toBe("f");
+  });
+
+  it("next() past the end of input is idempotent -- it never advances rawOffset or column further", () => {
+    const cursor = new MarkdownScanCursor("a");
+    cursor.next();
+    expect(cursor.next()).toBeUndefined();
+    const markAfterFirstPastEnd = cursor.mark();
+    expect(cursor.next()).toBeUndefined();
+    expect(cursor.next()).toBeUndefined();
+    expect(cursor.mark()).toEqual(markAfterFirstPastEnd);
   });
 
   it("atEnd() is false while a tab expansion is still pending, even past the raw source length", () => {
