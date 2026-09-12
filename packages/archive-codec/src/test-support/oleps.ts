@@ -159,9 +159,7 @@ export function propertySetStream(
   const streamBytes = new Uint8Array(HEADER_SIZE + propertySetBytes.length);
   const view = new DataView(streamBytes.buffer);
   view.setUint16(0, 0xfffe, true); // ByteOrder
-  view.setUint16(2, 0); // Version: the value is 0, byte-identical under either endianness
-  view.setUint32(4, 0); // SystemIdentifier: likewise always 0 here
-  // CLSID (bytes 8-23) = GUID_NULL, all zero bytes -- exactly what streamBytes already holds fresh off `new Uint8Array`, so there is nothing to write here.
+  // Version (bytes 2-3), SystemIdentifier (bytes 4-7), and CLSID (bytes 8-23, GUID_NULL) all stay zero: streamBytes is fresh off `new Uint8Array`, which already zero-fills every byte none of these three fields is written a second time.
   view.setUint32(24, 1, true); // NumPropertySets
   writeGuid(view, 28, formatId); // FMTID0
   view.setUint32(44, HEADER_SIZE, true); // Offset0
