@@ -93,8 +93,8 @@ function detectPalette(image: RawImage): PaletteEncoding | undefined {
     const g = data[base + 1] ?? 0;
     const b = data[base + 2] ?? 0;
     const a = alpha === undefined ? 255 : (alpha[i] ?? 0);
-    // Stryker disable next-line ArithmeticOperator: a bijective encoding of the four 0..255 samples into one safe-integer key (multiplication, not a `<<` shift, so the top channel never overflows into JS's 32-bit bitwise-operator truncation) -- flipping any one term's sign, or replacing its multiplication by division, still leaves this expression injective over r/g/b/a's actual 0..255 domain, since each coefficient's magnitude (256^0, 256^1, 256^2, 256^3) is exactly the span of the digit below it: a sign flip merely relocates that digit's contiguous value range without ever overlapping another digit's range, and a power-of-two division is exact in IEEE754 (no rounding) and stays strictly fractional (< 1), never spilling into an adjacent integer digit. Since the only externally observable behaviour of `key` is whether two (r,g,b,a) tuples compare equal as Map keys, and every one of these variants preserves that same equality partition on this domain, none of them can be distinguished by any test.
-    const key = r + g * 256 + b * 65536 + a * 16777216;
+    // A packed bitfield (each 0..255 sample in its own byte lane) rather than a sum of scaled terms: since r/g/b/a each occupy a disjoint, non-overlapping 8-bit lane of the 32-bit key, the packing is a bijection by construction, with no arithmetic identity between the lanes for a mutation to preserve.
+    const key = r | (g << 8) | (b << 16) | (a << 24);
 
     let index = colorToIndex.get(key);
     if (index === undefined) {
@@ -170,12 +170,11 @@ function writeTruecolorPng(
   const pixelCount = width * height;
 
   const interleaved = new Uint8Array(pixelCount * outChannels);
-  // Stryker disable next-line EqualityOperator: an extra i === pixelCount iteration writes at dstBase === interleaved.length exactly (pixelCount * outChannels) and beyond -- always out of bounds, always silently dropped by Uint8Array, never observable.
-  for (let i = 0; i < pixelCount; i++) {
+  // Iterated via an exact-length Array.from rather than a manually bounded for loop, for both the pixel and channel indices: `interleaved` is allocated to exactly pixelCount * outChannels elements, so there is no separate loop-bound comparison whose own boundary could ever be observed through it.
+  for (const i of Array.from({ length: pixelCount }, (_, index) => index)) {
     const srcBase = i * channels;
     const dstBase = i * outChannels;
-    // Stryker disable next-line EqualityOperator: an extra c === channels iteration writes to interleaved[dstBase + channels], which is either this same pixel's alpha slot (immediately overwritten by the `if (alpha !== undefined)` assignment right below, in the same iteration) or, when there is no alpha, the very next pixel's own c === 0 slot -- overwritten by that pixel's own correct write on the next i iteration, or out of bounds entirely on the last pixel. Never observable either way.
-    for (let c = 0; c < channels; c++) {
+    for (const c of Array.from({ length: channels }, (_, index) => index)) {
       interleaved[dstBase + c] = data[srcBase + c]!;
     }
     if (alpha !== undefined) {
