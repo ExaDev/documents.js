@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { bytesToBase64, createDocx } from "documents.js";
 import { describe, expect, it } from "vitest";
 import { describeFontFileOperation, fontsOperation } from "./fonts";
@@ -21,5 +24,15 @@ describe("describeFontFileOperation", () => {
         },
       }),
     ).rejects.toThrow();
+  });
+
+  it("propagates a parse failure identically for a font file read from a path, naming the real path in the error", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "fonts-test-"));
+    const path = join(dir, "not-a-font.ttf");
+    writeFileSync(path, "not a font");
+
+    await expect(
+      describeFontFileOperation.run({ source: { path } }),
+    ).rejects.toThrow(new RegExp(path.replace(/[/\\]/g, "\\$&")));
   });
 });
