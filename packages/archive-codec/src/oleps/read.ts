@@ -30,17 +30,23 @@ export class PropertySetFormatError extends Error {
   }
 }
 
+// No offset<0/length<0 guard: every call site below derives both from a getUint32/getInt16 read (always non-negative) or a positive literal/constant, so neither can ever actually be negative -- a defensive check against an input this module never produces.
 function requireBytes(
   byteLength: number,
   offset: number,
   length: number,
   what: string,
 ): void {
-  if (offset < 0 || length < 0 || offset + length > byteLength) {
+  if (offset + length > byteLength) {
     throw new PropertySetFormatError(
       `property set stream ends before ${what} (needs ${length} bytes at offset ${offset}, stream is ${byteLength} bytes)`,
     );
   }
+}
+
+// VT_I2's own Value field is a signed 16-bit integer, but a codepage above 32767 is conventionally stored as its negative two's-complement equivalent -- this undoes that back to the unsigned codepage number a real producer declared. Exported for direct testing: the resulting number is only ever compared against CP_WINUNICODE/WINDOWS_1252_CODEPAGE downstream, neither of which a boundary mistake at raw === 0 would ever produce either way, so no decoding outcome could otherwise distinguish the two.
+export function decodeCodepage(raw: number): number {
+  return raw < 0 ? raw + 0x10000 : raw;
 }
 
 const ANSI_DECODER = new TextDecoder("windows-1252");
@@ -58,7 +64,8 @@ function decodeAnsi(
 }
 
 // [MS-OLEPS] 2.19/2.20: both string packets MAY carry embedded or additional trailing null characters beyond the first terminator, and how a reader "presents" such a string to its application is implementation-specific. This one truncates at the first null code unit -- what every string ./write.ts and ./summary-information.ts actually produce needs (a plain string, no embedded nulls), and what the spec's own worked SummaryInformation example requires to read an empty property back as "" rather than as embedded NUL characters (its KEYWORDS property is four zero bytes: Size 4, not the minimal Size 1 a null-terminator-only empty string would use).
-function truncateAtNull(value: string): string {
+// Exported for direct testing: every fixture this module's own tests decode already carries a real producer's null terminator, so a round trip alone never exercises the "no null present at all" branch.
+export function truncateAtNull(value: string): string {
   const index = value.indexOf("\u0000");
   return index === -1 ? value : value.slice(0, index);
 }
@@ -187,8 +194,7 @@ export function readPropertySetStream(
       );
     }
     const raw = view.getInt16(abs + TYPED_VALUE_HEADER_SIZE, true);
-    // Codepages above 32767 are conventionally stored as their negative 16-bit twos-complement equivalent, since VT_I2's own Value is a signed integer.
-    codepage = raw < 0 ? raw + 0x10000 : raw;
+    codepage = decodeCodepage(raw);
   }
 
   const properties = new Map<number, PropertyValue>();
@@ -208,6 +214,7 @@ export function readPropertySetStream(
       );
     }
     const valueOffset = abs + TYPED_VALUE_HEADER_SIZE;
+    // A PropertyType this switch names no case for (e.g. VT_CF, a PIDSI_THUMBNAIL clipboard format) is skipped rather than aborting the whole read, since an undecodable value is a projection gap, not a structural violation (see the module comment above). No explicit default case: falling out of a switch with no matching case is already exactly that -- a no-op -- so a default whose own body is just `break` would only restate what already happens, and its break is otherwise dead code every case above it already itself carries.
     switch (type) {
       case VT_I2: {
         requireBytes(
@@ -263,9 +270,6 @@ export function readPropertySetStream(
         });
         break;
       }
-      default:
-        // A PropertyType this reader does not decode (e.g. VT_CF, a PIDSI_THUMBNAIL clipboard format) -- skipped rather than aborting the whole read, since an undecodable value is a projection gap, not a structural violation (see the module comment above).
-        break;
     }
   }
 
