@@ -777,6 +777,31 @@ describe("outline numbering", () => {
   });
 
   // Every other member of the group displays a counter inside running text and carries no structure, so its digits stay exactly where they are.
+  // applyDisplayNumberGroup's own Off dispatch must actually gate on the subfunction being an Off, not decrement the suppression depth for any subgroup it does not recognise as one -- a page-number-display On (0x04) sits in the very same function group but names none of the paragraph-number On/Off codes.
+  it("does not end paragraph-number suppression for an unrelated function in the same group", () => {
+    const document = readDocumentArea([
+      ...variableFunction({
+        group: DISPLAY_NUMBER_GROUP,
+        subgroup: 0x0c,
+        nonDeletable: [0],
+      }),
+      ...text("hidden"),
+      ...variableFunction({
+        group: DISPLAY_NUMBER_GROUP,
+        subgroup: 0x04, // page number display On -- a real function, but not a paragraph-number Off
+        nonDeletable: [0],
+      }),
+      ...text("stillHidden"),
+      ...variableFunction({ group: DISPLAY_NUMBER_GROUP, subgroup: 0x0d }),
+      ...text("shown"),
+    ]);
+    expect(
+      paragraphsOf(document)[0]
+        ?.runs.map((r) => r.text)
+        .join(""),
+    ).toBe("shown");
+  });
+
   it("leaves a page number display's own text in place", () => {
     const document = readDocumentArea([
       ...text("page "),
@@ -1213,6 +1238,84 @@ describe("style resolution depth and scope handling", () => {
     expect(found?.message).toBe(
       "A chain of styles resolving one another's own packets ran deeper than this reader will follow, so the deepest style's own direct formatting was not applied.",
     );
+  });
+
+  // Exactly MAX_STYLE_RESOLUTION_DEPTH (16) successful recursions must leave the 17th attempt refused: a chain one level too shallow to force a refusal under `>` (which would only trigger once depth genuinely exceeds 16) must trigger the guard under the real `>=` boundary. With a chain of exactly 17 style packets and nothing left to recurse into after the 17th, an off-by-one guard would let the whole chain resolve and never report anything at all.
+  it("refuses exactly the chain's 17th style recursion, not the 18th", () => {
+    const depth = 17;
+    const prefixIds = Array.from({ length: depth }, (_, i) => i + 1);
+    const packets = prefixIds.map((id) =>
+      normalStylePacket(
+        id,
+        id === depth
+          ? variableFunction({
+              group: CHARACTER_GROUP,
+              subgroup: 0x1b, // a font size change: a real, non-empty begin block that opens no further style -- nothing left to over-recurse into
+              nonDeletable: [0x58, 0x02, 0, 0, 0, 0, 0, 0],
+            })
+          : variableFunction({
+              group: STYLE_GROUP,
+              subgroup: GLOBAL_ON,
+              prefixIds: [id + 1],
+              nonDeletable: [0, 0, NO_SYSTEM_STYLE],
+            }),
+      ),
+    );
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(
+      buildWpdFile(
+        [
+          ...variableFunction({
+            group: STYLE_GROUP,
+            subgroup: GLOBAL_ON,
+            prefixIds: [1],
+            nonDeletable: [0, 0, NO_SYSTEM_STYLE],
+          }),
+          ...text("deep"),
+        ],
+        packets,
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    expect(
+      diagnostics.filter(
+        (d) => d.code === WpdDiagnosticCodes.StyleResolutionDepthExceeded,
+      ),
+    ).toHaveLength(1);
+  });
+
+  // The resolution depth counter must return to its starting value once a style's own begin block finishes resolving, not keep climbing -- otherwise a long enough run of entirely separate, non-nested style scopes would eventually (and wrongly) trip the same depth guard a genuinely self-referential chain trips.
+  it("never accumulates resolution depth across sibling, non-nested style scopes", () => {
+    const siblingCount = 9; // enough that a counter incrementing instead of decrementing after each one would cross MAX_STYLE_RESOLUTION_DEPTH (16)
+    const prefixIds = Array.from({ length: siblingCount }, (_, i) => i + 1);
+    const packets = prefixIds.map((id) =>
+      normalStylePacket(
+        id,
+        variableFunction({
+          group: CHARACTER_GROUP,
+          subgroup: 0x1b, // a font size change: real, harmless direct formatting that opens no further style
+          nonDeletable: [0x58, 0x02, 0, 0, 0, 0, 0, 0],
+        }),
+      ),
+    );
+    const documentArea = prefixIds.flatMap((id) => [
+      ...variableFunction({
+        group: STYLE_GROUP,
+        subgroup: GLOBAL_ON,
+        prefixIds: [id],
+        nonDeletable: [0, 0, NO_SYSTEM_STYLE],
+      }),
+      ...variableFunction({ group: STYLE_GROUP, subgroup: GLOBAL_OFF }),
+    ]);
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(buildWpdFile([...documentArea, ...text("done")], packets), {
+      sink: (d) => diagnostics.push(d),
+    });
+    expect(
+      diagnostics.some(
+        (d) => d.code === WpdDiagnosticCodes.StyleResolutionDepthExceeded,
+      ),
+    ).toBe(false);
   });
 
   // The four intermediate style subfunctions (per style.test.ts: 1, 2, 5, 6, 7, 8) delimit the style's own before/after codes but neither open nor close a scope -- one arriving mid-scope must not be mistaken for the scope's own closer.

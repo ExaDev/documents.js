@@ -891,9 +891,8 @@ function applyDisplayNumberGroup(
 ): void {
   if (isParagraphNumberDisplayOn(token.subgroup)) {
     const level = readDisplayNumberLevel(token.nonDeletable);
-    if (level !== undefined && state.pendingListLevel === undefined) {
-      state.pendingListLevel = level;
-    }
+    // No separate `level !== undefined` guard is needed: pendingListLevel is only ever compared against undefined (never enumerated or spread conditionally on its own presence), so assigning it an undefined level when the level itself could not be read is indistinguishable from leaving it untouched.
+    state.pendingListLevel ??= level;
     state.numberDisplayDepth += 1;
     reportOnce(
       state,
