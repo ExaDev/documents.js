@@ -40,19 +40,25 @@ describe("createXorObfuscationKey / createXorObfuscationPasswordVerifier", () =>
   });
 
   it("rejects a password longer than 15 characters", () => {
+    // The exact message, not just the error class: a downstream out-of-range table lookup a few lines later also throws a RangeError for a 16-character password, so an assertion on the error class alone would not actually prove this guard fired.
     expect(() => createXorObfuscationKey("1234567890123456")).toThrow(
-      RangeError,
+      "XOR obfuscation passwords must be 1-15 characters, got 16",
     );
   });
 
   it("rejects an empty password", () => {
-    expect(() => createXorObfuscationKey("")).toThrow(RangeError);
+    expect(() => createXorObfuscationKey("")).toThrow(
+      "XOR obfuscation passwords must be 1-15 characters, got 0",
+    );
   });
 
   it("rejects a password with a character outside single-byte ASCII/Latin-1", () => {
     expect(() => createXorObfuscationKey("pässwörd")).not.toThrow();
+    // U+00FF is the highest single-byte Latin-1 code point this module accepts -- the exact boundary the ASCII/Latin-1 check must get right.
+    expect(() => createXorObfuscationKey("ÿ")).not.toThrow();
+    // charCodeAt reads UTF-16 code units, so the emoji's own high surrogate (0xD83D = 55357) is what surfaces at index 4, not its full code point.
     expect(() => createXorObfuscationKey("pass\u{1F600}word")).toThrow(
-      RangeError,
+      "XOR obfuscation passwords must be single-byte ASCII/Latin-1 characters, got code point 55357 at index 4",
     );
   });
 });
@@ -172,6 +178,19 @@ describe("decryptXorObfuscationMethod2", () => {
       XOR_OBFUSCATION_ROTATE_DISTANCE_METHOD2,
     );
     const data = new Uint8Array([0x00, 0x00, 0x00]);
+    const decrypted = decryptXorObfuscationMethod2(array, data, 0);
+    expect(decrypted).toEqual(data);
+  });
+
+  it("leaves a non-zero byte unmodified when XORing it against the array happens to produce zero", () => {
+    // [MS-OFFCRYPTO] 2.3.7.6's own zero-exception applies whenever EITHER the original byte or the transformed result is zero, not only when the input already was -- a byte that XORs to zero against its own array entry (transformed === 0) must stay as its own original, non-zero value, exactly as a genuinely zero input byte does.
+    const array = createXorObfuscationArray(
+      "Test1234",
+      XOR_OBFUSCATION_ROTATE_DISTANCE_METHOD2,
+    );
+    const firstArrayByte = array[0] ?? 0;
+    expect(firstArrayByte).not.toBe(0);
+    const data = new Uint8Array([firstArrayByte]);
     const decrypted = decryptXorObfuscationMethod2(array, data, 0);
     expect(decrypted).toEqual(data);
   });
