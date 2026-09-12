@@ -1,3 +1,10 @@
+## [7.20.6](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.5...documents.js%407.20.6) (2026-09-12)
+
+
+### Dependencies
+
+- Updated wpd-codec to 3.5.2
+
 ## [7.20.5](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.4...documents.js%407.20.5) (2026-09-12)
 
 

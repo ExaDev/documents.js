@@ -1,3 +1,61 @@
+## [3.5.2](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.5.1...wpd-codec%403.5.2) (2026-09-12)
+
+### Bug Fixes
+
+* **wpd-codec:** drop an unused IIFE return field that broke the workspace typecheck ([c7a813d](https://github.com/ExaDev/documents.js/commit/c7a813d6240a31004f3279f6600c93ecb2accb5d))
+* **wpd-codec:** strip a table cell formula's own length-word framing ([c1a92e3](https://github.com/ExaDev/documents.js/commit/c1a92e39a719c3f15e5b0a5652db68261c9a1227))
+* **wpd-codec:** type compoundFileWithStream's return as ArrayBuffer-backed ([273235e](https://github.com/ExaDev/documents.js/commit/273235e887654b1f8d598d89051e0bfcf57a1d78))
+* **wpd-codec:** type genericHeaderBytes' return as ArrayBuffer-backed ([5d56ed2](https://github.com/ExaDev/documents.js/commit/5d56ed2d81d5c8fe9c2a0160027d2b2723050156))
+
+### Code Refactoring
+
+* **wpd-codec:** add UNBOUNDED_WORDS for ole.ts's unbounded word-string read ([cee0fcb](https://github.com/ExaDev/documents.js/commit/cee0fcb0c896178838abc11a66562d72501e5771))
+* **wpd-codec:** close wpg.ts's remaining mutation gaps ([5d65c4d](https://github.com/ExaDev/documents.js/commit/5d65c4d8f03b55b12fc708bf02125280d64b3ea8))
+* **wpd-codec:** compute documentAreaEnd's upper bound with Math.min ([52808ea](https://github.com/ExaDev/documents.js/commit/52808eab9f3d48272b1f9eb3cd95e052291765e0))
+* **wpd-codec:** drop box.ts's redundant position-override room guards ([cdd2a11](https://github.com/ExaDev/documents.js/commit/cdd2a1192167235bd1a956369efa2d7219a7b022))
+* **wpd-codec:** extract passwordByteAt with its own dedicated test ([9e445b4](https://github.com/ExaDev/documents.js/commit/9e445b47ce5befa99448512a884bb7abca236bb7))
+* **wpd-codec:** make image.ts's signature scan throw on out-of-range reads ([52e647d](https://github.com/ExaDev/documents.js/commit/52e647d4896687839bd39340c08aca75c5dee740))
+* **wpd-codec:** make the character-decode fallback a real assertion ([16f6c78](https://github.com/ExaDev/documents.js/commit/16f6c7888e3d5ef5c54ad0a095f287512457dd50))
+* **wpd-codec:** rely on the read-time throw for style.ts's PID-count guard ([957d439](https://github.com/ExaDev/documents.js/commit/957d439d85e7ff03f0b694a3024e2bd3b18d583b))
+* **wpd-codec:** rely on the read-time throw for summary.ts's group header guard ([8a983d8](https://github.com/ExaDev/documents.js/commit/8a983d8511906f184c6dea791c65029f2fbf9072))
+* **wpd-codec:** remove equivalent-mutant boundary checks from image scanner ([7304b39](https://github.com/ExaDev/documents.js/commit/7304b39a0f0a90ab56ef2d8612ec29ccb9974e46))
+* **wpd-codec:** remove equivalent-mutant boundary checks from wpg.ts ([6987413](https://github.com/ExaDev/documents.js/commit/698741337656b6b5a28108473977068ea141da8b))
+* **wpd-codec:** remove equivalent-mutant patterns from compound-file fixture ([1b8594e](https://github.com/ExaDev/documents.js/commit/1b8594e6bc2aa42f8ac32f1c07b6e49e39655665))
+* **wpd-codec:** remove equivalent-mutant patterns from formula.ts ([2b48ad0](https://github.com/ExaDev/documents.js/commit/2b48ad0f8ccfa7db7dca010305fa46ee8b89b845))
+* **wpd-codec:** remove prefix.ts's redundant text-block and typeface guards ([c16e20a](https://github.com/ExaDev/documents.js/commit/c16e20a9b6ee6636726983e3269a0880f7de71ac))
+* **wpd-codec:** remove three redundant final-case returns in read.ts ([ba7ba0e](https://github.com/ExaDev/documents.js/commit/ba7ba0e7c7d6b282571f48c521b4631e2158d141))
+* **wpd-codec:** simplify pendingListLevel's guard and add depth-boundary tests ([6535640](https://github.com/ExaDev/documents.js/commit/6535640f5590e86997e597c50f3c9b15359836d5))
+* **wpd-codec:** stop writing an unread name for compound-file.ts's root entry ([aeda8f2](https://github.com/ExaDev/documents.js/commit/aeda8f232e5abde29d0ddb0e91f84cd340848305))
+
+### Styles
+
+* **wpd-codec:** apply formatting to table.ts ([1eb6702](https://github.com/ExaDev/documents.js/commit/1eb67029d7edb875c753bdabac4045faa66d23b9))
+
+### Tests
+
+* **wpd-codec:** close a first batch of read.ts mutation gaps ([1fe7e66](https://github.com/ExaDev/documents.js/commit/1fe7e660f9841a13c563e692baa7179470aaf68c))
+* **wpd-codec:** close box content-type and frame-resolution gaps ([ab3559a](https://github.com/ExaDev/documents.js/commit/ab3559a6ad9e2f8ad65555d881146d346f0b8722))
+* **wpd-codec:** close font-size, colour, and character-group gaps ([3ecc02f](https://github.com/ExaDev/documents.js/commit/3ecc02ff588caabd2a66778a149f151255455743))
+* **wpd-codec:** close mutation gaps in stream/box ([a87b6d5](https://github.com/ExaDev/documents.js/commit/a87b6d50a158cb16e63541d9444feeb5b49a0839))
+* **wpd-codec:** close mutation gaps in stream/characters, ole, style, table, tokenise ([55fa74b](https://github.com/ExaDev/documents.js/commit/55fa74be17959d0bec2bc62ddc8a9d56cc99f88d))
+* **wpd-codec:** close mutation gaps in the container package ([5f98dda](https://github.com/ExaDev/documents.js/commit/5f98ddaae2422eb00439a8a5da2bef6305bbc44a))
+* **wpd-codec:** close note-marker, merge-field, and plainTextOf gaps ([afa6e31](https://github.com/ExaDev/documents.js/commit/afa6e31cd8de0a8d36bd8882176795a99c98b19c))
+* **wpd-codec:** close read.ts style, table, page-geometry, and font gaps ([577f1bd](https://github.com/ExaDev/documents.js/commit/577f1bd680c7aee0a5d956258050534cd07cac7b))
+* **wpd-codec:** close readWpd, summary, and table end-of-stream gaps ([6a36d30](https://github.com/ExaDev/documents.js/commit/6a36d306e3d267ae3f80d33a304f105916f05911))
+* **wpd-codec:** close WPG box-embedding mutation gaps ([1c01be0](https://github.com/ExaDev/documents.js/commit/1c01be0982c8fbd9fe87cdd220677f4d6158e6b7))
+* **wpd-codec:** confirm readWpd's tree section omits absent furniture keys ([dfd853a](https://github.com/ExaDev/documents.js/commit/dfd853a60fd42f9034ad67e2315403129f658f4f))
+* **wpd-codec:** cover formula.ts's untested token codes and image.ts's JPEG scanner ([3ac6100](https://github.com/ExaDev/documents.js/commit/3ac6100eceaf41f48f83d8ff418a51be9e30699e))
+* **wpd-codec:** cover previously untested leaf modules directly ([c7f66ef](https://github.com/ExaDev/documents.js/commit/c7f66ef9f220ce8c744c01cb2bef0a2291481b0c))
+* **wpd-codec:** cover read.ts's attribute, note, style, and furniture gaps ([dbb984a](https://github.com/ExaDev/documents.js/commit/dbb984a526e39fffc5815849443a47985db83dec))
+* **wpd-codec:** cover the beginning-of-file EOL mapping and five single-byte formatting functions ([155f44f](https://github.com/ExaDev/documents.js/commit/155f44fad729a2119806279b24fcbe4ce2cd3a94))
+* **wpd-codec:** cover the box-embedded WPG graphic lift, previously untested ([24d0a95](https://github.com/ExaDev/documents.js/commit/24d0a95dd67d5e2f373138d4f8bb887bf3b8f92c))
+* **wpd-codec:** cover wpg/formula/image boundary and dispatch branches ([89e71b4](https://github.com/ExaDev/documents.js/commit/89e71b4a2bec2eb3bf4e1abead322bb3dabd0aa3))
+* **wpd-codec:** fix mutants that survived because frame requires both width and height ([0567b12](https://github.com/ExaDev/documents.js/commit/0567b12255217209f1d200bd9d07e51a347f290d))
+* **wpd-codec:** mark proven-equivalent boundary mutants in image/compound-file ([65cafef](https://github.com/ExaDev/documents.js/commit/65cafefed5cdefadbe82f271d5d6f43380071664))
+* **wpd-codec:** mark wpg.ts's characterization-boundary ties as equivalent ([e56d43b](https://github.com/ExaDev/documents.js/commit/e56d43b0c0e70bc2306626b9fc598b8241ddf029))
+* **wpd-codec:** prove nearestPercentType's out-of-range throw is real ([5722e6e](https://github.com/ExaDev/documents.js/commit/5722e6e56ae7df7fe01221adc202ae57e44d8925))
+* **wpd-codec:** prove the attribute-code gate against a live attribute ([e35fdfb](https://github.com/ExaDev/documents.js/commit/e35fdfb4cfcb963e341c42f8d6926c9b71003fe7))
+
 ## [3.5.1](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.5.0...wpd-codec%403.5.1) (2026-09-11)
 
 ### Code Refactoring

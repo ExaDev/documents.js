@@ -1,6 +1,6 @@
 {
   "name": "pdf-raster-cpu",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Pure-software reference backend for pdf-codec's PageRasteriser port: an RGBA scanline rasteriser that renders a page (or a located figure region) to PNG bytes with no canvas dependency, on any Worker-isomorphic runtime.",
   "type": "module",
   "repository": {
