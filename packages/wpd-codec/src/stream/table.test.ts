@@ -173,6 +173,14 @@ describe("readEmbeddedSubfunctions", () => {
     });
   });
 
+  // A function exactly two bytes long (just enough to hold the deletable-size word, with no non-deletable region at all) whose deletable size is itself non-zero -- the one case that tells "the function is too short to even hold the size word" apart from "the size word is present but genuinely overruns", since a deletable size of 0 at this same length answers the same (non-truncated, empty) result either way.
+  it("reports truncation for a two-byte function whose own non-zero deletable size overruns it", () => {
+    expect(readEmbeddedSubfunctions(new Uint8Array([5, 0]))).toEqual({
+      subfunctions: [],
+      truncated: true,
+    });
+  });
+
   // A non-zero deletable size that lands cursor exactly on the buffer's own end -- the one boundary where "past the end" and "exactly at the end" agree or disagree, and where an empty, non-deletable region genuinely follows (rather than the coincidental all-zero case a deletable size of 0 would also produce).
   it("answers an empty, non-truncated result when the deletable data exactly fills the rest of the function", () => {
     expect(

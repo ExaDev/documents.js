@@ -278,8 +278,8 @@ const PERCENT_STEPS: readonly [number, ContentCellPatternType][] = [
 ];
 
 function nearestPercentType(percent: number): ContentCellPatternType {
-  // Stryker disable next-line EqualityOperator: < and <= only disagree on an exact tie between two candidate steps, and percent is always 100 * (255 - shade) / 255 for an integer shade byte 0-255 -- no such shade produces a value exactly equidistant between any two adjacent entries in PERCENT_STEPS (that would require their sum to be a multiple of 40, which none of the table's adjacent pairs are), so this table's own real domain never reaches the one input where the two comparisons would disagree.
   return PERCENT_STEPS.reduce((best, step) =>
+    // Stryker disable next-line EqualityOperator: < and <= only disagree on an exact tie between two candidate steps, and percent is always 100 * (255 - shade) / 255 for an integer shade byte 0-255 -- no such shade produces a value exactly equidistant between any two adjacent entries in PERCENT_STEPS (that would require their sum to be a multiple of 40, which none of the table's adjacent pairs are), so this table's own real domain never reaches the one input where the two comparisons would disagree.
     Math.abs(step[0] - percent) < Math.abs(best[0] - percent) ? step : best,
   )[1];
 }
@@ -316,8 +316,9 @@ export function readCellFill(data: Uint8Array): WpdCellFill | undefined {
   const foreground = colorAt(data, 0);
   // Stryker disable next-line ConditionalExpression,BlockStatement: genuinely unreachable, see the comment below -- no test can construct data for which this is ever true.
   if (foreground === undefined) {
-    // Believed unreachable: foreground occupies the buffer's first three bytes, background occupies the four bytes right after foreground's own RGBS quad, and background's own shade byte was just read above at offset RGBS_SIZE + SHADE_OFFSET (7) -- so data already has at least eight bytes by this point, which foreground's own bytes at offsets 0-2 are well within. The check exists because noUncheckedIndexedAccess cannot see that positional invariant, not because it can genuinely fire; if it ever does, the record is corrupt in a way worth surfacing rather than papering over with a guessed colour. Stryker disable next-line StringLiteral: unreachable, see above -- no test can ever observe this message.
+    // Believed unreachable: foreground occupies the buffer's first three bytes, background occupies the four bytes right after foreground's own RGBS quad, and background's own shade byte was just read above at offset RGBS_SIZE + SHADE_OFFSET (7) -- so data already has at least eight bytes by this point, which foreground's own bytes at offsets 0-2 are well within. The check exists because noUncheckedIndexedAccess cannot see that positional invariant, not because it can genuinely fire; if it ever does, the record is corrupt in a way worth surfacing rather than papering over with a guessed colour.
     throw new WpdFormatError(
+      // Stryker disable next-line StringLiteral: unreachable, see above -- no test can ever observe this message.
       "Cell fill has a readable background colour but an unreadable foreground colour, which the RGBS pair's own contiguous layout should make impossible.",
     );
   }
