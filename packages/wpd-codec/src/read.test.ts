@@ -388,6 +388,77 @@ describe("readWpdContent", () => {
     });
   });
 
+  it("splits the run at a font size change, leaving earlier text without the new size", () => {
+    const document = readDocumentArea([
+      ...text("before"),
+      ...variableFunction({
+        group: 0xd4,
+        subgroup: 0x1b,
+        nonDeletable: [0x58, 0x02, 0, 0, 0, 0, 0, 0],
+      }),
+      ...text("after"),
+    ]);
+    expect(paragraphsOf(document)[0]?.runs).toEqual([
+      { text: "before" },
+      { text: "after", sizePt: 12 },
+    ]);
+  });
+
+  it("ignores a font size change whose non-deletable data is too short to hold a size word", () => {
+    const document = readDocumentArea([
+      ...variableFunction({
+        group: 0xd4,
+        subgroup: 0x1b,
+        nonDeletable: [0x58], // one byte -- not enough for the size word
+      }),
+      ...text("sized"),
+    ]);
+    expect(paragraphsOf(document)[0]?.runs[0]).toEqual({ text: "sized" });
+  });
+
+  it("ignores a font size change of exactly zero points", () => {
+    const document = readDocumentArea([
+      ...variableFunction({
+        group: 0xd4,
+        subgroup: 0x1b,
+        nonDeletable: [0, 0, 0, 0, 0, 0, 0, 0],
+      }),
+      ...text("sized"),
+    ]);
+    expect(paragraphsOf(document)[0]?.runs[0]).toEqual({ text: "sized" });
+  });
+
+  it("splits the run at a character colour change, leaving earlier text without the new colour", () => {
+    const document = readDocumentArea([
+      ...text("before"),
+      ...variableFunction({
+        group: 0xd4,
+        subgroup: 0x18,
+        nonDeletable: [102, 51, 204],
+      }),
+      ...text("after"),
+    ]);
+    expect(paragraphsOf(document)[0]?.runs).toEqual([
+      { text: "before" },
+      {
+        text: "after",
+        color: { r: 102 / 255, g: 51 / 255, b: 204 / 255 },
+      },
+    ]);
+  });
+
+  // applyCharacterGroup's own switch must fall through its default case, contributing nothing, for a character-group subgroup this reader names no handling for at all.
+  it("contributes nothing for a character-group subgroup with no named case", () => {
+    const document = readDocumentArea([
+      ...text("un"),
+      ...variableFunction({ group: 0xd4, subgroup: 0x19 }), // an unassigned character-group subgroup
+      ...text("broken"),
+    ]);
+    const paragraphs = paragraphsOf(document);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.runs[0]?.text).toBe("unbroken");
+  });
+
   it("reads a character colour change", () => {
     const document = readDocumentArea([
       ...variableFunction({
