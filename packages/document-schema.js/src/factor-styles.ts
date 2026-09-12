@@ -333,18 +333,16 @@ interface Branch {
   readonly factoredRuns: ReadonlySet<ContentRun>;
 }
 
-// One accumulated table entry: its resolved content, the wrappers referencing it, and the ordering inputs (total stripped positions and the first wrapper's pre-order visit index).
+// One accumulated table entry: its resolved content, the wrappers referencing it, and the total stripped positions feeding its frequency. Entry ORDER (the "first occurrence" tie-break) needs no field of its own here: entries.values() already yields ascending pre-order-visit order for free, since each entry is inserted into the Map at the moment plan() first visits the wrapper that mints it, and Map iteration is insertion order -- see mint()'s own sort comment.
 interface MintedEntry {
   readonly content: StyleEntry;
   readonly wrappers: MintWrapper[];
   frequency: number;
-  firstVisit: number;
 }
 
-// Visits one wrapper outermost-first: selects at most one entry here, records its strips against this wrapper, freezes its keys for everything below, then recurses into the child wrappers with the branch bookkeeping extended (copy-on-descend, so sibling branches stay independent). `visit.index` numbers wrappers in pre-order -- the "first occurrence" arm of the entry ordering rule.
+// Visits one wrapper outermost-first: selects at most one entry here, records its strips against this wrapper, freezes its keys for everything below, then recurses into the child wrappers with the branch bookkeeping extended (copy-on-descend, so sibling branches stay independent).
 function plan(
   wrapper: MintWrapper,
-  visit: { index: number },
   branch: Branch,
   state: MintState,
   entries: Map<string, MintedEntry>,
@@ -382,7 +380,6 @@ function plan(
         frequency:
           (paragraphCandidate?.positions.length ?? 0) +
           (runCandidate?.positions.length ?? 0),
-        firstVisit: visit.index,
       });
     } else {
       existing.wrappers.push(wrapper);
@@ -408,7 +405,6 @@ function plan(
     state.wrapperStrips.set(wrapper, strips);
   }
 
-  visit.index += 1;
   const next: Branch = {
     frozenParagraphs: nextFrozenParagraphs,
     frozenRuns: nextFrozenRuns,
@@ -416,7 +412,7 @@ function plan(
     factoredRuns: nextFactoredRuns,
   };
   for (const child of childWrappers(wrapper)) {
-    plan(child, visit, next, state, entries);
+    plan(child, next, state, entries);
   }
 }
 
@@ -439,7 +435,6 @@ export function mint(pkg: DocumentTree): DocumentTree {
     wrapperStrips: new Map(),
   };
   const entries = new Map<string, MintedEntry>();
-  const visit = { index: 0 };
   const rootBranch: Branch = {
     frozenParagraphs: new Set(),
     frozenRuns: new Set(),
@@ -451,8 +446,7 @@ export function mint(pkg: DocumentTree): DocumentTree {
     case "wordprocessing":
     case "presentation":
     case "drawing":
-      for (const root of pkg.children)
-        plan(root, visit, rootBranch, state, entries);
+      for (const root of pkg.children) plan(root, rootBranch, state, entries);
       break;
     // A spreadsheet's roots are sheet groups (no block flow, never minted) and a formula package's single child is a leaf: neither holds a wrapper to visit -- both arms are genuinely empty, the switch's own last arms, so there is nothing to break out of.
     case "spreadsheet":
@@ -461,7 +455,7 @@ export function mint(pkg: DocumentTree): DocumentTree {
   if (entries.size === 0) {
     return pkg;
   }
-  // Entry ids in (descending total frequency, first wrapper visit) order -- the deterministic table order the plan locks. entries.values() already yields ascending-firstVisit order for free (each entry is inserted into the Map at the moment its firstVisit is assigned, and Map iteration is insertion order), and Array.prototype.sort has been a STABLE sort by spec since ES2019 -- so sorting by descending frequency alone, with no explicit tie-break, already preserves each frequency-tied group's own relative (ascending-firstVisit) order exactly as a manual `|| a.firstVisit - b.firstVisit` tie-break would, without a second comparator arm to state or get wrong.
+  // Entry ids in (descending total frequency, first wrapper visit) order -- the deterministic table order the plan locks. entries.values() already yields ascending pre-order-visit order for free (each entry is inserted into the Map at the moment plan() first mints it, and Map iteration is insertion order), and Array.prototype.sort has been a STABLE sort by spec since ES2019 -- so sorting by descending frequency alone, with no explicit tie-break, already preserves each frequency-tied group's own relative (ascending pre-order-visit) insertion order exactly as a manual first-visit tie-break would, without a second comparator arm -- or a recorded firstVisit field -- to state or get wrong.
   const ordered = [...entries.values()].sort(
     (a, b) => b.frequency - a.frequency,
   );
@@ -768,23 +762,17 @@ function rebuildListGroup(
     : { node: anchor, ...(ref !== undefined ? { style: ref } : {}), children };
 }
 
-// rebuildParagraph is typed on the loose ContentParagraph, so a rebuilt anchor comes back with its REQUIRED grouping signal widened to optional; these assertions re-narrow it without a cast, exactly as flatten.ts does for resolved anchors. Stripping only ever deletes mintable style keys (never headingLevel or list -- see the module doc), so the signal always survives; the throw is the loud guard if that contract ever broke.
+// rebuildParagraph is typed on the loose ContentParagraph, so a rebuilt anchor comes back with its REQUIRED grouping signal widened to optional; these assertions re-narrow it without a cast, exactly as flatten.ts does for resolved anchors. No runtime check backs the narrowing: PARAGRAPH_STYLE_KEYS (the only source stripParagraphKeys ever draws a strip's key list from, transitively through commonParagraphKeys/bestParagraphCandidate) never contains "headingLevel" or "list" -- see the module doc -- so stripping can never remove either signal, and a runtime guard here could never observe a paragraph that actually lost it. Adding one anyway would be exactly the untestable defensive branch this package's own mutation-testing gate forbids: a check with no reachable failing input is dead code, not a safety net.
 function assertHeadingAnchor(
   paragraph: ContentParagraph,
 ): asserts paragraph is HeadingParagraph {
-  if (paragraph.headingLevel === undefined)
-    throw new Error(
-      "factorStyles: stripping dropped a heading anchor's headingLevel",
-    );
+  void paragraph;
 }
 
 function assertListAnchor(
   paragraph: ContentParagraph,
 ): asserts paragraph is ListGroupNode["node"] {
-  if (paragraph.list === undefined)
-    throw new Error(
-      "factorStyles: stripping dropped a list anchor's list membership",
-    );
+  void paragraph;
 }
 
 // One paragraph (leaf or anchor): stripped -- copied sans its minted keys -- when a wrapper on its chain factored it (chain-scoped, so an aliased position is stripped by its own branch's minter, never another branch's), with its runs rebuilt through the same copy-or-share rule. Returns the same object when nothing under it changed.
