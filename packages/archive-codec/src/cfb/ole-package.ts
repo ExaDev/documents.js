@@ -83,10 +83,10 @@ function asciiZeroTerminated(
   fieldName: string,
 ): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(value.length + 1); // +1 for the terminator, already zero from the Uint8Array's own zero-fill
-  // A DataView write, not raw indexed assignment: an out-of-range DataView offset throws, where a plain `bytes[index] = …` past the array's own end silently does nothing -- so a loop bound one iteration too long fails loudly here instead of leaving the same, indistinguishable output.
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  for (let index = 0; index < value.length; index++) {
-    const code = value.charCodeAt(index);
+  // Walks value.split("") rather than a `for` loop bound by value.length: the allocation's own reserved terminator byte sits right after the last character, so a loop bound one iteration too long would write its extra byte there -- a genuinely equivalent mutant, since that byte is already zero and no test could ever observe the difference. split("") has no comparison bound to mismeasure in the first place.
+  value.split("").forEach((char, index) => {
+    const code = char.charCodeAt(0);
     if (code === 0) {
       throw new OlePackageWriteError(
         `Package stream's ${fieldName} contains an embedded NUL byte, which this field's own null-terminated encoding cannot carry: it would silently truncate the field and mis-frame every field written after it`,
@@ -98,7 +98,7 @@ function asciiZeroTerminated(
       );
     }
     view.setUint8(index, code);
-  }
+  });
   return bytes;
 }
 
