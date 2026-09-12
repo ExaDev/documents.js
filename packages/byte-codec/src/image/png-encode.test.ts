@@ -2,7 +2,12 @@ import * as zlib from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { crc32 } from "../bytes/crc32";
 import { decodePng } from "./png-decode";
-import { encodePng } from "./png-encode";
+import {
+  PNG_MAX_DIMENSION,
+  PNG_MAX_PIXELS,
+  encodePng,
+  exceedsMaxPixelCount,
+} from "./png-encode";
 
 // Walks a PNG's own chunk stream (ignoring CRC verification, unlike decodePng's own reader) so tests can assert directly on which chunks and IHDR fields encodePng actually wrote, independent of what decodePng chooses to expose in a RawImage.
 function readChunks(png: Uint8Array): Map<string, Uint8Array> {
@@ -252,6 +257,28 @@ describe("encodePng indexed-colour (colour type 3)", () => {
     expect(Array.from(decoded.alpha!)).toEqual(Array.from(image.alpha));
   });
 
+  it("trims every trailing opaque entry off tRNS, not just a single one, stopping at exactly one retained entry", () => {
+    // Three distinct colours in first-seen order red(transparent), green(opaque), blue(opaque): paletteAlpha = [0, 255, 255]. The two trailing opaque entries must both be trimmed, leaving only the leading transparent entry -- a single-entry-only test can't tell a real multi-step trim loop apart from one that never runs at all, since both start and end at length 1.
+    const image = repeatRowsWithAlpha(
+      3,
+      [[255, 0, 0, 0, 255, 0, 0, 0, 255]], // red, green, blue
+      [[0, 255, 255]],
+      5000,
+    );
+    const png = encodePng(image);
+
+    expect(colorTypeOf(png)).toBe(3);
+    const trns = readChunks(png).get("tRNS");
+    expect(trns).toBeDefined();
+    expect(trns!.length).toBe(1); // both trailing opaque entries trimmed away
+    expect(Array.from(trns!)).toEqual([0]); // only the leading transparent entry survives
+    assertSpecCompliantPng(png);
+
+    const decoded = decodePng(png);
+    expect(Array.from(decoded.data)).toEqual(Array.from(image.data));
+    expect(Array.from(decoded.alpha!)).toEqual(Array.from(image.alpha));
+  });
+
   it("keeps two trailing pixels' own differing RGB values when an alpha plane shorter than width*height leaves both without a real sample, rather than colliding them onto one shared palette entry", () => {
     // Simulates the shape pdf-codec's own tolerant-recovery paths can produce for real (a short-streamed /SMask, or inflateTolerant's by-design partial inflate on a truncated stream): an alpha plane shorter than width*height, so the trailing pixels' alpha[i] reads run past the end of the array. Two trailing pixels are dropped, not one, because the two rows alternate colour -- the bug this guards against only shows up once a second, differently-coloured out-of-range pixel reuses the first one's palette entry instead of getting its own.
     const image = repeatRowsWithAlpha(
@@ -317,6 +344,20 @@ describe("encodePng indexed-colour (colour type 3)", () => {
     expect(Array.from(decodePng(png).data)).toEqual(Array.from(image.data));
   });
 
+  it("falls back to truecolour at 257 distinct colours even when tiled tall enough that indexed colour would otherwise win on size", () => {
+    // The bare 257-distinct-colour test above is a single row: indexed colour's own fixed PLTE overhead already loses to truecolour there regardless of whether the 256-entry cap is enforced, so it can't actually observe the cap being bypassed. Tiling the same 257-colour row tall enough that indexed colour's per-pixel savings would normally win (as the 256-colour test above does) forces the choice to depend on the cap firing correctly: if it didn't, a 257th palette entry would be assigned index 256, which silently wraps to 0 in the indices' Uint8Array, colliding two genuinely different colours onto one palette slot.
+    const row: number[] = [];
+    for (let i = 0; i < 257; i++) {
+      row.push(i % 256, Math.floor(i / 256), 0);
+    }
+    const image = repeatRows(257, [row], 2000);
+    const png = encodePng(image);
+
+    expect(colorTypeOf(png)).toBe(2); // truecolour, no alpha -- indexed colour must never be chosen
+    expect(readChunks(png).has("PLTE")).toBe(false);
+    expect(Array.from(decodePng(png).data)).toEqual(Array.from(image.data));
+  }, 30000);
+
   it("never emits indexed colour for a grayscale (channels 1) image, since a palette would come back from decodePng as channels 3", () => {
     const image = {
       width: 2,
@@ -330,6 +371,25 @@ describe("encodePng indexed-colour (colour type 3)", () => {
     expect(readChunks(png).has("PLTE")).toBe(false);
     const decoded = decodePng(png);
     expect(decoded.channels).toBe(1);
+    expect(Array.from(decoded.data)).toEqual(Array.from(image.data));
+  });
+
+  it("never even attempts indexed colour for a large, highly-repetitive grayscale image, where a mistaken attempt would actually win on size", () => {
+    // The bare 2-pixel test above can't observe channels === 3 being ignored: even if detectPalette were wrongly invoked on a channels === 1 image (reinterpreting consecutive gray bytes as fake RGB triples), a 2-pixel image is far too small for indexed colour's own PLTE overhead to beat truecolour, so the buggy palette would just lose the size comparison and never be chosen anyway. A large, single-value image removes that safety net: reinterpreted 3 bytes at a time, a solid value still collapses to exactly one fake "colour" (every byte is identical, so any 3-byte grouping is that same value three times over, regardless of alignment) -- the smallest possible palette, which *would* win decisively at this size if wrongly attempted.
+    const width = 300;
+    const height = 300;
+    const image = {
+      width,
+      height,
+      channels: 1 as const,
+      data: new Uint8Array(width * height).fill(42),
+    };
+    const png = encodePng(image);
+
+    expect(colorTypeOf(png)).toBe(0); // plain grayscale -- colour type 3 would mean the bug fired
+    expect(readChunks(png).has("PLTE")).toBe(false);
+    const decoded = decodePng(png);
+    expect(decoded.channels).toBe(1); // an indexed round-trip would come back as channels 3
     expect(Array.from(decoded.data)).toEqual(Array.from(image.data));
   });
 
@@ -452,4 +512,52 @@ describe("encodePng indexed-colour (colour type 3)", () => {
       expect(() => encodePng(image)).toThrow(/pixels/);
     },
   );
+
+  it("accepts a width of exactly PNG_MAX_DIMENSION, rejecting only on the pixel-count guard beyond it", () => {
+    // height=1 keeps the pixel count itself tiny (well under PNG_MAX_PIXELS), isolating the dimension guard: if it wrongly rejected the boundary value itself (>= instead of >), this would throw an "invalid dimension" error instead of ever reaching the pixel-count guard.
+    const image = rgbImage(PNG_MAX_DIMENSION, 1, []);
+    expect(() => encodePng(image)).toThrow(/pixels/);
+    expect(() => encodePng(image)).not.toThrow(/invalid dimension/);
+  });
+
+  it("accepts a height of exactly PNG_MAX_DIMENSION, rejecting only on the pixel-count guard beyond it", () => {
+    const image = rgbImage(1, PNG_MAX_DIMENSION, []);
+    expect(() => encodePng(image)).toThrow(/pixels/);
+    expect(() => encodePng(image)).not.toThrow(/invalid dimension/);
+  });
+
+  it("exceedsMaxPixelCount accepts exactly PNG_MAX_PIXELS, rejecting only one pixel beyond it", () => {
+    // Exercising this exact boundary through a real encodePng() call would mean actually allocating and filtering/deflating a genuine 100-million-pixel image -- tens of seconds even in the cheapest configuration, and untenable under Stryker's per-mutant instrumented reruns (see exceedsMaxPixelCount's own comment). Testing the extracted predicate directly exercises the identical comparison encodePng's own guard calls, at zero cost.
+    expect(exceedsMaxPixelCount(PNG_MAX_PIXELS)).toBe(false);
+    expect(exceedsMaxPixelCount(PNG_MAX_PIXELS + 1)).toBe(true);
+  });
+
+  it("never chooses indexed colour for a small, single-colour image, since its fixed PLTE overhead outweighs a handful of pixels' per-pixel savings", () => {
+    const image = rgbImage(
+      2,
+      2,
+      [10, 20, 30, 10, 20, 30, 10, 20, 30, 10, 20, 30],
+    );
+    const png = encodePng(image);
+
+    expect(colorTypeOf(png)).toBe(2); // truecolour -- indexed colour would be colour type 3
+    expect(readChunks(png).has("PLTE")).toBe(false);
+    expect(Array.from(decodePng(png).data)).toEqual(Array.from(image.data));
+  });
+
+  it("breaks an exact size tie between the two candidates in favour of indexed colour", () => {
+    // Found by direct search (not hand-derived): at exactly 985 repeats of this 2x2 4-colour tile, the indexed and truecolour candidates compress to the identical byte length under deflate. A tie-break of `<=` (favouring indexed) versus a strict `<` (favouring truecolour) can only ever be distinguished at a genuine size tie -- any input where one candidate is decisively smaller gives the same winner under either comparison.
+    const image = repeatRows(
+      2,
+      [
+        [255, 0, 0, 0, 255, 0],
+        [0, 0, 255, 255, 255, 0],
+      ],
+      985,
+    );
+    const png = encodePng(image, { filter: "none" });
+
+    expect(colorTypeOf(png)).toBe(3); // indexed colour wins the tie
+    expect(Array.from(decodePng(png).data)).toEqual(Array.from(image.data));
+  });
 });
