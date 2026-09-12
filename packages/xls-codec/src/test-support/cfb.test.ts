@@ -103,7 +103,7 @@ describe("compoundFile", () => {
     const bytes = compoundFile([{ path: "Big", bytes: big }]);
     const streams = readCompoundFile(bytes);
 
-    expect(streamOf("Big", streams)).toEqual(big);
+    expect(streamOf("Big", streams)).toStrictEqual(big);
   });
 
   it("round-trips two big streams, proving the second one's sectors start where the first one's end", () => {
@@ -115,8 +115,8 @@ describe("compoundFile", () => {
     ]);
     const streams = readCompoundFile(bytes);
 
-    expect(streamOf("First", streams)).toEqual(first);
-    expect(streamOf("Second", streams)).toEqual(second);
+    expect(streamOf("First", streams)).toStrictEqual(first);
+    expect(streamOf("Second", streams)).toStrictEqual(second);
   });
 
   it("round-trips a stream spanning several sectors of its own FAT chain", () => {
@@ -125,7 +125,7 @@ describe("compoundFile", () => {
     const bytes = compoundFile([{ path: "Huge", bytes: huge }]);
     const streams = readCompoundFile(bytes);
 
-    expect(streamOf("Huge", streams)).toEqual(huge);
+    expect(streamOf("Huge", streams)).toStrictEqual(huge);
   });
 
   it("round-trips a file whose record count forces more than one directory sector", () => {
@@ -174,7 +174,7 @@ describe("compoundFile", () => {
     });
     const streams = readCompoundFile(bytes);
 
-    expect(streamOf("Big", streams)).toEqual(big);
+    expect(streamOf("Big", streams)).toStrictEqual(big);
   });
 
   it("produces byte-identical output for identical input, given the deterministic input-order layout", () => {
@@ -182,13 +182,13 @@ describe("compoundFile", () => {
       { path: "A", bytes: textStream("one") },
       { path: "B", bytes: textStream("two") },
     ];
-    expect(compoundFile(entries)).toEqual(compoundFile(entries));
+    expect(compoundFile(entries)).toStrictEqual(compoundFile(entries));
   });
 
   it("round-trips a compound file with no streams at all", () => {
     const bytes = compoundFile([]);
     const streams = readCompoundFile(bytes);
 
-    expect(streams).toEqual([]);
+    expect(streams).toStrictEqual([]);
   });
 });

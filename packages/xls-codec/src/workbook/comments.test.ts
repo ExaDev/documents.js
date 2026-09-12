@@ -23,7 +23,7 @@ describe("readSheetComments", () => {
       ...noteTxoRecords("Hello there"),
       noteRecord(2, 3, 1, "Alice"),
     );
-    expect(comments.get("2:3")).toEqual({
+    expect(comments.get("2:3")).toStrictEqual({
       row: 2,
       column: 3,
       comment: { text: "Hello there", author: "Alice" },
@@ -36,7 +36,7 @@ describe("readSheetComments", () => {
       ...noteTxoRecords("No author here"),
       noteRecord(0, 0, 1),
     );
-    expect(comments.get("0:0")).toEqual({
+    expect(comments.get("0:0")).toStrictEqual({
       row: 0,
       column: 0,
       comment: { text: "No author here" },
@@ -49,7 +49,7 @@ describe("readSheetComments", () => {
       noteObjRecord(7),
       ...noteTxoRecords("Written first, read last"),
     );
-    expect(comments.get("5:5")).toEqual({
+    expect(comments.get("5:5")).toStrictEqual({
       row: 5,
       column: 5,
       comment: { text: "Written first, read last", author: "Bob" },
@@ -75,12 +75,12 @@ describe("readSheetComments", () => {
       noteRecord(0, 0, 1, "Alice"),
       noteRecord(4, 4, 2, "Bob"),
     );
-    expect(comments.get("0:0")).toEqual({
+    expect(comments.get("0:0")).toStrictEqual({
       row: 0,
       column: 0,
       comment: { text: "First comment", author: "Alice" },
     });
-    expect(comments.get("4:4")).toEqual({
+    expect(comments.get("4:4")).toStrictEqual({
       row: 4,
       column: 4,
       comment: { text: "Second comment", author: "Bob" },

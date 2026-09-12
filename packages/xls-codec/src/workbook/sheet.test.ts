@@ -63,7 +63,7 @@ describe("readSheetRecords cell records", () => {
     // [MS-XLS] 2.4.180: a Cell then an Xnum. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/a40c74c6-3df4-4e81-9a43-85521cc92c0a
     expect(
       readCells(record(RECORD_NUMBER, [...cell(2, 3), ...f64(1.25)])),
-    ).toEqual([
+    ).toStrictEqual([
       {
         row: 2,
         column: 3,
@@ -80,7 +80,7 @@ describe("readSheetRecords cell records", () => {
       record(RECORD_RK, [...u16(0), ...u16(0), ...u16(15), ...rkInteger(42)]),
     );
 
-    expect(cells[0]?.value).toEqual({ kind: "number", value: 42 });
+    expect(cells[0]?.value).toStrictEqual({ kind: "number", value: 42 });
   });
 
   it("reads an RK cell holding a truncated double", () => {
@@ -88,7 +88,7 @@ describe("readSheetRecords cell records", () => {
       record(RECORD_RK, [...u16(0), ...u16(0), ...u16(15), ...rkDouble(1.5)]),
     );
 
-    expect(cells[0]?.value).toEqual({ kind: "number", value: 1.5 });
+    expect(cells[0]?.value).toStrictEqual({ kind: "number", value: 1.5 });
   });
 
   it("reads a MulRk record as one cell per column in its run", () => {
@@ -109,7 +109,7 @@ describe("readSheetRecords cell records", () => {
 
     expect(
       cells.map((entry) => [entry.row, entry.column, entry.value]),
-    ).toEqual([
+    ).toStrictEqual([
       [4, 1, { kind: "number", value: 10 }],
       [4, 2, { kind: "number", value: 20 }],
       [4, 3, { kind: "number", value: 30 }],
@@ -129,7 +129,7 @@ describe("readSheetRecords cell records", () => {
       ]),
     );
 
-    expect(cells.map((entry) => entry.xfIndex)).toEqual([15, 16]);
+    expect(cells.map((entry) => entry.xfIndex)).toStrictEqual([15, 16]);
   });
 
   it("rejects a MulRk record whose length holds no whole number of entries", () => {
@@ -143,7 +143,7 @@ describe("readSheetRecords cell records", () => {
   it("reads a Blank cell", () => {
     const cells = readCells(record(RECORD_BLANK, cell(1, 1)));
 
-    expect(cells[0]?.value).toEqual({ kind: "blank" });
+    expect(cells[0]?.value).toStrictEqual({ kind: "blank" });
   });
 
   it("reads a MulBlank record as one cell per column in its run", () => {
@@ -158,7 +158,7 @@ describe("readSheetRecords cell records", () => {
       ]),
     );
 
-    expect(cells.map((entry) => [entry.column, entry.xfIndex])).toEqual([
+    expect(cells.map((entry) => [entry.column, entry.xfIndex])).toStrictEqual([
       [2, 15],
       [3, 16],
     ]);
@@ -170,7 +170,7 @@ describe("readSheetRecords cell records", () => {
       record(RECORD_BOOLERR, [...cell(0, 0), 0x01, 0x00]),
     );
 
-    expect(cells[0]?.value).toEqual({ kind: "boolean", value: true });
+    expect(cells[0]?.value).toStrictEqual({ kind: "boolean", value: true });
   });
 
   it("reads a false boolean cell", () => {
@@ -178,7 +178,7 @@ describe("readSheetRecords cell records", () => {
       record(RECORD_BOOLERR, [...cell(0, 0), 0x00, 0x00]),
     );
 
-    expect(cells[0]?.value).toEqual({ kind: "boolean", value: false });
+    expect(cells[0]?.value).toStrictEqual({ kind: "boolean", value: false });
   });
 
   it("reads an error cell as the spelling a user sees", () => {
@@ -186,14 +186,14 @@ describe("readSheetRecords cell records", () => {
       record(RECORD_BOOLERR, [...cell(0, 0), 0x07, 0x01]),
     );
 
-    expect(cells[0]?.value).toEqual({ kind: "error", value: "#DIV/0!" });
+    expect(cells[0]?.value).toStrictEqual({ kind: "error", value: "#DIV/0!" });
   });
 
   it("drops a cell whose error code the specification does not define", () => {
     // Inventing a spelling would put a value in the document no producer wrote.
     expect(
       readCells(record(RECORD_BOOLERR, [...cell(0, 0), 0x99, 0x01])),
-    ).toEqual([]);
+    ).toStrictEqual([]);
   });
 
   it("reads a LabelSst cell through the shared string table", () => {
@@ -202,7 +202,10 @@ describe("readSheetRecords cell records", () => {
       ["Alpha", "Beta"],
     );
 
-    expect(sheet.cells[0]?.value).toEqual({ kind: "string", value: "Beta" });
+    expect(sheet.cells[0]?.value).toStrictEqual({
+      kind: "string",
+      value: "Beta",
+    });
   });
 
   it("reads a LabelSst whose index the table does not hold as an empty string", () => {
@@ -212,7 +215,7 @@ describe("readSheetRecords cell records", () => {
       ["Alpha"],
     );
 
-    expect(sheet.cells[0]?.value).toEqual({ kind: "string", value: "" });
+    expect(sheet.cells[0]?.value).toStrictEqual({ kind: "string", value: "" });
   });
 
   it("reads a Label cell's inline string", () => {
@@ -220,7 +223,7 @@ describe("readSheetRecords cell records", () => {
       record(RECORD_LABEL, [...cell(0, 0), ...xlUnicodeString("Inline")]),
     );
 
-    expect(cells[0]?.value).toEqual({ kind: "string", value: "Inline" });
+    expect(cells[0]?.value).toStrictEqual({ kind: "string", value: "Inline" });
   });
 });
 
@@ -257,7 +260,7 @@ describe("readSheetRecords formula cells", () => {
       ]),
     );
 
-    expect(cells[0]?.value).toEqual({ kind: "boolean", value: true });
+    expect(cells[0]?.value).toStrictEqual({ kind: "boolean", value: true });
   });
 
   it("reads an error cached result from its tag byte", () => {
@@ -276,7 +279,7 @@ describe("readSheetRecords formula cells", () => {
       ]),
     );
 
-    expect(cells[0]?.value).toEqual({ kind: "error", value: "#REF!" });
+    expect(cells[0]?.value).toStrictEqual({ kind: "error", value: "#REF!" });
   });
 
   it("reads a string cached result from the String record that follows", () => {
@@ -296,7 +299,7 @@ describe("readSheetRecords formula cells", () => {
       record(RECORD_STRING, xlUnicodeString("Result")),
     );
 
-    expect(cells[0]?.value).toEqual({ kind: "string", value: "Result" });
+    expect(cells[0]?.value).toStrictEqual({ kind: "string", value: "Result" });
   });
 
   it("finds a string cached result past the ShrFmla record of a shared formula", () => {
@@ -319,7 +322,7 @@ describe("readSheetRecords formula cells", () => {
       record(RECORD_STRING, xlUnicodeString("Shared")),
     );
 
-    expect(cells[0]?.value).toEqual({ kind: "string", value: "Shared" });
+    expect(cells[0]?.value).toStrictEqual({ kind: "string", value: "Shared" });
   });
 
   it("does not reach past an unrelated record into the next cell's own String", () => {
@@ -330,7 +333,7 @@ describe("readSheetRecords formula cells", () => {
       record(RECORD_STRING, xlUnicodeString("NotMine")),
     );
 
-    expect(cells[0]?.value).toEqual({ kind: "number", value: 1 });
+    expect(cells[0]?.value).toStrictEqual({ kind: "number", value: 1 });
   });
 
   it("reads a string cached result as empty when no String record follows", () => {
@@ -349,7 +352,7 @@ describe("readSheetRecords formula cells", () => {
       ]),
     );
 
-    expect(cells[0]?.value).toEqual({ kind: "string", value: "" });
+    expect(cells[0]?.value).toStrictEqual({ kind: "string", value: "" });
   });
 
   it("reads a blank-string cached result", () => {
@@ -368,7 +371,7 @@ describe("readSheetRecords formula cells", () => {
       ]),
     );
 
-    expect(cells[0]?.value).toEqual({ kind: "string", value: "" });
+    expect(cells[0]?.value).toStrictEqual({ kind: "string", value: "" });
   });
 
   it("recovers the formula's own text from its compiled Ptg token stream", () => {
@@ -412,7 +415,7 @@ describe("readSheetRecords formula cells", () => {
     );
 
     expect(cells[0]?.formula).toBeUndefined();
-    expect(cells[0]?.value).toEqual({ kind: "number", value: 4 });
+    expect(cells[0]?.value).toStrictEqual({ kind: "number", value: 4 });
   });
 
   it("resolves a 3D reference using the formulaSheets context readSheetRecords is given", () => {
@@ -640,7 +643,7 @@ describe("readSheetRecords formula cells", () => {
     );
 
     expect(cells[0]?.formula).toBeUndefined();
-    expect(cells[0]?.value).toEqual({ kind: "number", value: 6 });
+    expect(cells[0]?.value).toStrictEqual({ kind: "number", value: 6 });
   });
 
   it("leaves formula absent for a PtgExp whose base cell has no matching ShrFmla/Array group", () => {
@@ -658,7 +661,7 @@ describe("readSheetRecords formula cells", () => {
     );
 
     expect(cells[0]?.formula).toBeUndefined();
-    expect(cells[0]?.value).toEqual({ kind: "number", value: 1 });
+    expect(cells[0]?.value).toStrictEqual({ kind: "number", value: 1 });
   });
 
   it("does not abort the whole sheet read when a ShrFmla record's own cce overruns the record", () => {
@@ -689,8 +692,8 @@ describe("readSheetRecords formula cells", () => {
     );
 
     expect(cells[0]?.formula).toBeUndefined();
-    expect(cells[0]?.value).toEqual({ kind: "number", value: 1 });
-    expect(cells[1]?.value).toEqual({ kind: "number", value: 42 });
+    expect(cells[0]?.value).toStrictEqual({ kind: "number", value: 1 });
+    expect(cells[1]?.value).toStrictEqual({ kind: "number", value: 42 });
   });
 
   it("does not abort the whole sheet read when an Array record's own cce overruns the record", () => {
@@ -721,8 +724,8 @@ describe("readSheetRecords formula cells", () => {
     );
 
     expect(cells[0]?.formula).toBeUndefined();
-    expect(cells[0]?.value).toEqual({ kind: "number", value: 2 });
-    expect(cells[1]?.value).toEqual({ kind: "number", value: 99 });
+    expect(cells[0]?.value).toStrictEqual({ kind: "number", value: 2 });
+    expect(cells[1]?.value).toStrictEqual({ kind: "number", value: 99 });
   });
 
   it("does not abort the whole sheet read when a shared group's own rgce carries a token with a lying embedded length", () => {
@@ -752,8 +755,8 @@ describe("readSheetRecords formula cells", () => {
     );
 
     expect(cells[0]?.formula).toBeUndefined();
-    expect(cells[0]?.value).toEqual({ kind: "number", value: 1 });
-    expect(cells[1]?.value).toEqual({ kind: "number", value: 42 });
+    expect(cells[0]?.value).toStrictEqual({ kind: "number", value: 1 });
+    expect(cells[1]?.value).toStrictEqual({ kind: "number", value: 42 });
   });
 
   it("does not abort the whole sheet read when an array group's own rgce carries a token with a lying embedded length", () => {
@@ -783,8 +786,8 @@ describe("readSheetRecords formula cells", () => {
     );
 
     expect(cells[0]?.formula).toBeUndefined();
-    expect(cells[0]?.value).toEqual({ kind: "number", value: 2 });
-    expect(cells[1]?.value).toEqual({ kind: "number", value: 99 });
+    expect(cells[0]?.value).toStrictEqual({ kind: "number", value: 2 });
+    expect(cells[1]?.value).toStrictEqual({ kind: "number", value: 99 });
   });
 
   it("does not abort the whole sheet read when an ordinary (non-shared) Formula record's own rgce carries a token with a lying embedded length", () => {
@@ -803,8 +806,8 @@ describe("readSheetRecords formula cells", () => {
     );
 
     expect(cells[0]?.formula).toBeUndefined();
-    expect(cells[0]?.value).toEqual({ kind: "number", value: 1 });
-    expect(cells[1]?.value).toEqual({ kind: "number", value: 42 });
+    expect(cells[0]?.value).toStrictEqual({ kind: "number", value: 1 });
+    expect(cells[1]?.value).toStrictEqual({ kind: "number", value: 42 });
   });
 
   it("does not abort the whole sheet read when a Formula record's own cce overruns the record", () => {
@@ -823,8 +826,8 @@ describe("readSheetRecords formula cells", () => {
     );
 
     expect(cells[0]?.formula).toBeUndefined();
-    expect(cells[0]?.value).toEqual({ kind: "number", value: 1 });
-    expect(cells[1]?.value).toEqual({ kind: "number", value: 42 });
+    expect(cells[0]?.value).toStrictEqual({ kind: "number", value: 1 });
+    expect(cells[1]?.value).toStrictEqual({ kind: "number", value: 42 });
   });
 });
 
@@ -844,7 +847,7 @@ describe("readSheetRecords grid geometry", () => {
       [],
     );
 
-    expect(sheet.usedRange).toEqual({
+    expect(sheet.usedRange).toStrictEqual({
       startRow: 1,
       startColumn: 2,
       endRow: 4,
@@ -889,7 +892,9 @@ describe("readSheetRecords grid geometry", () => {
       [],
     );
 
-    expect(sheet.rows).toEqual([{ index: 3, heightPt: 15, hidden: false }]);
+    expect(sheet.rows).toStrictEqual([
+      { index: 3, heightPt: 15, hidden: false },
+    ]);
   });
 
   it("omits a height the producer did not mark as declared", () => {
@@ -911,7 +916,7 @@ describe("readSheetRecords grid geometry", () => {
       [],
     );
 
-    expect(sheet.rows[0]).toEqual({ index: 0, hidden: false });
+    expect(sheet.rows[0]).toStrictEqual({ index: 0, hidden: false });
   });
 
   it("reads a hidden row", () => {
@@ -951,7 +956,9 @@ describe("readSheetRecords grid geometry", () => {
       [],
     );
 
-    expect(sheet.columns.map((column) => column.index)).toEqual([1, 2, 3]);
+    expect(sheet.columns.map((column) => column.index)).toStrictEqual([
+      1, 2, 3,
+    ]);
     expect(new Set(sheet.columns.map((column) => column.widthPt))).toHaveLength(
       1,
     );
@@ -994,7 +1001,7 @@ describe("readSheetRecords grid geometry", () => {
       [],
     );
 
-    expect(sheet.merges).toEqual([
+    expect(sheet.merges).toStrictEqual([
       { startRow: 0, endRow: 1, startColumn: 0, endColumn: 2 },
       { startRow: 5, endRow: 5, startColumn: 3, endColumn: 4 },
     ]);
@@ -1027,7 +1034,7 @@ describe("readSheetRecords grid geometry", () => {
       [],
     );
 
-    expect(sheet.dataValidations).toEqual([
+    expect(sheet.dataValidations).toStrictEqual([
       {
         type: "whole",
         operator: "between",
@@ -1075,7 +1082,7 @@ describe("readSheetRecords grid geometry", () => {
       [],
     );
 
-    expect(sheet.conditionalFormats).toEqual([
+    expect(sheet.conditionalFormats).toStrictEqual([
       {
         operator: "greaterThan",
         formula1: "10",
@@ -1085,7 +1092,7 @@ describe("readSheetRecords grid geometry", () => {
       },
     ]);
     // Dimensions, the record right after the CF this CondFmt claimed, is still read on the following loop iteration -- proving the lookahead skip advanced past exactly the CondFmt's own group and nothing more.
-    expect(sheet.usedRange).toEqual({
+    expect(sheet.usedRange).toStrictEqual({
       startRow: 0,
       endRow: 1,
       startColumn: 0,
@@ -1149,7 +1156,7 @@ describe("readSheetRecords grid geometry", () => {
       [],
     );
 
-    expect(sheet.conditionalFormats12).toEqual([
+    expect(sheet.conditionalFormats12).toStrictEqual([
       {
         kind: "colorScale",
         stops: [
@@ -1162,7 +1169,7 @@ describe("readSheetRecords grid geometry", () => {
       },
     ]);
     // Dimensions, the record right after the CF12 this CondFmt12 claimed, is still read on the following loop iteration -- proving the lookahead skip advanced past exactly the CondFmt12's own group and nothing more.
-    expect(sheet.usedRange).toEqual({
+    expect(sheet.usedRange).toStrictEqual({
       startRow: 0,
       endRow: 1,
       startColumn: 0,
@@ -1205,7 +1212,7 @@ describe("readSheetRecords print settings", () => {
       [],
     );
 
-    expect(sheet.print.setup).toEqual({
+    expect(sheet.print.setup).toStrictEqual({
       paperCode: 9,
       scalePercent: 80,
       fitWidth: 2,
@@ -1229,7 +1236,7 @@ describe("readSheetRecords print settings", () => {
       [],
     );
 
-    expect(sheet.print.marginsPt).toEqual({
+    expect(sheet.print.marginsPt).toStrictEqual({
       left: 36,
       right: 54,
       top: 72,
@@ -1244,7 +1251,7 @@ describe("readSheetRecords print settings", () => {
       [],
     );
 
-    expect(sheet.print.marginsPt).toEqual({ left: 36 });
+    expect(sheet.print.marginsPt).toStrictEqual({ left: 36 });
   });
 
   it("reads PrintGrid and PrintRowCol as the booleans they are", () => {
@@ -1305,8 +1312,8 @@ describe("readSheetRecords print settings", () => {
       [],
     );
 
-    expect(sheet.print.rowBreaks).toEqual([4, 10]);
-    expect(sheet.print.columnBreaks).toEqual([3]);
+    expect(sheet.print.rowBreaks).toStrictEqual([4, 10]);
+    expect(sheet.print.columnBreaks).toStrictEqual([3]);
   });
 
   it("collapses two breaks naming the same index, which the schema models only once", () => {
@@ -1326,7 +1333,7 @@ describe("readSheetRecords print settings", () => {
       [],
     );
 
-    expect(sheet.print.rowBreaks).toEqual([7]);
+    expect(sheet.print.rowBreaks).toStrictEqual([7]);
   });
 
   it("states nothing at all for a sheet carrying none of the print records", () => {
@@ -1335,7 +1342,7 @@ describe("readSheetRecords print settings", () => {
       [],
     );
 
-    expect(sheet.print).toEqual({
+    expect(sheet.print).toStrictEqual({
       marginsPt: {},
       rowBreaks: [],
       columnBreaks: [],
