@@ -485,7 +485,7 @@ describe("parseFormulaText array constants (PtgArray/PtgExtraArray)", () => {
 describe("readPtgExpBase", () => {
   it("extracts the base cell from a lone PtgExp token", () => {
     const rgce = bytes(0x01, ...u16(3), ...u16(1));
-    expect(readPtgExpBase(rgce)).toEqual({ row: 3, column: 1 });
+    expect(readPtgExpBase(rgce)).toStrictEqual({ row: 3, column: 1 });
   });
 
   it("returns undefined for anything other than exactly one PtgExp token", () => {

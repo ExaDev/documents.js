@@ -29,7 +29,7 @@ describe("readRecords", () => {
   it("reads a record's type and data from the framing", () => {
     const stream = bytes(...record(RECORD_BOF, [0x00, 0x06, 0x05, 0x00]));
 
-    expect(readRecords(stream)).toEqual([
+    expect(readRecords(stream)).toStrictEqual([
       { type: RECORD_BOF, data: bytes(0x00, 0x06, 0x05, 0x00), offset: 0 },
     ]);
   });
@@ -40,7 +40,7 @@ describe("readRecords", () => {
       ...record(RECORD_EOF, []),
     );
 
-    expect(readRecords(stream).map((entry) => entry.type)).toEqual([
+    expect(readRecords(stream).map((entry) => entry.type)).toStrictEqual([
       RECORD_BOF,
       RECORD_EOF,
     ]);
@@ -48,7 +48,7 @@ describe("readRecords", () => {
 
   it("reads a zero-length record, which the framing explicitly permits", () => {
     // [MS-XLS] 2.1.4: "The record size MUST be greater than or equal to 0". EOF is exactly this case in every real file.
-    expect(readRecords(bytes(...record(RECORD_EOF, [])))).toEqual([
+    expect(readRecords(bytes(...record(RECORD_EOF, [])))).toStrictEqual([
       { type: RECORD_EOF, data: bytes(), offset: 0 },
     ]);
   });
@@ -60,7 +60,9 @@ describe("readRecords", () => {
       ...record(RECORD_EOF, []),
     );
 
-    expect(readRecords(stream).map((entry) => entry.offset)).toEqual([0, 6]);
+    expect(readRecords(stream).map((entry) => entry.offset)).toStrictEqual([
+      0, 6,
+    ]);
   });
 
   it("keeps a Continue record as its own entry rather than merging it", () => {
@@ -70,14 +72,14 @@ describe("readRecords", () => {
       ...record(RECORD_CONTINUE, [0x02]),
     );
 
-    expect(readRecords(stream)).toEqual([
+    expect(readRecords(stream)).toStrictEqual([
       { type: RECORD_SST, data: bytes(0x01), offset: 0 },
       { type: RECORD_CONTINUE, data: bytes(0x02), offset: 5 },
     ]);
   });
 
   it("stops cleanly at the end of the stream", () => {
-    expect(readRecords(bytes())).toEqual([]);
+    expect(readRecords(bytes())).toStrictEqual([]);
   });
 
   it("rejects a truncated record header", () => {

@@ -35,13 +35,13 @@ function readBack(pieces: readonly Uint8Array<ArrayBuffer>[]) {
 
 describe("writeSheetComments", () => {
   it("returns nothing for a sheet with no commented cells", () => {
-    expect(writeSheetComments([])).toEqual([]);
+    expect(writeSheetComments([])).toStrictEqual([]);
   });
 
   it("round-trips one comment's cell position, text, and author", () => {
     const pieces = writeSheetComments([commentedCell(2, 3, "Hello", "Alice")]);
 
-    expect(readBack(pieces).get("2:3")).toEqual({
+    expect(readBack(pieces).get("2:3")).toStrictEqual({
       row: 2,
       column: 3,
       comment: { text: "Hello", author: "Alice" },
@@ -51,7 +51,7 @@ describe("writeSheetComments", () => {
   it("round-trips a comment with no author as an absent author, not an empty-string placeholder", () => {
     const pieces = writeSheetComments([commentedCell(0, 0, "No author")]);
 
-    expect(readBack(pieces).get("0:0")).toEqual({
+    expect(readBack(pieces).get("0:0")).toStrictEqual({
       row: 0,
       column: 0,
       comment: { text: "No author" },
@@ -63,7 +63,7 @@ describe("writeSheetComments", () => {
     const records = readRecords(concat(...pieces));
 
     expect(records.some((r) => r.type === 0x003c /* CONTINUE */)).toBe(false);
-    expect(readBack(pieces).get("1:1")).toEqual({
+    expect(readBack(pieces).get("1:1")).toStrictEqual({
       row: 1,
       column: 1,
       comment: { text: "" },
@@ -78,15 +78,15 @@ describe("writeSheetComments", () => {
     ]);
     const comments = readBack(pieces);
 
-    expect(comments.get("5:5")?.comment).toEqual({
+    expect(comments.get("5:5")?.comment).toStrictEqual({
       text: "Fifth",
       author: "E",
     });
-    expect(comments.get("0:9")?.comment).toEqual({
+    expect(comments.get("0:9")?.comment).toStrictEqual({
       text: "First-by-row",
       author: "A",
     });
-    expect(comments.get("0:2")?.comment).toEqual({
+    expect(comments.get("0:2")?.comment).toStrictEqual({
       text: "First-by-column",
       author: "B",
     });
@@ -103,7 +103,7 @@ describe("writeSheetComments", () => {
       .filter((r) => r.type === RECORD_NOTE)
       .map((r) => [r.data[0], r.data[2]]); // row, column: each a little-endian u16 whose low byte alone is enough here
 
-    expect(notePositions).toEqual([
+    expect(notePositions).toStrictEqual([
       [0, 1],
       [0, 5],
       [2, 0],
@@ -118,7 +118,7 @@ describe("writeSheetComments", () => {
     const records = readRecords(concat(...pieces));
     const types = records.map((r) => r.type);
 
-    expect(types).toEqual([
+    expect(types).toStrictEqual([
       RECORD_NOTE,
       RECORD_NOTE,
       RECORD_OBJ,
@@ -140,7 +140,7 @@ describe("writeSheetComments", () => {
     // idObj sits at byte offset 6 of a Note record's own data (row u16, column u16, flags u16, idObj u16).
     const idObjs = notes.map((r) => r.data[6]);
 
-    expect(idObjs).toEqual([1, 2]);
+    expect(idObjs).toStrictEqual([1, 2]);
   });
 
   it("refuses more comments than a 16-bit FtCmo.id can distinguish", () => {

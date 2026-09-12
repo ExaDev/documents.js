@@ -56,7 +56,7 @@ describe("groupRecords", () => {
   it("keeps a record with no continuation as a single block", () => {
     const groups = groupRecords(records({ type: RECORD_SST, data: bytes(1) }));
 
-    expect(groups).toEqual([
+    expect(groups).toStrictEqual([
       { type: RECORD_SST, blocks: [bytes(1)], offset: 0 },
     ]);
   });
@@ -70,7 +70,7 @@ describe("groupRecords", () => {
       ),
     );
 
-    expect(groups).toEqual([
+    expect(groups).toStrictEqual([
       {
         type: RECORD_SST,
         blocks: [bytes(1), bytes(2), bytes(3)],
@@ -88,7 +88,10 @@ describe("groupRecords", () => {
       ),
     );
 
-    expect(groups.map((group) => group.type)).toEqual([RECORD_SST, RECORD_EOF]);
+    expect(groups.map((group) => group.type)).toStrictEqual([
+      RECORD_SST,
+      RECORD_EOF,
+    ]);
     expect(groups[0]?.blocks).toHaveLength(2);
   });
 
@@ -135,7 +138,7 @@ describe("groupRecords", () => {
       ),
     );
 
-    expect(groups).toEqual([
+    expect(groups).toStrictEqual([
       { type: RECORD_CF12, blocks: [bytes(1), bytes(2, 3)], offset: 0 },
     ]);
   });
@@ -168,7 +171,7 @@ describe("splitSubstreams", () => {
       ),
     );
 
-    expect(substreams.map((sub) => sub.documentType)).toEqual([
+    expect(substreams.map((sub) => sub.documentType)).toStrictEqual([
       BOF_TYPE_WORKBOOK,
       BOF_TYPE_WORKSHEET,
     ]);
@@ -185,7 +188,7 @@ describe("splitSubstreams", () => {
       ),
     );
 
-    expect(substreams[0]?.records.map((entry) => entry.type)).toEqual([
+    expect(substreams[0]?.records.map((entry) => entry.type)).toStrictEqual([
       RECORD_SST,
     ]);
   });
@@ -202,7 +205,7 @@ describe("splitSubstreams", () => {
       ),
     );
 
-    expect(substreams.map((sub) => sub.index)).toEqual([0, 1]);
+    expect(substreams.map((sub) => sub.index)).toStrictEqual([0, 1]);
   });
 
   it("records the stream offset of each substream's own BOF", () => {
@@ -219,7 +222,7 @@ describe("splitSubstreams", () => {
     );
 
     // The first BOF sits at 0 and spans 4 + 16 bytes; its EOF spans 4 more, so the second BOF starts at 24.
-    expect(substreams.map((sub) => sub.offset)).toEqual([0, 24]);
+    expect(substreams.map((sub) => sub.offset)).toStrictEqual([0, 24]);
   });
 
   it("tolerates a substream left unterminated at the end of the stream", () => {
@@ -242,7 +245,7 @@ describe("splitSubstreams", () => {
       splitSubstreams(
         groupRecords(records({ type: RECORD_EOF, data: bytes() })),
       ),
-    ).toEqual([]);
+    ).toStrictEqual([]);
   });
 
   it("rejects a BOF that does not declare BIFF8", () => {
@@ -280,17 +283,16 @@ describe("splitSubstreams", () => {
       ),
     );
 
-    expect(substreams.map((sub) => sub.documentType)).toEqual([
+    expect(substreams.map((sub) => sub.documentType)).toStrictEqual([
       BOF_TYPE_CHART,
       BOF_TYPE_WORKSHEET,
     ]);
-    expect(substreams[0]?.records.map((entry) => entry.blocks[0])).toEqual([
-      bytes(2),
-    ]);
-    expect(substreams[1]?.records.map((entry) => entry.blocks[0])).toEqual([
-      bytes(1),
-      bytes(3),
-    ]);
+    expect(
+      substreams[0]?.records.map((entry) => entry.blocks[0]),
+    ).toStrictEqual([bytes(2)]);
+    expect(
+      substreams[1]?.records.map((entry) => entry.blocks[0]),
+    ).toStrictEqual([bytes(1), bytes(3)]);
   });
 
   it("nests multiple embedded charts, one per BOF...EOF pair, in the same worksheet substream", () => {
@@ -309,13 +311,13 @@ describe("splitSubstreams", () => {
       ),
     );
 
-    expect(substreams.map((sub) => sub.documentType)).toEqual([
+    expect(substreams.map((sub) => sub.documentType)).toStrictEqual([
       BOF_TYPE_CHART,
       BOF_TYPE_CHART,
       BOF_TYPE_WORKSHEET,
     ]);
-    expect(substreams[0]?.records[0]?.blocks[0]).toEqual(bytes(1));
-    expect(substreams[1]?.records[0]?.blocks[0]).toEqual(bytes(2));
+    expect(substreams[0]?.records[0]?.blocks[0]).toStrictEqual(bytes(1));
+    expect(substreams[1]?.records[0]?.blocks[0]).toStrictEqual(bytes(2));
     expect(substreams[2]?.records).toHaveLength(0);
   });
 
@@ -331,7 +333,7 @@ describe("splitSubstreams", () => {
       ),
     );
 
-    expect(substreams.map((sub) => sub.documentType)).toEqual([
+    expect(substreams.map((sub) => sub.documentType)).toStrictEqual([
       BOF_TYPE_CHART,
       BOF_TYPE_WORKSHEET,
     ]);

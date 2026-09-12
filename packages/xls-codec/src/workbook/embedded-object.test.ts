@@ -36,8 +36,8 @@ describe("writeEmbeddedObjectPackage / readEmbeddedObjectPackage", () => {
     const result = readEmbeddedObjectPackage(packageBytes, FRAME);
 
     expect(result?.objectKind).toBe("drawing");
-    expect(result?.document).toEqual(DRAWING_DOCUMENT);
-    expect(result?.frame).toEqual(FRAME);
+    expect(result?.document).toStrictEqual(DRAWING_DOCUMENT);
+    expect(result?.frame).toStrictEqual(FRAME);
   });
 
   it("merges the caller's own frame in, overriding whatever the payload itself carried", () => {
@@ -47,7 +47,7 @@ describe("writeEmbeddedObjectPackage / readEmbeddedObjectPackage", () => {
 
     const result = readEmbeddedObjectPackage(packageBytes, otherFrame);
 
-    expect(result?.frame).toEqual(otherFrame);
+    expect(result?.frame).toStrictEqual(otherFrame);
   });
 
   it("does not round-trip the placement fields -- they come only from the caller's frame argument", () => {
@@ -75,7 +75,7 @@ describe("writeEmbeddedObjectPackage / readEmbeddedObjectPackage", () => {
 
     const result = readEmbeddedObjectPackage(packageBytes, FRAME);
 
-    expect(result?.source).toEqual({ format: "xlsx", xml: "<a/>" });
+    expect(result?.source).toStrictEqual({ format: "xlsx", xml: "<a/>" });
   });
 
   it("returns undefined for a Package stream carrying a foreign label", () => {

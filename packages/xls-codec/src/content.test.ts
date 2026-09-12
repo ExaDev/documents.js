@@ -283,7 +283,7 @@ describe("readXlsContent", () => {
     const content = readXlsContent(bytes);
 
     expect(content.kind).toBe("spreadsheet");
-    expect(content.sheets.map((sheet) => sheet.name)).toEqual([
+    expect(content.sheets.map((sheet) => sheet.name)).toStrictEqual([
       "First",
       "Second",
     ]);
@@ -309,11 +309,11 @@ describe("readXlsContent", () => {
 
     const content = readXlsContent(bytes);
 
-    expect(content.sheets[0]?.cells[0]?.value).toEqual({
+    expect(content.sheets[0]?.cells[0]?.value).toStrictEqual({
       kind: "number",
       value: 11,
     });
-    expect(content.sheets[1]?.cells[0]?.value).toEqual({
+    expect(content.sheets[1]?.cells[0]?.value).toStrictEqual({
       kind: "number",
       value: 22,
     });
@@ -339,7 +339,7 @@ describe("readXlsContent", () => {
       }),
     );
 
-    expect(readXlsContent(bytes).sheets[0]?.cells[0]).toEqual({
+    expect(readXlsContent(bytes).sheets[0]?.cells[0]).toStrictEqual({
       row: 0,
       column: 0,
       value: { kind: "string", value: "Hello" },
@@ -397,7 +397,7 @@ describe("readXlsContent", () => {
       }),
     );
 
-    expect(readXlsContent(bytes).sheets[0]?.cells[0]?.value).toEqual({
+    expect(readXlsContent(bytes).sheets[0]?.cells[0]?.value).toStrictEqual({
       kind: "date",
       value: "2024-01-01",
     });
@@ -417,7 +417,7 @@ describe("readXlsContent", () => {
       }),
     );
 
-    expect(readXlsContent(bytes).sheets[0]?.cells[0]?.value).toEqual({
+    expect(readXlsContent(bytes).sheets[0]?.cells[0]?.value).toStrictEqual({
       kind: "percentage",
       value: 0.4256,
     });
@@ -442,7 +442,7 @@ describe("readXlsContent", () => {
       }),
     );
 
-    expect(readXlsContent(bytes).sheets[0]?.cells[0]?.value).toEqual({
+    expect(readXlsContent(bytes).sheets[0]?.cells[0]?.value).toStrictEqual({
       kind: "currency",
       value: 12.5,
       currency: "GBP",
@@ -463,7 +463,7 @@ describe("readXlsContent", () => {
       }),
     );
 
-    expect(readXlsContent(bytes).sheets[0]?.cells[0]?.value).toEqual({
+    expect(readXlsContent(bytes).sheets[0]?.cells[0]?.value).toStrictEqual({
       kind: "number",
       value: 60,
     });
@@ -553,7 +553,7 @@ describe("readXlsContent", () => {
       }),
     );
 
-    expect(readXlsContent(bytes).sheets[0]?.dataValidations).toEqual([
+    expect(readXlsContent(bytes).sheets[0]?.dataValidations).toStrictEqual([
       {
         type: "decimal",
         operator: "greaterThan",
@@ -610,7 +610,7 @@ describe("readXlsContent", () => {
       }),
     );
 
-    expect(readXlsContent(bytes).sheets[0]?.conditionalFormats).toEqual([
+    expect(readXlsContent(bytes).sheets[0]?.conditionalFormats).toStrictEqual([
       {
         type: "cellIs",
         operator: "greaterThan",
@@ -683,7 +683,7 @@ describe("readXlsContent", () => {
       }),
     );
 
-    expect(readXlsContent(bytes).sheets[0]?.conditionalFormats).toEqual([
+    expect(readXlsContent(bytes).sheets[0]?.conditionalFormats).toStrictEqual([
       {
         type: "colorScale",
         ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
@@ -748,7 +748,7 @@ describe("readXlsContent", () => {
       }),
     );
 
-    expect(readXlsContent(bytes).sheets[0]?.conditionalFormats).toEqual([
+    expect(readXlsContent(bytes).sheets[0]?.conditionalFormats).toStrictEqual([
       {
         type: "top10",
         ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
@@ -780,7 +780,7 @@ describe("readXlsContent", () => {
       }),
     );
 
-    expect(readXlsContent(bytes).sheets[0]?.cells).toEqual([
+    expect(readXlsContent(bytes).sheets[0]?.cells).toStrictEqual([
       {
         row: 2,
         column: 1,
@@ -803,9 +803,9 @@ describe("readXlsContent", () => {
       }),
     );
 
-    expect(readXlsContent(bytes).sheets.map((sheet) => sheet.name)).toEqual([
-      "Data",
-    ]);
+    expect(
+      readXlsContent(bytes).sheets.map((sheet) => sheet.name),
+    ).toStrictEqual(["Data"]);
   });
 
   it("emits print settings the schema requires even though the file's own are not read", () => {
@@ -1281,11 +1281,11 @@ describe("readXlsContent", () => {
         displayText: "",
       });
       // icv 10 is the default table's own Red, icv 12 its own Blue.
-      expect(cells[0]?.background).toEqual({
+      expect(cells[0]?.background).toStrictEqual({
         kind: "solid",
         color: { r: 1, g: 0, b: 0 },
       });
-      expect(cells[0]?.borders).toEqual({
+      expect(cells[0]?.borders).toStrictEqual({
         top: { color: { r: 0, g: 0, b: 1 }, widthPt: 0.75 },
       });
     });
@@ -1317,7 +1317,9 @@ describe("readXlsContent", () => {
         fillPattern: 1,
         fillForegroundIcv: 10,
       });
-      expect(readXlsContent(bytes).sheets[0]?.cells[0]?.background).toEqual({
+      expect(
+        readXlsContent(bytes).sheets[0]?.cells[0]?.background,
+      ).toStrictEqual({
         kind: "solid",
         color: { r: 1, g: 0, b: 0 },
       });
@@ -1330,7 +1332,9 @@ describe("readXlsContent", () => {
         fillForegroundIcv: 10, // default Red
         fillBackgroundIcv: 11, // default Green
       });
-      expect(readXlsContent(bytes).sheets[0]?.cells[0]?.background).toEqual({
+      expect(
+        readXlsContent(bytes).sheets[0]?.cells[0]?.background,
+      ).toStrictEqual({
         kind: "pattern",
         patternType: "mediumGray",
         foregroundColor: { r: 1, g: 0, b: 0 },
@@ -1355,7 +1359,7 @@ describe("readXlsContent", () => {
         left: { style: 1, icv: 12 }, // icv 12: default Blue
         top: { style: 3, icv: 11 }, // icv 11: default Green
       });
-      expect(readXlsContent(bytes).sheets[0]?.cells[0]?.borders).toEqual({
+      expect(readXlsContent(bytes).sheets[0]?.cells[0]?.borders).toStrictEqual({
         left: { color: { r: 0, g: 0, b: 1 }, widthPt: 0.75 },
         top: { color: { r: 0, g: 1, b: 0 }, widthPt: 0.75, style: "dashed" },
       });
@@ -1387,7 +1391,9 @@ describe("readXlsContent", () => {
           ]),
         ],
       );
-      expect(readXlsContent(bytes).sheets[0]?.cells[0]?.background).toEqual({
+      expect(
+        readXlsContent(bytes).sheets[0]?.cells[0]?.background,
+      ).toStrictEqual({
         kind: "solid",
         color: { r: 1, g: 128 / 255, b: 0 },
       });
@@ -1421,7 +1427,7 @@ describe("readXlsContent", () => {
         }),
       );
 
-      expect(readXlsContent(bytes).sheets[0]?.cells[0]?.font).toEqual({
+      expect(readXlsContent(bytes).sheets[0]?.cells[0]?.font).toStrictEqual({
         bold: true,
         italic: true,
         underline: true,
@@ -1606,7 +1612,7 @@ describe("readXlsContent", () => {
         }),
       );
 
-      expect(readXlsContent(bytes).names).toEqual([
+      expect(readXlsContent(bytes).names).toStrictEqual([
         { name: "SalesData", refersTo: "Sheet1!$A$1:$B$2" },
       ]);
     });
@@ -1636,7 +1642,7 @@ describe("readXlsContent", () => {
         }),
       );
 
-      expect(readXlsContent(bytes).names).toEqual([
+      expect(readXlsContent(bytes).names).toStrictEqual([
         {
           name: "LocalRange",
           refersTo: "Sheet2!$A$3:$A$5",
@@ -1682,7 +1688,7 @@ describe("readXlsContent", () => {
         }),
       );
 
-      expect(readXlsContent(bytes).names).toEqual([
+      expect(readXlsContent(bytes).names).toStrictEqual([
         {
           name: "SecondSheet",
           refersTo: "Sheet2!$A$1:$A$1",
@@ -1711,7 +1717,7 @@ describe("readXlsContent", () => {
       );
 
       const content = readXlsContent(bytes);
-      expect(content.names).toEqual([
+      expect(content.names).toStrictEqual([
         {
           name: "_xlnm._FilterDatabase",
           refersTo: "Sheet1!$A$1:$C$1",
@@ -1719,7 +1725,7 @@ describe("readXlsContent", () => {
         },
       ]);
       // The print area the built-in carried is not lost -- it lives where the schema models it.
-      expect(content.sheets[0]?.printSettings.printRange).toEqual({
+      expect(content.sheets[0]?.printSettings.printRange).toStrictEqual({
         startRow: 0,
         startColumn: 0,
         endRow: 0,
@@ -1771,6 +1777,7 @@ describe("readXlsContent", () => {
         },
       );
       const content = readXlsContent(bytes);
+      // .toEqual, not .toStrictEqual: archive-codec's own summaryInformationToLayoutMetadata (shared with doc-codec/ppt-codec) states every LayoutMetadata field explicitly, as undefined rather than omitted, for whichever of subject/keywords/modifiedIso the stream did not carry -- a real, if minor, contract inconsistency against LayoutMetadataSchema's own "optional means absent" convention, but one belonging to that shared package rather than this one.
       expect(content.metadata).toEqual({
         title: "Budget",
         author: "Cornelius",
@@ -1785,7 +1792,7 @@ describe("readXlsContent", () => {
           sheets: [{ name: "Sheet1", records: [] }],
         }),
       );
-      expect(readXlsContent(bytes).metadata).toEqual({});
+      expect(readXlsContent(bytes).metadata).toStrictEqual({});
     });
   });
 });
@@ -1833,7 +1840,7 @@ describe("readXlsContent formula recovery", () => {
     );
 
     expect(cellC1?.formula).toBe("A1+B1");
-    expect(cellC1?.value).toEqual({ kind: "number", value: 3 });
+    expect(cellC1?.value).toStrictEqual({ kind: "number", value: 3 });
   });
 
   it("resolves a cross-sheet 3D reference through EXTERNSHEET and a self-referencing SupBook", () => {
@@ -1917,7 +1924,7 @@ describe("readXlsContent formula recovery", () => {
     const cellA1 = readXlsContent(bytes).sheets[0]?.cells[0];
 
     expect(cellA1?.formula).toBeUndefined();
-    expect(cellA1?.value).toEqual({ kind: "number", value: 4 });
+    expect(cellA1?.value).toStrictEqual({ kind: "number", value: 4 });
   });
 });
 
@@ -1994,7 +2001,7 @@ describe("readXlsContent schema conformance", () => {
       ),
     );
 
-    expect(kinds).toEqual(
+    expect(kinds).toStrictEqual(
       new Set(["date", "percentage", "string", "boolean", "error", "empty"]),
     );
   });
@@ -2050,7 +2057,7 @@ describe("isXlsFile", () => {
     ]);
 
     expect(isXlsFile(xlr)).toBe(true);
-    expect(readXlsContent(xlr).sheets[0]?.cells[0]?.value).toEqual({
+    expect(readXlsContent(xlr).sheets[0]?.cells[0]?.value).toStrictEqual({
       kind: "number",
       value: 3,
     });
@@ -2145,7 +2152,7 @@ describe("readXlsContent print settings", () => {
 
   it("falls back to Excel's own Normal preset for a sheet stating nothing", () => {
     // Every record behind these is optional in [MS-XLS] 2.1.7.20.6's own PAGESETUP production, and a sheet nobody has set a page setup on carries none of them.
-    expect(printSettingsOf([])).toEqual({
+    expect(printSettingsOf([])).toStrictEqual({
       pageSize: { widthPt: 612, heightPt: 792 },
       margins: { topPt: 54, rightPt: 50.4, bottomPt: 54, leftPt: 50.4 },
       gridlines: false,
@@ -2157,7 +2164,7 @@ describe("readXlsContent print settings", () => {
   it("falls back per field, keeping the one margin a sheet does state", () => {
     expect(
       printSettingsOf([record(RECORD_LEFTMARGIN, f64(1))])?.margins,
-    ).toEqual({ topPt: 54, rightPt: 50.4, bottomPt: 54, leftPt: 72 });
+    ).toStrictEqual({ topPt: 54, rightPt: 50.4, bottomPt: 54, leftPt: 72 });
   });
 
   it("resolves the page size, scale, gridlines, headers, and page order a sheet does state", () => {
@@ -2194,7 +2201,7 @@ describe("readXlsContent print settings", () => {
       }),
     ]);
 
-    expect(settings?.pageSize).toEqual({ widthPt: 612, heightPt: 792 });
+    expect(settings?.pageSize).toStrictEqual({ widthPt: 612, heightPt: 792 });
     expect(settings?.scalePercent).toBeUndefined();
   });
 
@@ -2211,7 +2218,7 @@ describe("readXlsContent print settings", () => {
       }),
     ]);
 
-    expect(settings?.fitToPages).toEqual({ width: 2, height: 3 });
+    expect(settings?.fitToPages).toStrictEqual({ width: 2, height: 3 });
     expect(settings?.scalePercent).toBeUndefined();
   });
 
@@ -2248,7 +2255,7 @@ describe("readXlsContent print settings", () => {
           ...u16(0xffff),
         ]),
       ])?.manualBreaks,
-    ).toEqual({ rows: [12], columns: [5] });
+    ).toStrictEqual({ rows: [12], columns: [5] });
   });
 
   it("reads the print range from the globals substream's own built-in defined name", () => {
@@ -2264,7 +2271,7 @@ describe("readXlsContent print settings", () => {
           }),
         ],
       )?.printRange,
-    ).toEqual({ startRow: 1, startColumn: 1, endRow: 5, endColumn: 3 });
+    ).toStrictEqual({ startRow: 1, startColumn: 1, endRow: 5, endColumn: 3 });
   });
 
   it("scopes a print name by its own BoundSheet8 position, not by position among the worksheets", () => {
@@ -2289,7 +2296,7 @@ describe("readXlsContent print settings", () => {
 
     const document = readXlsContent(bytes);
     expect(document.sheets).toHaveLength(1);
-    expect(document.sheets[0]?.printSettings.printRange).toEqual({
+    expect(document.sheets[0]?.printSettings.printRange).toStrictEqual({
       startRow: 3,
       startColumn: 0,
       endRow: 4,
@@ -2317,7 +2324,7 @@ describe("readXlsContent: cell comments (ExaDev/documents.js#949)", () => {
       }),
     );
 
-    expect(readXlsContent(bytes).sheets[0]?.cells[0]).toEqual({
+    expect(readXlsContent(bytes).sheets[0]?.cells[0]).toStrictEqual({
       row: 0,
       column: 0,
       value: { kind: "number", value: 42 },
@@ -2344,7 +2351,7 @@ describe("readXlsContent: cell comments (ExaDev/documents.js#949)", () => {
       }),
     );
 
-    expect(readXlsContent(bytes).sheets[0]?.cells).toEqual([
+    expect(readXlsContent(bytes).sheets[0]?.cells).toStrictEqual([
       {
         row: 5,
         column: 2,
@@ -2454,7 +2461,7 @@ describe("readXlsContent: charts, drawings and images (ExaDev/documents.js#924)"
 
     const sheet = readXlsContent(bytes).sheets[0];
 
-    expect(sheet?.images).toEqual([]);
+    expect(sheet?.images).toStrictEqual([]);
     expect(sheet?.embeddedObjects).toHaveLength(1);
     expect(sheet?.embeddedObjects?.[0]?.objectKind).toBe("drawing");
   });
@@ -2469,7 +2476,7 @@ describe("readXlsContent: charts, drawings and images (ExaDev/documents.js#924)"
 
     const sheet = readXlsContent(bytes).sheets[0];
 
-    expect(sheet?.images).toEqual([]);
+    expect(sheet?.images).toStrictEqual([]);
     expect(sheet?.embeddedObjects).toBeUndefined();
   });
 });

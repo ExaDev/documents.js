@@ -108,7 +108,7 @@ function worksheetRecords(rawRecords: readonly Uint8Array<ArrayBuffer>[]) {
 
 describe("readSheetDrawing", () => {
   it("returns nothing for a worksheet with no drawing records", () => {
-    expect(readSheetDrawing([], baseContext())).toEqual({
+    expect(readSheetDrawing([], baseContext())).toStrictEqual({
       images: [],
       embeddedObjects: [],
     });
@@ -126,7 +126,7 @@ describe("readSheetDrawing", () => {
 
     const drawing = readSheetDrawing(records, baseContext({ blipStore }));
 
-    expect(drawing.embeddedObjects).toEqual([]);
+    expect(drawing.embeddedObjects).toStrictEqual([]);
     expect(drawing.images).toHaveLength(1);
     expect(drawing.images[0]?.format).toBe("png");
     expect(drawing.images[0]?.base64).toBe("abc");
@@ -143,7 +143,7 @@ describe("readSheetDrawing", () => {
 
     const drawing = readSheetDrawing(records, baseContext());
 
-    expect(drawing.images).toEqual([]);
+    expect(drawing.images).toStrictEqual([]);
     expect(drawing.embeddedObjects).toHaveLength(1);
     expect(drawing.embeddedObjects[0]?.objectKind).toBe("drawing");
   });
@@ -157,8 +157,8 @@ describe("readSheetDrawing", () => {
 
     const drawing = readSheetDrawing(records, baseContext());
 
-    expect(drawing.images).toEqual([]);
-    expect(drawing.embeddedObjects).toEqual([]);
+    expect(drawing.images).toStrictEqual([]);
+    expect(drawing.embeddedObjects).toStrictEqual([]);
   });
 
   it("pairs multiple shapes with multiple Obj records in document order", () => {
@@ -216,7 +216,7 @@ describe("readSheetDrawing", () => {
       baseContext({ allSubstreams: substreams }),
     );
 
-    expect(drawing.images).toEqual([]);
+    expect(drawing.images).toStrictEqual([]);
     expect(drawing.embeddedObjects).toHaveLength(1);
     expect(drawing.embeddedObjects[0]?.objectKind).toBe("chart");
   });
@@ -283,6 +283,6 @@ describe("chartTableCells", () => {
       { name: undefined, categories: [""], values: [""] },
     ]);
 
-    expect(cells).toEqual([]);
+    expect(cells).toStrictEqual([]);
   });
 });

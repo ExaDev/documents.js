@@ -10,7 +10,7 @@ describe("readEscherRecords", () => {
 
     const records = readEscherRecords(bytes);
 
-    expect(records).toEqual([
+    expect(records).toStrictEqual([
       {
         kind: "atom",
         recInstance: 0x234,
@@ -35,7 +35,7 @@ describe("readEscherRecords", () => {
     expect(dg.recType).toBe(0xf002);
     expect(dg.children).toHaveLength(2);
     const [dgAtom, spgr] = dg.children;
-    expect(dgAtom).toEqual({
+    expect(dgAtom).toStrictEqual({
       kind: "atom",
       recInstance: 0,
       recType: 0xf008,
@@ -44,7 +44,7 @@ describe("readEscherRecords", () => {
     if (spgr?.kind !== "container") {
       throw new Error("expected a nested container");
     }
-    expect(spgr.children).toEqual([
+    expect(spgr.children).toStrictEqual([
       {
         kind: "atom",
         recInstance: 5,
@@ -62,7 +62,9 @@ describe("readEscherRecords", () => {
 
     const records = readEscherRecords(bytes);
 
-    expect(records.map((record) => record.recType)).toEqual([0xf00a, 0xf00b]);
+    expect(records.map((record) => record.recType)).toStrictEqual([
+      0xf00a, 0xf00b,
+    ]);
   });
 
   it("throws on a record header running past the end of the stream", () => {
@@ -113,7 +115,7 @@ describe("childrenOfType / findDescendant", () => {
       throw new Error("expected a container");
     }
 
-    expect(findDescendant(root, 0xf007)).toEqual({
+    expect(findDescendant(root, 0xf007)).toStrictEqual({
       kind: "atom",
       recInstance: 0,
       recType: 0xf007,

@@ -139,7 +139,7 @@ describe("readCondFmtGroup", () => {
     const result = readCondFmtGroup(groups, 0, NO_SHEETS);
 
     expect(result.recordsConsumed).toBe(2);
-    expect(result.formats).toEqual([
+    expect(result.formats).toStrictEqual([
       {
         operator: "greaterThan",
         formula1: "10",
@@ -158,7 +158,7 @@ describe("readCondFmtGroup", () => {
 
     const result = readCondFmtGroup(groups, 0, NO_SHEETS);
 
-    expect(result.formats).toEqual([
+    expect(result.formats).toStrictEqual([
       {
         operator: "between",
         formula1: "1",
@@ -198,7 +198,7 @@ describe("readCondFmtGroup", () => {
 
     const result = readCondFmtGroup(groups, 0, NO_SHEETS);
 
-    expect(result.formats).toEqual([]);
+    expect(result.formats).toStrictEqual([]);
     expect(result.recordsConsumed).toBe(2);
   });
 
@@ -210,7 +210,7 @@ describe("readCondFmtGroup", () => {
 
     const result = readCondFmtGroup(groups, 0, NO_SHEETS);
 
-    expect(result.formats[0]?.style).toEqual({
+    expect(result.formats[0]?.style).toStrictEqual({
       fontColorIcv: 10,
       fill: undefined,
     });
@@ -230,7 +230,7 @@ describe("readCondFmtGroup", () => {
 
     const result = readCondFmtGroup(groups, 0, NO_SHEETS);
 
-    expect(result.formats[0]?.style).toEqual({
+    expect(result.formats[0]?.style).toStrictEqual({
       fontColorIcv: undefined,
       fill: { fillPattern: 1, fillForegroundIcv: 12, fillBackgroundIcv: 9 },
     });
@@ -265,13 +265,13 @@ describe("readCondFmtGroup", () => {
 
     expect(result.recordsConsumed).toBe(4);
     expect(result.formats).toHaveLength(3);
-    expect(result.formats.map((f) => f.operator)).toEqual([
+    expect(result.formats.map((f) => f.operator)).toStrictEqual([
       "equal",
       "notEqual",
       "greaterThan",
     ]);
     for (const format of result.formats) {
-      expect(format.ranges).toEqual(ranges);
+      expect(format.ranges).toStrictEqual(ranges);
     }
   });
 
@@ -284,7 +284,7 @@ describe("readCondFmtGroup", () => {
 
     const result = readCondFmtGroup(groups, 0, NO_SHEETS);
 
-    expect(result.formats).toEqual([]);
+    expect(result.formats).toStrictEqual([]);
     expect(result.recordsConsumed).toBe(1);
   });
 
@@ -296,7 +296,7 @@ describe("readCondFmtGroup", () => {
 
     const result = readCondFmtGroup(groups, 0, NO_SHEETS);
 
-    expect(result.formats).toEqual([]);
+    expect(result.formats).toStrictEqual([]);
     expect(result.recordsConsumed).toBe(1);
   });
 
@@ -306,7 +306,7 @@ describe("readCondFmtGroup", () => {
 
     const result = readCondFmtGroup(groups, 0, NO_SHEETS);
 
-    expect(result.formats).toEqual([]);
+    expect(result.formats).toStrictEqual([]);
     expect(result.recordsConsumed).toBe(1);
   });
 

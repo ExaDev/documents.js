@@ -19,7 +19,7 @@ describe("readWorkbookStreams", () => {
     const workbook = minimalWorkbookStream();
     const bytes = compoundFile([{ path: "Workbook", bytes: workbook }]);
 
-    expect(readWorkbookStreams(bytes).workbook).toEqual(workbook);
+    expect(readWorkbookStreams(bytes).workbook).toStrictEqual(workbook);
   });
 
   it("carries the SummaryInformation stream's bytes when present", () => {
@@ -30,7 +30,7 @@ describe("readWorkbookStreams", () => {
       { path: "\x05SummaryInformation", bytes: summary },
     ]);
 
-    expect(readWorkbookStreams(bytes).metadata).toEqual(summary);
+    expect(readWorkbookStreams(bytes).metadata).toStrictEqual(summary);
   });
 
   it("reports no metadata when the container carries no SummaryInformation stream", () => {
@@ -50,7 +50,7 @@ describe("readWorkbookStreams", () => {
 
     const { embeddingStreams } = readWorkbookStreams(bytes);
     expect(embeddingStreams.size).toBe(1);
-    expect(embeddingStreams.get(1)).toEqual(packageBytes);
+    expect(embeddingStreams.get(1)).toStrictEqual(packageBytes);
   });
 
   it("reports no embedding streams when the container carries none", () => {

@@ -36,12 +36,12 @@ function rectangleShape(spid: number, anchor: readonly number[]): number[] {
 
 describe("readSheetShapes", () => {
   it("returns no shapes for an empty drawing stream", () => {
-    expect(readSheetShapes(new Uint8Array())).toEqual([]);
+    expect(readSheetShapes(new Uint8Array())).toStrictEqual([]);
   });
 
   it("returns no shapes when the stream carries no DgContainer", () => {
     const bytes = new Uint8Array(escherContainer(0xf003, 0, []));
-    expect(readSheetShapes(bytes)).toEqual([]);
+    expect(readSheetShapes(bytes)).toStrictEqual([]);
   });
 
   it("skips the patriarch and reads one real top-level shape", () => {
@@ -51,7 +51,7 @@ describe("readSheetShapes", () => {
     const shapes = readSheetShapes(bytes);
 
     expect(shapes).toHaveLength(1);
-    expect(shapes[0]).toEqual({
+    expect(shapes[0]).toStrictEqual({
       shapeType: SHAPE_TYPE_RECTANGLE,
       spid: 1025,
       blipIndex: undefined,
@@ -78,7 +78,7 @@ describe("readSheetShapes", () => {
 
     const shapes = readSheetShapes(bytes);
 
-    expect(shapes.map((shape) => shape.spid)).toEqual([10, 11]);
+    expect(shapes.map((shape) => shape.spid)).toStrictEqual([10, 11]);
   });
 
   it("resolves a picture shape's own pib property to a 1-based Blip Store index", () => {
@@ -105,7 +105,7 @@ describe("readSheetShapes", () => {
 
     const shapes = readSheetShapes(bytes);
 
-    expect(shapes.map((shape) => shape.spid)).toEqual([31]);
+    expect(shapes.map((shape) => shape.spid)).toStrictEqual([31]);
   });
 
   it("recurses into a nested shape group, skipping the group's own shape record", () => {
@@ -122,6 +122,6 @@ describe("readSheetShapes", () => {
 
     const shapes = readSheetShapes(bytes);
 
-    expect(shapes.map((shape) => shape.spid)).toEqual([41]);
+    expect(shapes.map((shape) => shape.spid)).toStrictEqual([41]);
   });
 });

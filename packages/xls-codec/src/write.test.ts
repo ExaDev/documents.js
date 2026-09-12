@@ -127,7 +127,7 @@ describe("writeXlsContent", () => {
     );
     const content = readXlsContent(bytes);
     const readBack = findCell(content, 0, 0, 0);
-    expect(readBack?.value).toEqual({ kind: "number", value: 42 });
+    expect(readBack?.value).toStrictEqual({ kind: "number", value: 42 });
     expect(readBack?.displayText).toBe("42");
     // The same "General" stamping content.test.ts already pins for a real .xls's plain cells -- XF 15's own ifmt (0) resolves through the built-in table.
     expect(readBack?.numberFormatCode).toBe("General");
@@ -142,7 +142,7 @@ describe("writeXlsContent", () => {
       ]),
     );
     const readBack = findCell(readXlsContent(bytes), 0, 0, 0);
-    expect(readBack?.value).toEqual({
+    expect(readBack?.value).toStrictEqual({
       kind: "string",
       value: "Hello, world!",
     });
@@ -160,19 +160,19 @@ describe("writeXlsContent", () => {
       ]),
     );
     const content = readXlsContent(bytes);
-    expect(findCell(content, 0, 0, 0)?.value).toEqual({
+    expect(findCell(content, 0, 0, 0)?.value).toStrictEqual({
       kind: "string",
       value: "Repeated",
     });
-    expect(findCell(content, 0, 0, 1)?.value).toEqual({
+    expect(findCell(content, 0, 0, 1)?.value).toStrictEqual({
       kind: "string",
       value: "Repeated",
     });
-    expect(findCell(content, 0, 1, 0)?.value).toEqual({
+    expect(findCell(content, 0, 1, 0)?.value).toStrictEqual({
       kind: "string",
       value: "Repeated",
     });
-    expect(findCell(content, 0, 1, 1)?.value).toEqual({
+    expect(findCell(content, 0, 1, 1)?.value).toStrictEqual({
       kind: "string",
       value: "Different",
     });
@@ -185,7 +185,7 @@ describe("writeXlsContent", () => {
         sheet("Sheet1", [cell(0, 0, { kind: "string", value: text })]),
       ]),
     );
-    expect(findCell(readXlsContent(bytes), 0, 0, 0)?.value).toEqual({
+    expect(findCell(readXlsContent(bytes), 0, 0, 0)?.value).toStrictEqual({
       kind: "string",
       value: text,
     });
@@ -201,12 +201,12 @@ describe("writeXlsContent", () => {
       ]),
     );
     const content = readXlsContent(bytes);
-    expect(findCell(content, 0, 0, 0)?.value).toEqual({
+    expect(findCell(content, 0, 0, 0)?.value).toStrictEqual({
       kind: "boolean",
       value: true,
     });
     expect(findCell(content, 0, 0, 0)?.displayText).toBe("TRUE");
-    expect(findCell(content, 0, 0, 1)?.value).toEqual({
+    expect(findCell(content, 0, 0, 1)?.value).toStrictEqual({
       kind: "boolean",
       value: false,
     });
@@ -235,7 +235,7 @@ describe("writeXlsContent", () => {
     );
     const content = readXlsContent(bytes);
     errors.forEach((text, index) => {
-      expect(findCell(content, 0, 0, index)?.value).toEqual({
+      expect(findCell(content, 0, 0, index)?.value).toStrictEqual({
         kind: "error",
         value: text,
       });
@@ -265,23 +265,26 @@ describe("writeXlsContent", () => {
       ]),
     );
     const content = readXlsContent(bytes);
-    expect(findCell(content, 0, 0, 0)?.value).toEqual({
+    expect(findCell(content, 0, 0, 0)?.value).toStrictEqual({
       kind: "percentage",
       value: 0.5,
     });
     const currencyCell = findCell(content, 0, 0, 1);
-    expect(currencyCell?.value).toEqual({ kind: "currency", value: 19.99 });
+    expect(currencyCell?.value).toStrictEqual({
+      kind: "currency",
+      value: 19.99,
+    });
     // No numberFormatCode was given and this writer's own default currency format carries no [$XXX-nnn] marker, so no ISO code is recovered either -- an honest round trip of what was actually written, not an invented one.
     expect(currencyCell?.value).not.toHaveProperty("currency");
-    expect(findCell(content, 0, 0, 2)?.value).toEqual({
+    expect(findCell(content, 0, 0, 2)?.value).toStrictEqual({
       kind: "date",
       value: "2026-09-03",
     });
-    expect(findCell(content, 0, 0, 3)?.value).toEqual({
+    expect(findCell(content, 0, 0, 3)?.value).toStrictEqual({
       kind: "time",
       value: "13:45:30",
     });
-    expect(findCell(content, 0, 0, 4)?.value).toEqual({
+    expect(findCell(content, 0, 0, 4)?.value).toStrictEqual({
       kind: "dateTime",
       value: "2026-09-03T13:45:30",
     });
@@ -301,7 +304,7 @@ describe("writeXlsContent", () => {
       ]),
     );
     const readBack = findCell(readXlsContent(bytes), 0, 0, 0);
-    expect(readBack?.value).toEqual({
+    expect(readBack?.value).toStrictEqual({
       kind: "currency",
       value: 5,
       currency: "USD",
@@ -322,18 +325,18 @@ describe("writeXlsContent", () => {
       ]),
     );
     const content = readXlsContent(bytes);
-    expect(findCell(content, 0, 0, 0)?.value).toEqual({
+    expect(findCell(content, 0, 0, 0)?.value).toStrictEqual({
       kind: "currency",
       value: 7.99,
       currency: "USD",
     });
     expect(findCell(content, 0, 0, 0)?.numberFormatCode).toBe("[$USD]#,##0.00");
-    expect(findCell(content, 0, 0, 1)?.value).toEqual({
+    expect(findCell(content, 0, 0, 1)?.value).toStrictEqual({
       kind: "currency",
       value: 4.5,
       currency: "GBP",
     });
-    expect(findCell(content, 0, 0, 2)?.value).toEqual({
+    expect(findCell(content, 0, 0, 2)?.value).toStrictEqual({
       kind: "currency",
       value: 3,
     });
@@ -354,7 +357,7 @@ describe("writeXlsContent", () => {
       ]),
     );
     const readBack = findCell(readXlsContent(bytes), 0, 0, 0);
-    expect(readBack?.value).toEqual({ kind: "number", value: 3.14159 });
+    expect(readBack?.value).toStrictEqual({ kind: "number", value: 3.14159 });
     expect(readBack?.numberFormatCode).toBe("0.000");
   });
 
@@ -396,9 +399,9 @@ describe("writeXlsContent", () => {
           ]),
         ]),
       );
-      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.background).toEqual(
-        redFill,
-      );
+      expect(
+        findCell(readXlsContent(bytes), 0, 0, 0)?.background,
+      ).toStrictEqual(redFill);
     });
 
     it("round-trips per-side borders, including a non-default style and colour", () => {
@@ -423,7 +426,7 @@ describe("writeXlsContent", () => {
           ]),
         ]),
       );
-      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.borders).toEqual({
+      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.borders).toStrictEqual({
         left: { color: blue, widthPt: 0.75 },
         top: { color: red, widthPt: 0.75, style: "dashed" },
       });
@@ -446,8 +449,8 @@ describe("writeXlsContent", () => {
         ]),
       );
       const readBack = findCell(readXlsContent(bytes), 0, 0, 0);
-      expect(readBack?.background).toEqual(redFill);
-      expect(readBack?.borders).toEqual({
+      expect(readBack?.background).toStrictEqual(redFill);
+      expect(readBack?.borders).toStrictEqual({
         bottom: { color: blue, widthPt: 1.5 },
       });
     });
@@ -466,9 +469,9 @@ describe("writeXlsContent", () => {
           ]),
         ]),
       );
-      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.background).toEqual(
-        fill,
-      );
+      expect(
+        findCell(readXlsContent(bytes), 0, 0, 0)?.background,
+      ).toStrictEqual(fill);
     });
 
     it("round-trips a genuine two-colour crosshatch pattern fill instead of dropping it (ExaDev/documents.js#951)", () => {
@@ -485,9 +488,9 @@ describe("writeXlsContent", () => {
           ]),
         ]),
       );
-      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.background).toEqual(
-        fill,
-      );
+      expect(
+        findCell(readXlsContent(bytes), 0, 0, 0)?.background,
+      ).toStrictEqual(fill);
     });
 
     it("round-trips a pattern fill leaving one of its own colours unstated", () => {
@@ -503,9 +506,9 @@ describe("writeXlsContent", () => {
           ]),
         ]),
       );
-      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.background).toEqual(
-        fill,
-      );
+      expect(
+        findCell(readXlsContent(bytes), 0, 0, 0)?.background,
+      ).toStrictEqual(fill);
     });
 
     it("throws writing a WordprocessingML-only pattern type BIFF8's own FillPattern enumeration has no member for", () => {
@@ -536,9 +539,9 @@ describe("writeXlsContent", () => {
         ]),
       );
       // red (255,0,0) is icv 10 in the fixed default table -- resolvable with no Palette record present, and readXlsContent must still recover it correctly through that fallback.
-      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.background).toEqual(
-        redFill,
-      );
+      expect(
+        findCell(readXlsContent(bytes), 0, 0, 0)?.background,
+      ).toStrictEqual(redFill);
     });
 
     it("writes a real Palette record and round-trips a colour outside the fixed default table", () => {
@@ -554,9 +557,9 @@ describe("writeXlsContent", () => {
           ]),
         ]),
       );
-      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.background).toEqual(
-        coralFill,
-      );
+      expect(
+        findCell(readXlsContent(bytes), 0, 0, 0)?.background,
+      ).toStrictEqual(coralFill);
     });
 
     it("reuses one XF entry for two cells sharing the identical decoration, and mints a separate one for a cell with none", () => {
@@ -571,8 +574,8 @@ describe("writeXlsContent", () => {
         ]),
       );
       const content = readXlsContent(bytes);
-      expect(findCell(content, 0, 0, 0)?.background).toEqual(redFill);
-      expect(findCell(content, 0, 0, 1)?.background).toEqual(redFill);
+      expect(findCell(content, 0, 0, 0)?.background).toStrictEqual(redFill);
+      expect(findCell(content, 0, 0, 1)?.background).toStrictEqual(redFill);
       expect(findCell(content, 0, 0, 2)?.background).toBeUndefined();
     });
 
@@ -624,7 +627,7 @@ describe("writeXlsContent", () => {
       for (const written of cells) {
         expect(
           findCell(content, 0, written.row, written.column)?.background,
-        ).toEqual(written.background);
+        ).toStrictEqual(written.background);
       }
     });
 
@@ -647,9 +650,9 @@ describe("writeXlsContent", () => {
       );
 
       const readBack = findCell(readXlsContent(bytes), 0, 1, 2);
-      expect(readBack?.value).toEqual({ kind: "empty" });
-      expect(readBack?.background).toEqual(redFill);
-      expect(readBack?.borders).toEqual({
+      expect(readBack?.value).toStrictEqual({ kind: "empty" });
+      expect(readBack?.background).toStrictEqual(redFill);
+      expect(readBack?.borders).toStrictEqual({
         top: { color: blue, widthPt: 1.5 },
       });
     });
@@ -688,8 +691,8 @@ describe("writeXlsContent", () => {
       );
 
       const readBack = findCell(readXlsContent(bytes), 0, 0, 0);
-      expect(readBack?.value).toEqual({ kind: "empty" });
-      expect(readBack?.background).toEqual(redFill);
+      expect(readBack?.value).toStrictEqual({ kind: "empty" });
+      expect(readBack?.background).toStrictEqual(redFill);
       expect(readBack?.colSpan).toBe(2);
       expect(readBack?.rowSpan).toBe(3);
     });
@@ -706,8 +709,8 @@ describe("writeXlsContent", () => {
       );
 
       const content = readXlsContent(bytes);
-      expect(findCell(content, 0, 0, 0)?.background).toEqual(redFill);
-      expect(findCell(content, 0, 0, 1)?.background).toEqual(redFill);
+      expect(findCell(content, 0, 0, 0)?.background).toStrictEqual(redFill);
+      expect(findCell(content, 0, 0, 1)?.background).toStrictEqual(redFill);
     });
 
     it("refuses one distinct colour past the palette's last slot", () => {
@@ -825,7 +828,7 @@ describe("writeXlsContent", () => {
       const readBack = findCell(readXlsContent(bytes), 0, 0, 0);
       expect(readBack?.alignment).toBe("right");
       expect(readBack?.verticalAlignment).toBe("top");
-      expect(readBack?.background).toEqual(redFill);
+      expect(readBack?.background).toStrictEqual(redFill);
     });
 
     it("round-trips a decorated-alignment-only empty cell through a real Blank record", () => {
@@ -838,7 +841,7 @@ describe("writeXlsContent", () => {
         ]),
       );
       const readBack = findCell(readXlsContent(bytes), 0, 1, 2);
-      expect(readBack?.value).toEqual({ kind: "empty" });
+      expect(readBack?.value).toStrictEqual({ kind: "empty" });
       expect(readBack?.alignment).toBe("center");
     });
 
@@ -880,7 +883,7 @@ describe("writeXlsContent", () => {
       ]),
     );
     const readBack = findCell(readXlsContent(bytes), 0, 2, 2);
-    expect(readBack?.value).toEqual({ kind: "string", value: "Merged" });
+    expect(readBack?.value).toStrictEqual({ kind: "string", value: "Merged" });
     expect(readBack?.colSpan).toBe(2);
     expect(readBack?.rowSpan).toBeUndefined();
   });
@@ -899,7 +902,7 @@ describe("writeXlsContent", () => {
       ]),
     );
     const readBack = findCell(readXlsContent(bytes), 0, 3, 0);
-    expect(readBack?.value).toEqual({ kind: "empty" });
+    expect(readBack?.value).toStrictEqual({ kind: "empty" });
     expect(readBack?.colSpan).toBe(2);
     expect(readBack?.rowSpan).toBe(2);
   });
@@ -949,20 +952,20 @@ describe("writeXlsContent", () => {
       ]),
     );
     const content = readXlsContent(bytes);
-    expect(content.sheets.map((s) => s.name)).toEqual([
+    expect(content.sheets.map((s) => s.name)).toStrictEqual([
       "First",
       "Second",
       "Third",
     ]);
-    expect(findCell(content, 0, 0, 0)?.value).toEqual({
+    expect(findCell(content, 0, 0, 0)?.value).toStrictEqual({
       kind: "number",
       value: 1,
     });
-    expect(findCell(content, 1, 0, 0)?.value).toEqual({
+    expect(findCell(content, 1, 0, 0)?.value).toStrictEqual({
       kind: "number",
       value: 2,
     });
-    expect(findCell(content, 2, 0, 0)?.value).toEqual({
+    expect(findCell(content, 2, 0, 0)?.value).toStrictEqual({
       kind: "number",
       value: 3,
     });
@@ -972,7 +975,7 @@ describe("writeXlsContent", () => {
     const bytes = writeXlsContent(document([sheet("Empty", [])]));
     const content = readXlsContent(bytes);
     expect(content.sheets[0]?.name).toBe("Empty");
-    expect(content.sheets[0]?.cells).toEqual([]);
+    expect(content.sheets[0]?.cells).toStrictEqual([]);
   });
 
   it("produces a document valid against document-schema.js's own ContentDocumentSchema", () => {
@@ -1039,13 +1042,13 @@ describe("writeXlsContent", () => {
       );
       const content = readXlsContent(bytes);
       expect(findCell(content, 0, 0, 0)?.font).toBeUndefined();
-      expect(findCell(content, 0, 0, 1)?.font).toEqual({ bold: true });
-      expect(findCell(content, 0, 0, 2)?.font).toEqual({
+      expect(findCell(content, 0, 0, 1)?.font).toStrictEqual({ bold: true });
+      expect(findCell(content, 0, 0, 2)?.font).toStrictEqual({
         italic: true,
         sizePt: 8,
       });
       // icv 10 is the default palette's own duplicate of Red, which is what a { r: 1, g: 0, b: 0 } colour resolves to without forcing a Palette record -- the identical quantisation the fill round trips already pin.
-      expect(findCell(content, 0, 0, 3)?.font).toEqual({
+      expect(findCell(content, 0, 0, 3)?.font).toStrictEqual({
         fontFamily: "Courier New",
         underline: true,
         strike: true,
@@ -1065,8 +1068,8 @@ describe("writeXlsContent", () => {
         ]),
       );
       const content = readXlsContent(bytes);
-      expect(findCell(content, 0, 0, 0)?.font).toEqual({ bold: true });
-      expect(findCell(content, 1, 0, 0)?.font).toEqual({ bold: true });
+      expect(findCell(content, 0, 0, 0)?.font).toStrictEqual({ bold: true });
+      expect(findCell(content, 1, 0, 0)?.font).toStrictEqual({ bold: true });
     });
 
     it("round-trips a font combined with a fill on the same cell, through the XF the two share", () => {
@@ -1086,8 +1089,8 @@ describe("writeXlsContent", () => {
         ]),
       );
       const readBack = findCell(readXlsContent(bytes), 0, 0, 0);
-      expect(readBack?.font).toEqual({ bold: true });
-      expect(readBack?.background).toEqual({
+      expect(readBack?.font).toStrictEqual({ bold: true });
+      expect(readBack?.background).toStrictEqual({
         kind: "solid",
         color: { r: 1, g: 0, b: 0 },
       });
@@ -1102,8 +1105,8 @@ describe("writeXlsContent", () => {
         ]),
       );
       const readBack = findCell(readXlsContent(bytes), 0, 0, 0);
-      expect(readBack?.value).toEqual({ kind: "empty" });
-      expect(readBack?.font).toEqual({ bold: true });
+      expect(readBack?.value).toStrictEqual({ kind: "empty" });
+      expect(readBack?.font).toStrictEqual({ bold: true });
     });
 
     it("writes no font of a cell's own for a ContentFont that merely restates the Normal font's values", () => {
@@ -1155,7 +1158,7 @@ describe("writeXlsContent", () => {
           { name: "LocalRange", refersTo: "Sheet2!$C$2", scopeSheetIndex: 1 },
         ],
       });
-      expect(readXlsContent(bytes).names).toEqual([
+      expect(readXlsContent(bytes).names).toStrictEqual([
         { name: "SalesData", refersTo: "Sheet1!$A$1:$B$2" },
         {
           name: "LocalRange",
@@ -1174,7 +1177,7 @@ describe("writeXlsContent", () => {
           { name: "Abs", refersTo: "Other!$A$1" },
         ],
       });
-      expect(readXlsContent(bytes).names).toEqual([
+      expect(readXlsContent(bytes).names).toStrictEqual([
         { name: "Rel", refersTo: "'My Sheet'!A1:B2" },
         { name: "Abs", refersTo: "Other!$A$1:$A$1" },
       ]);
@@ -1191,7 +1194,7 @@ describe("writeXlsContent", () => {
           },
         ],
       });
-      expect(readXlsContent(bytes).names).toEqual([
+      expect(readXlsContent(bytes).names).toStrictEqual([
         {
           name: "_xlnm._FilterDatabase",
           refersTo: "Sheet1!$A$1:$C$1",
@@ -1247,7 +1250,7 @@ describe("writeXlsContent", () => {
         },
       };
       const bytes = writeXlsContent(input);
-      expect(readXlsContent(bytes).metadata).toEqual(input.metadata);
+      expect(readXlsContent(bytes).metadata).toStrictEqual(input.metadata);
     });
 
     it('writes no "\\x05SummaryInformation" stream at all when metadata carries nothing that stream can hold', () => {
@@ -1258,7 +1261,7 @@ describe("writeXlsContent", () => {
       expect(
         streams.some((stream) => stream.path === "\x05SummaryInformation"),
       ).toBe(false);
-      expect(readXlsContent(bytes).metadata).toEqual({});
+      expect(readXlsContent(bytes).metadata).toStrictEqual({});
     });
 
     it("throws a BiffWriteError, not a raw RangeError, for a malformed createdIso", () => {
@@ -1352,7 +1355,9 @@ describe("print settings", () => {
   };
 
   it("round-trips every field of a fully populated print setting", () => {
-    expect(roundTripped(FULL_PRINT_SETTINGS)).toEqual(FULL_PRINT_SETTINGS);
+    expect(roundTripped(FULL_PRINT_SETTINGS)).toStrictEqual(
+      FULL_PRINT_SETTINGS,
+    );
   });
 
   it("round-trips fit-to-page in place of a scale percentage", () => {
@@ -1362,7 +1367,7 @@ describe("print settings", () => {
       repeatColumns: FULL_PRINT_SETTINGS.repeatColumns,
       fitToPages: { width: 2, height: 3 },
     };
-    expect(roundTripped(settings)).toEqual(settings);
+    expect(roundTripped(settings)).toStrictEqual(settings);
   });
 
   it("round-trips a portrait page size without transposing it", () => {
@@ -1371,12 +1376,12 @@ describe("print settings", () => {
       ...PRINT_SETTINGS,
       pageSize: PAGE_SIZE_A4,
     };
-    expect(roundTripped(settings)?.pageSize).toEqual(PAGE_SIZE_A4);
+    expect(roundTripped(settings)?.pageSize).toStrictEqual(PAGE_SIZE_A4);
   });
 
   it("round-trips a sheet whose settings are exactly the Normal preset", () => {
     // Nothing in ContentSheetPrintSettings can say "this sheet states nothing", so the writer emits the preset's own values rather than omitting the records -- and the reader's own fallback then agrees with them.
-    expect(roundTripped(PRINT_SETTINGS)).toEqual(PRINT_SETTINGS);
+    expect(roundTripped(PRINT_SETTINGS)).toStrictEqual(PRINT_SETTINGS);
   });
 
   it("round-trips an explicit 100% scale onto the absence that means the same thing", () => {
@@ -1392,7 +1397,7 @@ describe("print settings", () => {
       ...WITHOUT_SCALE_AND_REPEAT_COLUMNS,
       scalePercent: FULL_PRINT_SETTINGS.scalePercent,
     };
-    expect(roundTripped(settings)).toEqual(settings);
+    expect(roundTripped(settings)).toStrictEqual(settings);
   });
 
   it("keeps each sheet's own print settings separate", () => {
@@ -1409,8 +1414,8 @@ describe("print settings", () => {
     ]);
 
     const read = readXlsContent(writeXlsContent(content));
-    expect(read.sheets[0]?.printSettings).toEqual(FULL_PRINT_SETTINGS);
-    expect(read.sheets[1]?.printSettings.printRange).toEqual({
+    expect(read.sheets[0]?.printSettings).toStrictEqual(FULL_PRINT_SETTINGS);
+    expect(read.sheets[1]?.printSettings.printRange).toStrictEqual({
       startRow: 0,
       startColumn: 0,
       endRow: 9,
@@ -1432,7 +1437,7 @@ describe("print settings", () => {
     ]);
 
     const read = readXlsContent(writeXlsContent(content)).sheets[0];
-    expect(read?.printSettings.pageSize).toEqual(PAGE_SIZE_LETTER);
+    expect(read?.printSettings.pageSize).toStrictEqual(PAGE_SIZE_LETTER);
     expect(read?.printSettings.gridlines).toBe(true);
     expect(read?.cells).toHaveLength(1);
   });
@@ -1447,7 +1452,7 @@ describe("print settings", () => {
         ...PRINT_SETTINGS,
         fitToPages: { width: 100_000, height: 2 },
       })?.fitToPages,
-    ).toEqual({ width: 32767, height: 2 });
+    ).toStrictEqual({ width: 32767, height: 2 });
   });
 
   it("clamps a print range and a repeated band past BIFF8's own row/column ceiling, rather than wrapping to an in-grid coordinate", () => {
@@ -1466,14 +1471,14 @@ describe("print settings", () => {
       repeatColumns: { start: 1, end: 300 },
     };
     const read = roundTripped(settings);
-    expect(read?.printRange).toEqual({
+    expect(read?.printRange).toStrictEqual({
       startRow: 2,
       startColumn: 2,
       endRow: 0xffff,
       endColumn: 0xff,
     });
-    expect(read?.repeatRows).toEqual({ start: 2, end: 0xffff });
-    expect(read?.repeatColumns).toEqual({ start: 1, end: 0xff });
+    expect(read?.repeatRows).toStrictEqual({ start: 2, end: 0xffff });
+    expect(read?.repeatColumns).toStrictEqual({ start: 1, end: 0xff });
   });
 
   it("drops a manual page break past BIFF8's own row/column ceiling, rather than wrapping to an in-grid index", () => {
@@ -1482,7 +1487,7 @@ describe("print settings", () => {
       ...PRINT_SETTINGS,
       manualBreaks: { rows: [10, 70_000], columns: [3, 400] },
     };
-    expect(roundTripped(settings)?.manualBreaks).toEqual({
+    expect(roundTripped(settings)?.manualBreaks).toStrictEqual({
       rows: [10],
       columns: [3],
     });
@@ -1585,7 +1590,7 @@ describe("formula records", () => {
     const read = readXlsContent(writeXlsContent(content));
     const written = findCell(read, 0, 0, 2);
     expect(written?.formula).toBe("A1+B1");
-    expect(written?.value).toEqual({ kind: "number", value: 5 });
+    expect(written?.value).toStrictEqual({ kind: "number", value: 5 });
   });
 
   it("refuses a formula this package's own reader could not read back, rather than writing unreadable bytes", () => {
@@ -1634,7 +1639,7 @@ describe("cell comments", () => {
       ]),
     ]);
     const read = readXlsContent(writeXlsContent(content));
-    expect(findCell(read, 0, 0, 0)?.comment).toEqual({
+    expect(findCell(read, 0, 0, 0)?.comment).toStrictEqual({
       text: "a note",
       author: "Reviewer",
     });
@@ -1653,7 +1658,7 @@ describe("cell comments", () => {
       ]),
     ]);
     const read = readXlsContent(writeXlsContent(content));
-    expect(findCell(read, 0, 2, 2)?.comment).toEqual({
+    expect(findCell(read, 0, 2, 2)?.comment).toStrictEqual({
       text: "pinned to nothing",
     });
   });
@@ -1670,7 +1675,9 @@ describe("cell comments", () => {
       ]),
     ]);
     const read = readXlsContent(writeXlsContent(content));
-    expect(findCell(read, 0, 0, 0)?.comment).toEqual({ text: "anonymous" });
+    expect(findCell(read, 0, 0, 0)?.comment).toStrictEqual({
+      text: "anonymous",
+    });
   });
 
   it("round-trips an empty comment with no text at all", () => {
@@ -1680,7 +1687,7 @@ describe("cell comments", () => {
       ]),
     ]);
     const read = readXlsContent(writeXlsContent(content));
-    expect(findCell(read, 0, 0, 0)?.comment).toEqual({ text: "" });
+    expect(findCell(read, 0, 0, 0)?.comment).toStrictEqual({ text: "" });
   });
 
   it("round-trips multiple comments on the same sheet, each keeping its own cell and text", () => {
@@ -1701,8 +1708,10 @@ describe("cell comments", () => {
       ]),
     ]);
     const read = readXlsContent(writeXlsContent(content));
-    expect(findCell(read, 0, 0, 0)?.comment).toEqual({ text: "note one" });
-    expect(findCell(read, 0, 5, 1)?.comment).toEqual({
+    expect(findCell(read, 0, 0, 0)?.comment).toStrictEqual({
+      text: "note one",
+    });
+    expect(findCell(read, 0, 5, 1)?.comment).toStrictEqual({
       text: "note two",
       author: "Someone",
     });
@@ -1878,7 +1887,7 @@ describe("writeXlsContent: images and embedded objects written (#971)", () => {
     const read = readXlsContent(written);
     const embedded = read.sheets[0]?.embeddedObjects?.[0];
     expect(embedded?.objectKind).toBe("drawing");
-    expect(embedded?.document).toEqual(embeddedDocument);
+    expect(embedded?.document).toStrictEqual(embeddedDocument);
   });
 
   it("throws when asked to write a 'chart' embedded object", () => {
@@ -1929,7 +1938,7 @@ describe("writeXlsContent: data validations written (#971)", () => {
     const reread = readXlsContent(
       writeXlsContent(document([sheet("S", [], { dataValidations: [rule] })])),
     );
-    expect(reread.sheets[0]?.dataValidations).toEqual([rule]);
+    expect(reread.sheets[0]?.dataValidations).toStrictEqual([rule]);
   });
 
   it("round-trips a between rule's two formulas, a list rule's quoted literal, and a custom rule's expression", () => {
@@ -1955,7 +1964,7 @@ describe("writeXlsContent: data validations written (#971)", () => {
     const reread = readXlsContent(
       writeXlsContent(document([sheet("S", [], { dataValidations: rules })])),
     );
-    expect(reread.sheets[0]?.dataValidations).toEqual(rules);
+    expect(reread.sheets[0]?.dataValidations).toStrictEqual(rules);
   });
 
   it("refuses an operator-less comparison type and a two-operand operator without its second formula", () => {
@@ -2014,7 +2023,7 @@ describe("writeXlsContent: conditional formats written (#971)", () => {
         document([sheet("S", [], { conditionalFormats: [rule] })]),
       ),
     );
-    expect(reread.sheets[0]?.conditionalFormats).toEqual([rule]);
+    expect(reread.sheets[0]?.conditionalFormats).toStrictEqual([rule]);
   });
 
   it("round-trips a style-less notBetween rule's two formulas", () => {
@@ -2030,7 +2039,7 @@ describe("writeXlsContent: conditional formats written (#971)", () => {
         document([sheet("S", [], { conditionalFormats: [rule] })]),
       ),
     );
-    expect(reread.sheets[0]?.conditionalFormats).toEqual([rule]);
+    expect(reread.sheets[0]?.conditionalFormats).toStrictEqual([rule]);
   });
 
   it("refuses a rule variant with no BIFF8 spelling rather than dropping it", () => {
@@ -2079,7 +2088,7 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
         { value: { type: "max" }, color: { r: 0, g: 1, b: 0 } },
       ],
     };
-    expect(roundTripped(rule)).toEqual([rule]);
+    expect(roundTripped(rule)).toStrictEqual([rule]);
   });
 
   it("round-trips a three-stop colour scale with numeric, percent, and percentile thresholds", () => {
@@ -2095,7 +2104,7 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
         { value: { type: "max" }, color: { r: 1, g: 0, b: 0 } },
       ],
     };
-    expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+    expect(roundTripped(rule)).toStrictEqual([{ ...rule, priority: 1 }]);
   });
 
   it("round-trips a data bar with its bar colour, thresholds, and hidden value", () => {
@@ -2108,7 +2117,7 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
       color: { r: 0, g: 204 / 255, b: 1 },
       showValue: false,
     };
-    expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+    expect(roundTripped(rule)).toStrictEqual([{ ...rule, priority: 1 }]);
   });
 
   it("round-trips an icon set with reverse and a five-icon set", () => {
@@ -2125,7 +2134,7 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
         { type: "max" },
       ],
     };
-    expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+    expect(roundTripped(rule)).toStrictEqual([{ ...rule, priority: 1 }]);
   });
 
   it("refuses an icon-set threshold count the named set cannot carry", () => {
@@ -2186,7 +2195,7 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
         background: { r: 1, g: 1, b: 0.8 },
       },
     };
-    expect(roundTripped(rule)).toEqual([rule]);
+    expect(roundTripped(rule)).toStrictEqual([rule]);
   });
 
   it("round-trips a plain aboveAverage rule and an equal-average below-average one", () => {
@@ -2201,10 +2210,19 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
       equalAverage: true,
       stdDev: 2,
     };
-    expect(roundTripped(above)).toEqual([{ ...above, priority: 1 }]);
-    expect(roundTripped(belowEqualStdDev)).toEqual([
+    expect(roundTripped(above)).toStrictEqual([{ ...above, priority: 1 }]);
+    expect(roundTripped(belowEqualStdDev)).toStrictEqual([
       { ...belowEqualStdDev, priority: 1 },
     ]);
+  });
+
+  it("round-trips an aboveAverage rule carrying a style", () => {
+    const rule: ContentSheetConditionalFormat = {
+      type: "aboveAverage",
+      ranges: [RANGE],
+      style: { textColor: { r: 1, g: 0, b: 0 } },
+    };
+    expect(roundTripped(rule)).toStrictEqual([{ ...rule, priority: 1 }]);
   });
 
   it("refuses an aboveAverage standard-deviation count beyond [MS-XLS]'s own table", () => {
@@ -2223,7 +2241,17 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
       ranges: [RANGE],
       timePeriod: "last7Days",
     };
-    expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+    expect(roundTripped(rule)).toStrictEqual([{ ...rule, priority: 1 }]);
+  });
+
+  it("round-trips a timePeriod rule carrying a style", () => {
+    const rule: ContentSheetConditionalFormat = {
+      type: "timePeriod",
+      ranges: [RANGE],
+      timePeriod: "today",
+      style: { background: { r: 1, g: 1, b: 0 } },
+    };
+    expect(roundTripped(rule)).toStrictEqual([{ ...rule, priority: 1 }]);
   });
 
   it("round-trips the operand-free family", () => {
@@ -2240,7 +2268,7 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
         ranges: [RANGE],
         style: { background: { r: 1, g: 1, b: 0.8 } },
       };
-      expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+      expect(roundTripped(rule)).toStrictEqual([{ ...rule, priority: 1 }]);
     }
   });
 
@@ -2257,7 +2285,7 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
         text: 'a "quoted" needle',
         style: { textColor: { r: 1, g: 0, b: 0 } },
       };
-      expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+      expect(roundTripped(rule)).toStrictEqual([{ ...rule, priority: 1 }]);
     }
   });
 
@@ -2283,7 +2311,7 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
         document([sheet("S", [], { conditionalFormats: rules })]),
       ),
     );
-    expect(reread.sheets[0]?.conditionalFormats).toEqual([
+    expect(reread.sheets[0]?.conditionalFormats).toStrictEqual([
       { ...rules[0], priority: 2 },
       { ...rules[1], priority: 1 },
       { ...rules[2], priority: 3 },
@@ -2340,7 +2368,7 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
         document([sheet("S", [], { conditionalFormats: [cellIs, textRule] })]),
       ),
     );
-    expect(reread.sheets[0]?.conditionalFormats).toEqual([
+    expect(reread.sheets[0]?.conditionalFormats).toStrictEqual([
       cellIs,
       { ...textRule, priority: 1 },
     ]);
@@ -2354,7 +2382,7 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
       max: { type: "max" },
       color: { r: 1, g: 0, b: 0 },
     };
-    expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+    expect(roundTripped(rule)).toStrictEqual([{ ...rule, priority: 1 }]);
   });
 
   it("round-trips an icon set with showValue false and reverse absent (the opposite of the earlier reverse test)", () => {
@@ -2369,7 +2397,7 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
         { type: "max" },
       ],
     };
-    expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+    expect(roundTripped(rule)).toStrictEqual([{ ...rule, priority: 1 }]);
   });
 
   it("round-trips a top10 rule selecting from the top rather than the bottom, by count rather than percent", () => {
@@ -2378,7 +2406,7 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
       ranges: [RANGE],
       rank: 3,
     };
-    expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+    expect(roundTripped(rule)).toStrictEqual([{ ...rule, priority: 1 }]);
   });
 
   it("round-trips every combination of aboveAverage/equalAverage", () => {
@@ -2392,8 +2420,10 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
       ranges: [RANGE],
       aboveAverage: false,
     };
-    expect(roundTripped(aboveEqual)).toEqual([{ ...aboveEqual, priority: 1 }]);
-    expect(roundTripped(belowNotEqual)).toEqual([
+    expect(roundTripped(aboveEqual)).toStrictEqual([
+      { ...aboveEqual, priority: 1 },
+    ]);
+    expect(roundTripped(belowNotEqual)).toStrictEqual([
       { ...belowNotEqual, priority: 1 },
     ]);
   });
@@ -2405,7 +2435,7 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
       rank: 1,
       stopIfTrue: true,
     };
-    expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+    expect(roundTripped(rule)).toStrictEqual([{ ...rule, priority: 1 }]);
   });
 
   it("round-trips a colour-scale stop of every threshold kind, including percentile and formula", () => {
@@ -2423,7 +2453,7 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
         },
       ],
     };
-    expect(roundTripped(rule)).toEqual([{ ...rule, priority: 1 }]);
+    expect(roundTripped(rule)).toStrictEqual([{ ...rule, priority: 1 }]);
   });
 
   it("refuses a threshold of a value-bearing type carrying no value", () => {
