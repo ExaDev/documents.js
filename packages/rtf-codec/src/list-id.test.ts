@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { mintRtfListNumId, parseRtfListNumId } from "./list-id";
 
 describe("mintRtfListNumId", () => {
@@ -39,6 +39,26 @@ describe("mintRtfListNumId", () => {
 });
 
 describe("parseRtfListNumId", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns undefined if the index capture somehow comes back absent from an otherwise-successful match", () => {
+    // NUMID_PATTERN's own (\d+) capture group is required, so a real match can never actually omit it -- but the code still guards it explicitly (TypeScript types every regex match index as possibly undefined, since the type system has no way to encode "always present for a required group"). Forcing the impossible case here proves that guard is real and not merely decorative.
+    vi.spyOn(RegExp.prototype, "exec").mockImplementationOnce(function (
+      this: RegExp,
+      value: string,
+    ) {
+      // A fresh RegExp built from the same source/flags, rather than reusing the (now-mocked) prototype method, so the real match still runs underneath the mock.
+      const result = new RegExp(this.source, this.flags).exec(value);
+      if (result !== null) {
+        result[1] = undefined as unknown as string;
+      }
+      return result;
+    });
+    expect(parseRtfListNumId("rtf3:bullet")).toBeUndefined();
+  });
+
   it("parses a bullet numId with no start", () => {
     expect(parseRtfListNumId("rtf3:bullet")).toEqual({
       listOverrideIndex: 3,
