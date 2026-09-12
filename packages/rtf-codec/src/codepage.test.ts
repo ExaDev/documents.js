@@ -110,6 +110,91 @@ describe("decodeCodepageBytes: East Asian DBCS pages", () => {
   });
 });
 
+describe("decodeCodepageBytes: general behaviour", () => {
+  it("decodes an empty input as an empty string without touching the codepage at all", () => {
+    expect(
+      decodeCodepageBytes(new Uint8Array(0), 1252, NOOP_RTF_DIAGNOSTIC_SINK),
+    ).toBe("");
+  });
+
+  it("decodes through the platform's own UTF-8 decoder for \\ansicpg65001", () => {
+    const bytes = new TextEncoder().encode("café €");
+    expect(
+      decodeCodepageBytes(bytes, UTF8_CODEPAGE, NOOP_RTF_DIAGNOSTIC_SINK),
+    ).toBe("café €");
+  });
+
+  it("treats the byte right below 0x80 as plain ASCII and the byte at 0x80 as the table's own first entry", () => {
+    expect(
+      decodeCodepageBytes(
+        Uint8Array.from([0x7f]),
+        1252,
+        NOOP_RTF_DIAGNOSTIC_SINK,
+      ),
+    ).toBe("");
+    expect(
+      decodeCodepageBytes(
+        Uint8Array.from([0x80]),
+        1252,
+        NOOP_RTF_DIAGNOSTIC_SINK,
+      ),
+    ).toBe("€");
+  });
+
+  it("reports the exact unsupported-codepage message, naming both the requested and fallback pages", () => {
+    const diagnostics: string[] = [];
+    decodeCodepageBytes(Uint8Array.from([0x41]), 9999, (diagnostic) => {
+      diagnostics.push(diagnostic.message);
+    });
+    expect(diagnostics).toEqual([
+      "code page 9999 is not supported; decoding this run through code page 1252 instead",
+    ]);
+  });
+
+  it("does not read one byte past the end of a DBCS run", () => {
+    // Two whole two-byte GBK characters; an off-by-one loop bound would either drop the last character or read a phantom trailing byte.
+    expect(
+      decodeCodepageBytes(
+        Uint8Array.from([0xd6, 0xd0, 0xd6, 0xd0]),
+        936,
+        NOOP_RTF_DIAGNOSTIC_SINK,
+      ),
+    ).toBe("中中");
+  });
+
+  it("treats the byte right below 0x80 in a DBCS run as plain ASCII", () => {
+    expect(
+      decodeCodepageBytes(
+        Uint8Array.from([0x7f]),
+        936,
+        NOOP_RTF_DIAGNOSTIC_SINK,
+      ),
+    ).toBe("");
+  });
+
+  it("decodes a lead byte followed by a trail byte it does not define as U+FFFD", () => {
+    // 0x81 is a real Shift-JIS lead byte; 0x7f is never a valid trail byte for it.
+    expect(
+      decodeCodepageBytes(
+        Uint8Array.from([0x81, 0x7f]),
+        932,
+        NOOP_RTF_DIAGNOSTIC_SINK,
+      ),
+    ).toBe("�");
+  });
+
+  it("decodes a high byte that is neither a lead byte nor a single-byte extra as U+FFFD", () => {
+    // 936 (GBK) defines no single-byte extras at all, and 0x80 is not one of its lead bytes.
+    expect(
+      decodeCodepageBytes(
+        Uint8Array.from([0x80]),
+        936,
+        NOOP_RTF_DIAGNOSTIC_SINK,
+      ),
+    ).toBe("�");
+  });
+});
+
 describe("readRtfContent: East Asian DBCS pages end to end", () => {
   it("decodes a Shift-JIS document declared via \\ansicpg932 with no unsupported-codepage diagnostic", () => {
     const { document, diagnostics } = readRtfContent(
