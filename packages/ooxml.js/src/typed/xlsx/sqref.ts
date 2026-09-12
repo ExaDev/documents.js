@@ -12,8 +12,9 @@ export function parseSqref(sqref: string | undefined): ContentSheetRange[] {
   if (sqref === undefined) {
     return [];
   }
+  // Split on a single whitespace character rather than a run of them (`\s+`): splitting on each individual character instead only ever inserts extra EMPTY strings between adjacent whitespace characters, which the loop's own `token === ""` skip below already discards -- so the two split forms produce the identical final token list regardless of how many consecutive whitespace characters separate two ranges.
   const ranges: ContentSheetRange[] = [];
-  for (const token of sqref.split(/\s+/)) {
+  for (const token of sqref.split(/\s/)) {
     if (token === "") {
       continue;
     }
