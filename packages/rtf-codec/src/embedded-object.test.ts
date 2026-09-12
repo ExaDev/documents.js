@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { writeCompoundFile, writeOlePackage } from "archive-codec";
+import {
+  readCompoundFile,
+  readOlePackage,
+  writeCompoundFile,
+  writeOlePackage,
+} from "archive-codec";
 import type { ContentEmbeddedObject } from "document-schema.js";
 import {
   readEmbeddedObjectData,
@@ -171,6 +176,38 @@ describe("readEmbeddedObjectData", () => {
     expect(bytes.length).toBe(dibStart + 52);
   });
 
+  it("writes an empty sourcePath and tempPath into the Package stream, not arbitrary filler", () => {
+    const bytes = writeEmbeddedObjectData(embedded);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const classNameLength = "Package".length + 1;
+    const objectHeaderLength = 8 + (4 + classNameLength) + 4 + 4;
+    const nativeDataSize = view.getUint32(objectHeaderLength, true);
+    const nativeData = bytes.subarray(
+      objectHeaderLength + 4,
+      objectHeaderLength + 4 + nativeDataSize,
+    );
+    const streams = readCompoundFile(nativeData);
+    const packageStream = streams.find((stream) => stream.path === "Package");
+    if (packageStream === undefined) {
+      throw new Error("expected a Package stream");
+    }
+    const olePackage = readOlePackage(packageStream.bytes);
+    expect(olePackage.sourcePath).toBe("");
+    expect(olePackage.tempPath).toBe("");
+  });
+
+  it("rejects a compound file with no stream named Package at all", () => {
+    const nativeData = writeCompoundFile([
+      { path: "NotPackage", bytes: new TextEncoder().encode("{}") },
+    ]);
+    const bytes = buildEmbeddedObjectBytes({
+      formatId: 0x00000002,
+      className: "Package",
+      nativeData,
+    });
+    expect(readEmbeddedObjectData(bytes)).toBeUndefined();
+  });
+
   it("rejects a payload whose bytes end exactly at NativeData, with no Presentation field at all", () => {
     // The pre-fix shape this writer used to produce: a real, decodable NativeData with nothing after it. EmbeddedObject's own fourth field is mandatory, so this is no longer spec-conformant \\objdata even though NativeData alone still decodes.
     const bytes = buildEmbeddedObjectBytes({
@@ -188,6 +225,34 @@ describe("readEmbeddedObjectData", () => {
       className: "Package",
       nativeData: packagedJson(embedded),
       presentation: [...uint32Le(0x00000501)], // OLEVersion only -- FormatID never arrives
+    });
+    expect(readEmbeddedObjectData(bytes)).toBeUndefined();
+  });
+
+  it("rejects a PresentationObjectHeader.FormatID other than 0x00000005, even when otherwise well-formed", () => {
+    const presentation = presentationObjectBytes();
+    const buffer = Uint8Array.from(presentation);
+    // FormatID is the 4 bytes right after OLEVersion.
+    new DataView(buffer.buffer).setUint32(4, 0x00000000, true);
+    const bytes = buildEmbeddedObjectBytes({
+      formatId: 0x00000002,
+      className: "Package",
+      nativeData: packagedJson(embedded),
+      presentation: Array.from(buffer),
+    });
+    expect(readEmbeddedObjectData(bytes)).toBeUndefined();
+  });
+
+  it("rejects a ClipboardFormat other than CF_DIB, even when otherwise well-formed", () => {
+    const presentation = presentationObjectBytes();
+    const buffer = Uint8Array.from(presentation);
+    // ClipboardFormat is the 4 bytes right after PresentationObjectHeader (OLEVersion + FormatID + empty ClassName = 12 bytes).
+    new DataView(buffer.buffer).setUint32(12, 0x00000002, true); // CF_BITMAP, not CF_DIB
+    const bytes = buildEmbeddedObjectBytes({
+      formatId: 0x00000002,
+      className: "Package",
+      nativeData: packagedJson(embedded),
+      presentation: Array.from(buffer),
     });
     expect(readEmbeddedObjectData(bytes)).toBeUndefined();
   });
