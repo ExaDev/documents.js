@@ -833,6 +833,28 @@ describe("table cell attribute gaps", () => {
     );
   });
 
+  it("carries a resolved table formula onto the cell", () => {
+    // A1+B1: a cell reference (code 64, absolute-flag word, row word, column word) for A1, the binary "+" token (1), then the same cell-reference shape for B1 -- the identical byte pattern stream/formula.test.ts proves readTableFormula resolves to "A1+B1" on its own, here wrapped in the embedded subfunction's own leading and trailing length-word framing.
+    const cellA1 = [64, ...word(0), ...word(0)];
+    const cellB1 = [64, ...word(0), ...word(1)];
+    const formulaTokens = [...cellA1, 1, ...cellB1];
+    const document = readDocumentArea([
+      ...tableDefinition([1200]),
+      ...text("5"),
+      ...eolFunction({
+        subgroup: EOL_TABLE_ROW,
+        embedded: embeddedSubfunction(CELL_FORMULA, [
+          ...word(formulaTokens.length),
+          ...formulaTokens,
+          ...word(formulaTokens.length),
+        ]),
+      }),
+      ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+    ]);
+    const cell = tablesOf(document)[0]?.rows[0]?.cells[0];
+    expect(cell?.formula).toBe("A1+B1");
+  });
+
   it("resolves a blended (pattern) cell fill and reports it", () => {
     const diagnostics: WpdDiagnostic[] = [];
     const document = readWpdContent(
