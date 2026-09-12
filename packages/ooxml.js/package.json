@@ -1,6 +1,6 @@
 {
   "name": "ooxml.js",
-  "version": "8.14.2",
+  "version": "8.14.4",
   "description": "Type-safe, lossless round-trip conversion between OOXML packages (docx, pptx, xlsx) and JSON, built on Zod 4 codecs.",
   "type": "module",
   "repository": {
@@ -86,7 +86,7 @@
   "dependencies": {
     "archive-codec": "1.11.1",
     "document-schema.js": "7.11.1",
-    "excel-number-format": "1.2.1",
+    "excel-number-format": "1.2.3",
     "fast-xml-parser": "5.10.1",
     "fflate": "0.8.3",
     "zod": "4.4.3"

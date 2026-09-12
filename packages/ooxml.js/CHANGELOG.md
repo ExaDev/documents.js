@@ -1,3 +1,17 @@
+## [8.14.4](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.14.3...ooxml.js%408.14.4) (2026-09-12)
+
+
+### Dependencies
+
+- Updated excel-number-format to 1.2.3
+
+## [8.14.3](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.14.2...ooxml.js%408.14.3) (2026-09-11)
+
+
+### Dependencies
+
+- Updated excel-number-format to 1.2.2
+
 ## [8.14.2](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.14.1...ooxml.js%408.14.2) (2026-09-11)
 
 ### Bug Fixes

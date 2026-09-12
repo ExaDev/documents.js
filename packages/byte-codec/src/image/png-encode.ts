@@ -17,6 +17,11 @@ export const PNG_MAX_DIMENSION = 0x7fffffff;
 // A ceiling on width * height, on top of PNG_MAX_DIMENSION above -- the spec bounds only each dimension independently, not their product, so a pair of dimensions that individually satisfy PNG_MAX_DIMENSION (e.g. 46341 x 46341, or 65536 x 65536) can still multiply into an unboundedly large pixel count. This has no PNG-spec basis -- it is a practical, finite ceiling on the per-call work this encoder is willing to do, not a guarantee that encoding at or near it stays fast: measured directly, encoding a PNG_MAX_PIXELS-sized image takes tens of seconds end to end, dominated by filterScanlines' own adaptive per-row search across all five PNG filter types and the subsequent deflate pass, not by the smaller per-pixel loops in detectPalette or writeTruecolorPng's interleave step. The point of the bound is to keep that worst case finite rather than to keep it quick, and this figure is chosen high enough to reject only genuinely extreme inputs -- some real sources (an above-100-megapixel medium-format sensor, a high-DPI full-page scan) do exceed it, so this is not a claim that every legitimate photograph or scan stays under the ceiling, only that one large enough to exceed it needs downsampling before it reaches this encoder.
 export const PNG_MAX_PIXELS = 100_000_000;
 
+// Extracted from encodePng's own guard purely so its exact boundary (a pixel count of precisely PNG_MAX_PIXELS must be accepted, one more must not) is directly, cheaply testable: exercising this comparison through encodePng itself at the real boundary means actually allocating and filtering/deflating a genuine 100-million-pixel image, which -- see PNG_MAX_PIXELS' own comment on what dominates cost at this size -- takes tens of seconds even in the cheapest configuration, and far longer under Stryker's per-statement coverage instrumentation (multiple minutes, repeated across every mutant in the whole package's test run). A pure, standalone predicate keeps the real guard's exact logic under test without paying that cost at all.
+export function exceedsMaxPixelCount(pixelCount: number): boolean {
+  return pixelCount > PNG_MAX_PIXELS;
+}
+
 export interface PngEncodeOptions {
   // 'adaptive' (the default) picks, per row, whichever of the five PNG filters minimises the sum of the filtered bytes' absolute values -- the PNG spec's own recommended heuristic. 'none' always emits filter type 0, useful for deterministic, human-auditable test output.
   readonly filter?: "none" | "adaptive";
@@ -88,7 +93,7 @@ function detectPalette(image: RawImage): PaletteEncoding | undefined {
     const g = data[base + 1] ?? 0;
     const b = data[base + 2] ?? 0;
     const a = alpha === undefined ? 255 : (alpha[i] ?? 0);
-    // A bijective encoding of the four 0..255 samples into one safe-integer key -- multiplication (not a `<<` shift) so the top channel never overflows into JS's 32-bit bitwise-operator truncation.
+    // Stryker disable next-line ArithmeticOperator: a bijective encoding of the four 0..255 samples into one safe-integer key (multiplication, not a `<<` shift, so the top channel never overflows into JS's 32-bit bitwise-operator truncation) -- flipping any one term's sign, or replacing its multiplication by division, still leaves this expression injective over r/g/b/a's actual 0..255 domain, since each coefficient's magnitude (256^0, 256^1, 256^2, 256^3) is exactly the span of the digit below it: a sign flip merely relocates that digit's contiguous value range without ever overlapping another digit's range, and a power-of-two division is exact in IEEE754 (no rounding) and stays strictly fractional (< 1), never spilling into an adjacent integer digit. Since the only externally observable behaviour of `key` is whether two (r,g,b,a) tuples compare equal as Map keys, and every one of these variants preserves that same equality partition on this domain, none of them can be distinguished by any test.
     const key = r + g * 256 + b * 65536 + a * 16777216;
 
     let index = colorToIndex.get(key);
@@ -165,9 +170,11 @@ function writeTruecolorPng(
   const pixelCount = width * height;
 
   const interleaved = new Uint8Array(pixelCount * outChannels);
+  // Stryker disable next-line EqualityOperator: an extra i === pixelCount iteration writes at dstBase === interleaved.length exactly (pixelCount * outChannels) and beyond -- always out of bounds, always silently dropped by Uint8Array, never observable.
   for (let i = 0; i < pixelCount; i++) {
     const srcBase = i * channels;
     const dstBase = i * outChannels;
+    // Stryker disable next-line EqualityOperator: an extra c === channels iteration writes to interleaved[dstBase + channels], which is either this same pixel's alpha slot (immediately overwritten by the `if (alpha !== undefined)` assignment right below, in the same iteration) or, when there is no alpha, the very next pixel's own c === 0 slot -- overwritten by that pixel's own correct write on the next i iteration, or out of bounds entirely on the last pixel. Never observable either way.
     for (let c = 0; c < channels; c++) {
       interleaved[dstBase + c] = data[srcBase + c]!;
     }
@@ -205,7 +212,7 @@ export function encodePng(
     );
   }
   const pixelCount = image.width * image.height;
-  if (pixelCount > PNG_MAX_PIXELS) {
+  if (exceedsMaxPixelCount(pixelCount)) {
     throw new Error(
       `cannot encode a PNG with ${pixelCount} pixels (width=${image.width}, height=${image.height}); each dimension is individually within the PNG spec's own limit, but this encoder bounds their product to ${PNG_MAX_PIXELS} to avoid an unbounded per-pixel scan and allocation`,
     );

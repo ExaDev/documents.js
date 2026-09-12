@@ -141,6 +141,18 @@ export function evaluate(
   }
 }
 
+// evaluate() for a caller that can only work with a point value: same walk, same errors, but an Interval result is reported as an UnsupportedExpressionError instead of widening the return type. An Interval only ever enters an evaluation by being bound to a symbol, so a caller whose bindings are all Quantity gets a Quantity back -- but that is a fact about the bindings it passes, not something the type system can check for it, which is exactly why the narrowing belongs here as one shared, exercised check rather than being restated at each such call site (the worked-example harness is the one in this package).
+export function evaluateQuantity(
+  expression: MathExpression,
+  bindings: FormulaBindings,
+  context: SymbolTable = EMPTY_SYMBOL_TABLE,
+): Quantity {
+  return asQuantity(
+    evaluate(expression, bindings, context),
+    "evaluateQuantity",
+  );
+}
+
 function evaluateQty(node: MathQty, context: SymbolTable): Quantity {
   const unit = context.units.find((entry) => entry.id === node.unit);
   if (unit === undefined) {

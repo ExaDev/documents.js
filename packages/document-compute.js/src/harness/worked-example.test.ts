@@ -85,6 +85,73 @@ describe("runWorkedExampleSequence: dimensionless arithmetic", () => {
     expect(outcome?.outcome).toBe("mismatch");
   });
 
+  it("matches an exact zero stated answer using the absolute-tolerance branch, not a division by zero", () => {
+    const formulas = [
+      formula(equation("d", app("math:subtract", [sym("m"), sym("m2")]))),
+      formula(equation("m", num(5))),
+      formula(equation("m2", num(5))),
+      formula(equation("d", num(0))),
+    ];
+    const report = runWorkedExampleSequence(formulas);
+    expect(report.matched).toBe(1);
+  });
+
+  it("rejects a non-zero actual against a zero stated answer once it exceeds the absolute tolerance", () => {
+    const formulas = [
+      formula(equation("d", app("math:subtract", [sym("m"), sym("m2")]))),
+      formula(equation("m", num(5))),
+      formula(equation("m2", num(4))),
+      formula(equation("d", num(0))),
+    ];
+    const report = runWorkedExampleSequence(formulas);
+    expect(report.mismatched).toBe(1);
+  });
+
+  it("accepts an actual magnitude exactly at the absolute tolerance boundary against a zero stated answer (the comparison is inclusive)", () => {
+    // m - m2 = (1 + 2^-10) - 1 = 2^-10 exactly (both exact in binary), matched against relativeTolerance = 2^-10 exactly: bit-identical, not merely close.
+    const relativeTolerance = 2 ** -10;
+    const formulas = [
+      formula(equation("d", app("math:subtract", [sym("m"), sym("m2")]))),
+      formula(equation("m", num(1 + relativeTolerance))),
+      formula(equation("m2", num(1))),
+      formula(equation("d", num(0))),
+    ];
+    const report = runWorkedExampleSequence(formulas, undefined, {
+      relativeTolerance,
+    });
+    expect(report.matched).toBe(1);
+  });
+
+  it("accepts a residual exactly at the relative tolerance boundary (the comparison is inclusive)", () => {
+    // Stated (expected) = 8, computed (actual) = m * a = 2 * 4.03125 = 8.0625: both exact in binary (0.03125 = 2^-5), and withinTolerance divides by |expected| = 8, so |actual - expected| / |expected| = 0.0625 / 8 = 2^-7 exactly, matching relativeTolerance = 2^-7 bit-for-bit -- not merely close to it.
+    const relativeTolerance = 2 ** -7;
+    const formulas = [
+      formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))),
+      formula(equation("m", num(2))),
+      formula(equation("a", num(4.03125))),
+      formula(equation("F", num(8))),
+    ];
+    const report = runWorkedExampleSequence(formulas, undefined, {
+      relativeTolerance,
+    });
+    expect(report.matched).toBe(1);
+  });
+
+  it("rejects a residual just past the relative tolerance boundary, distinguishing the inclusive '<=' from a stricter '<'", () => {
+    // Same construction as above but with the stated answer nudged so the ratio is strictly greater than the tolerance -- must mismatch under either operator, so this alone doesn't kill the boundary mutant, but pairs with the exact-boundary test above to pin the comparison down from both sides.
+    const relativeTolerance = 2 ** -7;
+    const formulas = [
+      formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))),
+      formula(equation("m", num(2))),
+      formula(equation("a", num(4.0625))), // 2 * 4.0625 = 8.125, ratio = 0.125/8 = 2^-6, comfortably past 2^-7
+      formula(equation("F", num(8))),
+    ];
+    const report = runWorkedExampleSequence(formulas, undefined, {
+      relativeTolerance,
+    });
+    expect(report.mismatched).toBe(1);
+  });
+
   it("tolerates a stated answer rounded within the relative tolerance", () => {
     const formulas = [
       formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))),
@@ -155,6 +222,50 @@ describe("runWorkedExampleSequence: units-typed physics worked example", () => {
       gap: "unknown-unit",
     });
   });
+
+  it("reports division-by-zero when a definition divides by a bound zero", () => {
+    const formulas = [
+      formula(equation("q", app("math:divide", [sym("m"), sym("n")]))),
+      formula(equation("m", num(6))),
+      formula(equation("n", num(0))),
+      formula(equation("q", num(1))),
+    ];
+    const report = runWorkedExampleSequence(formulas);
+    expect(report.gaps).toBe(1);
+    expect(report.outcomes[0]).toMatchObject({
+      outcome: "gap",
+      gap: "division-by-zero",
+    });
+  });
+
+  it("reports numeric-domain when a definition takes the square root of a negative magnitude", () => {
+    const formulas = [
+      formula(equation("r", app("math:sqrt", [num(-4)]))),
+      formula(equation("r", num(2))),
+    ];
+    const report = runWorkedExampleSequence(formulas);
+    expect(report.gaps).toBe(1);
+    expect(report.outcomes[0]).toMatchObject({
+      outcome: "gap",
+      gap: "numeric-domain",
+    });
+  });
+
+  it("counts multiple independent gaps without conflating them with matches or the total", () => {
+    const formulas = [
+      formula(equation("a", qty(1, "si:no-such-unit"))), // gap 1: unknown-unit
+      formula(equation("b", app("math:sqrt", [num(-1)]))), // definition, held pending
+      formula(equation("b", num(1))), // gap 2: numeric-domain, on resolving the pending definition
+      formula(equation("F", app("math:multiply", [sym("m"), sym("a2")]))),
+      formula(equation("m", num(2))),
+      formula(equation("a2", num(3))),
+      formula(equation("F", num(6))), // a genuine match, alongside the two gaps
+    ];
+    const report = runWorkedExampleSequence(formulas, SI_UNIT_REGISTRY);
+    expect(report.gaps).toBe(2);
+    expect(report.matched).toBe(1);
+    expect(report.mismatched).toBe(0);
+  });
 });
 
 describe("runWorkedExampleSequence: structural edge cases", () => {
@@ -170,7 +281,136 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
     expect(report.total).toBe(0);
   });
 
-  it("reports unresolved when a definition never gets a stated result", () => {
+  it("skips an 'app' formula whose operator is not math:eq, rather than misreading its first argument as an equality's own left-hand side", () => {
+    // If the operator check were bypassed, this formula (app('math:add', [sym('x'), num(1)])) would be misread as the equality shape asEquality actually recognises -- a bare symbol on the left -- treating it as the binding "x = 1" instead of skipping it entirely. Observed by checking x stays unbound: a later definition using x must gap with unbound-symbol, not silently succeed using a wrongly-inferred binding.
+    const formulas = [
+      formula({
+        kind: "app",
+        operator: "math:add",
+        args: [sym("x"), num(1)],
+      }),
+      formula(equation("total", sym("x"))),
+      formula(equation("total", num(1))),
+    ];
+    const report = runWorkedExampleSequence(formulas);
+    expect(report.total).toBe(1);
+    expect(report.gaps).toBe(1);
+    expect(report.matched).toBe(0);
+    expect(report.outcomes[0]).toMatchObject({
+      outcome: "gap",
+      gap: "unbound-symbol",
+    });
+  });
+
+  it("treats an expression as a definition when at least one argument contains a symbol, even if another argument is a closed literal", () => {
+    // math:add's args are [sym('x'), num(1)] -- one contains a symbol, one does not. If containsSymbol used .every instead of .some, this would be misclassified as already-closed and evaluated immediately against EMPTY_BINDINGS, producing an unbound-symbol gap instead of being held as a pending definition.
+    const formulas = [
+      formula(equation("z", app("math:add", [sym("x"), num(1)]))),
+      formula(equation("x", num(2))),
+      formula(equation("z", num(3))),
+    ];
+    const report = runWorkedExampleSequence(formulas);
+    expect(report.gaps).toBe(0);
+    expect(report.matched).toBe(1);
+  });
+
+  it("treats a sum/prod binder's own lower, upper, and body as containing a symbol whenever any one of them does", () => {
+    // Each variant isolates one of the three sub-expressions as the only symbol-carrying one, so a definition using it is correctly held pending rather than evaluated immediately (which would fail since the outer bound symbols aren't defined yet).
+    const lowerHasSymbol: MathExpression = {
+      kind: "sum",
+      binder: "i",
+      lower: sym("n0"),
+      upper: num(2),
+      body: num(1),
+    };
+    const upperHasSymbol: MathExpression = {
+      kind: "prod",
+      binder: "i",
+      lower: num(1),
+      upper: sym("n1"),
+      body: num(1),
+    };
+    const bodyHasSymbol: MathExpression = {
+      kind: "sum",
+      binder: "i",
+      lower: num(1),
+      upper: num(2),
+      body: sym("n2"),
+    };
+    for (const [rhs, boundName, boundValue, expected] of [
+      [lowerHasSymbol, "n0", 1, 2],
+      [upperHasSymbol, "n1", 2, 1],
+      [bodyHasSymbol, "n2", 5, 10],
+    ] as const) {
+      const formulas = [
+        formula(equation("total", rhs)),
+        formula(equation(boundName, num(boundValue))),
+        formula(equation("total", num(expected))),
+      ];
+      const report = runWorkedExampleSequence(formulas);
+      expect(report.matched).toBe(1);
+      expect(report.gaps).toBe(0);
+    }
+  });
+
+  it("treats a fully closed sum (no symbol anywhere in lower/upper/body) as a binding, not a definition held pending", () => {
+    // If the OR were replaced wholesale with 'true' (rather than mutating one of its three operands), every sum/prod would be misclassified as a definition regardless of content -- including this one, which has no symbol anywhere and should instead be evaluated immediately as an ordinary closed binding, generating no outcome of its own the same way "m = 2" never does.
+    const closedSum: MathExpression = {
+      kind: "sum",
+      binder: "i",
+      lower: num(1),
+      upper: num(3),
+      body: num(5), // constant body -- 5 + 5 + 5 = 15, no reference to the binder or anything else
+    };
+    const formulas = [formula(equation("total", closedSum))];
+    const report = runWorkedExampleSequence(formulas);
+    // A closed binding with nothing ever restating it produces no outcome at all -- distinct from a wrongly-pending definition, which would surface as an "unresolved" outcome once the sequence ends.
+    expect(report.total).toBe(0);
+    expect(report.unresolved).toBe(0);
+  });
+
+  it("treats a matrix expression as containing a symbol whenever any one cell does, holding it pending rather than gapping it immediately", () => {
+    // Distinguishes "held pending, then gapped only once something restates it" (correct: unresolved=0, gaps=1, from the eventual resolution attempt) from "wrongly read as closed, gapped immediately on first sight" (a .some/.every or arrow-function mutant: since nothing ever restates "total", a wrongly-immediate gap leaves nothing pending, so no "unresolved" outcome is ever produced either -- gaps=1 either way, but only the correct path also means the definition was genuinely held). The two are told apart by NEVER restating "total": correctly held pending, the sequence ends with it still awaiting a result, which closeUnresolved reports as "unresolved", not "gap".
+    const matrixWithSymbol: MathExpression = {
+      kind: "matrix",
+      rows: [
+        [num(1), num(2)],
+        [sym("k"), num(4)],
+      ],
+    };
+    const formulas = [
+      formula(equation("total", matrixWithSymbol)),
+      formula(equation("k", num(3))),
+      // total is never restated.
+    ];
+    const report = runWorkedExampleSequence(formulas);
+    expect(report.gaps).toBe(0);
+    expect(report.unresolved).toBe(1);
+    expect(report.outcomes[0]).toMatchObject({
+      outcome: "unresolved",
+      targetSymbol: "total",
+    });
+  });
+
+  it("reports unsupported-construct once a held-pending matrix definition is finally resolved", () => {
+    const matrixWithSymbol: MathExpression = {
+      kind: "matrix",
+      rows: [[sym("k")]],
+    };
+    const formulas = [
+      formula(equation("total", matrixWithSymbol)),
+      formula(equation("k", num(3))),
+      formula(equation("total", num(1))),
+    ];
+    const report = runWorkedExampleSequence(formulas);
+    expect(report.gaps).toBe(1);
+    expect(report.outcomes[0]).toMatchObject({
+      outcome: "gap",
+      gap: "unsupported-construct",
+    });
+  });
+
+  it("reports unresolved when a definition never gets a stated result, with an exact message naming it", () => {
     const formulas = [
       formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))),
       formula(equation("m", num(2))),
@@ -182,6 +422,8 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
     expect(report.outcomes[0]).toMatchObject({
       outcome: "unresolved",
       targetSymbol: "F",
+      message:
+        '"F" was defined but the sequence never restated it as a closed numeric result before ending or being superseded by another definition',
     });
   });
 
@@ -232,6 +474,83 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
     expect(report.outcomes[0]).toMatchObject({
       outcome: "gap",
       gap: "unbound-symbol",
+    });
+  });
+
+  it("reports coverage as undefined when nothing in the sequence has a resolvable stated answer, never a fabricated 0 or 1", () => {
+    const formulas = [formula(num(42))]; // skipped entirely -- not even a gap
+    const report = runWorkedExampleSequence(formulas);
+    expect(report.coverage).toBeUndefined();
+    expect(report.matched).toBe(0);
+    expect(report.mismatched).toBe(0);
+  });
+
+  it("computes coverage as matched / (matched + mismatched), not conflated with gaps or unresolved outcomes", () => {
+    const formulas = [
+      // Two matches.
+      formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))),
+      formula(equation("m", num(2))),
+      formula(equation("a", num(3))),
+      formula(equation("F", num(6))),
+      formula(equation("G", app("math:multiply", [sym("m"), sym("b")]))),
+      formula(equation("b", num(5))),
+      formula(equation("G", num(10))),
+      // One mismatch.
+      formula(equation("H", app("math:multiply", [sym("m"), sym("c")]))),
+      formula(equation("c", num(7))),
+      formula(equation("H", num(999))),
+      // One gap (must not affect the coverage ratio at all).
+      formula(equation("j", qty(1, "si:no-such-unit"))),
+      // One unresolved (must not affect the coverage ratio either).
+      formula(equation("K", app("math:multiply", [sym("m"), sym("d")]))),
+      formula(equation("d", num(1))),
+    ];
+    const report = runWorkedExampleSequence(formulas, SI_UNIT_REGISTRY);
+    expect(report.matched).toBe(2);
+    expect(report.mismatched).toBe(1);
+    expect(report.gaps).toBe(1);
+    expect(report.unresolved).toBe(1);
+    // 2 / (2 + 1) = 2/3 -- distinct from every other plausible ratio of these four counts.
+    expect(report.coverage).toBeCloseTo(2 / 3, 12);
+  });
+
+  it("reports a defined coverage when matched equals mismatched (both nonzero), not a fabricated undefined", () => {
+    // matched - mismatched = 0 here even though matched + mismatched = 2 (nonzero) -- an arithmetic-operator mutant swapping the sum for a difference in the "nothing resolvable" guard would wrongly treat this as undefined.
+    const formulas = [
+      formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))),
+      formula(equation("m", num(2))),
+      formula(equation("a", num(3))),
+      formula(equation("F", num(6))), // match
+      formula(equation("G", app("math:multiply", [sym("m"), sym("c")]))),
+      formula(equation("c", num(7))),
+      formula(equation("G", num(999))), // mismatch
+    ];
+    const report = runWorkedExampleSequence(formulas);
+    expect(report.matched).toBe(1);
+    expect(report.mismatched).toBe(1);
+    expect(report.coverage).toBe(0.5);
+  });
+});
+
+describe("runWorkedExampleSequence: failures from outside this package's own error hierarchy", () => {
+  it("reports other-evaluation-error, not a guessed category, when evaluation fails with an error no gap category covers", () => {
+    // A qty node whose exact value carries a zero denominator: MathExpressionSchema would reject it, but the harness reads an already-lowered ContentFormula rather than re-parsing one, so a malformed tree reaches rational.ts's own reduce() and fails there with a plain RangeError -- none of the six document-compute.js error classes. That has to surface as its own uncategorised gap rather than being folded into the nearest named one.
+    const formulas = [
+      formula(
+        equation("d", {
+          kind: "qty",
+          value: { numerator: "1", denominator: "0" },
+          unit: "si:metre",
+        }),
+      ),
+    ];
+    const report = runWorkedExampleSequence(formulas, SI_UNIT_REGISTRY);
+    expect(report.gaps).toBe(1);
+    expect(report.outcomes[0]).toEqual({
+      outcome: "gap",
+      gap: "other-evaluation-error",
+      targetSymbol: "d",
+      message: "rational.ts: denominator must not be zero",
     });
   });
 });

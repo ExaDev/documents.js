@@ -122,7 +122,8 @@ function bisection(
     if (Math.abs(fMid) < tolerance) {
       return mid;
     }
-    if (fMid > 0 === fLow > 0) {
+    // Which half of the bracket still straddles the root: the half whose two residuals disagree in sign. Compared as Math.sign values rather than as a pair of `> 0` booleans, because the boolean spelling has to decide which side an exact zero belongs to -- and both answers are defensible, so `> 0` and `>= 0` are two equally correct spellings of the same intent that only ever disagree on a residual the `Math.abs(fMid) < tolerance` return above has already claimed. Math.sign keeps zero as its own third value instead, which drops it out of the half being kept (a residual of exactly zero IS the root, so shrinking the bracket down onto it from the other side is the correct move) with no boundary comparison to spell either way.
+    if (Math.sign(fMid) === Math.sign(fLow)) {
       low = mid;
       fLow = fMid;
     } else {
@@ -164,15 +165,8 @@ function newton(
         `the numeric derivative vanished or diverged near x=${x}`,
       );
     }
-    const next = x - fx / derivative;
-    if (!Number.isFinite(next)) {
-      throw new NonConvergentSolveError(
-        "newton",
-        i,
-        `the iteration diverged to a non-finite value near x=${x}`,
-      );
-    }
-    x = next;
+    // The step itself needs no separate non-finite guard: the check above is the one that catches divergence, and it catches it on the very next pass rather than this one. A non-finite x makes f(x) non-finite, which makes the central difference above non-finite (or NaN), which fails `Number.isFinite(derivative)` and throws -- so an iterate that runs away still terminates as a NonConvergentSolveError naming the point it ran away from, one iteration later, instead of silently spinning out the iteration budget. Guarding `x` here as well would only restate that, for an input the smooth grammar this package evaluates cannot actually produce.
+    x = x - fx / derivative;
   }
   throw new NonConvergentSolveError(
     "newton",

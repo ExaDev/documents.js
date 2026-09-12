@@ -1,3 +1,15 @@
+## [1.0.2](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.1...pdf-raster-cpu%401.0.2) (2026-09-12)
+
+### Tests
+
+* **pdf-raster-cpu:** reach a 100% mutation score ([4717f16](https://github.com/ExaDev/documents.js/commit/4717f16e909e8dd77613805dcc08c97e0283b18c))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.5.2
+- Updated pdf-codec to 4.8.2
+
 ## [1.0.1](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.0...pdf-raster-cpu%401.0.1) (2026-09-11)
 
 ### Code Refactoring
