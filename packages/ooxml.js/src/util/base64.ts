@@ -26,12 +26,11 @@ export function bytesToBase64(bytes: Uint8Array<ArrayBuffer>): string {
   return out;
 }
 
+// Builds its output as a plain number[] rather than pre-sizing a Uint8Array from a `len * 3 / 4` estimate: that estimate is only ever an upper bound (every 4-character group yields at most 3 bytes), so any sizing formula that never UNDER-counts is behaviourally identical to any other -- there is no way for a test to distinguish one over-allocation from another, since the array is converted to its exact final length by Uint8Array.from below regardless. Growing a plain array removes that unobservable sizing arithmetic as an AST node entirely, rather than leaving it for a mutation to hide behind.
 export function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
   const clean = b64.replace(/[^A-Za-z0-9+/=]/g, "");
-  const len = clean.length;
-  const out = new Uint8Array(((len * 3) / 4) | 0);
-  let p = 0;
-  for (let i = 0; i < len; i = i + 4) {
+  const out: number[] = [];
+  for (let i = 0; i < clean.length; i = i + 4) {
     const c0 = DECODE[clean.charCodeAt(i)]!;
     const c1 = DECODE[clean.charCodeAt(i + 1)]!;
     const c2 = clean.charCodeAt(i + 2);
@@ -39,15 +38,15 @@ export function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
     if (c0 === 255 || c1 === 255) {
       throw new Error("invalid base64 input");
     }
-    out[p++] = (c0 << 2) | (c1 >> 4);
+    out.push((c0 << 2) | (c1 >> 4));
     if (c2 !== 61) {
       const d2 = DECODE[c2]!;
-      out[p++] = ((c1 & 0x0f) << 4) | (d2 >> 2);
+      out.push(((c1 & 0x0f) << 4) | (d2 >> 2));
       if (c3 !== 61) {
         const d3 = DECODE[c3]!;
-        out[p++] = ((d2 & 0x03) << 6) | d3;
+        out.push(((d2 & 0x03) << 6) | d3);
       }
     }
   }
-  return out.subarray(0, p);
+  return Uint8Array.from(out);
 }
