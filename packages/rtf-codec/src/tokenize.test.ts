@@ -62,6 +62,35 @@ describe("control word tokenization", () => {
     const [token] = tokenizeRtf(bytes(`\\${overlong}`));
     expect(token).toEqual({ kind: "controlWord", name: "a".repeat(32) });
   });
+
+  it("reads an uppercase letter as part of a control word's name, not just lowercase", () => {
+    expect(tokenizeRtf(bytes("\\PARD"))).toEqual([
+      { kind: "controlWord", name: "PARD" },
+    ]);
+  });
+
+  it("includes the letters at both ends of each ASCII letter range", () => {
+    // 'A'/'Z' and 'a'/'z' are the exact boundaries isAsciiLetter checks -- an off-by-one there would exclude exactly these four letters.
+    expect(tokenizeRtf(bytes("\\AzaZ"))).toEqual([
+      { kind: "controlWord", name: "AzaZ" },
+    ]);
+  });
+
+  it("terminates a control word's name at the byte just past 'Z', which is not a letter", () => {
+    // '[' (0x5b) is the byte immediately after 'Z' (0x5a); a boundary error in isAsciiLetter's own upper-case range would swallow it into the name.
+    expect(tokenizeRtf(bytes("\\ab[cd"))).toEqual([
+      { kind: "controlWord", name: "ab" },
+      { kind: "text", bytes: bytes("[cd") },
+    ]);
+  });
+
+  it("terminates a control word's name at the byte just before 'A', which is not a letter", () => {
+    // '@' (0x40) is the byte immediately before 'A' (0x41).
+    expect(tokenizeRtf(bytes("\\@ab"))).toEqual([
+      { kind: "controlSymbol", symbol: "@" },
+      { kind: "text", bytes: bytes("ab") },
+    ]);
+  });
 });
 
 describe("control symbol tokenization", () => {
@@ -92,6 +121,16 @@ describe("control symbol tokenization", () => {
 
   it("reads \\'hh as a hexadecimal byte value", () => {
     expect(tokenizeRtf(bytes("\\'e9"))).toEqual([{ kind: "hex", byte: 0xe9 }]);
+  });
+
+  it("reads an uppercase hex digit too, not only lowercase", () => {
+    expect(tokenizeRtf(bytes("\\'E9"))).toEqual([{ kind: "hex", byte: 0xe9 }]);
+  });
+
+  it("includes the digits at both ends of the lowercase and uppercase hex letter ranges", () => {
+    // 'a'/'f' and 'A'/'F' are the exact boundaries hexDigitValue checks.
+    expect(tokenizeRtf(bytes("\\'af"))).toEqual([{ kind: "hex", byte: 0xaf }]);
+    expect(tokenizeRtf(bytes("\\'AF"))).toEqual([{ kind: "hex", byte: 0xaf }]);
   });
 
   it("treats a backslash before a line break as \\par, per the spec's carriage-return rule", () => {
