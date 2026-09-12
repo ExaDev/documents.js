@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { md5 } from "./md5";
+import { md5, splitBitLength64 } from "./md5";
 
 function toHex(bytes: Uint8Array<ArrayBuffer>): string {
   return Array.from(bytes)
@@ -34,5 +34,20 @@ describe("md5", () => {
   it("hashes a block-boundary-crossing message (exactly 64 bytes)", () => {
     const input = ascii("x".repeat(64));
     expect(toHex(md5(input))).toBe("c1bb4f81d892b2d57947682aeb252456");
+  });
+});
+
+describe("splitBitLength64", () => {
+  it("keeps the whole value in the low half when it fits in 32 bits", () => {
+    expect(splitBitLength64(640)).toEqual({ low: 640, high: 0 });
+  });
+
+  it("carries the excess into the high half once the bit length passes 2^32", () => {
+    // A message longer than 512 MiB overflows the low 32-bit half -- exercised here directly against a fabricated bit length, since hashing an actual 512 MiB buffer to reach this boundary would make the suite itself pathologically slow.
+    expect(splitBitLength64(0x100000005)).toEqual({ low: 5, high: 1 });
+  });
+
+  it("keeps splitting correctly for a bit length spanning several high-half units", () => {
+    expect(splitBitLength64(0x300000010)).toEqual({ low: 0x10, high: 3 });
   });
 });
