@@ -86,7 +86,7 @@ describe("writeCellXfRecord", () => {
     const word3 = cursor.u32();
     const word4 = cursor.u16();
 
-    expect(unpackXfDecoration(word2, word3, word4)).toEqual({
+    expect(unpackXfDecoration(word2, word3, word4)).toStrictEqual({
       fillPattern: 1,
       fillForegroundIcv: 12,
       fillBackgroundIcv: 0x41,
@@ -186,7 +186,7 @@ describe("writePaletteRecord", () => {
     const cursor = new BlockCursor([data]);
     cursor.skip(2); // ccv
     for (const color of colors) {
-      expect(readLongRgbColor(cursor)).toEqual(color);
+      expect(readLongRgbColor(cursor)).toStrictEqual(color);
     }
   });
 });

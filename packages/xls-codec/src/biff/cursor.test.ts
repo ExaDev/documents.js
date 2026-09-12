@@ -70,13 +70,13 @@ describe("BlockCursor", () => {
   it("reads a run of raw bytes", () => {
     const cursor = new BlockCursor([bytes(0x01, 0x02, 0x03, 0x04)]);
 
-    expect(cursor.take(3)).toEqual(bytes(0x01, 0x02, 0x03));
+    expect(cursor.take(3)).toStrictEqual(bytes(0x01, 0x02, 0x03));
   });
 
   it("reads a run of raw bytes spanning a block boundary", () => {
     const cursor = new BlockCursor([bytes(0x01, 0x02), bytes(0x03, 0x04)]);
 
-    expect(cursor.take(3)).toEqual(bytes(0x01, 0x02, 0x03));
+    expect(cursor.take(3)).toStrictEqual(bytes(0x01, 0x02, 0x03));
   });
 
   it("rejects a length-prefixed take() before allocating, rather than after reading runs out", () => {

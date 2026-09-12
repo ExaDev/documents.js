@@ -198,7 +198,7 @@ describe("decryptWorkbookRecords", () => {
         PASSWORD,
       );
 
-      expect([...(decrypted?.data ?? [])]).toEqual(plain);
+      expect([...(decrypted?.data ?? [])]).toStrictEqual(plain);
     });
 
     it("leaves a never-encrypted record type's data untouched", () => {
@@ -214,7 +214,7 @@ describe("decryptWorkbookRecords", () => {
         PASSWORD,
       );
 
-      expect([...(decrypted?.data ?? [])]).toEqual(untouchedBytes);
+      expect([...(decrypted?.data ?? [])]).toStrictEqual(untouchedBytes);
     });
 
     it("leaves BOF's own data untouched even though it is not the FilePass record", () => {
@@ -229,7 +229,7 @@ describe("decryptWorkbookRecords", () => {
         PASSWORD,
       );
 
-      expect([...(decrypted?.data ?? [])]).toEqual(bofBytes);
+      expect([...(decrypted?.data ?? [])]).toStrictEqual(bofBytes);
     });
 
     it("preserves a BoundSheet8 record's own unencrypted lbPlyPos prefix while decrypting the rest", () => {
@@ -259,7 +259,10 @@ describe("decryptWorkbookRecords", () => {
         PASSWORD,
       );
 
-      expect([...(decrypted?.data ?? [])]).toEqual([...lbPlyPos, ...restPlain]);
+      expect([...(decrypted?.data ?? [])]).toStrictEqual([
+        ...lbPlyPos,
+        ...restPlain,
+      ]);
     });
   });
 
@@ -289,7 +292,7 @@ describe("decryptWorkbookRecords", () => {
         PASSWORD,
       );
 
-      expect([...(decrypted?.data ?? [])]).toEqual(expectedPlain);
+      expect([...(decrypted?.data ?? [])]).toStrictEqual(expectedPlain);
     });
 
     it("leaves a never-encrypted record type's data untouched", () => {
@@ -304,7 +307,7 @@ describe("decryptWorkbookRecords", () => {
         PASSWORD,
       );
 
-      expect([...(decrypted?.data ?? [])]).toEqual(untouchedBytes);
+      expect([...(decrypted?.data ?? [])]).toStrictEqual(untouchedBytes);
     });
 
     it("preserves a BoundSheet8 record's own unencrypted lbPlyPos prefix while decrypting the rest", () => {
@@ -338,7 +341,7 @@ describe("decryptWorkbookRecords", () => {
         PASSWORD,
       );
 
-      expect([...(decrypted?.data ?? [])]).toEqual([
+      expect([...(decrypted?.data ?? [])]).toStrictEqual([
         ...lbPlyPos,
         ...expectedRestPlain,
       ]);

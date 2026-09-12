@@ -48,7 +48,7 @@ function groupsOf(
 
 describe("readPrintNames", () => {
   it("reads a real LibreOffice-written Print_Area into the range it names", () => {
-    expect(readPrintNames(groupsOf(LIBREOFFICE_PRINT_AREA))).toEqual(
+    expect(readPrintNames(groupsOf(LIBREOFFICE_PRINT_AREA))).toStrictEqual(
       new Map([
         [
           0,
@@ -66,7 +66,7 @@ describe("readPrintNames", () => {
   });
 
   it("reads a real LibreOffice-written Print_Titles into both repeated bands", () => {
-    expect(readPrintNames(groupsOf(LIBREOFFICE_PRINT_TITLES))).toEqual(
+    expect(readPrintNames(groupsOf(LIBREOFFICE_PRINT_TITLES))).toStrictEqual(
       new Map([
         [
           0,
@@ -84,7 +84,7 @@ describe("readPrintNames", () => {
       readPrintNames(
         groupsOf(LIBREOFFICE_PRINT_AREA, LIBREOFFICE_PRINT_TITLES),
       ).get(0),
-    ).toEqual({
+    ).toStrictEqual({
       printRange: { startRow: 1, startColumn: 1, endRow: 5, endColumn: 3 },
       repeatRows: { start: 0, end: 1 },
       repeatColumns: { start: 0, end: 0 },
@@ -94,7 +94,9 @@ describe("readPrintNames", () => {
   it("keys a name by its own itab, one-based in the record and zero-based here", () => {
     const onSheetThree = new Uint8Array(LIBREOFFICE_PRINT_AREA);
     onSheetThree[OFFSET_ITAB] = 0x03;
-    expect([...readPrintNames(groupsOf(onSheetThree)).keys()]).toEqual([2]);
+    expect([...readPrintNames(groupsOf(onSheetThree)).keys()]).toStrictEqual([
+      2,
+    ]);
   });
 
   it("ignores a name that is not built in", () => {
@@ -128,7 +130,9 @@ describe("printNameEntriesFor and writePrintNameRecords", () => {
     const entries = printNameEntriesFor(0, 0, {
       printRange: { startRow: 1, startColumn: 1, endRow: 5, endColumn: 3 },
     });
-    expect(writePrintNameRecords(entries)).toEqual([LIBREOFFICE_PRINT_AREA]);
+    expect(writePrintNameRecords(entries)).toStrictEqual([
+      LIBREOFFICE_PRINT_AREA,
+    ]);
   });
 
   it("writes both repeated bands as one Print_Titles name, mem-wrapped and union-joined", () => {
@@ -136,13 +140,13 @@ describe("printNameEntriesFor and writePrintNameRecords", () => {
       repeatRows: { start: 0, end: 1 },
       repeatColumns: { start: 0, end: 0 },
     });
-    expect(writePrintNameRecords(entries)).toEqual([
+    expect(writePrintNameRecords(entries)).toStrictEqual([
       PRINT_TITLES_WITHOUT_PAREN,
     ]);
   });
 
   it("plans no name at all for a sheet declaring neither a range nor a band", () => {
-    expect(printNameEntriesFor(0, 0, {})).toEqual([]);
+    expect(printNameEntriesFor(0, 0, {})).toStrictEqual([]);
   });
 
   it("round-trips every combination of range and bands back through the reader", () => {
@@ -152,14 +156,14 @@ describe("printNameEntriesFor and writePrintNameRecords", () => {
       repeatColumns: { start: 1, end: 2 },
     };
     const records = writePrintNameRecords(printNameEntriesFor(5, 5, settings));
-    expect(readPrintNames(groupsOf(...records)).get(5)).toEqual(settings);
+    expect(readPrintNames(groupsOf(...records)).get(5)).toStrictEqual(settings);
   });
 
   it("round-trips a repeated row band on its own, without inventing a column band", () => {
     const records = writePrintNameRecords(
       printNameEntriesFor(0, 0, { repeatRows: { start: 0, end: 0 } }),
     );
-    expect(readPrintNames(groupsOf(...records)).get(0)).toEqual({
+    expect(readPrintNames(groupsOf(...records)).get(0)).toStrictEqual({
       repeatRows: { start: 0, end: 0 },
     });
   });

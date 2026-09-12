@@ -273,7 +273,7 @@ describe("readCondFmt12Group", () => {
     const result = readCondFmt12Group(groups, 0, NO_SHEETS);
 
     expect(result.recordsConsumed).toBe(2);
-    expect(result.formats).toEqual([
+    expect(result.formats).toStrictEqual([
       {
         kind: "colorScale",
         stops: [
@@ -307,7 +307,7 @@ describe("readCondFmt12Group", () => {
     expect(format?.kind).toBe("colorScale");
     if (format?.kind !== "colorScale") throw new Error("expected colorScale");
     expect(format.stops).toHaveLength(3);
-    expect(format.stops[1]).toEqual({
+    expect(format.stops[1]).toStrictEqual({
       value: { type: "num", value: "50" },
       color: { kind: "rgb", color: { r: 1, g: 1, b: 0 }, tint: 0 },
     });
@@ -329,7 +329,10 @@ describe("readCondFmt12Group", () => {
 
     const format = result.formats[0];
     if (format?.kind !== "colorScale") throw new Error("expected colorScale");
-    expect(format.stops[0]?.value).toEqual({ type: "formula", value: "5" });
+    expect(format.stops[0]?.value).toStrictEqual({
+      type: "formula",
+      value: "5",
+    });
   });
 
   it("degrades a colour scale whole rule when a stop's colour is unresolvable (automatic/theme)", () => {
@@ -344,7 +347,7 @@ describe("readCondFmt12Group", () => {
       ),
     );
 
-    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toEqual([]);
+    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual([]);
   });
 
   it("reads a data bar with its min/max thresholds, colour, and showValue", () => {
@@ -363,7 +366,7 @@ describe("readCondFmt12Group", () => {
 
     const result = readCondFmt12Group(groups, 0, NO_SHEETS);
 
-    expect(result.formats).toEqual([
+    expect(result.formats).toStrictEqual([
       {
         kind: "dataBar",
         min: { type: "min" },
@@ -419,7 +422,7 @@ describe("readCondFmt12Group", () => {
 
     const result = readCondFmt12Group(groups, 0, NO_SHEETS);
 
-    expect(result.formats).toEqual([
+    expect(result.formats).toStrictEqual([
       {
         kind: "iconSet",
         iconSetType: "3TrafficLights1",
@@ -474,7 +477,7 @@ describe("readCondFmt12Group", () => {
       ),
     );
 
-    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toEqual([]);
+    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual([]);
   });
 
   it("reads showValue as false when an icon set's own fIconOnly bit is set", () => {
@@ -502,7 +505,7 @@ describe("readCondFmt12Group", () => {
         cf12Record(ct, []),
       );
       const result = readCondFmt12Group(groups, 0, NO_SHEETS);
-      expect(result.formats).toEqual([]);
+      expect(result.formats).toStrictEqual([]);
       expect(result.recordsConsumed).toBe(2);
     }
   });
@@ -554,7 +557,7 @@ describe("readCondFmt12Group", () => {
     expect(result.recordsConsumed).toBe(3);
     expect(result.formats).toHaveLength(2);
     for (const format of result.formats) {
-      expect(format.ranges).toEqual(ranges);
+      expect(format.ranges).toStrictEqual(ranges);
     }
   });
 
@@ -572,7 +575,7 @@ describe("readCondFmt12Group", () => {
 
     const result = readCondFmt12Group(groups, 0, NO_SHEETS);
 
-    expect(result.formats).toEqual([]);
+    expect(result.formats).toStrictEqual([]);
     expect(result.recordsConsumed).toBe(1);
   });
 
@@ -585,7 +588,7 @@ describe("readCondFmt12Group", () => {
 
     const result = readCondFmt12Group(groups, 0, NO_SHEETS);
 
-    expect(result.formats).toEqual([]);
+    expect(result.formats).toStrictEqual([]);
     expect(result.recordsConsumed).toBe(1);
   });
 
@@ -613,7 +616,7 @@ describe("readCondFmt12Group", () => {
 
     // groupRecords has already joined the CF12 base record and its ContinueFrt12 into one logical record by this point, so recordsConsumed still counts 2 -- the CondFmt12 plus that one (now complete) CF12, the same as an unsplit CF12 would.
     expect(result.recordsConsumed).toBe(2);
-    expect(result.formats).toEqual([
+    expect(result.formats).toStrictEqual([
       {
         kind: "colorScale",
         stops: [
@@ -640,7 +643,7 @@ describe("readCondFmt12Group", () => {
       }),
     );
 
-    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toEqual([
+    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual([
       {
         kind: "top10",
         rank: 10,
@@ -649,6 +652,7 @@ describe("readCondFmt12Group", () => {
         priority: 0,
         stopIfTrue: false,
         ranges: ONE_RANGE,
+        style: undefined,
       },
     ]);
   });
@@ -750,8 +754,14 @@ describe("readCondFmt12Group", () => {
         condFmt12Record(1, ONE_RANGE),
         cf12Record(0x05, cfFilterBytes(), { icfTemplate }),
       );
-      expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toEqual([
-        { kind, priority: 0, stopIfTrue: false, ranges: ONE_RANGE },
+      expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual([
+        {
+          kind,
+          priority: 0,
+          stopIfTrue: false,
+          ranges: ONE_RANGE,
+          style: undefined,
+        },
       ]);
     }
   });
@@ -764,7 +774,7 @@ describe("readCondFmt12Group", () => {
 
     const result = readCondFmt12Group(groups, 0, NO_SHEETS);
 
-    expect(result.formats).toEqual([]);
+    expect(result.formats).toStrictEqual([]);
     expect(result.recordsConsumed).toBe(2);
   });
 
@@ -774,7 +784,7 @@ describe("readCondFmt12Group", () => {
       cf12Record(0x05, cfFilterBytes(), { icfTemplate: 0x00ff }),
     );
 
-    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toEqual([]);
+    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual([]);
   });
 
   it("reads a filter rule's own DXFN12 style -- unlike colour scale/data bar/icon set, [MS-XLS] does not force ct 0x05's own cbDxf to zero", () => {
@@ -803,7 +813,7 @@ describe("readCondFmt12Group", () => {
       }),
     );
 
-    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toEqual([]);
+    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual([]);
   });
 
   it("still finds the record after a ct 0x05 rule's own CFFilter, proving cbFilter-driven skip advances correctly", () => {
@@ -818,7 +828,7 @@ describe("readCondFmt12Group", () => {
     const result = readCondFmt12Group(groups, 0, NO_SHEETS);
 
     expect(result.recordsConsumed).toBe(3);
-    expect(result.formats.map((f) => f.kind)).toEqual([
+    expect(result.formats.map((f) => f.kind)).toStrictEqual([
       "uniqueValues",
       "duplicateValues",
     ]);
@@ -842,7 +852,7 @@ describe("readCondFmt12Group", () => {
           }),
         );
         const result = readCondFmt12Group(groups, 0, NO_SHEETS);
-        expect(result.formats).toEqual([
+        expect(result.formats).toStrictEqual([
           {
             kind,
             text: "needle",
@@ -875,7 +885,7 @@ describe("readCondFmt12Group", () => {
 
       const result = readCondFmt12Group(groups, 0, NO_SHEETS);
 
-      expect(result.formats).toEqual([
+      expect(result.formats).toStrictEqual([
         {
           kind: "containsText",
           text: "needle",
@@ -917,7 +927,9 @@ describe("readCondFmt12Group", () => {
         }),
       );
 
-      expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toEqual([]);
+      expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual(
+        [],
+      );
     });
 
     it("does not promote a containsText-templated rule whose formula carries no string literal at all", () => {
@@ -930,7 +942,9 @@ describe("readCondFmt12Group", () => {
         }),
       );
 
-      expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toEqual([]);
+      expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual(
+        [],
+      );
     });
 
     it("does not promote a ct 0x02 rule whose icfTemplate is not the containsText family -- the same 'expression' boundary base CF's own formula-condition reading draws", () => {
@@ -942,7 +956,9 @@ describe("readCondFmt12Group", () => {
         }),
       );
 
-      expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toEqual([]);
+      expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual(
+        [],
+      );
     });
   });
 });
