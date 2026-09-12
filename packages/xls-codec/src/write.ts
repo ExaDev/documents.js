@@ -177,10 +177,7 @@ function buildFormatPlan(sheets: readonly ContentSheet[]): FormatPlan {
   };
 
   for (const sheet of sheets) {
-    for (const cell of sheet.cells) {
-      if (!writesCellRecord(cell)) {
-        continue;
-      }
+    for (const cell of sheet.cells.filter(writesCellRecord)) {
       resolve(formatCodeForCell(cell));
     }
   }
@@ -233,11 +230,8 @@ function buildPalettePlan(sheets: readonly ContentSheet[]): PalettePlan {
   };
 
   for (const sheet of sheets) {
-    for (const cell of sheet.cells) {
-      // Only cells that actually become records, so the scan can never allocate a palette slot to a colour the XF pass below then never writes -- see written-cells.ts on why every pass shares one predicate.
-      if (!writesCellRecord(cell)) {
-        continue;
-      }
+    // Only cells that actually become records, so the scan can never allocate a palette slot to a colour the XF pass below then never writes -- see written-cells.ts on why every pass shares one predicate.
+    for (const cell of sheet.cells.filter(writesCellRecord)) {
       recordFill(cell.background);
       record(cell.font?.color);
       record(cell.borders?.left?.color);
@@ -444,11 +438,8 @@ function buildFontPlan(
     xfFontFieldsOf(cell.font, palettePlan.icvOf);
 
   for (const sheet of sheets) {
-    for (const cell of sheet.cells) {
-      // The same predicate every other workbook-wide pass applies, so a font is never interned for a cell that then writes no record naming it.
-      if (!writesCellRecord(cell)) {
-        continue;
-      }
+    // The same predicate every other workbook-wide pass applies, so a font is never interned for a cell that then writes no record naming it.
+    for (const cell of sheet.cells.filter(writesCellRecord)) {
       const fields = fieldsOf(cell);
       const signature = signatureOfFont(fields);
       if (indexBySignature.has(signature)) {

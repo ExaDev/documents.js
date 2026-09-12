@@ -436,6 +436,48 @@ describe("writeXlsContent", () => {
       });
     });
 
+    it("distinguishes four cells each bordered identically on a different single side", () => {
+      // Each cell's own decoration-signature string must name which side it is, not just the style/colour that side shares with every other cell here -- otherwise two of these would collide onto the same interned XF and each other's cell would read back with the wrong side bordered.
+      const border = { color: blue, widthPt: 0.75 } as const;
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(
+              0,
+              0,
+              { kind: "string", value: "l" },
+              { borders: { left: border } },
+            ),
+            cell(
+              0,
+              1,
+              { kind: "string", value: "r" },
+              { borders: { right: border } },
+            ),
+            cell(
+              0,
+              2,
+              { kind: "string", value: "t" },
+              { borders: { top: border } },
+            ),
+            cell(
+              0,
+              3,
+              { kind: "string", value: "b" },
+              { borders: { bottom: border } },
+            ),
+          ]),
+        ]),
+      );
+      const read = readXlsContent(bytes);
+      expect(findCell(read, 0, 0, 0)?.borders).toStrictEqual({ left: border });
+      expect(findCell(read, 0, 0, 1)?.borders).toStrictEqual({ right: border });
+      expect(findCell(read, 0, 0, 2)?.borders).toStrictEqual({ top: border });
+      expect(findCell(read, 0, 0, 3)?.borders).toStrictEqual({
+        bottom: border,
+      });
+    });
+
     it("round-trips both a background and borders on the same cell", () => {
       const bytes = writeXlsContent(
         document([
