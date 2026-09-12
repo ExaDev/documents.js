@@ -66,4 +66,14 @@ describe("compoundFileWithStream", () => {
     const streams = readCompoundFile(file);
     expect(streams.map((entry) => entry.path)).toEqual(["MyStream"]);
   });
+
+  // The header's own 109-entry DIFAT array names exactly one real FAT sector (this fixture only ever needs one), so every other entry must state FREESECT (0xFFFFFFFF), the [MS-CFB] sentinel for "unused" -- archive-codec's own reader (src/cfb/read.ts) walks all 109 header entries unconditionally and treats anything other than FREESECT as a real FAT sector number to read, so a zero-initialised (rather than FREESECT-padded) entry here would be misread as 108 more (bogus, duplicate) FAT sectors.
+  it("pads every unused header DIFAT entry with FREESECT, not the buffer's own zero fill", () => {
+    const file = compoundFileWithStream("Stream", new Uint8Array([1, 2, 3]));
+    const view = new DataView(file.buffer, file.byteOffset, file.byteLength);
+    const usedEntries = 1;
+    for (let i = usedEntries; i < 109; i += 1) {
+      expect(view.getUint32(0x4c + i * 4, true)).toBe(0xffffffff);
+    }
+  });
 });

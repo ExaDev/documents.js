@@ -25,10 +25,10 @@ function writeChain(table: Uint32Array, start: number, count: number): void {
   });
 }
 
-function writeDirectoryEntry(
+// The fields every directory entry carries regardless of its own name: object type, sibling/child links (this fixture's two entries are unrelated siblings, so both left and right stay NOSTREAM's own 0xFF fill), child id, start sector, and size. Name and name-length are deliberately NOT written here: archive-codec's own reader (src/cfb/read.ts) only validates and reads an entry's name/nameLength once the directory tree walk reaches it via root.child, and the root entry itself (id 0) is read directly as entries[0] without ever entering that walk -- "its own name is the 'Root Entry' convention and nothing depends on it" -- so the root is the one caller with no real name value to write, and every non-root caller writes its own name separately, after this.
+function writeDirectoryEntryFields(
   directory: Uint8Array,
   id: number,
-  name: string,
   objectType: number,
   childId: number,
   startSector: number,
@@ -40,10 +40,6 @@ function writeDirectoryEntry(
     directory.byteOffset + entryOffset,
     DIRECTORY_ENTRY_SIZE,
   );
-  for (const [index, character] of [...name].entries()) {
-    view.setUint16(index * 2, character.charCodeAt(0), true);
-  }
-  view.setUint16(0x40, name.length * 2 + 2, true);
   view.setUint8(0x42, objectType);
   new Uint8Array(
     directory.buffer,
@@ -55,24 +51,40 @@ function writeDirectoryEntry(
   view.setUint32(0x78, size, true);
 }
 
+// The name and its own length field, per [MS-CFB] 2.6.1: only a non-root entry's name is ever read back (see writeDirectoryEntryFields' own comment), so this is called for every entry except the root.
+function writeDirectoryEntryName(
+  directory: Uint8Array,
+  id: number,
+  name: string,
+): void {
+  const entryOffset = id * DIRECTORY_ENTRY_SIZE;
+  const view = new DataView(
+    directory.buffer,
+    directory.byteOffset + entryOffset,
+    DIRECTORY_ENTRY_SIZE,
+  );
+  for (const [index, character] of [...name].entries()) {
+    view.setUint16(index * 2, character.charCodeAt(0), true);
+  }
+  view.setUint16(0x40, name.length * 2 + 2, true);
+}
+
 export function compoundFileWithStream(
   name: string,
   stream: Uint8Array,
 ): Uint8Array<ArrayBuffer> {
   const inMiniStream = stream.length < MINI_STREAM_CUTOFF;
 
-  const miniStream = inMiniStream
-    ? new Uint8Array(
-        sectorsFor(stream.length, MINI_SECTOR_SIZE) * MINI_SECTOR_SIZE,
-      )
-    : new Uint8Array(0);
-  miniStream.set(inMiniStream ? stream : new Uint8Array(0));
+  // The mini stream area's own declared pool size, per [MS-CFB]'s own mini-sector granularity: archive-codec's reader (src/cfb/read.ts) carves each entry's own mini-sectors out of a pool bounded by exactly this many bytes (the root entry's own `size` field), so it must be rounded up to a whole number of 64-byte mini sectors even though the real stream data inside it is shorter -- a pool declared only as large as the raw stream would undercount the mini-sector chain by one whenever the stream's own length is not itself a multiple of MINI_SECTOR_SIZE.
+  const miniStreamPoolSize = inMiniStream
+    ? sectorsFor(stream.length, MINI_SECTOR_SIZE) * MINI_SECTOR_SIZE
+    : 0;
 
   const directorySectorCount = 1;
   const bigStreamSectorCount = inMiniStream
     ? 0
     : sectorsFor(stream.length, SECTOR_SIZE);
-  const miniStreamSectorCount = sectorsFor(miniStream.length, SECTOR_SIZE);
+  const miniStreamSectorCount = sectorsFor(miniStreamPoolSize, SECTOR_SIZE);
   const miniFatSectorCount = inMiniStream ? 1 : 0;
   const fatSectorCount = 1;
 
@@ -104,24 +116,23 @@ export function compoundFileWithStream(
   writeChain(fat, miniFatStart, miniFatSectorCount);
 
   const directory = new Uint8Array(directorySectorCount * SECTOR_SIZE);
-  writeDirectoryEntry(
+  writeDirectoryEntryFields(
     directory,
     0,
-    "",
     5,
     1,
-    miniStream.length === 0 ? ENDOFCHAIN : miniStreamStart,
-    miniStream.length,
+    miniStreamPoolSize === 0 ? ENDOFCHAIN : miniStreamStart,
+    miniStreamPoolSize,
   );
-  writeDirectoryEntry(
+  writeDirectoryEntryFields(
     directory,
     1,
-    name,
     2,
     NOSTREAM,
     inMiniStream ? 0 : bigStreamStart,
     stream.length,
   );
+  writeDirectoryEntryName(directory, 1, name);
 
   const file = new Uint8Array(SECTOR_SIZE + totalSectors * SECTOR_SIZE);
   const view = new DataView(file.buffer);
@@ -144,11 +155,8 @@ export function compoundFileWithStream(
   };
   putSector(0, new Uint8Array(fat.buffer));
   putSector(fatSectorCount, directory);
-  if (inMiniStream) {
-    putSector(miniStreamStart, miniStream);
-  } else {
-    putSector(bigStreamStart, stream);
-  }
+  // Written unconditionally at bigStreamStart, in the mini-stream case too: bigStreamSectorCount is 0 whenever inMiniStream, which makes bigStreamStart and miniStreamStart the very same region start (the cumulative region-size walk above never advances between them), and file's own backing buffer starts fully zeroed, so writing the raw, unpadded stream there lands on exactly the same bytes a separately zero-padded copy would have -- the trailing pad bytes miniStreamPoolSize declares are already zero either way.
+  putSector(bigStreamStart, stream);
   if (inMiniStream) {
     const miniSectorCount = sectorsFor(stream.length, MINI_SECTOR_SIZE);
     const miniFat = new Uint32Array(SECTOR_SIZE / 4).fill(FREESECT);
