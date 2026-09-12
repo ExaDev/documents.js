@@ -41,6 +41,7 @@ export function readJpegInfo(bytes: Uint8Array<ArrayBuffer>): JpegInfo {
   let offset = 2;
   let adobeTransform: number | undefined;
 
+  // Stryker disable next-line EqualityOperator: nothing after this loop ever reads `offset` again (the function just throws unconditionally once the loop ends), so one extra boundary iteration at offset === bytes.length -- which only ever increments offset once more via the non-0xff branch below before the loop condition stops it anyway -- is never observable.
   while (offset < bytes.length) {
     if (bytes[offset] !== 0xff) {
       offset++;
