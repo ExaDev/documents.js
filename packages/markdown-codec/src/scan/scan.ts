@@ -41,18 +41,15 @@ export class MarkdownScanCursor {
     };
   }
 
+  // No separate `pendingTabColumns === 0` half here: rawOffset only ever advances past a tab once every one of its own columns has been consumed (next()'s own tab branch below), so rawOffset can never reach source.length while pendingTabColumns is still nonzero -- the two conditions were never independent, and checking rawOffset alone already answers exactly when this class considers itself done.
   atEnd(): boolean {
-    return this.pendingTabColumns === 0 && this.rawOffset >= this.source.length;
+    return this.rawOffset >= this.source.length;
   }
 
   // The next effective character without consuming it: a real source character, or a synthetic single space while a tab's own expansion is only partially consumed. Never returns '\t' or '\r' -- a tab's columns come back as ' ' one at a time, and a line ending (LF, CRLF, or lone CR) comes back as a single '\n', matching next()'s own normalisation.
+  //
+  // No `pendingTabColumns > 0` branch of its own, and no `rawOffset >= source.length` guard either: while a tab's expansion is only partly consumed, rawOffset still points AT that same tab character (see atEnd's own note), so reading `this.source[this.rawOffset]` here already finds '\t' and the ordinary tab branch below already answers " " for it; and past the end of input, indexing a string out of range is itself already `undefined` in JS, which matches every one of the comparisons below and falls out the far end as `undefined` on its own -- both cases this method needs to handle are already handled by the plain read.
   peek(): string | undefined {
-    if (this.pendingTabColumns > 0) {
-      return " ";
-    }
-    if (this.rawOffset >= this.source.length) {
-      return undefined;
-    }
     const char = this.source[this.rawOffset];
     if (char === "\t") {
       return " ";
