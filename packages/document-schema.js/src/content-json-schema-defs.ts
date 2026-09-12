@@ -52,15 +52,12 @@ function getMathMlJsonSchemas(): Record<string, JsonSchema> {
 }
 
 // Strips the $schema/$id root markers z.toJSONSchema() stamps onto every registry entry (each is generated as its own standalone root) -- an artefact of generation, not a real structural difference from a fragment nested inside another schema's own $defs, matching content-json-schema-defs.test.ts's own withoutRootMarkers.
+//
+// The non-null assertion on the lookup below is exactly the case this package's own eslint config turns nonNullAssertion off for: getMathMlJsonSchemas() adds precisely these three ids to the registry before calling z.toJSONSchema() on it, and a registry's own conversion result carries an entry for every schema registered onto it -- id is never anything other than one of those three literal strings, so the lookup can never actually miss. A defensive undefined check here would be unreachable by any real input, not a genuine safety net.
 function mathMlDef(
   id: "MathMlAttribute" | "MathMlElement" | "MathMlNode",
 ): JsonSchema {
-  const generated = getMathMlJsonSchemas()[id];
-  if (generated === undefined) {
-    throw new Error(
-      `z.toJSONSchema() produced no schema for registered id "${id}"`,
-    );
-  }
+  const generated = getMathMlJsonSchemas()[id]!;
   const stripped = { ...generated };
   delete stripped.$schema;
   delete stripped.$id;
