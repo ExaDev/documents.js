@@ -668,6 +668,19 @@ describe("tables", () => {
     ]);
     expect(tablesOf(document)[0]?.rows).toHaveLength(1);
   });
+
+  // A row still accumulating closed cells but never itself closed by any EOL boundary before the document area ends must still become a real row -- not vanish along with the whole table, which happens only when it holds zero rows.
+  it("closes an unfinished row's own already-closed cells when the document area ends", () => {
+    const document = readDocumentArea([
+      ...tableDefinition([1200]),
+      ...text("A"),
+      ...eolFunction({ subgroup: EOL_TABLE_CELL }),
+      ...text("unclosed"),
+    ]);
+    const tables = tablesOf(document);
+    expect(tables).toHaveLength(1);
+    expect(tables[0]?.rows[0]?.cells.map(cellText)).toEqual(["A"]);
+  });
 });
 
 describe("styles", () => {
@@ -896,6 +909,15 @@ describe("document metadata", () => {
 
   it("answers an empty envelope for a document carrying no summary", () => {
     expect(readDocumentArea(text("body")).metadata).toEqual({});
+  });
+
+  // readMetadata's own packet lookup must actually filter on packet type, not just take the first packet in the index -- a document whose summary is not the first packet must still find it.
+  it("finds the summary packet even when it is not the first packet in the index", () => {
+    const document = readDocumentArea(text("body"), [
+      { packetType: 0x08, bytes: new Uint8Array(0) }, // General WP Text, not a summary
+      summaryPacket([{ tag: 17, type: 0x01, data: wordString("Found it") }]),
+    ]);
+    expect(document.metadata).toEqual({ title: "Found it" });
   });
 });
 
