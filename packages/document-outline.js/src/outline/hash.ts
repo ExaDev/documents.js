@@ -71,6 +71,16 @@ function rotr(x: number, n: number): number {
   return ((x >>> n) | (x << (32 - n))) >>> 0;
 }
 
+// Writes the SHA-256 length suffix -- the message's own bit length as a big-endian 64-bit integer -- at `offset` in `view`. Split out from sha256 below so the arithmetic (only observable once a message exceeds 2^32 bits, ~512 MiB, an input size no unit test can afford to allocate and hash) is exercisable directly against an arbitrary `bitLength` number rather than requiring an actual multi-hundred-megabyte byte array to reach it. Exported for exactly that test.
+export function writeBitLength(
+  view: DataView,
+  offset: number,
+  bitLength: number,
+): void {
+  view.setUint32(offset, Math.floor(bitLength / 4294967296));
+  view.setUint32(offset + 4, bitLength >>> 0);
+}
+
 export function sha256(bytes: Uint8Array): Uint8Array {
   const bitLength = bytes.length * 8;
   // Pad to a multiple of 512 bits: append 0x80, zeros, then the original bit length as a big-endian 64-bit integer. Every practical input is far below 2^53 bits, so the high 32 bits are Math.floor(bitLength / 2^32) and the low 32 are bitLength >>> 0.
@@ -79,8 +89,7 @@ export function sha256(bytes: Uint8Array): Uint8Array {
   padded.set(bytes);
   padded[bytes.length] = 0x80;
   const view = new DataView(padded.buffer);
-  view.setUint32(paddedLength - 8, Math.floor(bitLength / 4294967296));
-  view.setUint32(paddedLength - 4, bitLength >>> 0);
+  writeBitLength(view, paddedLength - 8, bitLength);
   let h0 = 0x6a09e667;
   let h1 = 0xbb67ae85;
   let h2 = 0x3c6ef372;
