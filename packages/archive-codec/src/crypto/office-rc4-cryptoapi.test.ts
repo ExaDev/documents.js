@@ -4,6 +4,7 @@ import {
   verifyRc4CryptoApiPassword,
 } from "./office-rc4-cryptoapi";
 import { rc4 } from "./rc4";
+import { sha1 } from "./sha1";
 
 function toHex(bytes: Uint8Array<ArrayBuffer>): string {
   return Array.from(bytes)
@@ -79,6 +80,29 @@ describe("verifyRc4CryptoApiPassword", () => {
         128,
         encryptedVerifier,
         encryptedVerifierHash,
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a decrypted hash that shares one byte with the verifier's own SHA-1 but otherwise disagrees, not just a wholesale mismatch", () => {
+    // A verifier/hash pair built to share exactly one byte (index 0) at whatever position a byte-by-byte comparison checks first, with every other byte of the hash deliberately complemented (`0xff - b` can never equal `b`, so every other position is guaranteed to differ) -- this is exactly the input that would fool a comparison using `.some` (true the moment any single byte matches) where only `.every` (true only when every byte matches) is correct.
+    const verifier = new Uint8Array(16).fill(0x42);
+    const correctHash = sha1(verifier);
+    const tamperedHash = correctHash.map((byte, index) =>
+      index === 0 ? byte : 0xff - byte,
+    );
+    const key = deriveRc4CryptoApiBlockKey(PASSWORD, SALT, 0, 128);
+    const combined = new Uint8Array(36);
+    combined.set(verifier, 0);
+    combined.set(tamperedHash, 16);
+    const ciphertext = rc4(key, combined);
+    expect(
+      verifyRc4CryptoApiPassword(
+        PASSWORD,
+        SALT,
+        128,
+        ciphertext.subarray(0, 16),
+        ciphertext.subarray(16, 36),
       ),
     ).toBe(false);
   });
