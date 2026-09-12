@@ -13,6 +13,7 @@ import {
 import {
   CURRENT_USER_HEADER_TOKEN_ENCRYPTED,
   CURRENT_USER_HEADER_TOKEN_PLAIN,
+  decodeUtf16Le,
   readCurrentUserAtom,
 } from "./current-user";
 
@@ -53,6 +54,24 @@ function currentUserAtom(options: {
     ),
   );
 }
+
+describe("decodeUtf16Le", () => {
+  it("decodes an even-length run of little-endian code units", () => {
+    expect(decodeUtf16Le(utf16le("Adaé"))).toBe("Adaé");
+  });
+
+  it("ignores a trailing odd byte rather than reading past the buffer", () => {
+    const bytes = utf16le("Ada");
+    const withTrailingByte = new Uint8Array(bytes.length + 1);
+    withTrailingByte.set(bytes);
+    withTrailingByte[bytes.length] = 0xff;
+    expect(decodeUtf16Le(withTrailingByte)).toBe("Ada");
+  });
+
+  it("decodes an empty buffer to an empty string", () => {
+    expect(decodeUtf16Le(new Uint8Array(0))).toBe("");
+  });
+});
 
 describe("readCurrentUserAtom", () => {
   it("reads the offset of the most recent user edit", () => {
@@ -98,11 +117,17 @@ describe("readCurrentUserAtom", () => {
     expect(() => readCurrentUserAtom(atom(0x03e8, new Uint8Array(20)))).toThrow(
       PptFormatError,
     );
+    expect(() => readCurrentUserAtom(atom(0x03e8, new Uint8Array(20)))).toThrow(
+      `Current User stream begins with record type 0x3e8, not RT_CurrentUserAtom (0x${RT_CurrentUserAtom.toString(16)})`,
+    );
   });
 
   it("rejects a size field that is not the mandated 0x00000014", () => {
     expect(() => readCurrentUserAtom(currentUserAtom({ size: 0x10 }))).toThrow(
       PptFormatError,
+    );
+    expect(() => readCurrentUserAtom(currentUserAtom({ size: 0x10 }))).toThrow(
+      "CurrentUserAtom size field is 0x10, not the mandated 0x14",
     );
   });
 
@@ -110,17 +135,70 @@ describe("readCurrentUserAtom", () => {
     expect(() =>
       readCurrentUserAtom(currentUserAtom({ headerToken: 0x12345678 })),
     ).toThrow(PptFormatError);
+    expect(() =>
+      readCurrentUserAtom(currentUserAtom({ headerToken: 0x12345678 })),
+    ).toThrow(
+      "CurrentUserAtom headerToken is 0x12345678, neither the plaintext 0xe391c05f nor the encrypted 0xf3d1c4df",
+    );
   });
 
   it("rejects a docFileVersion other than the mandated 0x03F4", () => {
     expect(() =>
       readCurrentUserAtom(currentUserAtom({ docFileVersion: 0x0400 })),
     ).toThrow(PptFormatError);
+    expect(() =>
+      readCurrentUserAtom(currentUserAtom({ docFileVersion: 0x0400 })),
+    ).toThrow(
+      "CurrentUserAtom docFileVersion is 0x400, not the mandated 0x3f4",
+    );
   });
 
   it("rejects a stream too short to hold the fixed portion", () => {
     expect(() =>
       readCurrentUserAtom(atom(RT_CurrentUserAtom, u32le(0x14))),
     ).toThrow(PptFormatError);
+    expect(() =>
+      readCurrentUserAtom(atom(RT_CurrentUserAtom, u32le(0x14))),
+    ).toThrow(
+      "CurrentUserAtom carries 4 bytes of data, fewer than the 20-byte fixed portion the record requires",
+    );
+  });
+
+  it("accepts a record carrying exactly the 20-byte fixed portion and nothing more", () => {
+    // lenUserName 0, no ansiUserName/relVersion/unicodeUserName bytes at all -- ansiEnd and unicodeStart both then sit exactly at (or past) the buffer's own end, which must not be treated as an overrun.
+    const bytes = atom(
+      RT_CurrentUserAtom,
+      concatBytes(
+        u32le(0x00000014),
+        u32le(CURRENT_USER_HEADER_TOKEN_PLAIN),
+        u32le(0),
+        u16le(0), // lenUserName
+        u16le(0x03f4),
+        u8(0x03),
+        u8(0x00),
+        u16le(0),
+      ),
+    );
+    expect(readCurrentUserAtom(bytes).userName).toBe("");
+  });
+
+  it("rejects an ansiUserName that runs past the record's own bytes", () => {
+    const bytes = atom(
+      RT_CurrentUserAtom,
+      concatBytes(
+        u32le(0x00000014),
+        u32le(CURRENT_USER_HEADER_TOKEN_PLAIN),
+        u32le(0),
+        u16le(10), // lenUserName claims 10 bytes, but none follow
+        u16le(0x03f4),
+        u8(0x03),
+        u8(0x00),
+        u16le(0),
+      ),
+    );
+    expect(() => readCurrentUserAtom(bytes)).toThrow(PptFormatError);
+    expect(() => readCurrentUserAtom(bytes)).toThrow(
+      "CurrentUserAtom declares a 10-byte ansiUserName that runs past the record's 20 bytes",
+    );
   });
 });
