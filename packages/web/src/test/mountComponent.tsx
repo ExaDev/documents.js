@@ -1,5 +1,6 @@
 /// <reference lib="dom" />
 import { MantineProvider } from "@mantine/core";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import type { ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -11,14 +12,17 @@ export interface MountedComponent {
   unmount: () => void;
 }
 
-export function mountWithMantine(node: ReactNode): MountedComponent {
+function mount(
+  wrap: (node: ReactNode) => ReactNode,
+  node: ReactNode,
+): MountedComponent {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root: Root = createRoot(container);
 
   function rerender(next: ReactNode) {
     act(() => {
-      root.render(<MantineProvider>{next}</MantineProvider>);
+      root.render(wrap(next));
     });
   }
 
@@ -34,4 +38,21 @@ export function mountWithMantine(node: ReactNode): MountedComponent {
       container.remove();
     },
   };
+}
+
+export function mountWithMantine(node: ReactNode): MountedComponent {
+  return mount((n) => <MantineProvider>{n}</MantineProvider>, node);
+}
+
+// For a route component that reaches for a react-query hook (useMutation/useQuery/useLiveQuery) itself, not just via a hook this package already tests in isolation -- a fresh QueryClient per mount, exactly as renderHookWithQueryClient (src/test/renderHook.tsx) already establishes for hook-only tests.
+export function mountWithProviders(node: ReactNode): MountedComponent {
+  const queryClient = new QueryClient();
+  return mount(
+    (n) => (
+      <MantineProvider>
+        <QueryClientProvider client={queryClient}>{n}</QueryClientProvider>
+      </MantineProvider>
+    ),
+    node,
+  );
 }
