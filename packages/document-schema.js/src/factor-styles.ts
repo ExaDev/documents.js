@@ -23,7 +23,6 @@ import type { DocumentTree } from "./package";
 import type {
   DrawPageGroupNode,
   HeadingGroupNode,
-  HeadingParagraph,
   ListChild,
   ListGroupNode,
   SectionChild,
@@ -724,7 +723,6 @@ function rebuildHeadingGroup(
 ): HeadingGroupNode {
   const inner = innerChain(group, chain, state);
   const anchor = rebuildParagraph(group.node, inner);
-  assertHeadingAnchor(anchor);
   const children = group.children.map((child) =>
     rebuildChild(child, inner, state),
   );
@@ -749,7 +747,6 @@ function rebuildListGroup(
 ): ListGroupNode {
   const inner = innerChain(group, chain, state);
   const anchor = rebuildParagraph(group.node, inner);
-  assertListAnchor(anchor);
   const children = group.children.map((child) =>
     rebuildChild(child, inner, state),
   );
@@ -762,24 +759,13 @@ function rebuildListGroup(
     : { node: anchor, ...(ref !== undefined ? { style: ref } : {}), children };
 }
 
-// rebuildParagraph is typed on the loose ContentParagraph, so a rebuilt anchor comes back with its REQUIRED grouping signal widened to optional; these assertions re-narrow it without a cast, exactly as flatten.ts does for resolved anchors. No runtime check backs the narrowing: PARAGRAPH_STYLE_KEYS (the only source stripParagraphKeys ever draws a strip's key list from, transitively through commonParagraphKeys/bestParagraphCandidate) never contains "headingLevel" or "list" -- see the module doc -- so stripping can never remove either signal, and a runtime guard here could never observe a paragraph that actually lost it. Adding one anyway would be exactly the untestable defensive branch this package's own mutation-testing gate forbids: a check with no reachable failing input is dead code, not a safety net.
-function assertHeadingAnchor(
-  paragraph: ContentParagraph,
-): asserts paragraph is HeadingParagraph {
-  void paragraph;
-}
-
-function assertListAnchor(
-  paragraph: ContentParagraph,
-): asserts paragraph is ListGroupNode["node"] {
-  void paragraph;
-}
-
 // One paragraph (leaf or anchor): stripped -- copied sans its minted keys -- when a wrapper on its chain factored it (chain-scoped, so an aliased position is stripped by its own branch's minter, never another branch's), with its runs rebuilt through the same copy-or-share rule. Returns the same object when nothing under it changed.
-function rebuildParagraph(
-  paragraph: ContentParagraph,
+//
+// Generic over the paragraph's own type (rather than fixed to the loose ContentParagraph) so a heading or list anchor keeps its REQUIRED grouping signal (headingLevel/list) through the round trip with no re-narrowing at the call site -- neither an assertion function nor a banned `as` cast. This is sound with no runtime check because PARAGRAPH_STYLE_KEYS (the only source stripParagraphKeys ever draws a strip's key list from, transitively through commonParagraphKeys/bestParagraphCandidate) never contains "headingLevel" or "list" -- see the module doc -- so stripping can never touch either signal, on a HeadingParagraph, a ListParagraph, or a bare ContentParagraph leaf alike.
+function rebuildParagraph<P extends ContentParagraph>(
+  paragraph: P,
   chain: ChainStrips,
-): ContentParagraph {
+): P {
   const strips = paragraphStripsOf(chain, paragraph);
   const base =
     strips === undefined ? paragraph : stripParagraphKeys(paragraph, strips);
@@ -796,12 +782,12 @@ function rebuildParagraph(
   return { ...base, runs };
 }
 
-// Copies a paragraph sans the named keys -- copy-then-delete, never destructuring the keys out (an unused binding) and never mutating the input (decompose embedded the caller's own node objects, and the layout pass's frames ride on them). Every mintable paragraph key is optional on ContentParagraph, so the deletes are type-honest.
-function stripParagraphKeys(
-  paragraph: ContentParagraph,
+// Copies a paragraph sans the named keys -- copy-then-delete, never destructuring the keys out (an unused binding) and never mutating the input (decompose embedded the caller's own node objects, and the layout pass's frames ride on them). Every mintable paragraph key is optional on ContentParagraph, so the deletes are type-honest. Generic for the same reason rebuildParagraph is: preserves a heading/list anchor's own narrower type through the copy.
+function stripParagraphKeys<P extends ContentParagraph>(
+  paragraph: P,
   keys: readonly ParagraphKey[],
-): ContentParagraph {
-  const copy: ContentParagraph = { ...paragraph };
+): P {
+  const copy = { ...paragraph };
   for (const key of keys) Reflect.deleteProperty(copy, key);
   return copy;
 }
