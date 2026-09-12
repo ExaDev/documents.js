@@ -251,10 +251,9 @@ export type ContentFloatPosition = z.infer<typeof ContentFloatPositionSchema>;
 export const IMAGE_FORMATS = ["png", "jpeg", "svg", "gif"] as const;
 export type ImageFormat = (typeof IMAGE_FORMATS)[number];
 
+// No separate `typeof value === "string"` guard: Array.prototype.includes compares by strict equality against IMAGE_FORMATS's own string elements, so it can only ever return true for a value that already IS one of those strings -- a non-string value never satisfies it either way, making the typeof check redundant rather than a genuine second condition.
 function isImageFormat(value: unknown): value is ImageFormat {
-  return (
-    typeof value === "string" && IMAGE_FORMATS.includes(value as ImageFormat)
-  );
+  return IMAGE_FORMATS.includes(value as ImageFormat);
 }
 
 // The source's own compressed bytes for an image filter this family has no encoder for -- JBIG2 (ITU-T T.88) and JPEG 2000 (ISO/IEC 15444-1). pdf-codec decodes both for real on read, but its writer can only re-emit such an image by re-encoding the decoded pixels through a filter it does have an encoder for, since a hand-written JBIG2 encoder is research-grade symbol-dictionary design and a JPEG 2000 encoder is the full EBCOT/wavelet stack -- so a pdf-to-pdf round trip through this model was lossy for exactly these two filters. Carrying the original stream beside the canonical decoded representation lets a same-format writer re-embed it verbatim (zero generation loss), while every other consumer keeps reading `base64`, which stays the always-decodable canonical. Deliberately never set for a filter this family can already encode: a jpeg IS its own compressed bytes (format: 'jpeg' already passes through verbatim in both directions), and flate/ccitt are re-encoded from pixels losslessly (pdf-codec's bilevel writer even prefers CCITT G4 by size), so an original for those would be a second spelling of data the writer can already reproduce. jbig2GlobalsBase64 carries the image's /JBIG2Globals stream when the source had one -- without it, a symbol-dictionary-carrying JBIG2 stream cannot decode, so verbatim re-embedding without the globals would produce a file no viewer can render.
