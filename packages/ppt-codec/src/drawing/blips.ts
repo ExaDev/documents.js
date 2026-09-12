@@ -133,9 +133,7 @@ export function blipForPib(
   blips: readonly PptBlip[],
   pib: number,
 ): PptBlip | undefined {
-  if (pib <= 0) {
-    return undefined;
-  }
+  // A pib of 0 -- the format's own "ignored" value -- and any other non-positive pib both resolve to undefined without a separate guard: a negative array index is not a thing JavaScript indexing supports, so blips[pib - 1] already reads as undefined for pib <= 0 exactly as it would for a genuinely out-of-range positive one.
   return blips[pib - 1];
 }
 

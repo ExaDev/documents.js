@@ -175,6 +175,62 @@ describe("readBlipStore", () => {
     );
     expect(store).toEqual([]);
   });
+
+  it("skips a cRef-0 empty slot even when its foDelay names a real Pictures-stream offset", () => {
+    // cRef 0 and foDelay FO_DELAY_NONE are two independent reasons a slot contributes nothing -- this proves cRef alone is enough, distinctly from the combined case above.
+    const store = readBlipStore(
+      documentWithStore(
+        fbse({ blipType: 0x06, embedded: undefined, cRef: 0, foDelay: 0 }),
+      ),
+      pngBlip(pngBytes()),
+    );
+    expect(store).toEqual([]);
+  });
+
+  it("skips a delay-stream FBSE stating FO_DELAY_NONE even when its cRef is nonzero", () => {
+    const store = readBlipStore(
+      documentWithStore(
+        fbse({
+          blipType: 0x06,
+          embedded: undefined,
+          cRef: 1,
+          foDelay: 0xffffffff,
+        }),
+      ),
+      pngBlip(pngBytes()),
+    );
+    expect(store).toEqual([]);
+  });
+
+  it("reads a bare blip record with no FBSE wrapper at all, the spelling the container permits", () => {
+    const png = pngBytes();
+    const document = container(RT_Document, [
+      container(RT_DrawingGroup, [
+        container(OfficeArtDggContainer, [
+          container(OfficeArtBStoreContainer, [pngBlip(png)]),
+        ]),
+      ]),
+    ]);
+    expect(readBlipStore(readRecordAt(document, 0), undefined)).toEqual([
+      { format: "png", bytes: png },
+    ]);
+  });
+
+  it("rejects a blip record too short for its own uid(s) and tag", () => {
+    const truncated = atom(
+      OfficeArtBlipPNG,
+      concatBytes(ZERO_DIGEST, u8(0xff)).subarray(0, 10),
+      { recInstance: 0x6e0 },
+    );
+    expect(() =>
+      readBlipStore(
+        documentWithStore(fbse({ blipType: 0x06, embedded: truncated })),
+        undefined,
+      ),
+    ).toThrow(
+      "a blip record of type 0xf01e declares 6e0 as its instance (so 1 digest(s)) but carries only 10 bytes",
+    );
+  });
 });
 
 describe("blipForPib", () => {
