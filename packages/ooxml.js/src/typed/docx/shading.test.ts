@@ -66,11 +66,25 @@ describe("readCellShading", () => {
 
   it("reads a stripe/cross pattern by its own ST_Shd name", () => {
     const shd = el("w:shd", { "w:val": "diagCross", "w:color": "ff0000" });
-    expect(readCellShading(tcPr(shd))).toEqual({
+    const result = readCellShading(tcPr(shd));
+    expect(result).toEqual({
       kind: "pattern",
       patternType: "diagonalCross",
       foregroundColor: { r: 1, g: 0, b: 0 },
     });
+    // A stricter check than the toEqual above, which treats an explicit `backgroundColor: undefined` the same as the key being absent entirely: an unstated w:fill must genuinely omit the key, never spread it on with an undefined value.
+    expect(Object.hasOwn(result ?? {}, "backgroundColor")).toBe(false);
+  });
+
+  it("reads a pattern with only its background colour stated, genuinely omitting foregroundColor rather than spreading it on as undefined", () => {
+    const shd = el("w:shd", { "w:val": "diagCross", "w:fill": "0000ff" });
+    const result = readCellShading(tcPr(shd));
+    expect(result).toEqual({
+      kind: "pattern",
+      patternType: "diagonalCross",
+      backgroundColor: { r: 0, g: 0, b: 1 },
+    });
+    expect(Object.hasOwn(result ?? {}, "foregroundColor")).toBe(false);
   });
 
   it('reads w:val="nil" as no fill', () => {
@@ -85,6 +99,16 @@ describe("readCellShading", () => {
 
   it('reads "auto"/"none" colours as unstated, matching w:color/@w:val\'s own convention', () => {
     const shd = el("w:shd", { "w:val": "clear", "w:fill": "auto" });
+    expect(readCellShading(tcPr(shd))).toBeUndefined();
+  });
+
+  it('reads a "none" w:fill as unstated, distinctly from "auto"', () => {
+    const shd = el("w:shd", { "w:val": "clear", "w:fill": "none" });
+    expect(readCellShading(tcPr(shd))).toBeUndefined();
+  });
+
+  it('reads a "none" w:color as unstated for a solid-pattern fill', () => {
+    const shd = el("w:shd", { "w:val": "solid", "w:color": "none" });
     expect(readCellShading(tcPr(shd))).toBeUndefined();
   });
 });
