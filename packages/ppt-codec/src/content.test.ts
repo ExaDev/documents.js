@@ -6,6 +6,8 @@ import {
   ALIGN_CENTER,
   ALIGN_DISTRIBUTED,
   ALIGN_JUSTIFY,
+  ALIGN_LEFT,
+  ALIGN_RIGHT,
   type RgbColor,
   type StyleTextProps,
 } from "./text/style";
@@ -146,6 +148,14 @@ describe("buildParagraphs", () => {
     expect(paragraphs[1]?.list).toEqual({ level: 2 });
   });
 
+  it.each([
+    [ALIGN_LEFT, "left"],
+    [ALIGN_RIGHT, "right"],
+  ])("maps %i to the schema's %s alignment", (raw, expected) => {
+    const style = styleOf([{ count: 3, properties: pfProps(0, raw) }], []);
+    expect(build("abc", style, [])[0]?.alignment).toBe(expected);
+  });
+
   it("leaves alignment undefined for a value the shared schema has no name for", () => {
     const style = styleOf(
       [
@@ -183,6 +193,19 @@ describe("buildParagraphs", () => {
       [],
     );
     expect(build("abc", style, [])[0]?.lineSpacing).toBeUndefined();
+  });
+
+  it("converts a ParaSpacing of exactly 0 -- the percentage form's own boundary -- to a line-height multiplier of 0, not undefined", () => {
+    const style = styleOf(
+      [
+        {
+          count: 3,
+          properties: { ...pfProps(0, undefined), lineSpacing: 0 },
+        },
+      ],
+      [],
+    );
+    expect(build("abc", style, [])[0]?.lineSpacing).toBe(0);
   });
 
   it("converts an absolute-master-units ParaSpacing into spacingBeforePt/spacingAfterPt", () => {
