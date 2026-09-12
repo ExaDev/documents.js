@@ -236,7 +236,8 @@ function decodeDbcsBytes(
       const trail = input[i + 1];
       // charAt, not a bracket read: trailTable is always a dense 256-character string (DBCS_LEAD_BYTE_TABLES's own header comment), so a trail byte (0x00-0xFF) is always in range, and a `?? "�"` fallback for the bracket-read's own `string | undefined` type would be pretending an unreachable case is real -- the same reasoning decodeCodepageBytes's own single-byte loop already states for SINGLE_BYTE_PAGES.
       out += trail === undefined ? "�" : trailTable.charAt(trail);
-      i += trail === undefined ? 1 : 2;
+      // Always 2, even when trail is undefined: trail is only ever undefined when i + 1 is already past input's own end, meaning i was already the last index -- advancing by 1 or by 2 from there both land past input.length either way, so there is no real pair left to skip over by advancing the full 2.
+      i += 2;
       continue;
     }
     // charAt, not a bracket read, for the identical reason: DBCS_SINGLE_BYTE_EXTRAS's own header comment states each entry is a dense 128-character string, so byte - 0x80 is always in range once singleByteExtras itself is known to exist.
