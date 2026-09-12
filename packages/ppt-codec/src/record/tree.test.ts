@@ -39,6 +39,10 @@ describe("readRecordAt", () => {
     bytes.set(truncated);
     new DataView(bytes.buffer).setUint32(4, 16, true);
     expect(() => readRecordAt(bytes, 0)).toThrow(PptFormatError);
+    // Names the real remaining byte count (12 - 8 = 4), not an arithmetic mutant's swapped-operand figure, and the true record type/offset rather than an emptied message.
+    expect(() => readRecordAt(bytes, 0)).toThrow(
+      `record 0x${RT_DocumentAtom.toString(16)} at offset 0 declares 16 bytes of data but only 4 remain in the stream`,
+    );
   });
 });
 
@@ -65,12 +69,19 @@ describe("readRecordSequence", () => {
     expect(() => readRecordSequence(bytes, 0, bytes.length)).toThrow(
       PptFormatError,
     );
+    // Pins the true 3-byte fragment size (end - at, not the reverse) and the real end offset, not an emptied message.
+    expect(() => readRecordSequence(bytes, 0, bytes.length)).toThrow(
+      `record sequence ending at ${bytes.length} has a trailing 3-byte fragment, too short for the 8-byte record header`,
+    );
   });
 
   it("rejects a child whose recLen overruns the range its parent gave it", () => {
     const bytes = atom(RT_DocumentAtom, u32le(1));
     // The record is 12 bytes; confining the sequence to 10 must fail rather than silently truncating the child.
     expect(() => readRecordSequence(bytes, 0, 10)).toThrow(PptFormatError);
+    expect(() => readRecordSequence(bytes, 0, 10)).toThrow(
+      `record 0x${RT_DocumentAtom.toString(16)} at offset 0 ends at 12, past the 10 its container allows`,
+    );
   });
 });
 
