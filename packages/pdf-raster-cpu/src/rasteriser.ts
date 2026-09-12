@@ -64,8 +64,12 @@ export class CpuRasteriser implements PageRasteriser {
       ),
       mask: new CoverageMask(geometry.widthPx, geometry.heightPx),
     };
-    // Stryker disable next-line CallExpression: decodeCached's own key is a pure function of the image bytes (crc32 plus length), so a decode left over from a previous page is byte-for-byte the same RawImage this page would have decoded itself -- retaining it changes memory footprint, never a rendered pixel. Skipping this clear is a real (if narrow) memory-retention concern across many pages, which is why it stays, but it is not something any pixel-level test can observe.
     this.decodedImages.clear();
+  }
+
+  // Exposed purely so rasteriser.test.ts can pin the image-decode cache's own behaviour directly (populated on first decode, reused on a repeat, forgotten between pages) -- the same pattern colourBytes/quadCorners/invertMatrix/sampleBilinear below already use for their own arithmetic, needed here because decodePng's own purity means no rendered pixel can ever distinguish a cache hit, a fresh re-decode, or a retained-past-its-page entry from one another.
+  decodedImageForTesting(bytes: Uint8Array<ArrayBuffer>): RawImage | undefined {
+    return this.decodedImages.get(decodeCacheKey(bytes));
   }
 
   draw(op: RasterDrawOp): void {
@@ -106,33 +110,26 @@ export class CpuRasteriser implements PageRasteriser {
   private fillRectOp(op: RasterFillRectOp): void {
     const { geometry, canvas } = this.requirePage("draw");
     const left = Math.max(op.xPx, 0);
-    const right = Math.min(op.xPx + op.widthPx, geometry.widthPx);
     const top = Math.max(op.yPx, 0);
-    const bottom = Math.min(op.yPx + op.heightPx, geometry.heightPx);
-    // Stryker disable next-line ConditionalExpression,LogicalOperator,EqualityOperator,BlockStatement: pixelOverlap(index, edgeLow, edgeHigh) is clamped to Math.max(0, ...), so whenever the interval [left, right) or [top, bottom) is empty or inverted (which is exactly what this guard tests for), every pixelOverlap call the loops below could ever make against it returns exactly 0 -- rendering this guard a pure early-exit for a case the coverage-zero checks further down already paint nothing for. Loosening, inverting, or dropping either half of this check cannot change a single blended pixel; it can only make the loops below iterate over a wider, still entirely zero-coverage range.
-    if (right <= left || bottom <= top) {
-      return; // outside the canvas, or degenerate: no ink either way
-    }
+    // Clamped up to left/top, not merely down to the canvas's own far edge, so right >= left and bottom >= top always hold -- a rect that starts past the canvas, or one whose own width/height is zero or negative, collapses to an exact zero-width or zero-height interval here rather than an inverted one, with no separate degenerate-input guard needed below.
+    const right = Math.max(
+      Math.min(op.xPx + op.widthPx, geometry.widthPx),
+      left,
+    );
+    const bottom = Math.max(
+      Math.min(op.yPx + op.heightPx, geometry.heightPx),
+      top,
+    );
     const colour = colourBytes(op.color);
     const columnStart = Math.floor(left);
     const columnEnd = Math.ceil(right);
     const rowStart = Math.floor(top);
     const rowEnd = Math.ceil(bottom);
-    // Stryker disable next-line EqualityOperator: pixelOverlap(rowEnd, top, bottom) is always exactly 0 -- rowEnd is Math.ceil(bottom), so bottom - rowEnd is never positive, and the overlap's own Math.max(0, ...) clamp floors that to 0 every time. Admitting one extra row via <= only ever hits this always-zero case, caught by the coverageY check just below.
     for (let row = rowStart; row < rowEnd; row++) {
       const coverageY = pixelOverlap(row, top, bottom);
-      // Stryker disable next-line ConditionalExpression,BlockStatement: this.blendPixel at alpha 0 leaves the destination byte exactly as it was (bg + (fg - bg) * 0 rounds back to the same already-integer bg), so skipping the call here is a performance shortcut, not a correctness requirement -- removing it cannot change a rendered pixel.
-      if (coverageY === 0) {
-        continue;
-      }
       const rowBase = row * geometry.widthPx;
-      // Stryker disable next-line EqualityOperator: the same reasoning as the row loop above -- pixelOverlap(columnEnd, left, right) is always exactly 0, since columnEnd is Math.ceil(right).
       for (let column = columnStart; column < columnEnd; column++) {
         const coverage = coverageY * pixelOverlap(column, left, right);
-        // Stryker disable next-line ConditionalExpression,BlockStatement: same reasoning as the coverageY check above -- blendPixel at alpha 0 is already a no-op.
-        if (coverage === 0) {
-          continue;
-        }
         this.blendPixel(canvas, rowBase + column, colour, coverage);
       }
     }
@@ -179,58 +176,31 @@ export class CpuRasteriser implements PageRasteriser {
     mask.reset();
     mask.fillPolygons([quad], "nonzero");
     const inverse = invertMatrix(op.matrix);
-    // Stryker disable next-line MethodExpression: mask.fillPolygons([quad], ...) just above already paints the mask according to the quad's own real, unmutated geometry, independently of this clamp -- so any row this bound admits outside the quad's true extent reads a mask cell the fill pass itself left at samples 0 (whether that cell is a genuine miss or an out-of-bounds index countAt's own `?? 0` already covers), caught by the samples check inside the loop below. Unlike a write into the mask (which really could corrupt an adjacent row), this bound only ever widens what gets read back from an already-correct mask.
-    const rowStart = Math.max(
-      0,
-      Math.floor(Math.min(...quad.map((corner) => corner.y))),
-    );
-    // Stryker disable next-line MethodExpression: same reasoning as rowStart above.
-    const rowEnd = Math.min(
-      geometry.heightPx,
-      Math.ceil(Math.max(...quad.map((corner) => corner.y))),
-    );
-    // Stryker disable next-line MethodExpression: same reasoning as rowStart above.
-    const columnStart = Math.max(
-      0,
-      Math.floor(Math.min(...quad.map((corner) => corner.x))),
-    );
-    // Stryker disable next-line MethodExpression: same reasoning as rowStart above.
-    const columnEnd = Math.min(
-      geometry.widthPx,
-      Math.ceil(Math.max(...quad.map((corner) => corner.x))),
-    );
-    // Stryker disable next-line EqualityOperator: see the disable comment on rowStart above -- widening either loop bound here only ever admits a zero-coverage cell.
-    for (let row = rowStart; row < rowEnd; row++) {
-      const rowBase = row * geometry.widthPx;
-      // Stryker disable next-line EqualityOperator: same reasoning as the row loop above.
-      for (let column = columnStart; column < columnEnd; column++) {
-        const samples = mask.countAt(rowBase + column);
-        // Stryker disable next-line ConditionalExpression,BlockStatement: at samples 0 the blendPixel call below would run with alpha (0 / COVERAGE_DENOMINATOR) * a === 0, itself a no-op (see fillRectOp's identical reasoning) -- this check only ever saves the wasted inverse/sampleBilinear/blendPixel work, never changes a pixel.
-        if (samples === 0) {
-          continue;
-        }
-        const [u, v] = inverse(column + 0.5, row + 0.5);
-        const [r, g, b, a] = sampleBilinear(source, u, v);
-        this.blendPixel(
-          canvas,
-          rowBase + column,
-          { r, g, b },
-          (samples / COVERAGE_DENOMINATOR) * a,
-        );
-      }
+    // The linear pixel-index range this one fillPolygons call actually marked, rather than a hand-computed bounding box over the quad's own corners: markedRange() reflects the fill pass's real output, so there is no separately-derived bound that could disagree with it, and the loop below is the same range-walk blendMask uses for a fill or stroke's own mask. No samples-zero skip inside the range: this.blendPixel at alpha 0 leaves the destination byte exactly as it was (bg + (fg - bg) * 0 rounds back to the same already-integer bg), so a gap pixel between two marked spans costs a wasted call, never a wrong one.
+    const { first, last } = mask.markedRange();
+    for (let i = first; i <= last; i++) {
+      const samples = mask.countAt(i);
+      const row = Math.floor(i / geometry.widthPx);
+      const column = i % geometry.widthPx;
+      const [u, v] = inverse(column + 0.5, row + 0.5);
+      const [r, g, b, a] = sampleBilinear(source, u, v);
+      this.blendPixel(
+        canvas,
+        i,
+        { r, g, b },
+        (samples / COVERAGE_DENOMINATOR) * a,
+      );
     }
   }
 
   // The port may hand the same image bytes repeatedly (one XObject drawn for every stamp of a logo); PNG decoding is this backend's most expensive per-op step, so decoded images are cached by content within the page. crc32 over the bytes plus the byte length is the key -- cheap relative to the decode, and two distinct images colliding on both is not a case a page's own content can produce.
   private decodeCached(bytes: Uint8Array<ArrayBuffer>): RawImage {
-    const key = `${bytes.length}:${crc32(bytes)}`;
+    const key = decodeCacheKey(bytes);
     const cached = this.decodedImages.get(key);
-    // Stryker disable next-line BlockStatement: decodePng is a pure function of `bytes`, and `key` is derived from those same bytes, so skipping this early return only means falling through to decode the identical bytes again and returning an equal (if freshly-allocated) RawImage -- the cache exists to skip the decode's own cost, not to change what a caller receives.
     if (cached !== undefined) {
       return cached;
     }
     const decoded = decodePng(bytes);
-    // Stryker disable next-line CallExpression: skipping this populate means only that every future call with these same bytes falls through to decodePng again instead of hitting the cache -- decodePng is pure, so it returns an equal RawImage either way. This cache is a performance measure, never a correctness one, per this method's own leading comment.
     this.decodedImages.set(key, decoded);
     return decoded;
   }
@@ -241,14 +211,10 @@ export class CpuRasteriser implements PageRasteriser {
     color: UnitRgb,
   ): void {
     const colour = colourBytes(color);
-    const pixels = mask.widthPx * mask.heightPx;
-    // Stryker disable next-line EqualityOperator: mask.countAt(pixels), one past the mask's own last valid index, reads past the end of its backing Uint16Array and its own `?? 0` fallback returns 0 -- admitting that one extra iteration via <= hits the same always-zero, always-skipped case the samples check just below already handles.
-    for (let i = 0; i < pixels; i++) {
+    const { first, last } = mask.markedRange();
+    // No samples-zero skip: this.blendPixel at alpha 0 is a no-op (per fillRectOp's identical reasoning), so a gap pixel between two marked spans costs a wasted call, never a wrong one.
+    for (let i = first; i <= last; i++) {
       const samples = mask.countAt(i);
-      // Stryker disable next-line ConditionalExpression,BlockStatement: blendPixel at alpha 0 is a no-op, per fillRectOp's identical reasoning -- this check only saves the wasted call.
-      if (samples === 0) {
-        continue;
-      }
       this.blendPixel(canvas, i, colour, samples / COVERAGE_DENOMINATOR);
     }
   }
@@ -286,13 +252,18 @@ export function colourBytes(color: UnitRgb): {
   };
 }
 
-// The covered fraction of one pixel row (or column) index against the half-open interval [edgeLow, edgeHigh]: the overlap length of [index, index + 1] with it, 0..1.
+// The image-decode cache key, shared between decodeCached's own lookup/populate and decodedImageForTesting's read-only inspection so the two can never disagree about which entry a given set of bytes maps to.
+function decodeCacheKey(bytes: Uint8Array<ArrayBuffer>): string {
+  return `${bytes.length}:${crc32(bytes)}`;
+}
+
+// The covered fraction of one pixel row (or column) index against the half-open interval [edgeLow, edgeHigh]: the overlap length of [index, index + 1] with it, 0..1. No defensive clamp to a minimum of 0: fillRectOp's own rowStart/rowEnd and columnStart/columnEnd already bound index to the exact range where this difference is non-negative (edgeHigh >= edgeLow is an invariant fillRectOp establishes before computing them), so a clamp here would only ever mask a genuinely wrong caller-side range rather than serve a real input.
 function pixelOverlap(
   index: number,
   edgeLow: number,
   edgeHigh: number,
 ): number {
-  return Math.max(0, Math.min(index + 1, edgeHigh) - Math.max(index, edgeLow));
+  return Math.min(index + 1, edgeHigh) - Math.max(index, edgeLow);
 }
 
 // The placement quad in device pixels: the port's matrix maps the unit image square (top-left origin, x right, y down) through PDF's [a b c d e f] row-vector convention, so the corners are the images of (0,0), (1,0), (1,1), (0,1) in order -- a quad whatever rotation the placement carries.
@@ -328,20 +299,17 @@ export function sampleBilinear(
   const clampedV = Math.min(Math.max(v, 0), 1);
   const sx = Math.min(
     Math.max(clampedU * source.width - 0.5, 0),
-    // Stryker disable next-line ArithmeticOperator: this clamp only ever binds when the unclamped value would exceed source.width - 1, which forces sx to land on exactly that value regardless of the mutation, since sx can never legitimately go higher (clampedU maxes out at 1, giving source.width - 0.5, itself past this bound) -- and landing on exactly x0 = source.width - 1 makes fx (sx - x0) exactly 0, which zeroes out every place x1 (the only thing this clamp could otherwise have widened) enters the interpolation below. Widening the clamp changes what sx could theoretically reach, never what it does once floored and weighted.
     source.width - 1,
   );
   const sy = Math.min(
     Math.max(clampedV * source.height - 0.5, 0),
-    // Stryker disable next-line ArithmeticOperator: the same reasoning as sx above, for the vertical axis.
     source.height - 1,
   );
   const x0 = Math.floor(sx);
   const y0 = Math.floor(sy);
-  // Stryker disable next-line ArithmeticOperator: whenever x0 < source.width - 1, x0 + 1 is already the smaller of the two candidates Math.min compares, so widening the second one to source.width + 1 cannot change the result; whenever x0 === source.width - 1 (the only case where this clamp would otherwise bind), sx equals x0 exactly (see the sx comment above), so fx is 0 and x1's own value cannot reach the output either way.
-  const x1 = Math.min(x0 + 1, source.width - 1);
-  // Stryker disable next-line ArithmeticOperator: the same reasoning as x1 above, for the vertical axis.
-  const y1 = Math.min(y0 + 1, source.height - 1);
+  // No clamp against source.width/height - 1 here: sx is already clamped there, so x0 can never exceed it, and x1 = x0 + 1 only ever reaches an actual out-of-texture column when x0 is exactly that last column -- the one case where fx (sx - x0) is exactly 0, zeroing out whatever sample(x1, ...) reads (a real value in an adjacent row, or the 0 fallback past the array's own end) before it can enter the interpolation below.
+  const x1 = x0 + 1;
+  const y1 = y0 + 1;
   const fx = sx - x0;
   const fy = sy - y0;
   const channelCount = source.channels === 1 ? 1 : 3;

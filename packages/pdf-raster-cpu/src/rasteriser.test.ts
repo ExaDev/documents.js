@@ -255,12 +255,47 @@ describe("fillRect pixels", () => {
   });
 
   it("blends a fractional edge at the exact analytic fraction", () => {
-    // A rect starting at x 10.5: column 10 is covered from 10.5, an exact 0.5 overlap, so a 50%-grey red fill lands at exactly the half-blend of (128, 0, 0) over white.
+    // A rect starting at x 10.5: column 10 is covered from 10.5, an exact 0.5 overlap, so a 50%-grey red fill lands at exactly the half-blend of (128, 0, 0) over white. The far edge sits at 40.5, the same fractional shape one column further along; column 41 -- one past it -- must stay pure white, not just the near-side column 9.
     const image = renderPixels(onePagePdf("0.5 0 0 rg 10.5 20 30 40 re f"));
     expect(pixelAt(image, 10, 60)).toEqual([192, 128, 128]);
     expect(pixelAt(image, 40, 60)).toEqual([192, 128, 128]);
     expect(pixelAt(image, 25, 60)).toEqual([128, 0, 0]);
     expect(pixelAt(image, 9, 60)).toEqual(WHITE);
+    expect(pixelAt(image, 41, 60)).toEqual(WHITE);
+  });
+
+  it("blends a fractional top and bottom edge symmetrically, with nothing painted one row past either", () => {
+    // Page y 20.5..50.5 (height 30) maps to device y 49.5..79.5 (the y flip): row 49 gets the far (bottom, in page terms) fractional 0.5 overlap, row 79 gets the near (top) fractional 0.5 overlap, and rows 48 and 80 -- one past each edge -- must stay pure white.
+    const image = renderPixels(onePagePdf("0 0.5 0 rg 10 20.5 30 30 re f"));
+    expect(pixelAt(image, 20, 49)).toEqual([128, 192, 128]);
+    expect(pixelAt(image, 20, 79)).toEqual([128, 192, 128]);
+    expect(pixelAt(image, 20, 60)).toEqual([0, 128, 0]);
+    expect(pixelAt(image, 20, 48)).toEqual(WHITE);
+    expect(pixelAt(image, 20, 80)).toEqual(WHITE);
+  });
+
+  it("paints nothing for a rect whose own width or height is negative", () => {
+    // widthPx < 0 (or heightPx < 0) makes xPx + widthPx fall short of xPx itself; the clamp collapses this to an exact zero-width (or zero-height) interval rather than an inverted one, so the whole op paints nothing rather than something in the wrong place.
+    const rasteriser = new CpuRasteriser();
+    rasteriser.beginPage(pageGeometry(20, 20));
+    rasteriser.draw({
+      kind: "fillRect",
+      xPx: 15,
+      yPx: 5,
+      widthPx: -10,
+      heightPx: 5,
+      color: { r: 0, g: 0, b: 0 },
+    });
+    rasteriser.draw({
+      kind: "fillRect",
+      xPx: 5,
+      yPx: 15,
+      widthPx: 5,
+      heightPx: -10,
+      color: { r: 0, g: 0, b: 0 },
+    });
+    const image = decodePng(rasteriser.finish());
+    expect(image.data).toEqual(new Uint8Array(20 * 20 * 3).fill(255));
   });
 
   it("clamps a rect straddling the page edge instead of painting outside the canvas", () => {
@@ -677,6 +712,30 @@ describe("CpuRasteriser: draw ops driven directly", () => {
     expect(diagnostics[0]?.message).toMatch(/byte-codec has no DCT decoder/);
   });
 
+  it("blends the mask's own last marked pixel, not just every pixel before it", () => {
+    // A triangle covering the whole 3x3 canvas: the mask's own markedRange().last is the bottom-right pixel's index (8), and blendMask must walk up to and including it -- stopping one short would leave that one corner pixel white while every other pixel the shape covers turns black.
+    const rasteriser = new CpuRasteriser();
+    rasteriser.beginPage(pageGeometry(3, 3));
+    rasteriser.draw({
+      kind: "path",
+      subpaths: [
+        {
+          startXPx: 0,
+          startYPx: 0,
+          segments: [
+            { kind: "line", xPx: 3, yPx: 0 },
+            { kind: "line", xPx: 3, yPx: 3 },
+            { kind: "line", xPx: 0, yPx: 3 },
+          ],
+          closed: true,
+        },
+      ],
+      fill: { color: { r: 0, g: 0, b: 0 }, fillRule: "nonzero" },
+    });
+    const image = decodePng(rasteriser.finish());
+    expect(pixelAt(image, 2, 2)).toEqual(BLACK);
+  });
+
   it("does not let two degenerate two-point subpaths perturb a real polygon's own fill", () => {
     // A real triangle alongside two unrelated two-point segments: CoverageMask's own bounding-box computation already excludes any subpath under three points from the SCAN RANGE regardless of what reaches it, so a single stray segment's forward/reverse crossings alone can land only on the identical x (the markSpan zero-width guard already absorbs that case) -- it takes a SECOND, differently-placed degenerate segment for their respective stray crossings to pair up into a genuine, non-cancelling span. Pinning that pathOp's own `.filter(points => points.length >= 3)` keeps that pairing from ever reaching CoverageMask at all: pixel (1, 2) sits on the triangle's own interior and must stay solid black, not fade toward white.
     const triangle: RasterSubpath = {
@@ -854,6 +913,37 @@ describe("CpuRasteriser: draw ops driven directly", () => {
     const image = decodePng(rasteriser.finish());
     expect(pixelAt(image, 1, 1)).toEqual([255, 0, 0]);
     expect(pixelAt(image, 6, 6)).toEqual([0, 0, 255]);
+  });
+
+  it("caches a decoded image by content within a page, and forgets it once the next page begins", () => {
+    // decodePng is pure, so no rendered pixel can ever tell a cache hit from a fresh decode -- decodedImageForTesting inspects the cache directly instead, the same way stroke.test.ts/coverage.test.ts reach past this package's own narrow public surface for their own arithmetic.
+    const solidGreen: RawImage = {
+      width: 1,
+      height: 1,
+      channels: 3,
+      data: new Uint8Array([0, 255, 0]),
+    };
+    const bytes = pngBytes(solidGreen);
+    const rasteriser = new CpuRasteriser();
+    rasteriser.beginPage(pageGeometry(4, 4));
+    expect(rasteriser.decodedImageForTesting(bytes)).toBeUndefined();
+    const op: RasterImageOp = {
+      kind: "image",
+      format: "png",
+      bytes,
+      sourceWidthPx: 1,
+      sourceHeightPx: 1,
+      matrix: [1, 0, 0, 1, 0, 0],
+    };
+    rasteriser.draw(op);
+    const decodedOnFirstDraw = rasteriser.decodedImageForTesting(bytes);
+    expect(decodedOnFirstDraw).toBeDefined();
+    // A second placement of the identical bytes reuses the cached entry, the exact same object, rather than replacing it with a fresh decode.
+    rasteriser.draw(op);
+    expect(rasteriser.decodedImageForTesting(bytes)).toBe(decodedOnFirstDraw);
+    // The next page forgets it entirely.
+    rasteriser.beginPage(pageGeometry(4, 4));
+    expect(rasteriser.decodedImageForTesting(bytes)).toBeUndefined();
   });
 
   it("blends an image sample by its own coverage fraction times its own alpha, not divided by it", () => {
