@@ -15,14 +15,31 @@ const source = {
   format: "docx" as const,
 };
 
+// A byte-level signature unique to each targetFormat's own real output -- checked so a targetFormat branch silently falling through to a DIFFERENT renderer (all three return equally non-empty bytes) is actually caught.
+const FORMAT_SIGNATURES = {
+  docx: "word/document.xml",
+  odt: "opendocument.text",
+  pdf: "%PDF",
+} as const;
+
+function bytesContain(bytes: Uint8Array, needle: string): boolean {
+  return Buffer.from(bytes).toString("latin1").includes(needle);
+}
+
 describe("odbRenderReportOperation", () => {
   it("renders the fixture's single declared report to odt with no report name given", async () => {
     const result = await odbRenderReportOperation.run({
       source,
       targetFormat: "odt",
     });
-    expect("bytesBase64" in result).toBe(true);
+    if (!("bytesBase64" in result)) {
+      throw new Error("expected inline bytes");
+    }
     expect(result.byteLength).toBeGreaterThan(0);
+    const bytes = Uint8Array.from(atob(result.bytesBase64), (char) =>
+      char.charCodeAt(0),
+    );
+    expect(bytesContain(bytes, FORMAT_SIGNATURES.odt)).toBe(true);
     expect(result.mathDiagnostics).toEqual([]);
   });
 
@@ -32,7 +49,13 @@ describe("odbRenderReportOperation", () => {
       report: FORM_AND_REPORT_REPORT_NAME,
       targetFormat: "docx",
     });
-    expect("bytesBase64" in result).toBe(true);
+    if (!("bytesBase64" in result)) {
+      throw new Error("expected inline bytes");
+    }
+    const bytes = Uint8Array.from(atob(result.bytesBase64), (char) =>
+      char.charCodeAt(0),
+    );
+    expect(bytesContain(bytes, FORMAT_SIGNATURES.docx)).toBe(true);
   });
 
   it("throws OdbReportNotSpecifiedError naming the unrecognised report", async () => {
@@ -51,11 +74,41 @@ describe("odbRenderReportOperation", () => {
       report: FORM_AND_REPORT_REPORT_NAME,
       targetFormat: "pdf",
     });
-    expect("bytesBase64" in result).toBe(true);
+    if (!("bytesBase64" in result)) {
+      throw new Error("expected inline bytes");
+    }
     expect(result.byteLength).toBeGreaterThan(0);
+    const bytes = Uint8Array.from(atob(result.bytesBase64), (char) =>
+      char.charCodeAt(0),
+    );
+    expect(bytesContain(bytes, FORMAT_SIGNATURES.pdf)).toBe(true);
     expect(result.mathDiagnostics).toEqual([]);
     expect(result.fontSubstitutions).toEqual([]);
     expect(result.charSubstitutions).toEqual([]);
+  });
+
+  it("propagates an already-aborted signal for every targetFormat", async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      odbRenderReportOperation.run(
+        { source, targetFormat: "docx" },
+        { signal: controller.signal },
+      ),
+    ).rejects.toThrow();
+    await expect(
+      odbRenderReportOperation.run(
+        { source, targetFormat: "odt" },
+        { signal: controller.signal },
+      ),
+    ).rejects.toThrow();
+    await expect(
+      odbRenderReportOperation.run(
+        { source, targetFormat: "pdf" },
+        { signal: controller.signal },
+      ),
+    ).rejects.toThrow();
   });
 
   it("reports a real WinAnsi character substitution, with its page index, when a report's own bound data prints a non-WinAnsi character", async () => {
