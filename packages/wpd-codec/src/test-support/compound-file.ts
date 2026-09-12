@@ -47,7 +47,7 @@ function writeDirectoryEntry(
   view.setUint32(0x4c, childId, true);
   view.setUint32(0x74, startSector, true);
   view.setUint32(0x78, size, true);
-  // Stryker disable next-line BooleanLiteral: value 0 has identical (all-zero) bytes in either byte order.
+  // Stryker disable next-line BooleanLiteral,CallExpression: value 0 has identical (all-zero) bytes in either byte order, and the directory buffer is already zero-initialised at every offset before any field is written, so a mutant that deletes this write entirely leaves the same zero byte this call would have written anyway.
   view.setUint32(0x7c, 0, true);
 }
 
@@ -86,8 +86,8 @@ export function compoundFileWithStream(
 
   const fat = new Uint32Array(SECTOR_SIZE / 4).fill(FREESECT);
   fat[0] = FATSECT;
-  // Stryker disable next-line EqualityOperator: an extra iteration at index === count writes fat[start + count] = start + count + 1. For every call below but the last, start + count is exactly the next call's own start, and that next call's own first write (index 0) computes the identical value (next_start + 0 + 1 = start + count + 1) -- the stray write is always overwritten by the real one immediately after it. For the last call (miniFatStart), the corresponding slot is never referenced by any directory entry's own startSector, so nothing ever reads it either way.
   const chain = (start: number, count: number): void => {
+    // Stryker disable next-line EqualityOperator: an extra iteration at index === count writes fat[start + count] = start + count + 1. For every call below but the last, start + count is exactly the next call's own start, and that next call's own first write (index 0) computes the identical value (next_start + 0 + 1 = start + count + 1) -- the stray write is always overwritten by the real one immediately after it. For the last call (miniFatStart), the corresponding slot is never referenced by any directory entry's own startSector, so nothing ever reads it either way.
     for (let index = 0; index < count; index += 1) {
       fat[start + index] = index === count - 1 ? ENDOFCHAIN : start + index + 1;
     }
@@ -98,6 +98,7 @@ export function compoundFileWithStream(
   chain(miniFatStart, miniFatSectorCount);
 
   const miniFat = new Uint32Array(SECTOR_SIZE / 4).fill(FREESECT);
+  // Stryker disable next-line ConditionalExpression: forcing this branch to always run only ever populates the local miniFat array with chain data for a stream that is not actually in the mini stream; miniFat is only ever written into the file by the separate, unmutated `if (inMiniStream)` guard around putSector(miniFatStart, ...) below, so a miniFat populated here for a big-stream file is computed but never observed.
   if (inMiniStream) {
     const miniSectorCount = sectorsFor(stream.length, MINI_SECTOR_SIZE);
     // Stryker disable next-line EqualityOperator: an extra iteration writes miniFat[miniSectorCount], but the real chain already ends one slot earlier with ENDOFCHAIN, so a reader walking it from the stream's own start sector stops before ever reaching this slot.
@@ -107,10 +108,10 @@ export function compoundFileWithStream(
   }
 
   const directory = new Uint8Array(directorySectorCount * SECTOR_SIZE);
-  // Stryker disable next-line StringLiteral: archive-codec's reader identifies the root entry solely by object type (5, checked below), never by name -- [MS-CFB] 2.6.1 fixes the name to "Root Entry" for producers, but nothing here reads it back.
   writeDirectoryEntry(
     directory,
     0,
+    // Stryker disable next-line StringLiteral: archive-codec's reader identifies the root entry solely by object type (5, checked below), never by name -- [MS-CFB] 2.6.1 fixes the name to "Root Entry" for producers, but nothing here reads it back.
     "Root Entry",
     5,
     1,
@@ -130,26 +131,27 @@ export function compoundFileWithStream(
   const file = new Uint8Array(SECTOR_SIZE + totalSectors * SECTOR_SIZE);
   const view = new DataView(file.buffer);
   file.set([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1], 0);
-  // Stryker disable next-line BooleanLiteral: the minor version is never read by archive-codec's reader (only major version, at 0x1a, gates anything), so which byte order this claims to write it in is unobservable.
+  // Stryker disable next-line BooleanLiteral,CallExpression: the minor version is never read by archive-codec's reader (only major version, at 0x1a, gates anything), so which byte order this claims to write it in is unobservable, and deleting the write entirely leaves the buffer's own zero-initialised default there instead, which is equally unread.
   view.setUint16(0x18, 0x3e, true); // minor version, the value real producers write
   view.setUint16(0x1a, 3, true); // major version
   view.setUint16(0x1c, 0xfffe, true); // little-endian byte order
   view.setUint16(0x1e, 9, true); // sector shift: 2^9 = 512
   view.setUint16(0x20, 6, true); // mini sector shift: 2^6 = 64
+  // Stryker disable next-line BooleanLiteral: value 0 has identical (all-zero) bytes in either byte order.
   view.setUint32(0x28, 0, true); // directory sector count: fixed at 0 for version 3
-  // Stryker disable next-line BooleanLiteral: the reader locates every FAT sector through the DIFAT array (0x4C onward) and its own chain, never through this declared count, so this field is never read back.
+  // Stryker disable next-line BooleanLiteral,CallExpression: the reader locates every FAT sector through the DIFAT array (0x4C onward) and its own chain, never through this declared count, so this field is never read back -- deleting the write entirely just leaves the buffer's own zero-initialised default there instead, equally unread.
   view.setUint32(0x2c, fatSectorCount, true);
   view.setUint32(0x30, fatSectorCount, true);
   view.setUint32(0x38, MINI_STREAM_CUTOFF, true);
   view.setUint32(0x3c, inMiniStream ? miniFatStart : ENDOFCHAIN, true);
-  // Stryker disable next-line BooleanLiteral: the reader walks the mini FAT chain from firstMiniFatSector until it hits ENDOFCHAIN, never consulting a declared sector count, so this field is never read back.
+  // Stryker disable next-line BooleanLiteral,CallExpression: the reader walks the mini FAT chain from firstMiniFatSector until it hits ENDOFCHAIN, never consulting a declared sector count, so this field is never read back -- deleting the write entirely just leaves the buffer's own zero-initialised default there instead, equally unread.
   view.setUint32(0x40, miniFatSectorCount, true);
   view.setUint32(0x44, ENDOFCHAIN, true); // first DIFAT sector: none needed
-  // Stryker disable next-line BooleanLiteral: value 0 has identical (all-zero) bytes in either byte order, and this field (a declared DIFAT sector count) is never read back regardless.
+  // Stryker disable next-line BooleanLiteral,CallExpression: value 0 has identical (all-zero) bytes in either byte order, and this field (a declared DIFAT sector count) is never read back regardless -- deleting the write entirely leaves the same zero byte there anyway.
   view.setUint32(0x48, 0, true);
-  // Stryker disable next-line EqualityOperator,ConditionalExpression: an extra iteration (or the loop never running at all) only ever changes entries that are already, or become, indistinguishable to the reader from entry 0's own real value -- see the two mutants on the ternary just below for the full proof; between the two together, every input this loop can produce collects the identical single real FAT sector (0) into fatSectorIds, however many times, which the reader then treats identically to collecting it once.
+  // Stryker disable next-line EqualityOperator,ConditionalExpression,BlockStatement: an extra iteration (the loop never running at all, or the loop body being skipped entirely) only ever changes entries that are already, or become, indistinguishable to the reader from entry 0's own real value -- see the two mutants on the ternary just below for the full proof; between the two together, every input this loop can produce collects the identical single real FAT sector (0) into fatSectorIds, however many times, which the reader then treats identically to collecting it once. Skipping the loop body entirely leaves every entry at the buffer's own zero-initialised default (0), which the reader reads as "sector 0" for all 109 entries -- the identical "collects sector 0 repeatedly" case.
   for (let index = 0; index < 109; index += 1) {
-    // Stryker disable next-line ConditionalExpression,EqualityOperator: "true" (every entry becomes 0) reduces to the same "all entries name sector 0" case the loop-bound mutants above already cover; "index !== 0" (entry 0 becomes FREESECT, every other entry becomes 0) still leaves fatSectorIds naming only sector 0, repeated, which the reader's own flat FAT table construction collapses back to the identical real content regardless of how many times sector 0 is named.
+    // Stryker disable next-line ConditionalExpression,EqualityOperator,BooleanLiteral: "true" (every entry becomes 0) reduces to the same "all entries name sector 0" case the loop-bound mutants above already cover; "index !== 0" (entry 0 becomes FREESECT, every other entry becomes 0) still leaves fatSectorIds naming only sector 0, repeated, which the reader's own flat FAT table construction collapses back to the identical real content regardless of how many times sector 0 is named; and both values written here (0 and FREESECT, 0xFFFFFFFF) are byte-order-invariant (all-zero or all-0xFF), so which endianness this claims is unobservable.
     view.setUint32(0x4c + index * 4, index === 0 ? 0 : FREESECT, true);
   }
 
@@ -158,9 +160,11 @@ export function compoundFileWithStream(
   };
   putSector(0, new Uint8Array(fat.buffer));
   putSector(fatSectorCount, directory);
+  // Stryker disable next-line ConditionalExpression: forcing this branch to always run writes `stream` at bigStreamStart even when the stream is actually a mini one; in that case bigStreamStart === miniStreamStart (bigStreamSectorCount is 0), and the miniStream write just below -- always at least as long as stream, since it is stream padded up to whole mini sectors -- runs afterwards at the identical offset and fully overwrites whatever this wrote. For an empty stream, `stream` itself is zero bytes, so writing it is a no-op regardless.
   if (!inMiniStream) {
     putSector(bigStreamStart, stream);
   }
+  // Stryker disable next-line ConditionalExpression,EqualityOperator: miniStream.length is a real array length, never negative, so forcing this branch to always run (or ">= 0", always true) only ever adds a call that writes zero bytes when the length is genuinely 0 -- Uint8Array#set with an empty source is a no-op, so the file's contents are unaffected either way.
   if (miniStream.length > 0) {
     putSector(miniStreamStart, miniStream);
   }
