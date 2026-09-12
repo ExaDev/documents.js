@@ -65,8 +65,8 @@ interface ControlWordScan {
 function scanControlWord(input: Uint8Array, start: number): ControlWordScan {
   let cursor = start;
   let name = "";
+  // No explicit cursor < input.length bound: past the end, input[cursor] is undefined, `?? 0` turns that into the NUL byte, and isAsciiLetter(0) is false -- already the one real stopping condition, exactly the way decodeDbcsBytes' identical shape of loop states it in codepage.ts.
   while (
-    cursor < input.length &&
     name.length < MAX_CONTROL_WORD_LETTERS &&
     isAsciiLetter(input[cursor] ?? 0)
   ) {
@@ -77,13 +77,13 @@ function scanControlWord(input: Uint8Array, start: number): ControlWordScan {
 
   let param: number | undefined;
   let negative = false;
-  if (cursor < input.length && input[cursor] === MINUS) {
+  // input[cursor] is undefined past the end, and undefined === MINUS is false on its own, so no separate bound is needed here either.
+  if (input[cursor] === MINUS) {
     negative = true;
     cursor += 1;
   }
   let digits = "";
   while (
-    cursor < input.length &&
     digits.length < MAX_PARAMETER_DIGITS &&
     isAsciiDigit(input[cursor] ?? 0)
   ) {
@@ -97,7 +97,7 @@ function scanControlWord(input: Uint8Array, start: number): ControlWordScan {
     cursor -= 1;
   }
 
-  if (cursor < input.length && input[cursor] === SPACE) {
+  if (input[cursor] === SPACE) {
     cursor += 1;
   }
   return { name, param, next: cursor };
@@ -118,9 +118,8 @@ export function tokenizeRtf(input: Uint8Array): RtfToken[] {
   };
 
   const pushTextByte = (byte: number): void => {
-    if (textStart === -1) {
-      textStart = cursor;
-    }
+    // Unconditional: textStart's own value is never read except as an "is a run pending" flag (flushText's === -1 check) -- it is never used as an actual byte offset back into `input`, so there is no need to preserve whichever cursor position started the run, only that it is no longer -1.
+    textStart = cursor;
     pendingText.push(byte);
   };
 
