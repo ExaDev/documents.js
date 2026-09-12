@@ -67,10 +67,29 @@ describe("createRestServer", () => {
   it("GET / lists every available operation", async () => {
     const response = await fetch(running.baseUrl + "/");
     expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("application/json");
     const body = (await response.json()) as { operations: { name: string }[] };
     expect(body.operations.some((op) => op.name === "convert_document")).toBe(
       true,
     );
+  });
+
+  it("does not list operations for a non-GET request to /", async () => {
+    const response = await fetch(running.baseUrl + "/", { method: "POST" });
+    expect(response.status).toBe(404);
+  });
+
+  it("treats an empty request body as {} rather than a JSON parse failure", async () => {
+    const response = await fetch(running.baseUrl + "/convert_document", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "",
+    });
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: string };
+    // An empty body parses to {}, which then fails convert_document's own inputSchema (missing source/targetFormat) -- a distinct failure mode from "not valid JSON", and the one that actually applies here.
+    expect(body.error).toMatch(/failed validation/);
   });
 
   it("POST /convert_document converts a docx to markdown", async () => {
@@ -143,11 +162,19 @@ describe("createRestServer", () => {
     });
 
     expect(response.status).toBe(404);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toBe(
+      'No operation named "not_a_real_operation". GET / lists every available operation.',
+    );
   });
 
   it("returns 405 for GET on a known operation route", async () => {
     const response = await fetch(running.baseUrl + "/convert_document");
     expect(response.status).toBe(405);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toBe(
+      "convert_document only accepts POST, received GET.",
+    );
   });
 
   it("maps OdmUnresolvedSectionError to a 400 naming the unresolved href", async () => {
@@ -160,8 +187,11 @@ describe("createRestServer", () => {
     });
 
     expect(response.status).toBe(400);
-    const body = (await response.json()) as { hrefs: string[] };
+    const body = (await response.json()) as { error: string; hrefs: string[] };
     expect(body.hrefs).toEqual(["../missing.odt"]);
+    expect(body.error).toMatch(
+      /Pass chaptersDir containing these files, or an explicit chapters override, for each href\.$/,
+    );
   });
 
   // odb_render_report's own OdbReportNotSpecifiedError mapping (the "no report given, and the .odb declares zero or more than one" case) has no equivalent direct HTTP-round-trip test here: the one real .odb fixture this repo checks in (form-and-report.odb, copied from document-operations' own test-support) declares exactly one report, so omitting `report` auto-selects it without ever throwing -- the identical limitation document-mcp's own odb-render-report.test.ts documents for its own suite, which resorts to constructing an OdbReportNotSpecifiedError instance directly rather than a real fixture round trip. This route's mapping is structurally identical to odm_to_pdf's (an instanceof check plus a fixed-shape body), which the test above does exercise end to end.
