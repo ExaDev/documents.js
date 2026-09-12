@@ -27,10 +27,9 @@ const HTML_TAG_PATTERN = new RegExp(
 );
 
 // Matches an inline HTML tag starting at `start` (which must be the `<`), returning its literal source text, or undefined when what follows is not a tag at all -- a bare `<` is ordinary text, never an error.
+//
+// No separate "does text[start] even open with '<'?" guard: every one of HTML_TAG_PATTERN's own alternatives (OPEN_TAG, CLOSING_TAG, HTML_COMMENT, PROCESSING_INSTRUCTION, DECLARATION, CDATA_SECTION) already begins with a literal '<' in its own regex source, and the pattern as a whole is anchored at `^` -- so a slice that doesn't start with '<' can never match any alternative regardless, and a guard duplicating that fact ahead of the real check would only ever agree with it.
 export function matchHtmlTag(text: string, start: number): string | undefined {
-  if (text.charAt(start) !== "<") {
-    return undefined;
-  }
   const match = HTML_TAG_PATTERN.exec(text.slice(start));
   return match === null ? undefined : match[0];
 }
@@ -136,9 +135,7 @@ export function matchHtmlBlockStart(
   line: string,
   interruptsParagraph: boolean,
 ): HtmlBlockType | undefined {
-  if (!line.startsWith("<")) {
-    return undefined;
-  }
+  // No separate "does line even start with '<'?" guard: every one of HTML_BLOCK_START_PATTERNS' real entries (types 1-7) is itself anchored at `^` and begins with a literal '<' in its own regex source, so a line that doesn't open with '<' already fails every pattern in the loop below on its own, and the loop exhausts to the identical `undefined` regardless.
   for (const type of HTML_BLOCK_TYPES) {
     if (type === LAST_HTML_BLOCK_TYPE && interruptsParagraph) {
       continue;
