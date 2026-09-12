@@ -281,8 +281,7 @@ const PERCENT_STEPS: readonly [number, ContentCellPatternType][] = [
 const PATTERN_TYPE_BY_SHADE: readonly ContentCellPatternType[] = Array.from(
   { length: 256 },
   (_, shade) => {
-    const foregroundCoveragePercent =
-      100 - (shade / COLOR_COMPONENT_MAX) * 100;
+    const foregroundCoveragePercent = 100 - (shade / COLOR_COMPONENT_MAX) * 100;
     return PERCENT_STEPS.reduce((best, step) =>
       Math.abs(step[0] - foregroundCoveragePercent) <
       Math.abs(best[0] - foregroundCoveragePercent)
