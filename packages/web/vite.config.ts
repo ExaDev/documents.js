@@ -121,8 +121,12 @@ export default defineConfig(({ command }) => ({
     __APP_COMMIT_TIMESTAMP__: JSON.stringify(commitTimestampMs),
   },
   plugins: [
-    // Must precede react(): the router plugin's route-tree codegen needs to run before plugin-react's JSX transform sees the generated imports.
-    tanstackRouter({ target: "react", autoCodeSplitting: true }),
+    // Must precede react(): the router plugin's route-tree codegen needs to run before plugin-react's JSX transform sees the generated imports. routeFileIgnorePattern excludes a route file's own unit tests from the generated route tree -- without it, the first test added directly under src/routes/ (e.g. index.test.ts) warns "does not export a Route" on every build and test run, and the existing dash-prefix convention (this directory's own -Sidebar.tsx, a genuine non-route support file) is the wrong fix for a test file: dash-prefixing every *.test.ts(x) here would read oddly next to every other test file in the package, which carries no such prefix.
+    tanstackRouter({
+      target: "react",
+      autoCodeSplitting: true,
+      routeFileIgnorePattern: "\\.test\\.tsx?$",
+    }),
     react(),
     vanillaExtractPlugin(),
     pwa,
