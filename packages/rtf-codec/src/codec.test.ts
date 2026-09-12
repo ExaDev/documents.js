@@ -18,6 +18,12 @@ describe("RtfBytesSchema", () => {
     expect(RtfBytesSchema.safeParse(bytes("PK")).success).toBe(false);
   });
 
+  it("rejects bytes that match only the leading '{' and not the rest of the magic", () => {
+    // Every one of the five magic bytes must match, not merely one of them --
+    // this starts with the same brace the real magic opens with but diverges immediately after.
+    expect(RtfBytesSchema.safeParse(bytes("{XXXX")).success).toBe(false);
+  });
+
   it("accepts a version parameter other than 1, which a future document could still carry", () => {
     expect(RtfBytesSchema.safeParse(bytes("{\\rtf2\\ansi}")).success).toBe(
       true,
