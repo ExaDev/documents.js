@@ -298,19 +298,18 @@ export function classifyRegion(signals: RegionSignals): {
     0.7 * signals.formulaFraction + 0.3 * signals.numericFraction,
   );
 
-  const scored = (
-    [
-      { kind: "table", score: tableScore },
-      { kind: "prose", score: proseScore },
-      { kind: "model", score: modelScore },
-    ] satisfies { kind: RegionClassification; score: number }[]
-  ).sort((a, b) => b.score - a.score);
-  const top = scored[0];
-  const second = scored[1];
-  if (top === undefined || second === undefined) {
-    // Unreachable: the literal array above always has exactly three entries.
-    return { classification: "unknown", confidence: 1 };
-  }
+  // Typed as a fixed 3-tuple, not a general array, so scored[0]/scored[1] below are known-defined at the type level under noUncheckedIndexedAccess -- Array.prototype.sort's `this`-typed return preserves the tuple shape through the sort, so there is no "what if the array were some other length" case for TypeScript (or a mutation test) to ever have to guard against.
+  const scored: [
+    { kind: RegionClassification; score: number },
+    { kind: RegionClassification; score: number },
+    { kind: RegionClassification; score: number },
+  ] = [
+    { kind: "table", score: tableScore },
+    { kind: "prose", score: proseScore },
+    { kind: "model", score: modelScore },
+  ];
+  scored.sort((a, b) => b.score - a.score);
+  const [top, second] = scored;
 
   if (top.score < SIGNAL_THRESHOLD) {
     return { classification: "unknown", confidence: clamp01(1 - top.score) };
