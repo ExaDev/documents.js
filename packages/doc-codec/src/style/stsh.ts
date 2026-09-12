@@ -219,9 +219,8 @@ export function resolveStyleFormatting(
 
   const paragraphPrls: Prl[] = [];
   const characterPrls: Prl[] = [];
-  for (let index = chain.length - 1; index >= 0; index -= 1) {
-    const style = chain[index];
-    if (style === undefined) continue;
+  // chain holds only the Style values the while loop above actually pushed -- every entry is genuinely defined, so folding it back to front needs no absent-entry guard of its own.
+  for (const style of [...chain].reverse()) {
     if (style.grpprlPapx !== undefined) paragraphPrls.push(...style.grpprlPapx);
     if (style.grpprlChpx !== undefined) characterPrls.push(...style.grpprlChpx);
   }
