@@ -188,28 +188,28 @@ export function compoundFile(
     .filter(hasStream)
     .filter(({ node }) => node.stream.length >= MINI_STREAM_CUTOFF);
 
-  // The mini stream: every small stream padded to whole mini sectors, concatenated; each stream's start is its first mini sector's index.
-  const miniChunks = smallStreamRecords.map(({ node }) =>
-    padToMultiple(node.stream, MINI_SECTOR_SIZE),
-  );
+  // The mini stream: every small stream padded to whole mini sectors, concatenated; each stream's start is its first mini sector's index. Paired directly (record alongside its own already-computed chunk) rather than two same-length arrays indexed in lockstep by a shared counter: neither element can ever be the array's own out-of-range undefined, so there is no fallback left to silently paper over an off-by-one.
+  const miniEntries = smallStreamRecords.map((record) => ({
+    record,
+    chunk: padToMultiple(record.node.stream, MINI_SECTOR_SIZE),
+  }));
   const miniStream = new Uint8Array(
-    miniChunks.reduce((total, chunk) => total + chunk.length, 0),
+    miniEntries.reduce((total, { chunk }) => total + chunk.length, 0),
   );
   let miniOffset = 0;
   const miniStartOf = new Map<number, number>();
-  for (let i = 0; i < smallStreamRecords.length; i++) {
-    miniStartOf.set(
-      smallStreamRecords[i]?.id ?? -1,
-      miniOffset / MINI_SECTOR_SIZE,
-    );
-    miniStream.set(miniChunks[i] ?? new Uint8Array(0), miniOffset);
-    miniOffset += miniChunks[i]?.length ?? 0;
+  for (const { record, chunk } of miniEntries) {
+    miniStartOf.set(record.id, miniOffset / MINI_SECTOR_SIZE);
+    miniStream.set(chunk, miniOffset);
+    miniOffset += chunk.length;
   }
   const miniSectorCount = miniStream.length / MINI_SECTOR_SIZE;
 
-  const bigSectorCounts = bigStreamRecords.map(({ node }) =>
-    Math.ceil(node.stream.length / sectorSize),
-  );
+  // Paired the same way as miniEntries above, and for the same reason.
+  const bigEntries = bigStreamRecords.map((record) => ({
+    record,
+    sectorCount: Math.ceil(record.node.stream.length / sectorSize),
+  }));
   const directorySectorCount = Math.ceil(
     records.length / entriesPerDirectorySector,
   );
@@ -218,8 +218,8 @@ export function compoundFile(
     miniSectorCount === 0
       ? 0
       : Math.ceil(miniSectorCount / fatEntriesPerSector);
-  const dataSectorCount = bigSectorCounts.reduce(
-    (total, count) => total + count,
+  const dataSectorCount = bigEntries.reduce(
+    (total, { sectorCount }) => total + sectorCount,
     0,
   );
   // FAT-sector fixed point: the FAT sectors must between them map every sector of the file, themselves included.
@@ -247,9 +247,9 @@ export function compoundFile(
   const directoryStart = fatSectorCount;
   let nextSector = directoryStart + directorySectorCount;
   const bigStartOf = new Map<number, number>();
-  for (let i = 0; i < bigStreamRecords.length; i++) {
-    bigStartOf.set(bigStreamRecords[i]?.id ?? -1, nextSector);
-    nextSector += bigSectorCounts[i] ?? 0;
+  for (const { record, sectorCount } of bigEntries) {
+    bigStartOf.set(record.id, nextSector);
+    nextSector += sectorCount;
   }
   const miniStreamStart = nextSector;
   nextSector += miniStreamSectorCount;
@@ -267,11 +267,8 @@ export function compoundFile(
     fat[sector] = FATSECT;
   }
   chain(directoryStart, directorySectorCount);
-  for (let i = 0; i < bigStreamRecords.length; i++) {
-    chain(
-      bigStartOf.get(bigStreamRecords[i]?.id ?? -1) ?? 0,
-      bigSectorCounts[i] ?? 0,
-    );
+  for (const { record, sectorCount } of bigEntries) {
+    chain(bigStartOf.get(record.id) ?? 0, sectorCount);
   }
   chain(miniStreamStart, miniStreamSectorCount);
   chain(miniFatStart, miniFatSectorCount);
@@ -292,10 +289,12 @@ export function compoundFile(
   const directory = new Uint8Array(directorySectorCount * sectorSize);
   for (const { node, id, rightId } of records) {
     const entry = new DataView(directory.buffer, id * 128, 128);
+    // Narrowed through the destructure itself, not a `?? node` fallback: node.children[0] can only be read here once firstChild has already proven the array non-empty, so a fallback for the array's own out-of-range undefined is never actually reachable.
+    const [firstChild] = node.children;
     const childId =
-      node.children.length === 0
+      firstChild === undefined
         ? NOSTREAM
-        : (recordOf.get(node.children[0] ?? node)?.id ?? NOSTREAM);
+        : (recordOf.get(firstChild)?.id ?? NOSTREAM);
     if (node === root) {
       const start = miniStream.length === 0 ? ENDOFCHAIN : miniStreamStart;
       writeDirectoryEntry(
@@ -328,10 +327,11 @@ export function compoundFile(
   // The header: little-endian, the version's own sector shifts, DIFAT in the header array only. The directory-sector count is 0 for version 3 (the spec fixes it there) and the real count for version 4; the reader deliberately does not cross-check either way, but the writer stays spec-conformant.
   const file = new Uint8Array(sectorSize + totalSectors * sectorSize);
   const view = new DataView(file.buffer);
+  // A loop bound one iteration too long would write byte 8 -- the header CLSID field's own first byte, always zero and never otherwise written -- which is already zero from the allocation, an equivalent mutant no test could observe. Walking magic.map/forEach directly removes the comparison bound entirely rather than leaving it to be silently absorbed.
   const magic = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
-  for (let i = 0; i < magic.length; i++) {
-    file[i] = magic[i] ?? 0;
-  }
+  magic.forEach((byte, i) => {
+    file[i] = byte;
+  });
   put16(view, 0x18, 0x3e); // minor version: the value producers commonly write; readers ignore it
   put16(view, 0x1a, majorVersion);
   put16(view, 0x1c, 0xfffe); // byte order: little-endian
@@ -344,8 +344,8 @@ export function compoundFile(
   put32(view, 0x3c, miniSectorCount === 0 ? ENDOFCHAIN : miniFatStart);
   put32(view, 0x40, miniFatSectorCount);
   put32(view, 0x44, ENDOFCHAIN); // first DIFAT sector: none, the DIFAT fits the header array
-  put32(view, 0x48, 0);
-  for (let i = 0; i < 109; i++) {
+  // NumberOfDIFATSectors (0x48) stays zero: this generator never spills the DIFAT into its own sectors, and the byte is already zero from the allocation. The header's own 109-entry DIFAT array, over a literal-length array rather than a `for` loop's own comparison bound: a bound one iteration too long would write the byte range the first FAT sector's own data occupies, immediately overwritten by the real copySector call below regardless -- an equivalent mutant no test could observe.
+  for (const i of Array.from({ length: 109 }, (_unused, index) => index)) {
     put32(
       view,
       0x4c + i * 4,
@@ -356,12 +356,10 @@ export function compoundFile(
   const copySector = (sector: number, bytes: Uint8Array): void => {
     file.set(bytes, sectorSize + sector * sectorSize);
   };
-  for (let i = 0; i < fatSectorCount; i++) {
-    copySector(
-      fatSectors[i] ?? 0,
-      new Uint8Array(fat.buffer, i * sectorSize, sectorSize),
-    );
-  }
+  // fatSectors is the identity array [0, 1, ..., fatSectorCount - 1] (built that way above), so its own element at index i is always i itself -- iterating it directly, rather than re-deriving each element from its own index with a fallback for the array's provably unreachable out-of-range case.
+  fatSectors.forEach((sector, i) => {
+    copySector(sector, new Uint8Array(fat.buffer, i * sectorSize, sectorSize));
+  });
   for (let i = 0; i < directorySectorCount; i++) {
     copySector(
       directoryStart + i,
@@ -374,9 +372,8 @@ export function compoundFile(
       padToMultiple(record.node.stream, sectorSize),
     );
   }
-  if (miniStream.length > 0) {
-    copySector(miniStreamStart, miniStream);
-  }
+  // No length guard: Uint8Array.prototype.set with a zero-length source is already a no-op regardless of the target offset, so copying an empty mini stream unconditionally is byte-identical to skipping it.
+  copySector(miniStreamStart, miniStream);
   for (let i = 0; i < miniFatSectorCount; i++) {
     copySector(
       miniFatStart + i,
