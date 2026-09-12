@@ -124,4 +124,14 @@ describe("localFileHeaderNames / localHeaderCompressionMethod", () => {
       "no local file header at entry index 1",
     );
   });
+
+  it("stops at a signature mismatch rather than misreading whatever bytes happen to follow as another header", () => {
+    // The "fewer entries than the archive holds" case above can never actually distinguish a missing signature check: both a signature mismatch and simply running out of bytes end up at the identical throw, since its message names only the requested entryIndex, never anything the loop itself observed. This instead places 40 zero bytes -- long enough to read as a well-formed (if nonsensical) header, but not starting with the local-file-header magic -- right after one real entry, so a walk that skipped the signature check would treat them as a second header, find its own compression-method field there (0, since every byte is 0), and return that instead of throwing.
+    const first = localFileHeader("only.txt", new TextEncoder().encode("x"), 0);
+    const notAHeader = new Uint8Array(40);
+    const bytes = concat(first, notAHeader);
+    expect(() => localHeaderCompressionMethod(bytes, 1)).toThrow(
+      "no local file header at entry index 1",
+    );
+  });
 });
