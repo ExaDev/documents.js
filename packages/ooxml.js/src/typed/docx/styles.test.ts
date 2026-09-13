@@ -158,6 +158,16 @@ describe("resolveRunProperties: underline", () => {
       }).underline,
     ).toBe(false);
   });
+
+  it("a <w:u> with no w:val at all means not underlined, unlike a toggle property's bare-presence-means-on rule", () => {
+    const { paragraph, run } = paragraphWithRun([], runEl([el("w:u")]));
+    expect(
+      resolveRunProperties(run, paragraph, {
+        stylesRoot: undefined,
+        theme: EMPTY_THEME,
+      }).underline,
+    ).toBe(false);
+  });
 });
 
 describe("resolveRunProperties: colour", () => {
@@ -362,6 +372,44 @@ describe("resolveRunProperties: colour", () => {
     expect(color).toEqual({ r: 0.2, g: 0.4, b: 0.6 });
   });
 
+  it("rejects a themeTint byte with a non-hex character BEFORE its two valid hex digits, not just any non-hex value", () => {
+    const themedTheme = {
+      colorScheme: new Map([["accent1", { r: 0.2, g: 0.4, b: 0.6 }]]),
+      majorFont: "Major Font",
+      minorFont: "Minor Font",
+    };
+    const { paragraph, run } = paragraphWithRun(
+      [],
+      runEl([
+        el("w:color", { "w:themeColor": "accent1", "w:themeTint": "z0f" }),
+      ]),
+    );
+    const color = resolveRunProperties(run, paragraph, {
+      stylesRoot: undefined,
+      theme: themedTheme,
+    }).color;
+    expect(color).toEqual({ r: 0.2, g: 0.4, b: 0.6 });
+  });
+
+  it("rejects a themeTint byte with a non-hex character AFTER its two valid hex digits, not just a too-short value", () => {
+    const themedTheme = {
+      colorScheme: new Map([["accent1", { r: 0.2, g: 0.4, b: 0.6 }]]),
+      majorFont: "Major Font",
+      minorFont: "Minor Font",
+    };
+    const { paragraph, run } = paragraphWithRun(
+      [],
+      runEl([
+        el("w:color", { "w:themeColor": "accent1", "w:themeTint": "0fz" }),
+      ]),
+    );
+    const color = resolveRunProperties(run, paragraph, {
+      stylesRoot: undefined,
+      theme: themedTheme,
+    }).color;
+    expect(color).toEqual({ r: 0.2, g: 0.4, b: 0.6 });
+  });
+
   it("falls back to w:val when the theme colour reference does not resolve", () => {
     const { paragraph, run } = paragraphWithRun(
       [],
@@ -418,6 +466,29 @@ describe("resolveRunProperties: fonts and size", () => {
     ).toBe("Minor Font");
   });
 
+  it("resolves majorAscii/minorAscii theme references too, not just their HAnsi spellings", () => {
+    const major = paragraphWithRun(
+      [],
+      runEl([el("w:rFonts", { "w:asciiTheme": "majorAscii" })]),
+    );
+    const minor = paragraphWithRun(
+      [],
+      runEl([el("w:rFonts", { "w:asciiTheme": "minorAscii" })]),
+    );
+    expect(
+      resolveRunProperties(major.run, major.paragraph, {
+        stylesRoot: undefined,
+        theme: THEME,
+      }).fontFamily,
+    ).toBe("Major Font");
+    expect(
+      resolveRunProperties(minor.run, minor.paragraph, {
+        stylesRoot: undefined,
+        theme: THEME,
+      }).fontFamily,
+    ).toBe("Minor Font");
+  });
+
   it("converts w:sz from half-points to points", () => {
     const { paragraph, run } = paragraphWithRun(
       [],
@@ -459,6 +530,69 @@ describe("resolveRunProperties: cascade", () => {
         theme: EMPTY_THEME,
       }).sizePt,
     ).toBe(12);
+  });
+
+  it("finds the default style by BOTH its own type and w:default=1, ignoring a same-typed non-default style and a differently-typed default style", () => {
+    const wrongType = styleEl("CharDefault", "character", {
+      isDefault: true,
+      rPr: el("w:rPr", {}, [el("w:sz", { "w:val": "60" })]),
+    });
+    const notDefault = styleEl("NotDefault", "paragraph", {
+      rPr: el("w:rPr", {}, [el("w:sz", { "w:val": "40" })]),
+    });
+    const realDefault = styleEl("Normal", "paragraph", {
+      isDefault: true,
+      rPr: el("w:rPr", {}, [el("w:sz", { "w:val": "24" })]),
+    });
+    const styles = stylesRoot([wrongType, notDefault, realDefault]);
+    const { paragraph, run } = paragraphWithRun([], runEl([]));
+    expect(
+      resolveRunProperties(run, paragraph, {
+        stylesRoot: styles,
+        theme: EMPTY_THEME,
+      }).sizePt,
+    ).toBe(12);
+  });
+
+  it("resolves a w:pStyle reference against a style of the SAME id but the WRONG type as a miss, not a match", () => {
+    const wrongTypeSameId = styleEl("Shared", "character", {
+      rPr: el("w:rPr", {}, [el("w:sz", { "w:val": "60" })]),
+    });
+    const rightTypeSameId = styleEl("Shared", "paragraph", {
+      rPr: el("w:rPr", {}, [el("w:sz", { "w:val": "24" })]),
+    });
+    const styles = stylesRoot([wrongTypeSameId, rightTypeSameId]);
+    const { paragraph, run } = paragraphWithRun(
+      [el("w:pStyle", { "w:val": "Shared" })],
+      runEl([]),
+    );
+    expect(
+      resolveRunProperties(run, paragraph, {
+        stylesRoot: styles,
+        theme: EMPTY_THEME,
+      }).sizePt,
+    ).toBe(12);
+  });
+
+  it("inherits strike from an ancestor style when a descendant style doesn't set it", () => {
+    const grandparent = styleEl("Grandparent", "paragraph", {
+      rPr: el("w:rPr", {}, [el("w:strike")]),
+    });
+    const parent = styleEl("Parent", "paragraph", {
+      basedOn: "Grandparent",
+      rPr: el("w:rPr", {}, [el("w:sz", { "w:val": "28" })]),
+    });
+    const styles = stylesRoot([grandparent, parent]);
+    const { paragraph, run } = paragraphWithRun(
+      [el("w:pStyle", { "w:val": "Parent" })],
+      runEl([]),
+    );
+    expect(
+      resolveRunProperties(run, paragraph, {
+        stylesRoot: styles,
+        theme: EMPTY_THEME,
+      }).strike,
+    ).toBe(true);
   });
 
   it("resolves a basedOn chain root-first, so a child style overrides its ancestor", () => {
@@ -544,6 +678,7 @@ describe("resolveParagraphProperties", () => {
       ["right", "right"],
       ["end", "right"],
       ["both", "justify"],
+      ["distribute", "justify"],
     ] as const) {
       const paragraph = paragraphEl([el("w:jc", { "w:val": val })]);
       expect(
@@ -576,15 +711,34 @@ describe("resolveParagraphProperties", () => {
   });
 
   it("ignores w:line when lineRule is exact/atLeast, since it is then an absolute height, not a multiplier", () => {
-    const paragraph = paragraphEl([
+    const exactParagraph = paragraphEl([
       el("w:spacing", { "w:line": "360", "w:lineRule": "exact" }),
     ]);
+    const atLeastParagraph = paragraphEl([
+      el("w:spacing", { "w:line": "360", "w:lineRule": "atLeast" }),
+    ]);
     expect(
-      resolveParagraphProperties(paragraph, {
+      resolveParagraphProperties(exactParagraph, {
         stylesRoot: undefined,
         theme: EMPTY_THEME,
       }).lineSpacing,
     ).toBeUndefined();
+    expect(
+      resolveParagraphProperties(atLeastParagraph, {
+        stylesRoot: undefined,
+        theme: EMPTY_THEME,
+      }).lineSpacing,
+    ).toBeUndefined();
+  });
+
+  it("falls back to w:ind/@w:start when w:left is absent", () => {
+    const paragraph = paragraphEl([el("w:ind", { "w:start": "720" })]);
+    expect(
+      resolveParagraphProperties(paragraph, {
+        stylesRoot: undefined,
+        theme: EMPTY_THEME,
+      }).indentLeftPt,
+    ).toBe(36);
   });
 
   it("reads w:firstLine as a positive indent and w:hanging as its negative", () => {
@@ -604,6 +758,22 @@ describe("resolveParagraphProperties", () => {
         theme: EMPTY_THEME,
       }).indentFirstLinePt,
     ).toBe(-18);
+  });
+
+  it("the default paragraph style's own w:pPr is merged in, above docDefaults", () => {
+    const docDefaultsPPr = el("w:pPr", {}, [el("w:jc", { "w:val": "left" })]);
+    const normalStyle = styleEl("Normal", "paragraph", {
+      isDefault: true,
+      pPr: el("w:pPr", {}, [el("w:jc", { "w:val": "center" })]),
+    });
+    const styles = stylesRoot([normalStyle], docDefaultsPPr);
+    const paragraph = paragraphEl([]);
+    expect(
+      resolveParagraphProperties(paragraph, {
+        stylesRoot: styles,
+        theme: EMPTY_THEME,
+      }).alignment,
+    ).toBe("center");
   });
 
   it("resolves the named paragraph style chain, root-first", () => {
