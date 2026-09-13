@@ -466,6 +466,19 @@ describe("resolveRunProperties: fonts and size", () => {
     ).toBe("Minor Font");
   });
 
+  it("resolves an unrecognised w:asciiTheme value to no font family at all, not a false minor-font default", () => {
+    const { paragraph, run } = paragraphWithRun(
+      [],
+      runEl([el("w:rFonts", { "w:asciiTheme": "majorBidi" })]),
+    );
+    expect(
+      resolveRunProperties(run, paragraph, {
+        stylesRoot: undefined,
+        theme: THEME,
+      }).fontFamily,
+    ).toBeUndefined();
+  });
+
   it("resolves majorAscii/minorAscii theme references too, not just their HAnsi spellings", () => {
     const major = paragraphWithRun(
       [],
