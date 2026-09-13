@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Package } from "../model/package";
-import { localFileHeaderNames } from "../test-support/zip";
+import {
+  localFileHeaderNames,
+  readUint16LE,
+  readUint32LE,
+} from "../test-support/zip";
 import {
   serializePackage,
   orderedPackagePartPaths,
@@ -10,6 +14,20 @@ import {
 
 function packageOf(parts: Package["parts"]): Package {
   return { parts };
+}
+
+// Walks local file headers exactly as localFileHeaderNames does, but also returns each entry's own compression-method field (0 = stored, 8 = deflated) -- what a non-mimetype part's storage mode actually is, which localFileHeaderNames itself has no need to expose.
+function localFileHeaderCompressionMethods(bytes: Uint8Array): number[] {
+  const methods: number[] = [];
+  let offset = 0;
+  while (offset < bytes.length && readUint32LE(bytes, offset) === 0x04034b50) {
+    methods.push(readUint16LE(bytes, offset + 8));
+    const compressedSize = readUint32LE(bytes, offset + 18);
+    const filenameLength = readUint16LE(bytes, offset + 26);
+    const extraLength = readUint16LE(bytes, offset + 28);
+    offset = offset + 30 + filenameLength + extraLength + compressedSize;
+  }
+  return methods;
 }
 
 describe("orderedPackagePartPaths", () => {
@@ -57,5 +75,14 @@ describe("serializePackage", () => {
     const pkg = packageOf({ "content.xml": { kind: "xml", nodes: [] } });
     const names = localFileHeaderNames(serializePackage(pkg));
     expect(names).toEqual(["content.xml"]);
+  });
+
+  it("stores only the mimetype entry uncompressed; every other part is deflated (compression method 8), not also stored", () => {
+    const pkg = packageOf({
+      [MIMETYPE_PART]: { kind: "binary", base64: "" },
+      "content.xml": { kind: "xml", nodes: [] },
+    });
+    const methods = localFileHeaderCompressionMethods(serializePackage(pkg));
+    expect(methods).toEqual([0, 8]);
   });
 });
