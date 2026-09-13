@@ -28,4 +28,13 @@ describe("bytesToBase64 / base64ToBytes", () => {
   it("throws when a padding character appears where a data character is required", () => {
     expect(() => base64ToBytes("A===")).toThrow("invalid base64 input");
   });
+
+  it("throws when the padding character appears in the very first position", () => {
+    // Distinct from the existing "A===" case: this hits c0 === 255 specifically, not c1.
+    expect(() => base64ToBytes("=AAA")).toThrow("invalid base64 input");
+  });
+
+  it("strips embedded whitespace before decoding, matching the same input with it removed", () => {
+    expect(base64ToBytes("Y W\nJj")).toEqual(base64ToBytes("YWJj"));
+  });
 });
