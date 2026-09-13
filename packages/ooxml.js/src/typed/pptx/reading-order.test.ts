@@ -70,6 +70,18 @@ describe("assignReadingOrder", () => {
     expect(order(shapes)).toEqual(["r1c1", "r1c2", "r2c1", "r2c2"]);
   });
 
+  it("breaks an EXACT tie between the two axes' relative gaps in favour of rows", () => {
+    // A symmetric grid (square boxes, an identical gap on both axes) makes the column ratio and row ratio come out exactly equal, not merely close -- a >= comparison would wrongly treat this as "columns win" and read down each column first, producing r1c1, r2c1, r1c2, r2c2 instead.
+    const shapes = [
+      shape("r1c1", 0, 0, 100, 100),
+      shape("r1c2", 150, 0, 100, 100),
+      shape("r2c1", 0, 150, 100, 100),
+      shape("r2c2", 150, 150, 100, 100),
+    ];
+
+    expect(order(shapes)).toEqual(["r1c1", "r1c2", "r2c1", "r2c2"]);
+  });
+
   it("recurses, so a column's own internal rows are ordered within that column", () => {
     const shapes = [
       shape("left-bottom", 40, 300, 300, 80),
@@ -80,9 +92,37 @@ describe("assignReadingOrder", () => {
     expect(order(shapes)).toEqual(["left-top", "left-bottom", "right"]);
   });
 
+  it("recurses into each row, so a row's own internal columns are ordered within that row", () => {
+    // Each row's own two shapes overlap slightly in y (a right-hand shape a touch higher than its left-hand neighbour), so a flat sort of the whole set by y would read right-before-left within a row -- only cutting each row out FIRST, then ordering left-to-right inside it, gets this right.
+    const shapes = [
+      shape("r1-right", 300, 40, 100, 100),
+      shape("r1-left", 0, 50, 100, 100),
+      shape("r2-left", 0, 400, 100, 100),
+      shape("r2-right", 300, 410, 100, 100),
+    ];
+
+    expect(order(shapes)).toEqual([
+      "r1-left",
+      "r1-right",
+      "r2-left",
+      "r2-right",
+    ]);
+  });
+
+  it("computes an axis's extent as its true span, not the sum of its earliest start and latest end", () => {
+    // x stays near zero (so a start+end sum barely differs from a real end-start span there), while y is pushed far from zero -- large enough that summing y's own start and end, instead of subtracting, shrinks the vertical ratio to near nothing. The horizontal and vertical gaps are otherwise identical, so the correct (subtracting) computation ties them and breaks the tie in favour of rows; a summing bug would instead make the corrupted vertical ratio lose outright, flipping the result to columns.
+    const shapes = [
+      shape("r1c1", 0, 100000, 100, 100),
+      shape("r1c2", 150, 100000, 100, 100),
+      shape("r2c1", 0, 100150, 100, 100),
+      shape("r2c2", 150, 100150, 100, 100),
+    ];
+
+    expect(order(shapes)).toEqual(["r1c1", "r1c2", "r2c1", "r2c2"]);
+  });
+
   it("falls back to topmost-then-leftmost for shapes that overlap on both axes", () => {
-    // Neither axis has a band of empty space crossing the whole set, so no cut is possible. A total
-    // order (y, then x) keeps the result deterministic rather than dependent on input order.
+    // Neither axis has a band of empty space crossing the whole set, so no cut is possible. A total order (y, then x) keeps the result deterministic rather than dependent on input order.
     const shapes = [
       shape("lower", 100, 200, 400, 300),
       shape("upper", 60, 60, 400, 300),
@@ -90,6 +130,28 @@ describe("assignReadingOrder", () => {
 
     expect(order(shapes)).toEqual(["upper", "lower"]);
     expect(order([...shapes].reverse())).toEqual(["upper", "lower"]);
+  });
+
+  it("sorts overlapping shapes by y even when doing so runs against their own x order", () => {
+    // "topmost" is the primary key: this shape is higher up (smaller y) but sits further right (larger x) than the other, so a comparator that let the x term leak into a y-differing comparison would put them in the wrong order.
+    const shapes = [
+      shape("topmost-but-rightmost", 200, 0, 300, 300),
+      shape("bottommost-but-leftmost", 0, 100, 300, 300),
+    ];
+
+    expect(order(shapes)).toEqual([
+      "topmost-but-rightmost",
+      "bottommost-but-leftmost",
+    ]);
+  });
+
+  it("breaks a genuine y-tie by x, leftmost first", () => {
+    const shapes = [
+      shape("right", 100, 0, 300, 300),
+      shape("left", 0, 0, 300, 300),
+    ];
+
+    expect(order(shapes)).toEqual(["left", "right"]);
   });
 
   it("leaves a single shape, or none, alone", () => {
