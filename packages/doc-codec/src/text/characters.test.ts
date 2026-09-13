@@ -117,7 +117,7 @@ describe("readTextRange", () => {
   it("rejects a negative cpStart", () => {
     expect(() =>
       readTextRange(specExampleStream(), SPEC_EXAMPLE_TABLE, -1, 3),
-    ).toThrow(DocFormatError);
+    ).toThrow(/not a pair of non-negative integer character positions/);
   });
 
   it("accepts cpEnd exactly at the piece table's own last CP", () => {
