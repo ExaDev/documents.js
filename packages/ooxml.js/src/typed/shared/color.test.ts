@@ -181,8 +181,8 @@ describe("hslToRgb", () => {
 
   // Exact (not toBeCloseTo) equality: hueToRgbComponent's own piece boundaries at exactly t === 1/6 and t === 1/2 land the real (strict "<") formula and its inclusive-boundary mutant a floating-point epsilon apart (0.92 vs 0.9199999999999999) -- a tolerance loose enough to call a real bug "close enough" would defeat the point of testing the boundary at all.
   it("takes the q-branch, not the low-piece formula, at hue's green channel exactly on the 1/6 boundary", () => {
-    // h=60 puts hk (the green channel's own hue argument) at exactly 60/360 === 1/6.
-    expect(hslToRgb({ h: 60, s: 0.8, l: 0.6 }).g).toBe(0.92);
+    // h=60 puts hk (the green channel's own hue argument) at exactly 60/360 === 1/6. s=0.73/l=0.29 is one of the (l, s) pairs where the low-piece formula's own floating-point rounding at this exact t measurably misses q, rather than coincidentally landing back on it (many nearby pairs do coincide).
+    expect(hslToRgb({ h: 60, s: 0.73, l: 0.29 }).g).toBe(0.5016999999999999);
   });
 
   it("takes the q-branch, not the final clamped formula, at hue's blue channel exactly on the 1/2 boundary", () => {
