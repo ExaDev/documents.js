@@ -1,5 +1,4 @@
 import { BlockCursor } from "../biff/cursor";
-import { recoverFromFormatError } from "../biff/records";
 import {
   ESCHER_CLIENT_ANCHOR,
   ESCHER_DG_CONTAINER,
@@ -7,7 +6,6 @@ import {
   ESCHER_SP,
   ESCHER_SP_CONTAINER,
   ESCHER_SPGR_CONTAINER,
-  FOPT_FCOMPLEX_MASK,
   FOPT_OPID_PIB,
 } from "./escher-constants";
 import {
@@ -41,13 +39,13 @@ export interface ShapeAnchor {
 
 const CLIENT_ANCHOR_SIZE = 18;
 
-/** Reads one worksheet's own concatenated MsoDrawing bytes into an ordered list of its real (non-patriarch) top-level shapes. A stream this reader cannot make sense of at all (empty, or carrying no DgContainer) yields no shapes rather than throwing -- workbook/drawing.ts already treats "this sheet has a drawing" as optional. */
+/** One FOPTE entry's own fixed size ([MS-ODRAW] OfficeArtFOPTE): a two-byte opid, then a four-byte op. */
+const FOPT_ENTRY_SIZE = 6;
+
+/** Reads one worksheet's own concatenated MsoDrawing bytes into an ordered list of its real (non-patriarch) top-level shapes. A stream this reader cannot make sense of at all (empty, or carrying no DgContainer) yields no shapes rather than throwing -- workbook/drawing.ts already treats "this sheet has a drawing" as optional. An empty `drawingBytes` needs no dedicated check of its own here: readEscherRecords already returns no records at all for a zero-length stream, so the DgContainer search two lines below already comes back empty and takes the same "no shapes" path a genuinely non-empty but DgContainer-less stream does. */
 export function readSheetShapes(
   drawingBytes: Uint8Array<ArrayBuffer>,
 ): readonly DrawingShape[] {
-  if (drawingBytes.length === 0) {
-    return [];
-  }
   const roots = readEscherRecords(drawingBytes);
   const dg = roots.find(
     (record): record is EscherContainer =>
@@ -111,15 +109,11 @@ function readShapeContainer(
     return undefined;
   }
   const opt = childrenOfType(container, ESCHER_OPT)[0];
-  // A malformed Opt table (a FOPTE array whose own byte count is not a whole multiple of one entry's 6 bytes -- there is no length field of its own beyond the atom's recLen to cross-check against) degrades this ONE shape to carrying no pib, rather than aborting the whole sheet's shape read the way an uncaught BiffFormatError would; every other field this shape already resolved (its type, id, anchor) is still real and worth keeping.
-  let blipIndex: number | undefined;
-  if (opt?.kind === "atom") {
-    try {
-      blipIndex = readPibProperty(opt.data);
-    } catch (error) {
-      recoverFromFormatError(error, undefined);
-    }
-  }
+  // A malformed Opt table (a FOPTE array whose own byte count is not a whole multiple of one entry's own FOPT_ENTRY_SIZE bytes -- there is no length field of its own beyond the atom's recLen to cross-check against) degrades this ONE shape to carrying no pib, rather than aborting the whole sheet's shape read; every other field this shape already resolved (its type, id, anchor) is still real and worth keeping. Checking the length up front, rather than catching whatever readPibProperty's own BlockCursor reads throw, is what lets that reader assume a well-formed entry run rather than needing its own recovery path: an exact multiple of FOPT_ENTRY_SIZE guarantees every entry it reads lands exactly on the next one's own boundary.
+  const blipIndex =
+    opt?.kind === "atom" && opt.data.length % FOPT_ENTRY_SIZE === 0
+      ? readPibProperty(opt.data)
+      : undefined;
   return { shapeType: sp.recInstance, spid, blipIndex, anchor };
 }
 
@@ -142,13 +136,14 @@ function readClientAnchor(
   return { colL, dxL, rwT, dyT, colR, dxR, rwB, dyB };
 }
 
-/** Walks an Opt atom's own FOPTE array looking for the `pib` property ([MS-ODRAW] "pib": opid.opid MUST be 0x0104) -- undefined when the shape states no `pib` at all, or states one through the complex-data trailer form (fComplex set) this reader does not resolve, which is not the common inline-index shape a picture shape's own pib actually takes. */
+/** Walks an Opt atom's own FOPTE array looking for the `pib` property ([MS-ODRAW] "pib": opid.opid MUST be 0x0104, with FOPT_OPID_PIB carrying the plain, non-complex, non-blip-id whole 16-bit entry escher-constants.ts's own comment describes) -- undefined when the shape states no `pib` entry with exactly that opid at all, which is what a complex-data trailer form (fComplex set) this reader does not resolve also produces, since a complex entry's own raw opid is a different 16-bit value from the one this check compares against. */
 function readPibProperty(data: Uint8Array<ArrayBuffer>): number | undefined {
   const cursor = new BlockCursor([data]);
   while (cursor.hasMore()) {
     const opid = cursor.u16();
     const op = cursor.u32();
-    if (opid === FOPT_OPID_PIB && (opid & FOPT_FCOMPLEX_MASK) === 0) {
+    // `opid === FOPT_OPID_PIB` alone already pins opid to that exact 16-bit value, whose own fComplex bit (FOPT_FCOMPLEX_MASK) is clear -- a further `(opid & FOPT_FCOMPLEX_MASK) === 0` check here would just be re-testing a fact this equality already established, not a second, independent condition.
+    if (opid === FOPT_OPID_PIB) {
       return op;
     }
   }
