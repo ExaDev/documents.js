@@ -84,6 +84,44 @@ describe("buildInlinePicture", () => {
   });
 });
 
+describe("buildInlinePicture's own raw byte layout", () => {
+  // Layout constants mirrored from pictures-write.ts's own PICF_SIZE (68) and record-header size (8, recVer/recInstance (2) + recType (2) + recLen (4)) -- readInlinePicture never validates the shape container's own header content (it skips the whole record by its own recLen), so only a direct byte-level read of `data`, not a round trip through the reader, can tell these two record headers apart.
+  const PICF_SIZE = 68;
+  const RECORD_HEADER_SIZE = 8;
+
+  it("writes the shape container's own recType (0xf004) immediately after picf", () => {
+    const { data } = buildInlinePicture(image());
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    expect(view.getUint16(PICF_SIZE + 2, true)).toBe(0xf004);
+  });
+
+  it("writes a PNG's own recInstance (0x06e0), distinct from a JPEG's (0x046a)", () => {
+    const blipHeaderOffset = PICF_SIZE + RECORD_HEADER_SIZE;
+    const recInstanceOf = (data: Uint8Array): number => {
+      const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+      return view.getUint16(blipHeaderOffset, true) >> 4;
+    };
+    expect(
+      recInstanceOf(buildInlinePicture(image({ format: "png" })).data),
+    ).toBe(0x06e0);
+    expect(
+      recInstanceOf(
+        buildInlinePicture(
+          image({ format: "jpeg", base64: bytesToBase64(JPEG_BYTES) }),
+        ).data,
+      ),
+    ).toBe(0x046a);
+  });
+
+  it("writes widthPt's own twips value little-endian, not big-endian", () => {
+    // 72pt = 1440 twips = 0x05a0 -- byte-asymmetric, so a reversed byte order changes the read-back value rather than merely its sign or magnitude by coincidence. PICF_DXA_GOAL_OFFSET is 28.
+    const { data } = buildInlinePicture(image({ widthPt: 72, heightPt: 36 }));
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    expect(view.getUint8(28)).toBe(0xa0);
+    expect(view.getUint8(29)).toBe(0x05);
+  });
+});
+
 describe("buildInlinePicture's own sprmCPicLocation grpprl", () => {
   it("encodes the data-stream offset as a signed little-endian 32-bit operand", () => {
     const { buildGrpprl } = buildInlinePicture(image());

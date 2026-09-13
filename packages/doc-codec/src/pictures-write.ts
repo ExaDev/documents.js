@@ -98,6 +98,7 @@ export function buildInlinePicture(
 
   // OfficeArtInlineSpContainer.shape: an empty OfficeArtSpContainer -- pictures.ts's own reader skips it whole by this record header's own recLen and never looks inside it, so this writer states no shape properties of its own either.
   const shapeHeader = recordHeaderBytes(0xf004, 0, 0);
+  // rgbUid, [MS-ODRAW] 2.2.27/2.2.28 -- always the zero GUID this writer states rather than a genuinely random one, so `data`'s own zero-initialised bytes at this offset already are the uid's own bytes; nothing is ever written into them.
   const uid = new Uint8Array(BLIP_UID_SIZE);
   const blipHeader = recordHeaderBytes(
     recType,
@@ -120,7 +121,6 @@ export function buildInlinePicture(
   cursor += shapeHeader.length;
   data.set(blipHeader, cursor);
   cursor += blipHeader.length;
-  data.set(uid, cursor);
   cursor += uid.length;
   data[cursor] = BLIP_FILE_TAG;
   cursor += 1;
