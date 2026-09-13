@@ -139,7 +139,7 @@ importers:
   packages/archive-codec:
     dependencies:
       document-schema.js:
-        specifier: 7.11.1
+        specifier: 7.11.2
         version: link:../document-schema.js
       fflate:
         specifier: 0.8.3
@@ -240,10 +240,10 @@ importers:
   packages/doc-codec:
     dependencies:
       archive-codec:
-        specifier: 1.11.1
+        specifier: 1.11.2
         version: link:../archive-codec
       document-schema.js:
-        specifier: 7.11.1
+        specifier: 7.11.2
         version: link:../document-schema.js
     devDependencies:
       '@arethetypeswrong/cli':
@@ -295,13 +295,13 @@ importers:
         specifier: 15.0.0
         version: 15.0.0
       document-outline.js:
-        specifier: 3.7.3
+        specifier: 3.8.0
         version: link:../document-outline.js
       document-schema.js:
-        specifier: 7.11.1
+        specifier: 7.11.2
         version: link:../document-schema.js
       documents.js:
-        specifier: 7.20.6
+        specifier: 7.20.7
         version: link:../documents.js
       ink:
         specifier: 7.1.1
@@ -347,7 +347,7 @@ importers:
         specifier: 4.0.0
         version: 4.0.0(@types/react@19.2.18)
       odf.js:
-        specifier: 7.25.2
+        specifier: 7.25.3
         version: link:../odf.js
       publint:
         specifier: 0.3.22
@@ -374,7 +374,7 @@ importers:
   packages/document-compute.js:
     dependencies:
       document-schema.js:
-        specifier: 7.11.1
+        specifier: 7.11.2
         version: link:../document-schema.js
     devDependencies:
       '@arethetypeswrong/cli':
@@ -396,7 +396,7 @@ importers:
         specifier: 26.2.0
         version: 26.2.0
       documents.js:
-        specifier: 7.20.6
+        specifier: 7.20.7
         version: link:../documents.js
       eslint:
         specifier: 10.8.1
@@ -405,7 +405,7 @@ importers:
         specifier: 9.1.7
         version: 9.1.7
       markdown-codec:
-        specifier: 6.7.1
+        specifier: 6.7.2
         version: link:../markdown-codec
       publint:
         specifier: 0.3.22
@@ -432,10 +432,10 @@ importers:
         specifier: 2.0.0
         version: 2.0.0
       document-operations:
-        specifier: 1.1.6
+        specifier: 1.1.7
         version: link:../document-operations
       documents.js:
-        specifier: 7.20.6
+        specifier: 7.20.7
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -466,7 +466,7 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(vitest@4.1.11)
       document-schema.js:
-        specifier: 7.11.1
+        specifier: 7.11.2
         version: link:../document-schema.js
       eslint:
         specifier: 10.8.1
@@ -475,7 +475,7 @@ importers:
         specifier: 9.1.7
         version: 9.1.7
       odf.js:
-        specifier: 7.25.2
+        specifier: 7.25.3
         version: link:../odf.js
       publint:
         specifier: 0.3.22
@@ -496,22 +496,22 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))
       wpd-codec:
-        specifier: 3.5.2
+        specifier: 3.5.3
         version: link:../wpd-codec
 
   packages/document-operations:
     dependencies:
       document-compute.js:
-        specifier: 1.5.9
+        specifier: 1.5.10
         version: link:../document-compute.js
       document-outline.js:
-        specifier: 3.7.3
+        specifier: 3.8.0
         version: link:../document-outline.js
       document-schema.js:
-        specifier: 7.11.1
+        specifier: 7.11.2
         version: link:../document-schema.js
       documents.js:
-        specifier: 7.20.6
+        specifier: 7.20.7
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -545,7 +545,7 @@ importers:
         specifier: 9.1.7
         version: 9.1.7
       odf.js:
-        specifier: 7.25.2
+        specifier: 7.25.3
         version: link:../odf.js
       publint:
         specifier: 0.3.22
@@ -569,10 +569,10 @@ importers:
   packages/document-outline.js:
     dependencies:
       document-schema.js:
-        specifier: 7.11.1
+        specifier: 7.11.2
         version: link:../document-schema.js
       pdf-codec:
-        specifier: 4.8.2
+        specifier: 4.8.3
         version: link:../pdf-codec
       zod:
         specifier: 4.4.3
@@ -627,10 +627,10 @@ importers:
   packages/document-rest:
     dependencies:
       document-operations:
-        specifier: 1.1.6
+        specifier: 1.1.7
         version: link:../document-operations
       documents.js:
-        specifier: 7.20.6
+        specifier: 7.20.7
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -652,7 +652,7 @@ importers:
         specifier: 9.1.7
         version: 9.1.7
       odf.js:
-        specifier: 7.25.2
+        specifier: 7.25.3
         version: link:../odf.js
       publint:
         specifier: 0.3.22
@@ -731,49 +731,49 @@ importers:
   packages/documents.js:
     dependencies:
       archive-codec:
-        specifier: 1.11.1
+        specifier: 1.11.2
         version: link:../archive-codec
       byte-codec:
-        specifier: 1.5.2
+        specifier: 1.5.3
         version: link:../byte-codec
       doc-codec:
-        specifier: 2.10.1
+        specifier: 2.10.2
         version: link:../doc-codec
       document-schema.js:
-        specifier: 7.11.1
+        specifier: 7.11.2
         version: link:../document-schema.js
       epub-codec:
-        specifier: 1.5.2
+        specifier: 1.5.3
         version: link:../epub-codec
       fflate:
         specifier: 0.8.3
         version: 0.8.3
       markdown-codec:
-        specifier: 6.7.1
+        specifier: 6.7.2
         version: link:../markdown-codec
       odf.js:
-        specifier: 7.25.2
+        specifier: 7.25.3
         version: link:../odf.js
       ooxml.js:
-        specifier: 8.14.4
+        specifier: 8.14.5
         version: link:../ooxml.js
       pdf-codec:
-        specifier: 4.8.2
+        specifier: 4.8.3
         version: link:../pdf-codec
       ppt-codec:
-        specifier: 1.7.2
+        specifier: 1.7.3
         version: link:../ppt-codec
       rtf-codec:
-        specifier: 4.4.1
+        specifier: 4.4.2
         version: link:../rtf-codec
       temml:
         specifier: 0.13.4
         version: 0.13.4
       wpd-codec:
-        specifier: 3.5.2
+        specifier: 3.5.3
         version: link:../wpd-codec
       xls-codec:
-        specifier: 4.15.3
+        specifier: 4.15.4
         version: link:../xls-codec
       zod:
         specifier: 4.4.3
@@ -831,7 +831,7 @@ importers:
   packages/epub-codec:
     dependencies:
       document-schema.js:
-        specifier: 7.11.1
+        specifier: 7.11.2
         version: link:../document-schema.js
       entities:
         specifier: 8.0.0
@@ -937,7 +937,7 @@ importers:
   packages/markdown-codec:
     dependencies:
       document-schema.js:
-        specifier: 7.11.1
+        specifier: 7.11.2
         version: link:../document-schema.js
       zod:
         specifier: 4.4.3
@@ -995,7 +995,7 @@ importers:
   packages/odf.js:
     dependencies:
       document-schema.js:
-        specifier: 7.11.1
+        specifier: 7.11.2
         version: link:../document-schema.js
       fast-xml-parser:
         specifier: 5.10.1
@@ -1062,10 +1062,10 @@ importers:
   packages/ooxml.js:
     dependencies:
       archive-codec:
-        specifier: 1.11.1
+        specifier: 1.11.2
         version: link:../archive-codec
       document-schema.js:
-        specifier: 7.11.1
+        specifier: 7.11.2
         version: link:../document-schema.js
       excel-number-format:
         specifier: 1.2.3
@@ -1135,10 +1135,10 @@ importers:
   packages/pdf-codec:
     dependencies:
       byte-codec:
-        specifier: 1.5.2
+        specifier: 1.5.3
         version: link:../byte-codec
       document-schema.js:
-        specifier: 7.11.1
+        specifier: 7.11.2
         version: link:../document-schema.js
       fflate:
         specifier: 0.8.3
@@ -1202,10 +1202,10 @@ importers:
   packages/pdf-raster-cpu:
     dependencies:
       byte-codec:
-        specifier: 1.5.2
+        specifier: 1.5.3
         version: link:../byte-codec
       pdf-codec:
-        specifier: 4.8.2
+        specifier: 4.8.3
         version: link:../pdf-codec
     devDependencies:
       '@arethetypeswrong/cli':
@@ -1257,13 +1257,13 @@ importers:
   packages/ppt-codec:
     dependencies:
       archive-codec:
-        specifier: 1.11.1
+        specifier: 1.11.2
         version: link:../archive-codec
       byte-codec:
-        specifier: 1.5.2
+        specifier: 1.5.3
         version: link:../byte-codec
       document-schema.js:
-        specifier: 7.11.1
+        specifier: 7.11.2
         version: link:../document-schema.js
     devDependencies:
       '@arethetypeswrong/cli':
@@ -1312,10 +1312,10 @@ importers:
   packages/rtf-codec:
     dependencies:
       archive-codec:
-        specifier: 1.11.1
+        specifier: 1.11.2
         version: link:../archive-codec
       document-schema.js:
-        specifier: 7.11.1
+        specifier: 7.11.2
         version: link:../document-schema.js
       zod:
         specifier: 4.4.3
@@ -1418,13 +1418,13 @@ importers:
         specifier: 4.4.0
         version: 4.4.0(dexie@4.4.4)(react@19.2.8)
       document-schema.js:
-        specifier: 7.11.1
+        specifier: 7.11.2
         version: link:../document-schema.js
       documents.js:
-        specifier: 7.20.6
+        specifier: 7.20.7
         version: link:../documents.js
       markdown-codec:
-        specifier: 6.7.1
+        specifier: 6.7.2
         version: link:../markdown-codec
       react:
         specifier: 19.2.8
@@ -1521,10 +1521,10 @@ importers:
   packages/wpd-codec:
     dependencies:
       archive-codec:
-        specifier: 1.11.1
+        specifier: 1.11.2
         version: link:../archive-codec
       document-schema.js:
-        specifier: 7.11.1
+        specifier: 7.11.2
         version: link:../document-schema.js
       zod:
         specifier: 4.4.3
@@ -1582,10 +1582,10 @@ importers:
   packages/xls-codec:
     dependencies:
       archive-codec:
-        specifier: 1.11.1
+        specifier: 1.11.2
         version: link:../archive-codec
       document-schema.js:
-        specifier: 7.11.1
+        specifier: 7.11.2
         version: link:../document-schema.js
       excel-number-format:
         specifier: 1.2.3

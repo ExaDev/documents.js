@@ -1,3 +1,50 @@
+## [3.8.0](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.7.3...document-outline.js%403.8.0) (2026-09-13)
+
+### Features
+
+* **workspace:** add a per-package Stryker worker concurrency override ([308e53b](https://github.com/ExaDev/documents.js/commit/308e53b2f11f74e019c2af94aa3460678ad88b87))
+
+### Bug Fixes
+
+* **document-outline.js:** bounds-check sha256's message schedule write ([23588d6](https://github.com/ExaDev/documents.js/commit/23588d6693894a459c64c837c5cecd5e496c251b))
+
+### Code Refactoring
+
+* **document-outline.js:** close the remaining graph.ts write-API survivors ([14bf46c](https://github.com/ExaDev/documents.js/commit/14bf46c6d64df404c7e4981bebf3ff29d5379734))
+* **document-outline.js:** drop the redundant high-length check in orderKeyBetween ([2d8d2f7](https://github.com/ExaDev/documents.js/commit/2d8d2f76b73d971d1560eb4ca6f0ebce148d5c77))
+* **document-outline.js:** drop the redundant typeof guard in isOutlineNode ([d34f77e](https://github.com/ExaDev/documents.js/commit/d34f77e2fbb15dc24207362a341c388f5ea317fa))
+* **document-outline.js:** drop upsert-once guards in the graph projection ([c5b91a5](https://github.com/ExaDev/documents.js/commit/c5b91a56caa085ac7e05886344a749958401c367))
+* **document-outline.js:** extract classifyLeaf's scoring into testable helpers ([b69fd80](https://github.com/ExaDev/documents.js/commit/b69fd8029d57aec29a77c81dfb5f28a7d2b70017))
+* **document-outline.js:** extract sha256's length-suffix write for direct testing ([20bb96a](https://github.com/ExaDev/documents.js/commit/20bb96a29911c6d6e7caddb902837e38d209ad67))
+* **document-outline.js:** extract the region reading-order comparator for direct testing ([b7dc0cc](https://github.com/ExaDev/documents.js/commit/b7dc0ccfe2c3c40c35b00a17c0484beae14fbd5f))
+* **document-outline.js:** find the nearest neighbour label via filter+reduce ([397a651](https://github.com/ExaDev/documents.js/commit/397a6516c889f1981e93efc4db8f287ba0d52d5f))
+* **document-outline.js:** hoist sha256's bounds-checked write into a testable function ([499c7e7](https://github.com/ExaDev/documents.js/commit/499c7e7968fed608f66d1877dabfeb6b6d83face))
+* **document-outline.js:** make graph.ts's remaining write-API mutants testable ([f8dc733](https://github.com/ExaDev/documents.js/commit/f8dc733a3f4c3f388ea9f7010bade6e3d9ccaa3e))
+* **document-outline.js:** remove pdf-regions.ts's remaining unkillable mutants ([356ed80](https://github.com/ExaDev/documents.js/commit/356ed80ab818386bcc27d29c7aa9a37cf4802606))
+* **document-outline.js:** remove regions.ts's remaining unkillable mutants ([cac4d32](https://github.com/ExaDev/documents.js/commit/cac4d32d9c379f8409080394b3aca4e13a346fd3))
+* **document-outline.js:** resolve style chains unconditionally ([decd6de](https://github.com/ExaDev/documents.js/commit/decd6de229bea50db62b746bb2a93ed35390bd24))
+* **document-outline.js:** restructure graph.ts's write-API mutants into testable units ([dab6914](https://github.com/ExaDev/documents.js/commit/dab6914cb93d05e437732ea862e7749a81fcccad))
+* **document-outline.js:** simplify DisjointCellSet's root walk ([b2bff6e](https://github.com/ExaDev/documents.js/commit/b2bff6ef61095016a9bf26ad309c11265ffb9953))
+* **document-outline.js:** type region-classification scores as a fixed tuple ([8894f04](https://github.com/ExaDev/documents.js/commit/8894f0491cc4854b03750829304e50c3cedd8a48))
+
+### Tests
+
+* **document-outline.js:** add buildOutline coverage for construct groups and nested list stacks ([22ebeb4](https://github.com/ExaDev/documents.js/commit/22ebeb4b8ad27ca2fb949f328fad9874bc2d53a0))
+* **document-outline.js:** add direct unit tests for the fixture builders ([0c544d5](https://github.com/ExaDev/documents.js/commit/0c544d598564231e547b2948ad811d67e9adb58d))
+* **document-outline.js:** cover multi-block and nested-table outlineLeafText joins ([47fa975](https://github.com/ExaDev/documents.js/commit/47fa975cd5f8302a4aa56e6400045a0c0a734a08))
+* **document-outline.js:** expose originalSiblings' sort via a genuine insertion ([4bd24ce](https://github.com/ExaDev/documents.js/commit/4bd24ce0ccf3fa323acaeeb1e3e366b9ed1cc3e5))
+* **document-outline.js:** pin nearestTextCell's tie-break winner ([c4bde08](https://github.com/ExaDev/documents.js/commit/c4bde08c92a3f165ff1a7c3328eb4c0249c85cb8))
+
+### Miscellaneous Chores
+
+* **document-outline.js:** raise the mutation break threshold to 100 ([b51d634](https://github.com/ExaDev/documents.js/commit/b51d63422878b6f893096e78c768e6e499b429c0))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.2
+- Updated pdf-codec to 4.8.3
+
 ## [3.7.3](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.7.2...document-outline.js%403.7.3) (2026-09-12)
 
 

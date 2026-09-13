@@ -1,3 +1,22 @@
+## [1.5.3](https://github.com/ExaDev/documents.js/compare/byte-codec%401.5.2...byte-codec%401.5.3) (2026-09-13)
+
+### Code Refactoring
+
+* **byte-codec:** bound the JPEG marker scan by the data itself ([9a23cd2](https://github.com/ExaDev/documents.js/commit/9a23cd2d17143907758b0cee14bf6a8c09870c5f))
+* **byte-codec:** bound the tolerant-inflate recovery ladder by the data itself ([9d9f574](https://github.com/ExaDev/documents.js/commit/9d9f574879acc0e2288b583d072d852257d08474))
+* **byte-codec:** drop ByteWriter.writeBytes's redundant empty-chunk guard ([bc894e5](https://github.com/ExaDev/documents.js/commit/bc894e5c1c30559b9eb4a9571bfb33335b9e2ac9))
+* **byte-codec:** eliminate redundant loop bounds and branches in PNG decoding ([ddcad7c](https://github.com/ExaDev/documents.js/commit/ddcad7c6e3f54d703f380304a1133bbc629bd8fe))
+* **byte-codec:** pack the palette-detection key as a bitfield and drop redundant loop bounds ([fa20eb6](https://github.com/ExaDev/documents.js/commit/fa20eb679e7decf6882b25eea8c35ee8a5e96c5f))
+* **byte-codec:** restate PNG filter tie-breaking and loop bounds without pairwise comparisons ([f5c1130](https://github.com/ExaDev/documents.js/commit/f5c11307aee3a026df3bf0e5193dc023078760fc))
+
+### Tests
+
+* **byte-codec:** cover a JPEG marker scan that runs out of bytes with no EOI ([0f851b8](https://github.com/ExaDev/documents.js/commit/0f851b865558be03986c0c1323a5258c110b746b))
+
+### Miscellaneous Chores
+
+* **byte-codec:** describe the mutation gate without referencing disable comments ([48351e2](https://github.com/ExaDev/documents.js/commit/48351e2bedee5e5d6473a7320bfecbbd1eda0872))
+
 ## [1.5.2](https://github.com/ExaDev/documents.js/compare/byte-codec%401.5.1...byte-codec%401.5.2) (2026-09-12)
 
 ### Tests

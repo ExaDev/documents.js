@@ -1,3 +1,33 @@
+## [1.4.7](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.6...document-rest%401.4.7) (2026-09-13)
+
+### Bug Fixes
+
+* **document-rest:** abort the operation's signal via the response's close event, not the request's ([8307617](https://github.com/ExaDev/documents.js/commit/8307617458f1f44d7e9b1c247ced9d2a1b3d0f17))
+
+### Code Refactoring
+
+* **document-rest:** build the error-mapper registry per call instead of at module scope ([d226ad2](https://github.com/ExaDev/documents.js/commit/d226ad287161bb59453f5b0aced302e5dd0b1bae))
+* **document-rest:** slice off the pathname's leading slash instead of a regex replace ([fc24de8](https://github.com/ExaDev/documents.js/commit/fc24de86b67865c2ad75e2c5af1928deb8b5f2fb))
+
+### Tests
+
+* **document-rest:** cover the CLI's port/host flag parsing edge cases ([4e0fb3f](https://github.com/ExaDev/documents.js/commit/4e0fb3fdcf0043358c0b079eec15dff16fbc80c5))
+* **document-rest:** cover the CLI's TCP-address invariant via a mocked http server ([4d3f03b](https://github.com/ExaDev/documents.js/commit/4d3f03b0cfead0f86de3487524f1a598a1949565))
+* **document-rest:** cover the malformed-request guard for a missing url or method ([33b523d](https://github.com/ExaDev/documents.js/commit/33b523d71740700f78fc473b9e33499665b9df70))
+* **document-rest:** cover the SEA entry point's error handling ([161bf51](https://github.com/ExaDev/documents.js/commit/161bf5181cf88a03d5bc46206c82605ca5b10f38))
+* **document-rest:** strengthen response-body assertions on the REST server's HTTP tests ([ce26a4f](https://github.com/ExaDev/documents.js/commit/ce26a4f92905089fc813e9508e36bb92d21e91ac))
+
+### Miscellaneous Chores
+
+* **document-rest:** raise the mutation break threshold to 100 ([77e254e](https://github.com/ExaDev/documents.js/commit/77e254e72c2df8244a9fd393a66cc4330e8322d2))
+
+
+### Dependencies
+
+- Updated odf.js to 7.25.3
+- Updated documents.js to 7.20.7
+- Updated document-operations to 1.1.7
+
 ## [1.4.6](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.5...document-rest%401.4.6) (2026-09-12)
 
 
