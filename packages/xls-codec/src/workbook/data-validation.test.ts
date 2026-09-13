@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FormulaSheetContext } from "../biff/ptg";
+import * as ptgModule from "../biff/ptg";
 import { groupRecords, type RecordGroup } from "../biff/substreams";
 import { readRecords } from "../biff/records";
 import { record, u16, u32, xlUnicodeString } from "../test-support/biff";
@@ -250,5 +251,30 @@ describe("readDv", () => {
       throw new Error("test setup produced no record group");
 
     expect(readDv(group, NO_SHEETS)).toBeUndefined();
+  });
+
+  describe("errors that are not malformed-record degrades", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("propagates a genuine bug from parseFormulaText rather than absorbing it as a malformed record", () => {
+      const bug = new TypeError("a genuine bug, not a malformed record");
+      vi.spyOn(ptgModule, "parseFormulaText").mockImplementation(() => {
+        throw bug;
+      });
+      const group = dvRecord(
+        dvFlags({ valType: 0x0 }),
+        "",
+        "",
+        "",
+        "",
+        [],
+        [],
+        [],
+      );
+
+      expect(() => readDv(group, NO_SHEETS)).toThrow(bug);
+    });
   });
 });
