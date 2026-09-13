@@ -7,30 +7,27 @@ import { zipPackage, type ZipEntry } from "../zip";
 export const MIMETYPE_PART = "mimetype";
 export const MANIFEST_PART = "META-INF/manifest.xml";
 
-// Serializes a Package back to zip bytes. This is the one deliberate behavioural difference from a generic zip-of-XML writer: ODF requires the "mimetype" part to be the very first zip entry, stored uncompressed (see zip.ts), so it hoists that part first if present, then META-INF/manifest.xml next if present, then every remaining part in the Package's own existing key order. It never fabricates a mimetype or manifest.xml part that doesn't already exist in the input -- that belongs to a later phase's manifest-construction logic, not this lossless zip<->Package mapping, which stays a pure, honest round trip with no side effects.
+// The zip entry order serializePackage below actually writes in: "mimetype" first if present, then META-INF/manifest.xml if present, then every other part in the Package's own existing key order -- with each hoisted path EXCLUDED from that final group by construction (a filter predicate, not a delete-then-iterate step some part of the pipeline could skip), so a hoisted path can never also appear a second time among "every other part". Exported (and returning bare paths rather than the built ZipEntry values) so a test can pin this ordering-and-exclusion logic directly, independent of zipPackage's own object-keyed Zippable structure silently collapsing a same-path duplicate into one entry regardless of whether this function ever produced one.
+export function orderedPackagePartPaths(pkg: Package): string[] {
+  const paths = Object.keys(pkg.parts);
+  const hoisted = [MIMETYPE_PART, MANIFEST_PART].filter((path) =>
+    paths.includes(path),
+  );
+  const rest = paths.filter((path) => !hoisted.includes(path));
+  return [...hoisted, ...rest];
+}
+
+// Serializes a Package back to zip bytes. This is the one deliberate behavioural difference from a generic zip-of-XML writer: ODF requires the "mimetype" part to be the very first zip entry, stored uncompressed (see zip.ts), so it hoists that part first if present, then META-INF/manifest.xml next if present, then every remaining part in the Package's own existing key order -- see orderedPackagePartPaths above for that ordering itself. It never fabricates a mimetype or manifest.xml part that doesn't already exist in the input -- that belongs to a later phase's manifest-construction logic, not this lossless zip<->Package mapping, which stays a pure, honest round trip with no side effects.
 export function serializePackage(pkg: Package): Uint8Array<ArrayBuffer> {
-  const remaining = new Map(Object.entries(pkg.parts));
-  const entries: [string, ZipEntry][] = [];
-
-  const mimetype = remaining.get(MIMETYPE_PART);
-  if (mimetype !== undefined) {
-    entries.push([
-      MIMETYPE_PART,
-      { bytes: partToBytes(mimetype), stored: true },
-    ]);
-    remaining.delete(MIMETYPE_PART);
-  }
-
-  const manifest = remaining.get(MANIFEST_PART);
-  if (manifest !== undefined) {
-    entries.push([MANIFEST_PART, { bytes: partToBytes(manifest) }]);
-    remaining.delete(MANIFEST_PART);
-  }
-
-  for (const [path, part] of remaining) {
-    entries.push([path, { bytes: partToBytes(part) }]);
-  }
-
+  const entries: [string, ZipEntry][] = orderedPackagePartPaths(pkg).map(
+    (path) => {
+      const part = pkg.parts[path]!;
+      return [
+        path,
+        { bytes: partToBytes(part), stored: path === MIMETYPE_PART },
+      ];
+    },
+  );
   return zipPackage(entries);
 }
 
