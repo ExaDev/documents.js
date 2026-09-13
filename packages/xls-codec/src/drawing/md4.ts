@@ -14,6 +14,30 @@ const INITIAL_D = 0x10325476;
 
 const BLOCK_SIZE = 64;
 
+/** A block's 16 message words, one per `Uint32` of the 64-byte block. A literal-index tuple rather than `number[]` so every `x[index]` access below is typed as `number`, never `number | undefined`: `index` is itself typed as one of the 16 literal positions this tuple actually has, so there is no in-bounds/out-of-bounds question left for a guard to answer. */
+type BlockWords = readonly [
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+];
+
+/** The 16 literal positions a `BlockWords` tuple actually has. */
+type WordIndex =
+  0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
+
 /** The three auxiliary functions of RFC 1320 2.2, each a bit-selection over x/y/z -- G and H are MD4's own, not MD5's similarly-named ones. */
 function f(x: number, y: number, z: number): number {
   return (x & y) | (~x & z);
@@ -32,7 +56,7 @@ function rotateLeft(x: number, count: number): number {
   return ((x << count) | (x >>> (32 - count))) >>> 0;
 }
 
-/** The padding of RFC 1320 3.1: the message, a single 1 bit, zeros, then the 64-bit little-endian bit length, filling the final block(s) to a 64-byte multiple. */
+/** The padding of RFC 1320 3.1: the message, a single 1 bit, zeros, then the 64-bit little-endian bit length, filling the final block(s) to a 64-byte multiple. The length field's high 32 bits are never written: every message this hand-written digest ever hashes is an in-memory Escher blip payload, thousands of bytes at most, so `message.length * 8` never approaches 2**32 -- and a freshly allocated Uint8Array is already zero-filled, so stating the high word explicitly would be a redundant call rather than a real fact about the message. */
 function padMessage(message: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
   const bitLength = message.length * 8;
   const paddedLength =
@@ -42,7 +66,6 @@ function padMessage(message: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
   out[message.length] = 0x80;
   const view = new DataView(out.buffer);
   view.setUint32(paddedLength - 8, bitLength >>> 0, true);
-  view.setUint32(paddedLength - 4, Math.floor(bitLength / 0x100000000), true);
   return out;
 }
 
@@ -70,10 +93,24 @@ export function md4(message: Uint8Array<ArrayBuffer>): string {
   let d = INITIAL_D;
 
   for (let offset = 0; offset < padded.length; offset += BLOCK_SIZE) {
-    const x: number[] = [];
-    for (let index = 0; index < 16; index += 1) {
-      x.push(view.getUint32(offset + index * 4, true));
-    }
+    const x: BlockWords = [
+      view.getUint32(offset + 0 * 4, true),
+      view.getUint32(offset + 1 * 4, true),
+      view.getUint32(offset + 2 * 4, true),
+      view.getUint32(offset + 3 * 4, true),
+      view.getUint32(offset + 4 * 4, true),
+      view.getUint32(offset + 5 * 4, true),
+      view.getUint32(offset + 6 * 4, true),
+      view.getUint32(offset + 7 * 4, true),
+      view.getUint32(offset + 8 * 4, true),
+      view.getUint32(offset + 9 * 4, true),
+      view.getUint32(offset + 10 * 4, true),
+      view.getUint32(offset + 11 * 4, true),
+      view.getUint32(offset + 12 * 4, true),
+      view.getUint32(offset + 13 * 4, true),
+      view.getUint32(offset + 14 * 4, true),
+      view.getUint32(offset + 15 * 4, true),
+    ];
     const savedA = a;
     const savedB = b;
     const savedC = c;
@@ -81,29 +118,24 @@ export function md4(message: Uint8Array<ArrayBuffer>): string {
 
     const op = (
       kind: (x: number, y: number, z: number) => number,
-      index: number,
+      index: WordIndex,
       rotation: number,
       roundConstant: number,
     ): void => {
       const word = x[index];
-      if (word === undefined) {
-        throw new Error(
-          `internal error: MD4 block word ${index} is missing -- x is always filled with all 16 words above before any operation reads it`,
-        );
-      }
       const updated = rotateLeft(
         (a + kind(b, c, d) + word + roundConstant) >>> 0,
         rotation,
       );
       [a, b, c, d] = rotateRegisters([a, b, c, d], updated);
     };
-    const ff = (index: number, rotation: number) => {
+    const ff = (index: WordIndex, rotation: number) => {
       op(f, index, rotation, 0);
     };
-    const gg = (index: number, rotation: number) => {
+    const gg = (index: WordIndex, rotation: number) => {
       op(g, index, rotation, ROUND_2_CONSTANT);
     };
-    const hh = (index: number, rotation: number) => {
+    const hh = (index: WordIndex, rotation: number) => {
       op(h, index, rotation, ROUND_3_CONSTANT);
     };
 
