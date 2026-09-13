@@ -1,3 +1,24 @@
+## [4.14.10](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.9...document-mcp%404.14.10) (2026-09-13)
+
+### Code Refactoring
+
+* **document-mcp:** extract each docx-extras part into its own builder ([f33a7bd](https://github.com/ExaDev/documents.js/commit/f33a7bd6888e46321d23750f8bc7ce4819498d9d))
+* **document-mcp:** extract embedded-font-fixture's own font-face element and content-root guard ([35f53c4](https://github.com/ExaDev/documents.js/commit/35f53c4d02d3ff9a4fca8108e02a20772e1b4148))
+* **document-mcp:** extract font-fixture's embedded-face guard for direct testing ([95effc9](https://github.com/ExaDev/documents.js/commit/95effc9c0b4aabc18eb5dbc21f2b9eeebec84e1d))
+* **document-mcp:** pass outputSchema through unconditionally ([c23d425](https://github.com/ExaDev/documents.js/commit/c23d425f337ad41e3ad15b8ecc722ef1872c157c))
+* **document-mcp:** resolve serveHttp with the bound AddressInfo directly ([5bd1189](https://github.com/ExaDev/documents.js/commit/5bd118979e26f748a8a398163762a8c36d1e416b))
+
+### Tests
+
+* **document-mcp:** assert createServer registers every one of its twelve tools ([ec2fec1](https://github.com/ExaDev/documents.js/commit/ec2fec1f46ea8ae06999f6aa814628316cd8a7d0))
+* **document-mcp:** assert createServer's own advertised name and version ([76aaea2](https://github.com/ExaDev/documents.js/commit/76aaea295894c32e432bdf3a791713decea0189e))
+* **document-mcp:** compute docx-extras-fixture's package inside beforeAll ([107bc7c](https://github.com/ExaDev/documents.js/commit/107bc7cb066e021da81296ddef2212ded3327543))
+* **document-mcp:** cover sea-entry's own catch handler with a mocked main() ([7c19d44](https://github.com/ExaDev/documents.js/commit/7c19d442d09dd6c0d2bdf928a011c22fed138634))
+* **document-mcp:** pin ooxml-fixture and docx-extras-fixture builder output ([2cd8381](https://github.com/ExaDev/documents.js/commit/2cd838143d07362bcdf2128ab821d4394e1965d7))
+* **document-mcp:** pin the odf-formula and odm fixture builders' own output ([bd909c2](https://github.com/ExaDev/documents.js/commit/bd909c2a6c1443c2ea12c503b38381ba4de1ac7d))
+* **document-mcp:** prove odb_render_report's mapError wiring directly ([bae1ab6](https://github.com/ExaDev/documents.js/commit/bae1ab60fbc28136b9a55e57fe54b63f2be15126))
+* **document-mcp:** raise the mutation break threshold to 100 ([ea3ad74](https://github.com/ExaDev/documents.js/commit/ea3ad74e2db5a1618b0fa1f041ed2e5e6e0eaf78))
+
 ## [4.14.9](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.8...document-mcp%404.14.9) (2026-09-13)
 
 
