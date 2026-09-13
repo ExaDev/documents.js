@@ -194,14 +194,18 @@ describe("readBlipStore", () => {
     expect(store).toEqual([]);
   });
 
-  it("reads a slot whose cRef sets only its own most significant byte, not just its least", () => {
-    // 0x01000000 has every byte zero except the most significant one -- cRefIsZero's own four-byte check must genuinely test each of the four, not treat any one of them as always zero.
+  // cRefIsZero's own four-byte check must genuinely test each of the four bytes, not treat any one of them as always zero. An embedded-blip FBSE (like the test above) never reaches that check at all -- hasEmbedded returns first -- so each of these instead uses the delay-stream shape, where only cRefIsZero (or foDelay) stands between the entry and a resolved blip.
+  it.each([
+    ["its own second-least-significant byte", 0x00000100],
+    ["its own second-most-significant byte", 0x00010000],
+    ["its own most significant byte", 0x01000000],
+  ])("resolves a delay-stream slot whose cRef sets only %s", (_label, cRef) => {
     const png = pngBytes();
     const store = readBlipStore(
       documentWithStore(
-        fbse({ blipType: 0x06, embedded: pngBlip(png), cRef: 0x01000000 }),
+        fbse({ blipType: 0x06, embedded: undefined, cRef, foDelay: 0 }),
       ),
-      undefined,
+      pngBlip(png),
     );
     expect(store).toEqual([{ format: "png", bytes: png }]);
   });
