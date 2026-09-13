@@ -56,16 +56,14 @@ const end = (frame: Box, axis: Axis): number =>
 //
 // Ties, including the degenerate case where a set has no extent on an axis, go to rows: the ordinary
 // top-to-bottom reading of a slide with no column structure.
+// No separate "0 or 1 shapes" early return is needed: with at most one shape, splitOnGap on either axis produces a single group and a zero widestGap, so both ratios below are 0, neither `> 1` group-count check can pass, and the function falls through to the final sort -- a no-op on an array that short -- returning the input untouched, exactly what an early return would have done.
+// No separate "columns.groups.length > 1" guard is needed alongside the ratio comparison below: splitOnGap only ever raises widestGap above 0 by actually pushing a second group (a split happens exactly when a positive gap is found), so a widestGap of 0 always pairs with exactly one group and a ratio of 0 -- meaning the ratio comparison can only come out true when columns.groups.length is already at least 2.
 function cut(shapes: ContentShape[]): ContentShape[] {
-  if (shapes.length <= 1) {
-    return shapes;
-  }
   const rows = splitOnGap(shapes, "vertical");
   const columns = splitOnGap(shapes, "horizontal");
   if (
     ratio(columns.widestGap, extentAlong(shapes, "horizontal")) >
-      ratio(rows.widestGap, extentAlong(shapes, "vertical")) &&
-    columns.groups.length > 1
+    ratio(rows.widestGap, extentAlong(shapes, "vertical"))
   ) {
     return columns.groups.flatMap(cut);
   }
