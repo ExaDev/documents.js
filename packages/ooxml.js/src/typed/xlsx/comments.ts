@@ -33,8 +33,9 @@ export interface SheetCellComment {
 
 // The threaded-comments vocabulary is a Microsoft extension, not ECMA-376, so unlike every ECMA-376 part this package reads -- whose producers all bind the schema namespace as the DEFAULT namespace, leaving element names unprefixed -- these elements arrive under whatever prefix the producer chose: Excel writes the part unprefixed, other producers bind one (conventionally tc:). The local name, the part after the last ':', is the only spelling-agnostic address for these elements.
 function localName(tag: string): string {
+  // No "no colon" branch: String.prototype.lastIndexOf returns -1 for an unprefixed tag, and tag.slice(-1 + 1) === tag.slice(0) is the whole string unchanged -- exactly the un-sliced value the branch existed to return, for every possible tag, not merely the ones this file happens to see. The ternary's own comparison is therefore never actually reachable as a distinct outcome.
   const colon = tag.lastIndexOf(":");
-  return colon === -1 ? tag : tag.slice(colon + 1);
+  return tag.slice(colon + 1);
 }
 
 function childrenWithLocalName(
