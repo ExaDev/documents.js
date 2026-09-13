@@ -69,8 +69,8 @@ function int16(value: number, what: string): number[] {
       `${what} is ${rounded}, outside the ${MIN_INT16}..${MAX_INT16} range a signed 2-byte sprm operand can hold`,
     );
   }
-  const unsigned = rounded < 0 ? rounded + 0x10000 : rounded;
-  return [unsigned & 0xff, (unsigned >> 8) & 0xff];
+  // No separate "add 0x10000 for a negative value" conversion: & and >> operate on the 32-bit two's complement form already, which for any value in MIN_INT16..MAX_INT16 has exactly the same low 16 bits as its unsigned 16-bit equivalent -- rounded & 0xff and (rounded >> 8) & 0xff already read the right two bytes whether rounded is negative or not (matching prop/pap-write.ts's own identical int16).
+  return [rounded & 0xff, (rounded >> 8) & 0xff];
 }
 
 function le16(value: number): number[] {
@@ -137,8 +137,7 @@ function shadingPrls(cells: readonly TableCellToWrite[]): number[] {
   const bytes: number[] = [];
   for (const { opcode, first } of SHD_ARRAYS) {
     const window = cells.slice(first, first + MAX_SHD_PER_ARRAY);
-    if (window.length === 0) continue;
-    // "rgShd only contains elements necessary to define all shaded cells in the row. Non-shaded cells that follow the last shaded cell in the row are omitted from the array" -- so the array stops at the last shaded cell, and cells past it stay unshaded by default.
+    // "rgShd only contains elements necessary to define all shaded cells in the row. Non-shaded cells that follow the last shaded cell in the row are omitted from the array" -- so the array stops at the last shaded cell, and cells past it stay unshaded by default. An empty window (no cells reach this array's own range at all) falls out through the identical lastShaded === -1 check below rather than needing its own separate guard: forEach over an empty array leaves lastShaded at -1 regardless.
     let lastShaded = -1;
     window.forEach((cell, index) => {
       if (cell.background !== undefined) lastShaded = index;
