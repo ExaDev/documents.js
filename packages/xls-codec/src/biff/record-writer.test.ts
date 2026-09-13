@@ -39,6 +39,13 @@ describe("writeRecord", () => {
     const data = new Uint8Array(MAX_RECORD_DATA_SIZE + 1);
     expect(() => writeRecord(RECORD_BOF, data)).toThrow(BiffWriteError);
   });
+
+  it("names the record's own type and length in the refusal message", () => {
+    const data = new Uint8Array(MAX_RECORD_DATA_SIZE + 1);
+    expect(() => writeRecord(RECORD_BOF, data)).toThrow(
+      `record 0x${RECORD_BOF.toString(16)} would carry ${data.length} bytes of data, above the ${MAX_RECORD_DATA_SIZE}-byte maximum a single record can hold ([MS-XLS] 2.1.4); this writer does not split oversized records into Continue chains`,
+    );
+  });
 });
 
 describe("concatRecords", () => {
