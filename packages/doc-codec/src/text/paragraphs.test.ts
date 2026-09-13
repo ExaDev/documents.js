@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
+import { FKP_PAGE_SIZE, PropertyBinTable } from "../prop/fkp";
+import { buildBinTable } from "../test-support/fkp";
 import { PARAGRAPH_MARK } from "./special";
-import { splitEntriesByBoundaries, type ParagraphEntry } from "./paragraphs";
+import {
+  computeCharacterProperties,
+  noByteOffsetForCharacterMessage,
+  noByteOffsetForParagraphMarkMessage,
+  noByteOffsetForTrailingParagraphMessage,
+  noOpenFieldWhileInInstructionMessage,
+  splitEntriesByBoundaries,
+  type ParagraphEntry,
+  type ReadContext,
+} from "./paragraphs";
 
 function entry(endCp: number): ParagraphEntry {
   return {
@@ -75,5 +86,56 @@ describe("splitEntriesByBoundaries", () => {
   it("returns an empty group rather than throwing when given no entries at all", () => {
     const groups = splitEntriesByBoundaries([], [0, 5]);
     expect(groups).toEqual([[]]);
+  });
+});
+
+describe("paragraphs.ts's own internal-defect messages", () => {
+  // Every message named here is an invariant this module already maintains elsewhere in the same function, never one a caller's own input could violate -- see each message function's own comment. Tested against a hardcoded duplicate of the exact text, the same discipline prop/fkp-write.ts's own internal-defect messages follow.
+  it("carries noByteOffsetForParagraphMarkMessage's own exact text", () => {
+    expect(noByteOffsetForParagraphMarkMessage(3)).toBe(
+      "character 3 has no byte offset, so its paragraph's properties cannot be located",
+    );
+  });
+
+  it("carries noByteOffsetForTrailingParagraphMessage's own exact text", () => {
+    expect(noByteOffsetForTrailingParagraphMessage(7)).toBe(
+      "character 7 has no byte offset, so the trailing paragraph's properties cannot be located",
+    );
+  });
+
+  it("carries noByteOffsetForCharacterMessage's own exact text", () => {
+    expect(noByteOffsetForCharacterMessage(9)).toBe(
+      "character 9 of a paragraph has no byte offset, so its formatting cannot be located",
+    );
+  });
+
+  it("carries noOpenFieldWhileInInstructionMessage's own exact text", () => {
+    expect(noOpenFieldWhileInInstructionMessage()).toBe(
+      "internal defect: inInstruction is true with no open field on the stack, but it is only ever set true in the same statement that pushes one",
+    );
+  });
+});
+
+describe("computeCharacterProperties", () => {
+  // A ReadContext whose chpxTable/papxTable are never consulted by computeCharacterProperties itself (it takes grpprl and paragraphStyleCharacterPrls as plain arguments, never deriving them from these tables) -- built from real PropertyBinTable instances anyway, since ReadContext's own type carries no looser alternative and constructing genuine (if otherwise-unused) ones costs nothing here.
+  function unusedBinTable(): PropertyBinTable {
+    return new PropertyBinTable(
+      new Uint8Array(FKP_PAGE_SIZE),
+      buildBinTable([0, FKP_PAGE_SIZE], [0]),
+      "unused",
+    );
+  }
+
+  it("caches its own returned result on context.characterProperties under the given key", () => {
+    const context: ReadContext = {
+      chpxTable: unusedBinTable(),
+      papxTable: unusedBinTable(),
+      styles: undefined,
+      fonts: undefined,
+      characterProperties: new Map(),
+      dataStream: undefined,
+    };
+    const result = computeCharacterProperties("k", undefined, [], context);
+    expect(context.characterProperties.get("k")).toBe(result);
   });
 });
