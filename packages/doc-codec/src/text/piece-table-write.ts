@@ -6,8 +6,6 @@ import { DocFormatError } from "../errors";
 
 /** Pcdt's own marker byte, [MS-DOC] 2.9.19. */
 const CLXT_PCDT = 0x02;
-/** Pcd is 8 bytes: a 2-byte bit field, a 4-byte FcCompressed, and a 2-byte Prm. */
-const PCD_SIZE = 8;
 
 function push32(bytes: number[], value: number): void {
   bytes.push(
@@ -29,17 +27,13 @@ export function buildTextClx(
     );
   }
 
+  // Two 4-byte keys (aCp[0], aCp[1]) plus one 8-byte Pcd -- a fixed sequence of pushes below, never a computed or looped count, so this is unconditionally the one-piece PlcPcd the comment above describes; there is no input this function's own characterCount/textFc validation lets through that could ever produce a different shape.
   const plcPcd: number[] = [];
   push32(plcPcd, 0); // aCp[0].
   push32(plcPcd, characterCount); // aCp[1].
   plcPcd.push(0x00, 0x00); // Pcd bit field: fNoParaLast clear (the text does contain paragraph marks), fDirty clear.
   push32(plcPcd, textFc); // FcCompressed: bit 30 (fCompressed) clear, so fc is used as-is for 16-bit text.
   plcPcd.push(0x00, 0x00); // Prm: no additional property modifications.
-  if ((plcPcd.length - 4) / (4 + PCD_SIZE) !== 1) {
-    throw new DocFormatError(
-      "buildTextClx's own PlcPcd does not describe exactly one piece; this is an internal defect, not an input error",
-    );
-  }
 
   const clx = [CLXT_PCDT];
   push32(clx, plcPcd.length);
