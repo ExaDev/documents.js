@@ -730,8 +730,13 @@ class RtfWriter {
       // "\sect End of section and paragraph." The break kind belongs to the section it starts, so it is written after the \sect that opens it, alongside the rest of that section's <secfmt>.
       this.line("\\sect");
     }
+    // An absent breakType never reaches the map lookup at all -- it means the format's own default break (RTF's own "nextPage"), which is spelled by \sectd alone with no \sbk* suffix, the identical output "nextPage" itself produces below since RTF has no dedicated \sbk* word for it either.
+    const breakWord =
+      section.breakType === undefined
+        ? ""
+        : (SECTION_BREAK_CONTROL_WORDS.get(section.breakType) ?? "");
     this.line(
-      `\\sectd${SECTION_BREAK_CONTROL_WORDS.get(section.breakType ?? "") ?? ""}` +
+      `\\sectd${breakWord}` +
         `\\pgwsxn${String(pointsToTwips(section.pageSize.widthPt))}` +
         `\\pghsxn${String(pointsToTwips(section.pageSize.heightPt))}` +
         `\\marglsxn${String(pointsToTwips(section.margins.leftPt))}` +
