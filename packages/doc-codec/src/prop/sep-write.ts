@@ -144,8 +144,7 @@ export function buildPlcfSed(
   });
   fcSepxList.forEach((fcSepx, index) => {
     const base = keyBytes + index * 12;
-    // sed.fn and sed.fnMpr are always this constant 0, so no endianness argument is passed for either write: 0x0000 reads back identically regardless of byte order, unlike the real values fcSepx/fcMpr carry.
-    view.setUint16(base, 0);
+    // sed.fn is always this constant 0 -- and `bytes` is a fresh, zero-initialised Uint8Array no earlier write in this loop ever touches at this offset, so there is nothing to actually write here; a real setUint16(base, 0) call would be a genuine no-op.
     view.setUint32(base + 2, fcSepx, true); // sed.fcSepx.
     view.setUint16(base + 6, 0); // sed.fnMpr -- ignored.
     // 0xffffffff's own four bytes are identical (0xff each), so fcMpr's own endianness is equally moot.
