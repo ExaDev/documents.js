@@ -43,11 +43,8 @@ const DIB_HEADER_SIZE_BITMAPINFOHEADER = 40;
 // [MS-WMF] 2.1.1.3 BitCount Enumeration's BI_BITCOUNT_1: "The image is specified with two colours... represented by a single bit." The smallest legal pixel depth a DeviceIndependentBitmap Object can declare, paired with a 2-entry RGBQuad colour table below.
 const DIB_BIT_COUNT_MONOCHROME = 1;
 
-// [MS-OLEDS] 2.1.4 LengthPrefixedAnsiString: "Length (4 bytes): This MUST be set to the number of ANSI characters in the String field, including the terminating null character. Length MUST be set to 0x00000000 to indicate an empty string." -- so an empty string is the 4-byte zero length alone, with no String field at all, not a length of 1 holding just a null byte. Every caller passes one of this module's own fixed ASCII constants (OBJECT_HEADER_CLASS_NAME, or an empty string), never caller-supplied text, so this trusts its input is ASCII rather than re-validating a property already guaranteed by construction.
+// [MS-OLEDS] 2.1.4 LengthPrefixedAnsiString: "Length (4 bytes): This MUST be set to the number of ANSI characters in the String field, including the terminating null character." Every field this module's own writer actually needs an EMPTY LengthPrefixedAnsiString for (ObjectHeader's TopicName/ItemName, PresentationObjectHeader's ClassName) is a fixed 4-byte zero length with no String field at all, already satisfied by a freshly zero-initialized Uint8Array with no call to this function needed -- so this function's only remaining caller (OBJECT_HEADER_CLASS_NAME, "Package") ever passes it a non-empty value, and there is no empty-string case left to special-case here.
 function writeLengthPrefixedAnsiString(value: string): Uint8Array<ArrayBuffer> {
-  if (value.length === 0) {
-    return new Uint8Array(4); // already zero -- Length = 0x00000000
-  }
   const length = value.length + 1; // + the terminating null character, per LengthPrefixedAnsiString's own field definition
   const out = new Uint8Array(4 + length);
   const view = new DataView(out.buffer);
@@ -273,21 +270,19 @@ function knownContentEmbeddedObjectFields(
   };
 }
 
-// No Array.isArray exclusion: this is only ever called on a JSON.parse result within withoutInvalidSource below, and a JSON array never carries a "source" own-property to strip in the first place (JSON.stringify only ever serialises an array's numeric indices) -- so treating an array as record-shaped here changes nothing observable, and ContentEmbeddedObjectSchema.safeParse still rejects it for not being the object shape the schema requires. No null exclusion either, for the same reason: typeof null === "object" narrows null through as if it were a record, but withoutInvalidSource's very next line ("source" in value) throws for null exactly as it would for any other non-object JSON.parse result (a string, number, or boolean), landing in readEmbeddedObjectData's own shared catch and producing the identical undefined result an explicit exclusion here would have produced directly -- excluding it here would only rename which line throws, not change any outcome.
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object";
-}
-
 // A hostile or malformed \objdata JSON payload's own `source` value used to reach knownContentEmbeddedObjectFields untouched, because isContentEmbeddedObject's guard never inspected it -- that function validated and dropped it independently. Now that ContentEmbeddedObjectSchema validates `source` as a genuine field of its own (see that schema's own comment in document-schema.js's src/content.ts), a hostile source would instead fail the WHOLE object's validation at the safeParse call below, discarding an otherwise perfectly well-formed embedded object over one bad metadata field -- a real behavioural regression from the original, more lenient "drop the bad field, keep the rest" contract this reader has always offered. Stripping an invalid `source` key before that validation runs restores it: a payload whose `source` doesn't parse loses only that field, exactly as before, rather than the whole read.
+//
+// No typeof/null narrowing of `value` before probing it: this is only ever called on a JSON.parse result within readEmbeddedObjectData's own try block, and every shape that isn't a genuine record either has no "source" own-property to strip (an array, whose numeric-index serialisation never carries one) or throws attempting the "in" probe (null, a string, a number, a boolean -- the `in` operator requires an object on its right, with no auto-boxing exception for primitives the way property access gets). A thrown probe lands in that same shared catch a dedicated non-record check would have returned early into instead, and ContentEmbeddedObjectSchema.safeParse rejects a bare array exactly as it would have rejected the array unstripped -- so the specific path taken to reach "not this package's own payload" is never itself observable, only that it is reached. The cast is safe precisely because it is never trusted uninspected: the very next line either narrows it for real via "in", or throws before anything built from it is used.
 function withoutInvalidSource(value: unknown): unknown {
-  if (!isRecord(value) || !("source" in value)) {
+  const record = value as Record<string, unknown>;
+  if (!("source" in record)) {
     return value;
   }
-  if (SourceResidueSchema.safeParse(value.source).success) {
+  if (SourceResidueSchema.safeParse(record.source).success) {
     return value;
   }
   const sanitized: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value)) {
+  for (const [key, entry] of Object.entries(record)) {
     if (key !== "source") {
       sanitized[key] = entry;
     }
