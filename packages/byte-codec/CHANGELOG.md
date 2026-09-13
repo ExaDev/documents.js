@@ -1,3 +1,9 @@
+## [1.5.4](https://github.com/ExaDev/documents.js/compare/byte-codec%401.5.3...byte-codec%401.5.4) (2026-09-13)
+
+### Tests
+
+* **byte-codec:** raise the 256/257-colour PNG encode tests' timeout to 60s ([96a9d9c](https://github.com/ExaDev/documents.js/commit/96a9d9c24f59fb246f9a648ac9077725ebdaf859))
+
 ## [1.5.3](https://github.com/ExaDev/documents.js/compare/byte-codec%401.5.2...byte-codec%401.5.3) (2026-09-13)
 
 ### Code Refactoring

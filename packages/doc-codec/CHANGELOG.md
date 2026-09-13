@@ -1,3 +1,13 @@
+## [2.11.0](https://github.com/ExaDev/documents.js/compare/doc-codec%402.10.2...doc-codec%402.11.0) (2026-09-13)
+
+### Features
+
+* **doc-codec:** write hyperlinks as HYPERLINK fields, and read them back ([bee0160](https://github.com/ExaDev/documents.js/commit/bee01603eb4870748154d15e0a5b04227c6ebb0b))
+
+### Documentation
+
+* **doc-codec:** state hyperlink fields as read and written ([b8252c5](https://github.com/ExaDev/documents.js/commit/b8252c5cb93f27680ea3adabf0287636a3e2701d))
+
 ## [2.10.2](https://github.com/ExaDev/documents.js/compare/doc-codec%402.10.1...doc-codec%402.10.2) (2026-09-13)
 
 
