@@ -10,7 +10,7 @@ import {
   SUMMARY_INFORMATION_STREAM,
   WORD_DOCUMENT_STREAM,
 } from "./detect";
-import { DocFormatError, DocUnsupportedError } from "./errors";
+import { assertDefined, DocFormatError, DocUnsupportedError } from "./errors";
 import { buildFib } from "./fib/write";
 import { buildNumberingTables, gatherListUsage } from "./list/numbering-write";
 import { layoutMetadataToSummaryInformation } from "./metadata";
@@ -26,8 +26,8 @@ import {
 } from "./prop/fkp-write";
 import { encodeParagraphGrpprl } from "./prop/pap-write";
 import { buildPlcfSed, buildSepx, encodeSectionGrpprl } from "./prop/sep-write";
-import { buildFontTable } from "./style/fonts";
-import { buildStshForStyles } from "./style/stsh";
+import { buildFontTable, createFontIndexMinter } from "./style/fonts";
+import { buildStshForStyles, mintStyleIstds } from "./style/stsh";
 import {
   buildStorySubdocuments,
   paragraphCharacters,
@@ -51,6 +51,22 @@ const TEXT_FC = 0x400;
 /** This writer only ever emits 16-bit (uncompressed) text -- see text/piece-table-write.ts. */
 const BYTES_PER_CHARACTER = 2;
 
+// Every message below names an invariant writeDocContent's own logic maintains, never one a caller's input could violate -- no real call ever reaches the assertDefined it guards. Exported for this package's own tests only, each as a fixed constant or a small pure formatter, so a change to the actual wording is still directly testable even though nothing in writeDocContent's own test suite can trigger it (see errors.test.ts's own assertDefined tests for the mirrored, hardcoded-duplicate discipline this follows).
+export const NO_ILFO_MINTED_MESSAGE = (numId: string): string =>
+  `internal defect: writeDocContent's own list-usage map has no ilfo minted for numId ${JSON.stringify(numId)}`;
+export const PARAGRAPH_START_LOST_MESSAGE =
+  "internal defect: writeDocContent lost a paragraph's own start position";
+export const PARAGRAPH_ISTD_LOST_MESSAGE =
+  "internal defect: writeDocContent lost a paragraph's own minted istd";
+export const EMPTY_SECTION_LIST_MESSAGE =
+  "internal defect: writeDocContent built an empty section list despite the earlier at-least-one-section guard";
+export const SEPX_PLACEMENT_LOST_MESSAGE = (index: number): string =>
+  `internal defect: writeDocContent lost section ${String(index)}'s own Sepx placement`;
+export const SECTION_START_CP_LOST_MESSAGE = (index: number): string =>
+  `internal defect: writeDocContent lost section ${String(index)}'s own start CP`;
+export const CLOSE_SECTION_TRAILING_PARAGRAPH_LOST_MESSAGE =
+  "internal defect: closeSection lost its own just-ensured trailing paragraph";
+
 interface FormattedRun {
   readonly text: string;
   /** Empty means no direct character formatting at all. */
@@ -60,6 +76,92 @@ interface FormattedRun {
 interface FormattedParagraph {
   readonly runs: readonly FormattedRun[];
   readonly grpprl: readonly number[];
+}
+
+/** One not-yet-merged Chpx exception candidate: a `[start, end)` character range and the grpprl covering it, or undefined for a range with no direct character formatting at all. `end` is mutable -- both layoutParagraphText's own paragraph-mark-extension step and mergeChpxRuns extend a run's own end in place rather than replacing the whole entry. */
+export interface ChpxRunSeed {
+  readonly start: number;
+  end: number;
+  readonly grpprl: readonly number[] | undefined;
+}
+
+/** layoutParagraphText's own per-paragraph input: just the two fields it actually reads, so writeDocContent's own `formatted`/`writeParagraphs` pairing can be zipped into this shape without either type depending on the other. */
+export interface ParagraphToLayout {
+  readonly runs: readonly FormattedRun[];
+  readonly terminator: number;
+}
+
+export interface TextLayout {
+  /** Every character of the whole concatenated stream, main document and every story alike, each paragraph closed by its own terminator. */
+  readonly text: string;
+  /** Where each paragraph's own text begins, parallel to `paragraphs`. */
+  readonly paragraphStarts: readonly number[];
+  /** Not-yet-merged Chpx exceptions, in stream order -- mergeChpxRuns' own input. */
+  readonly chpxRuns: readonly ChpxRunSeed[];
+}
+
+// Lays out the logical text stream: every run's characters, each paragraph closed by its own mark -- an ordinary paragraph mark, or, for a table cell/row mark, its own cell mark (each paragraph's own `terminator`). Every run with at least one character gets its own Chpx exception candidate; a run whose own text is empty gets none at all, since [MS-DOC]'s own Chpx exceptions describe a real character range and a zero-length one names no character for a real producer or reader to attribute formatting to. Extracted out of writeDocContent's own body so this rule, and the paragraph mark's own formatting-extension choice below, are directly testable rather than only reachable through a full write+read round trip -- a zero-length exception a mutated version of this rule might wrongly emit is invisible to that round trip regardless, since PropertyBinTable's own lookup (findLargestAtMost) always resolves a shared fc to whichever exception with that fc appears LAST, silently masking an earlier, spurious zero-length one at the identical offset.
+export function layoutParagraphText(
+  paragraphs: readonly ParagraphToLayout[],
+): TextLayout {
+  let text = "";
+  const paragraphStarts: number[] = [];
+  const chpxRuns: ChpxRunSeed[] = [];
+  for (const paragraph of paragraphs) {
+    paragraphStarts.push(text.length);
+    for (const run of paragraph.runs) {
+      const runStart = text.length;
+      text += run.text;
+      if (text.length > runStart) {
+        chpxRuns.push({
+          start: runStart,
+          end: text.length,
+          grpprl: run.grpprl.length > 0 ? run.grpprl : undefined,
+        });
+      }
+    }
+    text += String.fromCharCode(paragraph.terminator);
+    // The mark shares the paragraph's own last run's formatting, matching what a real producer writes (test-support/doc.ts's buildDoc makes the identical choice, for the identical reason): extending that run keeps the Chpx's own ranges contiguous instead of adding a second, separately-tracked one-character exception.
+    const lastRun = chpxRuns[chpxRuns.length - 1];
+    if (lastRun?.end === text.length - 1) {
+      lastRun.end = text.length;
+    } else {
+      chpxRuns.push({
+        start: text.length - 1,
+        end: text.length,
+        grpprl: undefined,
+      });
+    }
+  }
+  return { text, paragraphStarts, chpxRuns };
+}
+
+// Two Chpx grpprls are the "same formatting" when both are absent, or both carry byte-identical operand sequences -- a length mismatch alone already implies inequality (a.every stops comparing once it hits a hole past b's own end, but a shorter b failing to disprove a longer a is exactly the bug a bare .every without the length check would have), so the check is genuinely necessary rather than a redundant belt-and-braces re-statement of what .every already proves on its own.
+export function sameGrpprl(
+  a: readonly number[] | undefined,
+  b: readonly number[] | undefined,
+): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return a.length === b.length && a.every((byte, index) => byte === b[index]);
+}
+
+// Merges adjacent, contiguous Chpx exception candidates that carry byte-identical formatting into one -- what a real producer writes, and what read.ts's own buildRuns must already split back apart at every paragraph boundary regardless of how many paragraphs one exception spans. Extracted alongside layoutParagraphText for the identical reason: directly testable without a zero-length seed's own masking (see that function's own comment) hiding a merge-boundary mistake from a round-trip check.
+export function mergeChpxRuns(
+  chpxRuns: readonly ChpxRunSeed[],
+): readonly ChpxRunSeed[] {
+  const merged: ChpxRunSeed[] = [];
+  for (const run of chpxRuns) {
+    const previous = merged[merged.length - 1];
+    if (
+      previous?.end === run.start &&
+      sameGrpprl(previous.grpprl, run.grpprl)
+    ) {
+      previous.end = run.end;
+      continue;
+    }
+    merged.push({ ...run });
+  }
+  return merged;
 }
 
 export interface WriteDocContentOptions {
@@ -131,49 +233,13 @@ export function writeDocContent(
     ...(stories.endnote?.paragraphs ?? []),
   ];
 
-  // 1a. Mint a real istd for every distinct paragraph style: a headingLevel of 1-9 maps directly to that istd (headingLevelFromIstd's own read-side rule, so a re-read derives the identical headingLevel back regardless of what styleId names it), and every other named styleId gets its own istd starting at 10. This mints style IDENTITY only -- name, kind, istd -- with no formatting of its own: every property this writer emits is already, unconditionally, a direct exception (see buildStshForStyles's own comment and the README's scope note, ExaDev/documents.js#1059). A paragraph with neither styleId nor an in-range headingLevel gets istd 0, left an empty hole rather than a real "Normal" entry -- minting one there unconditionally would round-trip an absent styleId into a real "Normal" string on the next read, which is not what the source document stated. A paragraph whose own styleId literally IS "Normal" is treated like any other named style and mints its own real entry (not necessarily at istd 0), so that distinction survives. A headingLevel outside 1-9 (the schema's own field is unbounded, "ODF alone permits ten levels") has no istd slot to round-trip through at all -- a genuine format-boundary limit, so such a paragraph falls back to its styleId (or istd 0) exactly as if it carried no headingLevel.
-  const FIRST_NON_HEADING_ISTD = 10;
-  const MAX_HEADING_ISTD = 9;
-  const styleNames = new Map<number, string>();
-  const istdByStyleId = new Map<string, number>();
-  let nextNonHeadingIstd = FIRST_NON_HEADING_ISTD;
-  const istdOf = (properties: {
-    readonly styleId?: string;
-    readonly headingLevel?: number;
-  }): number => {
-    const heading = properties.headingLevel;
-    if (heading !== undefined && heading >= 1 && heading <= MAX_HEADING_ISTD) {
-      if (!styleNames.has(heading)) {
-        styleNames.set(
-          heading,
-          properties.styleId ?? `Heading ${String(heading)}`,
-        );
-      }
-      return heading;
-    }
-    const styleId = properties.styleId;
-    if (styleId === undefined) return 0;
-    const existing = istdByStyleId.get(styleId);
-    if (existing !== undefined) return existing;
-    const istd = nextNonHeadingIstd;
-    nextNonHeadingIstd += 1;
-    istdByStyleId.set(styleId, istd);
-    styleNames.set(istd, styleId);
-    return istd;
-  };
-  const istds = writeParagraphs.map((entry) => istdOf(entry.properties));
+  // 1a. Mint a real istd for every distinct paragraph style -- see mintStyleIstds' own comment (style/stsh.ts) for the full rule; extracted there so its boundaries are directly testable rather than only reachable through a full write+read round trip.
+  const { istds, styleNames } = mintStyleIstds(
+    writeParagraphs.map((entry) => entry.properties),
+  );
 
   // 1. Assign every distinct font name its own font-table index, in first-use order.
-  const fontNames: string[] = [];
-  const fontIndexByName = new Map<string, number>();
-  const fontIndexOf = (name: string): number => {
-    const existing = fontIndexByName.get(name);
-    if (existing !== undefined) return existing;
-    const index = fontNames.length;
-    fontNames.push(name);
-    fontIndexByName.set(name, index);
-    return index;
-  };
+  const { fontIndexOf, fontNames } = createFontIndexMinter();
 
   // 1b. Gather every distinct numId the document's paragraphs use into a real NumberingDefinitions (list/numbering-write.ts's own gatherListUsage), minting the one-based ilfo each numId writes as its own sprmPIlfo -- one map built once up front, since a paragraph using numId "3" needs to resolve to the identical ilfo regardless of which other numIds the rest of the document also uses.
   const listUsage = gatherListUsage(
@@ -181,11 +247,7 @@ export function writeDocContent(
   );
   const ilfoOf = (numId: string): number => {
     const ilfo = listUsage.ilfoByNumId.get(numId);
-    if (ilfo === undefined) {
-      throw new DocFormatError(
-        `internal defect: writeDocContent's own list-usage map has no ilfo minted for numId ${JSON.stringify(numId)}`,
-      );
-    }
+    assertDefined(ilfo, NO_ILFO_MINTED_MESSAGE(numId));
     return ilfo;
   };
   const numberingTables = buildNumberingTables(listUsage.definitions);
@@ -205,55 +267,14 @@ export function writeDocContent(
     ],
   }));
 
-  // 3. Lay out the logical text stream: every run's characters, each paragraph closed by its own mark -- an ordinary paragraph mark, or, for a table cell/row mark, its own cell mark (writeParagraphs' own terminator). Adjacent stretches with byte-identical formatting merge into one Chpx exception -- what a real producer writes, and what read.ts's own buildRuns must already split back apart at every paragraph boundary regardless of how many paragraphs one exception spans.
-  let text = "";
-  const paragraphStarts: number[] = [];
-  const chpxRuns: {
-    start: number;
-    end: number;
-    grpprl: readonly number[] | undefined;
-  }[] = [];
-  formatted.forEach((paragraph, paragraphIndex) => {
-    paragraphStarts.push(text.length);
-    for (const run of paragraph.runs) {
-      const runStart = text.length;
-      text += run.text;
-      if (text.length > runStart) {
-        chpxRuns.push({
-          start: runStart,
-          end: text.length,
-          grpprl: run.grpprl.length > 0 ? run.grpprl : undefined,
-        });
-      }
-    }
-    const terminator =
-      writeParagraphs[paragraphIndex]?.terminator ?? PARAGRAPH_MARK;
-    text += String.fromCharCode(terminator);
-    // The mark shares the paragraph's own last run's formatting, matching what a real producer writes (test-support/doc.ts's buildDoc makes the identical choice, for the identical reason): extending that run keeps the Chpx's own ranges contiguous instead of adding a second, separately-tracked one-character exception.
-    const lastRun = chpxRuns[chpxRuns.length - 1];
-    if (lastRun?.end === text.length - 1) {
-      lastRun.end = text.length;
-    } else {
-      chpxRuns.push({
-        start: text.length - 1,
-        end: text.length,
-        grpprl: undefined,
-      });
-    }
-  });
-
-  const mergedChpxRuns: typeof chpxRuns = [];
-  for (const run of chpxRuns) {
-    const previous = mergedChpxRuns[mergedChpxRuns.length - 1];
-    if (
-      previous?.end === run.start &&
-      sameGrpprl(previous.grpprl, run.grpprl)
-    ) {
-      previous.end = run.end;
-      continue;
-    }
-    mergedChpxRuns.push({ ...run });
-  }
+  // 3. Lay out the logical text stream and merge adjacent, byte-identically-formatted Chpx exceptions -- see layoutParagraphText's and mergeChpxRuns' own comments (both above) for the full rule; extracted there so their boundaries are directly testable rather than only reachable through a full write+read round trip.
+  const { text, paragraphStarts, chpxRuns } = layoutParagraphText(
+    formatted.map((paragraph, index) => ({
+      runs: paragraph.runs,
+      terminator: writeParagraphs[index]?.terminator ?? PARAGRAPH_MARK,
+    })),
+  );
+  const mergedChpxRuns = mergeChpxRuns(chpxRuns);
 
   // 4. Place the text, then the character- and paragraph-formatting pages immediately after it.
   const characterFc = (cp: number): number =>
@@ -271,17 +292,9 @@ export function writeDocContent(
   const papxParagraphSpecs: PapxParagraphToWrite[] = formatted.map(
     (paragraph, index) => {
       const start = paragraphStarts[index];
-      if (start === undefined) {
-        throw new DocFormatError(
-          "internal defect: writeDocContent lost a paragraph's own start position",
-        );
-      }
+      assertDefined(start, PARAGRAPH_START_LOST_MESSAGE);
       const istd = istds[index];
-      if (istd === undefined) {
-        throw new DocFormatError(
-          "internal defect: writeDocContent lost a paragraph's own minted istd",
-        );
-      }
+      assertDefined(istd, PARAGRAPH_ISTD_LOST_MESSAGE);
       return { fc: characterFc(start), istd, grpprl: paragraph.grpprl };
     },
   );
@@ -302,11 +315,8 @@ export function writeDocContent(
   }
   const lastFcSepx = fcSepxList[fcSepxList.length - 1];
   const lastSepx = sepxList[sepxList.length - 1];
-  if (lastFcSepx === undefined || lastSepx === undefined) {
-    throw new DocFormatError(
-      "internal defect: writeDocContent built an empty section list despite the earlier at-least-one-section guard",
-    );
-  }
+  assertDefined(lastFcSepx, EMPTY_SECTION_LIST_MESSAGE);
+  assertDefined(lastSepx, EMPTY_SECTION_LIST_MESSAGE);
   const wordDocument = new Uint8Array(lastFcSepx + lastSepx.length);
   const wordView = new DataView(wordDocument.buffer);
   for (let index = 0; index < text.length; index += 1) {
@@ -318,24 +328,20 @@ export function writeDocContent(
   papxPages.forEach((page, index) => {
     wordDocument.set(page, (papxPageStart + index) * FKP_PAGE_SIZE);
   });
+  // A thin wrapper around Uint8Array.prototype.set purely to give `offset` a strictly required `number` parameter of write.ts's own -- unlike TypedArray.prototype.set's own optional `offset?: number`, which happily accepts an unnarrowed `number | undefined` argument as-is, so the assertDefined just above it would type-check away entirely if this wrapper did not force the narrowing to matter.
+  const writeSepxAt = (sepx: Uint8Array, offset: number): void => {
+    wordDocument.set(sepx, offset);
+  };
   sepxList.forEach((sepx, index) => {
     const fcSepx = fcSepxList[index];
-    if (fcSepx === undefined) {
-      throw new DocFormatError(
-        `internal defect: writeDocContent lost section ${String(index)}'s own Sepx placement`,
-      );
-    }
-    wordDocument.set(sepx, fcSepx);
+    assertDefined(fcSepx, SEPX_PLACEMENT_LOST_MESSAGE(index));
+    writeSepxAt(sepx, fcSepx);
   });
 
   // Each section's own start CP -- PlcfSed.aCp[i] -- is exactly where its first paragraph's own text begins, which paragraphStarts already recorded for every paragraph in the flattened, whole-document sequence (step 3 above).
   const sectionStartCps = sectionStartIndices.map((paragraphIndex, index) => {
     const startCp = paragraphStarts[paragraphIndex];
-    if (startCp === undefined) {
-      throw new DocFormatError(
-        `internal defect: writeDocContent lost section ${String(index)}'s own start CP`,
-      );
-    }
+    assertDefined(startCp, SECTION_START_CP_LOST_MESSAGE(index));
     return startCp;
   });
 
@@ -457,14 +463,6 @@ export function writeDocContent(
   return writeCompoundFile(streams);
 }
 
-function sameGrpprl(
-  a: readonly number[] | undefined,
-  b: readonly number[] | undefined,
-): boolean {
-  if (a === undefined || b === undefined) return a === b;
-  return a.length === b.length && a.every((byte, index) => byte === b[index]);
-}
-
 // Ensures `paragraphs` ends in a genuine ordinary-paragraph-mark-terminated entry -- appending an empty one when the last entry's own terminator is anything else (a table's own cell/row mark) -- then, when `terminator` differs from PARAGRAPH_MARK, replaces that entry's terminator with it. The one shared guarantee writeDocContent's own per-section loop and its final Main-Document-ending call both need: neither an end-of-section character nor the Main Document's own final character may land on a table's row-ending mark instead of a real paragraph mark (see this function's own call site for the [MS-DOC] citations).
 function closeSection(paragraphs: WriteParagraph[], terminator: number): void {
   const last = paragraphs[paragraphs.length - 1];
@@ -479,10 +477,6 @@ function closeSection(paragraphs: WriteParagraph[], terminator: number): void {
   if (terminator === PARAGRAPH_MARK) return;
   const index = paragraphs.length - 1;
   const target = paragraphs[index];
-  if (target === undefined) {
-    throw new DocFormatError(
-      "internal defect: closeSection lost its own just-ensured trailing paragraph",
-    );
-  }
+  assertDefined(target, CLOSE_SECTION_TRAILING_PARAGRAPH_LOST_MESSAGE);
   paragraphs[index] = { ...target, terminator };
 }
