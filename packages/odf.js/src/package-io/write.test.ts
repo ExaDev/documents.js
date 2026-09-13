@@ -1,11 +1,30 @@
 import { describe, expect, it } from "vitest";
 import type { Package } from "../model/package";
 import { localFileHeaderNames } from "../test-support/zip";
-import { serializePackage, MIMETYPE_PART, MANIFEST_PART } from "./write";
+import {
+  serializePackage,
+  orderedPackagePartPaths,
+  MIMETYPE_PART,
+  MANIFEST_PART,
+} from "./write";
 
 function packageOf(parts: Package["parts"]): Package {
   return { parts };
 }
+
+describe("orderedPackagePartPaths", () => {
+  it("lists the manifest path exactly once, never once hoisted and once again among the rest", () => {
+    const paths = orderedPackagePartPaths(
+      packageOf({
+        [MIMETYPE_PART]: { kind: "binary", base64: "" },
+        [MANIFEST_PART]: { kind: "xml", nodes: [] },
+        "content.xml": { kind: "xml", nodes: [] },
+      }),
+    );
+    expect(paths.filter((path) => path === MANIFEST_PART)).toHaveLength(1);
+    expect(paths).toEqual([MIMETYPE_PART, MANIFEST_PART, "content.xml"]);
+  });
+});
 
 describe("serializePackage", () => {
   it("hoists mimetype first, then manifest, then every remaining part in its own key order", () => {
