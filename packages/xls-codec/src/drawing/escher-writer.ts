@@ -138,11 +138,9 @@ function writeBseRecord(blip: StoredBlip): Uint8Array<ArrayBuffer> {
 }
 
 function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
-  const out = new Uint8Array(hex.length / 2);
-  for (let index = 0; index < out.length; index += 1) {
-    out[index] = Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16);
-  }
-  return out;
+  return Uint8Array.from({ length: hex.length / 2 }, (_, index) =>
+    Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16),
+  );
 }
 
 /** One drawing's own contribution to the drawing group's shape-id state: the drawing identifier its FDG and IDCL both name, and the last shape identifier it allocated. */
