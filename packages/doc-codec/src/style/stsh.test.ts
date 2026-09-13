@@ -50,6 +50,217 @@ describe("parseStsh", () => {
     expect(() => parseStsh(bytes)).toThrow(/shorter than the fixed 18-byte/);
   });
 
+  it("names the STSHI slice itself when cbStshi overruns the stream", () => {
+    const bytes = new Uint8Array([0x05, 0x00]); // cbStshi = 5, but nothing follows the 2-byte prefix.
+    expect(() => parseStsh(bytes)).toThrow(/STSH\.lpstshi\.stshi/);
+  });
+
+  it("accepts an STSHI of exactly the fixed 18-byte Stshif size, with nothing beyond it", () => {
+    const stshi = stshiBytes(0, 0x000a).slice(0, 18); // the first 9 fields = 18 bytes; drop ftcBi/cbLSD.
+    const bytes = stshBytes(stshi, []);
+    expect(() => parseStsh(bytes)).not.toThrow();
+  });
+
+  it("names the STD slice itself when cbStd overruns the stream", () => {
+    const bytes = stshBytes(stshiBytes(1, 0x000a), [0x05, 0x00]); // cbStd = 5, nothing following.
+    expect(() => parseStsh(bytes)).toThrow(/STD for istd 0/);
+  });
+
+  it("names the style name slice itself when Xstz's own cch overruns its STD", () => {
+    const std = [
+      0,
+      0, // word0: sti = 0.
+      0,
+      0, // word1: stk = 0, istdBase = 0 (unused by this error path).
+      0,
+      0,
+      0,
+      0,
+      0,
+      0, // filler up to cbStdBaseInFile's own offset (10).
+      100,
+      0, // cch = 100, far more than the 0 bytes actually following.
+    ];
+    const bytes = stshBytes(stshiBytes(1, 0x000a), [
+      std.length & 0xff,
+      (std.length >> 8) & 0xff,
+      ...std,
+    ]);
+    expect(() => parseStsh(bytes)).toThrow(/name of the style at istd 0/);
+  });
+
+  it("names the UpxPapx slice itself when its own cbUpx overruns the STD", () => {
+    const std = [
+      0,
+      0, // word0: sti = 0.
+      STK.paragraph,
+      0, // word1: stk = paragraph, istdBase = 0.
+      0,
+      0,
+      0,
+      0,
+      0,
+      0, // filler up to offset 10.
+      0,
+      0, // cch = 0 (empty name), at offset 10.
+      0,
+      0, // the Xstz's own null terminator, unread by readXstz but present so grLPUpxSwOffset (14) lines up.
+      0x64,
+      0x00, // UpxPapx's own cbUpx = 100 at offset 14, far more than the 0 bytes actually following.
+    ];
+    const bytes = stshBytes(stshiBytes(1, 0x000a), [
+      std.length & 0xff,
+      (std.length >> 8) & 0xff,
+      ...std,
+    ]);
+    expect(() => parseStsh(bytes)).toThrow(
+      /UpxPapx for the paragraph style at istd 0/,
+    );
+  });
+
+  it("names the UpxChpx slice itself when its own cbUpx overruns the STD", () => {
+    const std = [
+      0,
+      0, // word0: sti = 0.
+      STK.paragraph,
+      0, // word1: stk = paragraph, istdBase = 0.
+      0,
+      0,
+      0,
+      0,
+      0,
+      0, // filler up to offset 10.
+      0,
+      0, // cch = 0 (empty name).
+      0,
+      0, // Xstz's own null terminator.
+      0,
+      0, // UpxPapx's own cbUpx = 0 (an empty UpxPapx, so its own read cannot fail here).
+      0x64,
+      0x00, // UpxChpx's own cbUpx = 100, far more than the 0 bytes actually following.
+    ];
+    const bytes = stshBytes(stshiBytes(1, 0x000a), [
+      std.length & 0xff,
+      (std.length >> 8) & 0xff,
+      ...std,
+    ]);
+    expect(() => parseStsh(bytes)).toThrow(
+      /UpxChpx for the paragraph style at istd 0/,
+    );
+  });
+
+  it("names the paragraph style's own grpprlPapx slice when UpxPapx's own istd prefix leaves less than 2 bytes", () => {
+    const std = [
+      0,
+      0, // word0: sti = 0.
+      STK.paragraph,
+      0, // word1: stk = paragraph, istdBase = 0.
+      0,
+      0,
+      0,
+      0,
+      0,
+      0, // filler up to offset 10.
+      0,
+      0, // cch = 0 (empty name).
+      0,
+      0, // Xstz's own null terminator.
+      1,
+      0, // UpxPapx's own cbUpx = 1 -- one byte, too short for UpxPapx's own 2-byte istd prefix.
+      0xff, // UpxPapx's own 1-byte payload.
+      0x00, // the format's own even-byte pad, since cbUpx (1) is odd.
+      0,
+      0, // UpxChpx's own cbUpx = 0 (empty, so its own read cannot fail here).
+    ];
+    const bytes = stshBytes(stshiBytes(1, 0x000a), [
+      std.length & 0xff,
+      (std.length >> 8) & 0xff,
+      ...std,
+    ]);
+    expect(() => parseStsh(bytes)).toThrow(
+      /grpprlPapx for the paragraph style at istd 0/,
+    );
+  });
+
+  it("names the character style's own UpxChpx slice when its own cbUpx overruns the STD", () => {
+    const std = [
+      0,
+      0, // word0: sti = 0.
+      STK.character,
+      0, // word1: stk = character, istdBase = 0.
+      0,
+      0,
+      0,
+      0,
+      0,
+      0, // filler up to offset 10.
+      0,
+      0, // cch = 0 (empty name).
+      0,
+      0, // Xstz's own null terminator.
+      0x64,
+      0x00, // UpxChpx's own cbUpx = 100, far more than the 0 bytes actually following.
+    ];
+    const bytes = stshBytes(stshiBytes(1, 0x000a), [
+      std.length & 0xff,
+      (std.length >> 8) & 0xff,
+      ...std,
+    ]);
+    expect(() => parseStsh(bytes)).toThrow(
+      /UpxChpx for the character style at istd 0/,
+    );
+  });
+
+  it("advances past an odd-length STD's own even-byte pad before reading the next entry", () => {
+    // Both entries are stk table (3): parseGrLPUpxSw returns immediately for a table/numbering style without reading anything past the name, so a minimal entry needs only StdfBase and an Xstz.
+    const entry0 = [
+      0,
+      0, // word0: sti = 0.
+      STK.table,
+      0, // word1: stk = table, istdBase = 0.
+      0,
+      0,
+      0,
+      0,
+      0,
+      0, // filler up to offset 10.
+      0,
+      0, // cch = 0 (empty name).
+      0xaa, // one extra byte inside this entry's own declared cbStd (13, odd) -- unused by
+      // a table-kind style, but its oddness means the format's own even-byte LPStd pad byte genuinely follows this entry, unlike every entry buildStshForStyles itself mints.
+    ];
+    const name1 = "OK";
+    const entry1 = [
+      0,
+      0, // word0: sti = 0.
+      STK.table,
+      0, // word1: stk = table, istdBase = 0.
+      0,
+      0,
+      0,
+      0,
+      0,
+      0, // filler up to offset 10.
+      name1.length,
+      0, // cch = 2.
+      ...Array.from(name1, (character) => character.charCodeAt(0)).flatMap(
+        (code) => [code & 0xff, (code >> 8) & 0xff],
+      ),
+    ];
+    const bytes = stshBytes(stshiBytes(2, 0x000a), [
+      entry0.length & 0xff,
+      (entry0.length >> 8) & 0xff,
+      ...entry0,
+      0x00, // the real pad byte an odd cbStd (13) requires before the next entry.
+      entry1.length & 0xff,
+      (entry1.length >> 8) & 0xff,
+      ...entry1,
+    ]);
+    const sheet = parseStsh(bytes);
+    expect(sheet.styles).toHaveLength(2);
+    expect(sheet.styles[1]?.name).toBe("OK");
+  });
+
   it("accepts cbSTDBaseInFile 0x000A (no StdfPost2000)", () => {
     const bytes = stshBytes(stshiBytes(0, 0x000a), []);
     expect(() => parseStsh(bytes)).not.toThrow();
@@ -364,5 +575,33 @@ describe("buildStshForStyles", () => {
     expect(sheet.styles[0]).toBeUndefined();
     expect(sheet.styles[1]).toBeUndefined();
     expect(sheet.styles[2]?.name).toBe("Third");
+  });
+
+  it("writes every fixed STSHI header field [MS-DOC] mandates, not merely cbStshi", () => {
+    const bytes = buildStshForStyles(new Map());
+    const words: number[] = [];
+    for (let index = 0; index < 11; index += 1) {
+      const offset = 2 + index * 2;
+      words.push((bytes[offset] ?? 0) | ((bytes[offset + 1] ?? 0) << 8));
+    }
+    expect(words).toEqual([
+      0, // cstd.
+      0x000a, // cbSTDBaseInFile (STDF_SIZE_WITHOUT_POST_2000).
+      0x0001, // fStdStylenamesWritten -- [MS-DOC] requires 1.
+      0, // stiMaxWhenSaved.
+      0x000f, // istdMaxFixedWhenSaved -- [MS-DOC] requires 0x000F.
+      0, // nVerBuiltInNamesWhenSaved.
+      0, // ftcAsci.
+      0, // ftcFE.
+      0, // ftcOther.
+      0, // ftcBi.
+      4, // StshiLsd.cbLSD -- [MS-DOC] requires 4.
+    ]);
+  });
+
+  it("writes exactly one 24-byte style entry after the 24-byte STSHI header for a single-key map, with no trailing hole", () => {
+    // STSHI header: a 2-byte cbStshi prefix plus the 22-byte, 11-word body above = 24 bytes. One istd-0 entry named "A": a 2-byte cbStd prefix plus a 22-byte STD (10-byte StdfBase, a 4-byte Xstz for a 1-character name, a 4-byte empty UpxPapx, a 2-byte empty UpxChpx) = 24 bytes, itself even so no trailing LPStd pad follows it.
+    const bytes = buildStshForStyles(new Map([[0, "A"]]));
+    expect(bytes.length).toBe(48);
   });
 });
