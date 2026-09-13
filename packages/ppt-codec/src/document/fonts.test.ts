@@ -44,6 +44,10 @@ describe("readFontNames", () => {
     expect(readFontNames(readRecordAt(bytes, 0))).toEqual([]);
   });
 
+  it("returns an empty list when there is no Environment record at all", () => {
+    expect(readFontNames(undefined)).toEqual([]);
+  });
+
   it("skips a sibling record of some other type inside the FontCollection", () => {
     const bytes = container(RT_Environment, [
       container(RT_FontCollection, [

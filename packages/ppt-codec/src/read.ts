@@ -605,7 +605,7 @@ export function readPptStreams(
   };
 
   const environment = findChild(children, RT_Environment);
-  const fontNames = environment === undefined ? [] : readFontNames(environment);
+  const fontNames = readFontNames(environment);
   // [MS-PPT] 2.9.35: the DocumentTextInfoContainer's own TextMasterStyleAtom (a direct child of Environment, recInstance OTHER) is the fallback of last resort every TextTypeEnum member falls through to when its own master states nothing -- see document/master.ts's own top comment.
   const documentDefaultRecord =
     environment === undefined
