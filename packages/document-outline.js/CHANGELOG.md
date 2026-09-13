@@ -1,3 +1,19 @@
+## [3.9.0](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.8.0...document-outline.js%403.9.0) (2026-09-13)
+
+### Features
+
+* **document-outline.js:** carry a PDF region's caption and interpretation ([9b75739](https://github.com/ExaDev/documents.js/commit/9b757393289cf0edfca4600110ad673c1bda101f))
+
+### Bug Fixes
+
+* **document-outline.js:** make the caption tie-break test actually test it ([326acec](https://github.com/ExaDev/documents.js/commit/326acec70d3947e27c434e7299f62d8254868d81))
+* **document-outline.js:** restore regionText and update the stale figure-unaffected assertion ([ec7c4a7](https://github.com/ExaDev/documents.js/commit/ec7c4a7287f1a096eef55cb86b4fd586b44726e7))
+
+
+### Dependencies
+
+- Updated pdf-codec to 4.8.4
+
 ## [3.8.0](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.7.3...document-outline.js%403.8.0) (2026-09-13)
 
 ### Features
