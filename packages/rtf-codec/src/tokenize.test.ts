@@ -63,6 +63,14 @@ describe("control word tokenization", () => {
     expect(token).toEqual({ kind: "controlWord", name: "a".repeat(32) });
   });
 
+  it("stops a control word's parameter at 10 digits, leaving the overflow as text", () => {
+    // 10 digits comfortably covers every real RTF parameter (a signed 32-bit value never needs more than 11 characters including its sign), so a producer emitting an 11th digit is emitting a second, separate value that must not silently fold into the first.
+    expect(tokenizeRtf(bytes("\\ab1234567890123"))).toEqual([
+      { kind: "controlWord", name: "ab", param: 1234567890 },
+      { kind: "text", bytes: bytes("123") },
+    ]);
+  });
+
   it("reads an uppercase letter as part of a control word's name, not just lowercase", () => {
     expect(tokenizeRtf(bytes("\\PARD"))).toEqual([
       { kind: "controlWord", name: "PARD" },
@@ -150,6 +158,14 @@ describe("control symbol tokenization", () => {
     expect(tokenizeRtf(bytes("\\'gg"))).toEqual([
       { kind: "controlSymbol", symbol: "'" },
       { kind: "text", bytes: bytes("gg") },
+    ]);
+  });
+
+  it("falls back to a control symbol when the byte just before 'A' isn't a hex digit", () => {
+    // '@' (0x40) is the byte immediately below hexDigitValue's own uppercase-letter range -- a lower-bound error there would misread it as a valid hex digit worth 9 instead of falling through.
+    expect(tokenizeRtf(bytes("\\'@@"))).toEqual([
+      { kind: "controlSymbol", symbol: "'" },
+      { kind: "text", bytes: bytes("@@") },
     ]);
   });
 
