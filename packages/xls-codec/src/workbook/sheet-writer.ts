@@ -60,7 +60,7 @@ import { pointsToColumnWidth, pointsToInches, pointsToTwips } from "../units";
 import { cellCarriesFormatting, writesCellRecord } from "../written-cells";
 import { writeSheetConditionalFormats } from "./conditional-format-write";
 import { writeSheetDataValidations } from "./data-validation-write";
-import { writeSheetComments } from "./comment-writer";
+import { hasComment, writeSheetComments } from "./comment-writer";
 import { GENERAL_CELL_XF_INDEX } from "./globals-writer";
 import type { SheetDrawingWrite } from "./drawing-writer";
 
@@ -698,9 +698,7 @@ export function buildWorksheetSubstream(
     pieces.push(writeMergeCellsRecord(merges));
   }
 
-  const commentedCells = sheet.cells.filter(
-    (cell) => cell.comment !== undefined,
-  );
+  const commentedCells = sheet.cells.filter(hasComment);
   if (commentedCells.length > 0) {
     pieces.push(...writeSheetComments(commentedCells));
   }
