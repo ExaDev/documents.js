@@ -43,9 +43,11 @@ describe("writeXLUnicodeString", () => {
     expect(readXLUnicodeString(new BlockCursor([bytes]))).toBe(text);
   });
 
-  it("refuses a string longer than the two-byte cch can hold", () => {
-    expect(() => writeXLUnicodeString("x".repeat(0x10000))).toThrow(
-      BiffWriteError,
+  it("refuses a string longer than the two-byte cch can hold, naming its own shape and a 40-character truncation of the text in the message", () => {
+    // A repeated single character can't distinguish a truncated slice from the whole text by content alone -- it distinguishes them by LENGTH, since the message states the exact overflow count separately from the truncated text it embeds; only the message's own exact shape (which characters are followed by literal "...", where the closing quote lands) proves the truncation happened at 40 characters and not 0 or all 65536.
+    const text = "x".repeat(0x10000);
+    expect(() => writeXLUnicodeString(text)).toThrow(
+      `XLUnicodeString cannot hold ${text.length} UTF-16 code units, above its own 65535-unit limit (text: "${"x".repeat(40)}...")`,
     );
   });
 });
@@ -62,9 +64,10 @@ describe("writeShortXLUnicodeString", () => {
     expect(readShortXLUnicodeString(new BlockCursor([bytes]))).toBe(text);
   });
 
-  it("refuses a string longer than the one-byte cch can hold", () => {
-    expect(() => writeShortXLUnicodeString("x".repeat(256))).toThrow(
-      BiffWriteError,
+  it("refuses a string longer than the one-byte cch can hold, naming its own shape in the message", () => {
+    const text = "x".repeat(256);
+    expect(() => writeShortXLUnicodeString(text)).toThrow(
+      `ShortXLUnicodeString cannot hold ${text.length} UTF-16 code units, above its own 255-unit limit (text: "${"x".repeat(40)}...")`,
     );
   });
 });
@@ -91,5 +94,13 @@ describe("writeRichExtendedString", () => {
     for (const expected of strings) {
       expect(readRichExtendedString(cursor)).toBe(expected);
     }
+  });
+
+  it("refuses a string longer than the two-byte cch can hold, naming its own shape in the message", () => {
+    const text = "x".repeat(0x10000);
+    expect(() => writeRichExtendedString(text)).toThrow(BiffWriteError);
+    expect(() => writeRichExtendedString(text)).toThrow(
+      `XLUnicodeRichExtendedString cannot hold ${text.length} UTF-16 code units, above its own 65535-unit limit (text: "${"x".repeat(40)}...")`,
+    );
   });
 });
