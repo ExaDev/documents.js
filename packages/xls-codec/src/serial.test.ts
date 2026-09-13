@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { BiffWriteError } from "./biff/write-errors";
 import {
   isoDateTimeToSerial,
   isoDateToSerial,
@@ -85,6 +84,14 @@ describe("serialToIsoTime", () => {
     // The roll-over threshold is a product of at least 86399999.5 ms, so it takes a fraction this close to 1 to reach it.
     expect(serialToIsoTime(0.9999999995)).toBe("00:00:00");
   });
+
+  it("refuses a non-finite serial", () => {
+    expect(serialToIsoTime(Number.NaN)).toBeUndefined();
+  });
+
+  it("refuses a negative serial, rather than reading a time of day out of its own negative fraction", () => {
+    expect(serialToIsoTime(-0.5)).toBeUndefined();
+  });
 });
 
 describe("serialToIsoDateTime", () => {
@@ -100,6 +107,10 @@ describe("serialToIsoDateTime", () => {
 
   it("refuses a serial whose date half names no real day", () => {
     expect(serialToIsoDateTime(60.5, false)).toBeUndefined();
+  });
+
+  it("refuses a non-finite serial", () => {
+    expect(serialToIsoDateTime(Number.NaN, false)).toBeUndefined();
   });
 });
 
@@ -141,12 +152,21 @@ describe("isoDateToSerial", () => {
     expect(serialToIsoDate(serial, false)).toBe("1900-01-15");
   });
 
-  it("refuses a date before the 1900 epoch", () => {
-    expect(() => isoDateToSerial("1899-12-01", false)).toThrow(BiffWriteError);
+  it("writes 1899-12-31 itself as serial 0, the one day this epoch's own strict/non-strict boundary check must not also refuse", () => {
+    // days < 0 must throw and days === 0 must not -- a boundary this narrow (0 itself, not some day comfortably below it) is what tells a `<` refusal apart from a `<=` one; the sibling test below is well below the epoch either way and cannot distinguish them.
+    expect(isoDateToSerial("1899-12-31", false)).toBe(0);
   });
 
-  it("refuses a malformed date string", () => {
-    expect(() => isoDateToSerial("not-a-date", false)).toThrow(BiffWriteError);
+  it("refuses a date before the 1900 epoch, naming the offending date and the epoch in the message", () => {
+    expect(() => isoDateToSerial("1899-12-01", false)).toThrow(
+      `date value ${JSON.stringify("1899-12-01")} is before the epoch a BIFF8 serial can represent (1899-12-31)`,
+    );
+  });
+
+  it("refuses a malformed date string, naming the offending value and the expected spelling in the message", () => {
+    expect(() => isoDateToSerial("not-a-date", false)).toThrow(
+      `date value ${JSON.stringify("not-a-date")} is not an ISO 8601 calendar date (YYYY-MM-DD), which is the only spelling document-schema.js's 'date' cell value permits`,
+    );
   });
 });
 
@@ -165,8 +185,10 @@ describe("isoTimeToSerial", () => {
     expect(serialToIsoTime(isoTimeToSerial("00:00:01"))).toBe("00:00:01");
   });
 
-  it("refuses a malformed time string", () => {
-    expect(() => isoTimeToSerial("14:30")).toThrow(BiffWriteError);
+  it("refuses a malformed time string, naming the offending value and the expected spelling in the message", () => {
+    expect(() => isoTimeToSerial("14:30")).toThrow(
+      `time value ${JSON.stringify("14:30")} is not an ISO 8601 wall-clock time (HH:MM:SS), which is the only spelling document-schema.js's 'time'/'dateTime' cell values permit`,
+    );
   });
 });
 
@@ -194,9 +216,10 @@ describe("isoDateTimeToSerial", () => {
     expect(isoDateTimeToSerial("2024-01-01T12:00:00.500", false)).toBe(45292.5);
   });
 
-  it("refuses a string with no 'T' separator at the expected position", () => {
+  it("refuses a string with no 'T' separator at the expected position, naming the offending value and the expected spelling in the message", () => {
+    // Bypassing this check entirely still throws SOME BiffWriteError for this particular malformed input -- the mis-sliced date half ("2024-01-01 12:00:0", missing its own last character) fails ISO_DATE_PATTERN on its own -- so only the EXACT message (naming the dateTime shape, not the date shape) tells a genuine refusal here apart from an incidental one raised downstream after the check was skipped.
     expect(() => isoDateTimeToSerial("2024-01-01 12:00:00", false)).toThrow(
-      BiffWriteError,
+      `dateTime value ${JSON.stringify("2024-01-01 12:00:00")} is not an ISO 8601 combined date and time (YYYY-MM-DDTHH:MM:SS), which is the only spelling document-schema.js's 'dateTime' cell value permits`,
     );
   });
 });
