@@ -252,7 +252,7 @@ afterEach(() => {
 });
 
 describe("ConvertLayout", () => {
-  it("renders only the FileUpload before anything is picked", () => {
+  it("renders only the FileUpload before anything is picked, with To disabled until a source exists", () => {
     vi.mocked(getRpcClient).mockReturnValue(baseClient());
     const mounted = mountConvertLayout();
     expect(
@@ -260,6 +260,24 @@ describe("ConvertLayout", () => {
     ).not.toBeNull();
     expect(convertButton(mounted.container).disabled).toBe(true);
     expect(mounted.container.textContent).not.toContain("Could not detect");
+    expect(latestSelects.To?.disabled).toBe(true);
+    mounted.unmount();
+  });
+
+  it("lists To's options in the same sorted order as From's, not merely with the right disabled flags", async () => {
+    vi.mocked(getRpcClient).mockReturnValue(baseClient());
+    const mounted = mountConvertLayout();
+
+    act(() => {
+      latestOnFile?.(openedFile("a.docx"));
+    });
+    await vi.waitFor(() => {
+      expect(latestSelects.To?.data).not.toEqual([]);
+    });
+
+    const targetData = latestSelects.To?.data as { value: string }[];
+    const values = targetData.map((entry) => entry.value);
+    expect(values).toEqual([...values].sort());
     mounted.unmount();
   });
 
