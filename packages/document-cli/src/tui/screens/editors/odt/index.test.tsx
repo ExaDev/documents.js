@@ -23,7 +23,7 @@ describe("OdtBodyListScreen", () => {
   });
 
   it("names the actual mismatched format when a different one is open", async () => {
-    function Harness(): ReactElement {
+    function Harness(): ReactElement | undefined {
       const state = useAppState();
       const dispatch = useAppDispatch();
       useEffect(() => {
