@@ -10,6 +10,7 @@ import {
   sha256,
   stableContentHash,
   writeBitLength,
+  writeScheduleWord,
 } from "./hash";
 
 // The SHA-256 implementation is pinned against the specification's own published digests (FIPS 180-4 example vectors): the empty string exercises the single-block padding, 'abc' a short message, and the 55-character string forces exactly two padded blocks with the length word in the second -- the padding edge a hand-rolled implementation most easily gets wrong.
@@ -51,6 +52,21 @@ describe("writeBitLength", () => {
     writeBitLength(view, 0, 512);
     expect(view.getUint32(0)).toBe(0);
     expect(view.getUint32(4)).toBe(512);
+  });
+});
+
+describe("writeScheduleWord", () => {
+  it("writes the value at a valid index", () => {
+    const w = new Uint32Array(64);
+    writeScheduleWord(w, 20, 0xdeadbeef);
+    expect(w[20]).toBe(0xdeadbeef);
+  });
+
+  it("throws with the exact out-of-bounds message for an index at the array's own length", () => {
+    const w = new Uint32Array(64);
+    expect(() => {
+      writeScheduleWord(w, 64, 1);
+    }).toThrow("sha256: message schedule index 64 out of bounds (0..63)");
   });
 });
 
