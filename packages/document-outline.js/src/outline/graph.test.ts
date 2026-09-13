@@ -20,6 +20,8 @@ import {
   contentHashV1,
   ContainsCycleError,
   defaultExtractionPolicy,
+  dpAt,
+  entryIdAscComparator,
   insertEdge,
   insertNode,
   NodeKindMismatchError,
@@ -4028,5 +4030,206 @@ describe("insertEdge sibling filtering by kind, not just from", () => {
       .map((edge) => edge.to);
     // c lands right after a (between a and b), among the STYLED_BY siblings specifically -- not appended past the single unrelated CONTAINS sibling, and not refused as ambiguous by conflating the two kinds.
     expect(styledBy).toEqual([a.id, c.id, b.id]);
+  });
+});
+
+describe("entryIdAscComparator", () => {
+  it("returns -1 when a sorts before b, 1 when after, and 0 when equal", () => {
+    expect(entryIdAscComparator({ id: "1" }, { id: "2" })).toBe(-1);
+    expect(entryIdAscComparator({ id: "2" }, { id: "1" })).toBe(1);
+    expect(entryIdAscComparator({ id: "1" }, { id: "1" })).toBe(0);
+  });
+
+  it("leaves a genuine tie's relative order exactly as it was, since Array.prototype.sort is stable", () => {
+    // Two entries sharing the identical id (a real content-hash tie), interleaved with a third, distinct id: a correct comparator returns 0 for the tie and lets the stable sort keep the two tied entries in their original relative order either side of the distinct one; a broken tie-break (mutating the `a.id > b.id` branch to `true`, `false`, `>=`, or `<=`) can only ever be observed by an ASSIGNED marker surviving on the tied entries themselves, since the tied ids are otherwise indistinguishable in the output.
+    const items = [
+      { id: "b", marker: "first-b" },
+      { id: "a", marker: "only-a" },
+      { id: "b", marker: "second-b" },
+    ];
+    const sorted = [...items].sort(entryIdAscComparator);
+    expect(sorted.map((item) => item.id)).toEqual(["a", "b", "b"]);
+    // The two tied "b" entries keep their original relative order (first-b before second-b): a stable sort's own guarantee, and the only way this branch's tie behaviour is genuinely observable.
+    expect(sorted.map((item) => item.marker)).toEqual([
+      "only-a",
+      "first-b",
+      "second-b",
+    ]);
+  });
+});
+
+describe("dpAt", () => {
+  it("returns the value at a valid index", () => {
+    expect(dpAt([10, 20, 30], 1)).toBe(20);
+  });
+
+  it("throws with the exact out-of-bounds message for an index past the row's length", () => {
+    expect(() => dpAt([10, 20, 30], 3)).toThrow(
+      "reconcileChildren: dp lookup index 3 out of bounds (0..2)",
+    );
+  });
+
+  it("throws with the exact out-of-bounds message for a negative index", () => {
+    expect(() => dpAt([10, 20, 30], -1)).toThrow(
+      "reconcileChildren: dp lookup index -1 out of bounds (0..2)",
+    );
+  });
+});
+
+describe("reconcileChildren's originalSiblings: sorted and filtered, not raw creation order", () => {
+  const EMPTY_GRAPH: PropertyGraph = { nodes: [], edges: [] };
+
+  it("reads pre-existing CONTAINS edges by their own sorted orderKey, not by the edges array's own literal order", () => {
+    const leafA = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const leafB = insertNode(leafA.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "B." }] },
+    });
+    const leafC = insertNode(leafB.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "C." }] },
+    });
+    const sectionId = contentHashV1({
+      kind: "section",
+      children: [leafA.id, leafB.id, leafC.id],
+    });
+    const a = {
+      from: sectionId,
+      to: leafA.id,
+      kind: "CONTAINS" as const,
+      orderKey: orderKeys.orderKeyForIndex(0),
+    };
+    const b = {
+      from: sectionId,
+      to: leafB.id,
+      kind: "CONTAINS" as const,
+      orderKey: orderKeys.orderKeyForIndex(1),
+    };
+    const c = {
+      from: sectionId,
+      to: leafC.id,
+      kind: "CONTAINS" as const,
+      orderKey: orderKeys.orderKeyForIndex(2),
+    };
+    // Deliberately out of orderKey order in the edges ARRAY itself (c, a, b): reading originalSiblings by array order would see existingSeq = [C, A, B], which is NOT a subsequence of the requested [A, B, C] (C can never precede A in a subsequence of [A, B, C]), so an unsorted read would fail to match all three and mint a spurious extra edge instead of recognising every position as already wired.
+    const graph: PropertyGraph = { nodes: leafC.graph.nodes, edges: [c, a, b] };
+    const result = insertNode(graph, {
+      kind: "section",
+      properties: { kind: "section" },
+      children: [leafA.id, leafB.id, leafC.id],
+    });
+    const contains = result.graph.edges.filter(
+      (edge) => edge.from === sectionId && edge.kind === "CONTAINS",
+    );
+    expect(contains).toHaveLength(3);
+  });
+
+  it("ignores a decoy edge sharing the owner id or the CONTAINS kind but not both", () => {
+    const leafA = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const other = insertNode(leafA.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "Other." }] },
+    });
+    const sectionId = contentHashV1({
+      kind: "section",
+      children: [leafA.id],
+    });
+    const genuine = {
+      from: sectionId,
+      to: leafA.id,
+      kind: "CONTAINS" as const,
+      orderKey: orderKeys.orderKeyForIndex(0),
+    };
+    // A decoy from a DIFFERENT owner, still CONTAINS -- must never be read as one of sectionId's own existing siblings.
+    const decoyFrom = {
+      from: other.id,
+      to: leafA.id,
+      kind: "CONTAINS" as const,
+      orderKey: orderKeys.orderKeyForIndex(0),
+    };
+    // A decoy from sectionId, but a different kind -- must never be read as a CONTAINS sibling.
+    const decoyKind = {
+      from: sectionId,
+      to: leafA.id,
+      kind: "STYLED_BY" as const,
+      orderKey: orderKeys.orderKeyForIndex(0),
+    };
+    const graph: PropertyGraph = {
+      nodes: other.graph.nodes,
+      edges: [genuine, decoyFrom, decoyKind],
+    };
+    const result = insertNode(graph, {
+      kind: "section",
+      properties: { kind: "section" },
+      children: [leafA.id],
+    });
+    const contains = result.graph.edges.filter(
+      (edge) => edge.from === sectionId && edge.kind === "CONTAINS",
+    );
+    // Only the one genuine edge counts as already wired -- the decoys neither satisfy the request a second time nor get treated as extra siblings to reconcile against.
+    expect(contains).toHaveLength(1);
+  });
+});
+
+describe("insertEdge: the CONTAINS cycle check is scoped to CONTAINS edges alone", () => {
+  const EMPTY_GRAPH: PropertyGraph = { nodes: [], edges: [] };
+
+  it("does not run the cycle check for a non-CONTAINS edge, even when attaching it would close a CONTAINS cycle", () => {
+    const x = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "X." }] },
+    });
+    const y = insertNode(x.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "Y." }] },
+    });
+    // x CONTAINS y, so y reaches x's own would-be child position: attaching a further CONTAINS edge y -> x would close a cycle.
+    const wired = insertEdge(y.graph, x.id, y.id);
+    expect(() => insertEdge(wired, y.id, x.id)).toThrow(ContainsCycleError);
+    // The identical y -> x attachment as a STYLED_BY edge is not a CONTAINS edge at all, so the cycle check must never run for it -- it succeeds even though "x" (the `to`) already reaches "y" (the `from`) via the CONTAINS edge above.
+    const styled = insertEdge(wired, y.id, x.id, { kind: "STYLED_BY" });
+    const styledEdge = styled.edges.find(
+      (edge) => edge.from === y.id && edge.kind === "STYLED_BY",
+    );
+    expect(styledEdge?.to).toBe(x.id);
+  });
+});
+
+describe("insertEdge sorts its own siblings by orderKey before resolving a position", () => {
+  it("bisects against the sibling with the actual highest orderKey, not the edges array's own last element", () => {
+    const a = {
+      from: "p",
+      to: "a",
+      kind: "STYLED_BY" as const,
+      orderKey: orderKeys.orderKeyForIndex(0),
+    };
+    const b = {
+      from: "p",
+      to: "b",
+      kind: "STYLED_BY" as const,
+      orderKey: orderKeys.orderKeyForIndex(1),
+    };
+    const c = {
+      from: "p",
+      to: "c",
+      kind: "STYLED_BY" as const,
+      orderKey: orderKeys.orderKeyForIndex(2),
+    };
+    // Deliberately out of orderKey order in the edges ARRAY (c, a, b): if insertEdge read its siblings unsorted, "end" would bisect after the array's own last element (b, orderKeyForIndex(1)) rather than the sibling with the actual highest orderKey (c, orderKeyForIndex(2)).
+    const graph: PropertyGraph = { nodes: [], edges: [c, a, b] };
+    const result = insertEdge(graph, "p", "d", {
+      kind: "STYLED_BY",
+      position: { at: "end" },
+    });
+    const inserted = result.edges.find((edge) => edge.to === "d");
+    expect(inserted).toBeDefined();
+    // A correctly-sorted "end" insertion sits strictly after every existing sibling, c included; an unsorted read would bisect only past b, landing this key before c instead.
+    expect(inserted!.orderKey > c.orderKey).toBe(true);
   });
 });
