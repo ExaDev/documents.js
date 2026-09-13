@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { mountWithMantine } from "../test/mountComponent";
 import { MarkdownPreview, type MarkdownPreviewProps } from "./MarkdownPreview";
+import { previewFrame } from "./previewPanel.css";
 
 let unmount: (() => void) | undefined;
 
@@ -131,6 +132,20 @@ describe("MarkdownPreview", () => {
     });
     expect(html).toContain("<pre");
     expect(html).toContain("<code>const x = 1;</code>");
+  });
+
+  it("renders a run carrying a fontFamily as inline code, the markdown-specific reading of that field", () => {
+    const html = renderPreview({
+      label: "L",
+      format: "markdown",
+      content: wordprocessingDocument([
+        paragraph({
+          runs: [{ text: "inline", fontFamily: "monospace" }],
+        }),
+      ]),
+    });
+    expect(html).toContain("<code");
+    expect(html).toContain("inline");
   });
 
   it("renders a horizontal-rule paragraph as an hr", () => {
@@ -307,5 +322,10 @@ describe("MarkdownPreview", () => {
     });
     const matches = [...html.matchAll(/<ul/g)];
     expect(matches.length).toBe(2);
+  });
+
+  it("gives the preview frame the scrollable, padded variant", () => {
+    const html = renderPreview({ label: "L", format: "markdown" });
+    expect(html).toContain(previewFrame({ scroll: true, padded: true }));
   });
 });
