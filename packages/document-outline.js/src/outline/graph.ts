@@ -72,6 +72,14 @@ export function orderKeyAscComparator(
   return a.orderKey < b.orderKey ? -1 : a.orderKey > b.orderKey ? 1 : 0;
 }
 
+// Ascending id comparator for entry nodes awaiting emission (DocumentProjection's own pendingEntryNodes below): a tie (two entries content-hashing to the identical id) leaves their relative order exactly as pushed, since Array.prototype.sort is stable and a genuine tie can only ever be reordered by a broken comparator, never by a correct one. Exported purely for the direct unit test below pinning its exact -1/0/1 return values, including the tie case, the same reason orderKeyAscComparator above is exported.
+export function entryIdAscComparator(
+  a: { readonly id: string },
+  b: { readonly id: string },
+): number {
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
 // The dedup/identity key for one edge -- (from, to, kind, orderKey, path) -- shared by DocumentProjection's own addEdge below and the write API's rebalancing insert further down, so the two never drift into two different notions of "the same edge".
 function edgeKey(edge: GraphEdge): string {
   // No special-casing for a missing `path`: JSON.stringify(undefined) is the JS value `undefined`, which interpolates as the literal text "undefined" here -- a placeholder that can never collide with a genuine JSON.stringify(path) output, since PropertyPath is always a JSON array and JSON.stringify of an array always starts with `[`.
@@ -416,9 +424,7 @@ class DocumentProjection {
       kind: "documentTree",
       documentKind: this.pkg.kind,
     });
-    for (const node of this.pendingEntryNodes.sort((a, b) =>
-      a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
-    )) {
+    for (const node of this.pendingEntryNodes.sort(entryIdAscComparator)) {
       this.addNode(node);
     }
 
@@ -701,6 +707,16 @@ export class NodeKindMismatchError extends Error {
 // A missing occurrence's anchor is the `originalSiblings` index of the nearest LATER requested position already matched, or `originalSiblings.length` (past the end) when nothing later matched -- the same "before the next already-wired position, or at the end" rule as before, just resolved against a fixed index rather than a value that can drift or repeat. That anchor index is translated into the anchor's CURRENT position among `id`'s live CONTAINS siblings by counting how many of this reconcile's OWN prior insertions already landed at or before the same anchor index: `originalSiblings` itself is never reordered, so every earlier insertion's own (equally fixed) anchor index is exactly how far it shifted everything from that index onward. This is what lets a run of several consecutive missing occurrences sharing one anchor interleave in requested order -- each is placed by a running numeric offset, never re-resolved by value against the by-then-mutated live sibling list.
 //
 // The insertion itself reuses insertEdge's own CONTAINS-cycle check, bisection, and rebalance-on-exhaustion primitives directly (`assertNoContainsCycle`, `boundedOrderKey`, `rebalancedInsert`) rather than calling insertEdge with a before/after position -- that position parameter is exactly the value-based lookup this function must not go through, so the same guarantees are reached by index instead of by name. Only a position classified as missing is ever placed this way -- an already-matched occurrence is never moved. Walking CONTAINS edges from `id` after reconciliation reproduces the exact requested `children` list, in order and multiplicity both, whenever `originalSiblings`' own target sequence is a genuine subsequence of `children` -- a strictly wider guarantee than round 9's per-id matcher offered, since it now holds for any order-consistent interleaving across ids, not only a prefix of each id's own occurrences. When `originalSiblings` is not even a subsequence of `children` (a genuine cross-id ordering conflict, existing containment wired in a relative order the request cannot embed), reconciliation still terminates safely and never inflates any id's multiplicity past `max(existingCount, requestedCount)`, but the resulting order is not guaranteed to equal `children`, because existing containment is never reordered to fit a new request -- reconciliation inserts what is missing around what already exists, it does not re-sort what already exists. Requesting an identical `children` list twice stays the no-op past-the-first-call behaviour this module has always promised, because every position is then classified as already matched and none are inserted.
+// Bounds-checked in place of a bare `row[index]!`: every legitimate row/column pair reconcileChildren's own backtrack computes stays within a dp row's real dimensions, so this can only ever throw if the backtrack's own loop bounds were themselves wrong -- a genuine correctness bug, not a defensive "just in case". That throw is exactly what makes a boundary mutation of the backtrack's own `i`/`j` loop conditions (e.g. `<` weakened to `<=`) an observable failure instead of a silently-absorbed one-past-the-end no-op: `row[index]` alone would just read `undefined` and carry on. Hoisted out of reconcileChildren's own closure and exported purely so the direct unit test below can prove the throw itself fires, since no legitimate call through reconcileChildren can ever actually trigger it.
+export function dpAt(row: readonly number[], index: number): number {
+  if (index < 0 || index >= row.length) {
+    throw new Error(
+      `reconcileChildren: dp lookup index ${String(index)} out of bounds (0..${String(row.length - 1)})`,
+    );
+  }
+  return row[index]!;
+}
+
 function reconcileChildren(
   graph: PropertyGraph,
   id: string,
@@ -719,15 +735,6 @@ function reconcileChildren(
   const dp: number[][] = Array.from({ length: existingSeq.length + 1 }, () =>
     new Array<number>(children.length + 1).fill(0),
   );
-  // Bounds-checked in place of a bare `row[index]!`: every legitimate row/column pair the backtrack below computes stays within dp's own real dimensions, so this can only ever throw if the backtrack's own loop bounds were themselves wrong -- a genuine correctness bug, not a defensive "just in case". That throw is exactly what makes a boundary mutation of the backtrack's own `i`/`j` loop conditions (e.g. `<` weakened to `<=`) an observable failure instead of a silently-absorbed one-past-the-end no-op: `row[index]` alone would just read `undefined` and carry on.
-  const dpAt = (row: readonly number[], index: number): number => {
-    if (index < 0 || index >= row.length) {
-      throw new Error(
-        `reconcileChildren: dp lookup index ${String(index)} out of bounds (0..${String(row.length - 1)})`,
-      );
-    }
-    return row[index]!;
-  };
   for (let i = existingSeq.length - 1; i >= 0; i -= 1) {
     for (let j = children.length - 1; j >= 0; j -= 1) {
       dp[i]![j] =
@@ -778,15 +785,15 @@ function reconcileChildren(
     leftoverPointer.set(childId, pointer + 1);
   });
 
-  // A missing position's anchor: the `originalSiblings` index of the nearest LATER requested position already matched, or `originalSiblings.length` (past the end) when nothing later matched. Iterating `children.entries()` rather than a separately-bounded `for` loop ties the scan's own end directly to the real array it walks, so there is no independent "later < children.length" comparison left for a boundary mutation to weaken without also changing what `.entries()` itself iterates.
-  const anchorFor = (position: number): number => {
-    for (const [later] of children.entries()) {
-      if (later <= position) continue;
-      const candidate = matchedIndex.get(later);
-      if (candidate !== undefined) return candidate;
-    }
-    return originalSiblings.length;
-  };
+  // A missing position's anchor: the `originalSiblings` index of the nearest LATER requested position already matched, or `originalSiblings.length` (past the end) when nothing later matched. Precomputed once, back to front, over `[...children.entries()].reverse()` rather than scanned per call with an explicit "later > position" comparison: `position` is never itself a key in `matchedIndex` (this map's only two writers, the LCS backtrack and the anti-inflation pass above, both write exclusively at positions that end up matched, and this array is only ever read for a position the caller has already confirmed is NOT in `matchedIndex`), so any comparison boundary drawn at "later === position" is unobservable by construction -- not a gap in this function's tests, a fact about what `matchedIndex` can ever contain. Anchoring the traversal to `children`'s own reversed entries, rather than a separately-mutable length/index pair, means there is no boundary comparison left for a mutation to weaken at all.
+  const anchorAt = new Array<number>(children.length);
+  let runningAnchor = originalSiblings.length;
+  for (const [position] of [...children.entries()].reverse()) {
+    anchorAt[position] = runningAnchor;
+    const matchedHere = matchedIndex.get(position);
+    if (matchedHere !== undefined) runningAnchor = matchedHere;
+  }
+  const anchorFor = (position: number): number => anchorAt[position]!;
 
   // Every anchor index this loop has already inserted an occurrence at or before, in insertion order -- what lets each new insertion compute its own CURRENT position (its fixed anchor index, shifted right by however many earlier insertions in this same reconcile landed at or before that same index) without ever re-deriving a position from the live sibling list by value.
   const insertedAtOrBefore: number[] = [];
