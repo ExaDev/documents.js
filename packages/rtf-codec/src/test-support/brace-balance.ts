@@ -8,12 +8,17 @@ function countGroupBraces(rtf: string): {
   readonly open: number;
   readonly close: number;
 } {
-  // Stripping every two-character escape (\\, \{, \}) first, left to right, non-overlapping, is exactly what a character-by-character scan tracking "am I mid-escape" would do -- RTF's escapes are never longer than two characters, so there is no case a greedy global regex consumes differently. What remains is real, unescaped `{`/`}` delimiters (and any untouched backslash-word sequences, e.g. \b, whose own trailing characters are never brace characters), so counting them by splitting is exact.
-  const withoutEscapes = rtf.replace(/\\[\\{}]/g, "");
-  return {
-    open: withoutEscapes.split("{").length - 1,
-    close: withoutEscapes.split("}").length - 1,
-  };
+  let open = 0;
+  let close = 0;
+  // One pass, matching either a two-character escape (\\, \{, \}) or a single real brace, left to right and non-overlapping -- exactly what a character-by-character scan tracking "am I mid-escape" would do, since RTF's escapes are never longer than two characters. Only the second alternative's own match is ever compared against "{"/"}"; a matched escape pair is a two-character string that can never equal either, so it is correctly skipped without needing its own branch.
+  for (const [token] of rtf.matchAll(/\\[\\{}]|[{}]/g)) {
+    if (token === "{") {
+      open += 1;
+    } else if (token === "}") {
+      close += 1;
+    }
+  }
+  return { open, close };
 }
 
 export function expectBalancedBraces(rtf: string): void {

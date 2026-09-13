@@ -27,6 +27,17 @@ describe("expectBalancedBraces", () => {
     expectBalancedBraces("{\\rtf1 \\{not a group\\}}");
   });
 
+  it("does not count an escaped open brace as a real delimiter, even with no escaped close to balance it", () => {
+    // Deliberately asymmetric (one escaped \{ and no matching escaped \}): a reader that mishandled the escape check symmetrically -- unescaping every \{/\} alike, or none at all -- would still land on equal open/close counts for a string carrying one of each, exactly like the test above. Only a genuinely correct per-position escape check gets this one right.
+    expectBalancedBraces("{\\rtf1 \\{a}");
+  });
+
+  it("gives its own assertion a message naming what failed, not the default diff alone", () => {
+    expect(() => {
+      expectBalancedBraces("{\\rtf1}}");
+    }).toThrow("unbalanced RTF braces in minted output");
+  });
+
   it("does not treat the brace following an escaped backslash as escaped", () => {
     // \\{ is an escaped backslash (\\) followed by a REAL opening brace, not an escaped brace -- the two-character escape must consume exactly \\ and stop there, not swallow the { that follows it too.
     expect(() => {
