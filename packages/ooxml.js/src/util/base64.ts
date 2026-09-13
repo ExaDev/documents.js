@@ -16,8 +16,9 @@ export function bytesToBase64(bytes: Uint8Array<ArrayBuffer>): string {
   const len = bytes.length;
   for (let i = 0; i < len; i = i + 3) {
     const b0 = bytes[i]!;
-    const b1 = i + 1 < len ? bytes[i + 1]! : 0;
-    const b2 = i + 2 < len ? bytes[i + 2]! : 0;
+    // No `i + 1 < len ? ... : 0` (or the equivalent for b2) guard needed here: bytes[i + 1]/bytes[i + 2] already read back `undefined` past the array's own end, and the one use of each that is not itself guarded by its own boundary ternary below (the `b1 >> 4` and `b2 >> 6` shifts) coerces `undefined` to 0 via JS's own bitwise-operator ToInt32 conversion, the same result an explicit 0 fallback would give -- so no input changes the output, only Uint8Array's own out-of-range-is-undefined semantics.
+    const b1 = bytes[i + 1]!;
+    const b2 = bytes[i + 2]!;
     out += TABLE.charAt(b0 >> 2);
     out += TABLE.charAt(((b0 & 0x03) << 4) | (b1 >> 4));
     out += i + 1 < len ? TABLE.charAt(((b1 & 0x0f) << 2) | (b2 >> 6)) : "=";
