@@ -437,7 +437,8 @@ describe("Shd", () => {
     const diagCross = [
       0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x13, 0x00,
     ];
-    expect(readShd(bytes(diagCross), 0)).toEqual({
+    // toStrictEqual, not toEqual: with both colours automatic, readShd must omit foregroundColor/backgroundColor entirely rather than state them present-but-undefined -- toEqual treats the two the same and would not catch a mutant that always spreads the key in.
+    expect(readShd(bytes(diagCross), 0)).toStrictEqual({
       kind: "pattern",
       patternType: "diagonalCross",
     });
