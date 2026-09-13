@@ -461,11 +461,11 @@ describe("formFieldContentControl", () => {
       ).toMatchObject({ checked: false });
     });
 
-    it("sets no options on a checkbox even when its own listItems is non-empty", () => {
-      // listItems is a dropDown-only concern; a checkbox's controlType must gate the options branch on its own, not just fall through because some unrelated FFData field happens to be populated.
+    it("sets no options on a plain-text field even when its own listItems is non-empty", () => {
+      // controlType==="checkbox" is its own separate if-branch above, so a plainText field (neither checkbox nor dropDown) is what actually reaches this else-if's own condition -- listItems being non-empty must not be sufficient on its own to enter the dropDown branch without controlType actually being "dropDown".
       expect(
         formFieldContentControl(
-          "FORMCHECKBOX",
+          "FORMTEXT",
           formFieldData({ listItems: ["a"] }),
         ),
       ).not.toHaveProperty("options");

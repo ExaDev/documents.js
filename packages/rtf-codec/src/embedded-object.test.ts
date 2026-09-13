@@ -202,7 +202,7 @@ describe("readEmbeddedObjectData", () => {
   });
 
   it("finds the Package stream by name, not merely by being present in the compound file", () => {
-    // "Package" is deliberately the SECOND stream here -- picking whichever stream happens to come first, rather than the one actually named "Package", would hand readOlePackage bytes it cannot parse.
+    // [MS-CFB] 2.6.4's own directory-entry sort compares by name LENGTH first, then content, so a name shorter than "Package" (7 characters) is what actually guarantees it sorts, and therefore reads back, before "Package" -- picking whichever stream happens to come first, rather than the one actually named "Package", would hand readOlePackage bytes it cannot parse.
     const packageBytes = writeOlePackage({
       label: "test.json",
       sourcePath: "",
@@ -210,7 +210,7 @@ describe("readEmbeddedObjectData", () => {
       fileBytes: new TextEncoder().encode(JSON.stringify(embedded)),
     });
     const nativeData = writeCompoundFile([
-      { path: "NotPackage", bytes: new TextEncoder().encode("not a package") },
+      { path: "AAA", bytes: new TextEncoder().encode("not a package") },
       { path: "Package", bytes: packageBytes },
     ]);
     const bytes = buildEmbeddedObjectBytes({
