@@ -88,13 +88,17 @@ describe("readRecords", () => {
 
   it("rejects a truncated record header", () => {
     // Three bytes cannot carry a four-byte header, so the size field is unreadable. Failing loudly beats reporting a record whose length was guessed.
-    expect(() => readRecords(bytes(0x09, 0x08, 0x04))).toThrow(BiffFormatError);
+    expect(() => readRecords(bytes(0x09, 0x08, 0x04))).toThrow(
+      "record header at offset 0 runs past the end of the 3-byte stream",
+    );
   });
 
   it("rejects a record whose declared size runs past the end of the stream", () => {
     const stream = bytes(0x09, 0x08, 0x10, 0x00, 0x01, 0x02);
 
-    expect(() => readRecords(stream)).toThrow(BiffFormatError);
+    expect(() => readRecords(stream)).toThrow(
+      "record 0x809 at offset 0 declares 16 bytes of data, running past the end of the 6-byte stream",
+    );
   });
 
   it("rejects a record declaring more data than the framing permits", () => {
@@ -105,7 +109,15 @@ describe("readRecords", () => {
     view.setUint16(0, RECORD_BOF, true);
     view.setUint16(2, size, true);
 
-    expect(() => readRecords(stream)).toThrow(BiffFormatError);
+    expect(() => readRecords(stream)).toThrow(
+      "record 0x809 at offset 0 declares 8225 bytes of data, above the 8224-byte maximum",
+    );
+  });
+});
+
+describe("BiffFormatError", () => {
+  it("names itself BiffFormatError rather than the generic Error name", () => {
+    expect(new BiffFormatError("x").name).toBe("BiffFormatError");
   });
 });
 
