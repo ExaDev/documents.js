@@ -776,8 +776,6 @@ class RtfWriter {
       case "constructEnd":
         this.closeConstruct();
         return;
-      default:
-        return;
     }
   }
 
@@ -813,9 +811,8 @@ class RtfWriter {
     this.raw(" ");
     // A run-scoped construct is a boundary between runs, not a property of one, so its two halves are emitted at the run positions its half-open range names. Closes at a position run before opens, matching the block-marker rule: an extent ending where another begins must not enclose it.
     const bookmarks = (paragraph.constructs ?? []).filter(isBookmarkExtent);
-    const revisions = (paragraph.constructs ?? []).filter(
-      (extent) => extent.descriptor.kind === "provenance",
-    );
+    // Not pre-filtered to provenance extents here: revisionsCovering's own final type-guard filter already narrows to ProvenanceDescriptor, so filtering by kind twice would be a redundant, equivalent-mutant-prone AST node with no effect on the final result -- the identical reasoning revisionsCovering's own comment already gives for not repeating its range filter's job.
+    const constructs = paragraph.constructs ?? [];
     const formFields = selectNestableFormFields(
       (paragraph.constructs ?? []).filter(isContentControlExtent),
       this.sink,
@@ -825,7 +822,7 @@ class RtfWriter {
     for (const [index, run] of paragraph.runs.entries()) {
       this.writeRunBoundaries(bookmarks, index);
       this.writeFormFieldBoundaries(formFields, index, openedFormFields);
-      this.writeRun(run, revisionsCovering(revisions, index));
+      this.writeRun(run, revisionsCovering(constructs, index));
     }
     this.writeRunBoundaries(bookmarks, paragraph.runs.length);
     this.writeFormFieldBoundaries(
