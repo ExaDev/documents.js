@@ -23,7 +23,8 @@ import {
   FIB_FC_LCB_BLOB_OFFSET,
   FIB_LKEY_OFFSET,
 } from "./fib/offsets";
-import { readDocContent, readDocStreams } from "./read";
+import { groupAt, readDocContent, readDocStreams } from "./read";
+import type { ParagraphEntry } from "./text/paragraphs";
 import { compoundFile } from "./test-support/cfb";
 import { buildDoc } from "./test-support/doc";
 import { buildFib } from "./test-support/fib";
@@ -1041,6 +1042,73 @@ describe("readDocContent", () => {
   });
 });
 
+// Sets one FibRgFcLcb97 lcb field directly in a well-formed document's own WordDocument stream bytes, for exercising a specific bounds-check label readDocContent names when the corresponding structure runs past the Table stream -- a well-formed buildDoc fixture never produces an out-of-range lcb on its own.
+function docWithLcb(valueIndex: number, lcb: number): Uint8Array<ArrayBuffer> {
+  const bytes = buildDoc({ paragraphs: [{ runs: [{ text: "x" }] }] });
+  const { wordDocument, table } = readDocStreams(bytes);
+  const patched = new Uint8Array(wordDocument);
+  new DataView(patched.buffer).setUint32(
+    FIB_FC_LCB_BLOB_OFFSET + valueIndex * 4,
+    lcb,
+    true,
+  );
+  return compoundFile([
+    { path: "WordDocument", bytes: patched },
+    { path: "1Table", bytes: new Uint8Array(table) },
+  ]);
+}
+
+describe("readDocContent's own bounds labels", () => {
+  it("names 'Clx in the Table stream' when lcbClx runs past the Table stream", () => {
+    expect(() =>
+      readDocContent(docWithLcb(FC_LCB_VALUE_INDEX.lcbClx, 0x7fffffff)),
+    ).toThrow(/Clx in the Table stream/);
+  });
+
+  it("names 'STSH in the Table stream' when lcbStshf runs past the Table stream", () => {
+    expect(() =>
+      readDocContent(docWithLcb(FC_LCB_VALUE_INDEX.lcbStshf, 0x7fffffff)),
+    ).toThrow(/STSH in the Table stream/);
+  });
+
+  it("names 'PlcBteChpx in the Table stream' when lcbPlcfBteChpx runs past the Table stream", () => {
+    expect(() =>
+      readDocContent(docWithLcb(FC_LCB_VALUE_INDEX.lcbPlcfBteChpx, 0x7fffffff)),
+    ).toThrow(/PlcBteChpx in the Table stream/);
+  });
+
+  it("names 'PlcBtePapx in the Table stream' when lcbPlcfBtePapx runs past the Table stream", () => {
+    expect(() =>
+      readDocContent(docWithLcb(FC_LCB_VALUE_INDEX.lcbPlcfBtePapx, 0x7fffffff)),
+    ).toThrow(/PlcBtePapx in the Table stream/);
+  });
+
+  it("names 'SttbfFfn in the Table stream' when lcbSttbfFfn runs past the Table stream", () => {
+    expect(() =>
+      readDocContent(docWithLcb(FC_LCB_VALUE_INDEX.lcbSttbfFfn, 0x7fffffff)),
+    ).toThrow(/SttbfFfn in the Table stream/);
+  });
+
+  it("skips STSH entirely when lcbStshf is exactly 0, rather than treating it as present", () => {
+    const bytes = docWithLcb(FC_LCB_VALUE_INDEX.lcbStshf, 0);
+    expect(() => readDocContent(bytes)).not.toThrow();
+  });
+});
+
+describe("groupAt", () => {
+  it("returns the group at a real index", () => {
+    const groups: ParagraphEntry[][] = [[], []];
+    expect(groupAt(groups, 1)).toBe(groups[1]);
+  });
+
+  it("names the actual index and group count when the index has no group at all", () => {
+    const groups: ParagraphEntry[][] = [[]];
+    expect(() => groupAt(groups, 1)).toThrow(
+      /internal defect: section index 1 has no group despite 1 sections/,
+    );
+  });
+});
+
 describe("readDocStreams", () => {
   it("selects the Table stream FibBase.fWhichTblStm names", () => {
     const streams = readDocStreams(
@@ -1056,6 +1124,16 @@ describe("readDocStreams", () => {
     ]);
     expect(() => readDocStreams(bytes)).toThrow(DocFormatError);
     expect(() => readDocStreams(bytes)).toThrow(/WordDocument/);
+  });
+
+  it("names every stream the file actually holds, comma-separated, when WordDocument is missing", () => {
+    const bytes = compoundFile([
+      { path: "Workbook", bytes: new Uint8Array(16) },
+      { path: "ObjectPool", bytes: new Uint8Array(16) },
+    ]);
+    expect(() => readDocStreams(bytes)).toThrow(
+      /it holds: Workbook, ObjectPool/,
+    );
   });
 
   it("rejects a document whose FibBase selects a Table stream the file lacks", () => {
