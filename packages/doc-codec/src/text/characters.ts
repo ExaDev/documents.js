@@ -102,21 +102,13 @@ export function readTextRange(
   }
 
   return {
-    // Chunked rather than one spread call: String.fromCharCode is variadic, and a document of hundreds of thousands of characters would exceed the argument-count limit of every engine if applied in one go.
+    // Mapped one code unit at a time rather than spread into a single variadic String.fromCharCode call: that call's argument count would grow with the document's own character count, and a document of hundreds of thousands of characters would exceed the argument-count limit of every engine.
     text: fromCodeUnits(codeUnits),
     fcs,
     cpStart,
   };
 }
 
-const FROM_CHAR_CODE_CHUNK = 4096;
-
 function fromCodeUnits(codeUnits: readonly number[]): string {
-  let out = "";
-  for (let start = 0; start < codeUnits.length; start += FROM_CHAR_CODE_CHUNK) {
-    out += String.fromCharCode(
-      ...codeUnits.slice(start, start + FROM_CHAR_CODE_CHUNK),
-    );
-  }
-  return out;
+  return codeUnits.map((codeUnit) => String.fromCharCode(codeUnit)).join("");
 }
