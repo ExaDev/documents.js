@@ -248,6 +248,14 @@ describe("segmentPdfRegions", () => {
     expect(regions).toHaveLength(2);
     expect(regions.map((region) => region.bounds.xPt)).toEqual([50, 400]);
   });
+
+  it("leaves a genuine vertical tie already listed left-to-right still left-to-right", () => {
+    // The mirror image of the tie-break test above, with the two items already given in the CORRECT (ascending-x) order: a comparator that sums the two x values instead of subtracting (both xPt here being positive, the sum is always positive) would force a SWAP on this exact pair regardless of which one is "a" and which is "b" in the comparison -- flipping this already-sorted pair into descending order, unlike the reversed-input test above, where that same wrong comparator happens to force the correct swap by coincidence.
+    const items = [line(50, 700, "A"), line(400, 700, "B")]; // already left-to-right
+    const regions = segmentPdfRegions(page(items));
+    expect(regions).toHaveLength(2);
+    expect(regions.map((region) => region.bounds.xPt)).toEqual([50, 400]);
+  });
 });
 
 // A BoundedItem whose own item content is irrelevant -- only `bounds` matters to the function under test (boundingBox, findCut, isRowAlignedGrid's own band-membership).
@@ -652,6 +660,16 @@ describe("findCut", () => {
     expect(cut?.groups[1]).toHaveLength(1);
   });
 
+  it("merging a touching item into the running band (not starting a new one) changes the band's own scale, and therefore the next gap's threshold", () => {
+    // item1 (scale 100) and item2 (scale 1) touch exactly at x=100 -- correctly merged into ONE band, whose own scale is median([100, 1]) = 50.5, comfortably absorbing the 10pt gap to item3 (threshold 1.5*50.5 = 75.75) so NO cut occurs at all. A boundary weakened from `>` to `>=` would instead start item2 as its OWN band (scale 1), making that band's own gap to item3 use threshold 1.5*1 = 1.5 -- well under the 10pt gap -- and wrongly cut. The two outcomes (no cut at all vs. a genuine cut) are as different as this function's return value can be.
+    const items = [
+      boundedAt({ minX: 0, maxX: 100, minY: 0, maxY: 100 }), // itemScale 100
+      boundedAt({ minX: 100, maxX: 101, minY: 0, maxY: 1 }), // touches item1's maxX exactly; itemScale 1
+      boundedAt({ minX: 111, maxX: 211, minY: 0, maxY: 100 }), // 10pt gap from item2's own maxX; itemScale 100
+    ];
+    expect(findCut(items, "x")).toBeUndefined();
+  });
+
   it("returns undefined when fewer than two bands result", () => {
     const items = [
       boundedAt({ minX: 0, maxX: 10, minY: 0, maxY: 10 }),
@@ -995,6 +1013,24 @@ describe("classifyFromLeafSignals", () => {
     const result = classifyFromLeafSignals(signals);
     expect(result.classification).toBe("mixed");
     expect(result.confidence).toBeCloseTo(1 - 0.1 / 0.15, 10);
+  });
+
+  it("does not call it mixed when the top score sits exactly at the second score plus the mixed margin", () => {
+    // Constructed so the comparison's two sides are BIT-IDENTICAL, not merely numerically close: tableScore is set via avgCells alone (cellRegularity 0, graphicFraction >= 0.5 so the grid-graphic bonus never applies), and figureScore (graphicFraction, hasImage false) is a pure pass-through -- multiplying/dividing by 2 is exact for a normal-range double, so doubling secondValue into avgCells's own "-1" term and later halving it back via tableScore's 0.5 weight recovers secondValue exactly (Sterbenz's lemma also guarantees the intervening `avgCells - 1` is computed with no rounding, since avgCells sits within a factor of 2 of 1). figureScore is then set to literally `secondValue + MIXED_MARGIN`, the identical expression classifyFromLeafSignals' own comparison evaluates. See classifyFromLeafSignals' own comment on why the comparison is written as `top < second + MIXED_MARGIN` rather than a gap-based `top - second < MIXED_MARGIN`, which can never be pinned this precisely.
+    const secondValue = 0.35;
+    const MIXED_MARGIN = 0.15;
+    const topValue = secondValue + MIXED_MARGIN;
+    const signals: LeafSignals = {
+      graphicFraction: topValue, // figureScore = topValue exactly; >= 0.5, so no grid-graphic bonus
+      hasImage: false,
+      lineCount: 2,
+      avgCells: 1 + secondValue * 2,
+      cellRegularity: 0,
+      xStartRegularity: 0,
+    };
+    const result = classifyFromLeafSignals(signals);
+    expect(result.classification).toBe("figure");
+    expect(result.confidence).toBeCloseTo(topValue, 10);
   });
 });
 

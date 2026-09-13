@@ -213,9 +213,8 @@ export function findCut(
   const groups: BoundedItem[][] = [bands[0] ?? []];
   let maxGap = Number.NEGATIVE_INFINITY;
   let cutSomewhere = false;
-  // Iterating bands.entries() rather than a manually bounded `for` loop means `band` is always a real, defined element -- there is no separately-mutable upper-bound comparison to get subtly wrong, and no need to guard against an undefined `band`.
+  // Iterating bands.entries() rather than a manually bounded `for` loop means `band` is always a real, defined element -- there is no separately-mutable upper-bound comparison to get subtly wrong, and no need to guard against an undefined `band`. No separate `index === 0` clause: `bandStats[index - 1]` for index 0 is `bandStats[-1]`, always `undefined` for a plain array, so the `previous === undefined` check immediately below already skips the first band on its own -- a second, explicit check for the identical case would be redundant, not an independent guard.
   for (const [index, band] of bands.entries()) {
-    if (index === 0) continue;
     const previous = bandStats[index - 1];
     const current = bandStats[index];
     if (previous === undefined || current === undefined) continue;
@@ -302,9 +301,8 @@ const CELL_GAP_EM = 1.2;
 // Counts the distinct horizontally-gapped clusters ("cells") on one line -- 1 for an ordinary run of prose, >1 when the line itself contains internal gaps wide enough to be separate table cells or aligned columns.
 export function cellsInLine(line: TextLine): number {
   let cells = 1;
-  // Iterating line.items.entries() rather than a manually bounded `for` loop means `current` is always a real, defined element -- no separately-mutable upper-bound comparison to get subtly wrong.
+  // Iterating line.items.entries() rather than a manually bounded `for` loop means `current` is always a real, defined element -- no separately-mutable upper-bound comparison to get subtly wrong. No separate `index === 0` clause: `line.items[index - 1]` for index 0 is `line.items[-1]`, always `undefined`, so `previous?.kind !== "text"` immediately below already continues past the first item on its own via the optional-chaining short-circuit -- a second, explicit check for the identical case would be redundant.
   for (const [index, current] of line.items.entries()) {
-    if (index === 0) continue;
     const previous = line.items[index - 1];
     if (previous?.kind !== "text" || current.kind !== "text") continue;
     const previousEnd = previous.xPt + (previous.widthPt ?? 0);
@@ -419,9 +417,10 @@ export function classifyFromLeafSignals(signals: LeafSignals): {
   if (top.score < SIGNAL_THRESHOLD) {
     return { classification: "unknown", confidence: clamp01(1 - top.score) };
   }
+  // Written as `top < second + MIXED_MARGIN` rather than the algebraically equivalent `top - second < MIXED_MARGIN`: with both scores constrained to [SIGNAL_THRESHOLD, 1], their difference always lands on a coarser floating-point grid (a multiple of the wider of the two operands' own ULP) than MIXED_MARGIN's own stored value needs, so no achievable pair of scores can ever make that subtraction equal MIXED_MARGIN bit-for-bit -- the `<`/`<=` boundary there is unobservable by construction, not by any gap in testing. Comparing against `second + MIXED_MARGIN` instead lets a test construct top as EXACTLY that same sum (the identical expression, so the two sides are bit-identical by construction), making the boundary genuinely reachable.
   if (
     second.score >= SIGNAL_THRESHOLD &&
-    top.score - second.score < MIXED_MARGIN
+    top.score < second.score + MIXED_MARGIN
   ) {
     return {
       classification: "mixed",
