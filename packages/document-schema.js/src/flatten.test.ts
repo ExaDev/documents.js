@@ -244,6 +244,36 @@ describe("flattenTree envelope handling", () => {
     });
   });
 
+  it("omits symbolTable entirely when the tree carries none, rather than an explicit undefined key", () => {
+    const flat = flattenTree({
+      kind: "wordprocessing",
+      metadata: { title: "No symbol table" },
+      children: [{ node: { kind: "section", ...SECTION }, children: [] }],
+    });
+    expect("symbolTable" in flat).toBe(false);
+  });
+
+  it("omits a spreadsheet's names entirely when the tree carries none, rather than an explicit undefined key", () => {
+    const flat = flattenTree({
+      kind: "spreadsheet",
+      metadata: {},
+      children: [],
+    });
+    expect("names" in flat).toBe(false);
+  });
+
+  it("carries a spreadsheet's names when present", () => {
+    const flat = flattenTree({
+      kind: "spreadsheet",
+      metadata: {},
+      names: [{ name: "Total", refersTo: "Sheet1!A1" }],
+      children: [],
+    });
+    if (flat.kind !== "spreadsheet")
+      throw new Error("expected a spreadsheet back");
+    expect(flat.names).toEqual([{ name: "Total", refersTo: "Sheet1!A1" }]);
+  });
+
   it("rebuilds a draw page's shapes-then-vectors partition and a sheet's images-then-embedded-objects one", () => {
     const vector = {
       kind: "rect",
@@ -295,5 +325,94 @@ describe("flattenTree envelope handling", () => {
     expect(
       sectionBlocks(wordprocessingPackage([decomposeSection(source)])),
     ).toEqual(source.blocks);
+  });
+
+  it("returns the paragraph unchanged (same runs array reference) when the resolved entry has no run half", () => {
+    // applyEntry short-circuits on an undefined run half rather than re-mapping the runs array through a no-op transform -- the identity, not just the values, must survive.
+    const original = paragraph("keeps its runs array");
+    const pkg = wordprocessingPackage(
+      [
+        {
+          node: { kind: "section", ...SECTION },
+          style: "s1",
+          children: [original],
+        },
+      ],
+      { s1: { paragraph: { indentLeftPt: 20 } } },
+    );
+    const [block] = sectionBlocks(pkg);
+    if (block?.kind !== "paragraph")
+      throw new Error("expected a paragraph back");
+    expect(block.runs).toBe(original.runs);
+  });
+
+  it("passes a non-paragraph, non-group leaf inside a list item's flow through unchanged", () => {
+    const image = {
+      kind: "image",
+      format: "png",
+      base64: "",
+      widthPt: 10,
+      heightPt: 10,
+    } as const;
+    const pkg = wordprocessingPackage([
+      {
+        node: { kind: "section", ...SECTION },
+        children: [
+          {
+            node: {
+              kind: "paragraph",
+              list: { level: 0 },
+              runs: [{ text: "item" }],
+            },
+            children: [image],
+          },
+        ],
+      },
+    ]);
+    expect(sectionBlocks(pkg)).toEqual([
+      { kind: "paragraph", list: { level: 0 }, runs: [{ text: "item" }] },
+      image,
+    ]);
+  });
+});
+
+describe("flattenTree's narrow group-kind guards only ever matter for a tree that violates its own type", () => {
+  // isHeadingGroup/isListGroup/isConstructGroup (unexported helpers) each narrow on their group's OWN node shape (headingLevel present, list present, or node.kind !== 'paragraph'). For any value that is genuinely SectionChild/ListChild-typed, TypeScript already guarantees these three conditions are mutually exclusive -- a HeadingGroupNode's anchor always carries headingLevel, a ListGroupNode's anchor always carries list, and a construct descriptor's kind is never 'paragraph'. The three tests below can only observe a wrong guard by handing flattenTree a tree that is NOT genuinely well-typed (a paragraph-anchored group carrying neither signal) -- exactly the "no re-validation, the parameter type already guarantees a real DocumentTree" contract this module's own top comment states flattenTree relies on, deliberately bypassed here with an explicit cast to prove the guard itself is still correct if that contract is ever violated.
+  it("a construct group is never misread as a heading or list anchor", () => {
+    const pkg: DocumentTree = {
+      kind: "wordprocessing",
+      metadata: {},
+      children: [
+        {
+          node: { kind: "section", ...SECTION },
+          children: [
+            {
+              node: { kind: "anchor", anchorType: "bookmark", name: "b1" },
+              children: [paragraph("inside the bookmark construct")],
+            },
+          ],
+        },
+      ],
+    };
+    expect(sectionBlocks(pkg)).toEqual([
+      {
+        kind: "constructStart",
+        descriptor: { kind: "anchor", anchorType: "bookmark", name: "b1" },
+      },
+      paragraph("inside the bookmark construct"),
+      { kind: "constructEnd" },
+    ]);
+  });
+
+  it("a paragraph-anchored group with neither a heading nor a list signal is never silently treated as a construct group", () => {
+    const illegalGroup = {
+      node: { kind: "paragraph", runs: [{ text: "anchor with no signal" }] },
+      children: [],
+    } as unknown as HeadingGroupNode;
+    const pkg = wordprocessingPackage([
+      { node: { kind: "section", ...SECTION }, children: [illegalGroup] },
+    ]);
+    // Real code: isHeadingGroup/isListGroup both false, isConstructGroup's own node.kind !== 'paragraph' check is also false (this node's kind IS 'paragraph'), so this group falls through every named branch and is pushed as the group object itself -- not wrapped as a construct, which is what a mutated isConstructGroup (unconditionally true past its node/children guard) would do instead.
+    expect(sectionBlocks(pkg)).toEqual([illegalGroup]);
   });
 });

@@ -158,6 +158,20 @@ describe("overlayStyleEntries", () => {
     expect("paragraph" in merged).toBe(false);
   });
 
+  it("emits no run key when neither side carries a run half", () => {
+    const merged = overlayStyleEntries(
+      { paragraph: { alignment: "left" } },
+      {},
+    );
+    expect("run" in merged).toBe(false);
+  });
+
+  it("returns the inner run object by reference when outer carries no run half", () => {
+    const innerRun = { bold: true };
+    const merged = overlayStyleEntries({}, { run: innerRun });
+    expect(merged.run).toBe(innerRun);
+  });
+
   it("explicitly-present-undefined inner values do not overwrite outer -- absence is not a value", () => {
     const merged = overlayStyleEntries(BODY, {
       paragraph: { alignment: undefined },
@@ -240,5 +254,328 @@ describe("applyParagraphStyleProperties and applyRunStyleProperties", () => {
     const effective = applyRunStyleProperties({ bold: true }, run);
     expect(effective.hyperlink).toBe("https://example.com");
     expect(effective.text).toBe("x");
+  });
+});
+
+describe("overlayStyleEntries isolates each paragraph property's own overlay guard", () => {
+  const outerParagraph: StyleEntry = {
+    paragraph: {
+      list: { level: 0 },
+      spacingBeforePt: 1,
+      lineSpacing: 1.5,
+      indentLeftPt: 10,
+      indentFirstLinePt: 20,
+    },
+  };
+
+  it("list: fills from inner, and leaves spacingBeforePt untouched", () => {
+    const merged = overlayStyleEntries(outerParagraph, {
+      paragraph: { list: { level: 1 } },
+    });
+    expect(merged.paragraph?.list).toEqual({ level: 1 });
+    expect(merged.paragraph?.spacingBeforePt).toBe(1);
+  });
+
+  it("spacingBeforePt: fills from inner, and leaves lineSpacing untouched", () => {
+    const merged = overlayStyleEntries(outerParagraph, {
+      paragraph: { spacingBeforePt: 5 },
+    });
+    expect(merged.paragraph?.spacingBeforePt).toBe(5);
+    expect(merged.paragraph?.lineSpacing).toBe(1.5);
+  });
+
+  it("lineSpacing: fills from inner, and leaves indentLeftPt untouched", () => {
+    const merged = overlayStyleEntries(outerParagraph, {
+      paragraph: { lineSpacing: 3 },
+    });
+    expect(merged.paragraph?.lineSpacing).toBe(3);
+    expect(merged.paragraph?.indentLeftPt).toBe(10);
+  });
+
+  it("indentLeftPt: fills from inner, and leaves indentFirstLinePt untouched", () => {
+    const merged = overlayStyleEntries(outerParagraph, {
+      paragraph: { indentLeftPt: 99 },
+    });
+    expect(merged.paragraph?.indentLeftPt).toBe(99);
+    expect(merged.paragraph?.indentFirstLinePt).toBe(20);
+  });
+
+  it("indentFirstLinePt: fills from inner, and leaves list untouched -- closing the cycle back to the first field", () => {
+    const merged = overlayStyleEntries(outerParagraph, {
+      paragraph: { indentFirstLinePt: 99 },
+    });
+    expect(merged.paragraph?.indentFirstLinePt).toBe(99);
+    expect(merged.paragraph?.list).toEqual({ level: 0 });
+  });
+});
+
+describe("overlayStyleEntries isolates each run property's own overlay guard", () => {
+  const outerRun: StyleEntry = {
+    run: {
+      bold: true,
+      italic: true,
+      underline: true,
+      strike: true,
+      fontFamily: "Arial",
+      sizePt: 10,
+      color: { r: 0, g: 0, b: 0 },
+    },
+  };
+
+  it("bold: fills from inner, and leaves italic untouched", () => {
+    const merged = overlayStyleEntries(outerRun, { run: { bold: false } });
+    expect(merged.run?.bold).toBe(false);
+    expect(merged.run?.italic).toBe(true);
+  });
+
+  it("italic: fills from inner, and leaves underline untouched", () => {
+    const merged = overlayStyleEntries(outerRun, { run: { italic: false } });
+    expect(merged.run?.italic).toBe(false);
+    expect(merged.run?.underline).toBe(true);
+  });
+
+  it("underline: fills from inner, and leaves strike untouched", () => {
+    const merged = overlayStyleEntries(outerRun, {
+      run: { underline: false },
+    });
+    expect(merged.run?.underline).toBe(false);
+    expect(merged.run?.strike).toBe(true);
+  });
+
+  it("strike: fills from inner, and leaves fontFamily untouched", () => {
+    const merged = overlayStyleEntries(outerRun, { run: { strike: false } });
+    expect(merged.run?.strike).toBe(false);
+    expect(merged.run?.fontFamily).toBe("Arial");
+  });
+
+  it("fontFamily: fills from inner, and leaves sizePt untouched", () => {
+    const merged = overlayStyleEntries(outerRun, {
+      run: { fontFamily: "Times" },
+    });
+    expect(merged.run?.fontFamily).toBe("Times");
+    expect(merged.run?.sizePt).toBe(10);
+  });
+
+  it("sizePt: fills from inner, and leaves color untouched -- also proving the merge starts from a copy of outer, not an empty object", () => {
+    const merged = overlayStyleEntries(outerRun, { run: { sizePt: 20 } });
+    expect(merged.run?.sizePt).toBe(20);
+    expect(merged.run?.color).toEqual({ r: 0, g: 0, b: 0 });
+  });
+
+  it("color: fills from inner, and leaves bold untouched -- closing the cycle back to the first field", () => {
+    const merged = overlayStyleEntries(outerRun, {
+      run: { color: { r: 1, g: 1, b: 1 } },
+    });
+    expect(merged.run?.color).toEqual({ r: 1, g: 1, b: 1 });
+    expect(merged.run?.bold).toBe(true);
+  });
+});
+
+describe("applyParagraphStyleProperties isolates each field's own gap-fill guard", () => {
+  const paragraphBase: ContentParagraph = { kind: "paragraph", runs: [] };
+
+  it("adds no property at all when the style entry supplies nothing, for every field", () => {
+    const untouched = applyParagraphStyleProperties({}, paragraphBase);
+    for (const field of [
+      "alignment",
+      "list",
+      "spacingBeforePt",
+      "spacingAfterPt",
+      "lineSpacing",
+      "indentLeftPt",
+      "indentFirstLinePt",
+      "pageBreakBefore",
+      "pageBreakAfter",
+    ]) {
+      expect(field in untouched).toBe(false);
+    }
+  });
+
+  it("alignment: the node's own value wins, and the style fills a real gap", () => {
+    const node: ContentParagraph = { ...paragraphBase, alignment: "center" };
+    expect(
+      applyParagraphStyleProperties({ alignment: "left" }, node).alignment,
+    ).toBe("center");
+    expect(
+      applyParagraphStyleProperties({ alignment: "left" }, paragraphBase)
+        .alignment,
+    ).toBe("left");
+  });
+
+  it("list: the node's own value wins, and the style fills a real gap", () => {
+    const node: ContentParagraph = { ...paragraphBase, list: { level: 2 } };
+    expect(
+      applyParagraphStyleProperties({ list: { level: 5 } }, node).list,
+    ).toEqual({ level: 2 });
+    expect(
+      applyParagraphStyleProperties({ list: { level: 5 } }, paragraphBase).list,
+    ).toEqual({ level: 5 });
+  });
+
+  it("spacingBeforePt: the node's own value wins, and the style fills a real gap", () => {
+    const node: ContentParagraph = { ...paragraphBase, spacingBeforePt: 3 };
+    expect(
+      applyParagraphStyleProperties({ spacingBeforePt: 9 }, node)
+        .spacingBeforePt,
+    ).toBe(3);
+    expect(
+      applyParagraphStyleProperties({ spacingBeforePt: 9 }, paragraphBase)
+        .spacingBeforePt,
+    ).toBe(9);
+  });
+
+  it("spacingAfterPt: the node's own value wins, and the style fills a real gap", () => {
+    const node: ContentParagraph = { ...paragraphBase, spacingAfterPt: 3 };
+    expect(
+      applyParagraphStyleProperties({ spacingAfterPt: 9 }, node).spacingAfterPt,
+    ).toBe(3);
+    expect(
+      applyParagraphStyleProperties({ spacingAfterPt: 9 }, paragraphBase)
+        .spacingAfterPt,
+    ).toBe(9);
+  });
+
+  it("lineSpacing: the node's own value wins, and the style fills a real gap", () => {
+    const node: ContentParagraph = { ...paragraphBase, lineSpacing: 1 };
+    expect(
+      applyParagraphStyleProperties({ lineSpacing: 2 }, node).lineSpacing,
+    ).toBe(1);
+    expect(
+      applyParagraphStyleProperties({ lineSpacing: 2 }, paragraphBase)
+        .lineSpacing,
+    ).toBe(2);
+  });
+
+  it("indentLeftPt: the node's own value wins, and the style fills a real gap", () => {
+    const node: ContentParagraph = { ...paragraphBase, indentLeftPt: 3 };
+    expect(
+      applyParagraphStyleProperties({ indentLeftPt: 9 }, node).indentLeftPt,
+    ).toBe(3);
+    expect(
+      applyParagraphStyleProperties({ indentLeftPt: 9 }, paragraphBase)
+        .indentLeftPt,
+    ).toBe(9);
+  });
+
+  it("indentFirstLinePt: the node's own value wins, and the style fills a real gap", () => {
+    const node: ContentParagraph = {
+      ...paragraphBase,
+      indentFirstLinePt: 3,
+    };
+    expect(
+      applyParagraphStyleProperties({ indentFirstLinePt: 9 }, node)
+        .indentFirstLinePt,
+    ).toBe(3);
+    expect(
+      applyParagraphStyleProperties({ indentFirstLinePt: 9 }, paragraphBase)
+        .indentFirstLinePt,
+    ).toBe(9);
+  });
+
+  it("pageBreakBefore: the node's own value wins, and the style fills a real gap", () => {
+    const node: ContentParagraph = {
+      ...paragraphBase,
+      pageBreakBefore: false,
+    };
+    expect(
+      applyParagraphStyleProperties({ pageBreakBefore: true }, node)
+        .pageBreakBefore,
+    ).toBe(false);
+    expect(
+      applyParagraphStyleProperties({ pageBreakBefore: true }, paragraphBase)
+        .pageBreakBefore,
+    ).toBe(true);
+  });
+
+  it("pageBreakAfter: the node's own value wins, and the style fills a real gap", () => {
+    const node: ContentParagraph = {
+      ...paragraphBase,
+      pageBreakAfter: false,
+    };
+    expect(
+      applyParagraphStyleProperties({ pageBreakAfter: true }, node)
+        .pageBreakAfter,
+    ).toBe(false);
+    expect(
+      applyParagraphStyleProperties({ pageBreakAfter: true }, paragraphBase)
+        .pageBreakAfter,
+    ).toBe(true);
+  });
+});
+
+describe("applyRunStyleProperties isolates each field's own gap-fill guard", () => {
+  const runBase: ContentRun = { text: "x" };
+
+  it("adds no property at all when the style entry supplies nothing, for every field", () => {
+    const untouched = applyRunStyleProperties({}, runBase);
+    for (const field of [
+      "bold",
+      "italic",
+      "underline",
+      "strike",
+      "fontFamily",
+      "sizePt",
+      "color",
+    ]) {
+      expect(field in untouched).toBe(false);
+    }
+  });
+
+  it("bold: the run's own value wins, and the style fills a real gap", () => {
+    const run: ContentRun = { ...runBase, bold: false };
+    expect(applyRunStyleProperties({ bold: true }, run).bold).toBe(false);
+    expect(applyRunStyleProperties({ bold: true }, runBase).bold).toBe(true);
+  });
+
+  it("italic: the run's own value wins, and the style fills a real gap", () => {
+    const run: ContentRun = { ...runBase, italic: false };
+    expect(applyRunStyleProperties({ italic: true }, run).italic).toBe(false);
+    expect(applyRunStyleProperties({ italic: true }, runBase).italic).toBe(
+      true,
+    );
+  });
+
+  it("underline: the run's own value wins, and the style fills a real gap", () => {
+    const run: ContentRun = { ...runBase, underline: false };
+    expect(applyRunStyleProperties({ underline: true }, run).underline).toBe(
+      false,
+    );
+    expect(
+      applyRunStyleProperties({ underline: true }, runBase).underline,
+    ).toBe(true);
+  });
+
+  it("strike: the run's own value wins, and the style fills a real gap", () => {
+    const run: ContentRun = { ...runBase, strike: false };
+    expect(applyRunStyleProperties({ strike: true }, run).strike).toBe(false);
+    expect(applyRunStyleProperties({ strike: true }, runBase).strike).toBe(
+      true,
+    );
+  });
+
+  it("fontFamily: the run's own value wins, and the style fills a real gap", () => {
+    const run: ContentRun = { ...runBase, fontFamily: "Carlito" };
+    expect(
+      applyRunStyleProperties({ fontFamily: "Arial" }, run).fontFamily,
+    ).toBe("Carlito");
+    expect(
+      applyRunStyleProperties({ fontFamily: "Arial" }, runBase).fontFamily,
+    ).toBe("Arial");
+  });
+
+  it("sizePt: the run's own value wins, and the style fills a real gap", () => {
+    const run: ContentRun = { ...runBase, sizePt: 9 };
+    expect(applyRunStyleProperties({ sizePt: 20 }, run).sizePt).toBe(9);
+    expect(applyRunStyleProperties({ sizePt: 20 }, runBase).sizePt).toBe(20);
+  });
+
+  it("color: the run's own value wins, and the style fills a real gap", () => {
+    const run: ContentRun = { ...runBase, color: { r: 0, g: 0, b: 0 } };
+    expect(
+      applyRunStyleProperties({ color: { r: 1, g: 1, b: 1 } }, run).color,
+    ).toEqual({ r: 0, g: 0, b: 0 });
+    expect(
+      applyRunStyleProperties({ color: { r: 1, g: 1, b: 1 } }, runBase).color,
+    ).toEqual({ r: 1, g: 1, b: 1 });
   });
 });

@@ -7,11 +7,8 @@ export class ByteWriter {
     return this.byteLength;
   }
 
+  // An empty `bytes` is pushed as its own chunk rather than special-cased away: toBytes() and length are identical either way, since an empty chunk contributes zero bytes to both the running length and the concatenated output.
   writeBytes(bytes: Uint8Array): void {
-    // Stryker disable next-line ConditionalExpression,BlockStatement: a pure allocation-avoidance optimisation, skipping a no-op empty-chunk push -- toBytes() and length are identical either way, since an empty chunk contributes zero bytes to both the running length and the concatenated output.
-    if (bytes.length === 0) {
-      return;
-    }
     this.chunks.push(bytes);
     this.byteLength += bytes.length;
   }
