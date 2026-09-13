@@ -56,6 +56,8 @@ describe("usePdfObjectUrl", () => {
     expect(result.current).toBe("blob:one");
     const [blob] = createObjectURLSpy.mock.calls[0] ?? [];
     expect((blob as Blob).type).toBe("application/pdf");
+    // Pins that the Blob actually wraps the given bytes, not an empty blob -- .type alone can't tell those apart.
+    expect((blob as Blob).size).toBe(3);
     unmount();
   });
 
