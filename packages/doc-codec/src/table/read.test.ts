@@ -543,6 +543,106 @@ describe("readDocContent tables, from hand-assembled bytes", () => {
     ]);
     expect(rowTwoCells.map((cell) => cellText(cell))).toEqual(["a", "b", "c"]);
   });
+
+  it("finds a legacy TCGRF.horzMerge anchor's own right edge even when it is not the row's last physical cell", () => {
+    // Three physical cells: a plain column, an anchor, and a legacy continuation of that anchor -- so the anchor (physical index 1) is the row's real rightmost cell, even though a further physical cell (the continuation) follows it.
+    const plain = { horzMerge: 0, vertMerge: 0 };
+    const anchor = { horzMerge: 2, vertMerge: 0 };
+    const continuation = { horzMerge: 1, vertMerge: 0 };
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000, 3000], [plain, anchor, continuation]),
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          { runs: [{ text: "a" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          { runs: [{ text: "b" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          { runs: [{ text: "" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const block = tableBlock(document);
+    expect(block.rows[0]?.cells).toHaveLength(2);
+    expect(block.rows[0]?.cells[1]?.colSpan).toBe(2);
+    expect(cellText(block.rows[0]?.cells[1])).toBe("b");
+  });
+
+  it("skips an orphaned legacy TCGRF.horzMerge continuation cell that has no anchor before it", () => {
+    const orphan = { horzMerge: 1, vertMerge: 0 }; // the row's own first physical cell, with nothing before it to anchor.
+    const plain = { horzMerge: 0, vertMerge: 0 };
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [orphan, plain]),
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          { runs: [{ text: "" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          {
+            runs: [{ text: "kept" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const block = tableBlock(document);
+    expect(block.rows[0]?.cells).toHaveLength(1);
+    expect(cellText(block.rows[0]?.cells[0])).toBe("kept");
+  });
+
+  it("omits heightPt entirely from a row that states no sprmTDyaRowHeight, rather than stating it as undefined", () => {
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000], [{ horzMerge: 0, vertMerge: 0 }]),
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          { runs: [{ text: "a" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const block = tableBlock(document);
+    expect(block.rows[0]).not.toHaveProperty("heightPt");
+  });
+
+  it("refuses a table whose paragraphs dangle mid-row after a real row already closed, even though the wider stream continues", () => {
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000], [{ horzMerge: 0, vertMerge: 0 }]),
+    ];
+    expect(() =>
+      readDocContent(
+        buildDoc({
+          paragraphs: [
+            {
+              runs: [{ text: "closed" }],
+              grpprl: SPRM_P_F_IN_TABLE,
+              mark: CELL_MARK,
+            },
+            { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+            {
+              runs: [{ text: "dangling" }],
+              grpprl: SPRM_P_F_IN_TABLE,
+              mark: CELL_MARK,
+            },
+            { runs: [{ text: "after" }] },
+          ],
+        }),
+      ),
+    ).toThrow(
+      /a table's paragraphs end without a row-ending mark to close the row's last cell/,
+    );
+  });
 });
 
 // ExaDev/documents.js#945: a table decorated only through the row/table-level cascade -- sprmTTableBorders/sprmTTableBorders80, and sprmTSetShdTable for background -- used to read with no cell borders at all, since neither was read before. These tests hand-assemble that cascade the same way every other sprm in this file is exercised, independently of tap-write.ts (which never emits it).
@@ -1282,6 +1382,115 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
     expect(block.rows[1]?.cells[1]?.blocks).toEqual([]);
     // The plain column is genuinely unaffected: row 2 is its own real last row directly (the first path cellReachesTableBottom checks), never touching the ragged/vertMerge paths at all.
     expect(block.rows[2]?.cells[0]?.borders?.bottom).toEqual(BOTTOM);
+  });
+
+  it("does not treat an earlier row's cell as reaching the table's bottom when a later row states a column starting further right, not just a narrower one ending sooner", () => {
+    // Row 0 has two ordinary columns, [0,1000) and [1000,2000). Row 1 (the table's real last row) states only [1000,2000) -- missing its FIRST column rather than its last, so column 0 has nothing beneath it in row 1 even though row 1's own single cell's startGridIndex (1) is strictly greater than column 0's own gridIndex (0), not merely equal-or-past a shorter row's end.
+    const unmerged = { horzMerge: 0, vertMerge: 0 };
+    const rowZeroGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [unmerged, unmerged]),
+      ...tableBordersSprm,
+    ];
+    const rowOneGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([1000, 2000], [unmerged]),
+      ...tableBordersSprm,
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          { runs: [{ text: "A" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          { runs: [{ text: "B" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          { runs: [], grpprl: rowZeroGrpprl, mark: CELL_MARK },
+          { runs: [{ text: "C" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          { runs: [], grpprl: rowOneGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const block = tableBlock(document);
+    // Column 0 has nothing beneath it in the real last row, so its own bottom edge IS the table's real bottom edge.
+    expect(block.rows[0]?.cells[0]?.borders?.bottom).toEqual(BOTTOM);
+  });
+
+  it("gives a zero-width cell a colSpan of exactly 1 for later-row coverage purposes, not 0", () => {
+    // Row 0 states two ordinary columns, [0,1000) and [1000,2000). Row 1 (the real last row) states THREE physical cells over the identical two boundaries, [0,1000) and a genuine zero-width [1000,1000) -- [MS-DOC] 2.9.321 permits rgdxaCenter to repeat a boundary. If the zero-width cell's own colSpan were computed as 0 rather than the documented fallback of 1, row 1 would appear to leave column 1 uncovered, and row 0's own column-1 cell would incorrectly read as reaching the table's real bottom edge instead of the ordinary interior border.
+    const unmerged = { horzMerge: 0, vertMerge: 0 };
+    const rowZeroGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [unmerged, unmerged]),
+      ...tableBordersSprm,
+    ];
+    const rowOneGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 1000], [unmerged, unmerged]),
+      ...tableBordersSprm,
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          { runs: [{ text: "A" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          { runs: [{ text: "B" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          { runs: [], grpprl: rowZeroGrpprl, mark: CELL_MARK },
+          { runs: [{ text: "C" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          { runs: [{ text: "" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          { runs: [], grpprl: rowOneGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const block = tableBlock(document);
+    expect(block.rows[0]?.cells[1]?.borders?.bottom).toEqual(INSIDE_H);
+  });
+
+  it("gives a vertically merged anchor its own real rowSpan even when the anchor is not the table's first row", () => {
+    // Anchor at row 1 (not row 0), continuing into row 2 -- distinguishes lastRowInChain - rowIndex + 1 from lastRowInChain + rowIndex + 1, which agree only when rowIndex is 0.
+    const restart = { horzMerge: 0, vertMerge: 3 };
+    const continuation = { horzMerge: 0, vertMerge: 1 };
+    const plain = { horzMerge: 0, vertMerge: 0 };
+    const boundaries = [0, 1000];
+    const rowZeroGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable(boundaries, [plain]),
+    ];
+    const rowOneGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable(boundaries, [restart]),
+    ];
+    const rowTwoGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable(boundaries, [continuation]),
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "r0" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowZeroGrpprl, mark: CELL_MARK },
+          {
+            runs: [{ text: "anchor" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowOneGrpprl, mark: CELL_MARK },
+          { runs: [{ text: "" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          { runs: [], grpprl: rowTwoGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const block = tableBlock(document);
+    expect(block.rows).toHaveLength(3);
+    expect(cellText(block.rows[1]?.cells[0])).toBe("anchor");
+    expect(block.rows[1]?.cells[0]?.rowSpan).toBe(2);
   });
 });
 
