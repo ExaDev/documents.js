@@ -81,13 +81,12 @@ export function unescapeString(text: string): string {
       index += 1;
       continue;
     }
-    if (char === "&") {
-      const entity = matchEntity(text, index);
-      if (entity !== undefined) {
-        result += entity.value;
-        index += entity.raw.length;
-        continue;
-      }
+    // No separate char === "&" guard: matchEntity's own ENTITY_PATTERN is anchored at "^&" (see its own comment above), so calling it at a non-"&" index can never match regardless -- the same reasoning already applied to matchEntity's own leading-character check.
+    const entity = matchEntity(text, index);
+    if (entity !== undefined) {
+      result += entity.value;
+      index += entity.raw.length;
+      continue;
     }
     result += char;
     index += 1;
