@@ -18,6 +18,8 @@ export interface OdfPoint {
 }
 
 const FUNCTION_PATTERN = /([a-zA-Z]+)\s*\(\s*([^)]*?)\s*\)/g;
+// A function called with no arguments at all (e.g. "rotate()") has no tokens to extract, and every consumer below already treats a missing token (angleArg/xArg both undefined) and an unparseable one (a genuinely non-empty but garbage string) identically -- typed as the empty tuple `readonly []` so a content mutation here is a type error rather than a silent, unobservable survivor, exactly like build.ts's own NO_ORDERED_CONTENT.
+const NO_ARGS: readonly [] = [];
 
 // Parses a draw:transform attribute value into its function list, in document order. A function this module doesn't model (scale/skewX/skewY/matrix), or one whose arguments don't parse (a malformed angle, a translate length outside the ODF `length` grammar), is skipped rather than aborting the whole parse -- the remaining, well-formed functions still contribute, matching this package's general "degrade a single unsupported feature, don't fail the whole read" policy.
 export function parseOdfTransform(value: string): OdfTransformFunction[] {
@@ -26,13 +28,11 @@ export function parseOdfTransform(value: string): OdfTransformFunction[] {
     // FUNCTION_PATTERN's two capture groups are both plain, non-optional captures with no alternation that could skip them, so a successful match always populates both -- never undefined at runtime, only in the indexed-access type.
     const name = match[1]!;
     const argsRaw = match[2]!;
-    // Not argsRaw.split(/\s+/).filter(...): FUNCTION_PATTERN's own surrounding \s* already trims argsRaw of leading/trailing whitespace, so the only way split would otherwise misbehave is the classic "".split(...) === [""] case for a function called with no arguments at all (e.g. "rotate()") -- handled explicitly here instead of by filtering every split result.
-    const args = argsRaw.length === 0 ? [] : argsRaw.split(/\s+/);
+    // Not argsRaw.split(/\s+/).filter(...): FUNCTION_PATTERN's own surrounding \s* already trims argsRaw of leading/trailing whitespace, so the only way split would otherwise misbehave is the classic "".split(...) === [""] case for a function called with no arguments at all (e.g. "rotate()") — handled explicitly here instead of by filtering every split result.
+    const args = argsRaw.length === 0 ? NO_ARGS : argsRaw.split(/\s+/);
     if (name === "rotate") {
       const angleArg = args[0];
-      if (angleArg === undefined) {
-        continue;
-      }
+      // No separate `angleArg === undefined` guard: Number(undefined) is NaN, which the isFinite check below already rejects identically to a genuinely present but unparseable angle, so a missing argument needs no check of its own.
       const angleRad = Number(angleArg);
       if (!Number.isFinite(angleRad)) {
         continue;
