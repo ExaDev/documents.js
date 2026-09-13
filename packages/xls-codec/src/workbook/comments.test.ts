@@ -168,7 +168,8 @@ describe("readObjPictFmlaStorageId", () => {
   }
 
   it("finds FtPictFmla's own storage id, walking past FtCmo and an unrelated sub-record first", () => {
-    const unrelated = [...u16(0x1234), ...u16(4), 0xaa, 0xaa, 0xaa, 0xaa];
+    // An ODD-length unrelated payload (3 bytes, not the 2-byte-word-aligned count every real field here uses) is deliberate: a reader that failed to skip it would misread every following ft/cb pair off a shifted byte boundary rather than merely landing on the wrong sub-record, so the walk runs out of bytes and throws instead of coincidentally still finding 42 -- an even-length filler leaves the word alignment intact and can realign onto FtPictFmla by accident regardless of whether the skip actually ran.
+    const unrelated = [...u16(0x1234), ...u16(3), 0xaa, 0xaa, 0xaa];
     const group = objGroup(unrelated, ftPictFmla(42));
 
     expect(readObjPictFmlaStorageId(group)).toBe(42);
