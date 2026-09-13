@@ -57,13 +57,10 @@ function put32(view: DataView, offset: number, value: number): void {
   view.setUint32(offset, value, true);
 }
 
+// No node.name.length === 0 guard: this is called only via writeDirectoryEntry, once for the root (whose own name is "Root Entry" from creation, never empty) and once each for every other node, whose name was already proven non-empty by compoundFile's own path-segment validation before the node was ever created. An empty name can never reach here.
 function checkedName(node: StorageNode): Uint8Array<ArrayBuffer> {
   const encoded = enc(node.name);
-  if (
-    node.name.length === 0 ||
-    encoded.length > 31 ||
-    encoded.some((byte) => byte > 0x7f)
-  ) {
+  if (encoded.length > 31 || encoded.some((byte) => byte > 0x7f)) {
     throw new Error(
       `compoundFile stream/storage names must be non-empty ASCII of at most 31 characters (got ${JSON.stringify(node.name)})`,
     );
@@ -81,10 +78,11 @@ function writeDirectoryEntry(
   size: number,
 ): void {
   const encoded = checkedName(node);
-  for (let i = 0; i < encoded.length; i++) {
-    entry.setUint8(i * 2, encoded[i] ?? 0);
+  // Walks the encoded bytes directly (each paired with its own index via Array.from, rather than a hand-written comparison bound indexing back into encoded with a `?? 0` fallback for an out-of-range read that can now never happen): every element visited this way is a real byte of encoded, never the array's own out-of-range undefined.
+  Array.from(encoded).forEach((byte, i) => {
+    entry.setUint8(i * 2, byte);
     entry.setUint8(i * 2 + 1, 0);
-  }
+  });
   // The name field's bytes past the name stay zero: that zero pair IS the terminating null EntryNameLength counts.
   put16(entry, 0x40, encoded.length * 2 + 2);
   entry.setUint8(0x42, objectType);
@@ -118,15 +116,13 @@ export function compoundFile(
   const entriesPerDirectorySector = sectorSize / 128;
   const fatEntriesPerSector = sectorSize / 4;
 
-  const root: StorageNode = { name: "", children: [] };
+  // "Root Entry" from the start, not a placeholder overridden at write time: nothing else ever reads this node's own name (it is never a sibling, so it never enters a name comparison), so there is no reason to carry a second, different string that would only be discarded later.
+  const root: StorageNode = { name: "Root Entry", children: [] };
   for (const entry of entries) {
     const segments = entry.path.split("/");
     const leaf = segments.pop();
-    if (
-      leaf === undefined ||
-      leaf.length === 0 ||
-      segments.some((segment) => segment.length === 0)
-    ) {
+    // !leaf alone (not leaf === undefined || leaf.length === 0) covers exactly the same two cases: String.prototype.split always returns at least one element, so .pop() on it is genuinely never undefined here -- only ever a string, possibly empty -- and a falsy check catches both undefined and "" identically to spelling them out, while also narrowing leaf to string below.
+    if (!leaf || segments.some((segment) => segment.length === 0)) {
       throw new Error(
         `compoundFile entry paths must be slash-separated with no empty segments (got ${JSON.stringify(entry.path)})`,
       );
@@ -297,7 +293,7 @@ export function compoundFile(
       const start = miniStream.length === 0 ? ENDOFCHAIN : miniStreamStart;
       writeDirectoryEntry(
         entry,
-        { ...node, name: "Root Entry" },
+        node,
         5,
         childId,
         NOSTREAM,

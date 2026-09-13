@@ -1,0 +1,213 @@
+import { describe, expect, it } from "vitest";
+import { readCompoundFile } from "../cfb/read";
+import { compoundFile } from "./cfb";
+
+// Direct coverage for the [MS-CFB] fixture builder itself (src/test-support/cfb.ts), independent of the ../cfb/read.test.ts and ../cfb/write.test.ts suites that consume it as a black box. Most of this builder's own logic is already exercised indirectly by those two suites reading back what it writes -- these cases target the specific internal decisions (sibling-node reuse, byte-exact header/directory-entry fields, loop boundaries) that a correct read-back alone cannot distinguish from a subtly wrong one.
+
+const enc = (s: string): Uint8Array<ArrayBuffer> => new TextEncoder().encode(s);
+
+// Follows the directory's own FAT chain to its ENDOFCHAIN terminator, the same way read.ts would, rather than guessing a sector count from the total file length -- a sector that happens to hold mini-stream or mini-FAT content, not real directory rows, can otherwise be miscounted as one more directory sector by coincidence of its own leading byte.
+function directorySectorCount(bytes: Uint8Array<ArrayBuffer>): number {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const directoryStart = view.getUint32(0x30, true);
+  // FAT sector k always sits at physical sector k itself (this builder's own identity mapping, per its module comment), so FAT sector k's own bytes are at file offset (k + 1) * 512, and entry `sector`'s own slot is 4 * (sector mod 128) bytes into whichever FAT sector holds it.
+  const fatEntry = (sector: number): number =>
+    view.getUint32(
+      (Math.floor(sector / 128) + 1) * 512 + (sector % 128) * 4,
+      true,
+    );
+  let count = 1;
+  let current = directoryStart;
+  for (;;) {
+    const next = fatEntry(current);
+    if (next === 0xfffffffe) {
+      break; // ENDOFCHAIN
+    }
+    current = next;
+    count += 1;
+  }
+  return count;
+}
+
+function directoryEntryCount(bytes: Uint8Array<ArrayBuffer>): number {
+  return (directorySectorCount(bytes) * 512) / 128;
+}
+
+// Reads back every directory entry's own name and object type directly from the bytes, in id order -- a lower-level probe than readCompoundFile, which only ever surfaces stream paths, never a storage's own presence or a duplicate name.
+function directoryEntries(
+  bytes: Uint8Array<ArrayBuffer>,
+): { name: string; objectType: number }[] {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const directoryStart = view.getUint32(0x30, true);
+  const count = directoryEntryCount(bytes);
+  const decoder = new TextDecoder("utf-16le");
+  const entries: { name: string; objectType: number }[] = [];
+  for (let id = 0; id < count; id++) {
+    const base = (directoryStart + 1) * 512 + id * 128;
+    const objectType = view.getUint8(base + 0x42);
+    if (objectType === 0) {
+      continue; // unallocated padding
+    }
+    const nameLength = view.getUint16(base + 0x40, true);
+    const name = decoder.decode(
+      bytes.subarray(base, base + Math.max(0, nameLength - 2)),
+    );
+    entries.push({ name, objectType });
+  }
+  return entries;
+}
+
+describe("compoundFile sibling reuse", () => {
+  it("creates exactly one storage entry for a name shared by several stream paths, not one per path", () => {
+    const bytes = compoundFile([
+      { path: "Pool/First", bytes: enc("1") },
+      { path: "Pool/Second", bytes: enc("2") },
+      { path: "Pool/Third", bytes: enc("3") },
+    ]);
+    const poolEntries = directoryEntries(bytes).filter(
+      (e) => e.name === "Pool",
+    );
+    expect(poolEntries).toHaveLength(1);
+    expect(poolEntries[0]?.objectType).toBe(1); // storage
+  });
+
+  it("creates a separate storage entry for each distinctly-named top-level path, not a single shared one", () => {
+    const bytes = compoundFile([
+      { path: "Alpha/X", bytes: enc("1") },
+      { path: "Beta/Y", bytes: enc("2") },
+    ]);
+    const entries = directoryEntries(bytes);
+    expect(entries.filter((e) => e.name === "Alpha")).toHaveLength(1);
+    expect(entries.filter((e) => e.name === "Beta")).toHaveLength(1);
+  });
+
+  it("never reuses a stream node as a storage, even when a later path needs the same name to be one", () => {
+    // "Thing" is written first as a stream; "Thing/Inner" then needs an intermediate storage of the same name. The sibling-reuse search must skip the existing stream node (it is not a storage) and create a genuinely new storage entry instead, rather than silently reusing the wrong kind of node.
+    const bytes = compoundFile([
+      { path: "Thing", bytes: enc("leaf") },
+      { path: "Thing/Inner", bytes: enc("nested") },
+    ]);
+    const thingEntries = directoryEntries(bytes).filter(
+      (e) => e.name === "Thing",
+    );
+    expect(thingEntries).toHaveLength(2);
+    expect(thingEntries.map((e) => e.objectType).sort()).toEqual([1, 2]); // one storage, one stream
+    const streams = readCompoundFile(bytes);
+    expect(streams.map((s) => s.path).sort()).toEqual(["Thing", "Thing/Inner"]);
+  });
+});
+
+describe("compoundFile sibling right-links", () => {
+  it("chains three siblings to each other, not merely each to the first", () => {
+    const bytes = compoundFile([
+      { path: "Pool/First", bytes: enc("1") },
+      { path: "Pool/Second", bytes: enc("2") },
+      { path: "Pool/Third", bytes: enc("3") },
+    ]);
+    const streams = readCompoundFile(bytes);
+    expect(streams.map((s) => s.path).sort()).toEqual([
+      "Pool/First",
+      "Pool/Second",
+      "Pool/Third",
+    ]);
+  });
+
+  it("gives the last sibling in a chain NOSTREAM as its own right link, not a link to itself or the first", () => {
+    const bytes = compoundFile([
+      { path: "A", bytes: enc("1") },
+      { path: "B", bytes: enc("2") },
+    ]);
+    const view = new DataView(bytes.buffer);
+    const directoryStart = view.getUint32(0x30, true);
+    // Entry 0 is root, entry 1 is A, entry 2 is B (insertion order, depth-first).
+    const bRightLink = view.getUint32(
+      (directoryStart + 1) * 512 + 2 * 128 + 0x48,
+      true,
+    );
+    expect(bRightLink).toBe(0xffffffff); // NOSTREAM
+  });
+});
+
+describe("compoundFile directory-entry byte layout", () => {
+  it("writes the colour flag byte as 1 (black) for every entry", () => {
+    const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
+    const view = new DataView(bytes.buffer);
+    const directoryStart = view.getUint32(0x30, true);
+    // Root is id 0, A is id 1.
+    expect(view.getUint8((directoryStart + 1) * 512 + 0 * 128 + 0x43)).toBe(1);
+    expect(view.getUint8((directoryStart + 1) * 512 + 1 * 128 + 0x43)).toBe(1);
+  });
+
+  it("writes the high 32 bits of a stream's size as zero", () => {
+    const bytes = compoundFile([{ path: "A", bytes: enc("x".repeat(5000)) }]);
+    const view = new DataView(bytes.buffer);
+    const directoryStart = view.getUint32(0x30, true);
+    expect(
+      view.getUint32((directoryStart + 1) * 512 + 1 * 128 + 0x7c, true),
+    ).toBe(0);
+  });
+
+  it("accepts the highest ASCII byte value (0x7F) in a name, and rejects the lowest non-ASCII one (0x80)", () => {
+    // 0x7F (DEL) is the last code point checkedName's own > 0x7f test allows; a name built from it must round-trip. 0x80 is the first byte that test rejects.
+    const highAscii = String.fromCharCode(0x7f);
+    expect(() =>
+      compoundFile([{ path: highAscii, bytes: enc("x") }]),
+    ).not.toThrow();
+    const nonAscii = String.fromCharCode(0x80);
+    expect(() => compoundFile([{ path: nonAscii, bytes: enc("x") }])).toThrow(
+      /non-empty ASCII/,
+    );
+  });
+});
+
+describe("compoundFile entry-path validation", () => {
+  it("rejects a completely empty path, not just an empty segment within one", () => {
+    expect(() => compoundFile([{ path: "", bytes: enc("x") }])).toThrow(
+      /no empty segments/,
+    );
+  });
+});
+
+describe("compoundFile FAT chain lengths", () => {
+  it("chains a stream needing exactly two sectors as two links, not one or three", () => {
+    // 512-byte sectors; a 600-byte stream needs ceil(600/512) = 2 sectors. The chain() helper's own loop must mark exactly that many FAT entries (the last ENDOFCHAIN, every other pointing to the next), not one short (truncating real content) or one long (chaining into whatever sector follows).
+    const bytes = compoundFile([{ path: "A", bytes: enc("x".repeat(600)) }]);
+    const streams = readCompoundFile(bytes);
+    expect(streams[0]?.bytes.length).toBe(600);
+  });
+
+  it("chains a mini-resident stream needing exactly two mini sectors as two links, not one or three", () => {
+    // 64-byte mini sectors; a 100-byte stream needs ceil(100/64) = 2 mini sectors.
+    const bytes = compoundFile([{ path: "A", bytes: enc("x".repeat(100)) }]);
+    const streams = readCompoundFile(bytes);
+    expect(streams[0]?.bytes.length).toBe(100);
+  });
+});
+
+describe("compoundFile header DIFAT array padding", () => {
+  it("fills every one of the header's 109 DIFAT entries, the real FAT sector indices then FREESECT", () => {
+    const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
+    const view = new DataView(bytes.buffer);
+    const fatSectorCount = view.getUint32(0x2c, true);
+    expect(fatSectorCount).toBeGreaterThan(0);
+    for (let i = 0; i < fatSectorCount; i++) {
+      expect(view.getUint32(0x4c + i * 4, true)).toBe(i);
+    }
+    for (let i = fatSectorCount; i < 109; i++) {
+      expect(view.getUint32(0x4c + i * 4, true)).toBe(0xffffffff);
+    }
+  });
+});
+
+describe("compoundFile directory sector count", () => {
+  it("needs exactly two directory sectors for a fixture with more than four real entries", () => {
+    // 4 entries per 512-byte directory sector; root plus 5 streams is 6 real entries, needing 2 sectors -- the directorySectorCount loop's own boundary matters here, not merely whether one sector is enough.
+    const bytes = compoundFile(
+      Array.from({ length: 5 }, (_unused, i) => ({
+        path: `S${i}`,
+        bytes: enc("x"),
+      })),
+    );
+    expect(directoryEntryCount(bytes)).toBe(8); // 2 sectors * 4 entries
+  });
+});
