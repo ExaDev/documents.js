@@ -500,6 +500,27 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  it("closes a form field's own group at its endRun, not only at the paragraph's final position", () => {
+    // startRun 0/endRun 1 in a 2-run paragraph closes at position 1, before the last position (2) writeFormFieldBoundaries is called at -- the one shape that exercises the `top = opened[opened.length - 1]` stack-peek popping loop rather than either the point-anchor inline close (startRun === endRun) or the paragraph-end drain backstop, both of which close correctly regardless of which array slot is peeked.
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "field" }, { text: "after" }],
+          constructs: [
+            {
+              descriptor: { kind: "contentControl", controlType: "checkbox" },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out.indexOf("}}")).toBeLessThan(out.indexOf("after"));
+    expectBalancedBraces(out);
+  });
+
   it("writes \\ffres0 for an unchecked checkbox's own current state, not just \\ffdefres0", () => {
     const out = write(
       wordprocessing([
@@ -2767,6 +2788,58 @@ describe("round trip through this package's own reader", () => {
     expect(out.indexOf("marked")).toBeLessThan(
       out.indexOf("{\\*\\bkmkend paradigm}"),
     );
+    // writeRunBoundaries is called once per run position (0..3 here); each half must fire at its own single position, not once per call.
+    expect(out.match(/\\bkmkstart/g)).toHaveLength(1);
+    expect(out.match(/\\bkmkend/g)).toHaveLength(1);
+  });
+
+  it("writes exactly one {\\*\\bkmkstart}/{\\*\\bkmkend} pair, adjacent, for a point bookmark anchor whose start equals its end", () => {
+    // A point anchor (startRun === endRun, here at position 1 of a 2-run paragraph, neither the first nor the last position) opens and closes at the identical boundary -- entirely from the open loop's own point-anchor branch, never from the close loop above it, since that loop's own startRun !== position guard excludes a position where they are equal.
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "A" }, { text: "B" }],
+          constructs: [
+            {
+              descriptor: { kind: "anchor", anchorType: "bookmark", name: "p" },
+              startRun: 1,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out.match(/\\bkmkstart/g)).toHaveLength(1);
+    expect(out.match(/\\bkmkend/g)).toHaveLength(1);
+    expect(out).toContain("{\\*\\bkmkstart p}{\\*\\bkmkend p}");
+    expect(out.indexOf("A")).toBeLessThan(out.indexOf("{\\*\\bkmkstart p}"));
+    expect(out.indexOf("{\\*\\bkmkend p}")).toBeLessThan(out.indexOf("B"));
+  });
+
+  it("still closes a bookmark whose endRun is the paragraph's own runs.length, the one position only the final writeRunBoundaries call reaches", () => {
+    // The loop over paragraph.runs only calls writeRunBoundaries for positions 0..runs.length-1; a dedicated final call at exactly paragraph.runs.length is the only place an extent closing after the last run gets its own {\*\bkmkend} written at all.
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "A" }, { text: "B" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "anchor",
+                anchorType: "bookmark",
+                name: "whole",
+              },
+              startRun: 0,
+              endRun: 2,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("{\\*\\bkmkend whole}");
+    expect(out.indexOf("B")).toBeLessThan(out.indexOf("{\\*\\bkmkend whole}"));
   });
 
   it("re-emits an rtf residue value's own control words verbatim, which is what the quarantine contract permits", () => {
