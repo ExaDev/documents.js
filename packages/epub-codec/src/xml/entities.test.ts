@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeEntities, encodeEntities } from "./entities";
+import { decodeEntities, decodeTextLikeNode, encodeEntities } from "./entities";
 
 describe("decodeEntities", () => {
   it("decodes the five standard XML entities", () => {
@@ -26,6 +26,20 @@ describe("decodeEntities", () => {
   it("leaves plain text and a genuinely unrecognised entity untouched", () => {
     expect(decodeEntities("plain text &qwertyzzznonexistent; here")).toBe(
       "plain text &qwertyzzznonexistent; here",
+    );
+  });
+});
+
+describe("decodeTextLikeNode", () => {
+  it("decodes entities in a text node", () => {
+    expect(decodeTextLikeNode({ type: "text", value: "A &amp; B" })).toBe(
+      "A & B",
+    );
+  });
+
+  it("leaves a cdata node's value untouched, with no entity decoding applied", () => {
+    expect(decodeTextLikeNode({ type: "cdata", value: "A &amp; B" })).toBe(
+      "A &amp; B",
     );
   });
 });

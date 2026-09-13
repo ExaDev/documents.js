@@ -31,4 +31,37 @@ describe("readNav3TocHrefs", () => {
       ),
     ).toBeUndefined();
   });
+
+  it('does not treat a non-nav element carrying epub:type="toc" as the toc nav', () => {
+    const xml = `<html xmlns:epub="urn"><body>
+      <div epub:type="toc"><ol><li><a href="ignored.xhtml">Ignored</a></li></ol></div>
+      <nav epub:type="toc"><ol><li><a href="real.xhtml">Real</a></li></ol></nav>
+    </body></html>`;
+    expect(readNav3TocHrefs(xml)).toEqual(["real.xhtml"]);
+  });
+
+  it("skips a nav element with no epub:type attribute at all, then finds the real toc nav", () => {
+    const xml = `<html xmlns:epub="urn"><body>
+      <nav><ol><li><a href="ignored.xhtml">Ignored</a></li></ol></nav>
+      <nav epub:type="toc"><ol><li><a href="real.xhtml">Real</a></li></ol></nav>
+    </body></html>`;
+    expect(readNav3TocHrefs(xml)).toEqual(["real.xhtml"]);
+  });
+
+  it("recognises 'toc' among several tab-separated epub:type values", () => {
+    const xml = `<html xmlns:epub="urn"><body>
+      <nav epub:type="landmarks\ttoc"><ol><li><a href="a.xhtml">A</a></li></ol></nav>
+    </body></html>`;
+    expect(readNav3TocHrefs(xml)).toEqual(["a.xhtml"]);
+  });
+
+  it("skips an <a> with no href attribute, rather than including it as literal 'undefined'", () => {
+    const xml = `<html xmlns:epub="urn"><body>
+      <nav epub:type="toc"><ol>
+        <li><a>No href</a></li>
+        <li><a href="real.xhtml">Real</a></li>
+      </ol></nav>
+    </body></html>`;
+    expect(readNav3TocHrefs(xml)).toEqual(["real.xhtml"]);
+  });
 });

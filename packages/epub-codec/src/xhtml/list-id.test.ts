@@ -24,4 +24,17 @@ describe("mintListNumId / parseListNumId", () => {
     expect(parseListNumId("list1")).toBeUndefined();
     expect(parseListNumId("md1:bullet")).toBeUndefined();
   });
+
+  it("mints a bullet list without an 'ordered@' suffix even when a start is given", () => {
+    // A bullet list has no start concept -- the type === "ordered" guard must actually gate this.
+    expect(mintListNumId(4, { type: "bullet", start: 5 })).toBe("epub4:bullet");
+  });
+
+  it("parses an ordered numId with no @start suffix as having no explicit start", () => {
+    expect(parseListNumId("epub1:ordered")).toEqual({ type: "ordered" });
+  });
+
+  it("ignores an @start suffix on a bullet numId -- start only ever applies to ordered", () => {
+    expect(parseListNumId("epub1:bullet@5")).toEqual({ type: "bullet" });
+  });
 });
