@@ -74,6 +74,28 @@ export function buildFontTable(names: readonly string[]): Uint8Array {
   return new Uint8Array(bytes);
 }
 
+export interface FontIndexMinter {
+  /** Resolves `name` to its font-table index -- an existing one when a previous call already named it, otherwise a fresh one appended to `fontNames`. */
+  readonly fontIndexOf: (name: string) => number;
+  /** Every distinct name minted so far, in first-use order -- buildFontTable's own input. Live: grows as `fontIndexOf` mints new names. */
+  readonly fontNames: readonly string[];
+}
+
+// A fresh font-name-to-index minter: every distinct font name a document's runs state gets its own font-table index, in first-use order, so a run naming a font it shares with an earlier run resolves to that same index rather than a fresh entry. Extracted out of writeDocContent's own body -- which calls fontIndexOf lazily, once per run, as encodeCharacterGrpprl asks for it -- so the first-use/reuse rule is directly testable rather than only reachable through a full write+read round trip.
+export function createFontIndexMinter(): FontIndexMinter {
+  const fontNames: string[] = [];
+  const fontIndexByName = new Map<string, number>();
+  const fontIndexOf = (name: string): number => {
+    const existing = fontIndexByName.get(name);
+    if (existing !== undefined) return existing;
+    const index = fontNames.length;
+    fontNames.push(name);
+    fontIndexByName.set(name, index);
+    return index;
+  };
+  return { fontIndexOf, fontNames };
+}
+
 function buildFfnRecord(name: string): number[] {
   const record: number[] = [
     0x00, // ffid: FFID's "don't care or don't know" family.

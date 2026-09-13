@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DocFormatError } from "../errors";
-import { buildFontTable, parseFontTable } from "./fonts";
+import { buildFontTable, createFontIndexMinter, parseFontTable } from "./fonts";
 
 describe("buildFontTable / parseFontTable round trip", () => {
   it("round-trips a single font name", () => {
@@ -99,5 +99,34 @@ describe("buildFontTable", () => {
     // 38 (fixed) + 2*n + 2 (terminator) === 255 has no integer solution, so pick n such that the record is <= 255 and as close as possible, confirming the boundary is inclusive rather than off-by-one.
     const name = "A".repeat(107); // 38 + 214 + 2 = 254 bytes.
     expect(() => buildFontTable([name])).not.toThrow();
+  });
+});
+
+describe("createFontIndexMinter", () => {
+  it("starts with no minted names at all", () => {
+    const { fontNames } = createFontIndexMinter();
+    expect(fontNames).toEqual([]);
+  });
+
+  it("mints the first name it sees at index 0, appending it to fontNames", () => {
+    const { fontIndexOf, fontNames } = createFontIndexMinter();
+    expect(fontIndexOf("Calibri")).toBe(0);
+    expect(fontNames).toEqual(["Calibri"]);
+  });
+
+  it("mints each distinct name its own sequential index, in first-use order", () => {
+    const { fontIndexOf, fontNames } = createFontIndexMinter();
+    expect(fontIndexOf("Calibri")).toBe(0);
+    expect(fontIndexOf("Arial")).toBe(1);
+    expect(fontIndexOf("Times New Roman")).toBe(2);
+    expect(fontNames).toEqual(["Calibri", "Arial", "Times New Roman"]);
+  });
+
+  it("resolves a repeated name to its existing index instead of minting a new one", () => {
+    const { fontIndexOf, fontNames } = createFontIndexMinter();
+    expect(fontIndexOf("Calibri")).toBe(0);
+    expect(fontIndexOf("Arial")).toBe(1);
+    expect(fontIndexOf("Calibri")).toBe(0);
+    expect(fontNames).toEqual(["Calibri", "Arial"]);
   });
 });
