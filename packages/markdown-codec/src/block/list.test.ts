@@ -80,4 +80,23 @@ describe("finalizeListTightness's own lastLineChecked memoisation", () => {
 
     expect(list.tight).toBe(false);
   });
+
+  it("descends through a listItem, not just a nested list, to find a blank line one level further down", () => {
+    const list = new BlockNode("list", 1);
+    const item1 = new BlockNode("listItem", 1);
+    const nestedList = new BlockNode("list", 1);
+    const nestedItem = new BlockNode("listItem", 1);
+    const deepLeaf = new BlockNode("paragraph", 1);
+    deepLeaf.lastLineBlank = true;
+    nestedItem.appendChild(deepLeaf);
+    nestedList.appendChild(nestedItem);
+    item1.appendChild(nestedList);
+    const item2 = new BlockNode("listItem", 2);
+    list.appendChild(item1);
+    list.appendChild(item2);
+
+    finalizeListTightness(list);
+
+    expect(list.tight).toBe(false);
+  });
 });

@@ -47,12 +47,12 @@ function matchMarker(
     };
   }
   const ordered = ORDERED_MARKER_PATTERN.exec(rest);
-  const digits = ordered?.[1];
-  // Same reasoning as the bullet branch above: ORDERED_MARKER_PATTERN's own second capturing group is the character class `[.)]`, so a populated capture is never anything but one of MarkdownOrderedListDelimiter's two members.
-  const delimiter = ordered?.[2] as MarkdownOrderedListDelimiter | undefined;
-  if (ordered === null || digits === undefined || delimiter === undefined) {
+  if (ordered === null) {
     return undefined;
   }
+  // Neither capturing group in ORDERED_MARKER_PATTERN is optional, so a successful match always populates both -- TypeScript's own RegExpExecArray typing has no way to say that (every capture reads as possibly-undefined, alternation or not), so both reads are cast the same way the bullet branch above already casts its own single capture.
+  const digits = ordered[1]!;
+  const delimiter = ordered[2] as MarkdownOrderedListDelimiter;
   const start = Number.parseInt(digits, 10);
   if (containerIsParagraph && start !== INTERRUPTING_ORDERED_START) {
     return undefined;
@@ -116,12 +116,10 @@ export function parseListMarker(
 }
 
 // Whether a newly started item continues the list that is already open, or starts a fresh one. spec 0.31.2: "a list is a sequence of list items of the same type" -- changing the bullet character or the ordered delimiter starts a new list, even with no blank line in between.
+//
+// No separate a.type === b.type check: bulletChar is set only on a "bullet" marker and delimiter only on an "ordered" one (see ListMarkerData), so whenever the two markers are different variants exactly one of the two comparisons below pits a real value against undefined and is already false -- a same-type comparison could never survive that pairing without the field comparisons already agreeing too.
 export function listsMatch(a: ListMarkerData, b: ListMarkerData): boolean {
-  return (
-    a.type === b.type &&
-    a.delimiter === b.delimiter &&
-    a.bulletChar === b.bulletChar
-  );
+  return a.delimiter === b.delimiter && a.bulletChar === b.bulletChar;
 }
 
 // Whether `block` ends with a blank line, looking through the last child of a list or list item to reach the block that actually recorded one. Memoised through BlockNode.lastLineChecked so a deeply nested list is descended at most once per finalisation rather than once per item.
