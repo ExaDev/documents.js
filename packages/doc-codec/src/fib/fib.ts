@@ -108,12 +108,12 @@ export function parseFib(wordDocument: Uint8Array): Fib {
   }
 
   const cbRgFcLcb = readUint16LE(wordDocument, FIB_CB_RG_FC_LCB_OFFSET);
-  const blobValues = cbRgFcLcb * 2;
-  // Every pair this reader needs must fall inside the blob the file declares. Checked once against the highest index rather than per read, so a truncated or downlevel blob is reported as what it is instead of as a failed read of one arbitrary field.
+  // Every pair this reader needs must fall inside the blob the file declares. Checked once against the highest index rather than per read, so a truncated or downlevel blob is reported as what it is instead of as a failed read of one arbitrary field. Compared as whole 4-byte pairs (not `highestIndex` against `cbRgFcLcb * 2`) because every value index in FC_LCB_VALUE_INDEX is odd, so a halved/doubled comparison would make `>=` and `>` equivalent for every input the file can actually carry.
   const highestIndex = Math.max(...Object.values(FC_LCB_VALUE_INDEX));
-  if (highestIndex >= blobValues) {
+  const requiredPairs = Math.ceil((highestIndex + 1) / 2);
+  if (cbRgFcLcb < requiredPairs) {
     throw new DocFormatError(
-      `Fib.cbRgFcLcb is ${cbRgFcLcb}, giving a FibRgFcLcb blob of ${blobValues} 4-byte values, which does not reach value index ${highestIndex} where lcbClx lives`,
+      `Fib.cbRgFcLcb is ${cbRgFcLcb}, giving a FibRgFcLcb blob of ${cbRgFcLcb * 2} 4-byte values, which does not reach value index ${highestIndex}, the highest field this reader needs`,
     );
   }
 
