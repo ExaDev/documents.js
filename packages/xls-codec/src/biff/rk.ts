@@ -34,11 +34,10 @@ function decodeSignedPayload(bits: number): number {
   return (payload & INT_SIGN_BIT) !== 0 ? payload - INT_MODULUS : payload;
 }
 
-/** The payload read as the high 32 bits of a double whose low 32 bits are zero, with the two flag bits (the double's own bits 32 and 33, which the spec requires be zero) cleared first. */
+/** The payload read as the high 32 bits of a double whose low 32 bits are zero, with the two flag bits (the double's own bits 32 and 33, which the spec requires be zero) cleared first. The low 32 bits are never written: a freshly allocated ArrayBuffer is already zero-filled, and endianness has no observable effect on a word of all-zero bytes -- so stating it explicitly would be a redundant call rather than a real fact about the format. */
 function decodeTruncatedDouble(bits: number): number {
   const buffer = new ArrayBuffer(8);
   const view = new DataView(buffer);
   view.setUint32(0, (bits & ~FLAG_MASK) >>> 0, false);
-  view.setUint32(4, 0, false);
   return view.getFloat64(0, false);
 }
