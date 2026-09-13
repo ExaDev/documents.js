@@ -158,23 +158,14 @@ export function compoundFile(
     };
     records.push(created);
     recordOf.set(node, created);
-    for (const child of node.children) {
-      record(child);
-    }
+    // Sibling chains, linked directly off this recursive call's own return values rather than a later pass through recordOf: node.children.map(record) always returns one real DirectoryRecord per child (record() never returns anything else), so iterating it directly never meets its own out-of-range undefined -- only childRecords[i + 1], at the true last sibling, ever is, and that is the genuine "no next sibling" case NOSTREAM already means.
+    const childRecords = node.children.map(record);
+    childRecords.forEach((childRecord, i) => {
+      childRecord.rightId = childRecords[i + 1]?.id ?? NOSTREAM;
+    });
     return created;
   };
   record(root);
-  // Sibling chains: each storage's children link right, one to the next.
-  for (const { node } of records) {
-    for (let i = 0; i < node.children.length; i++) {
-      const childRecord = recordOf.get(node.children[i] ?? node);
-      const next = node.children[i + 1];
-      if (childRecord !== undefined) {
-        childRecord.rightId =
-          next === undefined ? NOSTREAM : (recordOf.get(next)?.id ?? NOSTREAM);
-      }
-    }
-  }
 
   // Narrowed through a type predicate rather than a boolean one, because `filter` with a boolean callback leaves the element type alone: the two partitions below would still carry `stream?: Uint8Array` even though the predicate is exactly what rules the absent case out, and every later read would need a fallback that can never be taken.
   const smallStreamRecords = records
@@ -285,10 +276,8 @@ export function compoundFile(
     const entry = new DataView(directory.buffer, id * 128, 128);
     // Narrowed through the destructure itself, not a `?? node` fallback: node.children[0] can only be read here once firstChild has already proven the array non-empty, so a fallback for the array's own out-of-range undefined is never actually reachable.
     const [firstChild] = node.children;
-    const childId =
-      firstChild === undefined
-        ? NOSTREAM
-        : (recordOf.get(firstChild)?.id ?? NOSTREAM);
+    // firstChild && ... short-circuits to undefined (never evaluating recordOf.get) when there is no first child, narrowing firstChild to StorageNode on the right for TypeScript's benefit -- a plain `firstChild === undefined ? NOSTREAM : ...` ternary would produce the identical NOSTREAM for that case regardless, since recordOf.get's own fallback already produces NOSTREAM for a lookup that finds nothing, so the ternary's own two branches carry no genuine difference for Stryker to distinguish, but this one does: replacing && with || is a wrong value the moment firstChild is truthy.
+    const childId = (firstChild && recordOf.get(firstChild)?.id) ?? NOSTREAM;
     if (node === root) {
       const start = miniStream.length === 0 ? ENDOFCHAIN : miniStreamStart;
       writeDirectoryEntry(
@@ -339,12 +328,10 @@ export function compoundFile(
   put32(view, 0x40, miniFatSectorCount);
   put32(view, 0x44, ENDOFCHAIN); // first DIFAT sector: none, the DIFAT fits the header array
   // NumberOfDIFATSectors (0x48) stays zero: this generator never spills the DIFAT into its own sectors, and the byte is already zero from the allocation. The header's own 109-entry DIFAT array, over a literal-length array rather than a `for` loop's own comparison bound: a bound one iteration too long would write the byte range the first FAT sector's own data occupies, immediately overwritten by the real copySector call below regardless -- an equivalent mutant no test could observe.
+  //
+  // No i < fatSectors.length guard, either: fatSectors[i] is already undefined for every i at or past its own length, and `?? FREESECT` already turns that into the same FREESECT padding the guard's own false branch spelled out -- a second, redundant way of saying the identical thing.
   for (const i of Array.from({ length: 109 }, (_unused, index) => index)) {
-    put32(
-      view,
-      0x4c + i * 4,
-      i < fatSectors.length ? (fatSectors[i] ?? FREESECT) : FREESECT,
-    );
+    put32(view, 0x4c + i * 4, fatSectors[i] ?? FREESECT);
   }
 
   const copySector = (sector: number, bytes: Uint8Array): void => {
@@ -354,7 +341,11 @@ export function compoundFile(
   fatSectors.forEach((sector, i) => {
     copySector(sector, new Uint8Array(fat.buffer, i * sectorSize, sectorSize));
   });
-  for (let i = 0; i < directorySectorCount; i++) {
+  // Walks Array.from's own bounded index list rather than a hand-written comparison: directory is allocated at exactly directorySectorCount * sectorSize bytes, so an off-by-one here would subarray a range starting at the array's own length -- already empty, and Uint8Array.prototype.set with an empty source is already a no-op regardless of the target offset (see the mini-stream copy's own comment below for the identical reasoning), so there is nothing here for the extra iteration to actually change.
+  for (const i of Array.from(
+    { length: directorySectorCount },
+    (_unused, n) => n,
+  )) {
     copySector(
       directoryStart + i,
       directory.subarray(i * sectorSize, (i + 1) * sectorSize),
