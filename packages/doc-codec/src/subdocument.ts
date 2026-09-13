@@ -26,9 +26,8 @@ function readStoryPlexKeys(
   for (let offset = 0; offset < bytes.length; offset += 4) {
     const raw = readInt32LE(bytes, offset);
     const previous = keys[keys.length - 1] ?? 0;
-    keys.push(
-      raw < 0 || raw > subdocLength ? previous : Math.max(raw, previous),
-    );
+    // A negative raw never needs its own clause: previous is never itself negative (0 to start, or a prior iteration's own previous/Math.max result, both non-negative), so Math.max(raw, previous) already picks previous whenever raw < 0 -- checking it explicitly would only ever restate what the fallback below already does.
+    keys.push(raw > subdocLength ? previous : Math.max(raw, previous));
   }
   return keys;
 }
@@ -62,15 +61,17 @@ export function readSubdocumentStories(
   // Drop the trailing "ignored" slot every one of PlcffndTxt/PlcfandTxt/PlcfendTxt/Plcfhdd carries -- splitEntriesByBoundaries produces one group per gap between consecutive keys, the last of which brackets that undefined sentinel rather than real story content.
   const stories = groups.slice(0, -1);
   // Each non-empty story's own final entry is dropped when it is a bare empty paragraph -- the guard paragraph mark [MS-DOC]'s Headers page requires between stories ("If a story is non-empty, it MUST end with a paragraph mark that serves as a guard between stories. This paragraph mark is not considered part of the story contents"), which a real producer spells as an empty paragraph of its own. A story whose final entry carries content is NOT dropped even though the earlier unconditional `story.slice(0, -1)` removed it: a real producer's footnote/endnote/comment stories genuinely end with their own last content paragraph's mark and no separate guard (confirmed against a LibreOffice-authored .doc, whose single-paragraph footnote story is `<footnote self-reference><tab>text<0x0D>` with the subdocument's one extra trailing mark sitting beyond the story -- PlcffndTxt's own "The range of text MUST end in character 0x0D immediately before the next CP" is satisfied by that content mark itself), so dropping the final entry unconditionally read every such note as empty and every multi-paragraph one as missing its last paragraph. A story whose last paragraph genuinely is empty is indistinguishable from a guard at the byte level in that spelling, which is the format's own ambiguity, not a choice: the guard reading wins, exactly as [MS-DOC]'s "not considered part of the story contents" says it must. An empty story's group is already `[]`, and dropping nothing from it stays `[]`, so this needs no separate case for one.
-  return stories.map((story) =>
-    endsWithGuardParagraph(story) ? story.slice(0, -1) : story,
-  );
+  // The empty-story case (last === undefined) is resolved here rather than inside endsWithGuardParagraph itself: an empty story's own story.slice(0, -1) is already [] either way, so a guard returning false for it from inside the function can never be told apart from one that didn't bother -- narrowing `last` to defined before the call, instead, means a mutant that skipped this check entirely would call endsWithGuardParagraph(undefined) and fail to typecheck rather than survive unnoticed.
+  return stories.map((story) => {
+    const last = story[story.length - 1];
+    return last !== undefined && endsWithGuardParagraph(last)
+      ? story.slice(0, -1)
+      : story;
+  });
 }
 
 // Whether a story's own final entry is a bare paragraph mark and nothing else -- the guard spelling: one paragraph, no runs. Resolved through the entry's whole `blocks` rather than its text so an inline picture split out of the last paragraph (whose blocks end in the image, not a paragraph) is never mistaken for one.
-function endsWithGuardParagraph(story: readonly ParagraphEntry[]): boolean {
-  const last = story[story.length - 1];
-  if (last === undefined) return false;
+function endsWithGuardParagraph(last: ParagraphEntry): boolean {
   if (last.blocks.length !== 1) return false;
   const only = last.blocks[0];
   return only?.kind === "paragraph" && only.runs.length === 0;
