@@ -89,14 +89,9 @@ export function writeOdfFormulaContent(
       `writeOdfFormulaContent: expected a 'formula' document, got '${content.kind}' -- odf.js writes .odf from the formula arm only`,
     );
   }
+  // No starMath here: writeOdfFormulaMathMl (see its own top-of-file note) never reads document.starMath -- it round-trips the StarMath annotation verbatim as part of the mathml nodes themselves, so carrying content.formula.starMath through this object would be inert either way.
   return writeOdfFormulaMathMl(
-    {
-      mathml: content.formula.mathml,
-      ...(content.formula.starMath !== undefined
-        ? { starMath: content.formula.starMath }
-        : {}),
-      metadata: content.metadata,
-    },
+    { mathml: content.formula.mathml, metadata: content.metadata },
     options,
   );
 }

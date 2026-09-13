@@ -5,7 +5,8 @@ import type { XmlElement } from "../../model/node";
 import { el, txt } from "../../xml/fragment";
 import { decodePackage, encodePackage } from "../../codec";
 import { readMimetype } from "../../mimetype";
-import { validateManifest } from "../../manifest";
+import { readManifest, validateManifest } from "../../manifest";
+import { readOdfMetadata } from "../shared/metadata";
 import { rootElement } from "../../xml/query";
 import { readOdfFormula, readOdfFormulaMathMl } from "./read";
 import {
@@ -110,5 +111,56 @@ describe("writeOdfFormulaMathMl", () => {
         sections: [],
       }),
     ).toThrow(/formula/);
+  });
+
+  it("writes a standard XML declaration (version 1.0, encoding UTF-8) as content.xml's very first node", () => {
+    const pkg = writeOdfFormulaMathMl({
+      mathml: [el("mi", {}, [txt("x")])],
+      metadata: {},
+    });
+    const part = pkg.parts["content.xml"];
+    if (part?.kind !== "xml") {
+      throw new Error("expected an xml part");
+    }
+    expect(part.nodes[0]).toEqual({
+      type: "declaration",
+      attributes: [
+        { name: "version", value: "1.0" },
+        { name: "encoding", value: "UTF-8" },
+      ],
+    });
+  });
+
+  it("actually writes the given metadata into meta.xml, not just an empty document", () => {
+    const pkg = writeOdfFormulaMathMl({
+      mathml: [el("mi", {}, [txt("x")])],
+      metadata: { title: "Quadratic Formula" },
+    });
+    expect(readOdfMetadata(pkg).title).toBe("Quadratic Formula");
+  });
+
+  it("stamps the given version option onto both meta.xml and the manifest's root entry, not the default", () => {
+    const pkg = writeOdfFormulaMathMl(
+      { mathml: [el("mi", {}, [txt("x")])], metadata: {} },
+      { version: "1.4" },
+    );
+    expect(readManifest(pkg).version).toBe("1.4");
+  });
+
+  it("detects a math:-prefixed tag nested arbitrarily deep, not only at the mathml array's own top level", () => {
+    // The root and its immediate child both use plain (unprefixed) tags; only the leaf two levels down is math:-prefixed. A check that only inspects the top-level tag itself, without ever recursing into children, would wrongly report no math:-prefixed content here at all.
+    const pkg = writeOdfFormulaMathMl({
+      mathml: [el("mrow", {}, [el("mi", {}, [el("math:mi", {}, [])])])],
+      metadata: {},
+    });
+    const root = rootElement(
+      pkg.parts["content.xml"]?.kind === "xml"
+        ? pkg.parts["content.xml"].nodes
+        : [],
+    );
+    expect(
+      root?.attributes.find((attribute) => attribute.name === "xmlns:math")
+        ?.value,
+    ).toBe("http://www.w3.org/1998/Math/MathML");
   });
 });
