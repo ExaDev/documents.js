@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { decodePackage, encodePackage } from "../../codec";
 import { readMimetype } from "../../mimetype";
-import { validateManifest } from "../../manifest";
+import { validateManifest, readManifest } from "../../manifest";
 import {
   rootElement,
   findChildElement,
@@ -43,6 +43,28 @@ describe("writeOdm", () => {
       "application/vnd.oasis.opendocument.text-master",
     );
     expect(validateManifest(pkg)).toEqual([]);
+  });
+
+  it("defaults to the current ODF version on both content.xml and the manifest when no version option is given", () => {
+    const pkg = writeOdm(twoChapterDocument());
+    const root = rootElement(
+      pkg.parts["content.xml"]?.kind === "xml"
+        ? pkg.parts["content.xml"].nodes
+        : [],
+    );
+    expect(attrValue(root!, "office:version")).toBe("1.3");
+    expect(readManifest(pkg).version).toBe("1.3");
+  });
+
+  it("honours an explicit ODF version on content.xml and the manifest alike", () => {
+    const pkg = writeOdm(twoChapterDocument(), { version: "1.2" });
+    const root = rootElement(
+      pkg.parts["content.xml"]?.kind === "xml"
+        ? pkg.parts["content.xml"].nodes
+        : [],
+    );
+    expect(attrValue(root!, "office:version")).toBe("1.2");
+    expect(readManifest(pkg).version).toBe("1.2");
   });
 
   it("writes each chapter as a top-level text:section carrying a self-closing text:section-source with href and filter name only", () => {
