@@ -417,35 +417,17 @@ interface EditorParagraphHandle {
   remove(): void;
 }
 
-// The two access directions of the paragraph-family surface. Every editor class forwards paragraphs() itself; appendParagraph lives on the body for the three package-backed formats (docx/odt/markdown) and on the editor for doc -- each case narrows the session union to ONE class, since calling through a union of distinct classes requires their signatures to unify and the paragraph types deliberately do not.
+// The two access directions of the paragraph-family surface. Every editor class forwards paragraphs() itself with an identical zero-argument call, so there is no format-specific behaviour left to switch on: each of the four paragraph types satisfies EditorParagraphHandle structurally (this module's own top comment), which is what lets a single call return the union directly rather than needing one branch per format to narrow the session first. appendParagraph does still vary: it lives on the body for the three package-backed formats (docx/odt/markdown, which share an identical `body.appendParagraph` call) and on the editor itself for doc -- so that one genuine difference stays a real branch, narrowing only the case that actually differs from the rest.
 export function paragraphsOf(session: EditorSession): EditorParagraphHandle[] {
-  switch (session.format) {
-    case "docx":
-      return session.editor.paragraphs();
-    case "odt":
-      return session.editor.paragraphs();
-    case "doc":
-      return session.editor.paragraphs();
-    case "markdown":
-      return session.editor.paragraphs();
-  }
+  return session.editor.paragraphs();
 }
 
 export function appendParagraphOf(session: EditorSession, text: string): void {
-  switch (session.format) {
-    case "docx":
-      session.editor.body.appendParagraph({ text });
-      return;
-    case "odt":
-      session.editor.body.appendParagraph({ text });
-      return;
-    case "markdown":
-      session.editor.body.appendParagraph({ text });
-      return;
-    case "doc":
-      session.editor.appendParagraph({ text });
-      return;
+  if (session.format === "doc") {
+    session.editor.appendParagraph({ text });
+    return;
   }
+  session.editor.body.appendParagraph({ text });
 }
 
 export function paragraphTexts(session: EditorSession): string[] {
