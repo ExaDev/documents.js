@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { relsPathFor, resolveRelTarget } from "./util";
+import { el, txt } from "../xml/fragment";
+import { relsPathFor, resolveRelTarget, textContent } from "./util";
+
+describe("textContent", () => {
+  it("concatenates cdata content alongside plain text, not just text nodes", () => {
+    const element = el("w:t", {}, [
+      txt("plain "),
+      { type: "cdata", value: "cdata" },
+    ]);
+    expect(textContent(element)).toBe("plain cdata");
+  });
+});
 
 describe("relsPathFor", () => {
   it("splits a slash-containing part path into its directory and file name", () => {
