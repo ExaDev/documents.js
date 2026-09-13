@@ -63,7 +63,8 @@ export function parseChpxFkp(page: Uint8Array): ChpxFkp {
   const crun = readUint8(page, FKP_PAGE_SIZE - 1);
   if (crun < 1 || crun > MAX_CRUN) {
     throw new DocFormatError(
-      `ChpxFkp declares crun ${crun}, outside the 0x01..0x${MAX_CRUN.toString(16).toUpperCase()} range [MS-DOC] permits`,
+      // No .toUpperCase() on MAX_CRUN's own hex digits, unlike MAX_CPARA's message below: 0x65's digits are both plain numerals, so upper/lower-casing them is a genuine no-op for this fixed constant, not a stylistic omission.
+      `ChpxFkp declares crun ${crun}, outside the 0x01..0x${MAX_CRUN.toString(16)} range [MS-DOC] permits`,
     );
   }
   const rgfc = readRgfc(page, crun);
