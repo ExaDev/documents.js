@@ -18,38 +18,40 @@ interface RestErrorMapping {
   readonly body: Record<string, unknown>;
 }
 
-// Keyed by operation name rather than a per-operation registration call (document-mcp's own convention): document-rest has no per-operation registration step of its own to hang a mapError option off, since every operation is dispatched generically through OPERATIONS_BY_NAME.
-const ERROR_MAPPERS: ReadonlyMap<
+// Keyed by operation name rather than a per-operation registration call (document-mcp's own convention): document-rest has no per-operation registration step of its own to hang a mapError option off, since every operation is dispatched generically through OPERATIONS_BY_NAME. Built fresh on every call rather than once as a module-level constant: a Map built at module scope executes exactly once, at import time, before any test's per-test coverage instrumentation is active, which makes a mutation to its contents structurally invisible to Stryker's per-test mutant testing (the code runs, correctly, but never on a run a specific test's active-mutant flag can attribute to it). Calling this inside the request path costs building two Map entries per erroring request, which is immaterial next to the document conversion work each request is already doing.
+function buildErrorMappers(): ReadonlyMap<
   string,
   (error: unknown) => RestErrorMapping | undefined
-> = new Map([
-  [
-    "odb_render_report",
-    (error: unknown): RestErrorMapping | undefined => {
-      if (!(error instanceof OdbReportNotSpecifiedError)) return undefined;
-      return {
-        status: 400,
-        body: {
-          error: error.message,
-          availableReports: error.availableReports,
-        },
-      };
-    },
-  ],
-  [
-    "odm_to_pdf",
-    (error: unknown): RestErrorMapping | undefined => {
-      if (!(error instanceof OdmUnresolvedSectionError)) return undefined;
-      return {
-        status: 400,
-        body: {
-          error: `${error.message} Pass chaptersDir containing these files, or an explicit chapters override, for each href.`,
-          hrefs: error.hrefs,
-        },
-      };
-    },
-  ],
-]);
+> {
+  return new Map([
+    [
+      "odb_render_report",
+      (error: unknown): RestErrorMapping | undefined => {
+        if (!(error instanceof OdbReportNotSpecifiedError)) return undefined;
+        return {
+          status: 400,
+          body: {
+            error: error.message,
+            availableReports: error.availableReports,
+          },
+        };
+      },
+    ],
+    [
+      "odm_to_pdf",
+      (error: unknown): RestErrorMapping | undefined => {
+        if (!(error instanceof OdmUnresolvedSectionError)) return undefined;
+        return {
+          status: 400,
+          body: {
+            error: `${error.message} Pass chaptersDir containing these files, or an explicit chapters override, for each href.`,
+            hrefs: error.hrefs,
+          },
+        };
+      },
+    ],
+  ]);
+}
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -71,10 +73,10 @@ function sendJson(
   res.end(text);
 }
 
-// A signal that aborts if the client disconnects before the operation finishes -- node:http's IncomingMessage carries no AbortSignal of its own, only a 'close' event, so this bridges the two the same way Node's own fetch-adjacent APIs (e.g. Request.signal in undici) are built internally.
-function abortSignalFor(req: IncomingMessage): AbortSignal {
+// A signal that aborts if the client disconnects before the operation finishes -- node:http's ServerResponse carries no AbortSignal of its own, only a 'close' event, so this bridges the two the same way Node's own fetch-adjacent APIs (e.g. Request.signal in undici) are built internally. Deliberately keyed off the *response*, not the request: an IncomingMessage's own 'close' fires as soon as its body has been fully read, which happens well before a handler like this one is done with it, regardless of whether the client is still connected -- it is not a genuine "client went away" signal once the body is no longer being streamed. A ServerResponse's 'close' fires only when the underlying connection is torn down before res.end() completes it, which is exactly the condition this function exists to detect.
+function abortSignalFor(res: ServerResponse): AbortSignal {
   const controller = new AbortController();
-  req.once("close", () => {
+  res.once("close", () => {
     controller.abort();
   });
   return controller.signal;
@@ -106,11 +108,11 @@ async function handleOperationRequest(
 
   try {
     const result = await operation.run(parsed.data, {
-      signal: abortSignalFor(req),
+      signal: abortSignalFor(res),
     });
     sendJson(res, 200, { result: result });
   } catch (error) {
-    const mapped = ERROR_MAPPERS.get(operation.name)?.(error);
+    const mapped = buildErrorMappers().get(operation.name)?.(error);
     if (mapped !== undefined) {
       sendJson(res, mapped.status, mapped.body);
       return;
@@ -148,7 +150,8 @@ export function createRestServer(): Server {
         return;
       }
 
-      const name = url.pathname.replace(/^\//, "");
+      // WHATWG URL.pathname always begins with "/" for an http(s) URL, so slicing off exactly one leading character reaches the same result a `replace(/^\//, "")` would -- without a regex whose anchor a mutation test can never observe changing anything, since the first "/" is always at index 0.
+      const name = url.pathname.slice(1);
       const operation = OPERATIONS_BY_NAME.get(name);
       if (operation === undefined) {
         sendJson(res, 404, {
