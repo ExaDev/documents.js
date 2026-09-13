@@ -10,7 +10,7 @@ describe("writeRecord", () => {
     const data = new Uint8Array([0x00, 0x06, 0x05, 0x00]);
     const framed = writeRecord(RECORD_BOF, data);
 
-    expect(readRecords(framed)).toEqual([
+    expect(readRecords(framed)).toStrictEqual([
       { type: RECORD_BOF, data, offset: 0 },
     ]);
   });
@@ -18,14 +18,16 @@ describe("writeRecord", () => {
   it("frames a zero-length record", () => {
     const framed = writeRecord(RECORD_EOF, new Uint8Array(0));
 
-    expect(readRecords(framed)).toEqual([
+    expect(readRecords(framed)).toStrictEqual([
       { type: RECORD_EOF, data: new Uint8Array(0), offset: 0 },
     ]);
   });
 
   it("writes the header as a little-endian type then a little-endian size", () => {
     const framed = writeRecord(0x0809, new Uint8Array(3));
-    expect(Array.from(framed.slice(0, 4))).toEqual([0x09, 0x08, 0x03, 0x00]);
+    expect(Array.from(framed.slice(0, 4))).toStrictEqual([
+      0x09, 0x08, 0x03, 0x00,
+    ]);
   });
 
   it("accepts data exactly at the maximum record size", () => {
@@ -37,6 +39,13 @@ describe("writeRecord", () => {
     const data = new Uint8Array(MAX_RECORD_DATA_SIZE + 1);
     expect(() => writeRecord(RECORD_BOF, data)).toThrow(BiffWriteError);
   });
+
+  it("names the record's own type and length in the refusal message", () => {
+    const data = new Uint8Array(MAX_RECORD_DATA_SIZE + 1);
+    expect(() => writeRecord(RECORD_BOF, data)).toThrow(
+      `record 0x${RECORD_BOF.toString(16)} would carry ${data.length} bytes of data, above the ${MAX_RECORD_DATA_SIZE}-byte maximum a single record can hold ([MS-XLS] 2.1.4); this writer does not split oversized records into Continue chains`,
+    );
+  });
 });
 
 describe("concatRecords", () => {
@@ -46,7 +55,7 @@ describe("concatRecords", () => {
 
     const stream = concatRecords(first, second);
 
-    expect(readRecords(stream)).toEqual([
+    expect(readRecords(stream)).toStrictEqual([
       { type: RECORD_BOF, data: new Uint8Array([1, 2]), offset: 0 },
       { type: RECORD_EOF, data: new Uint8Array(0), offset: 6 },
     ]);

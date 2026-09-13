@@ -24,20 +24,20 @@ const PORTRAIT_LETTER: SetupFields = {
 
 describe("pageSizeFromSetup", () => {
   it("resolves US Letter (code 1) to the same 612 x 792 pt the shared schema constant carries", () => {
-    expect(pageSizeFromSetup(PORTRAIT_LETTER)).toEqual(PAGE_SIZE_LETTER);
+    expect(pageSizeFromSetup(PORTRAIT_LETTER)).toStrictEqual(PAGE_SIZE_LETTER);
   });
 
   it("resolves A4 (code 9) to the same 595.28 x 841.89 pt the shared schema constant carries", () => {
-    expect(pageSizeFromSetup({ ...PORTRAIT_LETTER, paperCode: 9 })).toEqual(
-      PAGE_SIZE_A4,
-    );
+    expect(
+      pageSizeFromSetup({ ...PORTRAIT_LETTER, paperCode: 9 }),
+    ).toStrictEqual(PAGE_SIZE_A4);
   });
 
   it("transposes a code's own portrait dimensions when fPortrait is clear", () => {
     // A paper code names the sheet's paper in portrait regardless of how it prints, so landscape A4 is the same code with the dimensions the other way round.
     expect(
       pageSizeFromSetup({ ...PORTRAIT_LETTER, paperCode: 9, portrait: false }),
-    ).toEqual({
+    ).toStrictEqual({
       widthPt: PAGE_SIZE_A4.heightPt,
       heightPt: PAGE_SIZE_A4.widthPt,
     });
@@ -51,12 +51,14 @@ describe("pageSizeFromSetup", () => {
         portrait: false,
         noOrientation: true,
       }),
-    ).toEqual(PAGE_SIZE_LETTER);
+    ).toStrictEqual(PAGE_SIZE_LETTER);
   });
 
   it("resolves a metric code from the millimetres its own table entry states", () => {
     // A3, 297 x 420 mm -> 297/25.4*72 x 420/25.4*72 pt, rounded to hundredths.
-    expect(pageSizeFromSetup({ ...PORTRAIT_LETTER, paperCode: 8 })).toEqual({
+    expect(
+      pageSizeFromSetup({ ...PORTRAIT_LETTER, paperCode: 8 }),
+    ).toStrictEqual({
       widthPt: 841.89,
       heightPt: 1190.55,
     });
@@ -75,7 +77,7 @@ describe("pageSizeFromSetup", () => {
 
 describe("paperSelectionFor", () => {
   it("names US Letter portrait for the shared schema constant", () => {
-    expect(paperSelectionFor(PAGE_SIZE_LETTER)).toEqual({
+    expect(paperSelectionFor(PAGE_SIZE_LETTER)).toStrictEqual({
       code: 1,
       portrait: true,
     });
@@ -87,12 +89,14 @@ describe("paperSelectionFor", () => {
         widthPt: PAGE_SIZE_A4.heightPt,
         heightPt: PAGE_SIZE_A4.widthPt,
       }),
-    ).toEqual({ code: 9, portrait: false });
+    ).toStrictEqual({ code: 9, portrait: false });
   });
 
   it("absorbs a fraction of a point of drift", () => {
     // A page size crossing between codecs picks up conversion drift; a fifth of a point is well under any real difference between two papers.
-    expect(paperSelectionFor({ widthPt: 595.08, heightPt: 841.69 })).toEqual({
+    expect(
+      paperSelectionFor({ widthPt: 595.08, heightPt: 841.69 }),
+    ).toStrictEqual({
       code: 9,
       portrait: true,
     });
@@ -101,6 +105,19 @@ describe("paperSelectionFor", () => {
   it("names no paper at all for a size no code covers", () => {
     // BIFF8's Setup record addresses paper only by code, so this is a real limit rather than a fallback: the caller refuses instead of substituting a paper the document never asked for.
     expect(paperSelectionFor({ widthPt: 500, heightPt: 500 })).toBeUndefined();
+  });
+
+  it("requires BOTH landscape dimensions to match, not just one", () => {
+    // 1224pt matches US Tabloid/11x17's own heightPt exactly, but 999pt matches no code's widthPt at all -- a size genuinely this shape names no paper, which is what proves the landscape check is a conjunction rather than "either dimension is close enough".
+    expect(paperSelectionFor({ widthPt: 1224, heightPt: 999 })).toBeUndefined();
+  });
+
+  it("matches at exactly the tolerance boundary, not only strictly inside it", () => {
+    // US Letter is 612 x 792pt; half a point over its width is exactly PAPER_SIZE_TOLERANCE_PT away, which must still count as the same paper.
+    expect(paperSelectionFor({ widthPt: 612.5, heightPt: 792 })).toStrictEqual({
+      code: 1,
+      portrait: true,
+    });
   });
 
   it("round-trips every resolvable code back to a page size that resolves the same way", () => {
@@ -118,7 +135,7 @@ describe("paperSelectionFor", () => {
           paperCode: selection?.code ?? -1,
           portrait: selection?.portrait ?? true,
         }),
-      ).toEqual(size);
+      ).toStrictEqual(size);
     }
   });
 });
@@ -134,7 +151,7 @@ describe("Setup flag packing", () => {
       };
       expect(
         unpackSetupFlags(packSetupFlags({ ...PORTRAIT_LETTER, ...flags })),
-      ).toEqual(flags);
+      ).toStrictEqual(flags);
     }
   });
 
@@ -156,7 +173,7 @@ describe("Setup flag packing", () => {
 
   it("reads the flags word a real LibreOffice-written Setup record carries", () => {
     // The grbit of the Setup record in a .xls LibreOffice wrote for a landscape sheet printed left-to-right: fLeftToRight and fUsePage set, fPortrait clear.
-    expect(unpackSetupFlags(0x0081)).toEqual({
+    expect(unpackSetupFlags(0x0081)).toStrictEqual({
       leftToRight: true,
       portrait: false,
       noPls: false,

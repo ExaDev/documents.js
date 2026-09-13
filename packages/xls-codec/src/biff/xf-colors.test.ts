@@ -31,15 +31,15 @@ import {
 
 describe("resolveIcvColor", () => {
   it("resolves icv 0-7 to the eight fixed built-in colours", () => {
-    expect(resolveIcvColor(0, undefined)).toEqual({ r: 0, g: 0, b: 0 }); // Black
-    expect(resolveIcvColor(2, undefined)).toEqual({ r: 1, g: 0, b: 0 }); // Red
-    expect(resolveIcvColor(7, undefined)).toEqual({ r: 0, g: 1, b: 1 }); // Cyan
+    expect(resolveIcvColor(0, undefined)).toStrictEqual({ r: 0, g: 0, b: 0 }); // Black
+    expect(resolveIcvColor(2, undefined)).toStrictEqual({ r: 1, g: 0, b: 0 }); // Red
+    expect(resolveIcvColor(7, undefined)).toStrictEqual({ r: 0, g: 1, b: 1 }); // Cyan
   });
 
   it("resolves icv 8-63 through the fixed default table when no Palette is given", () => {
     // icv 8: rgColor[0]'s own default (0,0,0); icv 24 (0x18): rgColor[16]'s own default (153,153,255) -- [MS-XLS] "Icv"'s own table.
-    expect(resolveIcvColor(8, undefined)).toEqual({ r: 0, g: 0, b: 0 });
-    expect(resolveIcvColor(24, undefined)).toEqual({
+    expect(resolveIcvColor(8, undefined)).toStrictEqual({ r: 0, g: 0, b: 0 });
+    expect(resolveIcvColor(24, undefined)).toStrictEqual({
       r: 153 / 255,
       g: 153 / 255,
       b: 1,
@@ -49,7 +49,7 @@ describe("resolveIcvColor", () => {
   it("resolves icv 8-63 through a real Palette's own entries when one is given", () => {
     const palette = Array.from({ length: 56 }, () => ({ r: 0, g: 0, b: 0 }));
     palette[0] = { r: 1, g: 0.5, b: 0 };
-    expect(resolveIcvColor(8, palette)).toEqual({ r: 1, g: 0.5, b: 0 });
+    expect(resolveIcvColor(8, palette)).toStrictEqual({ r: 1, g: 0.5, b: 0 });
   });
 
   it("does not resolve the Automatic foreground/background special values", () => {
@@ -59,6 +59,11 @@ describe("resolveIcvColor", () => {
 
   it("does not resolve a value outside every documented range", () => {
     expect(resolveIcvColor(0x7fff, undefined)).toBeUndefined();
+  });
+
+  it("resolves icv 63, the palette range's own last valid index, and refuses icv 64, one past it", () => {
+    expect(resolveIcvColor(63, undefined)).toBeDefined();
+    expect(resolveIcvColor(64, undefined)).toBeUndefined();
   });
 });
 
@@ -81,7 +86,7 @@ describe("DEFAULT_PALETTE_HEX_TO_ICV", () => {
         resolvedIcv === undefined
           ? undefined
           : resolveIcvColor(resolvedIcv, undefined),
-      ).toEqual(color);
+      ).toStrictEqual(color);
     }
   });
 });
@@ -96,13 +101,17 @@ describe("resolveBorderEdge / borderStyleTokenFor", () => {
   it("resolves a thin solid border with no explicit style member (solid is the omitted default)", () => {
     expect(
       resolveBorderEdge({ style: BORDER_STYLE_THIN, icv: 10 }, undefined),
-    ).toEqual({ color: { r: 1, g: 0, b: 0 }, widthPt: 0.75 });
+    ).toStrictEqual({ color: { r: 1, g: 0, b: 0 }, widthPt: 0.75 });
   });
 
   it("resolves a double border with its own style member", () => {
     expect(
       resolveBorderEdge({ style: BORDER_STYLE_DOUBLE, icv: 10 }, undefined),
-    ).toEqual({ color: { r: 1, g: 0, b: 0 }, widthPt: 0.75, style: "double" });
+    ).toStrictEqual({
+      color: { r: 1, g: 0, b: 0 },
+      widthPt: 0.75,
+      style: "double",
+    });
   });
 
   it("does not resolve a border whose colour does not resolve to a fixed RGB value", () => {
@@ -157,12 +166,12 @@ describe("resolveBorderEdge / borderStyleTokenFor", () => {
 
 describe("resolveFillBackground", () => {
   it("resolves a solid fill's own foreground colour", () => {
-    expect(resolveFillBackground(FILL_PATTERN_SOLID, 10, 0, undefined)).toEqual(
-      {
-        kind: "solid",
-        color: { r: 1, g: 0, b: 0 },
-      },
-    );
+    expect(
+      resolveFillBackground(FILL_PATTERN_SOLID, 10, 0, undefined),
+    ).toStrictEqual({
+      kind: "solid",
+      color: { r: 1, g: 0, b: 0 },
+    });
   });
 
   it("resolves nothing for FLSNULL (no fill pattern)", () => {
@@ -173,7 +182,9 @@ describe("resolveFillBackground", () => {
 
   it("resolves a genuine two-colour pattern fill instead of dropping it (ExaDev/documents.js#951)", () => {
     const GRAY_50_PERCENT = 0x02;
-    expect(resolveFillBackground(GRAY_50_PERCENT, 10, 11, undefined)).toEqual({
+    expect(
+      resolveFillBackground(GRAY_50_PERCENT, 10, 11, undefined),
+    ).toStrictEqual({
       kind: "pattern",
       patternType: "mediumGray",
       foregroundColor: { r: 1, g: 0, b: 0 },
@@ -185,7 +196,7 @@ describe("resolveFillBackground", () => {
     const THICK_DIAGONAL_CROSSHATCH = 0x0a;
     expect(
       resolveFillBackground(THICK_DIAGONAL_CROSSHATCH, 10, 11, undefined),
-    ).toEqual({
+    ).toStrictEqual({
       kind: "pattern",
       patternType: "darkTrellis",
       foregroundColor: { r: 1, g: 0, b: 0 },
@@ -206,7 +217,7 @@ describe("resolveFillBackground", () => {
       11,
       undefined,
     );
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       kind: "pattern",
       patternType: "mediumGray",
       backgroundColor: { r: 0, g: 1, b: 0 },
@@ -226,7 +237,7 @@ describe("packXfDecorationWords / unpackXfDecoration", () => {
       bottom: { style: BORDER_STYLE_NONE, icv: 0 },
     };
     const { word2, word3, word4 } = packXfDecorationWords(decoration);
-    expect(unpackXfDecoration(word2, word3, word4)).toEqual(decoration);
+    expect(unpackXfDecoration(word2, word3, word4)).toStrictEqual(decoration);
   });
 
   it("round-trips a genuine two-colour pattern's own foreground and background icv, both real", () => {
@@ -237,7 +248,7 @@ describe("packXfDecorationWords / unpackXfDecoration", () => {
       fillBackgroundIcv: 13,
     };
     const { word2, word3, word4 } = packXfDecorationWords(decoration);
-    expect(unpackXfDecoration(word2, word3, word4)).toEqual(decoration);
+    expect(unpackXfDecoration(word2, word3, word4)).toStrictEqual(decoration);
   });
 
   it("packs the exact undecorated defaults ([MS-XLS]'s own 'no border, no fill' state) with no argument", () => {
@@ -247,7 +258,7 @@ describe("packXfDecorationWords / unpackXfDecoration", () => {
     expect(word3).toBe(0);
     // word4: icvFore (0x40, Automatic foreground) | icvBack (0x41, Automatic background) << 7.
     expect(word4).toBe(0x40 | (0x41 << 7));
-    expect(unpackXfDecoration(word2, word3, word4).left).toEqual({
+    expect(unpackXfDecoration(word2, word3, word4).left).toStrictEqual({
       style: BORDER_STYLE_NONE,
       icv: 0,
     });
@@ -280,7 +291,7 @@ describe("applyTint", () => {
   const red = { r: 1, g: 0, b: 0 };
 
   it("returns the colour unchanged for a zero tint", () => {
-    expect(applyTint(red, 0)).toEqual(red);
+    expect(applyTint(red, 0)).toStrictEqual(red);
   });
 
   it("tints a colour toward white for a positive value", () => {
@@ -304,4 +315,77 @@ describe("applyTint", () => {
     expect(tinted.g).toBeCloseTo(tinted.b);
     expect(tinted.r).toBeGreaterThan(grey.r);
   });
+
+  // An independent reference implementation of the identical, standard sRGB<->HSL conversion (W3C CSS Color Module Level 3's own algorithm, https://www.w3.org/TR/css-color-3/#hsl-color) plus the tint formula the source's own top comment cites -- so the colours below (none of them a pure primary, unlike red/grey above, both of which happen to compute an exact 0.5 lightness that never exercises the s formula's own l > 0.5 branch or any hue branch but max === r) can be checked against a real computed expectation rather than only a directional bound.
+  function referenceTint(
+    color: { r: number; g: number; b: number },
+    tint: number,
+  ): { r: number; g: number; b: number } {
+    const { r, g, b } = color;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    let h = 0;
+    let s = 0;
+    if (max !== min) {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      if (max === r) {
+        h = (g - b) / d + (g < b ? 6 : 0);
+      } else if (max === g) {
+        h = (b - r) / d + 2;
+      } else {
+        h = (r - g) / d + 4;
+      }
+      h /= 6;
+    }
+    const newL = tint < 0 ? l * (1 + tint) : l * (1 - tint) + tint;
+    if (s === 0) {
+      return { r: newL, g: newL, b: newL };
+    }
+    const q = newL < 0.5 ? newL * (1 + s) : newL + s - newL * s;
+    const p = 2 * newL - q;
+    const hueToRgb = (t: number): number => {
+      let tt = t;
+      if (tt < 0) tt += 1;
+      if (tt > 1) tt -= 1;
+      if (tt < 1 / 6) return p + (q - p) * 6 * tt;
+      if (tt < 1 / 2) return q;
+      if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
+      return p;
+    };
+    return { r: hueToRgb(h + 1 / 3), g: hueToRgb(h), b: hueToRgb(h - 1 / 3) };
+  }
+
+  it.each([
+    // A lightened variant of blue (b uniquely max, l <= 0.5) -- the hue branch neither red (max === r) nor the green case below exercises.
+    {
+      label: "b-dominant, l<=0.5",
+      color: { r: 0.2, g: 0.2, b: 0.6 },
+      tint: 0.5,
+    },
+    // g uniquely max, l > 0.5 -- the s formula's own d / (2 - max - min) branch, which red's exact 0.5 lightness never selects.
+    { label: "g-dominant, l>0.5", color: { r: 0.6, g: 1, b: 0.7 }, tint: 0.5 },
+    // r max with g < b (red's own g === b never selects the "+6" branch of that ternary), shaded rather than tinted.
+    {
+      label: "r-dominant with g<b, shaded",
+      color: { r: 0.8, g: 0.1, b: 0.3 },
+      tint: -0.4,
+    },
+    // g-dominant with b well below r -- the one shape among these whose own computed hue puts h - 1/3 below zero, exercising hueToRgb's own negative-wraparound branch none of the other cases here reach.
+    {
+      label: "g-dominant, low hue",
+      color: { r: 0.9, g: 1, b: 0.1 },
+      tint: 0.3,
+    },
+  ] as const)(
+    "matches an independently computed HSL tint for $label",
+    ({ color, tint }) => {
+      const expected = referenceTint(color, tint);
+      const actual = applyTint(color, tint);
+      expect(actual.r).toBeCloseTo(expected.r);
+      expect(actual.g).toBeCloseTo(expected.g);
+      expect(actual.b).toBeCloseTo(expected.b);
+    },
+  );
 });

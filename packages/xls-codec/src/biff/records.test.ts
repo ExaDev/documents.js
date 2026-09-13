@@ -7,7 +7,11 @@ import {
   RECORD_EOF,
   RECORD_SST,
 } from "./record-types";
-import { BiffFormatError, readRecords } from "./records";
+import {
+  BiffFormatError,
+  readRecords,
+  recoverFromFormatError,
+} from "./records";
 
 // Byte sequences here are hand-built from [MS-XLS] 2.1.4's own three-component framing -- a two-byte little-endian record type, a two-byte little-endian record size, then exactly that many bytes of record data (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/170e90ce-87d7-4758-9331-dcf14cd72388) -- rather than captured from a real file, so a test failure points at this package's reading of the spec rather than at some producer's quirk.
 
@@ -29,7 +33,7 @@ describe("readRecords", () => {
   it("reads a record's type and data from the framing", () => {
     const stream = bytes(...record(RECORD_BOF, [0x00, 0x06, 0x05, 0x00]));
 
-    expect(readRecords(stream)).toEqual([
+    expect(readRecords(stream)).toStrictEqual([
       { type: RECORD_BOF, data: bytes(0x00, 0x06, 0x05, 0x00), offset: 0 },
     ]);
   });
@@ -40,7 +44,7 @@ describe("readRecords", () => {
       ...record(RECORD_EOF, []),
     );
 
-    expect(readRecords(stream).map((entry) => entry.type)).toEqual([
+    expect(readRecords(stream).map((entry) => entry.type)).toStrictEqual([
       RECORD_BOF,
       RECORD_EOF,
     ]);
@@ -48,7 +52,7 @@ describe("readRecords", () => {
 
   it("reads a zero-length record, which the framing explicitly permits", () => {
     // [MS-XLS] 2.1.4: "The record size MUST be greater than or equal to 0". EOF is exactly this case in every real file.
-    expect(readRecords(bytes(...record(RECORD_EOF, [])))).toEqual([
+    expect(readRecords(bytes(...record(RECORD_EOF, [])))).toStrictEqual([
       { type: RECORD_EOF, data: bytes(), offset: 0 },
     ]);
   });
@@ -60,7 +64,9 @@ describe("readRecords", () => {
       ...record(RECORD_EOF, []),
     );
 
-    expect(readRecords(stream).map((entry) => entry.offset)).toEqual([0, 6]);
+    expect(readRecords(stream).map((entry) => entry.offset)).toStrictEqual([
+      0, 6,
+    ]);
   });
 
   it("keeps a Continue record as its own entry rather than merging it", () => {
@@ -70,25 +76,29 @@ describe("readRecords", () => {
       ...record(RECORD_CONTINUE, [0x02]),
     );
 
-    expect(readRecords(stream)).toEqual([
+    expect(readRecords(stream)).toStrictEqual([
       { type: RECORD_SST, data: bytes(0x01), offset: 0 },
       { type: RECORD_CONTINUE, data: bytes(0x02), offset: 5 },
     ]);
   });
 
   it("stops cleanly at the end of the stream", () => {
-    expect(readRecords(bytes())).toEqual([]);
+    expect(readRecords(bytes())).toStrictEqual([]);
   });
 
   it("rejects a truncated record header", () => {
     // Three bytes cannot carry a four-byte header, so the size field is unreadable. Failing loudly beats reporting a record whose length was guessed.
-    expect(() => readRecords(bytes(0x09, 0x08, 0x04))).toThrow(BiffFormatError);
+    expect(() => readRecords(bytes(0x09, 0x08, 0x04))).toThrow(
+      "record header at offset 0 runs past the end of the 3-byte stream",
+    );
   });
 
   it("rejects a record whose declared size runs past the end of the stream", () => {
     const stream = bytes(0x09, 0x08, 0x10, 0x00, 0x01, 0x02);
 
-    expect(() => readRecords(stream)).toThrow(BiffFormatError);
+    expect(() => readRecords(stream)).toThrow(
+      "record 0x809 at offset 0 declares 16 bytes of data, running past the end of the 6-byte stream",
+    );
   });
 
   it("rejects a record declaring more data than the framing permits", () => {
@@ -99,6 +109,40 @@ describe("readRecords", () => {
     view.setUint16(0, RECORD_BOF, true);
     view.setUint16(2, size, true);
 
-    expect(() => readRecords(stream)).toThrow(BiffFormatError);
+    expect(() => readRecords(stream)).toThrow(
+      "record 0x809 at offset 0 declares 8225 bytes of data, above the 8224-byte maximum",
+    );
+  });
+});
+
+describe("BiffFormatError", () => {
+  it("names itself BiffFormatError rather than the generic Error name", () => {
+    expect(new BiffFormatError("x").name).toBe("BiffFormatError");
+  });
+});
+
+describe("recoverFromFormatError", () => {
+  it("absorbs a genuine BiffFormatError rather than letting it propagate", () => {
+    expect(() => {
+      recoverFromFormatError(new BiffFormatError("malformed"), undefined);
+    }).not.toThrow();
+  });
+
+  it("returns the fallback given, exactly as given, for a genuine BiffFormatError", () => {
+    const result = recoverFromFormatError(new BiffFormatError("malformed"), []);
+    expect(result).toStrictEqual([]);
+  });
+
+  it("rethrows anything that is not a BiffFormatError, rather than absorbing it", () => {
+    const bug = new TypeError("a genuine bug, not a malformed record");
+    expect(() => {
+      recoverFromFormatError(bug, undefined);
+    }).toThrow(bug);
+  });
+
+  it("rethrows a plain thrown value that is not even an Error", () => {
+    expect(() => {
+      recoverFromFormatError("not an error at all", undefined);
+    }).toThrow("not an error at all");
   });
 });

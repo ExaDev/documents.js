@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FormulaSheetContext } from "../biff/ptg";
 import { groupRecords, type RecordGroup } from "../biff/substreams";
 import { readRecords } from "../biff/records";
@@ -11,6 +11,7 @@ import {
 } from "../test-support/biff";
 import { RECORD_CF, RECORD_CFEX, RECORD_CONDFMT } from "../biff/record-types";
 import type { RawCfOperand } from "./conditional-format";
+import * as conditionalFormatModule from "./conditional-format";
 import { readCfEx, type CfExTarget } from "./conditional-format-ex";
 import {
   readCondFmtGroup,
@@ -153,7 +154,7 @@ describe("readCfEx", () => {
 
     const result = readCfEx(cfExGroup, targets, NO_SHEETS);
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       kind: "containsText",
       text: "needle",
       priority: 3,
@@ -252,10 +253,26 @@ describe("readCfEx", () => {
   });
 
   it("does not promote a rule extending a CF12 record (fIsCF12 nonzero) -- that CF12 carries no ranges of its own, see this file's own top comment", () => {
-    const targets = new Map<number, CfExTarget>();
-    const cfExGroup = cfExRecordGroup(1, { fIsCF12: 1 });
+    // A target and a fully-valid CFExNonCF12 payload are both present here despite fIsCF12 being nonzero -- [MS-XLS] 2.4.63 says a CFEx with fIsCF12 set carries no such payload at all, but this test builds it anyway (rather than the empty tail cfExBytes itself would produce) so that a reader which skipped the fIsCF12 check would parse through to a defined result instead of stumbling into a coincidentally-also-undefined outcome (a missing target, or a cursor overrun) for an unrelated reason.
+    const target = targetFrom(ONE_RANGE, [
+      { ct: 0x02, cp: 0x00, rgce1: new Uint8Array(ptgStr("needle")) },
+    ]);
+    const targets = new Map([[1, target]]);
+    const bytes = record(RECORD_CFEX, [
+      ...new Array<number>(12).fill(0), // frtRefHeaderU
+      ...u32(1), // fIsCF12: nonzero
+      ...u16(1), // nID
+      ...cfExNonCf12Bytes({
+        icfTemplate: 0x08,
+        templateParams: cfExTextTemplateParams(0x0000),
+      }),
+    ]);
+    const group = groupsFrom(bytes)[0];
+    if (group === undefined) {
+      throw new Error("expected a CFEx record group");
+    }
 
-    expect(readCfEx(cfExGroup, targets, NO_SHEETS)).toBeUndefined();
+    expect(readCfEx(group, targets, NO_SHEETS)).toBeUndefined();
   });
 
   it("does not promote a rule whose nID names no CondFmt group this reader has seen", () => {
@@ -327,6 +344,31 @@ describe("readCfEx", () => {
 
     expect(readCfEx(truncatedGroup, targets, NO_SHEETS)).toBeUndefined();
   });
+
+  describe("errors that are not malformed-record degrades", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("propagates a genuine bug from parseDxfStyle rather than absorbing it as a malformed record", () => {
+      const bug = new TypeError("a genuine bug, not a malformed record");
+      vi.spyOn(conditionalFormatModule, "parseDxfStyle").mockImplementation(
+        () => {
+          throw bug;
+        },
+      );
+      const target = targetFrom(ONE_RANGE, [
+        { ct: 0x02, cp: 0x00, rgce1: new Uint8Array(ptgStr("needle")) },
+      ]);
+      const targets = new Map([[1, target]]);
+      const cfExGroup = cfExRecordGroup(1, {
+        icfTemplate: 0x08,
+        templateParams: cfExTextTemplateParams(0x0000),
+      });
+
+      expect(() => readCfEx(cfExGroup, targets, NO_SHEETS)).toThrow(bug);
+    });
+  });
 });
 
 // End-to-end: a real worksheet substream carries the base CondFmt/CF group first, then the CFEx that extends one of its CF children -- this proves readCondFmtGroup's own nID/rawCfs and readCfEx actually compose the way workbook/sheet.ts wires them together, not just that each function is individually correct against a hand-built CfExTarget.
@@ -382,7 +424,7 @@ describe("readCondFmtGroup + readCfEx integration", () => {
 
     const result = readCfEx(cfExGroup, targets, NO_SHEETS);
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       kind: "containsText",
       text: "needle",
       priority: 0,

@@ -195,7 +195,7 @@ describe("readChartSeries", () => {
 
     const series = readChartSeries(groups, contextWithCells(cells));
 
-    expect(series).toEqual([
+    expect(series).toStrictEqual([
       { name: "Revenue", categories: ["Jan", "Feb"], values: ["10", "20"] },
     ]);
   });
@@ -214,7 +214,7 @@ describe("readChartSeries", () => {
 
     const series = readChartSeries(groups, contextWithCells([]));
 
-    expect(series).toEqual([
+    expect(series).toStrictEqual([
       { name: undefined, categories: ["Q1"], values: ["42"] },
     ]);
   });
@@ -239,12 +239,12 @@ describe("readChartSeries", () => {
 
     const series = readChartSeries(groups, contextWithCells([]));
 
-    expect(series).toEqual([
+    expect(series).toStrictEqual([
       { name: undefined, categories: [""], values: [""] },
     ]);
   });
 
   it("returns no series for a chart substream with no Series records", () => {
-    expect(readChartSeries([], contextWithCells([]))).toEqual([]);
+    expect(readChartSeries([], contextWithCells([]))).toStrictEqual([]);
   });
 });

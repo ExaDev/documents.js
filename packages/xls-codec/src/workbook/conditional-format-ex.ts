@@ -1,7 +1,7 @@
 import type { ContentSheetRange } from "document-schema.js";
 import { BlockCursor } from "../biff/cursor";
 import type { FormulaSheetContext } from "../biff/ptg";
-import { BiffFormatError } from "../biff/records";
+import { recoverFromFormatError } from "../biff/records";
 import type { RecordGroup } from "../biff/substreams";
 import { parseDxfStyle, type RawCfOperand } from "./conditional-format";
 import {
@@ -77,9 +77,7 @@ export function readCfEx(
     const style = parseDxfStyle(dxfBytes);
     return { ...textRule, ...common, style };
   } catch (err) {
-    if (!(err instanceof BiffFormatError)) {
-      throw err;
-    }
+    recoverFromFormatError(err, undefined);
     return undefined;
   }
 }

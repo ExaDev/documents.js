@@ -11,7 +11,7 @@ import {
   RECORD_EOF,
   RECORD_SST,
 } from "./record-types";
-import { BiffFormatError, type BiffRecord } from "./records";
+import type { BiffRecord } from "./records";
 import { groupRecords, splitSubstreams } from "./substreams";
 
 function bytes(...values: readonly number[]): Uint8Array<ArrayBuffer> {
@@ -56,7 +56,7 @@ describe("groupRecords", () => {
   it("keeps a record with no continuation as a single block", () => {
     const groups = groupRecords(records({ type: RECORD_SST, data: bytes(1) }));
 
-    expect(groups).toEqual([
+    expect(groups).toStrictEqual([
       { type: RECORD_SST, blocks: [bytes(1)], offset: 0 },
     ]);
   });
@@ -70,7 +70,7 @@ describe("groupRecords", () => {
       ),
     );
 
-    expect(groups).toEqual([
+    expect(groups).toStrictEqual([
       {
         type: RECORD_SST,
         blocks: [bytes(1), bytes(2), bytes(3)],
@@ -88,7 +88,10 @@ describe("groupRecords", () => {
       ),
     );
 
-    expect(groups.map((group) => group.type)).toEqual([RECORD_SST, RECORD_EOF]);
+    expect(groups.map((group) => group.type)).toStrictEqual([
+      RECORD_SST,
+      RECORD_EOF,
+    ]);
     expect(groups[0]?.blocks).toHaveLength(2);
   });
 
@@ -106,7 +109,7 @@ describe("groupRecords", () => {
   it("rejects a Continue with no preceding record to continue", () => {
     expect(() =>
       groupRecords(records({ type: RECORD_CONTINUE, data: bytes(1) })),
-    ).toThrow(BiffFormatError);
+    ).toThrow("Continue record with no preceding record to continue");
   });
 
   it("attaches a ContinueFrt12 record to the FRT record it continues, stripping its own 12-byte FrtRefHeader first", () => {
@@ -135,7 +138,7 @@ describe("groupRecords", () => {
       ),
     );
 
-    expect(groups).toEqual([
+    expect(groups).toStrictEqual([
       { type: RECORD_CF12, blocks: [bytes(1), bytes(2, 3)], offset: 0 },
     ]);
   });
@@ -148,7 +151,7 @@ describe("groupRecords", () => {
           data: bytes(...new Array<number>(12).fill(0)),
         }),
       ),
-    ).toThrow(BiffFormatError);
+    ).toThrow("ContinueFrt12 record with no preceding record to continue");
   });
 });
 
@@ -168,7 +171,7 @@ describe("splitSubstreams", () => {
       ),
     );
 
-    expect(substreams.map((sub) => sub.documentType)).toEqual([
+    expect(substreams.map((sub) => sub.documentType)).toStrictEqual([
       BOF_TYPE_WORKBOOK,
       BOF_TYPE_WORKSHEET,
     ]);
@@ -185,7 +188,7 @@ describe("splitSubstreams", () => {
       ),
     );
 
-    expect(substreams[0]?.records.map((entry) => entry.type)).toEqual([
+    expect(substreams[0]?.records.map((entry) => entry.type)).toStrictEqual([
       RECORD_SST,
     ]);
   });
@@ -202,7 +205,7 @@ describe("splitSubstreams", () => {
       ),
     );
 
-    expect(substreams.map((sub) => sub.index)).toEqual([0, 1]);
+    expect(substreams.map((sub) => sub.index)).toStrictEqual([0, 1]);
   });
 
   it("records the stream offset of each substream's own BOF", () => {
@@ -219,7 +222,7 @@ describe("splitSubstreams", () => {
     );
 
     // The first BOF sits at 0 and spans 4 + 16 bytes; its EOF spans 4 more, so the second BOF starts at 24.
-    expect(substreams.map((sub) => sub.offset)).toEqual([0, 24]);
+    expect(substreams.map((sub) => sub.offset)).toStrictEqual([0, 24]);
   });
 
   it("tolerates a substream left unterminated at the end of the stream", () => {
@@ -242,7 +245,7 @@ describe("splitSubstreams", () => {
       splitSubstreams(
         groupRecords(records({ type: RECORD_EOF, data: bytes() })),
       ),
-    ).toEqual([]);
+    ).toStrictEqual([]);
   });
 
   it("rejects a BOF that does not declare BIFF8", () => {
@@ -253,15 +256,39 @@ describe("splitSubstreams", () => {
       splitSubstreams(
         groupRecords(records({ type: RECORD_BOF, data: biff5Bof })),
       ),
-    ).toThrow(BiffFormatError);
+    ).toThrow(
+      "BOF declares BIFF version 0x0500; this reader implements BIFF8 (0x0600) only",
+    );
   });
 
   it("rejects a BOF too short to carry its own version and document type", () => {
+    // A single byte, so `data?.length ?? 0` names the real length (1) in the thrown message rather than a stand-in value.
     expect(() =>
       splitSubstreams(
         groupRecords(records({ type: RECORD_BOF, data: bytes(0) })),
       ),
-    ).toThrow(BiffFormatError);
+    ).toThrow(
+      "BOF record carries 1 bytes, too few for its own version and document type",
+    );
+  });
+
+  it("accepts a BOF carrying exactly its own four-byte prefix and nothing more", () => {
+    // BOF_PREFIX_SIZE (4) is the minimum, not a value that itself counts as "too few" -- the length check must be a strict `<`, not `<=`.
+    const substreams = splitSubstreams(
+      groupRecords(
+        records(
+          {
+            type: RECORD_BOF,
+            data: bytes(0x00, 0x06, BOF_TYPE_WORKSHEET, 0x00),
+          },
+          { type: RECORD_EOF, data: bytes() },
+        ),
+      ),
+    );
+
+    expect(substreams.map((sub) => sub.documentType)).toStrictEqual([
+      BOF_TYPE_WORKSHEET,
+    ]);
   });
 
   it("nests a chart substream inside the worksheet substream that anchors it, resuming the worksheet's own records once the chart's EOF closes it", () => {
@@ -280,17 +307,16 @@ describe("splitSubstreams", () => {
       ),
     );
 
-    expect(substreams.map((sub) => sub.documentType)).toEqual([
+    expect(substreams.map((sub) => sub.documentType)).toStrictEqual([
       BOF_TYPE_CHART,
       BOF_TYPE_WORKSHEET,
     ]);
-    expect(substreams[0]?.records.map((entry) => entry.blocks[0])).toEqual([
-      bytes(2),
-    ]);
-    expect(substreams[1]?.records.map((entry) => entry.blocks[0])).toEqual([
-      bytes(1),
-      bytes(3),
-    ]);
+    expect(
+      substreams[0]?.records.map((entry) => entry.blocks[0]),
+    ).toStrictEqual([bytes(2)]);
+    expect(
+      substreams[1]?.records.map((entry) => entry.blocks[0]),
+    ).toStrictEqual([bytes(1), bytes(3)]);
   });
 
   it("nests multiple embedded charts, one per BOF...EOF pair, in the same worksheet substream", () => {
@@ -309,13 +335,13 @@ describe("splitSubstreams", () => {
       ),
     );
 
-    expect(substreams.map((sub) => sub.documentType)).toEqual([
+    expect(substreams.map((sub) => sub.documentType)).toStrictEqual([
       BOF_TYPE_CHART,
       BOF_TYPE_CHART,
       BOF_TYPE_WORKSHEET,
     ]);
-    expect(substreams[0]?.records[0]?.blocks[0]).toEqual(bytes(1));
-    expect(substreams[1]?.records[0]?.blocks[0]).toEqual(bytes(2));
+    expect(substreams[0]?.records[0]?.blocks[0]).toStrictEqual(bytes(1));
+    expect(substreams[1]?.records[0]?.blocks[0]).toStrictEqual(bytes(2));
     expect(substreams[2]?.records).toHaveLength(0);
   });
 
@@ -331,7 +357,7 @@ describe("splitSubstreams", () => {
       ),
     );
 
-    expect(substreams.map((sub) => sub.documentType)).toEqual([
+    expect(substreams.map((sub) => sub.documentType)).toStrictEqual([
       BOF_TYPE_CHART,
       BOF_TYPE_WORKSHEET,
     ]);

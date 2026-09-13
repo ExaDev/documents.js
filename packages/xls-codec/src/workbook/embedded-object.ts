@@ -58,13 +58,11 @@ export function readEmbeddedObjectPackage(
     ) {
       return undefined;
     }
+    // No separate `if (!result.success) return undefined` guard: a failed safeParse's own result object carries no `data` property at all, so `result.data` already reads as undefined on failure -- stating the guard explicitly would only restate what accessing an absent property already does on its own.
     const result = ContentEmbeddedObjectSchema.safeParse({
       ...parsed,
       frame,
     });
-    if (!result.success) {
-      return undefined;
-    }
     return result.data;
   } catch {
     return undefined;
