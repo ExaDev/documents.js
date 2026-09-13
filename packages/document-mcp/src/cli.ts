@@ -6,8 +6,8 @@ import { createServer } from "./server";
 
 const DEFAULT_HTTP_PORT = 3000;
 
-// Reads a `--name value` or `--name=value` flag from argv, whichever form the caller used. Returns undefined when the flag is absent at all, distinct from a flag present with no value (an empty string), so a caller can tell "not given" from "given empty" rather than the two collapsing into one absent case.
-function readFlag(args: string[], name: string): string | undefined {
+// Reads a `--name value` or `--name=value` flag from argv, whichever form the caller used. Returns undefined when the flag is absent at all, distinct from a flag present with no value (an empty string), so a caller can tell "not given" from "given empty" rather than the two collapsing into one absent case. Exported for direct unit testing rather than only through main()'s own argv handling.
+export function readFlag(args: string[], name: string): string | undefined {
   const prefix = `--${name}=`;
   for (const [index, arg] of args.entries()) {
     if (arg.startsWith(prefix)) {
@@ -24,7 +24,8 @@ function readFlag(args: string[], name: string): string | undefined {
   return undefined;
 }
 
-function parsePort(raw: string): number {
+// Exported for direct unit testing of every boundary (negative, above 65535, non-integer, and the exact upper bound) rather than only through main()'s own --transport http path, which would otherwise need a real bound socket at each boundary to distinguish them.
+export function parsePort(raw: string): number {
   const port = Number.parseInt(raw, 10);
   if (
     !Number.isInteger(port) ||
@@ -57,13 +58,7 @@ export async function main(): Promise<Server | undefined> {
     const portArg = readFlag(args, "port");
     const port = portArg === undefined ? DEFAULT_HTTP_PORT : parsePort(portArg);
     const host = readFlag(args, "host") ?? "127.0.0.1";
-    const httpServer = await serveHttp(port, host);
-    const address = httpServer.address();
-    if (address === null || typeof address === "string") {
-      throw new Error(
-        "Expected the HTTP server to bind a TCP address, not a pipe or Unix socket",
-      );
-    }
+    const { server: httpServer, address } = await serveHttp(port, host);
     console.error(
       `document-mcp listening on http://${host}:${String(address.port)}${MCP_HTTP_PATH}`,
     );
