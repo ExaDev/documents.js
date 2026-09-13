@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as archiveCodec from "archive-codec";
 
 import { bofData, record } from "./test-support/biff";
 import { compoundFile } from "./test-support/cfb";
@@ -72,14 +73,27 @@ describe("readWorkbookStreams", () => {
   });
 
   it("refuses bytes with no compound-file signature", () => {
+    // Bytes this short and this unlike a [MS-CFB] header would also fail further in, inside readCompoundFile itself -- but that failure carries a different message ("compound-file container could not be read"), so asserting the exact text here proves it is the signature guard that fired, not a downstream parse failure that happens to throw the same error type.
     expect(() =>
       readWorkbookStreams(new Uint8Array([0x50, 0x4b, 0x03, 0x04])),
-    ).toThrow(BiffFormatError);
+    ).toThrow(
+      "not a compound file: a .xls workbook is a [MS-CFB] container holding a 'Workbook' stream",
+    );
   });
 
   it("refuses a compound file holding a legacy 'Book' stream rather than 'Workbook'", () => {
     const bytes = compoundFile([
       { path: "Book", bytes: minimalWorkbookStream() },
+    ]);
+
+    expect(() => readWorkbookStreams(bytes)).toThrow(/BIFF5\/BIFF7 workbook/);
+  });
+
+  it("recognises a legacy 'Book' stream even when it is not the container's only stream", () => {
+    // A single-stream container can't tell `.some` and `.every` apart -- both agree when there's only one thing to check. Adding an unrelated second stream that is NOT 'Book' makes them disagree: `.some` still finds the 'Book' stream and reports BIFF5/BIFF7, while `.every` would see a stream that isn't 'Book' and wrongly fall through to "holds no 'Workbook' stream" instead.
+    const bytes = compoundFile([
+      { path: "Book", bytes: minimalWorkbookStream() },
+      { path: "\x05SummaryInformation", bytes: new Uint8Array([1]) },
     ]);
 
     expect(() => readWorkbookStreams(bytes)).toThrow(/BIFF5\/BIFF7 workbook/);
@@ -135,5 +149,20 @@ describe("isXlsFile", () => {
     ]);
 
     expect(isXlsFile(bytes)).toBe(false);
+  });
+
+  describe("its own compound-file guard", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("never calls into readCompoundFile for bytes that are not a compound file at all", () => {
+      // Both the guard and the catch-all below it agree on the final answer (false) for non-CFB bytes, so the return value alone cannot prove the guard is what actually fired rather than a coincidentally-identical result from further in. Spying on readCompoundFile itself proves the guard short-circuits before ever calling it.
+      const readSpy = vi.spyOn(archiveCodec, "readCompoundFile");
+
+      expect(isXlsFile(new Uint8Array([0x50, 0x4b, 0x03, 0x04]))).toBe(false);
+
+      expect(readSpy).not.toHaveBeenCalled();
+    });
   });
 });
