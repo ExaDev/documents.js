@@ -311,6 +311,9 @@ describe("writeCompoundFile header and sector layout", () => {
       expect(u32(minimal, base + 0x44)).toBe(NOSTREAM);
       expect(u32(minimal, base + 0x48)).toBe(NOSTREAM);
       expect(u32(minimal, base + 0x4c)).toBe(NOSTREAM);
+      // Nothing ever explicitly writes an unallocated entry's own size fields, so 0x78/0x7c must still read the zero the allocation started with. Slot 3's own 0x7c sits at this fixture's absolute offset 1532 -- one past where a with-DIFAT file's own chained-DIFAT-sector loop, run one sector too far, would land its stray terminator write, so this is also where such an overrun would first become visible.
+      expect(u32(minimal, base + 0x78)).toBe(0);
+      expect(u32(minimal, base + 0x7c)).toBe(0);
     }
   });
 
@@ -867,6 +870,9 @@ describe("writeCompoundFile FAT, mini-FAT, and DIFAT region padding", () => {
         const fatIndex = 109 + sector * difatEntriesPerSector + i;
         if (fatIndex < fatSectorCount) {
           expect(u32(bytes, base + i * 4)).toBe(fatIndex);
+        } else {
+          // Past the last real FAT sector, this slot is never written by the chaining loop below and must still read the FREESECT the DIFAT region's own initial fill leaves there -- this fixture's last DIFAT sector genuinely has such trailing slots, since 24 MiB does not divide evenly into whole DIFAT sectors of FAT-sector references.
+          expect(u32(bytes, base + i * 4)).toBe(FREESECT);
         }
       }
       const terminator = u32(bytes, base + difatEntriesPerSector * 4);
