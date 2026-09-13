@@ -1,4 +1,5 @@
 import { BlockCursor } from "../biff/cursor";
+import { recoverFromFormatError } from "../biff/records";
 import {
   ESCHER_BLIP_JPEG_A,
   ESCHER_BLIP_JPEG_B,
@@ -38,9 +39,7 @@ export function readBlipStore(
   drawingGroupBytes: Uint8Array<ArrayBuffer>,
 ): ReadonlyMap<number, BlipImage> {
   const store = new Map<number, BlipImage>();
-  if (drawingGroupBytes.length === 0) {
-    return store;
-  }
+  // No explicit empty-input guard: readEscherRecords already returns no records at all for a zero-length stream, which flows straight into the dgg-not-found return below -- the same empty store this function would otherwise have special-cased.
   const roots = readEscherRecords(drawingGroupBytes);
   const dgg = roots.find(
     (record): record is Extract<EscherRecord, { kind: "container" }> =>
@@ -68,27 +67,26 @@ export function readBlipStore(
 
 /** One BSE atom's own body ([MS-ODRAW] OfficeArtFBSE): the fixed fields, an optional nameData string, then the nested embedded blip record -- present whenever the image is stored inline rather than only linked externally (foDelay !== 0xFFFFFFFF), which is the only case this reader can recover bytes for at all. */
 function readBseImage(data: Uint8Array<ArrayBuffer>): BlipImage | undefined {
-  if (data.length < BSE_FIXED_SIZE) {
-    return undefined;
+  let cbName: number;
+  try {
+    const cursor = new BlockCursor([data]);
+    cursor.skip(1); // btWin32
+    cursor.skip(1); // btMacOS
+    cursor.skip(RGB_UID_SIZE); // rgbUid
+    cursor.skip(2); // tag
+    cursor.skip(4); // size
+    cursor.skip(4); // cRef
+    cursor.skip(4); // foDelay
+    cursor.skip(1); // unused1
+    // cbName (a u8) is never negative, so it already IS the exact skip count with no separate zero-floor needed. unused2/unused3 are never skipped past: embeddedStart below is computed from BSE_FIXED_SIZE and cbName alone, not from the cursor's own position, so nothing ever reads through the cursor again after this line.
+    cbName = cursor.u8();
+  } catch (err) {
+    // A BSE entry truncated before its own fixed fields even end (shorter than the 34 bytes needed to reach cbName) is exactly like any other malformed record elsewhere in this package: absent from the result, not a thrown error. There is no separate numeric length pre-check for this -- the cursor's own bounds-checked reads already throw BiffFormatError at precisely the byte where truncation actually bites, which is a tighter and more honest boundary than restating BSE_FIXED_SIZE (a length that itself is never actually reachable-but-still-too-short, since any BSE this size or larger already has room to read past its own fixed fields) as a second, redundant check here.
+    recoverFromFormatError(err, undefined);
+    return;
   }
-  const cursor = new BlockCursor([data]);
-  cursor.skip(1); // btWin32
-  cursor.skip(1); // btMacOS
-  cursor.skip(RGB_UID_SIZE); // rgbUid
-  cursor.skip(2); // tag
-  cursor.skip(4); // size
-  cursor.skip(4); // cRef
-  cursor.skip(4); // foDelay
-  cursor.skip(1); // unused1
-  const cbName = cursor.u8();
-  cursor.skip(1); // unused2
-  cursor.skip(1); // unused3
-  const nameBytes = cbName > 0 ? cbName : 0;
-  const embeddedStart = BSE_FIXED_SIZE + nameBytes;
-  if (embeddedStart >= data.length) {
-    // No embedded blip at all -- an externally-linked reference (foDelay carries a delay-stream offset instead), which this reader has no delay stream to resolve against.
-    return undefined;
-  }
+  const embeddedStart = BSE_FIXED_SIZE + cbName;
+  // No explicit "past the end" guard: an externally-linked reference (foDelay carries a delay-stream offset instead of an embedded blip, which this reader has no delay stream to resolve against) leaves nothing at or past embeddedStart, and subarray on an out-of-range start already yields an empty slice -- readEscherRecords finds no records in it, so blip below is undefined and this function still returns undefined, the identical outcome an explicit guard here would have produced.
   const embeddedBytes = data.subarray(embeddedStart);
   const blipRecords = readEscherRecords(embeddedBytes);
   const blip = blipRecords[0];
@@ -131,11 +129,14 @@ function blipFormatOf(recType: number): "png" | "jpeg" | undefined {
 }
 
 function bytesToBase64(bytes: Uint8Array<ArrayBuffer>): string {
-  let binary = "";
+  // Chunked to stay under String.fromCharCode's own argument-count limit, the same reason biff/strings.ts's readCharacters is; chunk count comes from Math.ceil rather than a manually bounds-checked loop, for the identical reason that module gives.
   const chunkSize = 0x8000;
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    const chunk = bytes.subarray(offset, offset + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
+  const binary = Array.from(
+    { length: Math.ceil(bytes.length / chunkSize) },
+    (_, index) =>
+      String.fromCharCode(
+        ...bytes.subarray(index * chunkSize, (index + 1) * chunkSize),
+      ),
+  ).join("");
   return btoa(binary);
 }
