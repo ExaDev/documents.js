@@ -1,3 +1,4 @@
+import { readOlePackage } from "archive-codec";
 import type {
   ContentDocument,
   ContentEmbeddedObject,
@@ -82,6 +83,24 @@ describe("writeEmbeddedObjectPackage / readEmbeddedObjectPackage", () => {
     const foreign = writeForeignPackage("not-this-package.json", "{}");
 
     expect(readEmbeddedObjectPackage(foreign, FRAME)).toBeUndefined();
+  });
+
+  it("returns undefined for a foreign label even when its payload is otherwise a fully valid embedding", () => {
+    // "{}" (the case above) also fails the objectKind/document presence check on its own, so it cannot prove the label check itself did anything -- a reader that skipped the label entirely would reach the same undefined result via that other guard. A payload valid enough to parse and pass schema validation isolates the label check.
+    const foreign = writeForeignPackage(
+      "not-this-package.json",
+      JSON.stringify({ objectKind: "drawing", document: DRAWING_DOCUMENT }),
+    );
+
+    expect(readEmbeddedObjectPackage(foreign, FRAME)).toBeUndefined();
+  });
+
+  it("writes an empty sourcePath and tempPath, never a placeholder", () => {
+    const packageBytes = writeEmbeddedObjectPackage(embeddedObject());
+    const olePackage = readOlePackage(packageBytes);
+
+    expect(olePackage.sourcePath).toBe("");
+    expect(olePackage.tempPath).toBe("");
   });
 
   it("returns undefined for a payload that is not a JSON object", () => {
