@@ -17,8 +17,8 @@ function readStoryPlexKeys(
   subdocLength: number,
   what: string,
 ): readonly number[] {
-  // No separate bytes.length < 4 clause: this function's own caller already returns early for boundaryLcb <= 0, so bytes.length here is always at least 1 -- and every whole number from 1 to 3 already makes (bytes.length - 4) / 4 non-integer on its own (-0.75, -0.5, -0.25), so the whole-number check below already refuses anything under 4 bytes without a separate bound to say so.
-  if (!Number.isInteger((bytes.length - 4) / 4)) {
+  // No separate bytes.length < 4 clause: this function's own caller already returns early for boundaryLcb <= 0, so bytes.length here is always at least 1 -- and every whole number from 1 to 3 already fails bytes.length % 4 === 0 on its own, so the whole-number check below already refuses anything under 4 bytes without a separate bound to say so.
+  if (bytes.length % 4 !== 0) {
     throw new DocFormatError(
       `${what} is ${bytes.length} bytes, which does not yield a whole number of 4-byte keys`,
     );
@@ -44,7 +44,7 @@ export function readSubdocumentStories(
   boundaryLcb: number,
   what: string,
 ): readonly ParagraphEntry[][] {
-  if (subdocLength <= 0 || boundaryLcb <= 0) return [];
+  if (subdocLength <= 0) return [];
   const range = readTextRange(
     wordDocument,
     pieceTable,
@@ -52,7 +52,7 @@ export function readSubdocumentStories(
     subdocStartCp + subdocLength,
   );
   const entries = readParagraphs(range.text, range.fcs, context);
-  // A boundary plex of this shape carries only CPs, no per-element data, so its whole body is the aCP array -- read through readStoryPlexKeys rather than the shared PLC parser, whose ascending-keys invariant a genuine Word 97 file's placeholder CPs do not honour (see that function's own note).
+  // A boundary plex of this shape carries only CPs, no per-element data, so its whole body is the aCP array -- read through readStoryPlexKeys rather than the shared PLC parser, whose ascending-keys invariant a genuine Word 97 file's placeholder CPs do not honour (see that function's own note). No separate boundaryLcb <= 0 guard: every real caller's own boundaryLcb comes straight from an unsigned FIB field (never negative, so slice's own length check can never trip), and a genuinely zero boundaryLcb already needs no special-casing here either -- slice with a length of exactly 0 yields an empty keys array on its own, and splitEntriesByBoundaries already returns zero groups (silently discarding `entries`) for an empty boundaries array, the identical "no stories" result a separate guard would have produced.
   const keys = readStoryPlexKeys(
     slice(table, boundaryFc, boundaryLcb, `${what} in the Table stream`),
     subdocLength,
