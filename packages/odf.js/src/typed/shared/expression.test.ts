@@ -22,6 +22,11 @@ describe("skipExpression", () => {
     expect(skipExpression("(a{b,c}d),e", 0, ",")).toBe(9);
   });
 
+  it("advances past an empty brace pair correctly, not merely re-consuming already-processed content that happens to reach the same answer", () => {
+    // An immediately-closing "{}" isolates the brace branch's own trailing +1 from the recursive call's return value: rewinding by 2 instead (the mutation this pins) resets index to the opening "{" itself, causing skipExpression to re-open the identical brace pair forever.
+    expect(skipExpression("{},c", 0, ",")).toBe(2);
+  });
+
   it("a comma inside a double-quoted string is not the end", () => {
     expect(skipExpression('"a,b",c', 0, ",")).toBe(5);
   });
