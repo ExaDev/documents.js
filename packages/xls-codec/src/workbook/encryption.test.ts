@@ -1,3 +1,4 @@
+import * as archiveCodec from "archive-codec";
 import {
   createXorObfuscationArray,
   createXorObfuscationKey,
@@ -9,7 +10,7 @@ import {
   XOR_OBFUSCATION_ARRAY_LENGTH,
   XOR_OBFUSCATION_ROTATE_DISTANCE_METHOD1,
 } from "archive-codec";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { BiffRecord } from "../biff/records";
 import { BiffFormatError, HEADER_SIZE } from "../biff/records";
@@ -106,6 +107,15 @@ describe("decryptWorkbookRecords", () => {
         decryptWorkbookRecords([filePass], filePass, PASSWORD),
       ).toThrow(/RC4 CryptoAPI/);
     });
+
+    it("refuses RC4 EncryptionVersionInfo with a valid minor but wrong major", () => {
+      // A wrong major alone must still be refused -- the version check is a conjunction of both fields matching, not just the minor.
+      const filePass = biffRecord(RECORD_FILEPASS, [1, 0, 2, 0, 1, 0], 0);
+
+      expect(() =>
+        decryptWorkbookRecords([filePass], filePass, PASSWORD),
+      ).toThrow(/RC4 CryptoAPI/);
+    });
   });
 
   describe("password verification", () => {
@@ -170,6 +180,102 @@ describe("decryptWorkbookRecords", () => {
       ).toThrow(BiffFormatError);
       expect(() =>
         decryptWorkbookRecords([filePass], filePass, tooLong),
+      ).toThrow(/incorrect password/);
+    });
+
+    it("propagates a genuine bug from createXorObfuscationKey rather than folding it into a wrong-password report", () => {
+      const filePass = biffRecord(
+        RECORD_FILEPASS,
+        xorFilePassData(PASSWORD),
+        0,
+      );
+      const bug = new TypeError("a genuine bug, not a wrong password");
+      vi.spyOn(archiveCodec, "createXorObfuscationKey").mockImplementation(
+        () => {
+          throw bug;
+        },
+      );
+
+      expect(() =>
+        decryptWorkbookRecords([filePass], filePass, PASSWORD),
+      ).toThrow(bug);
+
+      vi.restoreAllMocks();
+    });
+
+    it("refuses a password whose XOR key matches but whose verifier does not", () => {
+      // The check is a disjunction: either field mismatching must refuse the password, not only both at once.
+      const key = createXorObfuscationKey(PASSWORD);
+      const realVerifier = createXorObfuscationPasswordVerifier(PASSWORD);
+      const wrongVerifier = (realVerifier + 1) & 0xffff;
+      const filePass = biffRecord(
+        RECORD_FILEPASS,
+        [
+          0,
+          0, // wEncryptionType = 0 (XOR obfuscation)
+          key & 0xff,
+          (key >> 8) & 0xff,
+          wrongVerifier & 0xff,
+          (wrongVerifier >> 8) & 0xff,
+        ],
+        0,
+      );
+
+      expect(() =>
+        decryptWorkbookRecords([filePass], filePass, PASSWORD),
+      ).toThrow(/incorrect password/);
+    });
+
+    it("refuses a password whose XOR verifier matches but whose key does not", () => {
+      const realKey = createXorObfuscationKey(PASSWORD);
+      const wrongKey = (realKey + 1) & 0xffff;
+      const verifier = createXorObfuscationPasswordVerifier(PASSWORD);
+      const filePass = biffRecord(
+        RECORD_FILEPASS,
+        [
+          0,
+          0,
+          wrongKey & 0xff,
+          (wrongKey >> 8) & 0xff,
+          verifier & 0xff,
+          (verifier >> 8) & 0xff,
+        ],
+        0,
+      );
+
+      expect(() =>
+        decryptWorkbookRecords([filePass], filePass, PASSWORD),
+      ).toThrow(/incorrect password/);
+    });
+
+    it("refuses an RC4 verifier hash that decrypts to the wrong bytes even where one byte happens to coincide", () => {
+      // The comparison must be a genuine every-byte match, not merely "at least one byte agrees" -- engineered here by taking the real, correctly-decrypting verifier hash and flipping every byte except the first, so a `.some()` in place of `.every()` would still wrongly accept it.
+      const baseHash = deriveOfficeRc4BaseHash(PASSWORD, SALT);
+      const verifier = new Uint8Array(16).map((_, i) => i * 7 + 3);
+      const realHash = md5(verifier);
+      const poisoned = realHash.map((byte, index) =>
+        index === 0 ? byte : (byte ^ 0xff) & 0xff,
+      );
+      const encryptedVerifier = decryptOfficeRc4(baseHash, 0, verifier);
+      const encryptedPoisonedHash = decryptOfficeRc4(baseHash, 16, poisoned);
+      const filePass = biffRecord(
+        RECORD_FILEPASS,
+        [
+          1,
+          0, // wEncryptionType = 1 (RC4)
+          1,
+          0, // vMajor = 1
+          1,
+          0, // vMinor = 1
+          ...SALT,
+          ...encryptedVerifier,
+          ...encryptedPoisonedHash,
+        ],
+        0,
+      );
+
+      expect(() =>
+        decryptWorkbookRecords([filePass], filePass, PASSWORD),
       ).toThrow(/incorrect password/);
     });
   });
