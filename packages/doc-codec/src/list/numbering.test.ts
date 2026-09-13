@@ -322,6 +322,20 @@ describe("readNumberingDefinitions", () => {
     expect(definitions).toEqual({});
   });
 
+  it("names 'PlfLst' when lcbPlfLst runs past the Table stream", () => {
+    const { table, fib } = tableStreamWithNumbering([], []);
+    expect(() =>
+      readNumberingDefinitions(table, { ...fib, lcbPlfLst: 0x7fffffff }),
+    ).toThrow(/PlfLst/);
+  });
+
+  it("names 'PlfLfo' when lcbPlfLfo runs past the Table stream", () => {
+    const { table, fib } = tableStreamWithNumbering([], []);
+    expect(() =>
+      readNumberingDefinitions(table, { ...fib, lcbPlfLfo: 0x7fffffff }),
+    ).toThrow(/PlfLfo/);
+  });
+
   it("rejects a negative PlfLst.cLst", () => {
     const { table, fib } = tableStreamWithNumbering([], []);
     const view = new DataView(table.buffer, table.byteOffset, table.byteLength);
