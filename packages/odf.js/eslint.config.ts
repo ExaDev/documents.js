@@ -22,8 +22,8 @@ export default tseslint.config(
     preferReadonlyParams: "off",
   }),
   {
-    // fast-xml-parser@5 deprecates the whole XMLBuilder class, not one of its options, and ships no replacement of its own -- it points at a separate `fast-xml-builder` package that is not a declared dependency here. Swapping it is a real dependency decision with round-trip fidelity to re-verify (this builder is what keeps XML byte-faithful), so it is tracked rather than guessed at inside a tooling change. Scoped to the one module that constructs the builder.
-    files: ["src/xml/build.ts"],
+    // fast-xml-parser@5 deprecates the whole XMLBuilder class, not one of its options, and ships no replacement of its own — it points at a separate `fast-xml-builder` package that is not a declared dependency here. Swapping it is a real dependency decision with round-trip fidelity to re-verify (this builder is what keeps XML byte-faithful), so it is tracked rather than guessed at inside a tooling change. Scoped to the one module that constructs the builder, plus its own test file, which necessarily references the identical deprecated class to reach BUILDER's shared prototype.
+    files: ["src/xml/build.ts", "src/xml/build.test.ts"],
     rules: { "@typescript-eslint/no-deprecated": "off" },
   },
 );
