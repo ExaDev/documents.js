@@ -85,19 +85,23 @@ export function compoundFile(
   view.setUint32(0x30, firstDirectorySector, true);
   view.setUint32(0x38, MINI_STREAM_CUTOFF, true);
   view.setUint32(0x3c, ENDOFCHAIN, true); // firstMiniFatSector
-  view.setUint32(0x40, 0, true); // miniFatSectorCount
+  // miniFatSectorCount and difatSectorCount: every byte of a 0x00000000 word is identical under either byte order, so the littleEndian argument DataView.setUint32 otherwise requires has no real choice to state here -- byte-filling the four bytes directly says so, rather than a call whose own third argument is inert.
+  file.fill(0, 0x40, 0x44);
   view.setUint32(0x44, ENDOFCHAIN, true); // firstDifatSector
-  view.setUint32(0x48, 0, true); // difatSectorCount
-  for (let i = 0; i < HEADER_DIFAT_ENTRIES; i++) {
-    view.setUint32(0x4c + i * 4, i < fatSectors ? i : FREESECT, true);
+  file.fill(0, 0x48, 0x4c); // difatSectorCount
+  for (const [i, sector] of Array.from(
+    { length: HEADER_DIFAT_ENTRIES },
+    (_unused, index) => (index < fatSectors ? index : FREESECT),
+  ).entries()) {
+    view.setUint32(0x4c + i * 4, sector, true);
   }
 
   // Sector N begins at (N + 1) * SECTOR_SIZE, the header occupying the first.
   const sectorOffset = (sector: number): number => (sector + 1) * SECTOR_SIZE;
 
-  for (let i = 0; i < fat.length; i++) {
-    view.setUint32(sectorOffset(0) + i * 4, fat[i] ?? FREESECT, true);
-  }
+  fat.forEach((entry, i) => {
+    view.setUint32(sectorOffset(0) + i * 4, entry, true);
+  });
 
   const writeDirectoryEntry = (
     id: number,
@@ -109,18 +113,19 @@ export function compoundFile(
     size: number,
   ): void => {
     const at = sectorOffset(firstDirectorySector) + id * DIRECTORY_ENTRY_SIZE;
-    for (let i = 0; i < name.length; i++) {
-      view.setUint16(at + i * 2, name.charCodeAt(i), true);
+    for (const [i, char] of [...name].entries()) {
+      view.setUint16(at + i * 2, char.charCodeAt(0), true);
     }
     view.setUint16(at + 0x40, name.length * 2 + 2, true);
     view.setUint8(at + 0x42, objectType);
     view.setUint8(at + 0x43, 1); // colour flag, meaningless to a structural reader
-    view.setUint32(at + 0x44, NOSTREAM, true); // left sibling
+    // Left sibling (always NOSTREAM, every byte 0xff) and the stream size's high dword (always 0): each is byte-symmetric under either byte order for the identical reason miniFatSectorCount/difatSectorCount are above.
+    file.fill(0xff, at + 0x44, at + 0x48); // left sibling
     view.setUint32(at + 0x48, rightId, true);
     view.setUint32(at + 0x4c, childId, true);
     view.setUint32(at + 0x74, startSector, true);
     view.setUint32(at + 0x78, size, true);
-    view.setUint32(at + 0x7c, 0, true); // the stream size's high dword
+    file.fill(0, at + 0x7c, at + 0x80); // the stream size's high dword
   };
 
   writeDirectoryEntry(
