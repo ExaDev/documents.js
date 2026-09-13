@@ -30,10 +30,8 @@ export function splitTableRow(line: string): string[] {
   // text.charAt(index) !== "", not index < text.length: the two are equivalent for every real index (charAt already returns "" one past the end, which none of this loop's own branches below can ever match either), but only this spelling's own mutation is actually reachable by a test rather than always landing on the identical fallthrough either way.
   while (text.charAt(index) !== "") {
     const char = text.charAt(index);
-    // text.charAt(index + 1) !== "", not index + 1 < text.length: same reasoning -- when the
-    // backslash is the very last character, charAt(index + 1) is already "", which is never "|"
-    // either, so the escaped-pipe branch below would add the identical single backslash either way; this spelling is the one whose own mutation an escaped-pipe test can actually catch.
-    if (char === "\\" && text.charAt(index + 1) !== "") {
+    // No separate "is there a character after the backslash" guard: when the backslash is the very last character, text.charAt(index + 1) is already "" out of range, which the ternary below already treats as "not a pipe" and appends as char + "" -- the identical single backslash the no-escape fallthrough two branches down would append anyway, so the guard would only ever gate two provably equal outcomes.
+    if (char === "\\") {
       // An escaped pipe is resolved HERE rather than left for the inline phase's own backslash handling, because a cell's content may put it somewhere that handling never reaches: GFM's own example escapes a pipe inside a code span (`` | b `\|` az | ``), and a code span's literal is never backslash-processed. Every other escape is passed through untouched for the inline phase to resolve as usual.
       const escaped = text.charAt(index + 1);
       current += escaped === "|" ? escaped : char + escaped;
