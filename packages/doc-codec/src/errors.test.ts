@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DocFormatError, DocUnsupportedError } from "./errors";
+import { assertDefined, DocFormatError, DocUnsupportedError } from "./errors";
 
 describe("DocFormatError", () => {
   it("carries the message given to it and names itself DocFormatError", () => {
@@ -16,5 +16,28 @@ describe("DocUnsupportedError", () => {
     expect(error.message).toBe("encrypted document");
     expect(error.name).toBe("DocUnsupportedError");
     expect(error).toBeInstanceOf(Error);
+  });
+});
+
+describe("assertDefined", () => {
+  it("throws a DocFormatError carrying the exact given message for an undefined value", () => {
+    expect(() => {
+      assertDefined(undefined, "should not be undefined");
+    }).toThrow(DocFormatError);
+    expect(() => {
+      assertDefined(undefined, "should not be undefined");
+    }).toThrow("should not be undefined");
+  });
+
+  it("does not throw for a defined value, including a falsy one", () => {
+    expect(() => {
+      assertDefined(0, "unreachable");
+    }).not.toThrow();
+    expect(() => {
+      assertDefined("", "unreachable");
+    }).not.toThrow();
+    expect(() => {
+      assertDefined(false, "unreachable");
+    }).not.toThrow();
   });
 });
