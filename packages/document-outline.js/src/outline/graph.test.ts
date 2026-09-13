@@ -4080,51 +4080,47 @@ describe("reconcileChildren's originalSiblings: sorted and filtered, not raw cre
   const EMPTY_GRAPH: PropertyGraph = { nodes: [], edges: [] };
 
   it("reads pre-existing CONTAINS edges by their own sorted orderKey, not by the edges array's own literal order", () => {
-    const leafA = insertNode(EMPTY_GRAPH, {
+    // A pure reordering with no duplicated id (existingSeq a permutation of children, one occurrence each) can never expose an unsorted read on its own: the anti-inflation pass pairs every unmatched existing edge against an unmatched requested occurrence of the identical id regardless of which specific index either side carries, so a scrambled-but-balanced originalSiblings still ends with every position "matched" (no edge minted, no edge moved) whether or not it was sorted first -- reconcileChildren never rewrites an existing edge's own orderKey, so the OUTPUT graph is then bit-for-bit identical either way. Genuinely exposing the sort needs a requested id with NO existing edge at all, so a real insertion happens, anchored against whichever position the (correctly or incorrectly ordered) LCS match assigns it next to.
+    const leafX = insertNode(EMPTY_GRAPH, {
       kind: "paragraph",
-      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+      properties: { kind: "paragraph", runs: [{ text: "X." }] },
     });
-    const leafB = insertNode(leafA.graph, {
+    const leafY = insertNode(leafX.graph, {
       kind: "paragraph",
-      properties: { kind: "paragraph", runs: [{ text: "B." }] },
+      properties: { kind: "paragraph", runs: [{ text: "Y." }] },
     });
-    const leafC = insertNode(leafB.graph, {
+    const leafNew = insertNode(leafY.graph, {
       kind: "paragraph",
-      properties: { kind: "paragraph", runs: [{ text: "C." }] },
+      properties: { kind: "paragraph", runs: [{ text: "New." }] },
     });
     const sectionId = contentHashV1({
       kind: "section",
-      children: [leafA.id, leafB.id, leafC.id],
+      children: [leafX.id, leafNew.id, leafY.id],
     });
-    const a = {
+    const x = {
       from: sectionId,
-      to: leafA.id,
+      to: leafX.id,
       kind: "CONTAINS" as const,
       orderKey: orderKeys.orderKeyForIndex(0),
     };
-    const b = {
+    const y = {
       from: sectionId,
-      to: leafB.id,
+      to: leafY.id,
       kind: "CONTAINS" as const,
       orderKey: orderKeys.orderKeyForIndex(1),
     };
-    const c = {
-      from: sectionId,
-      to: leafC.id,
-      kind: "CONTAINS" as const,
-      orderKey: orderKeys.orderKeyForIndex(2),
-    };
-    // Deliberately out of orderKey order in the edges ARRAY itself (c, a, b): reading originalSiblings by array order would see existingSeq = [C, A, B], which is NOT a subsequence of the requested [A, B, C] (C can never precede A in a subsequence of [A, B, C]), so an unsorted read would fail to match all three and mint a spurious extra edge instead of recognising every position as already wired.
-    const graph: PropertyGraph = { nodes: leafC.graph.nodes, edges: [c, a, b] };
+    // Deliberately out of orderKey order in the edges ARRAY itself (y, x): reading originalSiblings by array order sees existingSeq = [Y, X] against requested [X, New, Y]. The LCS match over that UNSORTED sequence pairs requested X with existing index 1 and requested Y with existing index 0 (the only assignment an unsorted read can find), anchoring the missing New occurrence to index 0 -- inserting it BEFORE the sorted set's own first sibling. A correctly-sorted read (existingSeq = [X, Y]) instead anchors New to the sorted set's actual second position, inserting it strictly BETWEEN X and Y.
+    const graph: PropertyGraph = { nodes: leafNew.graph.nodes, edges: [y, x] };
     const result = insertNode(graph, {
       kind: "section",
       properties: { kind: "section" },
-      children: [leafA.id, leafB.id, leafC.id],
+      children: [leafX.id, leafNew.id, leafY.id],
     });
-    const contains = result.graph.edges.filter(
-      (edge) => edge.from === sectionId && edge.kind === "CONTAINS",
-    );
-    expect(contains).toHaveLength(3);
+    const contains = result.graph.edges
+      .filter((edge) => edge.from === sectionId && edge.kind === "CONTAINS")
+      .sort(orderKeyAscComparator)
+      .map((edge) => edge.to);
+    expect(contains).toEqual([leafX.id, leafNew.id, leafY.id]);
   });
 
   it("ignores a decoy edge sharing the owner id or the CONTAINS kind but not both", () => {
