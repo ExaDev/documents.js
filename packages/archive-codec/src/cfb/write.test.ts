@@ -4,6 +4,7 @@ import {
   CompoundFileWriteError,
   deepestDepth,
   exceedsVersion3StreamCeiling,
+  highSizeWord,
   writeCompoundFile,
 } from "./write";
 
@@ -600,8 +601,9 @@ describe("writeCompoundFile input validation", () => {
   });
 
   it("rejects a name longer than the 32 code points the directory entry holds", () => {
-    expect(() => writeCompoundFile([stream("N".repeat(32), enc("x"))])).toThrow(
-      CompoundFileWriteError,
+    const name = "N".repeat(32);
+    expect(() => writeCompoundFile([stream(name, enc("x"))])).toThrow(
+      `'${name}' is 32 UTF-16 code points, more than the 31 a directory entry's name field holds alongside its terminating null (in stream path ${JSON.stringify(name)})`,
     );
     expect(() =>
       writeCompoundFile([stream("N".repeat(31), enc("x"))]),
@@ -611,7 +613,7 @@ describe("writeCompoundFile input validation", () => {
   it("rejects an empty path or an empty path segment", () => {
     for (const path of ["", "/Leading", "Trailing/", "Double//Segment"]) {
       expect(() => writeCompoundFile([stream(path, enc("x"))])).toThrow(
-        CompoundFileWriteError,
+        `stream path ${JSON.stringify(path)} has an empty name segment; every segment must name a storage, and the last must name the stream`,
       );
     }
   });
@@ -619,7 +621,9 @@ describe("writeCompoundFile input validation", () => {
   it("rejects the same path supplied twice", () => {
     expect(() =>
       writeCompoundFile([stream("Dup", enc("1")), stream("Dup", enc("2"))]),
-    ).toThrow(CompoundFileWriteError);
+    ).toThrow(
+      `stream path "Dup" collides with 'Dup', which the file already holds in the same storage ([MS-CFB] 2.6.4 requires siblings to have unique names)`,
+    );
   });
 
   it("rejects a path that needs one name to be both a storage and a stream", () => {
@@ -628,7 +632,9 @@ describe("writeCompoundFile input validation", () => {
         stream("Thing", enc("1")),
         stream("Thing/Inner", enc("2")),
       ]),
-    ).toThrow(CompoundFileWriteError);
+    ).toThrow(
+      `stream path "Thing/Inner" needs 'Thing' to be a storage, but the file already holds a stream by that name`,
+    );
     expect(() =>
       writeCompoundFile([
         stream("Thing/Inner", enc("2")),
@@ -677,6 +683,18 @@ describe("exceedsVersion3StreamCeiling", () => {
     expect(exceedsVersion3StreamCeiling(4, Number.MAX_SAFE_INTEGER)).toBe(
       false,
     );
+  });
+});
+
+describe("highSizeWord", () => {
+  it("is 0 for any size under 2^32", () => {
+    expect(highSizeWord(0)).toBe(0);
+    expect(highSizeWord(4294967295)).toBe(0);
+  });
+
+  it("divides by 2^32 and floors, not multiplies, for a size at and past the boundary", () => {
+    expect(highSizeWord(4294967296)).toBe(1); // exactly 2^32
+    expect(highSizeWord(4294967296 * 2 + 500)).toBe(2); // past it, with a nonzero low remainder
   });
 });
 
@@ -756,8 +774,8 @@ describe("writeCompoundFile mini-stream sector allocation", () => {
 });
 
 describe("writeCompoundFile FAT, mini-FAT, and DIFAT region padding", () => {
-  // A payload past the header's own 109-entry DIFAT array (6.875 MiB, [MS-CFB] 2.5), forcing a real chained DIFAT sector and several FAT sectors -- the shape every arithmetic mutant around sector-region boundaries needs to actually differ from the minimal, single-FAT-sector fixture above.
-  const payload = new Uint8Array(8 * 1024 * 1024);
+  // 24 MiB forces three chained DIFAT sectors past the header's own 109-entry array ([MS-CFB] 2.5), not just one or two: the DIFAT-chaining loop's own next-sector arithmetic (difatStart + sector + 1) needs a NON-LAST sector at an index past 0 to distinguish from a subtly wrong variant, since at sector 0 every candidate formula agrees (any term multiplied, divided, or negated by 0 is 0), and a fixture with only two DIFAT sectors has no non-last sector other than 0.
+  const payload = new Uint8Array(24 * 1024 * 1024);
   const bytes = writeCompoundFile([stream("WordDocument", payload)]);
   const fatSectorCount = u32(bytes, 0x2c);
   const difatSectorCount = u32(bytes, 0x48);
@@ -766,10 +784,32 @@ describe("writeCompoundFile FAT, mini-FAT, and DIFAT region padding", () => {
   const sectorSize = 512;
   const sectorOffset = (sector: number): number => (sector + 1) * sectorSize;
 
-  it("needs more than one FAT sector and at least one DIFAT sector for this fixture", () => {
-    // Sanity check on the fixture itself before trusting the boundary assertions below against it.
+  it("needs more than one FAT sector and at least three chained DIFAT sectors for this fixture", () => {
+    // Sanity check on the fixture itself before trusting the boundary assertions below against it: at least three DIFAT sectors are what makes the DIFAT-chaining loop's own per-sector index and next-pointer arithmetic observable at all (see the fixture's own comment above).
     expect(fatSectorCount).toBeGreaterThan(1);
-    expect(difatSectorCount).toBeGreaterThan(0);
+    expect(difatSectorCount).toBeGreaterThanOrEqual(3);
+  });
+
+  it("marks every FAT sector as FATSECT and every DIFAT sector as DIFSECT in the FAT table itself", () => {
+    // The FAT's own entry for each of its own sectors and each DIFAT sector is a role marker, never a chain continuation -- read directly from the FAT table (not merely inferred from the file round-tripping), since no reader ever follows a chain onto one of these sectors to notice a wrong marker there.
+    const entriesPerFatSector = sectorSize / 4;
+    const fatEntry = (sector: number): number => {
+      const holder = Math.floor(sector / entriesPerFatSector);
+      return u32(
+        bytes,
+        sectorOffset(holder) + (sector % entriesPerFatSector) * 4,
+      );
+    };
+    for (let sector = 0; sector < fatSectorCount; sector++) {
+      expect(fatEntry(sector)).toBe(FATSECT);
+    }
+    for (
+      let sector = difatStart;
+      sector < difatStart + difatSectorCount;
+      sector++
+    ) {
+      expect(fatEntry(sector)).toBe(DIFSECT);
+    }
   });
 
   it("fills the FAT's own unused tail entries with FREESECT, past the file's real total sector count", () => {
@@ -820,5 +860,22 @@ describe("writeCompoundFile FAT, mini-FAT, and DIFAT region padding", () => {
     for (let i = fatSectorCount; i < 109; i++) {
       expect(u32(bytes, 0x4c + i * 4)).toBe(FREESECT);
     }
+  });
+
+  it("needs no chained DIFAT sector for exactly 109 FAT sectors, and exactly one past that", () => {
+    // 109 is HEADER_DIFAT_ENTRIES itself: the header's own array holds that many FAT sector locations unaided, so a file needing precisely 109 must not chain a DIFAT sector, while one needing 110 must chain exactly one. Payload sizes derived from the writer's own fixed-point sector-count loop to land exactly on each side of the boundary.
+    const atBoundary = writeCompoundFile([
+      stream("A", new Uint8Array(7087104)),
+    ]);
+    expect(u32(atBoundary, 0x2c)).toBe(109); // fatSectorCount
+    expect(u32(atBoundary, 0x48)).toBe(0); // difatSectorCount
+    expect(u32(atBoundary, 0x44)).toBe(ENDOFCHAIN); // firstDifatSector: none needed
+
+    const pastBoundary = writeCompoundFile([
+      stream("A", new Uint8Array(7087616)),
+    ]);
+    expect(u32(pastBoundary, 0x2c)).toBe(110);
+    expect(u32(pastBoundary, 0x48)).toBe(1);
+    expect(u32(pastBoundary, 0x44)).not.toBe(ENDOFCHAIN);
   });
 });

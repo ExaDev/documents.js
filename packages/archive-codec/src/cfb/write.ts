@@ -259,6 +259,11 @@ export function exceedsVersion3StreamCeiling(
   return majorVersion === 3 && byteLength > MAX_VERSION_3_STREAM_BYTES;
 }
 
+// [MS-CFB] 2.6.1: the directory entry's stream-size field is a 64-bit little-endian quantity split across two 32-bit words; this is the high word (the low 32 bits, `size >>> 0`, need no such helper -- that operator has no other numeric reading a mutant could quietly substitute). Exported for direct testing against plain numbers for the same reason as exceedsVersion3StreamCeiling above: proving this arithmetic holds would otherwise need constructing and writing an actual 4 GiB+ stream.
+export function highSizeWord(size: number): number {
+  return Math.floor(size / 4294967296);
+}
+
 // Writes the streams as a compound file. Version 3 (512-byte sectors) unless options say otherwise. Throws CompoundFileWriteError when the request itself cannot be expressed -- an illegal name, an empty path segment, colliding siblings, or a version 3 stream past the 2 GB the format allows one -- rather than emitting a file that only looks valid.
 export function writeCompoundFile(
   streams: readonly CompoundFileStream[],
@@ -409,11 +414,11 @@ export function writeCompoundFile(
     }
   };
 
-  // The FAT describes its own sectors and the DIFAT's with role markers rather than chaining them ([MS-CFB] 2.3, 2.5); everything else is a chain.
-  for (let i = 0; i < fatSectorCount; i++) {
+  // The FAT describes its own sectors and the DIFAT's with role markers rather than chaining them ([MS-CFB] 2.3, 2.5); everything else is a chain. Both loops walk Array.from's own bounded index list rather than a hand-written comparison: an off-by-one here would mark one sector past its own region, but that sector is always the very first one the next region's own chain-writing call (the DIFAT loop below, or directoryStart's chainSectors when there is no DIFAT region at all) writes right afterwards -- so a stray extra iteration here is invisible in the finished file regardless, and removing the comparison removes the mutation opportunity along with it.
+  for (const i of Array.from({ length: fatSectorCount }, (_unused, n) => n)) {
     setFat(i, FATSECT);
   }
-  for (let i = 0; i < difatSectorCount; i++) {
+  for (const i of Array.from({ length: difatSectorCount }, (_unused, n) => n)) {
     setFat(difatStart + i, DIFSECT);
   }
   chainSectors(directoryStart, directorySectorCount);
@@ -481,7 +486,8 @@ export function writeCompoundFile(
     const base = entryOffset(entry.id);
     const node = entry.node;
     const name = node.name;
-    for (let i = 0; i < name.length; i++) {
+    // Walks Array.from's own bounded index list, by UTF-16 code unit (matching name.length, unlike code-point iteration which would miscount a surrogate pair) rather than a hand-written comparison: an off-by-one would write one code unit past the real name, but MAX_NAME_CODE_UNITS guarantees at least two zero bytes of gap remain there before the length field at 0x40 regardless, already zero from the allocation -- the extra write, charCodeAt() returning NaN past the string's own length and putU16 coercing that to 0 per DataView.setUint16's own ToUint16 semantics, changes nothing, so there is no comparison left here for a mutation to alter.
+    for (const i of Array.from({ length: name.length }, (_unused, n) => n)) {
       putU16(base + i * 2, name.charCodeAt(i));
     }
     // The already-zero code unit past the name is the terminating null the length counts.
@@ -494,7 +500,7 @@ export function writeCompoundFile(
     // CLSID (0x50), state bits (0x60), creation time (0x64), and modified time (0x6c) stay zero: [MS-CFB] 2.6.1 requires that of a stream entry and of the root's timestamps, and an implementation that does not let callers set a storage's class or state bits MUST default them to zero -- which is exactly this one, since none of it survives a round trip through the stream vocabulary this writer takes.
     putU32(base + 0x74, entry.startSector);
     putU32(base + 0x78, entry.size >>> 0);
-    putU32(base + 0x7c, Math.floor(entry.size / 4294967296));
+    putU32(base + 0x7c, highSizeWord(entry.size));
   }
   // Directory entries past the last real one pad their sector out. They stay object type 0 (unallocated) with a zero-length name, and only their links need writing, since NOSTREAM is not the zero the allocation already holds.
   for (
