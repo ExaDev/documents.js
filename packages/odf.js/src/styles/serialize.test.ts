@@ -38,6 +38,12 @@ describe("buildStylePropertyElements", () => {
 });
 
 describe("canonicalPropertiesString", () => {
+  it("joins each name=value entry with a real '|' separator, not run together", () => {
+    expect(canonicalPropertiesString({ alignment: "center", bold: true })).toBe(
+      "fo:text-align=center|fo:font-weight=bold",
+    );
+  });
+
   it("is a pure function: the same bag produces byte-identical output on every call", () => {
     const properties: StyleProperties = {
       bold: true,
