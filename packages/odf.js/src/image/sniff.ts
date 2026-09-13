@@ -12,13 +12,11 @@ const GIF89A_SIGNATURE: readonly number[] = [
   0x47, 0x49, 0x46, 0x38, 0x39, 0x61,
 ];
 
+// No separate "bytes too short" guard: when bytes.length < signature.length, some index i in the loop below reads past the end of bytes, and an out-of-bounds array read is `undefined` in JS -- which is never strictly equal to signature[i] (always a real 0-255 byte value), so the loop's own mismatch check already returns false for every too-short input. A dedicated length guard would only ever produce a result the loop already produces on its own.
 function startsWith(
   bytes: Uint8Array<ArrayBuffer>,
   signature: readonly number[],
 ): boolean {
-  if (bytes.length < signature.length) {
-    return false;
-  }
   for (let i = 0; i < signature.length; i++) {
     if (bytes[i] !== signature[i]) {
       return false;
