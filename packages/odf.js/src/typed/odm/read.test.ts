@@ -92,6 +92,10 @@ describe("readOdm: scope boundaries and error paths (synthetic packages)", () =>
     const realSection = el("text:section", { "text:name": "ChapterOne" }, [
       el("text:section-source", { "xlink:href": "chapter1.odt" }),
     ]);
+    // A decoy carrying a genuine text:section-source child, deliberately shaped so readSection would succeed on it if this element's own tag check were ever skipped -- an ordinary tagless decoy (like the stray text:p below) can't tell "skipped by tag" apart from "reached readSection, which itself found nothing to read".
+    const decoy = el("text:p", { "text:name": "Decoy" }, [
+      el("text:section-source", { "xlink:href": "not-a-real-chapter.odt" }),
+    ]);
     const pkg: Package = {
       parts: {
         "content.xml": {
@@ -101,6 +105,7 @@ describe("readOdm: scope boundaries and error paths (synthetic packages)", () =>
               el("office:body", {}, [
                 el("office:text", {}, [
                   txt("\n  "),
+                  decoy,
                   el("text:p", {}, [txt("stray paragraph")]),
                   realSection,
                 ]),
