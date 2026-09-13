@@ -114,6 +114,14 @@ describe("decryptDocStreams (RC4)", () => {
     ).toThrow(/RC4 CryptoAPI/);
   });
 
+  it("also refuses a mismatched vMajor alone, vMinor still the plain RC4 header's own 1", () => {
+    const table = buildTable();
+    new DataView(table.buffer).setUint16(0, 2, true); // vMajor 2, vMinor left at the plain RC4 header's own 1.
+    expect(() =>
+      decryptDocStreams(buildWordDocument(), table, PASSWORD, false),
+    ).toThrow(/RC4 CryptoAPI/);
+  });
+
   it("throws rather than reading past the end of a Table stream too short for the EncryptionHeader", () => {
     const shortTable = buildTable().subarray(0, 10);
     expect(() =>
@@ -126,6 +134,19 @@ describe("decryptDocStreams (RC4)", () => {
     ).toThrow(
       /EncryptionHeader read of \d+ bytes at offset 0 runs past the end/,
     );
+  });
+
+  it("accepts a Table stream that is exactly the EncryptionHeader's own size, not one byte short", () => {
+    // LKEY (52) is exactly RC4_HEADER_SIZE -- a Table stream of precisely this length must not trip the same "runs past the end" check the previous test relies on, distinguishing the boundary's own > from a >=.
+    const exactTable = buildTable().subarray(0, LKEY);
+    expect(() =>
+      decryptDocStreams(
+        buildWordDocument(),
+        new Uint8Array(exactTable),
+        PASSWORD,
+        false,
+      ),
+    ).not.toThrow();
   });
 });
 
