@@ -9,11 +9,19 @@ import {
 } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { slice } from "./bytes";
+import { DataStreamBuilder } from "./data-stream";
 import { isDocBytes } from "./detect";
 import { DocFormatError, DocUnsupportedError } from "./errors";
 import { PropertyBinTable } from "./prop/fkp";
 import { readGrpprl } from "./prop/sprm";
 import { readDocContent, readDocStreams } from "./read";
+import { applyTableSprms, VERT_MERGE_RESTART } from "./table/tap";
+import {
+  DISTRIBUTE_LOST_BOUNDARIES_FEWER_BUCKETS_MESSAGE,
+  EMPTY_COLUMN_BOUNDARY_ARRAY_MESSAGE,
+  flattenSectionBlocks,
+  LOST_BOUNDARIES_FEWER_ROW_BUCKETS_MESSAGE,
+} from "./table/write";
 import { readTextRange } from "./text/characters";
 import { parseClx } from "./text/piece-table";
 import { PARAGRAPH_MARK, SECTION_MARK } from "./text/special";
@@ -1979,6 +1987,76 @@ describe("writeDocContent tables", () => {
     expect(cellText(block.rows[1]?.cells[0])).toBe("A2");
   });
 
+  it("writes a vertical-merge anchor's own TCGRF as VERT_MERGE_RESTART, decoded straight from the row mark's own grpprl rather than through the schema round trip", () => {
+    // table/read.ts's own rowSpan computation (vertMergeChainLastRow) only ever inspects a FOLLOWING row's own vertMerge value when deciding how far a chain reaches -- never the anchor's own -- so this specific byte cannot be pinned by asserting anything about the round-tripped ContentTableCell (see flattenRow's own vertMerge comment for the full reasoning). It is still a real, load-bearing byte a genuine MS-DOC consumer other than this package's own reader depends on (LibreOffice's own import, and [MS-DOC] 2.9.317 itself), so it is verified here by decoding the row mark's own grpprl directly with the identical readGrpprl/applyTableSprms pair table/read.ts itself uses, rather than round-tripping through readDocContent.
+    const input: readonly ContentBlock[] = [
+      {
+        kind: "table",
+        columnWidthsPt: [80],
+        rows: [
+          {
+            cells: [{ blocks: [paragraph([{ text: "anchor" }])], rowSpan: 2 }],
+          },
+          { cells: [{ blocks: [] }] },
+        ],
+      },
+    ];
+    const paragraphs = flattenSectionBlocks(input, new DataStreamBuilder());
+    // Row 0's single cell is its own one WriteParagraph (index 0), followed by row 0's own row mark (index 1); row 1 (the continuation) follows the identical shape at indices 2 and 3.
+    const anchorRowMark = paragraphs[1];
+    if (anchorRowMark === undefined) {
+      throw new Error(
+        "expected the anchor row's own row-mark paragraph at index 1",
+      );
+    }
+    const definition = applyTableSprms(
+      readGrpprl(new Uint8Array(anchorRowMark.extraGrpprl)),
+      {},
+    ).definition;
+    expect(definition?.cells[0]?.vertMerge).toBe(VERT_MERGE_RESTART);
+  });
+
+  it("writes TCGRF.horzMerge 2 on a lost-boundary split's own first sub-cell, whether or not that cell is also a vertical-merge continuation", () => {
+    // logicalCellsForRow (table/read.ts) derives a physical cell's own colSpan purely from its physical boundaries against the table's shared canonical grid -- it never actually reads a NON-continuation cell's own horzMerge value at all (only a FOLLOWING cell's horzMerge === HORZ_MERGE_CONTINUATION decides whether that following cell folds into the one before it), so this specific byte cannot be pinned through the schema round trip either, for the identical reason the vertMerge test above cannot. It is still a real, spec-conformant TCGRF value ([MS-DOC] 2.9.317: "2 or 3 ... the first cell of a horizontally merged set") this writer states for a genuine third-party MS-DOC consumer, decoded here the same direct way. A single table with one rowSpan-2, colSpan-3 anchor and its own continuation row leaves both of the merge's own two internal boundaries lost (neither row states either on its own), assigned one to each row by distributeLostBoundaries' own round-robin -- so both the anchor row (isContinuation false) and the continuation row (isContinuation true) each end up splitting their own inherited span at their one assigned boundary, exercising the subSpans.length > 1 ternary in both of flattenRow's own branches at once.
+    const input: readonly ContentBlock[] = [
+      {
+        kind: "table",
+        columnWidthsPt: [20, 20, 20],
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [paragraph([{ text: "anchor" }])],
+                colSpan: 3,
+                rowSpan: 2,
+              },
+            ],
+          },
+          { cells: [{ blocks: [] }] },
+        ],
+      },
+    ];
+    const paragraphs = flattenSectionBlocks(input, new DataStreamBuilder());
+    // Row 0's own cell splits into 2 sub-paragraphs (indices 0-1) before its row mark (index 2); row 1's own inherited continuation likewise splits into 2 (indices 3-4) before its own row mark (index 5).
+    const anchorRowMark = paragraphs[2];
+    const continuationRowMark = paragraphs[5];
+    if (anchorRowMark === undefined || continuationRowMark === undefined) {
+      throw new Error(
+        "expected both rows' own row-mark paragraphs at indices 2 and 5",
+      );
+    }
+    const anchorDefinition = applyTableSprms(
+      readGrpprl(new Uint8Array(anchorRowMark.extraGrpprl)),
+      {},
+    ).definition;
+    const continuationDefinition = applyTableSprms(
+      readGrpprl(new Uint8Array(continuationRowMark.extraGrpprl)),
+      {},
+    ).definition;
+    expect(anchorDefinition?.cells[0]?.horzMerge).toBe(2);
+    expect(continuationDefinition?.cells[0]?.horzMerge).toBe(2);
+  });
+
   it("throws when a row's own cells cover more columns than the table declares", () => {
     const input = document([
       {
@@ -2074,6 +2152,61 @@ describe("writeDocContent tables", () => {
     const mergedIndex = block.columnWidthsPt.length - 1;
     expect(block.rows[0]?.cells[mergedIndex]?.colSpan).toBeUndefined();
     expect(cellText(block.rows[0]?.cells[mergedIndex])).toBe("merged");
+  });
+
+  it("never engages the lost-boundary fallback at all for a row with no merges, even one whose own bare cells already overflow the format's own byte budget", () => {
+    // 25 ordinary, single-column, unmerged cells: recoverableBoundaries states every internal boundary on its own (nothing merges across any of them), so this row's own assigned lost-boundary set is empty and flattenTable's own fallback code never runs for it at all -- not even to try, fail, and warn. The row's own bare, undecorated cells already cost 15 + 22 x 25 = 565 bytes, past the 487-byte PapxInFkp ceiling regardless of any lost-boundary machinery, so writeDocContent still throws -- but from the real, unrelated buildPapxPages call this fallback exists to route around only when boundaries are actually lost, never from this describe block's own onWarning at all.
+    const columnCount = 25;
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: Array.from({ length: columnCount }, () => 20),
+        rows: [
+          {
+            cells: Array.from({ length: columnCount }, (_unused, index) => ({
+              blocks: [paragraph([{ text: `c${index}` }])],
+            })),
+          },
+        ],
+      },
+    ]);
+    const warnings: string[] = [];
+    expect(() =>
+      writeDocContent(input, {
+        onWarning: (message) => warnings.push(message),
+      }),
+    ).toThrow(/does not fit in one 512-byte formatted disk page/);
+    expect(warnings).toEqual([]);
+  });
+
+  it("throws for a row so wide that even its own fully-unsplit merged form still overflows the format's byte budget, after warning it could not state any of its assigned boundaries", () => {
+    // 30 colSpan-2 pairs (60 columns, 1 row): every pair's own internal boundary is lost (a single row states nothing any other row could corroborate), all 30 assigned to this one row. Even the fully collapsed, wholly-unsplit form -- kept.length trimmed all the way to 0, the smallest this row could ever ask rowSplitFits to try -- still costs 15 + 22 x 30 = 675 bytes, past the 487-byte ceiling: the trimming loop's own downward scan exhausts every candidate down to kept.length === 0 and stops there (rather than looping forever re-trying an already-empty candidate), leaving flattenRow to encode the row unsplit regardless, which writeDocContent's own later buildPapxPages call then genuinely rejects.
+    const pairCount = 30;
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: Array.from({ length: pairCount * 2 }, () => 20),
+        rows: [
+          {
+            cells: Array.from({ length: pairCount }, (_unused, index) => ({
+              blocks: [paragraph([{ text: `c${index}` }])],
+              colSpan: 2,
+            })),
+          },
+        ],
+      },
+    ]);
+    const warnings: string[] = [];
+    expect(() =>
+      writeDocContent(input, {
+        onWarning: (message) => warnings.push(message),
+      }),
+    ).toThrow(/does not fit in one 512-byte formatted disk page/);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(
+      new RegExp(`any of its ${pairCount} assigned lost column boundaries`),
+    );
+    expect(warnings[0]).toMatch(/attempting to write it unsplit instead/);
   });
 
   it("writes a genuinely blank cell as blank, not as a vertical-merge continuation of the cell above it", () => {
@@ -2605,6 +2738,24 @@ describe("writeDocContent's own internal-defect messages", () => {
   it("carries CLOSE_SECTION_TRAILING_PARAGRAPH_LOST_MESSAGE's own exact text", () => {
     expect(CLOSE_SECTION_TRAILING_PARAGRAPH_LOST_MESSAGE).toBe(
       "internal defect: closeSection lost its own just-ensured trailing paragraph",
+    );
+  });
+
+  it("carries DISTRIBUTE_LOST_BOUNDARIES_FEWER_BUCKETS_MESSAGE's own exact text", () => {
+    expect(DISTRIBUTE_LOST_BOUNDARIES_FEWER_BUCKETS_MESSAGE).toBe(
+      "internal defect: distributeLostBoundaries built fewer row buckets than the row count it was given",
+    );
+  });
+
+  it("carries EMPTY_COLUMN_BOUNDARY_ARRAY_MESSAGE's own exact text", () => {
+    expect(EMPTY_COLUMN_BOUNDARY_ARRAY_MESSAGE).toBe(
+      "internal defect: a table's own column-boundary array is empty despite the columnCount guard above",
+    );
+  });
+
+  it("carries LOST_BOUNDARIES_FEWER_ROW_BUCKETS_MESSAGE's own exact text", () => {
+    expect(LOST_BOUNDARIES_FEWER_ROW_BUCKETS_MESSAGE).toBe(
+      "internal defect: distributeLostBoundaries returned fewer buckets than the table has rows",
     );
   });
 });
