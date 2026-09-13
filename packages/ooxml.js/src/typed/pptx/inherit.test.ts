@@ -383,10 +383,11 @@ describe("readRunPropertiesFromElement", () => {
     colorMap: new Map<string, string>(),
   };
 
-  it("leaves sizePt undefined for an element carrying no sz attribute at all", () => {
-    expect(
-      readRunPropertiesFromElement(el("a:rPr"), context).sizePt,
-    ).toBeUndefined();
+  it("leaves sizePt/bold/italic undefined for an element carrying none of sz/b/i at all", () => {
+    const props = readRunPropertiesFromElement(el("a:rPr"), context);
+    expect(props.sizePt).toBeUndefined();
+    expect(props.bold).toBeUndefined();
+    expect(props.italic).toBeUndefined();
   });
 
   it("resolves bold/italic to false for an explicit '0', not just for an absent attribute", () => {
