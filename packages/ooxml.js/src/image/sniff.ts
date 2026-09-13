@@ -29,7 +29,8 @@ function startsWith(
 const SVG_SNIFF_WINDOW = 1024;
 
 function looksLikeSvg(bytes: Uint8Array<ArrayBuffer>): boolean {
-  const window = bytes.subarray(0, Math.min(bytes.length, SVG_SNIFF_WINDOW));
+  // No Math.min against bytes.length needed: subarray's own end argument is clamped to the array's length regardless of what is asked for, so requesting SVG_SNIFF_WINDOW bytes from a shorter buffer already yields only the bytes that exist.
+  const window = bytes.subarray(0, SVG_SNIFF_WINDOW);
   let text = "";
   for (const byte of window) {
     text += String.fromCharCode(byte);
