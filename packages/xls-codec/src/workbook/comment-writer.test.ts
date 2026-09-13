@@ -1,4 +1,3 @@
-import type { ContentSheetCell } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 
 import { readRecords } from "../biff/records";
@@ -12,14 +11,14 @@ import { groupRecords } from "../biff/substreams";
 import { concat } from "../test-support/biff";
 import { BiffWriteError } from "../biff/write-errors";
 import { readSheetComments } from "./comments";
-import { writeSheetComments } from "./comment-writer";
+import { writeSheetComments, type CommentedCell } from "./comment-writer";
 
 function commentedCell(
   row: number,
   column: number,
   text: string,
   author?: string,
-): ContentSheetCell {
+): CommentedCell {
   return {
     row,
     column,
@@ -150,5 +149,47 @@ describe("writeSheetComments", () => {
 
     expect(() => writeSheetComments(cells)).toThrow(BiffWriteError);
     expect(() => writeSheetComments(cells)).toThrow(/65535/);
+  });
+
+  it("accepts exactly as many comments as a 16-bit FtCmo.id can distinguish, not one fewer", () => {
+    // 0xffff (65535) is the largest object id FtCmo.id's own 16-bit field can hold, so a sheet with exactly that many comments is still writable -- only one more should be refused.
+    const cells = Array.from({ length: 0xffff }, (_, index) =>
+      commentedCell(0, index, "x"),
+    );
+
+    expect(() => writeSheetComments(cells)).not.toThrow();
+  });
+
+  it("gives each comment's own FtNts a genuinely random GUID, not a fixed all-zero one", () => {
+    const pieces = writeSheetComments([
+      commentedCell(0, 0, "a"),
+      commentedCell(0, 1, "b"),
+    ]);
+    const objRecords = readRecords(concat(...pieces)).filter(
+      (r) => r.type === RECORD_OBJ,
+    );
+    // FtNts's own 16-byte GUID sits right after FtCmo (22 bytes) plus FtNts's own ft/cb header (4 bytes), at byte offset 26 of the Obj record's data.
+    const guidOf = (data: Uint8Array<ArrayBuffer>) => data.slice(26, 42);
+    const firstGuid = objRecords[0] ? guidOf(objRecords[0].data) : undefined;
+    const secondGuid = objRecords[1] ? guidOf(objRecords[1].data) : undefined;
+
+    expect(firstGuid).not.toStrictEqual(new Uint8Array(16));
+    expect(secondGuid).not.toStrictEqual(new Uint8Array(16));
+    expect(firstGuid).not.toStrictEqual(secondGuid);
+  });
+
+  it("writes a nonzero cbRuns for non-empty text and zero cbRuns for empty text", () => {
+    // cbRuns sits at byte offset 12 of a TxO record's own data (grbit u16, rot u16, reserved4 u16, reserved5 u32, cchText u16, cbRuns u16).
+    const nonEmpty = readRecords(
+      concat(...writeSheetComments([commentedCell(0, 0, "hi")])),
+    ).find((r) => r.type === RECORD_TXO);
+    if (nonEmpty === undefined) throw new Error("expected a TXO record");
+    expect(nonEmpty.data[12]).toBe(16);
+
+    const empty = readRecords(
+      concat(...writeSheetComments([commentedCell(0, 0, "")])),
+    ).find((r) => r.type === RECORD_TXO);
+    if (empty === undefined) throw new Error("expected a TXO record");
+    expect(empty.data[12]).toBe(0);
   });
 });

@@ -132,13 +132,23 @@ function writeNoteRecord(
 
 const MAX_OBJECT_ID = 0xffff;
 
+/** A cell known to carry a comment -- what `writeSheetComments` actually needs, and a stronger contract than `ContentSheetCell` states on its own (`comment` is optional there, since most cells carry none). Narrowing the parameter to this type, rather than accepting any `ContentSheetCell` and throwing on one whose `comment` turned out to be absent, moves the "does this cell actually have a comment" question to the one place -- the caller's own filter -- that can answer it with real information, rather than restating it here as a runtime check nothing can fail without a bug in that caller. */
+export type CommentedCell = ContentSheetCell & {
+  readonly comment: NonNullable<ContentSheetCell["comment"]>;
+};
+
+/** A type-guard predicate for `Array.prototype.filter`, so a sheet's own cell list narrows to `CommentedCell[]` at the filter call itself rather than staying `ContentSheetCell[]` with the comment field re-checked (or, worse, assumed) afterwards. */
+export function hasComment(cell: ContentSheetCell): cell is CommentedCell {
+  return cell.comment !== undefined;
+}
+
 /**
- * Every Note/Obj/TxO record a sheet's own commented cells need, in the order described above -- for `cells` already filtered to exactly those carrying a `comment` (workbook/sheet-writer.ts's own caller does the filtering, since only it knows the sheet's full cell list).
+ * Every Note/Obj/TxO record a sheet's own commented cells need, in the order described above.
  *
  * Object ids are assigned sequentially from 1: [MS-XLS] 2.5.92's own FtCmo.id must be unique "among all Obj records within ... Worksheet Substream ABNF", and this writer never emits any other kind of Obj record (no shapes, charts, or form controls yet -- see this package's README), so a per-sheet counter starting at 1 is already unique on its own.
  */
 export function writeSheetComments(
-  commentedCells: readonly ContentSheetCell[],
+  commentedCells: readonly CommentedCell[],
 ): Uint8Array<ArrayBuffer>[] {
   if (commentedCells.length > MAX_OBJECT_ID) {
     throw new BiffWriteError(
@@ -153,13 +163,10 @@ export function writeSheetComments(
   );
   ordered.forEach((cell, index) => {
     const objId = index + 1;
-    const comment = cell.comment;
-    if (comment === undefined) {
-      throw new BiffWriteError(
-        `internal error: writeSheetComments was called with a cell at row ${cell.row}, column ${cell.column} carrying no comment`,
-      );
-    }
-    pieces.push(writeObjRecordForNote(objId), ...writeTxoRecords(comment.text));
+    pieces.push(
+      writeObjRecordForNote(objId),
+      ...writeTxoRecords(cell.comment.text),
+    );
   });
   return pieces;
 }
