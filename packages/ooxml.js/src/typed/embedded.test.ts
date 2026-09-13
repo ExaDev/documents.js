@@ -125,8 +125,8 @@ describe("readEmbeddedOoxmlPayload", () => {
     ).toBeUndefined();
   });
 
-  it("returns undefined immediately for bytes carrying neither the ZIP nor the compound-file magic at all, never entering the parse", () => {
-    // Neither isZipArchive nor isCompoundFile recognise this input -- the gate above must short-circuit to undefined itself, rather than only degrading via the catch block once a parse attempt throws.
+  it("returns undefined for bytes carrying neither the ZIP nor the compound-file magic at all", () => {
+    // Neither isZipArchive nor readCompoundFile's own magic check recognise this input -- the latter throws CompoundFileFormatError, which the surrounding catch degrades to undefined exactly like any other undecodable payload.
     expect(readEmbeddedOoxmlPayload(enc("plain text, not an archive"))).toBe(
       undefined,
     );
