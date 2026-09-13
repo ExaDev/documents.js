@@ -89,16 +89,15 @@ export function canonicalParagraph(
   const { canonical: segmentedRuns, boundaryMap } =
     segmentOdfParagraphRunsMapped(
       paragraph.runs,
+      // The false branch needs no boundary set at all: segmentOdfParagraphRunsMapped's own merge loop only ever tests protectedBoundaries.has(index) for index in [0, runs.length) -- index 0 never merges regardless (there is no preceding group yet) and index === runs.length is never reached by that loop -- so a two-element {0, runs.length} set here would carry no member the merge decision ever actually consults. The true branch's own {0, runs.length} pair is equally inert for the same reason; only the construct extents' own interior startRun/endRun values (which DO fall inside that range) do any work, so this is the one boundary source worth constructing.
       allowConstructs
-        ? new Set<number>([
-            0,
-            paragraph.runs.length,
-            ...(paragraph.constructs ?? []).flatMap((extent) => [
+        ? new Set<number>(
+            (paragraph.constructs ?? []).flatMap((extent) => [
               extent.startRun,
               extent.endRun,
             ]),
-          ])
-        : new Set<number>([0, paragraph.runs.length]),
+          )
+        : new Set<number>(),
     );
   const canonical: ContentParagraph = {
     kind: "paragraph",
@@ -153,7 +152,7 @@ export function canonicalParagraph(
 }
 
 // A covered grid position is a table:covered-table-cell in ODF, which carries no content, no span and no style of its own -- so whatever an incoming placeholder happened to hold, reading one back yields exactly an empty cell. A cell's own blocks mirror readTableCell's own recursive scope (typed/shared/table.ts): a paragraph's list membership is renumbered onto `listState` exactly as a body-level paragraph's is (planListMembership, threaded by the caller across the whole document so a list minted inside a cell gets as unique an identity as one minted anywhere else), and a nested table recurses back into canonicalTable itself. Any other block kind is refused by name, matching every writer's own fidelity-construct stance.
-function canonicalCell(
+export function canonicalCell(
   cell: ContentTableCell,
   covered: boolean,
   listState: ListPlanState,
@@ -200,13 +199,11 @@ function canonicalCell(
   return canonical;
 }
 
-// The one canonical ContentTable a written-and-reread table equals, wherever writeOdfTable places it (odt's own top-level tables, or one nested inside an odp/odg shape's draw:frame) -- every mapping forced by ODF's own table:table content model rather than chosen here, matching typed/shared/table.ts's own writeOdfTable/readOdfTable as the single writer/reader pair every caller shares.
-// `listState` is the caller's own document-wide ListPlanState (typed/odt/write.ts's planDocument, typed/odp/write.ts's own presentation-wide state -- see each caller's own top-of-file note), threaded through every cell so a list minted inside this table -- including one nested inside a cell of a table nested inside one of THIS table's own cells -- is numbered in the identical document-encounter order readOdfTable's own listIdState mints it in on the way back in. Closed on entry and after every cell (never merely between rows): each cell is its own list-run scope, exactly as writeCellBlocks' own openList/closeList never persists across a writeCellBlocks call, so two adjacent cells can never canonicalise to the same numId even when both carry an identical incoming one.
+// The one canonical ContentTable a written-and-reread table equals, wherever writeOdfTable places it (odt's own top-level tables, or one nested inside an odp/odg shape's draw:frame) -- every mapping forced by ODF's own table:table content model rather than chosen here, matching typed/shared/table.ts's own writeOdfTable/readOdfTable as the single writer/reader pair every caller shares. `listState` is the caller's own document-wide ListPlanState (typed/odt/write.ts's planDocument, typed/odp/write.ts's own presentation-wide state -- see each caller's own top-of-file note), threaded through every cell so a list minted inside this table -- including one nested inside a cell of a table nested inside one of THIS table's own cells -- is numbered in the identical document-encounter order readOdfTable's own listIdState mints it in on the way back in. Closed before every cell's own canonicalCell call (each cell is its own list-run scope, so two adjacent cells can never canonicalise to the same numId even when both carry an identical incoming one) and once more after the whole table, for whatever sibling block follows this table in the caller's own block list -- a close between cells or immediately after canonicalCell's own return would only ever be overwritten by one of those two before anything could observe it, so only these two calls do real work.
 export function canonicalTable(
   table: ContentTable,
   listState: ListPlanState,
 ): ContentTable {
-  closeListPlan(listState);
   const covered = new Set<string>();
   const canonical: ContentTable = {
     kind: "table",
@@ -227,9 +224,7 @@ export function canonicalTable(
           }
         }
         closeListPlan(listState);
-        const canonicalCellValue = canonicalCell(cell, isCovered, listState);
-        closeListPlan(listState);
-        return canonicalCellValue;
+        return canonicalCell(cell, isCovered, listState);
       });
       return row.heightPt === undefined
         ? { cells }
