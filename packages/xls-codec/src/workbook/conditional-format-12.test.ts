@@ -159,6 +159,10 @@ function cf12Bytes(
     dxf?: readonly number[];
     /** rgce1's own bytes ([MS-XLS] 2.4.43's own CFParsedFormulaNoCCE) -- meaningful only for ct 0x01/0x02, empty (cce1 0) for every other ct this file already exercises. */
     formula1?: readonly number[];
+    /** rgce2's own bytes -- meaningful only for ct 0x01 with cp 0x01/0x02, empty for every other ct. Filler content this reader never reads (skipped by its own declared cce2), so its only purpose here is proving the skip advances the cursor by exactly that many bytes rather than by none at all. */
+    rgce2?: readonly number[];
+    /** fmlaActive's own rgce bytes (the colour scale/data bar/icon set "activity condition" formula) -- filler this reader always skips over regardless of ct, for the identical reason rgce2 above is. */
+    fmlaActiveRgce?: readonly number[];
   } = {},
 ): number[] {
   const templateParams =
@@ -168,16 +172,20 @@ function cf12Bytes(
   }
   const dxf = options.dxf ?? [];
   const formula1 = options.formula1 ?? [];
+  const rgce2 = options.rgce2 ?? [];
+  const fmlaActiveRgce = options.fmlaActiveRgce ?? [];
   return [
     ...new Array<number>(12).fill(0), // frtRefHeader
     ct,
     0x00, // cp
     ...u16(formula1.length), // cce1
-    ...u16(0), // cce2
+    ...u16(rgce2.length), // cce2
     ...u32(dxf.length), // cbDxf
     ...dxf,
     ...formula1, // rgce1
-    ...u16(0), // fmlaActive cce
+    ...rgce2,
+    ...u16(fmlaActiveRgce.length), // fmlaActive cce
+    ...fmlaActiveRgce,
     options.stopIfTrue === true ? 0x02 : 0x00, // flags: B - fStopIfTrue
     ...u16(options.priority ?? 0), // ipriority
     ...u16(options.icfTemplate ?? 0), // icfTemplate
@@ -212,14 +220,7 @@ function cfExAveragesTemplateParams(stdDev: number): number[] {
 function cf12Record(
   ct: number,
   rgbCT: readonly number[],
-  options: {
-    stopIfTrue?: boolean;
-    priority?: number;
-    icfTemplate?: number;
-    templateParams?: readonly number[];
-    dxf?: readonly number[];
-    formula1?: readonly number[];
-  } = {},
+  options: Parameters<typeof cf12Bytes>[2] = {},
 ): Uint8Array<ArrayBuffer> {
   return record(RECORD_CF12, cf12Bytes(ct, rgbCT, options));
 }
@@ -335,6 +336,26 @@ describe("readCondFmt12Group", () => {
     });
   });
 
+  it("degrades a colour scale whole rule when a threshold's own formula does not resolve to any text at all", () => {
+    // Two bare references with no combining operator between them (ptg.ts's own "leaves more than one value on the stack" abort case) is a malformed formula parseFormulaText genuinely cannot render, distinct from a threshold that simply carries no formula at all (cce 0, the numValue path every other formula-less test here already exercises).
+    const malformedFormula = [...ptgRef(0, 0), ...ptgRef(0, 1)];
+    const groups = groupsFrom(
+      condFmt12Record(1, ONE_RANGE),
+      cf12Record(
+        0x03,
+        cfGradient([
+          {
+            cfvo: cfvo(0x07, { formula: malformedFormula }),
+            color: cfColorIcv(2),
+          },
+          { cfvo: cfvo(0x03), color: cfColorIcv(3) },
+        ]),
+      ),
+    );
+
+    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual([]);
+  });
+
   it("degrades a colour scale whole rule when a stop's colour is unresolvable (automatic/theme)", () => {
     const groups = groupsFrom(
       condFmt12Record(1, ONE_RANGE),
@@ -345,6 +366,71 @@ describe("readCondFmt12Group", () => {
           { cfvo: cfvo(0x03), color: cfColorIcv(3) },
         ]),
       ),
+    );
+
+    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual([]);
+  });
+
+  // Every well-formed fixture above states matching, in-range cInterpCurve/cGradientCurve counts (2 or 3, always equal), so none of them can tell this guard's own <2/>3/mismatch checks apart from a bypass that would let the read continue -- each of the three cases below supplies exactly as many stop bytes as a bypassed read would consume, so a wrongly-skipped guard produces a genuine, differently-shaped colour scale rather than the same "record not promoted" outcome the guard's own correct refusal already gives.
+  it("degrades a colour scale whose own cInterpCurve and cGradientCurve counts disagree, even where both individually parse", () => {
+    const rgbCT = [
+      ...u16(0), // unused
+      0x00, // reserved1
+      2, // cInterpCurve
+      3, // cGradientCurve -- disagrees with cInterpCurve above
+      0x03, // fClamp + fBackground
+      ...[cfvo(0x02), cfvo(0x03)].flatMap((v) => [...v, ...f64(0)]), // 2 rgInterp entries
+      ...[cfColorIcv(1), cfColorIcv(2), cfColorIcv(3)].flatMap((c) => [
+        ...f64(0),
+        ...c,
+      ]), // 3 rgCurve entries
+    ];
+    const groups = groupsFrom(
+      condFmt12Record(1, ONE_RANGE),
+      cf12Record(0x03, rgbCT),
+    );
+
+    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual([]);
+  });
+
+  it("degrades a colour scale with fewer than 2 stops", () => {
+    const rgbCT = [
+      ...u16(0),
+      0x00,
+      1, // cInterpCurve
+      1, // cGradientCurve
+      0x03,
+      ...[cfvo(0x02)].flatMap((v) => [...v, ...f64(0)]),
+      ...[cfColorIcv(1)].flatMap((c) => [...f64(0), ...c]),
+    ];
+    const groups = groupsFrom(
+      condFmt12Record(1, ONE_RANGE),
+      cf12Record(0x03, rgbCT),
+    );
+
+    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual([]);
+  });
+
+  it("degrades a colour scale with more than 3 stops", () => {
+    const values = [
+      cfvo(0x02),
+      cfvo(0x01, { num: 25 }),
+      cfvo(0x01, { num: 75 }),
+      cfvo(0x03),
+    ];
+    const colors = [1, 2, 3, 4].map((icv) => cfColorIcv(icv));
+    const rgbCT = [
+      ...u16(0),
+      0x00,
+      4, // cInterpCurve
+      4, // cGradientCurve
+      0x03,
+      ...values.flatMap((v) => [...v, ...f64(0)]),
+      ...colors.flatMap((c) => [...f64(0), ...c]),
+    ];
+    const groups = groupsFrom(
+      condFmt12Record(1, ONE_RANGE),
+      cf12Record(0x03, rgbCT),
     );
 
     expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual([]);
@@ -508,6 +594,64 @@ describe("readCondFmt12Group", () => {
       expect(result.formats).toStrictEqual([]);
       expect(result.recordsConsumed).toBe(2);
     }
+  });
+
+  it("does not promote a ct 0x01 record even when its icfTemplate/templateParams/rgce1 happen to be shaped exactly like a valid containsText rule", () => {
+    // ct itself, not merely what templateParams/rgce1 happen to contain, must gate the ct 0x02 branch: this fixture states ct 0x01 but otherwise supplies precisely the fixture the containsText describe block below proves DOES promote under a genuine ct 0x02.
+    const groups = groupsFrom(
+      condFmt12Record(1, ONE_RANGE),
+      cf12Record(0x01, [], {
+        icfTemplate: 0x0008,
+        templateParams: cfExTextTemplateParams(0x0000),
+        formula1: ptgStr("needle"),
+      }),
+    );
+
+    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual([]);
+  });
+
+  it("skips exactly rgce2's own declared length, leaving priority/stopIfTrue readable afterwards", () => {
+    const groups = groupsFrom(
+      condFmt12Record(1, ONE_RANGE),
+      cf12Record(0x05, cfFilterBytes(), {
+        icfTemplate: 0x001b, // duplicateValues -- needs no template data of its own
+        rgce2: [0xaa, 0xbb, 0xcc, 0xdd, 0xee], // filler this reader never reads, only skips past
+        priority: 7,
+        stopIfTrue: true,
+      }),
+    );
+
+    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual([
+      {
+        kind: "duplicateValues",
+        priority: 7,
+        stopIfTrue: true,
+        ranges: ONE_RANGE,
+        style: undefined,
+      },
+    ]);
+  });
+
+  it("skips exactly fmlaActive's own declared length, leaving priority/stopIfTrue readable afterwards", () => {
+    const groups = groupsFrom(
+      condFmt12Record(1, ONE_RANGE),
+      cf12Record(0x05, cfFilterBytes(), {
+        icfTemplate: 0x001b,
+        fmlaActiveRgce: [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77],
+        priority: 9,
+        stopIfTrue: true,
+      }),
+    );
+
+    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual([
+      {
+        kind: "duplicateValues",
+        priority: 9,
+        stopIfTrue: true,
+        ranges: ONE_RANGE,
+        style: undefined,
+      },
+    ]);
   });
 
   it("reads priority and stopIfTrue", () => {
@@ -816,7 +960,8 @@ describe("readCondFmt12Group", () => {
     expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual([]);
   });
 
-  it("still finds the record after a ct 0x05 rule's own CFFilter, proving cbFilter-driven skip advances correctly", () => {
+  it("reads a ct 0x05 rule with a substantial trailing CFFilter body, and still finds the record that follows it", () => {
+    // Each CF12 record is parsed from its own fresh cursor over its own record.blocks, so this can't actually distinguish a cbFilter-driven skip from no skip at all -- the next record's own position comes from the caller's record-index loop, not from where this cursor ends up. It still earns its place as a realistic, non-trivial CFFilter body fixture; see the dedicated test below for what actually depends on the skip happening.
     const groups = groupsFrom(
       condFmt12Record(2, ONE_RANGE),
       cf12Record(0x05, cfFilterBytes([1, 2, 3, 4, 5, 6, 7, 8]), {
@@ -832,6 +977,16 @@ describe("readCondFmt12Group", () => {
       "uniqueValues",
       "duplicateValues",
     ]);
+  });
+
+  it("degrades a ct 0x05 rule whose own cbFilter declares more bytes than the record actually carries, rather than silently ignoring the overrun", () => {
+    // Every other length-prefixed field this function reads (cbDxf, cce1, cce2, fmlaActive's own cce) is validated the identical way -- a declared length past the record's real end throws, and readCf12's own catch degrades the whole record for it. cbFilter is the one that looks unobservable if its skip is dropped (nothing reads the cursor again afterwards), but only because a WELL-FORMED cbFilter never has anywhere else to go wrong -- a malformed one still needs the same throw-and-degrade every sibling field already gets.
+    const groups = groupsFrom(
+      condFmt12Record(1, ONE_RANGE),
+      cf12Record(0x05, [...u16(1000)], { icfTemplate: 0x001b }),
+    );
+
+    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual([]);
   });
 
   describe("containsText/notContainsText/beginsWith/endsWith (ct 0x02, icfTemplate 0x0008)", () => {
