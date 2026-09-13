@@ -2324,6 +2324,26 @@ describe("writeXlsContent: data validations written (#971)", () => {
     }
   });
 
+  it("accepts a range sitting exactly on BIFF8's own grid boundary, not just short of it", () => {
+    // 0xffff and 0xff are the largest row/column index BIFF8's own u16/u8 fields can carry -- a range naming exactly these values is still addressable, unlike the one-past-the-edge values the previous test throws on, so the boundary check must be a strict `>`, not `>=`.
+    const rule: ContentSheetDataValidation = {
+      ranges: [
+        {
+          startRow: 0xffff,
+          endRow: 0xffff,
+          startColumn: 0xff,
+          endColumn: 0xff,
+        },
+      ],
+      type: "whole",
+      operator: "greaterThan",
+      formula1: "5",
+    };
+    expect(() =>
+      writeXlsContent(document([sheet("S", [], { dataValidations: [rule] })])),
+    ).not.toThrow();
+  });
+
   it("writes no Dval/Dv records at all for a sheet stating an empty dataValidations array", () => {
     // A round trip through readXlsContent cannot distinguish this from a Dval-with-zero-Dv-records: mapDataValidations's own result is an empty array either way, and content.ts already omits the field for an empty array regardless of whether a genuinely empty Dval record was written at all. Calling the writer directly is the only way to check that no record is written in the first place.
     expect(
