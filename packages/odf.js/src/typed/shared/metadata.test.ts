@@ -81,7 +81,8 @@ describe("readOdfMetadata", () => {
   });
 
   it("returns an empty object for a well-formed but entirely empty office:meta -- an empty office:meta is valid ODF, not an error", () => {
-    expect(readOdfMetadata(metaPackage([]))).toEqual({});
+    // toStrictEqual, not toEqual: toEqual ignores explicit undefined-valued properties, so it can't tell a genuinely absent key apart from one of the six field guards below wrongly firing and setting metadata.<field> = undefined -- toStrictEqual treats that as a real, distinguishable difference from {}.
+    expect(readOdfMetadata(metaPackage([]))).toStrictEqual({});
   });
 
   // dc:title / meta:initial-creator / dc:subject / dc:date / meta:generator values below are copied verbatim (real LibreOffice 26.2.5.2 output) from Modern_business_letter_serif.ott and CV.ott, two of LibreOffice's own bundled templates under /Applications/LibreOffice.app/Contents/Resources/template/**; meta:creation-date's value is likewise a real LibreOffice-produced timestamp copied from the same template. See this module's own top-of-file note on how meta:initial-creator vs. dc:creator, and meta:keyword's one-element-per-keyword shape, were confirmed against those real files.
@@ -437,6 +438,19 @@ describe("patchOdfMetadata", () => {
     expect(readOdfMetadata(pkg).author).toBe("New author");
   });
 
+  it("declares xmlns:meta on office:document-meta when patching keywords into a meta.xml that only ever declared dc:", () => {
+    // The keywords loop calls ensureNamespaceDeclared itself (unlike title/author/subject, whose declaration goes through setElementText), so this pins that call's own "meta:keyword" prefix argument directly, distinct from the author-path test above.
+    const pkg = metaPackage([el("dc:title", {}, [txt("Existing title")])], {
+      "xmlns:office": "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
+      "xmlns:dc": "http://purl.org/dc/elements/1.1/",
+    });
+    patchOdfMetadata(pkg, { keywords: ["alpha"] });
+    const root = documentMetaRootOf(pkg);
+    expect(root.attributes.find((a) => a.name === "xmlns:meta")?.value).toBe(
+      "urn:oasis:names:tc:opendocument:xmlns:meta:1.0",
+    );
+  });
+
   it("does not duplicate an xmlns declaration the root already carries", () => {
     const pkg = metaPackage([], {
       "xmlns:office": "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
@@ -453,6 +467,15 @@ describe("patchOdfMetadata", () => {
     expect(() => {
       patchOdfMetadata({ parts: {} }, { title: "x" });
     }).toThrow(/has no 'meta\.xml' XML part/);
+  });
+
+  it("throws when meta.xml is an XML part with no root element at all", () => {
+    const pkg: Package = {
+      parts: { [META_PART]: { kind: "xml", nodes: [] } },
+    };
+    expect(() => {
+      patchOdfMetadata(pkg, { title: "x" });
+    }).toThrow(/has no root element/);
   });
 
   it("throws when meta.xml has no office:meta element", () => {
