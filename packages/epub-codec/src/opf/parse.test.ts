@@ -56,6 +56,51 @@ describe("parseOpf", () => {
     });
   });
 
+  it("splits a manifest item's multi-valued properties on any whitespace run", () => {
+    const { manifest } = parseOpf(
+      `<package xmlns="http://www.idpf.org/2007/opf">
+        <manifest>
+          <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav  scripted"/>
+        </manifest>
+        <spine/>
+      </package>`,
+    );
+    expect(manifest[0]?.properties).toEqual(["nav", "scripted"]);
+  });
+
+  it("skips a manifest item missing a required attribute, keeping the well-formed ones", () => {
+    const { manifest } = parseOpf(
+      `<package xmlns="http://www.idpf.org/2007/opf">
+        <manifest>
+          <item id="incomplete" href="x.xhtml"/>
+          <item id="ok" href="ok.xhtml" media-type="application/xhtml+xml"/>
+        </manifest>
+        <spine/>
+      </package>`,
+    );
+    expect(manifest).toEqual([
+      {
+        id: "ok",
+        href: "ok.xhtml",
+        mediaType: "application/xhtml+xml",
+        properties: [],
+      },
+    ]);
+  });
+
+  it("skips a spine itemref with no idref, keeping the well-formed ones", () => {
+    const { spine } = parseOpf(
+      `<package xmlns="http://www.idpf.org/2007/opf">
+        <manifest/>
+        <spine>
+          <itemref/>
+          <itemref idref="chapter1"/>
+        </spine>
+      </package>`,
+    );
+    expect(spine).toEqual([{ idref: "chapter1", linear: true }]);
+  });
+
   it("reads the spine in document order, with linear=no honoured", () => {
     const { spine, ncxId } = parseOpf(OPF_XML);
     expect(spine).toEqual([
@@ -68,22 +113,27 @@ describe("parseOpf", () => {
 
   it("throws EpubInvalidOpfError with no <package> root", () => {
     expect(() => parseOpf("<not-a-package/>")).toThrow(EpubInvalidOpfError);
+    expect(() => parseOpf("<not-a-package/>")).toThrow(
+      "the OPF document has no <package> root element",
+    );
   });
 
   it("throws EpubInvalidOpfError with no <manifest>", () => {
-    expect(() =>
-      parseOpf(
-        '<package xmlns="http://www.idpf.org/2007/opf"><spine/></package>',
-      ),
-    ).toThrow(EpubInvalidOpfError);
+    const xml =
+      '<package xmlns="http://www.idpf.org/2007/opf"><spine/></package>';
+    expect(() => parseOpf(xml)).toThrow(EpubInvalidOpfError);
+    expect(() => parseOpf(xml)).toThrow(
+      "the OPF document has no <manifest> element",
+    );
   });
 
   it("throws EpubInvalidOpfError with no <spine>", () => {
-    expect(() =>
-      parseOpf(
-        '<package xmlns="http://www.idpf.org/2007/opf"><manifest/></package>',
-      ),
-    ).toThrow(EpubInvalidOpfError);
+    const xml =
+      '<package xmlns="http://www.idpf.org/2007/opf"><manifest/></package>';
+    expect(() => parseOpf(xml)).toThrow(EpubInvalidOpfError);
+    expect(() => parseOpf(xml)).toThrow(
+      "the OPF document has no <spine> element",
+    );
   });
 
   it("tolerates a missing <metadata> element", () => {
