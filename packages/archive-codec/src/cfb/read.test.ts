@@ -181,7 +181,7 @@ describe("readCompoundFile", () => {
     expect(new DataView(bytes.buffer).getUint32(0x2c, true)).toBeGreaterThan(1);
     const streams = readCompoundFile(bytes);
     expect(streams[0]?.bytes).toEqual(payload);
-  });
+  }, 20000); // v8 coverage instrumentation (CI's own _test:coverage task, and every Stryker mutant run) multiplies this test's real cost far past the default 5000ms budget: a 300 KiB byte-fill loop plus a full round trip is measured well under a second uninstrumented, but has been observed to exceed 5s on a loaded GitHub runner under coverage. A generous fixed timeout, not a smaller payload, keeps the fixture large enough to force the fixed-point loop past 1 while removing the flake.
 
   it("needs a second mini FAT sector once the mini stream passes 128 mini sectors", () => {
     // Each stream's own byte content is distinct (filled with its own index), not uniformly zero: a mini-FAT sector physically misplaced during the write would corrupt whichever OTHER stream's data actually occupies that sector, and only content that differs per stream can make that corruption visible -- an all-zero payload would still read back as all zero even after such a misplacement.
