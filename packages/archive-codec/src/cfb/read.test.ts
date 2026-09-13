@@ -184,14 +184,21 @@ describe("readCompoundFile", () => {
   });
 
   it("needs a second mini FAT sector once the mini stream passes 128 mini sectors", () => {
+    // Each stream's own byte content is distinct (filled with its own index), not uniformly zero: a mini-FAT sector physically misplaced during the write would corrupt whichever OTHER stream's data actually occupies that sector, and only content that differs per stream can make that corruption visible -- an all-zero payload would still read back as all zero even after such a misplacement.
     const miniSectorsNeeded = 129;
     const inputs = Array.from({ length: miniSectorsNeeded }, (_unused, i) => ({
       path: `M${i}`,
-      bytes: new Uint8Array(64), // exactly one mini sector each
+      bytes: new Uint8Array(64).fill(i % 256), // exactly one mini sector each
     }));
     const bytes = compoundFile(inputs);
     expect(new DataView(bytes.buffer).getUint32(0x40, true)).toBe(2);
-    expect(readCompoundFile(bytes)).toHaveLength(miniSectorsNeeded);
+    const streams = readCompoundFile(bytes);
+    expect(streams).toHaveLength(miniSectorsNeeded);
+    for (let i = 0; i < miniSectorsNeeded; i++) {
+      expect(streams.find((s) => s.path === `M${i}`)?.bytes).toEqual(
+        new Uint8Array(64).fill(i % 256),
+      );
+    }
   });
 
   it("writes 0 as the directory-sector count for a version 3 file, and the real count for version 4", () => {
