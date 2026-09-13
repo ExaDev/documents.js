@@ -151,4 +151,13 @@ describe("buildCellShading", () => {
       buildCellShading({ kind: "pattern", patternType: "gray125" }),
     ).toThrow(/gray125/);
   });
+
+  it("throws naming the actual unrecognised kind for a fill outside the 'solid'/'pattern' discriminated union entirely", () => {
+    // ContentCellFillSchema only ever produces 'solid' or 'pattern' through normal validated input -- this exercises the writer's own defensive default branch directly, past the type system, for a value shaped like neither.
+    expect(() =>
+      buildCellShading({ kind: "gradient" } as unknown as Parameters<
+        typeof buildCellShading
+      >[0]),
+    ).toThrow(/gradient/);
+  });
 });
