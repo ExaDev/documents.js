@@ -131,6 +131,43 @@ describe("readDataValidations", () => {
     expect(Object.hasOwn(result.validations[0] ?? {}, "operator")).toBe(false);
   });
 
+  it("recognises every ST_DataValidationOperator vocabulary member, not just a couple of them", () => {
+    const operators = [
+      "between",
+      "notBetween",
+      "equal",
+      "notEqual",
+      "greaterThan",
+      "greaterThanOrEqual",
+      "lessThan",
+      "lessThanOrEqual",
+    ] as const;
+    for (const operator of operators) {
+      const dv = el("dataValidation", { type: "whole", sqref: "A1", operator });
+      const result = readDataValidations(worksheetWith(dv)).validations[0];
+      expect(result?.operator).toBe(operator);
+    }
+  });
+
+  it("reads formula2 for a notBetween operator too, not just between", () => {
+    const dv = el(
+      "dataValidation",
+      { type: "whole", sqref: "A1", operator: "notBetween" },
+      [
+        el("formula1", {}, [{ type: "text", value: "1" }]),
+        el("formula2", {}, [{ type: "text", value: "10" }]),
+      ],
+    );
+    const result = readDataValidations(worksheetWith(dv)).validations[0];
+    expect(result?.formula2).toBe("10");
+  });
+
+  it("omits formula1 entirely when the element carries no <formula1> child", () => {
+    const dv = el("dataValidation", { type: "whole", sqref: "A1" });
+    const result = readDataValidations(worksheetWith(dv)).validations[0];
+    expect(Object.hasOwn(result ?? {}, "formula1")).toBe(false);
+  });
+
   it("reads allowBlank/showInputMessage/showErrorMessage only when truthy, omitting the key entirely otherwise", () => {
     const trueDv = el("dataValidation", {
       type: "whole",
