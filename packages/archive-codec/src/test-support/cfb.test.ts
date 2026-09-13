@@ -190,6 +190,70 @@ describe("compoundFile FAT chain lengths", () => {
   });
 });
 
+describe("compoundFile FAT and mini-FAT padding tails", () => {
+  it("fills the FAT's own unused tail entries with FREESECT, past the file's real total sector count", () => {
+    // Every chain() call but the very last is immediately followed by the next region's own chain() call, whose first write lands exactly where an off-by-one in the previous call would have -- overwriting it regardless. The very last call (the mini-FAT's own chain) has nothing after it, so an off-by-one there leaks into the FAT's own genuinely unused padding tail, which must still read FREESECT.
+    const bytes = compoundFile([{ path: "A", bytes: enc("x".repeat(5000)) }]);
+    const view = new DataView(bytes.buffer);
+    const fatSectorCount = view.getUint32(0x2c, true);
+    const entriesPerFatSector = 512 / 4;
+    const totalRealSectors = bytes.length / 512 - 1;
+    const totalAddressableSectors = fatSectorCount * entriesPerFatSector;
+    expect(totalAddressableSectors).toBeGreaterThan(totalRealSectors);
+    for (
+      let sector = totalRealSectors;
+      sector < totalAddressableSectors;
+      sector++
+    ) {
+      const holder = Math.floor(sector / entriesPerFatSector);
+      expect(
+        view.getUint32(
+          (holder + 1) * 512 + (sector % entriesPerFatSector) * 4,
+          true,
+        ),
+      ).toBe(0xffffffff); // FREESECT
+    }
+  });
+
+  it("marks every one of its own FAT sectors as FATSECT in the FAT table itself", () => {
+    // Removing the fat[sector] = FATSECT loop entirely would leave every FAT sector reading back as FREESECT (its own initial fill value), since nothing else in this builder ever writes to those specific indices.
+    const bytes = compoundFile([{ path: "A", bytes: enc("x".repeat(5000)) }]);
+    const view = new DataView(bytes.buffer);
+    const fatSectorCount = view.getUint32(0x2c, true);
+    const entriesPerFatSector = 512 / 4;
+    for (let sector = 0; sector < fatSectorCount; sector++) {
+      const holder = Math.floor(sector / entriesPerFatSector);
+      expect(
+        view.getUint32(
+          (holder + 1) * 512 + (sector % entriesPerFatSector) * 4,
+          true,
+        ),
+      ).toBe(0xfffffffd); // FATSECT
+    }
+  });
+
+  it("fills the mini-FAT's own unused tail entries with FREESECT, past the real mini sector count", () => {
+    // The mini-FAT chain loop is the very last thing this builder writes into the miniFat array -- nothing follows it to overwrite an off-by-one, so its own padding tail is the direct witness.
+    const bytes = compoundFile([{ path: "A", bytes: enc("x") }]); // 1 byte -> 1 real mini sector, needing 1 mini-FAT sector of mostly padding
+    const view = new DataView(bytes.buffer);
+    const miniFatStart = view.getUint32(0x3c, true);
+    const miniFatSectorCount = view.getUint32(0x40, true);
+    const entriesPerFatSector = 512 / 4;
+    const realMiniSectors = 1;
+    const totalAddressableMiniSlots = miniFatSectorCount * entriesPerFatSector;
+    expect(totalAddressableMiniSlots).toBeGreaterThan(realMiniSectors);
+    for (let slot = realMiniSectors; slot < totalAddressableMiniSlots; slot++) {
+      const holder = miniFatStart + Math.floor(slot / entriesPerFatSector);
+      expect(
+        view.getUint32(
+          (holder + 1) * 512 + (slot % entriesPerFatSector) * 4,
+          true,
+        ),
+      ).toBe(0xffffffff); // FREESECT
+    }
+  });
+});
+
 describe("compoundFile header DIFAT array padding", () => {
   it("fills every one of the header's 109 DIFAT entries, the real FAT sector indices then FREESECT", () => {
     const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);

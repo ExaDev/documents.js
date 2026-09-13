@@ -342,10 +342,11 @@ export function writeCompoundFile(
           entriesPerFatSector,
       ),
     );
-    const neededDifat =
-      neededFat <= HEADER_DIFAT_ENTRIES
-        ? 0
-        : Math.ceil((neededFat - HEADER_DIFAT_ENTRIES) / difatEntriesPerSector);
+    // No neededFat <= HEADER_DIFAT_ENTRIES guard: HEADER_DIFAT_ENTRIES (109) is smaller than difatEntriesPerSector (127 for 512-byte sectors, 1023 for 4096-byte) for every sector size this writer supports, so whenever neededFat is genuinely at or under 109, (neededFat - HEADER_DIFAT_ENTRIES) is a negative number whose magnitude never reaches difatEntriesPerSector -- Math.ceil of that is always 0 (or -0, numerically identical) regardless, exactly the value the guard's own true branch spelled out a second time. Math.max(0, ...) makes that "never negative" invariant explicit rather than leaving it to a subtle cancellation between two magic numbers, and steers clear of -0 ever surfacing.
+    const neededDifat = Math.max(
+      0,
+      Math.ceil((neededFat - HEADER_DIFAT_ENTRIES) / difatEntriesPerSector),
+    );
     if (neededFat === fatSectorCount && neededDifat === difatSectorCount) {
       break;
     }
