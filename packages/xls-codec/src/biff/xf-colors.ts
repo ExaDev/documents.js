@@ -308,17 +308,14 @@ function hslToRgb(hsl: Hsl): Color {
   const { h, s, l } = hsl;
   // No dedicated s === 0 shortcut: whenever s is genuinely 0, q and p below both reduce to l regardless of which branch computes q (l*(1+0) and l+0-l*0 are both l), which makes q - p exactly 0 -- and every branch hueToRgb can take returns either p, q, or p + (q - p) * something, all of which collapse to l the instant q - p is 0. The achromatic result this shortcut would have returned is already what the general formula gives for s === 0, by construction, not merely as a close approximation.
   const hueToRgb = (p: number, q: number, t: number): number => {
-    let tt = t;
-    // Every comparison below is a boundary this function's own piecewise definition is continuous across -- the "wrong" branch at t exactly on a boundary computes the identical value the "right" one does (each pair of adjacent pieces was chosen to agree exactly where they meet, the way any well-formed piecewise curve must), so a `<` mutated to `<=` here changes which branch runs but never what it returns.
-    if (tt < 0) tt += 1;
-    if (tt > 1) tt -= 1;
-    if (tt < 1 / 6) return p + (q - p) * 6 * tt;
-    if (tt < 1 / 2) return q;
-    if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
-    return p;
+    // Wraps into [0, 1) by exactly one turn, matching every real caller's own h +/- 1/3 offset (h itself is always in [0, 1)): (t + 1) % 1 alone is enough, since a leading `t % 1` before adding 1 would be redundant -- mod-1 addition distributes over the +1 regardless of whether t was reduced first, for any t at all, not merely the realistic range.
+    const tt = (t + 1) % 1;
+    // The classic four-piece hueToRgb curve (ramp up over [0, 1/6), hold at q over [1/6, 1/2), ramp down over [1/2, 2/3), hold at p beyond) restated as one continuous trapezoid: each adjacent pair of pieces was chosen to meet exactly at its shared boundary, so a separate `<` comparison per piece could only ever disagree with itself about which of two identical values to return. Math.min(tt, 2/3 - tt) picks the up-ramp's height below the midpoint and the down-ramp's height above it (the same unification rgbToHsl's own `s` formula above uses for its `l > 0.5` boundary), and the outer clamp holds it at 0 or 1 everywhere the original's outer branches did.
+    const trapezoid = Math.min(Math.max(6 * Math.min(tt, 2 / 3 - tt), 0), 1);
+    return p + (q - p) * trapezoid;
   };
-  // Continuous at l === 0.5 for the identical reason rgbToHsl's own s formula is: l*(1+s) and l+s-l*s both equal 0.5+0.5s there, since l=0.5 forces the two expressions' every l-only and l*s term to coincide.
-  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  // Continuous at l === 0.5 for the identical reason rgbToHsl's own s formula is: l*(1+s) and l+s-l*s both equal 0.5+0.5s there, since l=0.5 forces the two expressions' every l-only and l*s term to coincide. l + s * Math.min(l, 1 - l) is those two branches unified: it reduces to l*(1+s) below the midpoint and l+s-l*s above it, with no boundary comparison left to disagree with itself over.
+  const q = l + s * Math.min(l, 1 - l);
   const p = 2 * l - q;
   return {
     r: hueToRgb(p, q, h + 1 / 3),
