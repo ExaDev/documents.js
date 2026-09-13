@@ -1,6 +1,6 @@
 import { readUint16LE, readUint32LE, readUint8, slice } from "../bytes";
 import { DocFormatError } from "../errors";
-import { findLargestAtMost, parsePlc } from "../plc";
+import { findLargestAtMost, parsePlc, type Plc } from "../plc";
 
 // The formatted disk page (FKP), [MS-DOC] 2.9.23 and 2.9.175 -- how a .doc stores character and paragraph formatting as sparse exceptions rather than per-character state. Text is divided into runs of identical formatting; each run's properties live in one 512-byte page, and a bin table maps a byte offset in the WordDocument stream to the page holding the properties for the text there.
 //
@@ -38,6 +38,8 @@ export interface PapxFkp {
   readonly rgfc: readonly number[];
   /** The PapxInFkp for paragraph `index`, or undefined when its BxPap.bOffset is zero and the paragraph takes the defaults. */
   papx(index: number): PapxRecord | undefined;
+  /** `rgfc[index + 1]`, the exclusive end offset for paragraph `index` -- always defined for any `index` `papx` itself accepts (rgfc always carries `cpara + 1` entries), so `papx`'s own bounds check is what actually guards this; exposed as its own method so that guarantee is directly testable rather than an unreachable check inside a caller. */
+  fcLimAt(index: number): number;
 }
 
 function checkPage(page: Uint8Array, what: string): void {
@@ -138,6 +140,15 @@ export function parsePapxFkp(page: Uint8Array): PapxFkp {
         ),
       };
     },
+    fcLimAt(index: number): number {
+      const value = rgfc[index + 1];
+      if (value === undefined) {
+        throw new DocFormatError(
+          `PapxFkp covers ${cpara} paragraphs; no bracketing end offset exists for paragraph ${index}`,
+        );
+      }
+      return value;
+    },
   };
 }
 
@@ -151,54 +162,39 @@ export interface PapxLookup extends PapxRecord {
 // Parsed pages are memoised because a document's text resolves through the same handful of pages thousands of times, and a page is re-parsed identically every time.
 export class PropertyBinTable {
   readonly #wordDocument: Uint8Array;
-  readonly #keys: readonly number[];
-  readonly #pageNumbers: readonly number[];
+  readonly #plc: Plc;
   readonly #chpxPages = new Map<number, ChpxFkp>();
   readonly #papxPages = new Map<number, PapxFkp>();
 
   constructor(wordDocument: Uint8Array, plc: Uint8Array, what: string) {
     this.#wordDocument = wordDocument;
-    const parsed = parsePlc(plc, 4, what);
-    this.#keys = parsed.keys;
-    const pageNumbers: number[] = [];
-    for (let index = 0; index < parsed.count; index += 1) {
-      pageNumbers.push(readUint32LE(parsed.element(index), 0) & PN_MASK);
-    }
-    this.#pageNumbers = pageNumbers;
+    this.#plc = parsePlc(plc, 4, what);
   }
 
-  #pageBytes(fc: number): Uint8Array | undefined {
-    const index = findLargestAtMost(this.#keys, fc);
+  /** Resolves `fc` to the bin table entry covering it, or undefined when `fc` falls outside every entry. Reads the page number through `Plc.element`, whose own bounds check is what actually guards this index -- `findLargestAtMost` never returns the PLC's own final (terminating) key, so `index` is always one `element` already accepts, and a second "is this page number missing" check here would have no input that could ever trigger it. */
+  #resolvePage(
+    fc: number,
+  ): { readonly pageNumber: number; readonly bytes: Uint8Array } | undefined {
+    const index = findLargestAtMost(this.#plc.keys, fc);
     if (index === undefined) return undefined;
-    const pageNumber = this.#pageNumbers[index];
-    if (pageNumber === undefined) {
-      throw new DocFormatError(
-        `bin table entry ${index} names no formatted-disk-page number`,
-      );
-    }
-    return slice(
+    const pageNumber = readUint32LE(this.#plc.element(index), 0) & PN_MASK;
+    const bytes = slice(
       this.#wordDocument,
       pageNumber * FKP_PAGE_SIZE,
       FKP_PAGE_SIZE,
       `formatted disk page ${pageNumber}`,
     );
-  }
-
-  #pageNumberFor(fc: number): number | undefined {
-    const index = findLargestAtMost(this.#keys, fc);
-    return index === undefined ? undefined : this.#pageNumbers[index];
+    return { pageNumber, bytes };
   }
 
   /** The direct character-formatting grpprl covering `fc`, or undefined when the offset is outside the table or its run carries no exception. */
   chpxGrpprl(fc: number): Uint8Array | undefined {
-    const pageNumber = this.#pageNumberFor(fc);
-    if (pageNumber === undefined) return undefined;
-    let fkp = this.#chpxPages.get(pageNumber);
+    const resolved = this.#resolvePage(fc);
+    if (resolved === undefined) return undefined;
+    let fkp = this.#chpxPages.get(resolved.pageNumber);
     if (fkp === undefined) {
-      const bytes = this.#pageBytes(fc);
-      if (bytes === undefined) return undefined;
-      fkp = parseChpxFkp(bytes);
-      this.#chpxPages.set(pageNumber, fkp);
+      fkp = parseChpxFkp(resolved.bytes);
+      this.#chpxPages.set(resolved.pageNumber, fkp);
     }
     const run = findLargestAtMost(fkp.rgfc, fc);
     return run === undefined ? undefined : fkp.grpprl(run);
@@ -206,25 +202,17 @@ export class PropertyBinTable {
 
   /** The direct paragraph-formatting record covering `fc`, or undefined when the offset is outside the table or its paragraph carries no exception. */
   papx(fc: number): PapxLookup | undefined {
-    const pageNumber = this.#pageNumberFor(fc);
-    if (pageNumber === undefined) return undefined;
-    let fkp = this.#papxPages.get(pageNumber);
+    const resolved = this.#resolvePage(fc);
+    if (resolved === undefined) return undefined;
+    let fkp = this.#papxPages.get(resolved.pageNumber);
     if (fkp === undefined) {
-      const bytes = this.#pageBytes(fc);
-      if (bytes === undefined) return undefined;
-      fkp = parsePapxFkp(bytes);
-      this.#papxPages.set(pageNumber, fkp);
+      fkp = parsePapxFkp(resolved.bytes);
+      this.#papxPages.set(resolved.pageNumber, fkp);
     }
     const index = findLargestAtMost(fkp.rgfc, fc);
     if (index === undefined) return undefined;
     const record = fkp.papx(index);
     if (record === undefined) return undefined;
-    const fcLim = fkp.rgfc[index + 1];
-    if (fcLim === undefined) {
-      throw new DocFormatError(
-        `PapxFkp paragraph ${index} has no bracketing end offset, so its extent is undefined`,
-      );
-    }
-    return { ...record, fcLim };
+    return { ...record, fcLim: fkp.fcLimAt(index) };
   }
 }
