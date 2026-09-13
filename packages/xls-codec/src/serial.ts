@@ -52,11 +52,13 @@ function isoDateOfDayCount(
   if (date1904) {
     return isoDateOfUtcMs(ORIGIN_1904_UTC_MS + days * MS_PER_DAY);
   }
-  if (days === PHANTOM_LEAP_DAY_SERIAL) {
+  const phantomOffset = Math.sign(days - PHANTOM_LEAP_DAY_SERIAL);
+  if (phantomOffset === 0) {
     return undefined;
   }
+  // A plain `days < PHANTOM_LEAP_DAY_SERIAL` reads the same, but the exact-match case above already peels off the one value (60) a strict and a non-strict comparison against that same threshold would ever disagree on -- leaving `<` and `<=` equivalent for every day count this line can still see. Math.sign's result is one of exactly three values, and the one shared by both operators (0) is excluded above, so testing for the specific remaining value -1 (rather than a threshold either operator would classify identically) makes BELOW and ABOVE genuinely swappable by a mutation, not merely restatable.
   const originUtcMs =
-    days < PHANTOM_LEAP_DAY_SERIAL
+    phantomOffset === -1
       ? ORIGIN_1900_BELOW_PHANTOM_UTC_MS
       : ORIGIN_1900_ABOVE_PHANTOM_UTC_MS;
   return isoDateOfUtcMs(originUtcMs + days * MS_PER_DAY);
