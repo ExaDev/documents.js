@@ -146,9 +146,9 @@ export function buildParagraphs(
 
   return splitParagraphs(text).map((paragraph) => {
     const end = paragraph.start + paragraph.text.length;
+    // The lower bound (paragraph.start >= extent.start) is provably redundant and dropped here rather than left as an always-true comparison: toExtents builds extents by cumulative count starting at 0 with no gaps, so scanning in order for the first extent whose end exceeds paragraph.start already finds the covering extent -- no earlier extent can satisfy that weaker check without also being the correct one, since each extent's end equals the next one's start.
     const rawParagraphProperties = paragraphExtents.find(
-      (extent) =>
-        paragraph.start >= extent.start && paragraph.start < extent.end,
+      (extent) => paragraph.start < extent.end,
     )?.properties;
     // The run's own stated (or, absent one, default-zero) outline depth -- never itself resolved from the master, since it is what selects which of the master's own levels apply in the first place.
     const indentLevel = rawParagraphProperties?.indentLevel ?? 0;
