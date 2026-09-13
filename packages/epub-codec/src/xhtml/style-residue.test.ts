@@ -51,4 +51,34 @@ describe("readXhtmlBody: <head> style residue", () => {
     });
     expect(source).toBeUndefined();
   });
+
+  it("does not quarantine a <link> whose rel is not stylesheet, nor an unrelated element that merely carries a rel=stylesheet attribute", () => {
+    // Distinguishes the two-part `node.tag === "link" && attrValue(node, "rel") === "stylesheet"` test from either half alone: a <link> with the wrong rel, and a non-<link> tag that happens to carry rel="stylesheet", must each fail the full conjunction on their own.
+    const { source } = readXhtmlBody(
+      bodyWithHead('<link rel="icon" href="a.ico"/><meta rel="stylesheet"/>'),
+      {
+        resolveImage: () => undefined,
+        sink: () => undefined,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    expect(source).toBeUndefined();
+  });
+
+  it("states the exact style-residue diagnostic message", () => {
+    const sink = vi.fn();
+    readXhtmlBody(bodyWithHead("<style>p { color: red; }</style>"), {
+      resolveImage: () => undefined,
+      sink,
+      sourceHref: "chapter1.xhtml",
+      contentWidthPt: CONTENT_WIDTH_PT,
+    });
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message:
+          "the document's own <head> style declarations (CSS) are quarantined as residue rather than interpreted; the schema is content, not styling",
+      }),
+    );
+  });
 });
