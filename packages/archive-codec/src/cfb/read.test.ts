@@ -746,6 +746,7 @@ describe("readCompoundFile malformed-input handling", () => {
   });
 
   it.each([
+    [0, "below the 2-byte minimum, and even"],
     [1, "below the 2-byte minimum, and odd"],
     [3, "within range, but odd"],
     [63, "within range, but odd"],
