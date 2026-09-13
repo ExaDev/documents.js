@@ -51,6 +51,23 @@ describe("resolveSlideTable", () => {
     const doc = pptxWithTable();
     expect(resolveSlideTable(doc, 0, 5)).toBeUndefined();
   });
+
+  it("skips a preceding non-table shape's own blocks rather than counting them as tables", () => {
+    const editor = createPptx();
+    const slide = editor.addSlide();
+    slide.addTextBox({
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+      text: "Not a table",
+    });
+    slide.addTable({
+      frame: { xPt: 10, yPt: 60, widthPt: 300, heightPt: 150 },
+      table: { rows: 2, columns: 3 },
+    });
+    const doc: PptxOpenDocument = { format: "pptx", editor, path: undefined };
+    // A dropped `block.kind === "table"` check would count the text box's own paragraph block as tableIndex 0, returning it in place of the real table.
+    const table = resolveSlideTable(doc, 0, 0);
+    expect(table?.kind).toBe("table");
+  });
 });
 
 describe("slideTableCellText", () => {
