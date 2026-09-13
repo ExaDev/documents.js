@@ -151,9 +151,8 @@ class FieldCursor {
     return this.view.getUint32(this.require(4), true);
   }
 
-  bytes(size: number): Uint8Array<ArrayBuffer> {
-    const at = this.require(size);
-    return this.data.subarray(at, at + size);
+  u8(): number {
+    return this.view.getUint8(this.require(1));
   }
 
   skip(size: number): void {
@@ -162,18 +161,11 @@ class FieldCursor {
 }
 
 function readColorIndexStruct(cursor: FieldCursor): RunColor | undefined {
-  const bytes = cursor.bytes(4);
-  const [red, green, blue, index] = bytes;
-  if (
-    red === undefined ||
-    green === undefined ||
-    blue === undefined ||
-    index === undefined
-  ) {
-    throw new PptFormatError(
-      "ColorIndexStruct read returned fewer than its four bytes",
-    );
-  }
+  // Four direct byte reads rather than a `bytes(4)` array destructured into named fields: cursor.require() already throws if fewer than 4 bytes remain, so a destructured array's own possibly-undefined elements would be an unreachable case with no real input that could ever trigger it.
+  const red = cursor.u8();
+  const green = cursor.u8();
+  const blue = cursor.u8();
+  const index = cursor.u8();
   if (index === COLOR_INDEX_SRGB) {
     return { kind: "rgb", rgb: { red, green, blue } };
   }

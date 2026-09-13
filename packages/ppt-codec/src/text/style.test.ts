@@ -235,6 +235,15 @@ describe("readStyleTextPropAtom paragraph runs", () => {
 });
 
 describe("readStyleTextPropAtom character runs", () => {
+  it("rejects character runs whose counts overshoot the text's character count", () => {
+    // The identical check as paragraph runs, on the same field name pattern, but with its own label -- proving this run's own overflow message names "character runs", not a copy-pasted "paragraph runs" from the sibling check.
+    const bytes = styleTextPropAtom([pfRun(7, 0, 0)], [cfRun(99, 0)]);
+    expect(() => read(bytes, 7)).toThrow(PptFormatError);
+    expect(() => read(bytes, 7)).toThrow(
+      "StyleTextPropAtom character runs cover 99 characters, more than the 7 in the corresponding text body",
+    );
+  });
+
   it("reads bold, italic and underline from fontStyle, gated by their own mask bits", () => {
     const bytes = styleTextPropAtom(
       [pfRun(6, 0, 0)],
@@ -352,6 +361,19 @@ describe("readStyleTextPropAtom character runs", () => {
     });
   });
 
+  it("skips the position field even when it is the only mask bit set, keeping a later run's own count aligned", () => {
+    // CF_POSITION alone sets no font-style bit, so this run reads no other optional field at all -- the position skip is the only thing standing between a correctly-aligned second run and a corrupted one.
+    const bytes = styleTextPropAtom(
+      [pfRun(7, 0, 0)],
+      [cfRun(3, CF_POSITION, u16le(0)), cfRun(4, CF_BOLD, u16le(STYLE_BOLD))],
+    );
+    const { characterRuns } = read(bytes, 7);
+    expect(characterRuns).toHaveLength(2);
+    expect(characterRuns[0]?.count).toBe(3);
+    expect(characterRuns[1]?.count).toBe(4);
+    expect(characterRuns[1]?.properties.bold).toBe(true);
+  });
+
   it("skips oldEAFontRef, symbolFontRef and position, none of which are projected, without disturbing the fields around them", () => {
     // fontRef (typeface) then oldEAFontRef (skipped), symbolFontRef (skipped), fontSize, color, then position (skipped) -- the spec's own field order. Only fontRef and fontSize are observable here, so setting every skip-only bit at once and checking both still decode correctly is the only way to prove none of the three skips was dropped.
     const bytes = styleTextPropAtom(
@@ -464,14 +486,27 @@ describe("readTextMasterStyleAtom", () => {
   });
 
   it("consumes an explicit level field for a type at or above CENTER_BODY, without letting it affect the level's own position-derived indentLevel", () => {
-    // TEXT_TYPE_CENTER_BODY levels carry a real level field ([MS-PPT] 2.9.35's own explicit-level types) ahead of pf/cf; this fixture states a level field that disagrees with the level's own position (2 at position 0) specifically to prove the byte offset consumed is the explicit field, not that this reader trusts its value over the position.
+    // TEXT_TYPE_CENTER_BODY levels carry a real level field ([MS-PPT] 2.9.35's own explicit-level types) ahead of pf/cf. The level field itself is 0 here specifically because a nonzero value would leak into readTextPFException's own mask if this field went unconsumed -- and several of that mask's low bits (PF_HAS_BULLET/PF_BULLET_HAS_FONT/PF_LEFT_MARGIN among them) each happen to trigger a field exactly 2 bytes wide, silently re-synchronising the cursor and masking the very omission this test exists to catch. A zero level field leaves no such field to accidentally compensate: skipping its consumption misreads the next 4 bytes as the pf mask with nothing left over, permanently losing 2 bytes and corrupting every field read after it.
     const bytes = masterStyleAtom(TEXT_TYPE_CENTER_BODY, [
-      concatBytes(u16le(2), pfLevel(0), cfLevel(CF_BOLD, u16le(STYLE_BOLD))),
+      concatBytes(u16le(0), pfLevel(0), cfLevel(CF_BOLD, u16le(STYLE_BOLD))),
     ]);
     const { levels } = readTextMasterStyleAtom(readRecordAt(bytes, 0));
     expect(levels).toHaveLength(1);
     expect(levels[0]?.character.bold).toBe(true);
     expect(levels[0]?.paragraph.indentLevel).toBe(0);
+  });
+
+  it("rejects a level truncated part way through its own pf/cf fields, naming this atom in the message", () => {
+    // cLevels 1, but no level data at all follows it -- readTextPFException's own cursor.u32() call throws, and the message must name "TextMasterStyleAtom", not some other cursor's own label.
+    const bytes = atom(RT_TextMasterStyleAtom, u16le(1), {
+      recInstance: TEXT_TYPE_BODY,
+    });
+    expect(() => readTextMasterStyleAtom(readRecordAt(bytes, 0))).toThrow(
+      PptFormatError,
+    );
+    expect(() => readTextMasterStyleAtom(readRecordAt(bytes, 0))).toThrow(
+      "TextMasterStyleAtom needs 4 more bytes at offset 2 but the atom holds only 2",
+    );
   });
 
   it("rejects cLevels greater than the mandated maximum of 5", () => {
