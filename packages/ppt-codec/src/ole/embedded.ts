@@ -132,9 +132,7 @@ export function resolveOleObjectStorage(
   if (record.header.recInstance !== EX_OLE_OBJ_STG_INSTANCE_COMPRESSED) {
     return record.data;
   }
-  if (record.data.length < 4) {
-    return undefined;
-  }
+  // No separate length guard ahead of the subarray: a decompressedSize prefix shorter than 4 bytes leaves subarray(4) with fewer bytes (or none) for inflate to work with, and inflate() can never succeed on a payload too short to be a valid zlib stream regardless of exactly how short -- the catch below already turns that failure into the same undefined this guard would have returned directly.
   try {
     return inflate(record.data.subarray(4));
   } catch {
