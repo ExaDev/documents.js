@@ -40,10 +40,11 @@ function encodeCharacters(text: string): EncodedCharacters {
   return { highByte: needsHighByte, units: builder.build() };
 }
 
+/** `max` is always at least MAX_SHORT_STRING_LENGTH (255) across this module's own three call sites below, so `text` is always well past 40 characters by the time this throws at all -- there is no shorter-text case left to choose between embedding it whole or truncating it, only the one this always takes. */
 function checkedLength(text: string, max: number, shape: string): number {
   if (text.length > max) {
     throw new BiffWriteError(
-      `${shape} cannot hold ${text.length} UTF-16 code units, above its own ${max}-unit limit (text: ${JSON.stringify(text.length > 40 ? `${text.slice(0, 40)}...` : text)})`,
+      `${shape} cannot hold ${text.length} UTF-16 code units, above its own ${max}-unit limit (text: ${JSON.stringify(`${text.slice(0, 40)}...`)})`,
     );
   }
   return text.length;
