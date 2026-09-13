@@ -2,7 +2,7 @@ import type { ContentSheetRange, SheetRuleOperator } from "document-schema.js";
 import { BlockCursor } from "../biff/cursor";
 import type { FormulaSheetContext } from "../biff/ptg";
 import { parseFormulaText } from "../biff/ptg";
-import { BiffFormatError } from "../biff/records";
+import { recoverFromFormatError } from "../biff/records";
 import { readXLUnicodeString } from "../biff/strings";
 import type { RecordGroup } from "../biff/substreams";
 
@@ -64,16 +64,13 @@ export interface RawDataValidation {
   readonly ranges: ContentSheetRange[];
 }
 
-// A DVParsedFormula ([MS-XLS] 2.2.2 / this reader's own citation on DVParsedFormula): cce (2 bytes), an unused 2-byte field, then cce bytes of Ptg tokens -- structurally simpler than a cell Formula record's own CellParsedFormula (no rgcb trailer: [MS-XLS] itself forbids a DV formula from containing a PtgArray at all). cce === 0 means "no formula" (valType 0's own formula1, or either formula whenever the Dv record's own valType/typOperator combination doesn't use it) -- the file states this directly rather than leaving it for a reader to infer from valType/typOperator, so this function trusts cce rather than re-deriving when a formula "should" be absent.
+// A DVParsedFormula ([MS-XLS] 2.2.2 / this reader's own citation on DVParsedFormula): cce (2 bytes), an unused 2-byte field, then cce bytes of Ptg tokens -- structurally simpler than a cell Formula record's own CellParsedFormula (no rgcb trailer: [MS-XLS] itself forbids a DV formula from containing a PtgArray at all). cce === 0 means "no formula" (valType 0's own formula1, or either formula whenever the Dv record's own valType/typOperator combination doesn't use it); no early return is needed to say so, since parseFormulaText resolves a zero-length rgce to undefined on its own (an empty token stream never pushes onto its own operand stack, so its own final "exactly one operand left" check already fails) -- the file states "no formula" directly rather than leaving it for a reader to infer from valType/typOperator, and this function trusts cce rather than re-deriving when a formula "should" be absent either way.
 function readDvParsedFormula(
   cursor: BlockCursor,
   formulaSheets: FormulaSheetContext,
 ): string | undefined {
   const cce = cursor.u16();
   cursor.skip(2); // unused
-  if (cce === 0) {
-    return undefined;
-  }
   return parseFormulaText(cursor.take(cce), formulaSheets);
 }
 
@@ -133,9 +130,7 @@ export function readDv(
       ranges,
     };
   } catch (err) {
-    if (!(err instanceof BiffFormatError)) {
-      throw err;
-    }
+    recoverFromFormatError(err, undefined);
     return undefined;
   }
 }

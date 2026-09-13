@@ -2,7 +2,7 @@ import type { ContentSheetRange, SheetRuleOperator } from "document-schema.js";
 import { BlockCursor } from "../biff/cursor";
 import type { FormulaSheetContext } from "../biff/ptg";
 import { parseFormulaText } from "../biff/ptg";
-import { BiffFormatError } from "../biff/records";
+import { recoverFromFormatError } from "../biff/records";
 import { recordByteLength, type RecordGroup } from "../biff/substreams";
 import { RECORD_CF } from "../biff/record-types";
 
@@ -109,9 +109,7 @@ export function parseDxfStyle(
     }
     return { fontColorIcv, fill };
   } catch (err) {
-    if (!(err instanceof BiffFormatError)) {
-      throw err;
-    }
+    recoverFromFormatError(err, undefined);
     return undefined;
   }
 }
@@ -145,9 +143,7 @@ function parseCfBytes(record: RecordGroup):
     const rgce2 = cursor.take(cce2);
     return { ct, cp, dxfBytes, rgce1, rgce2 };
   } catch (err) {
-    if (!(err instanceof BiffFormatError)) {
-      throw err;
-    }
+    recoverFromFormatError(err, undefined);
     return undefined;
   }
 }
@@ -191,9 +187,7 @@ function readCf(
       ranges,
     };
   } catch (err) {
-    if (!(err instanceof BiffFormatError)) {
-      throw err;
-    }
+    recoverFromFormatError(err, undefined);
     return undefined;
   }
 }
@@ -264,9 +258,6 @@ export function readCondFmtGroup(
     }
     return { formats, recordsConsumed: 1 + ccf, nID, ranges, rawCfs };
   } catch (err) {
-    if (!(err instanceof BiffFormatError)) {
-      throw err;
-    }
-    return DEGRADED_CONDFMT_GROUP;
+    return recoverFromFormatError(err, DEGRADED_CONDFMT_GROUP);
   }
 }
