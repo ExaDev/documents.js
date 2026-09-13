@@ -2070,8 +2070,10 @@ describe("writeDocContent tables", () => {
     expect(warnings[0]).toMatch(/attempting to write it unsplit instead/);
     // Unsplit: the merged cell's own internal boundary never made it into rgdxaCenter, so it reads back as one ordinary column, narrowing the table by exactly one.
     expect(block.columnWidthsPt).toHaveLength(plainColumnCount + 1);
-    expect(block.rows[0]?.cells[plainColumnCount].colSpan).toBeUndefined();
-    expect(cellText(block.rows[0]?.cells[plainColumnCount])).toBe("merged");
+    // Derived from the round-tripped table's own column count, not restated as the plainColumnCount literal: a bare literal index here trips a confirmed @typescript-eslint/no-unnecessary-condition false positive against noUncheckedIndexedAccess (it does not account for a `const`-literal-typed index into an array, even though tsc itself still reports the access as possibly undefined without its own `?.`).
+    const mergedIndex = block.columnWidthsPt.length - 1;
+    expect(block.rows[0]?.cells[mergedIndex]?.colSpan).toBeUndefined();
+    expect(cellText(block.rows[0]?.cells[mergedIndex])).toBe("merged");
   });
 
   it("writes a genuinely blank cell as blank, not as a vertical-merge continuation of the cell above it", () => {
