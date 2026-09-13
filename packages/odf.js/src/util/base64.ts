@@ -16,8 +16,9 @@ export function bytesToBase64(bytes: Uint8Array<ArrayBuffer>): string {
   const len = bytes.length;
   for (let i = 0; i < len; i = i + 3) {
     const b0 = bytes[i]!;
-    const b1 = i + 1 < len ? bytes[i + 1]! : 0;
-    const b2 = i + 2 < len ? bytes[i + 2]! : 0;
+    // No separate `i + 1 < len` / `i + 2 < len` fallback to 0 here: past the array's own end, bytes[i + 1]/bytes[i + 2] are undefined, and `undefined >> n` coerces to 0 identically to the explicit fallback -- the padding decision below (the "=" ternaries) is what actually gates whether this position is ever rendered at all.
+    const b1 = bytes[i + 1]!;
+    const b2 = bytes[i + 2]!;
     out += TABLE.charAt(b0 >> 2);
     out += TABLE.charAt(((b0 & 0x03) << 4) | (b1 >> 4));
     out += i + 1 < len ? TABLE.charAt(((b1 & 0x0f) << 2) | (b2 >> 6)) : "=";
