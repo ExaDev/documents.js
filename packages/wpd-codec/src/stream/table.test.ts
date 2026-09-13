@@ -4,6 +4,7 @@ import {
   CELL_INFORMATION_SUBFUNCTION,
   CELL_SPANNING_SUBFUNCTION,
   findEmbeddedSubfunction,
+  nearestPercentType,
   readCellFill,
   readCellInformation,
   readCellSpanning,
@@ -44,7 +45,10 @@ describe("readTableColumnWidthPt", () => {
   });
 
   it("declines a Table Column function shorter than its own field list", () => {
-    expect(readTableColumnWidthPt(new Uint8Array(8))).toBeUndefined();
+    const nonDeletable = new Uint8Array(8);
+    // A genuine, non-zero width at the field's own offset -- so a version that skipped the length guard would compute a real answer instead of merely also landing on undefined via the width-is-zero fallback.
+    nonDeletable.set(word(2400), 1);
+    expect(readTableColumnWidthPt(nonDeletable)).toBeUndefined();
   });
 
   it("declines a column that states no width", () => {
@@ -162,6 +166,51 @@ describe("readEmbeddedSubfunctions", () => {
     );
     expect(truncated).toBe(true);
   });
+
+  it("answers an empty, non-truncated result for a function too short to even hold the deletable size word", () => {
+    expect(readEmbeddedSubfunctions(new Uint8Array(0))).toEqual({
+      subfunctions: [],
+      truncated: false,
+    });
+  });
+
+  // A function exactly two bytes long (just enough to hold the deletable-size word, with no non-deletable region at all) whose deletable size is itself non-zero -- the one case that tells "the function is too short to even hold the size word" apart from "the size word is present but genuinely overruns", since a deletable size of 0 at this same length answers the same (non-truncated, empty) result either way.
+  it("reports truncation for a two-byte function whose own non-zero deletable size overruns it", () => {
+    expect(readEmbeddedSubfunctions(new Uint8Array([5, 0]))).toEqual({
+      subfunctions: [],
+      truncated: true,
+    });
+  });
+
+  // A non-zero deletable size that lands cursor exactly on the buffer's own end -- the one boundary where "past the end" and "exactly at the end" agree or disagree, and where an empty, non-deletable region genuinely follows (rather than the coincidental all-zero case a deletable size of 0 would also produce).
+  it("answers an empty, non-truncated result when the deletable data exactly fills the rest of the function", () => {
+    expect(
+      readEmbeddedSubfunctions(new Uint8Array([...word(3), 0xaa, 0xbb, 0xcc])),
+    ).toEqual({ subfunctions: [], truncated: false });
+  });
+
+  it("reports truncation for a cell formula code with no room left for its own length word", () => {
+    const { subfunctions, truncated } = readEmbeddedSubfunctions(
+      eolNonDeletable({ nonDeletable: [0x81] }),
+    );
+    expect(subfunctions).toHaveLength(0);
+    expect(truncated).toBe(true);
+  });
+
+  it("carries the exact payload bytes for a subfunction, not one byte more from whatever follows it", () => {
+    const { subfunctions } = readEmbeddedSubfunctions(
+      eolNonDeletable({
+        nonDeletable: [
+          ...gated(ROW_INFORMATION_SUBFUNCTION, [0x02, ...word(1200)]),
+          ...gated(CELL_SPANNING_SUBFUNCTION, [3, 1]),
+        ],
+      }),
+    );
+    expect(subfunctions[0]).toEqual({
+      code: ROW_INFORMATION_SUBFUNCTION,
+      data: new Uint8Array([0x02, ...word(1200)]),
+    });
+  });
 });
 
 describe("readRowInformation", () => {
@@ -178,6 +227,17 @@ describe("readRowInformation", () => {
       headerRow: false,
       heightPt: undefined,
     });
+  });
+
+  it("reports no height for a fixed-height row that states a height of zero", () => {
+    expect(readRowInformation(new Uint8Array([0x02, ...word(0)]))).toEqual({
+      headerRow: false,
+      heightPt: undefined,
+    });
+  });
+
+  it("declines a row with flags present but no room for the height word", () => {
+    expect(readRowInformation(new Uint8Array([0x02]))).toBeUndefined();
   });
 
   // "bit 2: 0 = not a header row, 1 = this is a header row".
@@ -228,6 +288,15 @@ describe("readCellSpanning", () => {
     expect(
       readCellSpanning(new Uint8Array([0x01, 0x82]))?.coveredFromAbove,
     ).toBe(true);
+  });
+});
+
+describe("nearestPercentType", () => {
+  // readCellFill's own shade byte always comes from a Uint8Array read (0-255), so this is unreachable from every real caller -- proven directly here rather than left as a promise no real caller could ever keep.
+  it("throws for a shade outside the 0-255 range a fill's own shading byte can ever hold", () => {
+    expect(() => nearestPercentType(256)).toThrow(
+      "Shade byte 256 is outside the 0-255 range a fill's own shading byte can ever hold.",
+    );
   });
 });
 

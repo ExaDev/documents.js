@@ -531,3 +531,26 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
     expect(report.coverage).toBe(0.5);
   });
 });
+
+describe("runWorkedExampleSequence: failures from outside this package's own error hierarchy", () => {
+  it("reports other-evaluation-error, not a guessed category, when evaluation fails with an error no gap category covers", () => {
+    // A qty node whose exact value carries a zero denominator: MathExpressionSchema would reject it, but the harness reads an already-lowered ContentFormula rather than re-parsing one, so a malformed tree reaches rational.ts's own reduce() and fails there with a plain RangeError -- none of the six document-compute.js error classes. That has to surface as its own uncategorised gap rather than being folded into the nearest named one.
+    const formulas = [
+      formula(
+        equation("d", {
+          kind: "qty",
+          value: { numerator: "1", denominator: "0" },
+          unit: "si:metre",
+        }),
+      ),
+    ];
+    const report = runWorkedExampleSequence(formulas, SI_UNIT_REGISTRY);
+    expect(report.gaps).toBe(1);
+    expect(report.outcomes[0]).toEqual({
+      outcome: "gap",
+      gap: "other-evaluation-error",
+      targetSymbol: "d",
+      message: "rational.ts: denominator must not be zero",
+    });
+  });
+});

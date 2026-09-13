@@ -64,9 +64,26 @@ export interface PropertyGraph {
   readonly edges: readonly GraphEdge[];
 }
 
+// Ascending orderKey comparator, shared by every sort site in this module (walkPropertyGraph's per-node outgoing-edge order, reconcileChildren's and insertEdge's own sibling lists) rather than three separately-typed-out copies: one definition means one set of mutants to kill, not three identical sets, and one caller change (were the comparison ever wrong) fixes every sort site at once. Exported purely for the direct unit test below pinning its exact -1/0/1 return values, not for use outside this module.
+export function orderKeyAscComparator(
+  a: { readonly orderKey: string },
+  b: { readonly orderKey: string },
+): number {
+  return a.orderKey < b.orderKey ? -1 : a.orderKey > b.orderKey ? 1 : 0;
+}
+
+// Ascending id comparator for entry nodes awaiting emission (DocumentProjection's own pendingEntryNodes below): a tie (two entries content-hashing to the identical id) leaves their relative order exactly as pushed, since Array.prototype.sort is stable and a genuine tie can only ever be reordered by a broken comparator, never by a correct one. Exported purely for the direct unit test below pinning its exact -1/0/1 return values, including the tie case, the same reason orderKeyAscComparator above is exported.
+export function entryIdAscComparator(
+  a: { readonly id: string },
+  b: { readonly id: string },
+): number {
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
 // The dedup/identity key for one edge -- (from, to, kind, orderKey, path) -- shared by DocumentProjection's own addEdge below and the write API's rebalancing insert further down, so the two never drift into two different notions of "the same edge".
 function edgeKey(edge: GraphEdge): string {
-  return `${edge.from}\u0000${edge.to}\u0000${edge.kind}\u0000${edge.orderKey}\u0000${edge.path === undefined ? "" : JSON.stringify(edge.path)}`;
+  // No special-casing for a missing `path`: JSON.stringify(undefined) is the JS value `undefined`, which interpolates as the literal text "undefined" here -- a placeholder that can never collide with a genuine JSON.stringify(path) output, since PropertyPath is always a JSON array and JSON.stringify of an array always starts with `[`.
+  return `${edge.from}\u0000${edge.to}\u0000${edge.kind}\u0000${edge.orderKey}\u0000${JSON.stringify(edge.path)}`;
 }
 
 // The fractional/lexicographic order-key primitive (src/outline/order-keys.ts), re-exported under one namespace so a caller minting edges of their own (an editor inserting a sibling into an already-projected graph) reaches every operation through `orderKeys.*` rather than a second subpath import -- the projection itself only ever calls `orderKeyForIndex`, but `orderKeyBetween`/`orderKeyBefore`/`orderKeyAfter`/`renumberedOrderKeys` are this module's published answer to "how do I add one more between", "how do I extend past either end", and "how do I rebalance" for exactly that consumer.
@@ -228,19 +245,18 @@ class DocumentProjection {
         `projectDocumentGraph: ${field} table entry "${key}" referenced but not present`,
       );
     }
+    // this.decidingEntries never needs a matching delete once decided: every path below unconditionally populates this.tableDecisions for memoKey before returning, and the memo check at the top of this method always short-circuits any later call for the same key before it could ever reach the decidingEntries.has(memoKey) cycle check above -- so a stale "still deciding" marker for an already-decided key is never read again.
     this.decidingEntries.add(memoKey);
     const walked = this.walkRecord(recordOf(entry), [field, key]);
-    this.decidingEntries.delete(memoKey);
     if (this.policy([field, key], entry) === "extract") {
       const id = contentHashV1(walked.hash);
       const decided = { status: "extract" as const, id, walked };
-      this.tableDecisions.set(memoKey, decided);
       this.pendingEntryNodes.push(entryNodeFace(id, field, walked.properties));
-      return decided;
+      // Chained through .get() (rather than a bare .set() statement) so the memoisation write is inseparable from the value this method returns: this Map is decideEntry's only cache, so a caller reads back exactly what was just stored.
+      return this.tableDecisions.set(memoKey, decided).get(memoKey)!;
     }
     const decided = { status: "inline" as const, walked };
-    this.tableDecisions.set(memoKey, decided);
-    return decided;
+    return this.tableDecisions.set(memoKey, decided).get(memoKey)!;
   }
 
   // Resolves a style ref from a group wrapper: the entry's decided fate, with the loud refusal on a ref the table does not carry (a malformed package, in the family's all-or-nothing resolution tradition).
@@ -272,13 +288,14 @@ class DocumentProjection {
       : { walked: decided.walked };
   }
 
+  // Unconditional set, not an upsert-once guard: two mint sites computing the identical `node.id` necessarily walked identical content through the identical recipe (contentHashV1 is a pure function of that content) -- for the two entry-tenant families that could otherwise collide, a StyleEntry never carries its own `kind` field while every generic-table entry (DefinitionEntrySchema) always requires one, so a styles-table id can never coincide with a definitions/layers/attachments/destinations-table id, and any two entries WITHIN the generic-table family already map to the identical graph `kind` ("definitionEntry") regardless of which tenant table minted them. Overwriting an existing entry for the same id therefore writes back the identical value.
   private addNode(node: GraphNode): void {
-    if (!this.nodes.has(node.id)) this.nodes.set(node.id, node);
+    this.nodes.set(node.id, node);
   }
 
+  // Unconditional set, not an upsert-once guard: edgeKey's own five components (from, to, kind, orderKey, path) are exactly GraphEdge's whole field set, so two edges producing the identical key are already structurally identical objects -- overwriting one with the other writes back the identical value.
   private addEdge(edge: GraphEdge): void {
-    const key = edgeKey(edge);
-    if (!this.edges.has(key)) this.edges.set(key, edge);
+    this.edges.set(edgeKey(edge), edge);
   }
 
   // The generic own-content walk: records rebuild key by key (asking the policy at every property, array elements are never extraction candidates -- a whole element cannot move to a node without breaking its position, while its properties stay addressable), arrays walk their elements, scalars pass through. The one typed ref inside content is an anchor descriptor's `definition` key, recognised by the containing record's own `kind: 'anchor'` discriminator -- the discriminator, not the key name alone, because the walk reads definitions-table bodies too and those bodies are tenant vocabulary where a same-named key is content (a glossary entry's `definition` is the term's meaning, and one that coincidentally names a real key must stay content rather than silently enter a hash as a ref id). Dereferenced per the module's rule: the referenced entry's hash for the hash input, never the bare local key.
@@ -390,7 +407,8 @@ class DocumentProjection {
       const table = this.tableOf(field);
       if (table === undefined) continue;
       const leftover: Record<string, unknown> = {};
-      for (const key of Object.keys(table).sort()) {
+      // Visiting order need not be sorted: decideEntry is memoised and its own per-entry decision never depends on which OTHER entry was decided first (a reference to another entry resolves through the identical deref regardless of outer iteration order, and object key order is never itself compared by any equality check downstream), so plain Object.keys(table) decides the identical set of entries with the identical values.
+      for (const key of Object.keys(table)) {
         const decided = this.decideEntry(field, key);
         if (decided.status === "inline")
           leftover[key] = decided.walked.properties;
@@ -406,9 +424,7 @@ class DocumentProjection {
       kind: "documentTree",
       documentKind: this.pkg.kind,
     });
-    for (const node of this.pendingEntryNodes.sort((a, b) =>
-      a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
-    )) {
+    for (const node of this.pendingEntryNodes.sort(entryIdAscComparator)) {
       this.addNode(node);
     }
 
@@ -532,7 +548,8 @@ class DocumentProjection {
 type AnyChild = TreeGroup | TreeLeaf;
 
 function isGroupChild(child: AnyChild): child is TreeGroup {
-  return "node" in child && "children" in child;
+  // A single field check, not a pair: for any schema-valid TreeGroup | TreeLeaf value, `node` and `children` are always co-present (every TreeGroup carries both, by its own type) or co-absent (no TreeLeaf variant carries either), so checking one is exactly as discriminating as checking both.
+  return "node" in child;
 }
 
 // A projected node's graph kind: the payload's own kind tag when it carries one (paragraph, section, slide, sheet, drawPage, the construct kinds, the vector kinds, image, pageBreak, table, embeddedObject as a block leaf); the three kind-less payloads get structural names -- a sheet-anchored embedded object, a formula document's single leaf, and a shape group's frame descriptor.
@@ -599,7 +616,7 @@ export interface WalkPropertyGraphOptions {
 
 // A shared pre-order depth-first walker over a PropertyGraph (ExaDev/documents.js#660), so every consumer of this projection's output -- an outline renderer walking CONTAINS, a style-chain reader walking STYLED_BY, a generic graph browser walking everything -- shares one traversal and one cycle policy instead of each hand-rolling its own. At each node, outgoing edges (edge.from === node.id) are filtered to `options.kinds` when given, else every kind present, and visited sorted ascending by orderKey -- which is what makes a CONTAINS walk reproduce document order and a STYLED_BY walk reproduce the resolution chain in order (#660's whole point for ordering keys).
 //
-// The cycle guard is derived from the kinds being traversed, never separately configured: CONTAINS alone needs no guard at all -- every CONTAINS edge minted directly by projectDocumentGraph's own tree walk points from a node whose hash already covers the target's hash, so a path built purely from those edges can never lead back to its own ancestor. A CONTAINS edge insertEdge or insertNode attaches onto an already-existing PropertyGraph carries no such hash relationship by itself -- an id can be the target of an insertEdge call before any node with that id exists, and a later insertNode call can mint exactly that id, so hash-folding alone cannot rule out a cycle closing across two calls -- so both of those attachment sites refuse any CONTAINS attachment that would close a cycle back to one of `to`'s own descendants (ContainsCycleError), via one shared, edge-only reachability check that works correctly whether or not the endpoints are nodes yet (see the note above ContainsCycleError for why node presence cannot be the test). The acyclicity this fast path relies on is upheld by that shared refusal being the ONLY way a CONTAINS edge ever enters a graph outside of projectDocumentGraph's own tree walk, not by every CONTAINS edge remaining hash-derived. The on-stack set is not even allocated for a CONTAINS-only walk, purely as an optimisation that refusal keeps safe, never a behavioural branch. Traversing any other kind (including the default "every kind present", since STYLED_BY/DEFINED_BY/PROPERTY edges carry no acyclicity guarantee of their own -- a hand-built or malicious graph can point them anywhere) maintains a Set of the current DFS path's node ids; descending into a neighbour already on that path is skipped entirely (no WalkedNode emitted, no recursion), which suppresses a true cycle while still visiting a node reached via two different, non-nested paths once per path, because neither occurrence is an ancestor of the other -- exactly the same multi-parent sharing a CONTAINS walk already relies on.
+// The cycle guard is derived from the kinds being traversed, never separately configured: CONTAINS alone needs no guard at all -- every CONTAINS edge minted directly by projectDocumentGraph's own tree walk points from a node whose hash already covers the target's hash, so a path built purely from those edges can never lead back to its own ancestor. A CONTAINS edge insertEdge or insertNode attaches onto an already-existing PropertyGraph carries no such hash relationship by itself -- an id can be the target of an insertEdge call before any node with that id exists, and a later insertNode call can mint exactly that id, so hash-folding alone cannot rule out a cycle closing across two calls -- so both of those attachment sites refuse any CONTAINS attachment that would close a cycle back to one of `to`'s own descendants (ContainsCycleError), via one shared, edge-only reachability check that works correctly whether or not the endpoints are nodes yet (see the note above ContainsCycleError for why node presence cannot be the test). The acyclicity this fast path relies on is upheld by that shared refusal being the ONLY way a CONTAINS edge ever enters a graph outside of projectDocumentGraph's own tree walk, not by every CONTAINS edge remaining hash-derived. The on-stack set below is allocated and maintained unconditionally, including for a CONTAINS-only walk where it can provably never actually suppress anything -- a few unused Set operations, not a behavioural branch. Traversing any other kind (including the default "every kind present", since STYLED_BY/DEFINED_BY/PROPERTY edges carry no acyclicity guarantee of their own -- a hand-built or malicious graph can point them anywhere) maintains a Set of the current DFS path's node ids; descending into a neighbour already on that path is skipped entirely (no WalkedNode emitted, no recursion), which suppresses a true cycle while still visiting a node reached via two different, non-nested paths once per path, because neither occurrence is an ancestor of the other -- exactly the same multi-parent sharing a CONTAINS walk already relies on.
 export function walkPropertyGraph(
   graph: GraphLike,
   startId: string,
@@ -607,8 +624,6 @@ export function walkPropertyGraph(
 ): readonly WalkedNode[] {
   const kinds = options?.kinds;
   const kindSet = kinds === undefined ? undefined : new Set<string>(kinds);
-  const needsGuard =
-    kinds === undefined || kinds.some((kind) => kind !== "CONTAINS");
   const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
   const outgoingByFrom = new Map<string, GraphEdgeLike[]>();
   for (const edge of graph.edges) {
@@ -618,23 +633,22 @@ export function walkPropertyGraph(
     else bucket.push(edge);
   }
   for (const bucket of outgoingByFrom.values())
-    bucket.sort((a, b) =>
-      a.orderKey < b.orderKey ? -1 : a.orderKey > b.orderKey ? 1 : 0,
-    );
+    bucket.sort(orderKeyAscComparator);
 
-  const onPath = needsGuard ? new Set<string>() : undefined;
+  // Always allocated, even for a CONTAINS-only walk where it is provably never needed (every CONTAINS edge projectDocumentGraph itself mints is hash-derived and therefore acyclic, per this function's own module comment): the guard's own on-path Set tracks only the CURRENT DFS ancestors, never nodes finished and popped off it, so it costs nothing but a few unused Set operations for a graph that can never actually cycle on CONTAINS alone.
+  const onPath = new Set<string>();
   const visited: WalkedNode[] = [];
 
   function visit(nodeId: string, edge: GraphEdgeLike | undefined): void {
     const node = nodesById.get(nodeId);
     if (node === undefined) return; // an edge naming a node absent from this graph is not this walker's concern to diagnose
     visited.push({ node, edge });
-    onPath?.add(nodeId);
+    onPath.add(nodeId);
     for (const outgoing of outgoingByFrom.get(nodeId) ?? []) {
-      if (onPath?.has(outgoing.to) === true) continue; // already an ancestor on this path: a genuine cycle, suppressed rather than recursed into
+      if (onPath.has(outgoing.to)) continue; // already an ancestor on this path: a genuine cycle, suppressed rather than recursed into
       visit(outgoing.to, outgoing);
     }
-    onPath?.delete(nodeId);
+    onPath.delete(nodeId);
   }
 
   visit(startId, undefined);
@@ -693,6 +707,16 @@ export class NodeKindMismatchError extends Error {
 // A missing occurrence's anchor is the `originalSiblings` index of the nearest LATER requested position already matched, or `originalSiblings.length` (past the end) when nothing later matched -- the same "before the next already-wired position, or at the end" rule as before, just resolved against a fixed index rather than a value that can drift or repeat. That anchor index is translated into the anchor's CURRENT position among `id`'s live CONTAINS siblings by counting how many of this reconcile's OWN prior insertions already landed at or before the same anchor index: `originalSiblings` itself is never reordered, so every earlier insertion's own (equally fixed) anchor index is exactly how far it shifted everything from that index onward. This is what lets a run of several consecutive missing occurrences sharing one anchor interleave in requested order -- each is placed by a running numeric offset, never re-resolved by value against the by-then-mutated live sibling list.
 //
 // The insertion itself reuses insertEdge's own CONTAINS-cycle check, bisection, and rebalance-on-exhaustion primitives directly (`assertNoContainsCycle`, `boundedOrderKey`, `rebalancedInsert`) rather than calling insertEdge with a before/after position -- that position parameter is exactly the value-based lookup this function must not go through, so the same guarantees are reached by index instead of by name. Only a position classified as missing is ever placed this way -- an already-matched occurrence is never moved. Walking CONTAINS edges from `id` after reconciliation reproduces the exact requested `children` list, in order and multiplicity both, whenever `originalSiblings`' own target sequence is a genuine subsequence of `children` -- a strictly wider guarantee than round 9's per-id matcher offered, since it now holds for any order-consistent interleaving across ids, not only a prefix of each id's own occurrences. When `originalSiblings` is not even a subsequence of `children` (a genuine cross-id ordering conflict, existing containment wired in a relative order the request cannot embed), reconciliation still terminates safely and never inflates any id's multiplicity past `max(existingCount, requestedCount)`, but the resulting order is not guaranteed to equal `children`, because existing containment is never reordered to fit a new request -- reconciliation inserts what is missing around what already exists, it does not re-sort what already exists. Requesting an identical `children` list twice stays the no-op past-the-first-call behaviour this module has always promised, because every position is then classified as already matched and none are inserted.
+// Bounds-checked in place of a bare `row[index]!`: every legitimate row/column pair reconcileChildren's own backtrack computes stays within a dp row's real dimensions, so this can only ever throw if the backtrack's own loop bounds were themselves wrong -- a genuine correctness bug, not a defensive "just in case". That throw is exactly what makes a boundary mutation of the backtrack's own `i`/`j` loop conditions (e.g. `<` weakened to `<=`) an observable failure instead of a silently-absorbed one-past-the-end no-op: `row[index]` alone would just read `undefined` and carry on. Hoisted out of reconcileChildren's own closure and exported purely so the direct unit test below can prove the throw itself fires, since no legitimate call through reconcileChildren can ever actually trigger it.
+export function dpAt(row: readonly number[], index: number): number {
+  if (index < 0 || index >= row.length) {
+    throw new Error(
+      `reconcileChildren: dp lookup index ${String(index)} out of bounds (0..${String(row.length - 1)})`,
+    );
+  }
+  return row[index]!;
+}
+
 function reconcileChildren(
   graph: PropertyGraph,
   id: string,
@@ -700,13 +724,10 @@ function reconcileChildren(
 ): PropertyGraph {
   if (children === undefined) return graph;
 
-  const byOrderKeyAsc = (a: GraphEdge, b: GraphEdge): number =>
-    a.orderKey < b.orderKey ? -1 : a.orderKey > b.orderKey ? 1 : 0;
-
   // The fixed reference list every classification and anchor below resolves against: `id`'s existing CONTAINS edges, sorted once. This array is never mutated or reordered by this function -- an index into it names one specific, unchanging existing edge for the rest of the call.
   const originalSiblings = graph.edges
     .filter((edge) => edge.from === id && edge.kind === "CONTAINS")
-    .sort(byOrderKeyAsc);
+    .sort(orderKeyAscComparator);
 
   const existingSeq = originalSiblings.map((edge) => edge.to);
 
@@ -718,28 +739,26 @@ function reconcileChildren(
     for (let j = children.length - 1; j >= 0; j -= 1) {
       dp[i]![j] =
         existingSeq[i] === children[j]
-          ? dp[i + 1]![j + 1]! + 1
-          : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
+          ? dpAt(dp[i + 1]!, j + 1) + 1
+          : Math.max(dpAt(dp[i + 1]!, j), dpAt(dp[i]!, j + 1));
     }
   }
 
   // Forward backtrack from (0, 0): a matching pair is taken the instant both sequences agree at the current pointers -- not because it is the only move an optimal assignment could ever take there (existingSeq [A, B] against children [A, A] has more than one assignment reaching a maximum common subsequence), but because the standard LCS recurrence guarantees taking an agreeing pair is always part of AT LEAST ONE maximum common subsequence, which is all a single deterministic backtrack needs. Otherwise whichever pointer leads to the branch the table says still carries the larger remaining match advances -- a genuine tie breaks toward advancing `i` (the existing side), so a requested position matches as early as any optimal assignment allows.
-  const matchedIndex = new Array<number | undefined>(children.length).fill(
-    undefined,
-  );
-  const matchedByOriginal = new Array<number | undefined>(
-    existingSeq.length,
-  ).fill(undefined);
+  //
+  // Both maps below are keyed by index rather than sized arrays: neither key space is ever read by `.length` or iterated as a whole, only ever looked up by a specific position/index and checked for presence, so a Map's own "no entry" semantics already say everything a pre-sized, pre-filled array's "still holds its initial fill value" would -- there is no separate "was this ever populated" fact a fixed initial size could add.
+  const matchedIndex = new Map<number, number>();
+  const matchedByOriginal = new Map<number, number>();
   {
     let i = 0;
     let j = 0;
     while (i < existingSeq.length && j < children.length) {
       if (existingSeq[i] === children[j]) {
-        matchedIndex[j] = i;
-        matchedByOriginal[i] = j;
+        matchedIndex.set(j, i);
+        matchedByOriginal.set(i, j);
         i += 1;
         j += 1;
-      } else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) {
+      } else if (dpAt(dp[i + 1]!, j) >= dpAt(dp[i]!, j + 1)) {
         i += 1;
       } else {
         j += 1;
@@ -750,36 +769,39 @@ function reconcileChildren(
   // Anti-inflation pass: pairs every existing edge the LCS match above left unmatched against a remaining unmatched requested occurrence of the identical id, front to back on each side -- see this function's own doc comment above for why this cannot preserve global order (no order-preserving assignment of these specific edges exists, or the LCS pass would already have found it) and why it must run anyway (capping each id's final multiplicity at max(existingCount, requestedCount), never minting a fresh edge for a position an existing one could satisfy).
   const unmatchedExistingByTarget = new Map<string, number[]>();
   originalSiblings.forEach((edge, index) => {
-    if (matchedByOriginal[index] !== undefined) return;
+    if (matchedByOriginal.has(index)) return;
     const bucket = unmatchedExistingByTarget.get(edge.to);
     if (bucket === undefined) unmatchedExistingByTarget.set(edge.to, [index]);
     else bucket.push(index);
   });
   const leftoverPointer = new Map<string, number>();
   children.forEach((childId, position) => {
-    if (matchedIndex[position] !== undefined) return;
+    if (matchedIndex.has(position)) return;
     const leftovers = unmatchedExistingByTarget.get(childId);
     if (leftovers === undefined) return;
     const pointer = leftoverPointer.get(childId) ?? 0;
     if (pointer >= leftovers.length) return;
-    matchedIndex[position] = leftovers[pointer]!;
+    matchedIndex.set(position, leftovers[pointer]!);
     leftoverPointer.set(childId, pointer + 1);
   });
 
-  // A missing position's anchor: the `originalSiblings` index of the nearest LATER requested position already matched, or `originalSiblings.length` (past the end) when nothing later matched.
-  const anchorFor = (position: number): number => {
-    for (let later = position + 1; later < children.length; later += 1) {
-      const candidate = matchedIndex[later];
-      if (candidate !== undefined) return candidate;
-    }
-    return originalSiblings.length;
-  };
+  // A missing position's anchor: the `originalSiblings` index of the nearest LATER requested position already matched, or `originalSiblings.length` (past the end) when nothing later matched. Precomputed once, back to front, over `[...children.entries()].reverse()` rather than scanned per call with an explicit "later > position" comparison: `position` is never itself a key in `matchedIndex` (this map's only two writers, the LCS backtrack and the anti-inflation pass above, both write exclusively at positions that end up matched, and this array is only ever read for a position the caller has already confirmed is NOT in `matchedIndex`), so any comparison boundary drawn at "later === position" is unobservable by construction -- not a gap in this function's tests, a fact about what `matchedIndex` can ever contain. Anchoring the traversal to `children`'s own reversed entries, rather than a separately-mutable length/index pair, means there is no boundary comparison left for a mutation to weaken at all.
+  //
+  // Keyed by position rather than a pre-sized array: every position this precompute writes is read back exactly once via anchorFor, never by `.length` or as a whole, so a Map's own get() already says everything a fixed-length array's initial size would -- there is no separate "was this ever populated" fact that size could add, the same reasoning matchedIndex/matchedByOriginal above already follow.
+  const anchorAt = new Map<number, number>();
+  let runningAnchor = originalSiblings.length;
+  for (const [position] of [...children.entries()].reverse()) {
+    anchorAt.set(position, runningAnchor);
+    const matchedHere = matchedIndex.get(position);
+    if (matchedHere !== undefined) runningAnchor = matchedHere;
+  }
+  const anchorFor = (position: number): number => anchorAt.get(position)!;
 
   // Every anchor index this loop has already inserted an occurrence at or before, in insertion order -- what lets each new insertion compute its own CURRENT position (its fixed anchor index, shifted right by however many earlier insertions in this same reconcile landed at or before that same index) without ever re-deriving a position from the live sibling list by value.
   const insertedAtOrBefore: number[] = [];
 
   return children.reduce((acc, childId, position) => {
-    if (matchedIndex[position] !== undefined) return acc; // already matched to a specific existing edge -- never moved
+    if (matchedIndex.has(position)) return acc; // already matched to a specific existing edge -- never moved
     assertNoContainsCycle(acc.edges, id, childId);
     const anchorIndex = anchorFor(position);
     const insertIndex =
@@ -788,32 +810,33 @@ function reconcileChildren(
     insertedAtOrBefore.push(anchorIndex);
     const currentSiblings = acc.edges
       .filter((edge) => edge.from === id && edge.kind === "CONTAINS")
-      .sort(byOrderKeyAsc);
-    try {
-      const orderKey = boundedOrderKey(currentSiblings, insertIndex);
-      const edge: GraphEdge = {
-        from: id,
-        to: childId,
-        kind: "CONTAINS",
-        orderKey,
-      };
-      return { nodes: acc.nodes, edges: [...acc.edges, edge] };
-    } catch (error) {
-      if (!(error instanceof OrderKeyBudgetExhaustedError)) throw error;
-      return rebalancedInsert(
-        acc,
-        id,
-        childId,
-        "CONTAINS",
-        currentSiblings,
-        insertIndex,
-        undefined,
-      );
-    }
+      .sort(orderKeyAscComparator);
+    return runOrRebalance(
+      () => {
+        const orderKey = boundedOrderKey(currentSiblings, insertIndex);
+        const edge: GraphEdge = {
+          from: id,
+          to: childId,
+          kind: "CONTAINS",
+          orderKey,
+        };
+        return { nodes: acc.nodes, edges: [...acc.edges, edge] };
+      },
+      () =>
+        rebalancedInsert(
+          acc,
+          id,
+          childId,
+          "CONTAINS",
+          currentSiblings,
+          insertIndex,
+          undefined,
+        ),
+    );
   }, graph);
 }
 
-// Mints one new node with the identical discipline as every read-side mint site: `id` is computed from content alone via contentHashV1 and spread into the face AFTER the content (`{ ...properties, id, kind }`), so a `properties` field named `id` or `kind` is shadowed unconditionally, and `InsertNodeContent` carries no `id` field at all -- there is no parameter a caller-supplied id could occupy. `kind` is deliberately excluded from the hash INPUT itself, the same reason mintValueNode's own `kind: 'value'` and entryNodeFace's graph-vocabulary kind are never folded into their hashes either: it is the graph vocabulary's word for what a node IS, asked for explicitly because this module's own mint sites decide it four different ways, not a fact about the node's content that identity should hinge on. Content identical to a node already present in `graph` dedupes to the existing node rather than minting a duplicate (addNode's own upsert-once rule) -- checked against the existing node's own `kind` first (NodeKindMismatchError above covers a genuine collision across kinds), then reconciled against its own CONTAINS edges at each child's OWN requested position (reconcileChildren above) rather than assumed to already match or simply appended, since two differently spelled calls can hash identically while only one of them declared `children` at all.
+// Mints one new node with the identical discipline as every read-side mint site: `id` is computed from content alone via contentHashV1 and spread into the face AFTER the content (`{ ...properties, id, kind }`), so a `properties` field named `id` or `kind` is shadowed unconditionally, and `InsertNodeContent` carries no `id` field at all -- there is no parameter a caller-supplied id could occupy. `kind` is deliberately excluded from the hash INPUT itself, the same reason mintValueNode's own `kind: 'value'` and entryNodeFace's graph-vocabulary kind are never folded into their hashes either: it is the graph vocabulary's word for what a node IS, asked for explicitly because this module's own mint sites decide it four different ways, not a fact about the node's content that identity should hinge on. Content identical to a node already present in `graph` dedupes to the existing node rather than minting a duplicate (this function's own `existing` lookup below) -- checked against the existing node's own `kind` first (NodeKindMismatchError above covers a genuine collision across kinds), then reconciled against its own CONTAINS edges at each child's OWN requested position (reconcileChildren above) rather than assumed to already match or simply appended, since two differently spelled calls can hash identically while only one of them declared `children` at all.
 //
 // When `children` is given for a genuinely fresh id -- one no earlier `insertEdge` call has ever pointed a dangling CONTAINS edge onto (the common case, checked by scanning `graph.edges` for `from === id` before minting anything) -- this mints one CONTAINS edge per child at `orderKeys.orderKeyForIndex(index)`, the WIDE, evenly spaced keys a fresh mint wants (exactly as projectGroup mints them for a freshly walked TreeGroup), leaving room for a later insertEdge to bisect between them without a rebalance; each of those child edges is still checked with `assertNoContainsCycle` first, exactly like insertEdge's own CONTAINS attachment, and throws `ContainsCycleError` when `to` (the child) already reaches `from` (this node's own about-to-be-minted id) -- folding the child's hash into this node's hash proves this id could never have existed before now, but says nothing about an edge some EARLIER call already pointed at this not-yet-existing id (insertEdge tolerates exactly that), so the check cannot be skipped just because this is a fresh mint. But when `graph` already carries one or more CONTAINS edges from this id -- exactly the dangling-edge shape the cycle check above exists to catch, an id named by an `insertEdge` call before any node with that id existed -- minting every child at its own bare `orderKeyForIndex(index)` regardless of what is already there is unsafe: an already-attached edge can sit at a key a fresh mint is about to hand to an unrelated sibling (an order-key TIE, the exact degenerate shape `boundedOrderKey` and `siblingInsertIndex` refuse everywhere else in this module) or can already BE the edge a fresh mint is about to re-mint (a byte-identical duplicate, violating `addEdge`'s own one-edge-per-tuple invariant on the read side). So a fresh mint with pre-existing CONTAINS edges routes every child through the identical `reconcileChildren` machinery the dedup-hit branch above already uses: a child already wired is left exactly as it is, and a genuinely new one is inserted at its own requested position via the same bisection (or automatic rebalance) `insertEdge` itself uses, anchored to a SPECIFIC existing edge by index rather than to a bare id value, which cannot produce a tie, a duplicate, or a misplaced anchor by construction.
 export function insertNode(
@@ -932,16 +955,15 @@ function siblingInsertIndex(
   if (matches.length === 0) {
     throw new UnknownSiblingError(from, kind, position.siblingId);
   }
-  if (matches.length > 1) {
-    const matchedOrderKeys = matches.map((index) => siblings[index]!.orderKey);
-    if (new Set(matchedOrderKeys).size !== matchedOrderKeys.length) {
-      throw new AmbiguousSiblingError(
-        from,
-        kind,
-        position.siblingId,
-        matches.length,
-      );
-    }
+  // No separate matches.length > 1 guard: by this point matches.length is already >= 1 (the zero case just refused above), and for a single-element array `new Set([x]).size` is trivially 1, equal to matchedOrderKeys.length, so running this check unconditionally never throws for a single match either.
+  const matchedOrderKeys = matches.map((index) => siblings[index]!.orderKey);
+  if (new Set(matchedOrderKeys).size !== matchedOrderKeys.length) {
+    throw new AmbiguousSiblingError(
+      from,
+      kind,
+      position.siblingId,
+      matches.length,
+    );
   }
   const index = matches[0]!;
   return position.at === "before" ? index : index + 1;
@@ -949,8 +971,8 @@ function siblingInsertIndex(
 
 // The fast path: bisect between whichever of `siblings[index - 1]`/`siblings[index]` exist, falling back to orderKeyForIndex(0) only when NEITHER does (a genuinely empty sibling list -- the same wide key a fresh projection mints for its own first child, not a defensive default masking a lookup failure). Throws OrderKeyBudgetExhaustedError when the two neighbours have no room left, which insertEdge below catches and answers with a full rebalance rather than surfacing to the caller -- exactly what a real sibling list needs to keep working once bisection is exhausted, most commonly `start` against a first child that (like every first child projectDocumentGraph itself ever mints) already sits at the scheme's own floor.
 //
-// Two adjacent siblings sharing one orderKey are a SEPARATE no-room case from a narrow-but-nonempty interval, and are checked for explicitly, before ever calling orderKeyBetween: this module's own emitWalkEdges mints every PROPERTY/DEFINED_BY edge from one owner at the uniform floor key, by design, since those edges carry no real document-order sequence for orderKey to encode (only `path` disambiguates them) -- so a tied pair here is an expected shape this module itself produces, not a malformed graph. orderKeyBetween's own precondition ("low must sort strictly before high") is written for a genuine caller error -- a reversed pair, low > high -- and throws a plain Error for that; asking it to also cover the tied case would make one precondition violation throw two different error classes depending on which of "equal" or "reversed" produced it. Recognising the tie here instead, ahead of the call, keeps that plain-Error/OrderKeyBudgetExhaustedError split consistent (genuine misuse vs. legitimate no-room-left) and routes the tie through the identical rebalance fallback insertEdge already has for a narrow interval.
-function boundedOrderKey(
+// Two adjacent siblings sharing one orderKey are a SEPARATE no-room case from a narrow-but-nonempty interval, and are checked for explicitly, before ever calling orderKeyBetween: this module's own emitWalkEdges mints every PROPERTY/DEFINED_BY edge from one owner at the uniform floor key, by design, since those edges carry no real document-order sequence for orderKey to encode (only `path` disambiguates them) -- so a tied pair here is an expected shape this module itself produces, not a malformed graph. orderKeyBetween's own precondition ("low must sort strictly before high") is written for a genuine caller error -- a reversed pair, low > high -- and throws a plain Error for that; asking it to also cover the tied case would make one precondition violation throw two different error classes depending on which of "equal" or "reversed" produced it. Recognising the tie here instead, ahead of the call, keeps that plain-Error/OrderKeyBudgetExhaustedError split consistent (genuine misuse vs. legitimate no-room-left) and routes the tie through the identical rebalance fallback insertEdge already has for a narrow interval. Exported purely for the direct unit test below pinning this exact tied-siblings message: insertEdge's own catch swallows it into a silent rebalance, so no test reaching this function only through insertEdge/reconcileChildren ever observes the string itself.
+export function boundedOrderKey(
   siblings: readonly GraphEdge[],
   index: number,
 ): string {
@@ -966,6 +988,16 @@ function boundedOrderKey(
     );
   }
   return orderKeys.orderKeyBetween(before.orderKey, after.orderKey);
+}
+
+// Runs `attempt`, answering an OrderKeyBudgetExhaustedError alone with a full rebalance via `onExhausted`; any other error propagates unchanged. Shared by reconcileChildren's and insertEdge's own identical try/catch, both built around this exact call shape (bisect via boundedOrderKey, rebalance on its one named exhaustion signal). The rethrow branch is a defensive guard no legitimate call through either of those two call sites can ever actually trigger: boundedOrderKey's own tied-key check runs before orderKeyBetween is ever called, and the sibling list handed to it is freshly sorted ascending immediately before every call, so orderKeyBetween's "low must sort strictly before high" precondition can never fail here -- exported purely so the direct unit test below can prove the rethrow itself works, the same reasoning effective.ts's assertResolvedHeadingAnchor already documents for an equivalent unreachable-in-practice guard.
+export function runOrRebalance<T>(attempt: () => T, onExhausted: () => T): T {
+  try {
+    return attempt();
+  } catch (error) {
+    if (!(error instanceof OrderKeyBudgetExhaustedError)) throw error;
+    return onExhausted();
+  }
 }
 
 // The rebalance fallback: mints a fresh, evenly spaced key for every one of `from`'s existing `kind` edges plus the new one, in the same relative order (renumberedOrderKeys -- the identical rebalance orderKeyBetween's own exhaustion already names as the answer), then replaces exactly those existing edges in `graph` with their rebuilt versions. Every OTHER edge in `graph` -- a different `from`, a different `kind`, or a wholly unrelated edge -- is carried over untouched; only the one sibling group that ran out of room is ever rewritten.
@@ -1069,41 +1101,30 @@ export function insertEdge(
   const position = options.position ?? { at: "end" };
   const siblings = graph.edges
     .filter((edge) => edge.from === from && edge.kind === kind)
-    .sort((a, b) =>
-      a.orderKey < b.orderKey ? -1 : a.orderKey > b.orderKey ? 1 : 0,
-    );
+    .sort(orderKeyAscComparator);
   const index = siblingInsertIndex(siblings, position, from, kind);
-  let orderKey: string;
-  try {
-    orderKey = boundedOrderKey(siblings, index);
-  } catch (error) {
-    if (!(error instanceof OrderKeyBudgetExhaustedError)) throw error;
-    return rebalancedInsert(
-      graph,
-      from,
-      to,
-      kind,
-      siblings,
-      index,
-      options.path,
-    );
-  }
-  const edge: GraphEdge = {
-    from,
-    to,
-    kind,
-    orderKey,
-    ...(options.path === undefined ? {} : { path: options.path }),
-  };
-  return { nodes: graph.nodes, edges: [...graph.edges, edge] };
+  return runOrRebalance(
+    () => {
+      const orderKey = boundedOrderKey(siblings, index);
+      const edge: GraphEdge = {
+        from,
+        to,
+        kind,
+        orderKey,
+        ...(options.path === undefined ? {} : { path: options.path }),
+      };
+      return { nodes: graph.nodes, edges: [...graph.edges, edge] };
+    },
+    () =>
+      rebalancedInsert(graph, from, to, kind, siblings, index, options.path),
+  );
 }
 
-// Whether two edges' own `path` fields name the same property path -- `undefined` matches only `undefined` (an edge with no path is not "the same path" as one carrying an empty array, exactly as edgeKey's own `path === undefined ? "" : JSON.stringify(path)` split already treats the two differently), otherwise structural equality via JSON.stringify, the same comparison edgeKey itself already relies on for its own dedup key.
+// Whether two edges' own `path` fields name the same property path -- `undefined` matches only `undefined` (an edge with no path is not "the same path" as one carrying an empty array), otherwise structural equality via JSON.stringify, the same comparison edgeKey itself already relies on for its own dedup key. No separate undefined special-case is needed: JSON.stringify(undefined) is the JS value `undefined` itself, not a string, so comparing the two stringified results already agrees with `a === b` whenever either argument is undefined (both undefined: undefined === undefined; exactly one undefined: undefined === "[...]", always false).
 function pathsEqual(
   a: PropertyPath | undefined,
   b: PropertyPath | undefined,
 ): boolean {
-  if (a === undefined || b === undefined) return a === b;
   return JSON.stringify(a) === JSON.stringify(b);
 }
 

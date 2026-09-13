@@ -38,6 +38,20 @@ export function wpdPasswordChecksum16(normalised: readonly number[]): number {
   return checksum;
 }
 
+// Reads the password byte a given cipher position cycles to, wrapping modulo the password's own length. `noUncheckedIndexedAccess` types this index access as possibly undefined even though it never is for a non-empty `normalised` (the only way applyWpdStandardEncryption ever calls this), so the throw below is unreachable from every real caller -- every one of them already rejects an empty password first. Exported for this package's own tests only, so the throw's own message is proven genuine by a direct test rather than left as a promise no real caller could ever keep (which is exactly what left it inlined and unreachable before: a Stryker mutant on that message's text had no test able to observe it either way).
+export function passwordByteAt(
+  normalised: readonly number[],
+  relative: number,
+): number {
+  const value = normalised[relative % normalised.length];
+  if (value === undefined) {
+    throw new WpdFormatError(
+      "The password normalised to no bytes, which the cipher cannot key with.",
+    );
+  }
+  return value;
+}
+
 // The cipher itself. A pure XOR keyed by position (password byte + ascending mask), so the same transform encrypts and decrypts -- wpbreak's paper relies on exactly this symmetry for its known-plaintext attack. Returns a new buffer (bytes at and after startOffset transformed, bytes before it verbatim); the input is never mutated, so an encrypted buffer stays available for a retry with a different password.
 export function applyWpdStandardEncryption(
   bytes: Uint8Array,
@@ -54,15 +68,9 @@ export function applyWpdStandardEncryption(
   output.set(bytes.subarray(0, startOffset));
   for (let pos = startOffset; pos < bytes.length; pos++) {
     const relative = pos - startOffset;
-    const passwordByte = normalised[relative % normalised.length];
-    if (passwordByte === undefined) {
-      // Unreachable: the empty-password throw above guarantees a non-empty array, so a modulo of its length always indexes in bounds. This is the noUncheckedIndexedAccess narrowing, not a fallback.
-      throw new WpdFormatError(
-        "The password normalised to no bytes, which the cipher cannot key with.",
-      );
-    }
     const mask = (maskBase + relative) & 0xff;
-    output[pos] = byteAt(bytes, pos) ^ passwordByte ^ mask;
+    output[pos] =
+      byteAt(bytes, pos) ^ passwordByteAt(normalised, relative) ^ mask;
   }
   return output;
 }

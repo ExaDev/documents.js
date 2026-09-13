@@ -1,6 +1,6 @@
 {
   "name": "document-mcp",
-  "version": "4.14.5",
+  "version": "4.14.6",
   "description": "MCP (Model Context Protocol) server exposing documents.js's document-conversion, .odb, metadata, and font tooling as MCP tools.",
   "type": "module",
   "repository": {
@@ -90,8 +90,8 @@
   "dependencies": {
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
-    "document-operations": "1.1.5",
-    "documents.js": "7.20.5",
+    "document-operations": "1.1.6",
+    "documents.js": "7.20.6",
     "zod": "4.4.3"
   },
   "devDependencies": {
@@ -113,6 +113,6 @@
     "turbo": "2.10.8",
     "typescript": "6.0.3",
     "vitest": "4.1.11",
-    "wpd-codec": "3.5.1"
+    "wpd-codec": "3.5.2"
   }
 }
