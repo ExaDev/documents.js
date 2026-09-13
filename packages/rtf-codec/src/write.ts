@@ -254,11 +254,8 @@ function escapeText(text: string): string {
   return out;
 }
 
-// The <bookstart> group: `'{\*' \bkmkstart (\bkmkcolfN? & \bkmkcollN?) #PCDATA '}'`, with the column controls "used within the \*\bkmkstart destination following the \bkmkstart control" -- which is exactly where a restored rtf residue value's own control words go, and why they precede the space that delimits the name.
-function bookmarkStartGroup(descriptor: ConstructDescriptor): string {
-  if (!isBookmarkAnchor(descriptor)) {
-    return "";
-  }
+// The <bookstart> group: `'{\*' \bkmkstart (\bkmkcolfN? & \bkmkcollN?) #PCDATA '}'`, with the column controls "used within the \*\bkmkstart destination following the \bkmkstart control" -- which is exactly where a restored rtf residue value's own control words go, and why they precede the space that delimits the name. Takes an already-narrowed AnchorDescriptor rather than re-checking isBookmarkAnchor here: both call sites only ever reach this after their own isBookmarkAnchor guard has already passed, so a second check here would be an unreachable, equivalent-mutant-prone AST node with no caller that could ever take its "false" branch.
+function bookmarkStartGroup(descriptor: AnchorDescriptor): string {
   const residue = bookmarkResidueControlWords(descriptor);
   return `{\\*\\bkmkstart${residue} ${escapeText(descriptor.name)}}`;
 }
@@ -357,10 +354,8 @@ function formFieldPayload(
       controlTypeParams += `\\ffdefres${String(selectedIndex)}\\ffres${String(selectedIndex)}`;
     } else if (descriptor.value !== undefined && descriptor.value.length > 0) {
       // `value` was recorded but names none of the entries actually written -- real, signalable data loss, distinct from "no value was ever set" below. Substituting the nearest available index (e.g. 0) would silently write a DIFFERENT, wrong selection with no signal that the recorded value was never actually represented, so this writer mints neither \ffres nor \ffdefres and reports the drop through the same sink every other unrepresentable construct in this writer uses (see the "mints neither \ffres nor \ffdefres for a dropDown whose value names none of its own options" test). Two genuinely different reasons collapse into this one branch: `value` may never have matched any of `options` at all, or it may have matched one that the 25-entry truncation above then cut away -- distinguished here so the message names the real cause rather than always blaming a mismatch that, in the truncated case, never actually happened.
-      const truncatedAway =
-        allOptions !== undefined &&
-        options !== allOptions &&
-        allOptions.includes(descriptor.value);
+      // Not also gated on `options !== allOptions`: this branch is only ever reached with selectedIndex either undefined or -1, i.e. `descriptor.value` was not found in `options` -- and whenever options === allOptions (no truncation happened), options.indexOf/allOptions.indexOf are the identical lookup, so allOptions.includes(descriptor.value) is already false here regardless. The truncation check would only ever agree with what allOptions.includes(...) alone already decides, making it a redundant, equivalent-mutant-prone AST node with no reachable case where it changes the result.
+      const truncatedAway = allOptions?.includes(descriptor.value) ?? false;
       sink({
         code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
         severity: "warning",
@@ -907,10 +902,9 @@ class RtfWriter {
       paragraph.headingLevel === undefined
         ? undefined
         : clampHeadingLevel(paragraph.headingLevel);
-    const styleHandle =
-      level === undefined ? undefined : this.tables.headingStyles.get(level);
-    if (styleHandle !== undefined && level !== undefined) {
-      out += `\\s${String(styleHandle)}\\outlinelevel${String(level - 1)}`;
+    // Not gated on this.tables.headingStyles.get(level) !== undefined too: collectTables' own noteBlock walk sets headingStyles.set(level, level) -- handle N reserved for level N -- for every paragraph that carries a headingLevel at all, over the exact same document this method is called against, so a defined level is already guaranteed to have a matching entry (in fact the identical value, level itself) by the time any paragraph is written. Checking the Map here a second time would be a redundant, equivalent-mutant-prone AST node with no reachable case where it disagrees with `level !== undefined` alone.
+    if (level !== undefined) {
+      out += `\\s${String(level)}\\outlinelevel${String(level - 1)}`;
     }
     const alignment =
       paragraph.alignment === undefined
