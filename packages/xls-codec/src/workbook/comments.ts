@@ -129,7 +129,7 @@ export function readSheetComments(
         break;
       }
       default:
-        break;
+      // Every other record type is irrelevant to comments and is ignored -- default is this switch's last case, inside a loop with nothing following it, so a `break` here would be a no-op statement rather than a real control-flow choice.
     }
   }
   const comments = new Map<string, SheetCellComment>();
