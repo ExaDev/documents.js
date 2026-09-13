@@ -972,8 +972,21 @@ describe("definition lists", () => {
     expect(sink).toHaveBeenCalledWith(
       expect.objectContaining({
         code: "epub/definition-list-content-outside-entry",
+        message:
+          "content sits directly inside a <dl> (or one of its <div> wrappers) outside any dt/dd (not valid HTML5); recovered as ordinary content -- a non-conformant wrapper's own dt/dd children, if any, lose their distinct term/definition treatment and degrade to plain concatenated text",
       }),
     );
+  });
+
+  it("flushes stray content sitting before a <div> wrapper as its own block, ahead of the div's own dt/dd content", () => {
+    const blocks = read(
+      body("<dl>stray<div><dt>Term</dt><dd>Definition</dd></div></dl>"),
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "stray" }] },
+      { kind: "paragraph", runs: [{ text: "Term" }] },
+      { kind: "paragraph", runs: [{ text: "Definition" }], indentLeftPt: 36 },
+    ]);
   });
 
   it("recovers stray text sitting before the very first dt inside a <dl>, with a diagnostic", () => {
@@ -1123,6 +1136,58 @@ describe("tables", () => {
         columnWidthsPt: [CONTENT_WIDTH_PT / 2, CONTENT_WIDTH_PT / 2],
       },
     ]);
+  });
+
+  it("treats a zero or negative colspan as absent, rather than a real span", () => {
+    const table = read(
+      body(
+        '<table><tr><td colspan="0">a</td><td colspan="-1">b</td></tr></table>',
+      ),
+    ).find((b) => b.kind === "table");
+    if (table === undefined) {
+      throw new Error("expected a table block");
+    }
+    for (const cell of table.rows[0]?.cells ?? []) {
+      expect(Object.hasOwn(cell, "colSpan")).toBe(false);
+    }
+  });
+
+  it("honours a cell's own rowspan attribute, distinctly from colspan", () => {
+    const table = read(
+      body('<table><tr><td rowspan="3">tall</td></tr></table>'),
+    ).find((b) => b.kind === "table");
+    if (table === undefined) {
+      throw new Error("expected a table block");
+    }
+    const cell = table.rows[0]?.cells[0];
+    expect(cell?.rowSpan).toBe(3);
+    expect(
+      cell === undefined ? undefined : Object.hasOwn(cell, "colSpan"),
+    ).toBe(false);
+  });
+
+  it("carries neither colSpan nor rowSpan on a cell with no such attribute, rather than an undefined-valued key", () => {
+    const table = read(body("<table><tr><td>plain</td></tr></table>")).find(
+      (b) => b.kind === "table",
+    );
+    if (table === undefined) {
+      throw new Error("expected a table block");
+    }
+    const cell = table.rows[0]?.cells[0];
+    if (cell === undefined) {
+      throw new Error("expected a cell");
+    }
+    expect(Object.hasOwn(cell, "colSpan")).toBe(false);
+    expect(Object.hasOwn(cell, "rowSpan")).toBe(false);
+  });
+
+  it("gives an empty table (no cells at all) the full content width, rather than dividing by a zero column count", () => {
+    const table = read(body("<table></table>")).find((b) => b.kind === "table");
+    if (table === undefined) {
+      throw new Error("expected a table block");
+    }
+    expect(table.rows).toEqual([]);
+    expect(table.columnWidthsPt).toEqual([CONTENT_WIDTH_PT]);
   });
 
   it("recovers a stray <ul> sitting directly inside a <table> (not inside any row group) as a genuinely nested list, not as if it were itself a row group", () => {
@@ -1394,7 +1459,11 @@ describe("tables", () => {
       columnWidthsPt: [CONTENT_WIDTH_PT],
     });
     expect(sink).toHaveBeenCalledWith(
-      expect.objectContaining({ code: "epub/table-caption-unsupported" }),
+      expect.objectContaining({
+        code: "epub/table-caption-unsupported",
+        message:
+          "<caption> has no document-schema.js table-caption field to carry its own distinct tag; read as an ordinary paragraph immediately before the table",
+      }),
     );
   });
 
@@ -1535,6 +1604,32 @@ describe("tables", () => {
             cells: [
               { blocks: [{ kind: "paragraph", runs: [{ text: "stray" }] }] },
               { blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] },
+            ],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT / 2, CONTENT_WIDTH_PT / 2],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "epub/table-row-content-outside-cell",
+        message:
+          "content sits directly inside a <tr> rather than inside a <td>/<th> (not valid HTML5); recovered as its own cell in the row's own column sequence",
+      }),
+    );
+  });
+
+  it("recovers stray text sitting directly inside a <tr> after its last <td> as its own trailing cell, with a diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(body("<table><tr><td>x</td>stray</tr></table>"), sink);
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              { blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] },
+              { blocks: [{ kind: "paragraph", runs: [{ text: "stray" }] }] },
             ],
           },
         ],
@@ -1782,10 +1877,17 @@ describe("tables", () => {
       ([diagnostic]) => diagnostic.code === "epub/table-duplicate-caption",
     );
     expect(duplicateCalls).toHaveLength(1);
+    expect(duplicateCalls[0]?.[0]?.message).toBe(
+      "<table> carries more than one <caption> (HTML5 permits at most one); every caption beyond the first is still read as its own ordinary paragraph immediately before the table, rather than being silently discarded",
+    );
     const captionUnsupportedCalls = sink.mock.calls.filter(
       ([diagnostic]) => diagnostic.code === "epub/table-caption-unsupported",
     );
     expect(captionUnsupportedCalls).toHaveLength(2);
+    // The very first sink call, for the first <caption>, must never be the duplicate-caption diagnostic -- only a second or later caption is a duplicate.
+    expect(sink.mock.calls[0]?.[0]?.code).toBe(
+      "epub/table-caption-unsupported",
+    );
   });
 });
 
@@ -2034,6 +2136,36 @@ describe("pre / code blocks", () => {
     });
   });
 
+  it("never treats a non-<a> wrapper's own href as a footnote reference, even when that same fragment is a real footnote elsewhere", () => {
+    // The wrapping <span> here is not itself a footnote-reference <a>, but happens to carry an href pointing at the same #fn2 fragment a real <a epub:type="noteref"> elsewhere in the document already registers as a footnote target. Only the genuinely nested <a href="#fn1"> should produce a construct; the span's own href must never be mistaken for a second one.
+    const blocks = read(
+      body(
+        '<p>See<a epub:type="noteref" href="#fn1">1</a>. Also<a epub:type="noteref" href="#fn2">2</a>.</p>' +
+          '<pre><span href="#fn2"><a epub:type="noteref" href="#fn1">ref</a></span></pre>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note one.</p></aside>' +
+          '<aside epub:type="footnote" id="fn2"><p>Note two.</p></aside>',
+      ),
+    );
+    const pre = blocks.find(
+      (b) => b.kind === "paragraph" && b.preformatted === true,
+    );
+    if (pre === undefined) {
+      throw new Error("expected a preformatted paragraph block");
+    }
+    expect(pre).toEqual({
+      kind: "paragraph",
+      runs: [{ text: "ref", fontFamily: "Courier New" }],
+      preformatted: true,
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 0,
+          endRun: 1,
+        },
+      ],
+    });
+  });
+
   it("maps a <br> inside a <pre> to a literal newline rather than dropping the line break", () => {
     const blocks = read(body("<pre>line1<br/>line2</pre>"));
     expect(blocks).toEqual([
@@ -2234,6 +2366,21 @@ describe("images", () => {
     }
   });
 
+  it("carries no altText key at all for a resolved image with an empty alt attribute", () => {
+    const bytes = fakePng(96, 192);
+    const { blocks } = readXhtmlBody(body('<p><img src="a.png" alt=""/></p>'), {
+      resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+      sink: () => undefined,
+      sourceHref: "chapter1.xhtml",
+      contentWidthPt: CONTENT_WIDTH_PT,
+    });
+    const [block] = blocks;
+    if (block === undefined) {
+      throw new Error("expected an image block");
+    }
+    expect(Object.hasOwn(block, "altText")).toBe(false);
+  });
+
   it("degrades to alt text with a diagnostic when the manifest has no such part", () => {
     const sink = vi.fn();
     const blocks = read(
@@ -2244,8 +2391,17 @@ describe("images", () => {
       { kind: "paragraph", runs: [{ text: "fallback text" }] },
     ]);
     expect(sink).toHaveBeenCalledWith(
-      expect.objectContaining({ code: "epub/image-unresolved" }),
+      expect.objectContaining({
+        code: "epub/image-unresolved",
+        message:
+          '<img src="missing.png"> names no resolvable manifest part; degraded to its alt text',
+      }),
     );
+  });
+
+  it("drops an unresolved image with an empty alt attribute entirely, rather than an empty paragraph", () => {
+    const blocks = read(body('<img src="missing.png" alt=""/>'));
+    expect(blocks).toEqual([]);
   });
 
   it("degrades to alt text with a diagnostic for a resolved but unsupported format", () => {
@@ -2258,8 +2414,22 @@ describe("images", () => {
     });
     expect(blocks).toEqual([{ kind: "paragraph", runs: [{ text: "a gif" }] }]);
     expect(sink).toHaveBeenCalledWith(
-      expect.objectContaining({ code: "epub/image-format-unsupported" }),
+      expect.objectContaining({
+        code: "epub/image-format-unsupported",
+        message:
+          '<img src="a.gif"> is neither a PNG nor a JPEG (document-schema.js\'s ContentImageBlock supports only those two); degraded to its alt text',
+      }),
     );
+  });
+
+  it("drops a resolved but unsupported-format image with an empty alt attribute entirely, rather than an empty paragraph", () => {
+    const { blocks } = readXhtmlBody(body('<img src="a.gif" alt=""/>'), {
+      resolveImage: () => new Uint8Array([0x47, 0x49, 0x46, 0x38]),
+      sink: () => undefined,
+      sourceHref: "chapter1.xhtml",
+      contentWidthPt: CONTENT_WIDTH_PT,
+    });
+    expect(blocks).toEqual([]);
   });
 
   it("degrades an <img> nested inside a <span> to its alt text with a diagnostic, instead of vanishing", () => {
@@ -2564,6 +2734,33 @@ describe("footnotes: EPUB 3 aside + noteref", () => {
         },
       ],
     });
+  });
+
+  it("reads a plain, non-footnote <aside> as ordinary content, with no construct wrapper and no diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(body("<aside><p>Just a sidebar.</p></aside>"), sink);
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Just a sidebar." }] },
+    ]);
+    expect(sink).not.toHaveBeenCalled();
+  });
+
+  it("reads a footnote <aside> with no id as ordinary content, with a diagnostic naming the loss", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body('<aside epub:type="footnote"><p>Orphan note.</p></aside>'),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Orphan note." }] },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "epub/footnote-target-unresolved",
+        message:
+          "a footnote <aside> carries no id and cannot be referenced; read as ordinary content",
+      }),
+    );
   });
 });
 
