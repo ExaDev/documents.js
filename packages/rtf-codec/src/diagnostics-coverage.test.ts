@@ -176,15 +176,51 @@ describe("every write-side diagnostic code is reachable", () => {
   });
 
   it("rtf/package-table-dropped", () => {
+    const table = {
+      n1: {
+        kind: "footnote" as const,
+        blocks: [{ kind: "paragraph" as const, runs: [{ text: "note" }] }],
+      },
+    };
+    const children: DocumentTree["children"] = [
+      {
+        node: { kind: "section", ...SECTION },
+        children: [{ kind: "paragraph", runs: [{ text: "body" }] }],
+      },
+    ];
+    // Each of the four package tables independently triggers the diagnostic -- hasPackageTables ORs all four, so a fixture setting only one at a time is the only way to prove each disjunct is actually load-bearing rather than merely reachable through definitions alone.
+    for (const field of [
+      "definitions",
+      "layers",
+      "attachments",
+      "destinations",
+    ] as const) {
+      const documentPackage: DocumentTree = {
+        kind: "wordprocessing",
+        metadata: {},
+        [field]: table,
+        children,
+      };
+      const diagnostics: RtfDiagnostic[] = [];
+      writeRtf(documentPackage, {
+        sink: (diagnostic) => diagnostics.push(diagnostic),
+      });
+      collect(diagnostics);
+      expect(diagnostics).toEqual([
+        {
+          code: RtfDiagnosticCodes.PACKAGE_TABLE_DROPPED,
+          severity: "info",
+          message:
+            "the package's definitions/layers/attachments/destinations tables are dropped: flattening resolves style refs, and RTF has no destination for the remaining tenants",
+        },
+      ]);
+    }
+  });
+
+  it("writes no rtf/package-table-dropped diagnostic when none of the four package tables are present", () => {
     const documentPackage: DocumentTree = {
       kind: "wordprocessing",
       metadata: {},
-      definitions: {
-        n1: {
-          kind: "footnote",
-          blocks: [{ kind: "paragraph", runs: [{ text: "note" }] }],
-        },
-      },
       children: [
         {
           node: { kind: "section", ...SECTION },
@@ -192,9 +228,11 @@ describe("every write-side diagnostic code is reachable", () => {
         },
       ],
     };
-    const codes: RtfDiagnostic[] = [];
-    writeRtf(documentPackage, { sink: (diagnostic) => codes.push(diagnostic) });
-    expect(collect(codes)).toContain(RtfDiagnosticCodes.PACKAGE_TABLE_DROPPED);
+    const diagnostics: RtfDiagnostic[] = [];
+    writeRtf(documentPackage, {
+      sink: (diagnostic) => diagnostics.push(diagnostic),
+    });
+    expect(diagnostics).toEqual([]);
   });
 });
 
