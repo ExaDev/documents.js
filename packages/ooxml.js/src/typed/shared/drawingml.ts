@@ -357,19 +357,27 @@ function canonicalizeGroupRotation(
 }
 
 // Composes an OUTER linear map A = R(outer.angleDeg) . (Fh if outer.mirrored) with an INNER linear map B = R(inner.angleDeg) . (Fh if inner.mirrored) that is applied FIRST, giving C = A . B, decomposed back into the same (angleDeg, mirrored) representation. Derived from the reflection/rotation commutation identity Fh . R(theta) = R(-theta) . Fh (verified by direct 2x2 matrix multiplication: both sides equal [[-cos(theta), sin(theta)], [sin(theta), cos(theta)]]): outer not mirrored -> C = R(outerAngle).R(innerAngle).F_inner = R(outerAngle+innerAngle).F_inner; outer mirrored -> C = R(outerAngle).Fh.R(innerAngle).F_inner = R(outerAngle).R(-innerAngle).Fh.F_inner [since Fh.R(innerAngle) = R(-innerAngle).Fh] = R(outerAngle-innerAngle).(Fh.F_inner), so a mirrored outer flips whether the result is mirrored (Fh.Fh=I cancels; Fh.I stays mirrored) AND subtracts the inner angle instead of adding it -- this is the concrete "an ancestor group's flip negates the sense of a descendant's own rotation" rule.
+// The angle half of composeRotation below, split out because composeShapeRotationDeg needs exactly this computation without ever needing a real `inner.mirrored` to pass in: the angle here depends only on whether the OUTER map is mirrored (added when it isn't, subtracted when it is), never on the inner map's own mirrored flag, which composeRotation folds into its OWN returned `mirrored` field instead.
+function composeAngleDeg(
+  outerMirrored: boolean,
+  outerAngleDeg: number,
+  innerAngleDeg: number,
+): number {
+  return normalizeDeg(
+    outerMirrored
+      ? outerAngleDeg - innerAngleDeg
+      : outerAngleDeg + innerAngleDeg,
+  );
+}
+
+// Composes an OUTER linear map A = R(outer.angleDeg) . (Fh if outer.mirrored) with an INNER linear map B = R(inner.angleDeg) . (Fh if inner.mirrored) that is applied FIRST, giving C = A . B, decomposed back into the same (angleDeg, mirrored) representation. Derived from the reflection/rotation commutation identity Fh . R(theta) = R(-theta) . Fh (verified by direct 2x2 matrix multiplication: both sides equal [[-cos(theta), sin(theta)], [sin(theta), cos(theta)]]): outer not mirrored -> C = R(outerAngle).R(innerAngle).F_inner = R(outerAngle+innerAngle).F_inner; outer mirrored -> C = R(outerAngle).Fh.R(innerAngle).F_inner = R(outerAngle).R(-innerAngle).Fh.F_inner [since Fh.R(innerAngle) = R(-innerAngle).Fh] = R(outerAngle-innerAngle).(Fh.F_inner), so a mirrored outer flips whether the result is mirrored (Fh.Fh=I cancels; Fh.I stays mirrored) AND subtracts the inner angle instead of adding it -- this is the concrete "an ancestor group's flip negates the sense of a descendant's own rotation" rule.
 function composeRotation(
   outer: { readonly angleDeg: number; readonly mirrored: boolean },
   inner: { readonly angleDeg: number; readonly mirrored: boolean },
 ): { readonly angleDeg: number; readonly mirrored: boolean } {
-  if (!outer.mirrored) {
-    return {
-      angleDeg: normalizeDeg(outer.angleDeg + inner.angleDeg),
-      mirrored: inner.mirrored,
-    };
-  }
   return {
-    angleDeg: normalizeDeg(outer.angleDeg - inner.angleDeg),
-    mirrored: !inner.mirrored,
+    angleDeg: composeAngleDeg(outer.mirrored, outer.angleDeg, inner.angleDeg),
+    mirrored: outer.mirrored ? !inner.mirrored : inner.mirrored,
   };
 }
 
@@ -477,11 +485,9 @@ export function composeShapeRotationDeg(
   if (parentTransform === undefined) {
     return normalizeDeg(ownRotationDeg);
   }
-  return composeRotation(
-    {
-      angleDeg: parentTransform.compositeRotationDeg,
-      mirrored: parentTransform.compositeMirrored,
-    },
-    { angleDeg: ownRotationDeg, mirrored: false },
-  ).angleDeg;
+  return composeAngleDeg(
+    parentTransform.compositeMirrored,
+    parentTransform.compositeRotationDeg,
+    ownRotationDeg,
+  );
 }

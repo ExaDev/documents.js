@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { el } from "../../xml/fragment";
+import { el, txt } from "../../xml/fragment";
 import type { GroupChildTransform } from "./drawingml";
 import {
   applyGroupTransform,
@@ -59,6 +59,39 @@ describe("readXfrm", () => {
       readXfrm(el("a:xfrm", {}, [el("a:ext", { cx: "1", cy: "1" })])),
     ).toBeUndefined();
     expect(readXfrm(el("a:xfrm"))).toBeUndefined();
+  });
+
+  // a:off/a:ext are present in every case below -- only one of the four required ATTRIBUTES they carry is missing, isolating each clause of the x/y/cx/cy undefined check from the other tests above, which only ever exercise the earlier "a:off or a:ext element itself is missing" guard.
+  it("returns undefined when a:off is missing its x attribute", () => {
+    const xfrm = el("a:xfrm", {}, [
+      el("a:off", { y: "0" }),
+      el("a:ext", { cx: "1", cy: "1" }),
+    ]);
+    expect(readXfrm(xfrm)).toBeUndefined();
+  });
+
+  it("returns undefined when a:off is missing its y attribute", () => {
+    const xfrm = el("a:xfrm", {}, [
+      el("a:off", { x: "0" }),
+      el("a:ext", { cx: "1", cy: "1" }),
+    ]);
+    expect(readXfrm(xfrm)).toBeUndefined();
+  });
+
+  it("returns undefined when a:ext is missing its cx attribute", () => {
+    const xfrm = el("a:xfrm", {}, [
+      el("a:off", { x: "0", y: "0" }),
+      el("a:ext", { cy: "1" }),
+    ]);
+    expect(readXfrm(xfrm)).toBeUndefined();
+  });
+
+  it("returns undefined when a:ext is missing its cy attribute", () => {
+    const xfrm = el("a:xfrm", {}, [
+      el("a:off", { x: "0", y: "0" }),
+      el("a:ext", { cx: "1" }),
+    ]);
+    expect(readXfrm(xfrm)).toBeUndefined();
   });
 });
 
@@ -130,6 +163,53 @@ describe("readTheme", () => {
     const theme = readTheme(root);
     expect(theme.majorFont).toBe("Calibri");
     expect(theme.minorFont).toBe("Calibri");
+  });
+
+  it("uses lastClr over the windowText/window fallback, even when val is 'window'", () => {
+    // val="window" would fall back to white if lastClr were ignored -- a distinct lastClr here proves the real cached value is read, not merely coinciding with what the fallback happens to also produce (every other fixture's own lastClr is black or white, indistinguishable from its own fallback).
+    const root = el("a:theme", {}, [
+      el("a:themeElements", {}, [
+        el("a:clrScheme", {}, [
+          el("a:lt1", {}, [
+            el("a:sysClr", { val: "window", lastClr: "123456" }),
+          ]),
+        ]),
+      ]),
+    ]);
+    const theme = readTheme(root);
+    expect(theme.colorScheme.get("lt1")).toEqual({
+      r: 0x12 / 255,
+      g: 0x34 / 255,
+      b: 0x56 / 255,
+    });
+  });
+
+  it("resolves no colour at all for a colour-scheme slot whose child is neither a:srgbClr nor a:sysClr", () => {
+    const root = el("a:theme", {}, [
+      el("a:themeElements", {}, [
+        el("a:clrScheme", {}, [
+          el("a:dk1", {}, [el("a:someOtherColorType", { val: "000000" })]),
+        ]),
+      ]),
+    ]);
+    const theme = readTheme(root);
+    expect(theme.colorScheme.has("dk1")).toBe(false);
+  });
+
+  it("skips a non-element child (e.g. whitespace text) to find a slot's real colour element", () => {
+    const root = el("a:theme", {}, [
+      el("a:themeElements", {}, [
+        el("a:clrScheme", {}, [
+          el("a:dk1", {}, [txt("\n  "), el("a:srgbClr", { val: "44546A" })]),
+        ]),
+      ]),
+    ]);
+    const theme = readTheme(root);
+    expect(theme.colorScheme.get("dk1")).toEqual({
+      r: 0x44 / 255,
+      g: 0x54 / 255,
+      b: 0x6a / 255,
+    });
   });
 });
 
@@ -210,6 +290,21 @@ describe("readSchemeColor", () => {
         EMPTY_THEME,
       ),
     ).toBeUndefined();
+  });
+
+  it("skips a recognised transform child that carries no val attribute, applying only the one that does", () => {
+    const theme = readTheme(themeRoot());
+    const colorMap = readColorMap(undefined);
+    const schemeClr = el("a:schemeClr", { val: "lt1" }, [
+      el("a:lumMod"),
+      el("a:lumOff", { val: "-50000" }),
+    ]);
+    // If the val-less lumMod were included as a NaN-valued transform, the result would be NaN throughout rather than the clean 0.5 a single, real 50% lumOff on white produces.
+    expect(readSchemeColor(schemeClr, colorMap, theme)).toEqual({
+      r: 0.5,
+      g: 0.5,
+      b: 0.5,
+    });
   });
 });
 
@@ -301,6 +396,51 @@ describe("readGroupXfrm", () => {
 
   it("returns undefined for undefined input", () => {
     expect(readGroupXfrm(undefined)).toBeUndefined();
+  });
+
+  // a:chOff/a:chExt are present in every case below -- only one of the four required ATTRIBUTES they carry is missing, isolating each clause of the cx/cy/ccx/ccy undefined check from the earlier "no chOff/chExt element at all" test above.
+  function groupXfrm(
+    chOff: ReturnType<typeof el>,
+    chExt: ReturnType<typeof el>,
+  ): ReturnType<typeof el> {
+    return el("a:xfrm", {}, [
+      el("a:off", { x: "0", y: "0" }),
+      el("a:ext", { cx: "1828800", cy: "914400" }),
+      chOff,
+      chExt,
+    ]);
+  }
+
+  it("returns undefined when a:chOff is missing its x attribute", () => {
+    const xfrm = groupXfrm(
+      el("a:chOff", { y: "0" }),
+      el("a:chExt", { cx: "914400", cy: "457200" }),
+    );
+    expect(readGroupXfrm(xfrm)).toBeUndefined();
+  });
+
+  it("returns undefined when a:chOff is missing its y attribute", () => {
+    const xfrm = groupXfrm(
+      el("a:chOff", { x: "0" }),
+      el("a:chExt", { cx: "914400", cy: "457200" }),
+    );
+    expect(readGroupXfrm(xfrm)).toBeUndefined();
+  });
+
+  it("returns undefined when a:chExt is missing its cx attribute", () => {
+    const xfrm = groupXfrm(
+      el("a:chOff", { x: "0", y: "0" }),
+      el("a:chExt", { cy: "457200" }),
+    );
+    expect(readGroupXfrm(xfrm)).toBeUndefined();
+  });
+
+  it("returns undefined when a:chExt is missing its cy attribute", () => {
+    const xfrm = groupXfrm(
+      el("a:chOff", { x: "0", y: "0" }),
+      el("a:chExt", { cx: "914400" }),
+    );
+    expect(readGroupXfrm(xfrm)).toBeUndefined();
   });
 });
 
@@ -415,6 +555,48 @@ describe("applyGroupTransform", () => {
     expect(result.xPt).toBeCloseTo(230, 9);
     expect(result.yPt).toBeCloseTo(130, 9);
   });
+
+  it("subtracts, rather than adds, the group's own child-space offset when mapping into the parent space", () => {
+    // A non-zero childOffXPt/childOffYPt (every other test above zeroes both, which cannot distinguish addition from subtraction): child at (10,10) in a space whose own origin sits at (5,5), one scale unit wide, so the child's own offset from that origin -- (10-5, 10-5) = (5,5) -- is what should be added onto the group's own placement (50,50), giving (55,55).
+    const group = unrotatedGroup({
+      offXPt: 50,
+      offYPt: 50,
+      extWidthPt: 100,
+      extHeightPt: 100,
+      childOffXPt: 5,
+      childOffYPt: 5,
+      childExtWidthPt: 100,
+      childExtHeightPt: 100,
+    });
+    const child = { xPt: 10, yPt: 10, widthPt: 20, heightPt: 20 };
+    expect(applyGroupTransform(group, child)).toEqual({
+      xPt: 55,
+      yPt: 55,
+      widthPt: 20,
+      heightPt: 20,
+    });
+  });
+
+  it("still rotates about the group's own centre when the composite is mirrored but its rotation is exactly 0", () => {
+    // The identity shortcut requires BOTH compositeRotationDeg === 0 AND !compositeMirrored -- a mirrored group with no rotation must still go through the centre-mirroring path (a 0deg rotation is a no-op once there, but a mirror is not), rather than short-circuiting straight to the unrotated canonical box.
+    const group: GroupChildTransform = {
+      offXPt: 0,
+      offYPt: 0,
+      extWidthPt: 200,
+      extHeightPt: 100,
+      childOffXPt: 0,
+      childOffYPt: 0,
+      childExtWidthPt: 200,
+      childExtHeightPt: 100,
+      compositeRotationDeg: 0,
+      compositeMirrored: true,
+    };
+    // Group centre (100,50); child box centre (60,50) is 40 to the left of it -- mirroring flips that to 40 to the right, i.e. a final box centre of (140,50), top-left (120,40).
+    const child = { xPt: 40, yPt: 40, widthPt: 40, heightPt: 20 };
+    const result = applyGroupTransform(group, child);
+    expect(result.xPt).toBeCloseTo(120, 9);
+    expect(result.yPt).toBeCloseTo(40, 9);
+  });
 });
 
 describe("composeGroupTransform", () => {
@@ -501,6 +683,44 @@ describe("composeGroupTransform", () => {
 
   it("returns undefined when own is undefined", () => {
     expect(composeGroupTransform(undefined, undefined)).toBeUndefined();
+  });
+
+  it("cancels flipH and flipV into a pure 180deg-shifted rotation, not a mirror", () => {
+    const own = {
+      offXPt: 0,
+      offYPt: 0,
+      extWidthPt: 100,
+      extHeightPt: 100,
+      childOffXPt: 0,
+      childOffYPt: 0,
+      childExtWidthPt: 100,
+      childExtHeightPt: 100,
+      rotationDeg: 30,
+      flipH: true,
+      flipV: true,
+    };
+    const composed = composeGroupTransform(own, undefined);
+    expect(composed?.compositeRotationDeg).toBe(210);
+    expect(composed?.compositeMirrored).toBe(false);
+  });
+
+  it("restates a lone flipV as a 180deg-shifted mirror about the canonical flipH axis", () => {
+    const own = {
+      offXPt: 0,
+      offYPt: 0,
+      extWidthPt: 100,
+      extHeightPt: 100,
+      childOffXPt: 0,
+      childOffYPt: 0,
+      childExtWidthPt: 100,
+      childExtHeightPt: 100,
+      rotationDeg: 30,
+      flipH: false,
+      flipV: true,
+    };
+    const composed = composeGroupTransform(own, undefined);
+    expect(composed?.compositeRotationDeg).toBe(210);
+    expect(composed?.compositeMirrored).toBe(true);
   });
 });
 
