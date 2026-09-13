@@ -110,6 +110,31 @@ describe("parsePlc", () => {
     expect(plc.count).toBe(2);
     expect(() => plc.element(2)).toThrow(DocFormatError);
   });
+
+  it("keyAt reads back every key a valid Plc actually carries, including the trailing terminator", () => {
+    const plc = parsePlc(
+      plcBytes(
+        [0, 4, 9],
+        [new Array<number>(8).fill(0), new Array<number>(8).fill(1)],
+      ),
+      8,
+      "PlcPcd",
+    );
+    expect(plc.keyAt(0)).toBe(0);
+    expect(plc.keyAt(1)).toBe(4);
+    expect(plc.keyAt(2)).toBe(9);
+  });
+
+  it("keyAt rejects an index past the last key, naming this Plc's own key count", () => {
+    const plc = parsePlc(
+      plcBytes([0, 1], [new Array<number>(8).fill(0)]),
+      8,
+      "PlcPcd",
+    );
+    expect(() => plc.keyAt(2)).toThrow(
+      /PlcPcd has 2 keys; key 2 was requested/,
+    );
+  });
 });
 
 // The lookup every [MS-DOC] algorithm phrases as "find the largest i such that a[i] <= x", used against PlcPcd.aCp, PlcBteChpx.aFc, ChpxFkp.rgfc and PapxFkp.rgfc alike.
