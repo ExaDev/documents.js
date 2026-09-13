@@ -76,4 +76,9 @@ describe("parseHexColorInput", () => {
     expect(color).toBeDefined();
     expect(layoutColorToHex(color!)).toBe("#3366cc");
   });
+
+  it("trims surrounding whitespace before handing the string to rgbHexToColor", () => {
+    // rgbHexToColor itself has no tolerance for surrounding whitespace, so this only passes if parseHexColorInput trims before calling it, not merely before validating.
+    expect(parseHexColorInput("  #ff0000  ")).toEqual({ r: 1, g: 0, b: 0 });
+  });
 });
