@@ -151,6 +151,24 @@ describe("readNumberingDefinitions", () => {
     );
     expect(Object.keys(definitions["8"]?.levels ?? {})).toEqual(["0"]);
   });
+
+  it("leaves an existing level's startAt untouched when w:startOverride has no w:val at all", () => {
+    const abstractNum = el("w:abstractNum", { "w:abstractNumId": "0" }, [
+      lvlEl("0", "decimal", "%1.", { start: "1" }),
+    ]);
+    const num = el("w:num", { "w:numId": "10" }, [
+      el("w:abstractNumId", { "w:val": "0" }),
+      el("w:lvlOverride", { "w:ilvl": "0" }, [el("w:startOverride")]),
+    ]);
+    const definitions = readNumberingDefinitions(
+      packageWithNumbering([abstractNum, num]),
+    );
+    expect(definitions["10"]?.levels["0"]).toEqual({
+      format: "decimal",
+      text: "%1.",
+      startAt: 1,
+    });
+  });
 });
 
 describe("buildNumberingElement", () => {
