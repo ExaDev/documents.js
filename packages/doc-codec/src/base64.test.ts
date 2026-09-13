@@ -56,6 +56,10 @@ describe("base64ToBytes", () => {
     expect(() => base64ToBytes("T")).toThrow(/invalid base64 input/);
   });
 
+  it("rejects a quartet whose first character is a bare padding sign, valid in the alphabet regex but absent from the decode table", () => {
+    expect(() => base64ToBytes("=bcd")).toThrow(/invalid base64 input/);
+  });
+
   it("round-trips every length from 0 to 8 bytes", () => {
     for (let length = 0; length <= 8; length += 1) {
       const bytes = new Uint8Array(length);
