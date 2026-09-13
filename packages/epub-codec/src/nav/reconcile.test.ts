@@ -17,4 +17,11 @@ describe("navMatchesSpine", () => {
   it("does not match a different length", () => {
     expect(navMatchesSpine(["a.xhtml"], ["a.xhtml", "b.xhtml"])).toBe(false);
   });
+
+  it("does not match when only some of an equal-length sequence agrees", () => {
+    // .some() would wrongly accept this (the first element matches); .every() correctly rejects it.
+    expect(
+      navMatchesSpine(["a.xhtml", "x.xhtml"], ["a.xhtml", "b.xhtml"]),
+    ).toBe(false);
+  });
 });

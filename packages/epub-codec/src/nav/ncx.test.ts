@@ -31,4 +31,14 @@ describe("readNcxHrefs", () => {
   it("returns undefined when there is no navMap", () => {
     expect(readNcxHrefs("<ncx/>")).toBeUndefined();
   });
+
+  it("skips a content element with no src attribute, rather than including it as literal 'undefined'", () => {
+    const xml = `<ncx>
+      <navMap>
+        <navPoint><content/></navPoint>
+        <navPoint><content src="chapter1.xhtml"/></navPoint>
+      </navMap>
+    </ncx>`;
+    expect(readNcxHrefs(xml)).toEqual(["chapter1.xhtml"]);
+  });
 });
