@@ -279,9 +279,8 @@ describe("isoFromDttm", () => {
     expect(isoFromDttm(dttm(2024, 13, 1, 0, 0))).toBeUndefined();
   });
 
-  it("accepts day 31 but rejects day 32", () => {
+  it("accepts day 31, the highest value its 5-bit field can hold", () => {
     expect(isoFromDttm(dttm(2024, 1, 31, 0, 0))).toBe("2024-01-31T00:00:00");
-    expect(isoFromDttm(dttm(2024, 1, 32, 0, 0))).toBeUndefined();
   });
 
   it("pads single-digit month/day/hour/minute with a leading zero", () => {
@@ -460,6 +459,16 @@ describe("formFieldContentControl", () => {
           formFieldData({ resultIndex: 25, defaultResultIndex: undefined }),
         ),
       ).toMatchObject({ checked: false });
+    });
+
+    it("sets no options on a checkbox even when its own listItems is non-empty", () => {
+      // listItems is a dropDown-only concern; a checkbox's controlType must gate the options branch on its own, not just fall through because some unrelated FFData field happens to be populated.
+      expect(
+        formFieldContentControl(
+          "FORMCHECKBOX",
+          formFieldData({ listItems: ["a"] }),
+        ),
+      ).not.toHaveProperty("options");
     });
   });
 
