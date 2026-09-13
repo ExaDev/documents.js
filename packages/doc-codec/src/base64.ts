@@ -15,9 +15,10 @@ export function bytesToBase64(bytes: Uint8Array): string {
   let out = "";
   const len = bytes.length;
   for (let index = 0; index < len; index += 3) {
+    // No bounds check needed on top of the `?? 0` fallback: reading a TypedArray past its own length already yields `undefined`, the same as reading before this trailing group has actually begun, so a manual `index + 1 < len` guard would only ever duplicate what indexing out of range already does.
     const b0 = bytes[index] ?? 0;
-    const b1 = index + 1 < len ? (bytes[index + 1] ?? 0) : 0;
-    const b2 = index + 2 < len ? (bytes[index + 2] ?? 0) : 0;
+    const b1 = bytes[index + 1] ?? 0;
+    const b2 = bytes[index + 2] ?? 0;
     out += TABLE.charAt(b0 >> 2);
     out += TABLE.charAt(((b0 & 0x03) << 4) | (b1 >> 4));
     out += index + 1 < len ? TABLE.charAt(((b1 & 0x0f) << 2) | (b2 >> 6)) : "=";
@@ -28,10 +29,9 @@ export function bytesToBase64(bytes: Uint8Array): string {
 
 export function base64ToBytes(base64: string): Uint8Array<ArrayBuffer> {
   const clean = base64.replace(/[^A-Za-z0-9+/=]/g, "");
-  const len = clean.length;
-  const out = new Uint8Array(((len * 3) / 4) | 0);
-  let position = 0;
-  for (let index = 0; index < len; index += 4) {
+  // Collected rather than written into a pre-sized Uint8Array: the exact final length depends on how many quartets end in padding, known only once every quartet has been walked, so a pre-sized buffer would need its own capacity arithmetic that nothing here would ever actually observe (Uint8Array.from below sizes itself exactly from what was pushed).
+  const out: number[] = [];
+  for (let index = 0; index < clean.length; index += 4) {
     const c0 = DECODE[clean.charCodeAt(index)] ?? 255;
     const c1 = DECODE[clean.charCodeAt(index + 1)] ?? 255;
     const c2 = clean.charCodeAt(index + 2);
@@ -39,15 +39,15 @@ export function base64ToBytes(base64: string): Uint8Array<ArrayBuffer> {
     if (c0 === 255 || c1 === 255) {
       throw new Error("invalid base64 input");
     }
-    out[position++] = (c0 << 2) | (c1 >> 4);
+    out.push((c0 << 2) | (c1 >> 4));
     if (c2 !== 61) {
       const d2 = DECODE[c2] ?? 255;
-      out[position++] = ((c1 & 0x0f) << 4) | (d2 >> 2);
+      out.push(((c1 & 0x0f) << 4) | (d2 >> 2));
       if (c3 !== 61) {
         const d3 = DECODE[c3] ?? 255;
-        out[position++] = ((d2 & 0x03) << 6) | d3;
+        out.push(((d2 & 0x03) << 6) | d3);
       }
     }
   }
-  return out.subarray(0, position);
+  return Uint8Array.from(out);
 }
