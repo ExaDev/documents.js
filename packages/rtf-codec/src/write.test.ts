@@ -260,6 +260,10 @@ describe("header tables", () => {
     expect(out).toContain("{\\subject A Subject}");
     // Joined with "; ", not "" -- otherwise "onetwo" would be indistinguishable from a single keyword.
     expect(out).toContain("{\\keywords one; two}");
+    // The four fields joined with "" between them, not any separator -- checked as one contiguous run, since each field's own substring above would still be found even with a real separator wrongly inserted between them.
+    expect(out).toContain(
+      "{\\info{\\title A Title}{\\author An Author}{\\subject A Subject}{\\keywords one; two}}",
+    );
   });
 
   it("omits \\keywords entirely for an empty keywords array, unlike a genuinely populated one", () => {
@@ -291,6 +295,9 @@ describe("header tables", () => {
     expect(out.match(/\\listlevel/g)).toHaveLength(9);
     expect(out).toContain(`\\li${String(720 * 1)}\\lin${String(720 * 1)}`);
     expect(out).toContain(`\\li${String(720 * 9)}\\lin${String(720 * 9)}`);
+    // A bullet level's own \levelnumbers is empty -- there is no decimal counter to place a placeholder byte for.
+    expect(out).toContain("{\\levelnumbers;}");
+    expect(out).not.toContain("\\levelnumbers\\'01");
   });
 
   it("mints an arabic level for an ordered numId", () => {
@@ -305,6 +312,8 @@ describe("header tables", () => {
     );
     expect(out).toContain("\\levelnfc0");
     expect(out).toContain("\\levelstartat5");
+    // An ordered level's own \levelnumbers carries the \'01 placeholder byte naming where the level's own decimal counter is inserted -- RTF 1.9.1's own <levelnumbers> production.
+    expect(out).toContain("{\\levelnumbers\\'01;}");
   });
 });
 
@@ -364,6 +373,20 @@ describe("body constructs", () => {
       ]),
     );
     expect(out).toContain("{\\f1\\fs28\\b\\i\\ul\\strike x}");
+  });
+
+  it("writes no \\f0 for a run explicitly naming the default font by its own name, distinct from omitting fontFamily entirely", () => {
+    // fontIndex !== 0 is a real, separate condition from fontIndex !== undefined: a run naming "Times New Roman" explicitly resolves to the same index (0) collectTables always seeds the fonts table with, so fontIndex is DEFINED here, just equal to the one value that must still not be restated.
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x", fontFamily: "Times New Roman" }],
+        },
+      ]),
+    );
+    // Checked as the run's own bare group, not a loose \f0 substring search: the {\fonttbl ...} entry for the default font is always \f0, so that substring exists in this output regardless of what runProperties itself writes.
+    expect(out).toContain("\\pard\\plain {x}");
   });
 
   it("writes no \\ul/\\strike for an explicit false, distinct from true -- undefined alone cannot tell the two BooleanLiteral branches apart", () => {
@@ -552,7 +575,9 @@ describe("body constructs", () => {
         },
       ]),
     );
-    expect(out.indexOf("}}")).toBeLessThan(out.indexOf("after"));
+    // Checked as "field" immediately followed by its own close, with "after" entirely outside the {\fldrslt ...} destination -- not indexOf("}}"), which also matches the unrelated "}}" already inside \*\fldinst/\*\formfield's own closing sequence regardless of where this close actually lands.
+    expect(out).toContain("{field}}}{after}");
+    expect(out).not.toContain("{field}{after}");
     expectBalancedBraces(out);
   });
 
@@ -1209,6 +1234,45 @@ describe("body constructs", () => {
     expect(out).toContain("{\\*\\ffl Option 24}");
     expect(out).not.toContain("{\\*\\ffl Option 25}");
     expectBalancedBraces(out);
+  });
+
+  it("writes exactly 25 dropDown options untouched, with no truncation diagnostic at the cap's own boundary", () => {
+    // allOptions.length > MAX_DROPDOWN_OPTIONS is a strict >: exactly 25 options must NOT truncate or report anything, distinct from 26, which is the smallest input the existing 30-option test cannot tell apart from an off-by-one >= mutant.
+    const diagnostics: { code: string; message: string }[] = [];
+    const options = Array.from(
+      { length: 25 },
+      (_, index) => `Option ${String(index)}`,
+    );
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "dropDown",
+                  options,
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        {
+          sink: (diagnostic) =>
+            diagnostics.push({
+              code: diagnostic.code,
+              message: diagnostic.message,
+            }),
+        },
+      ),
+    );
+    expect(diagnostics).toEqual([]);
+    expect(out).toContain("{\\*\\ffl Option 24}");
   });
 
   // A selection that names an option past the 25-entry cutoff is unrepresentable for two independent reasons at once -- the cap and the (now-truncated-away) match -- and both fire their own diagnostic rather than one silently masking the other. The second diagnostic's message must name the REAL reason (the option was truncated away) rather than claim the value never matched any option at all, since it did match one before the cap removed it.
@@ -2050,6 +2114,51 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  it("pops a stack entry exactly at its own endRun before checking a sibling starting there, not one position late", () => {
+    // A(0,4) encloses both B(0,2) and C(2,3). B must be POPPED once C's startRun(2) reaches its own endRun(2) -- not merely still sit on the stack -- or C's own crossing check would wrongly compare itself against B's endRun(2) instead of A's(4), rejecting a C that is genuinely nested inside A and merely adjacent to (not crossing) B.
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }, { text: "b" }, { text: "c" }, { text: "d" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "A",
+              },
+              startRun: 0,
+              endRun: 4,
+            },
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "B",
+              },
+              startRun: 0,
+              endRun: 2,
+            },
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "C",
+              },
+              startRun: 2,
+              endRun: 3,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("{\\*\\ffname A}");
+    expect(out).toContain("{\\*\\ffname B}");
+    expect(out).toContain("{\\*\\ffname C}");
+    expectBalancedBraces(out);
+  });
+
   // The exact endRun boundary at the other end of the crossing check: an extent that ends at precisely the same run as an already-open one is nested (sharing a closing boundary), not crossing it -- extent.endRun > top.endRun must stay strict.
   it("does not treat an extent ending exactly where its enclosing one does as crossing it", () => {
     const out = write(
@@ -2141,6 +2250,8 @@ describe("body constructs", () => {
     expect(out).toContain("\\intbl");
     expect(out).toContain("\\cell");
     expect(out).toContain("\\row");
+    // Exactly one \pard\plain\intbl per cell (two cells, two occurrences) -- wroteBlock = true after writing each cell's own paragraph is what keeps the !wroteBlock fallback shell from ALSO firing and appending a second, empty one.
+    expect(out.match(/\\pard\\plain\\intbl/g)).toHaveLength(2);
     expectBalancedBraces(out);
   });
 
@@ -2342,8 +2453,8 @@ describe("body constructs", () => {
       "{\\*\\shppict{\\pict\\pngblip\\picwgoal1440\\pichgoal720",
     );
     expect(out).toContain("89504e470d0a1a0a");
-    // A top-level image (inTable defaults to false, via writeImageParagraph) writes no \intbl and closes with its own trailing \par -- the sibling table-cell test above proves the opposite for inTable: true.
-    expect(out).not.toContain("\\intbl");
+    // A top-level image (inTable defaults to false, via writeImageParagraph) writes no \intbl and closes with its own trailing \par -- the sibling table-cell test above proves the opposite for inTable: true. Checked as the exact contiguous prefix, not a loose \intbl substring search: that alone would still pass if some OTHER text were wrongly substituted into the ternary's false branch instead of "".
+    expect(out).toContain("\\pard\\plain {\\*\\shppict");
     expect(out).toContain("}}\\par");
   });
 
@@ -2454,6 +2565,39 @@ describe("body constructs", () => {
     expect(out).not.toContain("\\pict");
   });
 
+  it("reports the same empty-payload gap for a genuinely empty base64 string, distinct from one that fails to decode at all", () => {
+    // base64ToBytes("") returns a real, defined, zero-length Uint8Array rather than undefined -- the one reachable way bytes.length === 0 fires on its own, separate from the bytes === undefined branch the malformed-string case above already covers.
+    const diagnostics: { code: string; message: string }[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "image",
+            format: "png",
+            base64: "",
+            widthPt: 72,
+            heightPt: 36,
+          },
+        ]),
+        {
+          sink: (diagnostic) =>
+            diagnostics.push({
+              code: diagnostic.code,
+              message: diagnostic.message,
+            }),
+        },
+      ),
+    );
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.UNSUPPORTED_PICTURE_FORMAT,
+        message:
+          "an image block's base64 payload could not be decoded, so no \\pict destination is written for it",
+      },
+    ]);
+    expect(out).not.toContain("\\pict");
+  });
+
   it("writes an embedded object as a real [MS-CFB] compound file inside \\object's \\objdata", () => {
     const out = write(
       wordprocessing([
@@ -2473,8 +2617,8 @@ describe("body constructs", () => {
     expect(out).toContain(
       "{\\result{\\pard\\plain [embedded spreadsheet object]\\par}}}",
     );
-    // A top-level embedded object (inTable defaults to false) writes no \intbl and closes with its own trailing \par -- the sibling table-cell test proves the opposite for inTable: true.
-    expect(out).not.toContain("\\intbl");
+    // A top-level embedded object (inTable defaults to false) writes no \intbl and closes with its own trailing \par -- the sibling table-cell test proves the opposite for inTable: true. Checked as the exact contiguous prefix, not a loose \intbl substring search, for the same reason the sibling image test above is.
+    expect(out).toContain("\\pard\\plain {\\object\\objemb");
     expect(out).toMatch(/\\par\n\}$/);
   });
 
@@ -3554,22 +3698,31 @@ describe("round trip through this package's own reader", () => {
   });
 
   it("still writes a real {\\*\\bkmkstart ...} for a bookmark alongside an unrelated construct, rather than misreading the bookmark as a contentControl extent", () => {
-    // isContentControlExtent gates selectNestableFormFields' own input -- a bookmark wrongly let through would be handed to formFieldOpenGroup, which has no controlType field to read on an AnchorDescriptor at all.
-    const out = write(
-      wordprocessing([
-        {
-          kind: "paragraph",
-          runs: [{ text: "a" }, { text: "b" }],
-          constructs: [
-            {
-              descriptor: { kind: "anchor", anchorType: "bookmark", name: "x" },
-              startRun: 0,
-              endRun: 2,
-            },
-          ],
-        },
-      ]),
+    // isContentControlExtent gates selectNestableFormFields' own input -- a bookmark wrongly let through would be handed to formFieldOpenGroup, which has no controlType field to read on an AnchorDescriptor at all, and would report it as an unrepresentable contentControl construct: checking for zero diagnostics is what actually proves the bookmark was excluded, since formFieldOpenGroup degrades a misrouted extent to a diagnostic rather than a crash.
+    const diagnostics: unknown[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "a" }, { text: "b" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "anchor",
+                  anchorType: "bookmark",
+                  name: "x",
+                },
+                startRun: 0,
+                endRun: 2,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => diagnostics.push(diagnostic) },
+      ),
     );
+    expect(diagnostics).toEqual([]);
     expect(out).toContain("{\\*\\bkmkstart x}");
     expect(out).not.toContain("\\field");
     expectBalancedBraces(out);
@@ -4054,8 +4207,13 @@ describe("round trip through this package's own reader", () => {
     );
     expect(write(withBreak("evenPage"))).toContain("\\sectd\\sbkeven\\pgwsxn");
     expect(write(withBreak("oddPage"))).toContain("\\sectd\\sbkodd\\pgwsxn");
-    expect(write(withBreak("nextPage"))).toContain("\\sectd\\pgwsxn");
-    expect(write(withBreak(undefined))).toContain("\\sectd\\pgwsxn");
+    // Counted, not merely contained: the first section always has an undefined breakType too, so a lone "\sectd\pgwsxn" match there would pass even if the SECOND section's own breakWord carried stray text between \sectd and \pgwsxn.
+    expect(write(withBreak("nextPage")).match(/\\sectd\\pgwsxn/g)).toHaveLength(
+      2,
+    );
+    expect(write(withBreak(undefined)).match(/\\sectd\\pgwsxn/g)).toHaveLength(
+      2,
+    );
   });
 
   it("preserves an embedded object's kind, frame, and nested document through a real OLE compound file", () => {
@@ -4163,7 +4321,8 @@ describe("round trip through this package's own reader", () => {
       ]),
     );
     expect(out).toContain("\\pard\\plain\\intbl {\\*\\shppict");
-    expect(out).not.toContain("\\par{\\*\\shppict");
+    // No bare \par control word anywhere (not merely "\pard"'s own leading \par substring): writeImagePict's own prefix (\pard\plain\intbl) comes AFTER wherever a wrongly-flushed \par would land, so a substring check anchored on "{\*\shppict" would miss one inserted before that whole prefix instead.
+    expect(out).not.toMatch(/\\par(?![a-zA-Z])/);
     // Exactly one \pard\plain\intbl -- the image's own, not a second one from the !wroteBlock fallback shell.
     expect(out.match(/\\pard\\plain\\intbl/g)).toHaveLength(1);
   });
