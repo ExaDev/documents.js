@@ -205,8 +205,9 @@ export function segmentOdfText(
       index += 1;
       continue;
     }
+    // No separate `end < text.length` bound: past the string's own end, `text[end]` is undefined, which is never `=== SPACE`, so the loop already stops there on its own -- a length check would only ever produce a result this comparison already produces.
     let end = index;
-    while (end < text.length && text[end] === SPACE) {
+    while (text[end] === SPACE) {
       end += 1;
     }
     const spaces = text.slice(index, end);
