@@ -176,6 +176,34 @@ describe("MetadataPage", () => {
     mounted.unmount();
   });
 
+  it("does not carry a previous file's edited title/author into the next file's fields", async () => {
+    const client = createMockRpcClient();
+    vi.mocked(client.metadata.read).mockResolvedValue({ title: "Original" });
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountMetadataPage();
+
+    act(() => {
+      latestOnFile?.(openedFile("first.docx"));
+    });
+    await vi.waitFor(() => {
+      expect(mounted.container.querySelector("table")).not.toBeNull();
+    });
+    typeInto(titleInput(mounted.container)!, "Edited title");
+    typeInto(authorInput(mounted.container)!, "Edited author");
+
+    vi.mocked(client.metadata.read).mockResolvedValue({
+      title: "Second file's title",
+    });
+    act(() => {
+      latestOnFile?.(openedFile("second.docx"));
+    });
+    await vi.waitFor(() => {
+      expect(titleInput(mounted.container)?.value).toBe("Second file's title");
+    });
+    expect(authorInput(mounted.container)?.value).toBe("");
+    mounted.unmount();
+  });
+
   it("does not carry a previous file's in-flight save state into the next file's Save button", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.metadata.read).mockResolvedValue({});
