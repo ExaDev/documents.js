@@ -393,17 +393,22 @@ describe("ConvertLayout", () => {
       expect(original?.getAttribute("data-has-error")).toBe("false");
       expect(converted?.getAttribute("data-has-error")).toBe("false");
 
-      // Every content.read/pdf.inspect call this pair should have triggered has resolved and fed an InspectPanel with the backing its own source/target format implies, and none of them carries an error either.
+      // Every content.read/pdf.inspect call this pair should have triggered is a separate async operation from convert.mutate itself, settling on its own tick -- waited for explicitly rather than assumed already resolved the moment the Done panel first appears.
+      await vi.waitFor(() => {
+        const inspectPanels = mounted.container.querySelectorAll(
+          '[data-testid="inspect-panel"]',
+        );
+        expect(inspectPanels[0]!.getAttribute("data-backing")).toBe(
+          source === "pdf" ? "pdf" : "content",
+        );
+        expect(inspectPanels[1]!.getAttribute("data-backing")).toBe(
+          target === "pdf" ? "pdf" : "content",
+        );
+      });
       const inspectPanels = mounted.container.querySelectorAll(
         '[data-testid="inspect-panel"]',
       );
       expect(inspectPanels).toHaveLength(2);
-      expect(inspectPanels[0]!.getAttribute("data-backing")).toBe(
-        source === "pdf" ? "pdf" : "content",
-      );
-      expect(inspectPanels[1]!.getAttribute("data-backing")).toBe(
-        target === "pdf" ? "pdf" : "content",
-      );
       expect(inspectPanels[0]!.getAttribute("data-has-error")).toBe("false");
       expect(inspectPanels[1]!.getAttribute("data-has-error")).toBe("false");
 
