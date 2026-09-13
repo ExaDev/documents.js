@@ -107,6 +107,19 @@ describe("paperSelectionFor", () => {
     expect(paperSelectionFor({ widthPt: 500, heightPt: 500 })).toBeUndefined();
   });
 
+  it("requires BOTH landscape dimensions to match, not just one", () => {
+    // 1224pt matches US Tabloid/11x17's own heightPt exactly, but 999pt matches no code's widthPt at all -- a size genuinely this shape names no paper, which is what proves the landscape check is a conjunction rather than "either dimension is close enough".
+    expect(paperSelectionFor({ widthPt: 1224, heightPt: 999 })).toBeUndefined();
+  });
+
+  it("matches at exactly the tolerance boundary, not only strictly inside it", () => {
+    // US Letter is 612 x 792pt; half a point over its width is exactly PAPER_SIZE_TOLERANCE_PT away, which must still count as the same paper.
+    expect(paperSelectionFor({ widthPt: 612.5, heightPt: 792 })).toStrictEqual({
+      code: 1,
+      portrait: true,
+    });
+  });
+
   it("round-trips every resolvable code back to a page size that resolves the same way", () => {
     for (let code = 0; code <= 300; code += 1) {
       const size = pageSizeFromSetup({ ...PORTRAIT_LETTER, paperCode: code });
