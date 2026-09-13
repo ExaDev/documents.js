@@ -32,13 +32,16 @@ export const Route = createFileRoute("/editors")({
 
 type EditorFormat = "docx" | "odt" | "doc" | "markdown";
 
+// The opened file, its inferred format, and its live snapshot always change together (the file/format are only ever set alongside the mutate() call whose result seeds the snapshot) and are only ever meaningful as a trio -- one state value carrying all three, rather than three separate pieces of state, is what makes that invariant a type-level fact instead of something every reader (and paragraph action below) needs to defensively re-check.
+interface EditorSession {
+  file: OpenedFile;
+  format: EditorFormat;
+  snapshot: { id: number; paragraphs: string[] };
+}
+
 // The Editors tool: an in-browser editing surface over documents.js's live-view editors, which run in the worker and hold the document itself -- every edit below is applied to the live document through the rpc session (nothing is buffered client-side), and Save re-serialises the whole document through the format's own writer. The v1 surface is the paragraph list every format family shares: edit a paragraph's text in place, append, remove, save. Formats beyond these four (and deeper per-run styling) stay out until they have the same genuine cross-format surface.
 function EditorsPage() {
-  const [file, setFile] = useState<OpenedFile | undefined>(undefined);
-  const [format, setFormat] = useState<EditorFormat | undefined>(undefined);
-  const [snapshot, setSnapshot] = useState<
-    { id: number; paragraphs: string[] } | undefined
-  >(undefined);
+  const [session, setSession] = useState<EditorSession | undefined>(undefined);
   const [newParagraph, setNewParagraph] = useState("");
 
   const openEditor = useOpenEditor();
@@ -57,14 +60,14 @@ function EditorsPage() {
       );
       return;
     }
-    setFile(opened);
-    setFormat(inferred);
-    setSnapshot(undefined);
-    openEditor.reset();
+    setSession(undefined);
+    // No reset() call precedes this: mutate() itself already clears any previous open's data/error the instant this dispatch starts, before its own result settles.
     openEditor.mutate(
       { format: inferred, bytes: opened.bytes },
       {
-        onSuccess: setSnapshot,
+        onSuccess: (snapshot) => {
+          setSession({ file: opened, format: inferred, snapshot });
+        },
         onError: (error) => {
           notifyError("Could not open document", error);
         },
@@ -72,12 +75,14 @@ function EditorsPage() {
     );
   };
 
-  const applySet = (index: number, text: string) => {
-    if (snapshot === undefined) return;
+  // Every paragraph action below is wired only to elements rendered inside the `session !== undefined` panel further down, so by the time any of them can actually run, the session (and its file/snapshot) is already known to be defined -- there is no separate guard to check here.
+  const applySet = (index: number, text: string, session: EditorSession) => {
     setParagraphText.mutate(
-      { id: snapshot.id, index, text },
+      { id: session.snapshot.id, index, text },
       {
-        onSuccess: setSnapshot,
+        onSuccess: (snapshot) => {
+          setSession({ ...session, snapshot });
+        },
         onError: (error) => {
           notifyError("Could not edit paragraph", error);
         },
@@ -85,13 +90,12 @@ function EditorsPage() {
     );
   };
 
-  const applyAdd = () => {
-    if (snapshot === undefined || newParagraph === "") return;
+  const applyAdd = (session: EditorSession) => {
     addParagraph.mutate(
-      { id: snapshot.id, text: newParagraph },
+      { id: session.snapshot.id, text: newParagraph },
       {
-        onSuccess: (next) => {
-          setSnapshot(next);
+        onSuccess: (snapshot) => {
+          setSession({ ...session, snapshot });
           setNewParagraph("");
         },
         onError: (error) => {
@@ -101,12 +105,13 @@ function EditorsPage() {
     );
   };
 
-  const applyRemove = (index: number) => {
-    if (snapshot === undefined) return;
+  const applyRemove = (index: number, session: EditorSession) => {
     removeParagraph.mutate(
-      { id: snapshot.id, index },
+      { id: session.snapshot.id, index },
       {
-        onSuccess: setSnapshot,
+        onSuccess: (snapshot) => {
+          setSession({ ...session, snapshot });
+        },
         onError: (error) => {
           notifyError("Could not remove paragraph", error);
         },
@@ -114,15 +119,14 @@ function EditorsPage() {
     );
   };
 
-  const applySave = () => {
-    if (snapshot === undefined || file === undefined) return;
+  const applySave = (session: EditorSession) => {
     saveEditor.mutate(
-      { id: snapshot.id },
+      { id: session.snapshot.id },
       {
         onSuccess: (result) => {
           notifySuccess("Document saved");
           void fileAccess.saveFile(result.bytes, {
-            suggestedName: file.name,
+            suggestedName: session.file.name,
             mimeType: "application/octet-stream",
           });
         },
@@ -152,26 +156,31 @@ function EditorsPage() {
             "text/markdown": [".md", ".markdown"],
           }}
           formatHint="docx, odt, doc, or markdown"
-          file={file}
+          file={session?.file}
           loading={openEditor.isPending}
         />
-        {snapshot !== undefined && (
+        {session !== undefined && (
           <Paper withBorder p="md">
             <Group justify="space-between" mb="md">
               <Text fw={500}>
-                {format?.toUpperCase()} · {snapshot.paragraphs.length}{" "}
-                {snapshot.paragraphs.length === 1 ? "paragraph" : "paragraphs"}
+                {session.format.toUpperCase()} ·{" "}
+                {session.snapshot.paragraphs.length}{" "}
+                {session.snapshot.paragraphs.length === 1
+                  ? "paragraph"
+                  : "paragraphs"}
               </Text>
               <Button
                 size="xs"
-                onClick={applySave}
+                onClick={() => {
+                  applySave(session);
+                }}
                 loading={saveEditor.isPending}
               >
                 Save
               </Button>
             </Group>
             <Stack gap="sm">
-              {snapshot.paragraphs.map((text, index) => (
+              {session.snapshot.paragraphs.map((text, index) => (
                 <Group key={index} align="flex-start" gap="xs" wrap="nowrap">
                   <Textarea
                     value={text}
@@ -180,15 +189,19 @@ function EditorsPage() {
                     style={{ flex: 1 }}
                     onChange={(event) => {
                       // Optimistic local edit: the input is driven by local state per keystroke, and the worker session is updated on blur -- one rpc round-trip per finished edit rather than per keystroke.
-                      setSnapshot({
-                        id: snapshot.id,
-                        paragraphs: snapshot.paragraphs.map((value, i) =>
-                          i === index ? event.currentTarget.value : value,
-                        ),
+                      setSession({
+                        ...session,
+                        snapshot: {
+                          id: session.snapshot.id,
+                          paragraphs: session.snapshot.paragraphs.map(
+                            (value, i) =>
+                              i === index ? event.currentTarget.value : value,
+                          ),
+                        },
                       });
                     }}
                     onBlur={(event) => {
-                      applySet(index, event.currentTarget.value);
+                      applySet(index, event.currentTarget.value, session);
                     }}
                   />
                   <ActionIcon
@@ -196,7 +209,7 @@ function EditorsPage() {
                     variant="subtle"
                     aria-label={`Remove paragraph ${index + 1}`}
                     onClick={() => {
-                      applyRemove(index);
+                      applyRemove(index, session);
                     }}
                     loading={removeParagraph.isPending}
                   >
@@ -219,7 +232,9 @@ function EditorsPage() {
               <ActionIcon
                 variant="subtle"
                 aria-label="Add paragraph"
-                onClick={applyAdd}
+                onClick={() => {
+                  applyAdd(session);
+                }}
                 disabled={newParagraph === ""}
                 loading={addParagraph.isPending}
               >
