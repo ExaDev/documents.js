@@ -117,7 +117,7 @@ const OPERATORS: readonly string[] = [
   "%",
 ];
 
-// The one trailing sentinel every tokenize() call appends, shared rather than a fresh literal per call so FormulaParser.peek() can fall back to this exact value (see its own comment) without introducing a second, untested "eof"/"" literal of its own -- every assertion this module's own tests make about eof handling exercises this identical object via the real (non-fallback) path below.
+// The sentinel FormulaParser.peek() falls back to once `position` steps past the last real token tokenize() produced -- see its own comment for why every eof-handling assertion this module's tests make genuinely goes through this exact fallback, not a token tokenize() itself appended.
 const EOF_TOKEN: Token = { type: "eof", text: "" };
 
 function tokenize(text: string): Token[] {
@@ -158,14 +158,15 @@ function tokenize(text: string): Token[] {
       let value = "";
       let cursor = index + 1;
       for (;;) {
-        if (cursor >= text.length) {
+        // Bracket indexing rather than charAt(): a real string genuinely cannot ever contain the value `undefined`, so this check needs no separate length comparison of its own -- reaching past the text's own end is the ONE way `current` can come back as anything other than a real character, unlike charAt(), whose out-of-range "" return reads as just another (empty) character rather than a distinguishable "nothing left" signal.
+        const current = text[cursor];
+        if (current === undefined) {
           throw new BiffWriteError(
             `formula text ${JSON.stringify(text)} carries an unterminated string literal starting at offset ${index}`,
           );
         }
-        const current = text.charAt(cursor);
         if (current === '"') {
-          if (text.charAt(cursor + 1) === '"') {
+          if (text[cursor + 1] === '"') {
             value += '"';
             cursor += 2;
             continue;
@@ -213,7 +214,7 @@ function tokenize(text: string): Token[] {
       `formula text ${JSON.stringify(text)} carries an unrecognised character ${JSON.stringify(char)} at offset ${index}`,
     );
   }
-  tokens.push(EOF_TOKEN);
+  // No explicit trailing eof token: FormulaParser.peek() already returns EOF_TOKEN itself once `position` reaches this array's own length, so appending one here would only ever restate what peek()'s own fallback already gives every caller for free.
   return tokens;
 }
 
@@ -269,7 +270,7 @@ class FormulaParser {
     this.sourceText = sourceText;
   }
 
-  // tokenize() always appends EOF_TOKEN as the array's own last element, and every advance() call site is gated behind a check that the CURRENT token (from this same peek()) is a specific non-eof type -- so position + offset never steps past that trailing token, and the one call site passing offset 1 (parsePrimary's word-lookahead) only does so once the current token is already confirmed not to be eof. The `?? EOF_TOKEN` fallback is therefore never actually exercised by any formula this writer's own tokenizer can produce, but it costs no untested code of its own to state: it names the identical shared constant tokenize() itself would have placed there, already covered by this module's own tests of eof handling.
+  // tokenize() never appends an eof token of its own -- this `?? EOF_TOKEN` fallback is the ONLY place one is ever produced, firing the moment `position + offset` steps past whatever real tokens tokenize() found. Every advance() call site is gated behind a check that the CURRENT token (from this same peek()) is a specific non-eof type, so the one call site passing offset 1 (parsePrimary's word-lookahead) only does so once the current token is already confirmed not to be eof -- meaning this fallback is reached exactly once per formula, the call that notices there is nothing left to read.
   private peek(offset = 0): Token {
     return this.tokens[this.position + offset] ?? EOF_TOKEN;
   }
@@ -623,9 +624,8 @@ function compileLeaf(
 
 function compileParent(builder: RgceBuilder, node: ParentNode): void {
   switch (node.kind) {
+    // "binary" and "unary" share one body -- both node shapes carry an opcode field, already picked by the parser to be exactly the byte the reader expects, so there is nothing left for one kind to do that the other wouldn't do identically. Two separate case bodies with the same two statements would just be one AST node Stryker could empty without the other noticing.
     case "binary":
-      builder.push(node.opcode);
-      return;
     case "unary":
       builder.push(node.opcode);
       return;
