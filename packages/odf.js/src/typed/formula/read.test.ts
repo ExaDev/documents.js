@@ -225,6 +225,29 @@ describe("readOdfFormulaMathMl", () => {
       el("mi", {}, [txt("y")]),
     ]);
   });
+
+  it('defensively finds a "math:math"-prefixed root nested inside the wrapper, continuing past "math" (tried first, absent here) rather than stopping there', () => {
+    const mathRoot = el(
+      "math:math",
+      { "xmlns:math": "http://www.w3.org/1998/Math/MathML" },
+      [el("math:mi", {}, [txt("z")])],
+    );
+    const pkg: Package = {
+      parts: {
+        "content.xml": {
+          kind: "xml",
+          nodes: [
+            el("office:document-content", {}, [
+              el("office:body", {}, [mathRoot]),
+            ]),
+          ],
+        },
+      },
+    };
+    expect(readOdfFormulaMathMl(pkg).mathml).toEqual([
+      el("math:mi", {}, [txt("z")]),
+    ]);
+  });
 });
 
 describe("readOdfFormulaContent", () => {
