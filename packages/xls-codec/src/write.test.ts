@@ -2174,6 +2174,21 @@ describe("writeXlsContent: data validations written (#971)", () => {
     expect(reread.sheets[0]?.dataValidations).toStrictEqual(rules);
   });
 
+  it("round-trips a notBetween rule's two formulas", () => {
+    // 'between' alone does not prove the writer's own isTwoOperand check actually names BOTH two-operand operators rather than just the one the sibling test above already exercises -- a rule refused for missing its second formula only when it should be, or accepted with one only for the operator that never needed it, would pass that test regardless.
+    const rule: ContentSheetDataValidation = {
+      ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
+      type: "decimal",
+      operator: "notBetween",
+      formula1: "1",
+      formula2: "10",
+    };
+    const reread = readXlsContent(
+      writeXlsContent(document([sheet("S", [], { dataValidations: [rule] })])),
+    );
+    expect(reread.sheets[0]?.dataValidations).toStrictEqual([rule]);
+  });
+
   it("refuses an operator-less comparison type and a two-operand operator without its second formula", () => {
     expect(() =>
       writeXlsContent(
@@ -2299,9 +2314,8 @@ describe("writeXlsContent: data validations written (#971)", () => {
     };
     const overRow: ContentSheetDataValidation = {
       ...base,
-      ranges: [
-        { startRow: 0x10000, endRow: 0x10000, startColumn: 0, endColumn: 0 },
-      ],
+      // endRow deliberately stays in-grid (0), unlike the other three edges below sharing one deviant field with its own pair: an overRow fixture whose own endRow ALSO exceeds 0xffff would still throw with the startRow check dropped entirely, since the endRow check alone already catches it -- only isolating startRow as the sole out-of-range field actually exercises that check on its own.
+      ranges: [{ startRow: 0x10000, endRow: 0, startColumn: 0, endColumn: 0 }],
     };
     const overEndRow: ContentSheetDataValidation = {
       ...base,
