@@ -2514,6 +2514,15 @@ describe("adjacent same-type lists get different marker glyphs (ExaDev/markdown-
 });
 
 describe("tables", () => {
+  it("emits an empty string for a table with no rows at all, rather than a header/delimiter line of nothing", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [],
+      rows: [],
+    };
+    expect(emitMarkdown(doc([table]))).toBe("");
+  });
+
   it("emits alignment markers read from the header row's own cell alignment", () => {
     const table: ContentTable = {
       kind: "table",
@@ -3181,6 +3190,14 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
       true,
     );
     expect(
+      collector.diagnostics.find(
+        (diagnostic) =>
+          diagnostic.code === MarkdownDiagnosticCodes.TABLE_HTML_FALLBACK,
+      )?.message,
+    ).toBe(
+      "a cell in this table needs colSpan/rowSpan/background, or holds a block a GFM table cell cannot represent at all (most commonly a nested table); GFM's own table extension holds inline content only (github.github.com/gfm, \"Tables (extension)\"), so no single cell can carry an HTML sub-block inside an otherwise pipe-syntax table -- the whole table is rendered as a raw HTML <table> block instead (CommonMark spec 0.31.2, HTML blocks condition 6, https://spec.commonmark.org/0.31.2/#html-blocks), which src/html/html-table.ts's own reader recognises back into an equal ContentTable",
+    );
+    expect(
       collector.has(MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED),
     ).toBe(true);
   });
@@ -3209,6 +3226,33 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     expect(
       collector.has(MarkdownDiagnosticCodes.TABLE_CELL_MULTI_PARAGRAPH_JOINED),
     ).toBe(true);
+    expect(
+      collector.diagnostics.find(
+        (diagnostic) =>
+          diagnostic.code ===
+          MarkdownDiagnosticCodes.TABLE_CELL_MULTI_PARAGRAPH_JOINED,
+      )?.message,
+    ).toBe(
+      "a table cell with 2 blocks has no multi-paragraph equivalent in a GFM table cell; their own rendered text is joined with a literal <br> line break",
+    );
+  });
+
+  it("does not fire TABLE_CELL_MULTI_PARAGRAPH_JOINED for a cell with exactly one block", () => {
+    const collector = createDiagnosticCollector();
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }] },
+        {
+          cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "one" }] }] }],
+        },
+      ],
+    };
+    emitMarkdown(doc([table]), { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.TABLE_CELL_MULTI_PARAGRAPH_JOINED),
+    ).toBe(false);
   });
 
   it("TABLE_CELL_IMAGE_DEGRADED fires for an image-kind cell block, which emits inline rather than being dropped", () => {
@@ -3244,8 +3288,37 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
       collector.has(MarkdownDiagnosticCodes.TABLE_CELL_IMAGE_DEGRADED),
     ).toBe(true);
     expect(
+      collector.diagnostics.find(
+        (diagnostic) =>
+          diagnostic.code === MarkdownDiagnosticCodes.TABLE_CELL_IMAGE_DEGRADED,
+      )?.message,
+    ).toBe(
+      "a table cell's own image block has no GFM table equivalent; it emits inline instead, degrading on read-back to a run carrying the alt text with the image's data as that run's hyperlink",
+    );
+    expect(
       collector.has(MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED),
     ).toBe(false);
+  });
+
+  it("joins a cell's own paragraphs skipping any that render to empty text, without an extra <br>", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }] },
+        {
+          cells: [
+            {
+              blocks: [
+                { kind: "paragraph", runs: [] },
+                { kind: "paragraph", runs: [{ text: "one" }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    expect(emitMarkdown(doc([table]))).toContain("| one |");
   });
 
   it("round-trips a table cell image as a run carrying the alt text with the image's own data as that run's hyperlink, the same shape a nested image inside emphasis/a link already degrades to", () => {
