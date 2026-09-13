@@ -79,7 +79,12 @@ function readStoreEntry(
     entry.data.byteOffset,
     entry.data.byteLength,
   );
-  const cRef = view.getUint32(24, true);
+  // Read as four individual bytes rather than one little-endian uint32: this field's only use below is a zero/non-zero test, which a byte-order choice can never change (reordering a nonzero byte still leaves it nonzero, and the all-zero pattern is identical in every byte order), so the little-endian read this format mandates for every other multi-byte field would state a byte order this particular comparison cannot actually depend on.
+  const cRefIsZero =
+    entry.data[24] === 0 &&
+    entry.data[25] === 0 &&
+    entry.data[26] === 0 &&
+    entry.data[27] === 0;
   const foDelay = view.getUint32(28, true);
   const cbName = view.getUint8(35);
   const embeddedAt = entry.dataOffset + FBSE_FIXED_SIZE + cbName;
@@ -88,7 +93,7 @@ function readStoreEntry(
   if (hasEmbedded) {
     return blipPayload(readRecordAt(entry.stream, embeddedAt));
   }
-  if (cRef === 0 || foDelay === FO_DELAY_NONE) {
+  if (cRefIsZero || foDelay === FO_DELAY_NONE) {
     return undefined;
   }
   if (picturesStream === undefined) {
@@ -169,9 +174,9 @@ function writeFbse(blip: PptBlip): Uint8Array<ArrayBuffer> {
       u32le(1), // cRef
       u32le(0), // foDelay -- embedded blip, no delay-stream offset
       u8(0), // unused1
-      u8(0), // cbName -- no nameData
       u8(0), // unused2
       u8(0), // unused3
+      u8(0), // cbName -- no nameData
       embedded,
     ),
     { recVer: 0x2, recInstance: blipType },
