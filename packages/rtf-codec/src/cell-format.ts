@@ -207,8 +207,6 @@ export function applyCellDefinitionControlWord(
     case "clvertalt":
       cell.verticalAlign = undefined;
       return true;
-    default:
-      break;
   }
   const pending = cell.side === undefined ? undefined : cell.borders[cell.side];
   if (pending === undefined) {
