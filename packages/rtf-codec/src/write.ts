@@ -168,10 +168,8 @@ function collectTables(document: ContentDocument): DocumentTables {
       }
       if (block.headingLevel !== undefined) {
         const level = clampHeadingLevel(block.headingLevel);
-        if (!headingStyles.has(level)) {
-          // Style handle N for heading level N, matching the built-in numbering a consumer expects; handle 0 stays free for Normal.
-          headingStyles.set(level, level);
-        }
+        // Style handle N for heading level N, matching the built-in numbering a consumer expects; handle 0 stays free for Normal. No has() guard: the key and the value are the same level, so re-setting an already-recorded one is a genuine no-op, not a duplicate entry -- a guard here would be an equivalent-mutant magnet with no consumer that can tell the difference.
+        headingStyles.set(level, level);
       }
       const numId = block.list?.numId;
       if (numId !== undefined && !lists.has(numId)) {
@@ -604,9 +602,8 @@ class RtfWriter {
 
   private writeFontTable(): void {
     this.raw("{\\fonttbl");
-    for (const [name, index] of [...this.tables.fonts].sort(
-      (left, right) => left[1] - right[1],
-    )) {
+    // No sort needed: noteRun assigns each font's own index as fonts.size at first sight, so the Map's own insertion order (which a for-of always iterates in) already IS ascending-index order.
+    for (const [name, index] of this.tables.fonts) {
       this.raw(`{\\f${String(index)}\\fnil\\fcharset0 ${escapeText(name)};}`);
     }
     this.raw("}");
@@ -618,9 +615,8 @@ class RtfWriter {
     }
     // The leading semicolon is the auto colour at index 0, exactly as the spec's own example writes it.
     this.raw("{\\colortbl;");
-    for (const [hex] of [...this.tables.colors].sort(
-      (left, right) => left[1] - right[1],
-    )) {
+    // No sort needed: noteColor assigns each colour's own index as colors.size + 1 at first sight, so the Map's own insertion order already IS ascending-index order -- see writeFontTable's identical reasoning.
+    for (const [hex] of this.tables.colors) {
       const red = Number.parseInt(hex.slice(0, 2), 16);
       const green = Number.parseInt(hex.slice(2, 4), 16);
       const blue = Number.parseInt(hex.slice(4, 6), 16);
@@ -651,9 +647,8 @@ class RtfWriter {
     if (this.tables.lists.size === 0) {
       return;
     }
-    const entries = [...this.tables.lists.values()].sort(
-      (left, right) => left.index - right.index,
-    );
+    // No sort needed: noteBlock assigns each list's own index as lists.size + 1 at first sight, so the Map's own insertion order already IS ascending-index order -- see writeFontTable's identical reasoning.
+    const entries = [...this.tables.lists.values()];
     this.raw("{\\*\\listtable");
     for (const entry of entries) {
       const bullet = entry.definition.type === "bullet";
