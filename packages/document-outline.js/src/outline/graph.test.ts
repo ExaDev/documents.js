@@ -4128,6 +4128,7 @@ describe("reconcileChildren's originalSiblings: sorted and filtered, not raw cre
   });
 
   it("ignores a decoy edge sharing the owner id or the CONTAINS kind but not both", () => {
+    // Requests leafA TWICE: with only one genuine existing edge, reconciliation must insert a fresh second CONTAINS edge for the missing occurrence -- UNLESS a decoy is wrongly counted as one of sectionId's own existing siblings, in which case it would falsely look like the second occurrence is already wired and no new edge would be inserted. A single-occurrence request can't expose this: reconciliation never deletes an existing edge just because originalSiblings over-counted it, so a decoy wrongly included alongside one real match produces the identical final edge count as a decoy correctly excluded.
     const leafA = insertNode(EMPTY_GRAPH, {
       kind: "paragraph",
       properties: { kind: "paragraph", runs: [{ text: "A." }] },
@@ -4138,7 +4139,7 @@ describe("reconcileChildren's originalSiblings: sorted and filtered, not raw cre
     });
     const sectionId = contentHashV1({
       kind: "section",
-      children: [leafA.id],
+      children: [leafA.id, leafA.id],
     });
     const genuine = {
       from: sectionId,
@@ -4146,14 +4147,14 @@ describe("reconcileChildren's originalSiblings: sorted and filtered, not raw cre
       kind: "CONTAINS" as const,
       orderKey: orderKeys.orderKeyForIndex(0),
     };
-    // A decoy from a DIFFERENT owner, still CONTAINS -- must never be read as one of sectionId's own existing siblings.
+    // A decoy from a DIFFERENT owner, still CONTAINS, also targeting leafA -- must never be read as one of sectionId's own existing siblings.
     const decoyFrom = {
       from: other.id,
       to: leafA.id,
       kind: "CONTAINS" as const,
       orderKey: orderKeys.orderKeyForIndex(0),
     };
-    // A decoy from sectionId, but a different kind -- must never be read as a CONTAINS sibling.
+    // A decoy from sectionId, but a different kind, also targeting leafA -- must never be read as a CONTAINS sibling.
     const decoyKind = {
       from: sectionId,
       to: leafA.id,
@@ -4167,13 +4168,13 @@ describe("reconcileChildren's originalSiblings: sorted and filtered, not raw cre
     const result = insertNode(graph, {
       kind: "section",
       properties: { kind: "section" },
-      children: [leafA.id],
+      children: [leafA.id, leafA.id],
     });
     const contains = result.graph.edges.filter(
       (edge) => edge.from === sectionId && edge.kind === "CONTAINS",
     );
-    // Only the one genuine edge counts as already wired -- the decoys neither satisfy the request a second time nor get treated as extra siblings to reconcile against.
-    expect(contains).toHaveLength(1);
+    // The genuine edge plus one freshly inserted edge for the second requested occurrence -- if either decoy were wrongly counted as an existing sectionId/CONTAINS sibling, it would falsely satisfy the second occurrence and this length would drop to 1.
+    expect(contains).toHaveLength(2);
   });
 });
 
@@ -4202,7 +4203,7 @@ describe("insertEdge: the CONTAINS cycle check is scoped to CONTAINS edges alone
 });
 
 describe("insertEdge sorts its own siblings by orderKey before resolving a position", () => {
-  it("bisects against the sibling with the actual highest orderKey, not the edges array's own last element", () => {
+  it("resolves a before/after position against the sorted index, not the edges array's own raw position", () => {
     const a = {
       from: "p",
       to: "a",
@@ -4221,15 +4222,14 @@ describe("insertEdge sorts its own siblings by orderKey before resolving a posit
       kind: "STYLED_BY" as const,
       orderKey: orderKeys.orderKeyForIndex(2),
     };
-    // Deliberately out of orderKey order in the edges ARRAY (c, a, b): if insertEdge read its siblings unsorted, "end" would bisect after the array's own last element (b, orderKeyForIndex(1)) rather than the sibling with the actual highest orderKey (c, orderKeyForIndex(2)).
-    const graph: PropertyGraph = { nodes: [], edges: [c, a, b] };
+    // Deliberately out of orderKey order in the edges ARRAY (c, b, a): "a"'s SORTED index is 0 (before b), but its RAW array index is 2 (last). An unsorted read would resolve "after a" to raw-index 3 -- past the end of the raw array -- bisecting via orderKeyAfter(a's key) into a wide, high-valued key (base-36 orderKeyAfter escapes to a short, lexicographically large string). A correctly-sorted read resolves "after a" to sorted-index 1, bisecting via orderKeyBetween(a, b) into a narrow key strictly less than b.
+    const graph: PropertyGraph = { nodes: [], edges: [c, b, a] };
     const result = insertEdge(graph, "p", "d", {
       kind: "STYLED_BY",
-      position: { at: "end" },
+      position: { at: "after", siblingId: "a" },
     });
     const inserted = result.edges.find((edge) => edge.to === "d");
     expect(inserted).toBeDefined();
-    // A correctly-sorted "end" insertion sits strictly after every existing sibling, c included; an unsorted read would bisect only past b, landing this key before c instead.
-    expect(inserted!.orderKey > c.orderKey).toBe(true);
+    expect(inserted!.orderKey < b.orderKey).toBe(true);
   });
 });
