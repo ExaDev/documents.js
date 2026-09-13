@@ -144,6 +144,11 @@ describe("readNotesAtom", () => {
     expect(() =>
       readNotesAtom(readRecordAt(atom(RT_TextHeaderAtom, u32le(0)), 0)),
     ).toThrow(PptFormatError);
+    expect(() =>
+      readNotesAtom(readRecordAt(atom(RT_TextHeaderAtom, u32le(0)), 0)),
+    ).toThrow(
+      `expected RT_NotesAtom (0x${RT_NotesAtom.toString(16)}), found record type 0x${RT_TextHeaderAtom.toString(16)}`,
+    );
   });
 
   it("rejects a NotesAtom shorter than its mandated 0x8 bytes", () => {
@@ -152,6 +157,11 @@ describe("readNotesAtom", () => {
         readRecordAt(atom(RT_NotesAtom, u32le(0x0104), { recVer: 0x1 }), 0),
       ),
     ).toThrow(PptFormatError);
+    expect(() =>
+      readNotesAtom(
+        readRecordAt(atom(RT_NotesAtom, u32le(0x0104), { recVer: 0x1 }), 0),
+      ),
+    ).toThrow("NotesAtom carries 4 bytes, fewer than the mandated 0x8");
   });
 });
 
@@ -169,12 +179,22 @@ describe("readNotesContainerAtom", () => {
     expect(() =>
       readNotesContainerAtom(readRecordAt(container(RT_Drawing, []), 0)),
     ).toThrow(PptFormatError);
+    expect(() =>
+      readNotesContainerAtom(readRecordAt(container(RT_Drawing, []), 0)),
+    ).toThrow(
+      `expected RT_Notes (0x${RT_Notes.toString(16)}), found record type 0x${RT_Drawing.toString(16)}`,
+    );
   });
 
   it("rejects a NotesContainer with no NotesAtom, since nothing else states which slide it belongs to", () => {
     expect(() =>
       readNotesContainerAtom(readRecordAt(container(RT_Notes, []), 0)),
     ).toThrow(PptFormatError);
+    expect(() =>
+      readNotesContainerAtom(readRecordAt(container(RT_Notes, []), 0)),
+    ).toThrow(
+      "the NotesContainer at offset 0 has no NotesAtom, so the presentation slide its notes belong to is unstated",
+    );
   });
 });
 
@@ -217,6 +237,11 @@ describe("readNotesText", () => {
     expect(readNotesText(readRecordAt(notes, 0))).toBe("Written by PowerPoint");
   });
 
+  it("skips a shape whose text atom is present but empty, distinctly from one carrying no text atom at all", () => {
+    const bytes = notesContainer(0x0100, [notesShape({ spid: 2, text: "" })]);
+    expect(readNotesText(readRecordAt(bytes, 0))).toBe("");
+  });
+
   it("skips a placeholder whose client textbox carries a header but no text atom", () => {
     // The spelling LibreOffice writes for a notes page with no notes: a PT_NotesBody placeholder whose textbox holds only a TextHeaderAtom.
     const bytes = notesContainer(0x0100, [
@@ -242,6 +267,16 @@ describe("readNotesText", () => {
     const bytes = notesContainer(0x0100, [
       notesShape({ spid: 2, text: "Top box" }),
       notesShape({ spid: 3, text: "Bottom box" }),
+    ]);
+    expect(readNotesText(readRecordAt(bytes, 0))).toBe("Top box\nBottom box");
+  });
+
+  it("contributes no separator for an empty-text shape sitting between two real ones", () => {
+    // Distinguishes actually skipping the empty body from merely joining it in: an unskipped empty body would still contribute its own blank paragraph, producing an extra "\n\n" pair around it rather than a single join between the two real bodies.
+    const bytes = notesContainer(0x0100, [
+      notesShape({ spid: 2, text: "Top box" }),
+      notesShape({ spid: 3, text: "" }),
+      notesShape({ spid: 4, text: "Bottom box" }),
     ]);
     expect(readNotesText(readRecordAt(bytes, 0))).toBe("Top box\nBottom box");
   });
@@ -282,10 +317,31 @@ describe("readNotesListWithText", () => {
     ]);
   });
 
+  it("skips a sibling record of some other type between two NotesPersistAtoms", () => {
+    // RT_NotesAtom shares no bytes with a NotesPersistAtom, so a reader that failed to skip it (or misread its own type check) would either crash on it or contribute a spurious persist entry.
+    const bytes = container(
+      RT_SlideListWithText,
+      [
+        notesPersistAtom(7, 0x0100),
+        notesAtom(0x0104),
+        notesPersistAtom(8, 0x0101),
+      ],
+      { recInstance: SLIDE_LIST_INSTANCE_NOTES },
+    );
+    expect(
+      readNotesListWithText(readRecordAt(bytes, 0)).map(
+        (persist) => persist.persistIdRef,
+      ),
+    ).toEqual([7, 8]);
+  });
+
   it("rejects a container whose type is not RT_SlideListWithText", () => {
     expect(() =>
       readNotesListWithText(readRecordAt(container(RT_Notes, []), 0)),
     ).toThrow(PptFormatError);
+    expect(() =>
+      readNotesListWithText(readRecordAt(container(RT_Notes, []), 0)),
+    ).toThrow(/expected RT_SlideListWithText/);
   });
 
   it("rejects a NotesPersistAtom shorter than its mandated 0x14 bytes", () => {
@@ -296,6 +352,9 @@ describe("readNotesListWithText", () => {
     );
     expect(() => readNotesListWithText(readRecordAt(bytes, 0))).toThrow(
       PptFormatError,
+    );
+    expect(() => readNotesListWithText(readRecordAt(bytes, 0))).toThrow(
+      "carries 5 bytes, fewer than the mandated 0x14",
     );
   });
 });

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { PptFormatError } from "../errors";
+import { readRecordAt } from "../record/tree";
+import { RT_DocumentAtom, RT_SlideAtom } from "../record/types";
+import { concatBytes, u32le, writeAtom as atom } from "../record/write";
 import {
   buildMasterStyleTable,
+  readSlideAtom,
   resolveCharacterProperties,
   resolveParagraphProperties,
 } from "./master";
@@ -20,6 +25,63 @@ import {
   TEXT_TYPE_QUARTER_BODY,
   TEXT_TYPE_TITLE,
 } from "../text/atoms";
+
+function slideAtomBytes(masterIdRef: number, notesIdRef: number) {
+  return atom(
+    RT_SlideAtom,
+    concatBytes(
+      u32le(0), // geom
+      new Uint8Array(8), // placeholderTypes
+      u32le(masterIdRef),
+      u32le(notesIdRef),
+      u32le(0), // slideFlags/unused
+    ),
+    { recVer: 0x2 },
+  );
+}
+
+describe("readSlideAtom", () => {
+  it("reads masterIdRef and notesIdRef from their own fixed offsets", () => {
+    const bytes = slideAtomBytes(0x80000000, 512);
+    const info = readSlideAtom(readRecordAt(bytes, 0));
+    expect(info.masterIdRef).toBe(0x80000000);
+    expect(info.notesIdRef).toBe(512);
+  });
+
+  it("rejects a record that is not RT_SlideAtom", () => {
+    const bytes = atom(RT_DocumentAtom, new Uint8Array(0x28));
+    expect(() => readSlideAtom(readRecordAt(bytes, 0))).toThrow(PptFormatError);
+    expect(() => readSlideAtom(readRecordAt(bytes, 0))).toThrow(
+      `expected RT_SlideAtom (0x${RT_SlideAtom.toString(16)}) at offset 0, found record type 0x${RT_DocumentAtom.toString(16)}`,
+    );
+  });
+
+  it("rejects a SlideAtom too short for its masterIdRef/notesIdRef fields", () => {
+    const bytes = atom(RT_SlideAtom, new Uint8Array(19), { recVer: 0x2 });
+    expect(() => readSlideAtom(readRecordAt(bytes, 0))).toThrow(PptFormatError);
+    expect(() => readSlideAtom(readRecordAt(bytes, 0))).toThrow(
+      "SlideAtom at offset 0 carries 19 bytes, too few for its masterIdRef/notesIdRef fields",
+    );
+  });
+
+  it("accepts a SlideAtom carrying exactly the 20 bytes its notesIdRef field ends at, with none to spare", () => {
+    // The boundary itself: notesIdRef occupies bytes [16, 20), so 20 bytes is the minimum valid length, not the minimum rejected one.
+    const bytes = atom(
+      RT_SlideAtom,
+      concatBytes(
+        u32le(0), // geom
+        new Uint8Array(8), // placeholderTypes
+        u32le(0x80000000), // masterIdRef
+        u32le(512), // notesIdRef
+      ),
+      { recVer: 0x2 },
+    );
+    expect(readSlideAtom(readRecordAt(bytes, 0))).toEqual({
+      masterIdRef: 0x80000000,
+      notesIdRef: 512,
+    });
+  });
+});
 
 const EMPTY_PARAGRAPH: ParagraphProperties = {
   indentLevel: 0,
@@ -150,6 +212,21 @@ describe("resolveCharacterProperties", () => {
     ).toBe(true);
   });
 
+  it("never resolves against a level deeper than the run's own indentLevel, even when a deeper level states the field and a shallower one does not", () => {
+    const table = buildMasterStyleTable(
+      [
+        atomOf(TEXT_TYPE_BODY, [
+          level({}), // level 0: states nothing
+          level({ bold: true }), // level 1: states bold, but out of reach at indentLevel 0
+        ]),
+      ],
+      undefined,
+    );
+    expect(
+      resolveCharacterProperties(undefined, table, TEXT_TYPE_BODY, 0).bold,
+    ).toBeUndefined();
+  });
+
   it.each([
     [TEXT_TYPE_CENTER_BODY, TEXT_TYPE_BODY],
     [TEXT_TYPE_HALF_BODY, TEXT_TYPE_BODY],
@@ -197,6 +274,37 @@ describe("resolveCharacterProperties", () => {
     expect(
       resolveCharacterProperties(undefined, table, TEXT_TYPE_NOTES, 0).bold,
     ).toBeUndefined();
+  });
+
+  it("fills shadow and emboss from the master, distinctly from every other field", () => {
+    const table = buildMasterStyleTable(
+      [atomOf(TEXT_TYPE_TITLE, [level({ shadow: true, emboss: false })])],
+      undefined,
+    );
+    const resolved = resolveCharacterProperties(
+      undefined,
+      table,
+      TEXT_TYPE_TITLE,
+      0,
+    );
+    expect(resolved.shadow).toBe(true);
+    expect(resolved.emboss).toBe(false);
+  });
+
+  it("walks a two-level cascade in nearest-to-furthest order, most specific level's own value winning", () => {
+    const table = buildMasterStyleTable(
+      [
+        atomOf(TEXT_TYPE_BODY, [
+          level({ sizePt: 10 }), // level 0
+          level({ sizePt: 20 }), // level 1
+        ]),
+      ],
+      undefined,
+    );
+    // A run at level 1 with no size of its own resolves to level 1's own 20, not level 0's 10 -- proving the walk actually reverses to nearest-first rather than reading level 0 first.
+    expect(
+      resolveCharacterProperties(undefined, table, TEXT_TYPE_BODY, 1).sizePt,
+    ).toBe(20);
   });
 
   it("resolves a scheme-colour reference the same as any other field, leaving the actual RGB lookup to the caller", () => {

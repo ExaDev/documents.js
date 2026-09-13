@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PptFormatError } from "../errors";
 import { readRecordAt, readRecordSequence } from "../record/tree";
 import {
   RT_TextBytesAtom,
@@ -31,6 +32,26 @@ describe("readTextHeaderAtom", () => {
     const bytes = atom(RT_TextHeaderAtom, u32le(TEXT_TYPE_BODY));
     expect(readTextHeaderAtom(readRecordAt(bytes, 0))).toBe(TEXT_TYPE_BODY);
   });
+
+  it("rejects a record whose type is not RT_TextHeaderAtom", () => {
+    const bytes = atom(RT_TextBytesAtom, u32le(0));
+    expect(() => readTextHeaderAtom(readRecordAt(bytes, 0))).toThrow(
+      PptFormatError,
+    );
+    expect(() => readTextHeaderAtom(readRecordAt(bytes, 0))).toThrow(
+      `expected RT_TextHeaderAtom (0x${RT_TextHeaderAtom.toString(16)}), found record type 0x${RT_TextBytesAtom.toString(16)}`,
+    );
+  });
+
+  it("rejects a TextHeaderAtom too short for its own textType field", () => {
+    const bytes = atom(RT_TextHeaderAtom, new Uint8Array(3));
+    expect(() => readTextHeaderAtom(readRecordAt(bytes, 0))).toThrow(
+      PptFormatError,
+    );
+    expect(() => readTextHeaderAtom(readRecordAt(bytes, 0))).toThrow(
+      "TextHeaderAtom carries 3 bytes, fewer than the 4 its textType field needs",
+    );
+  });
 });
 
 describe("readTextBody", () => {
@@ -46,6 +67,12 @@ describe("readTextBody", () => {
     expect(readTextBody(readRecordSequence(bytes, 0, bytes.length))).toBe(
       "Grüße",
     );
+  });
+
+  it("ignores a trailing odd byte of a TextCharsAtom rather than reading past the buffer", () => {
+    const withTrailingByte = new Uint8Array([...utf16le("Hi"), 0xff]);
+    const bytes = atom(RT_TextCharsAtom, withTrailingByte);
+    expect(readTextBody(readRecordSequence(bytes, 0, bytes.length))).toBe("Hi");
   });
 
   it("returns undefined when neither text atom is present, rather than an empty string", () => {

@@ -13,6 +13,7 @@ import {
 import {
   TEXT_TYPE_BODY,
   TEXT_TYPE_CENTER_BODY,
+  TEXT_TYPE_OTHER,
   TEXT_TYPE_TITLE,
 } from "./atoms";
 import {
@@ -23,11 +24,20 @@ import {
 } from "./style";
 
 // Mask bit positions written as raw shifts here, straight from the spec's own bit tables, rather than imported from the implementation: a test asserting against the constants the parser reads would pass even if both were wrong together. PFMasks ([MS-PPT] 2.9.x): https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/2a02831a-088b-44e7-84c9-c185ab314a71
+const PF_HAS_BULLET = 1 << 0;
+const PF_BULLET_FONT = 1 << 4;
+const PF_BULLET_COLOR = 1 << 5;
+const PF_BULLET_SIZE = 1 << 6;
+const PF_BULLET_CHAR = 1 << 7;
 const PF_LEFT_MARGIN = 1 << 8;
 const PF_INDENT = 1 << 10;
 const PF_ALIGN = 1 << 11;
 const PF_LINE_SPACING = 1 << 12;
+const PF_DEFAULT_TAB_SIZE = 1 << 15;
+const PF_FONT_ALIGN = 1 << 16;
+const PF_CHAR_WRAP = 1 << 17;
 const PF_TAB_STOPS = 1 << 20;
+const PF_TEXT_DIRECTION = 1 << 21;
 // CFMasks ([MS-PPT] 2.9.x): https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/bbca8581-d011-4293-a375-b209523cf962
 const CF_BOLD = 1 << 0;
 const CF_ITALIC = 1 << 1;
@@ -35,7 +45,10 @@ const CF_UNDERLINE = 1 << 2;
 const CF_TYPEFACE = 1 << 16;
 const CF_SIZE = 1 << 17;
 const CF_COLOR = 1 << 18;
+const CF_POSITION = 1 << 19;
+const CF_OLD_EA_TYPEFACE = 1 << 21;
 const CF_ANSI_TYPEFACE = 1 << 22;
+const CF_SYMBOL_TYPEFACE = 1 << 23;
 // CFStyle ([MS-PPT] 2.9.x), the value bits the CFMasks bits gate: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/3ea010b9-0ef9-4c05-9982-618130ca66cd
 const STYLE_BOLD = 1 << 0;
 const STYLE_ITALIC = 1 << 1;
@@ -146,6 +159,46 @@ describe("readStyleTextPropAtom paragraph runs", () => {
     expect(read(bytes, 7).paragraphRuns.map((r) => r.count)).toEqual([3, 4]);
   });
 
+  it("skips every unprojected optional field in the spec's own order, leaving the cursor correctly positioned for the fields that follow", () => {
+    // bulletFlags, bulletChar, bulletFont, bulletSize, bulletColor, [alignment], defaultTabSize, fontAlign, wrapFlags, textDirection -- none of these except alignment itself is projected into ParagraphProperties, so the only way to prove each skip() actually advanced the cursor is to check that alignment (and the following run) still decode correctly with every one of them present.
+    const masks =
+      PF_HAS_BULLET |
+      PF_BULLET_CHAR |
+      PF_BULLET_FONT |
+      PF_BULLET_SIZE |
+      PF_BULLET_COLOR |
+      PF_ALIGN |
+      PF_DEFAULT_TAB_SIZE |
+      PF_FONT_ALIGN |
+      PF_CHAR_WRAP |
+      PF_TEXT_DIRECTION;
+    const bytes = styleTextPropAtom(
+      [
+        pfRun(
+          3,
+          0,
+          masks,
+          u16le(0), // bulletFlags
+          u16le(0), // bulletChar
+          u16le(0), // bulletFont
+          u16le(0), // bulletSize
+          u32le(0), // bulletColor (4 bytes)
+          u16le(ALIGN_RIGHT), // alignment -- the one value this test can observe
+          u16le(0), // defaultTabSize
+          u16le(0), // fontAlign
+          u16le(0), // wrapFlags
+          u16le(0), // textDirection
+        ),
+        pfRun(4, 1, 0),
+      ],
+      [cfRun(7, 0)],
+    );
+    const result = read(bytes, 7);
+    expect(result.paragraphRuns[0]?.properties.alignment).toBe(ALIGN_RIGHT);
+    // A misaligned cursor from any dropped skip would either throw or make this second run's own count/indentLevel unreadable.
+    expect(result.paragraphRuns.map((r) => r.count)).toEqual([3, 4]);
+  });
+
   it("stops once the runs account for every character, ignoring trailing bytes", () => {
     const bytes = styleTextPropAtom(
       [pfRun(4, 0, 0), pfRun(3, 1, 0)],
@@ -157,15 +210,40 @@ describe("readStyleTextPropAtom paragraph runs", () => {
   it("rejects runs whose counts overshoot the text's character count", () => {
     const bytes = styleTextPropAtom([pfRun(99, 0, 0)], [cfRun(7, 0)]);
     expect(() => read(bytes, 7)).toThrow(PptFormatError);
+    expect(() => read(bytes, 7)).toThrow(
+      "StyleTextPropAtom paragraph runs cover 99 characters, more than the 7 in the corresponding text body",
+    );
   });
 
   it("rejects a run truncated part way through its own fields", () => {
     const bytes = atom(RT_StyleTextPropAtom, concatBytes(u32le(6), u16le(0)));
     expect(() => read(bytes, 6)).toThrow(PptFormatError);
+    expect(() => read(bytes, 6)).toThrow(
+      "StyleTextPropAtom needs 4 more bytes at offset 6 but the atom holds only 6",
+    );
+  });
+
+  it("rejects a record whose type is not RT_StyleTextPropAtom", () => {
+    const bytes = atom(RT_TextMasterStyleAtom, new Uint8Array(0), {
+      recInstance: TEXT_TYPE_BODY,
+    });
+    expect(() => read(bytes, 0)).toThrow(PptFormatError);
+    expect(() => read(bytes, 0)).toThrow(
+      `expected RT_StyleTextPropAtom (0x${RT_StyleTextPropAtom.toString(16)}), found record type 0x${RT_TextMasterStyleAtom.toString(16)}`,
+    );
   });
 });
 
 describe("readStyleTextPropAtom character runs", () => {
+  it("rejects character runs whose counts overshoot the text's character count", () => {
+    // The identical check as paragraph runs, on the same field name pattern, but with its own label -- proving this run's own overflow message names "character runs", not a copy-pasted "paragraph runs" from the sibling check.
+    const bytes = styleTextPropAtom([pfRun(7, 0, 0)], [cfRun(99, 0)]);
+    expect(() => read(bytes, 7)).toThrow(PptFormatError);
+    expect(() => read(bytes, 7)).toThrow(
+      "StyleTextPropAtom character runs cover 99 characters, more than the 7 in the corresponding text body",
+    );
+  });
+
   it("reads bold, italic and underline from fontStyle, gated by their own mask bits", () => {
     const bytes = styleTextPropAtom(
       [pfRun(6, 0, 0)],
@@ -239,6 +317,28 @@ describe("readStyleTextPropAtom character runs", () => {
       [cfRun(6, CF_COLOR, colorIndex(0x11, 0x22, 0x33, 0x2a))],
     );
     expect(() => read(bytes, 6)).toThrow(PptFormatError);
+    expect(() => read(bytes, 6)).toThrow(
+      "ColorIndexStruct index 0x2a is none of a colour-scheme slot (0x00-0x07), the literal-colour sentinel (0xfe), or the undefined-colour sentinel (0xff)",
+    );
+  });
+
+  it("accepts scheme slot 0x07, the last valid index below the literal/undefined sentinels", () => {
+    const bytes = styleTextPropAtom(
+      [pfRun(6, 0, 0)],
+      [cfRun(6, CF_COLOR, colorIndex(0x11, 0x22, 0x33, 0x07))],
+    );
+    expect(read(bytes, 6).characterRuns[0]?.properties.color).toEqual({
+      kind: "scheme",
+      schemeIndex: 0x07,
+    });
+  });
+
+  it("rejects index 0x08, one past the last valid scheme slot", () => {
+    const bytes = styleTextPropAtom(
+      [pfRun(6, 0, 0)],
+      [cfRun(6, CF_COLOR, colorIndex(0x11, 0x22, 0x33, 0x08))],
+    );
+    expect(() => read(bytes, 6)).toThrow(PptFormatError);
   });
 
   it("reads fontRef, and the later ansiFontRef, in the spec's field order", () => {
@@ -252,6 +352,45 @@ describe("readStyleTextPropAtom character runs", () => {
           u16le(3),
           u16le(7),
           i16le(18),
+        ),
+      ],
+    );
+    expect(read(bytes, 6).characterRuns[0]?.properties).toMatchObject({
+      fontRef: 3,
+      sizePt: 18,
+    });
+  });
+
+  it("skips the position field even when it is the only mask bit set, keeping a later run's own count aligned", () => {
+    // CF_POSITION alone sets no font-style bit, so this run reads no other optional field at all -- the position skip is the only thing standing between a correctly-aligned second run and a corrupted one.
+    const bytes = styleTextPropAtom(
+      [pfRun(7, 0, 0)],
+      [cfRun(3, CF_POSITION, u16le(0)), cfRun(4, CF_BOLD, u16le(STYLE_BOLD))],
+    );
+    const { characterRuns } = read(bytes, 7);
+    expect(characterRuns).toHaveLength(2);
+    expect(characterRuns[0]?.count).toBe(3);
+    expect(characterRuns[1]?.count).toBe(4);
+    expect(characterRuns[1]?.properties.bold).toBe(true);
+  });
+
+  it("skips oldEAFontRef, symbolFontRef and position, none of which are projected, without disturbing the fields around them", () => {
+    // fontRef (typeface) then oldEAFontRef (skipped), symbolFontRef (skipped), fontSize, color, then position (skipped) -- the spec's own field order. Only fontRef and fontSize are observable here, so setting every skip-only bit at once and checking both still decode correctly is the only way to prove none of the three skips was dropped.
+    const bytes = styleTextPropAtom(
+      [pfRun(6, 0, 0)],
+      [
+        cfRun(
+          6,
+          CF_TYPEFACE |
+            CF_OLD_EA_TYPEFACE |
+            CF_SYMBOL_TYPEFACE |
+            CF_SIZE |
+            CF_POSITION,
+          u16le(3), // fontRef
+          u16le(0), // oldEAFontRef
+          u16le(0), // symbolFontRef
+          i16le(18), // fontSize
+          u16le(0), // position
         ),
       ],
     );
@@ -347,14 +486,27 @@ describe("readTextMasterStyleAtom", () => {
   });
 
   it("consumes an explicit level field for a type at or above CENTER_BODY, without letting it affect the level's own position-derived indentLevel", () => {
-    // TEXT_TYPE_CENTER_BODY levels carry a real level field ([MS-PPT] 2.9.35's own explicit-level types) ahead of pf/cf; this fixture states a level field that disagrees with the level's own position (2 at position 0) specifically to prove the byte offset consumed is the explicit field, not that this reader trusts its value over the position.
+    // TEXT_TYPE_CENTER_BODY levels carry a real level field ([MS-PPT] 2.9.35's own explicit-level types) ahead of pf/cf. The level field itself is 0 here specifically because a nonzero value would leak into readTextPFException's own mask if this field went unconsumed -- and several of that mask's low bits (PF_HAS_BULLET/PF_BULLET_HAS_FONT/PF_LEFT_MARGIN among them) each happen to trigger a field exactly 2 bytes wide, silently re-synchronising the cursor and masking the very omission this test exists to catch. A zero level field leaves no such field to accidentally compensate: skipping its consumption misreads the next 4 bytes as the pf mask with nothing left over, permanently losing 2 bytes and corrupting every field read after it.
     const bytes = masterStyleAtom(TEXT_TYPE_CENTER_BODY, [
-      concatBytes(u16le(2), pfLevel(0), cfLevel(CF_BOLD, u16le(STYLE_BOLD))),
+      concatBytes(u16le(0), pfLevel(0), cfLevel(CF_BOLD, u16le(STYLE_BOLD))),
     ]);
     const { levels } = readTextMasterStyleAtom(readRecordAt(bytes, 0));
     expect(levels).toHaveLength(1);
     expect(levels[0]?.character.bold).toBe(true);
     expect(levels[0]?.paragraph.indentLevel).toBe(0);
+  });
+
+  it("rejects a level truncated part way through its own pf/cf fields, naming this atom in the message", () => {
+    // cLevels 1, but no level data at all follows it -- readTextPFException's own cursor.u32() call throws, and the message must name "TextMasterStyleAtom", not some other cursor's own label.
+    const bytes = atom(RT_TextMasterStyleAtom, u16le(1), {
+      recInstance: TEXT_TYPE_BODY,
+    });
+    expect(() => readTextMasterStyleAtom(readRecordAt(bytes, 0))).toThrow(
+      PptFormatError,
+    );
+    expect(() => readTextMasterStyleAtom(readRecordAt(bytes, 0))).toThrow(
+      "TextMasterStyleAtom needs 4 more bytes at offset 2 but the atom holds only 2",
+    );
   });
 
   it("rejects cLevels greater than the mandated maximum of 5", () => {
@@ -364,6 +516,19 @@ describe("readTextMasterStyleAtom", () => {
     expect(() => readTextMasterStyleAtom(readRecordAt(bytes, 0))).toThrow(
       PptFormatError,
     );
+    expect(() => readTextMasterStyleAtom(readRecordAt(bytes, 0))).toThrow(
+      "TextMasterStyleAtom at offset 0 declares cLevels 6, more than the mandated maximum of 5",
+    );
+  });
+
+  it("accepts cLevels exactly at the mandated maximum of 5", () => {
+    const bytes = masterStyleAtom(
+      TEXT_TYPE_BODY,
+      Array.from({ length: 5 }, () => concatBytes(pfLevel(0), cfLevel(0))),
+    );
+    expect(readTextMasterStyleAtom(readRecordAt(bytes, 0)).levels).toHaveLength(
+      5,
+    );
   });
 
   it("rejects a record that is not RT_TextMasterStyleAtom", () => {
@@ -371,5 +536,18 @@ describe("readTextMasterStyleAtom", () => {
     expect(() => readTextMasterStyleAtom(readRecordAt(bytes, 0))).toThrow(
       PptFormatError,
     );
+    expect(() => readTextMasterStyleAtom(readRecordAt(bytes, 0))).toThrow(
+      `expected RT_TextMasterStyleAtom (0x${RT_TextMasterStyleAtom.toString(16)}) at offset 0, found record type 0x${RT_StyleTextPropAtom.toString(16)}`,
+    );
+  });
+
+  it("treats textType one below CENTER_BODY as having no explicit level field", () => {
+    // TEXT_TYPE_OTHER (0x004) is one below MASTER_STYLE_TYPES_WITH_EXPLICIT_LEVEL (0x005) -- the boundary an off-by-one on the >= comparison would blur.
+    const bytes = masterStyleAtom(TEXT_TYPE_OTHER, [
+      concatBytes(pfLevel(0), cfLevel(CF_BOLD, u16le(STYLE_BOLD))),
+    ]);
+    const { levels } = readTextMasterStyleAtom(readRecordAt(bytes, 0));
+    expect(levels[0]?.character.bold).toBe(true);
+    expect(levels[0]?.paragraph.indentLevel).toBe(0);
   });
 });

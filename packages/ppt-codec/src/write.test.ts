@@ -14,14 +14,16 @@ import {
 import { describe, expect, it } from "vitest";
 import { bytesToBase64 } from "./base64";
 import { readNotesContainerAtom } from "./document/notes";
+import { readExternalOleEmbeds } from "./ole/embedded";
 import { readNotesListWithText } from "./document/notes-list";
 import { readSlideListWithText } from "./document/slide-list";
 import { type PptDiagnostic, PptDiagnosticCodes } from "./diagnostics";
 import { PptUnsupportedContentError } from "./errors";
-import { readPptContent, readPpt } from "./read";
+import { readPptContent, readPpt, readPptStreams } from "./read";
 import {
   type PptRecord,
   childRecords,
+  findChild,
   readRecordAt,
   readRecordSequence,
 } from "./record/tree";
@@ -761,20 +763,46 @@ describe("writePptContent / readPptContent round trip", () => {
     });
 
     it("writes one store entry for an image shown on several slides, so every showing reads back", () => {
-      const { slides } = readPptContent(
-        writePptContent({
-          metadata: {},
-          slides: [
-            slide({ shapes: [pictureShape({ format: "png", bytes: PNG })] }),
-            slide({
-              shapes: [
-                pictureShape({ format: "png", bytes: PNG }),
-                pictureShape({ format: "png", bytes: OTHER_PNG }),
-              ],
-            }),
-          ],
-        }),
+      const document = {
+        metadata: {},
+        slides: [
+          slide({ shapes: [pictureShape({ format: "png", bytes: PNG })] }),
+          slide({
+            shapes: [
+              pictureShape({ format: "png", bytes: PNG }),
+              pictureShape({ format: "png", bytes: OTHER_PNG }),
+            ],
+          }),
+        ],
+      };
+      // Two entries, not three: base64-comparing the round-tripped images alone (below) can't distinguish a shared store entry from three separate ones carrying byte-identical content, since either way every shape reads back the same bytes -- only the store's own entry count actually proves the duplicate PNG was deduplicated rather than re-added.
+      const { powerPointDocumentStream } = writePptStreams(document);
+      const documentRecord = readRecordSequence(
+        powerPointDocumentStream,
+        0,
+        powerPointDocumentStream.length,
+      )[0];
+      if (documentRecord === undefined) {
+        throw new Error("expected the DocumentContainer first");
+      }
+      const drawingGroup = findChild(
+        childRecords(documentRecord),
+        RT_DrawingGroup,
       );
+      const dgg =
+        drawingGroup === undefined
+          ? undefined
+          : findChild(childRecords(drawingGroup), OfficeArtDggContainer);
+      const store =
+        dgg === undefined
+          ? undefined
+          : findChild(childRecords(dgg), OfficeArtBStoreContainer);
+      if (store === undefined) {
+        throw new Error("expected an OfficeArtBStoreContainer");
+      }
+      expect(store.header.recInstance).toBe(2);
+
+      const { slides } = readPptContent(writePptContent(document));
       const secondSlideImages = slides[1]?.shapes
         .map((shape) => shape.blocks.find((block) => block.kind === "image"))
         .filter((block): block is ContentImageBlock => block !== undefined);
@@ -1050,6 +1078,53 @@ describe("writePptContent / readPptContent round trip", () => {
       };
     }
 
+    it("resolves a font family used only inside a table cell's own text", () => {
+      // collectFontFamilies scans each shape's own top-level blocks; a table shape's own blocks list carries one "table" block, never the rows/cells nested inside it, so a font family named only inside a cell's own run is invisible to that scan unless collectFontFamilies is taught to descend into table cells too.
+      const { slides } = readPptContent(
+        writePptContent({
+          metadata: {},
+          slides: [
+            slide({
+              shapes: [
+                tableShape([
+                  {
+                    kind: "table",
+                    rows: [
+                      {
+                        cells: [
+                          {
+                            blocks: [
+                              {
+                                kind: "paragraph",
+                                runs: [
+                                  {
+                                    text: "Cell font",
+                                    fontFamily: "Courier New",
+                                  },
+                                ],
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                    columnWidthsPt: [200],
+                  },
+                ]),
+              ],
+            }),
+          ],
+        }),
+      );
+      const [entry] = slides[0]?.shapes[0]?.blocks ?? [];
+      if (entry?.kind !== "table") {
+        throw new Error("expected a table block");
+      }
+      expect(entry.rows[0]?.cells[0]?.blocks[0]).toMatchObject({
+        runs: [{ text: "Cell font", fontFamily: "Courier New" }],
+      });
+    });
+
     it("round-trips a table as one group whose cells read back as the same grid", () => {
       const { slides } = readPptContent(
         writePptContent({
@@ -1293,6 +1368,9 @@ describe("writePptContent / readPptContent round trip", () => {
       expect(() => writePptContent(document)).toThrow(
         PptUnsupportedContentError,
       );
+      expect(() => writePptContent(document)).toThrow(
+        'LayoutMetadata.createdIso "not-a-real-date" is not a valid date string',
+      );
     });
 
     it("throws a PptUnsupportedContentError, not a raw RangeError, for a malformed modifiedIso", () => {
@@ -1302,6 +1380,9 @@ describe("writePptContent / readPptContent round trip", () => {
       };
       expect(() => writePptContent(document)).toThrow(
         PptUnsupportedContentError,
+      );
+      expect(() => writePptContent(document)).toThrow(
+        'LayoutMetadata.modifiedIso "not-a-real-date" is not a valid date string',
       );
     });
   });
@@ -1351,6 +1432,17 @@ describe("speaker notes", () => {
     expect(recordTypesIn(powerPointDocumentStream)).not.toContain(RT_Notes);
   });
 
+  it("writes no notes SlideListWithText at all when no slide carries notes", () => {
+    const { powerPointDocumentStream } = writePptStreams({
+      metadata: {},
+      slides: [slide(), slide()],
+    });
+    const document = readRecordAt(powerPointDocumentStream, 0);
+    expect(
+      listWithInstance(document, SLIDE_LIST_INSTANCE_NOTES),
+    ).toBeUndefined();
+  });
+
   it("writes a NotesContainer only for the slides that carry notes", () => {
     const { powerPointDocumentStream } = writePptStreams({
       metadata: {},
@@ -1371,6 +1463,20 @@ describe("speaker notes", () => {
     };
     const { slides } = readPptContent(writePptContent(document));
     expect(slides.map((s) => s.notes)).toEqual(["First.", "", "Third."]);
+  });
+
+  it("names the last slide's own id in the UserEditAtom, not the second slide's", () => {
+    const { currentUserStream, powerPointDocumentStream } = writePptStreams({
+      metadata: {},
+      slides: [slide(), slide(), slide()],
+    });
+    const { offsetToCurrentEdit } = readCurrentUserAtom(currentUserStream);
+    const { currentEdit } = buildPersistDirectory(
+      powerPointDocumentStream,
+      offsetToCurrentEdit,
+    );
+    // FIRST_SLIDE_ID (256) + 3 slides, 0-indexed: the third slide's own id is 258.
+    expect(currentEdit.lastSlideIdRef).toBe(258);
   });
 
   it("keeps every persist identifier below the seed a next edit would mint from", () => {
@@ -1416,6 +1522,27 @@ describe("speaker notes", () => {
     ).map((persist) => persist.notesId);
     expect(notesIds).toHaveLength(slideIds.length);
     expect(notesIds.filter((id) => slideIds.includes(id))).toEqual([]);
+  });
+
+  it("compacts notesId assignment by counting only the earlier slides that actually carry notes", () => {
+    // slide 2 (index 2, no notes) must not count towards the base a later notes-carrying slide's own id is offset from -- and the two notes-carrying slides before it (0 and 1) must both count, not merely whichever of "has notes" or "has no notes" a flipped comparison would count instead.
+    const { powerPointDocumentStream } = writePptStreams({
+      metadata: {},
+      slides: [
+        slide({ notes: "First." }),
+        slide({ notes: "Second." }),
+        slide(),
+        slide({ notes: "Fourth." }),
+      ],
+    });
+    const document = readRecordAt(powerPointDocumentStream, 0);
+    const notesIds = readNotesListWithText(
+      requireRecord(
+        listWithInstance(document, SLIDE_LIST_INSTANCE_NOTES),
+        "notes list",
+      ),
+    ).map((persist) => persist.notesId);
+    expect(notesIds).toEqual([512, 513, 514]);
   });
 
   it("names each notes slide's own presentation slide in its NotesAtom", () => {
@@ -1574,6 +1701,9 @@ describe("writePpt / readPpt round trip", () => {
     expect(() => writePpt(assembleTree(content))).toThrow(
       PptUnsupportedContentError,
     );
+    expect(() => writePpt(assembleTree(content))).toThrow(
+      "ppt-codec's writer only writes presentation documents; got a 'wordprocessing' document",
+    );
   });
 });
 
@@ -1719,6 +1849,81 @@ describe("OLE embedded objects", () => {
     expect(diagnostics).toEqual([]);
   });
 
+  it("mints a distinct exObjId and persistId for a second embedded object, rather than colliding with the first", () => {
+    const secondDocument: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [],
+    };
+    const content: ContentDocument = {
+      kind: "presentation",
+      metadata: {},
+      slides: [
+        slide({
+          shapes: [
+            shapeWithEmbed(embeddedSpreadsheet),
+            shapeWithEmbed(secondDocument),
+          ],
+        }),
+      ],
+    };
+    const { currentUserStream, powerPointDocumentStream } = writePptStreams(
+      { metadata: content.metadata, slides: content.slides },
+      {
+        serialiseEmbeddedObject: (document) =>
+          document === embeddedSpreadsheet
+            ? new Uint8Array([1])
+            : new Uint8Array([2]),
+      },
+    );
+    const read = readPptStreams(
+      currentUserStream,
+      powerPointDocumentStream,
+      undefined,
+      undefined,
+      {
+        decodeEmbeddedObject: (recovered) =>
+          recovered[0] === 1
+            ? { objectKind: "spreadsheet", document: embeddedSpreadsheet }
+            : { objectKind: "wordprocessing", document: secondDocument },
+      },
+    );
+    const [first, second] = read.slides[0]?.shapes ?? [];
+    expect(first?.blocks[0]).toMatchObject({ document: embeddedSpreadsheet });
+    expect(second?.blocks[0]).toMatchObject({ document: secondDocument });
+    // exObjId is otherwise write-only from this round trip's own point of view -- both the write and the matching read side use whatever value was minted internally, so a wrong-but-still-unique id (e.g. -1/0 instead of 1/2) would round-trip identically above. Reading the two ExOleObjAtom entries back directly is the only way to prove the actual minted values are 1 and 2.
+    const documentRecord = topLevelRecords(powerPointDocumentStream)[0];
+    if (documentRecord === undefined) {
+      throw new Error("expected the DocumentContainer first");
+    }
+    const embeds = readExternalOleEmbeds(childRecords(documentRecord));
+    expect([...embeds.keys()].sort((a, b) => a - b)).toEqual([1, 2]);
+  });
+
+  it("offsets an OLE embed's own persist id past every notes persist object, not merely past every slide", () => {
+    // Two of three slides carry notes, and the embed sits on the third: FIRST_SLIDE_PERSIST_ID + slides.length + notesCount is the only sum landing exactly past every already-used slide (3-5) and notes (6-7) persist id at 8. A wrong sign, a bare notesIdRefs.length (3, one too many), or an inverted notes-having/notes-less count (1, one too few) would each land somewhere a plain collision check might miss -- reading the embed's own persistIdRef back directly is what actually pins the value.
+    const content: ContentDocument = {
+      kind: "presentation",
+      metadata: {},
+      slides: [
+        slide({ notes: "First slide has notes." }),
+        slide({ notes: "Second slide has notes." }),
+        slide({ shapes: [shapeWithEmbed(embeddedSpreadsheet)] }),
+      ],
+    };
+    const { powerPointDocumentStream } = writePptStreams(
+      { metadata: content.metadata, slides: content.slides },
+      { serialiseEmbeddedObject: () => new Uint8Array([1]) },
+    );
+    const documentRecord = topLevelRecords(powerPointDocumentStream)[0];
+    if (documentRecord === undefined) {
+      throw new Error("expected the DocumentContainer first");
+    }
+    const embeds = readExternalOleEmbeds(childRecords(documentRecord));
+    const [embed] = embeds.values();
+    expect(embed?.persistIdRef).toBe(8);
+  });
+
   it("fires a block-dropped diagnostic for an embeddedObject block a serialise port declines", () => {
     const content: ContentDocument = {
       kind: "presentation",
@@ -1774,5 +1979,44 @@ describe("the shared schema accepts what the writer's own round trip produces", 
     expect(() =>
       DocumentTreeSchema.parse(readPpt(writePptContent(document))),
     ).not.toThrow();
+  });
+});
+
+describe("requireOneSlideSize", () => {
+  it("accepts every slide sharing the identical size", () => {
+    const document = {
+      metadata: {},
+      slides: [
+        slide({ size: { widthPt: 500, heightPt: 400 } }),
+        slide({ size: { widthPt: 500, heightPt: 400 } }),
+      ],
+    };
+    expect(() => writePptContent(document)).not.toThrow();
+  });
+
+  it("rejects a differing heightPt even when widthPt agrees", () => {
+    // Isolates the second half of the widthPt/heightPt OR check: a fixture differing in both fields could pass even with the heightPt half of the check disabled entirely.
+    const document = {
+      metadata: {},
+      slides: [
+        slide({ size: { widthPt: 500, heightPt: 400 } }),
+        slide({ size: { widthPt: 500, heightPt: 999 } }),
+      ],
+    };
+    expect(() => writePptContent(document)).toThrow(PptUnsupportedContentError);
+    expect(() => writePptContent(document)).toThrow(
+      `ppt-codec's writer cannot express per-slide sizes: slide sizes ${JSON.stringify({ widthPt: 500, heightPt: 400 })} and ${JSON.stringify({ widthPt: 500, heightPt: 999 })} both appear, but [MS-PPT]'s DocumentAtom states exactly one slide size for the whole presentation`,
+    );
+  });
+
+  it("rejects a differing widthPt even when heightPt agrees", () => {
+    const document = {
+      metadata: {},
+      slides: [
+        slide({ size: { widthPt: 500, heightPt: 400 } }),
+        slide({ size: { widthPt: 999, heightPt: 400 } }),
+      ],
+    };
+    expect(() => writePptContent(document)).toThrow(PptUnsupportedContentError);
   });
 });
