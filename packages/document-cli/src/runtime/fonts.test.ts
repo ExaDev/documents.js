@@ -84,4 +84,15 @@ describe("loadProvidedFonts", () => {
       /ENOENT/,
     );
   });
+
+  it("rejects instead of reading the file once the given signal is already aborted", async () => {
+    const path = join(workspace, "aborted.ttf");
+    await writeFile(path, fixtureCalibriFontBytes());
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      loadProvidedFonts([path], { signal: controller.signal }),
+    ).rejects.toThrow(/abort/i);
+  });
 });
