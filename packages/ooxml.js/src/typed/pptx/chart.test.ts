@@ -169,6 +169,17 @@ describe("readChartTable", () => {
     });
   });
 
+  it("reads a genuinely empty-string cached value the same as an absent one", () => {
+    const chartRoot = chartRootWith(
+      ser(
+        el("c:cat", {}, [el("c:numRef", {}, [numCache(cPt("0", ""))])]),
+        el("c:val", {}, [el("c:numRef", {}, [numCache(cPt("0", "1"))])]),
+      ),
+    );
+    const table = readChartTable(chartRoot, FRAME);
+    expect(table?.rows[1]?.cells[0]).toEqual({ blocks: [] });
+  });
+
   it("reads no series name at all as an empty header cell, not a literal 'undefined'", () => {
     const chartRoot = chartRootWith(
       ser(
@@ -180,14 +191,15 @@ describe("readChartTable", () => {
     expect(table?.rows[0]?.cells[1]).toEqual({ blocks: [] });
   });
 
-  it("reads the deepest (last) level of a multi-level cached string reference", () => {
+  it("reads the deepest (LAST) level of a multi-level cached string reference, not merely the second", () => {
     const chartRoot = chartRootWith(
       ser(
         el("c:cat", {}, [
           el("c:multiLvlStrRef", {}, [
             el("c:multiLvlStrCache", {}, [
-              el("c:lvl", {}, [cPt("0", "outer")]),
-              el("c:lvl", {}, [cPt("0", "inner")]),
+              el("c:lvl", {}, [cPt("0", "level-0")]),
+              el("c:lvl", {}, [cPt("0", "level-1")]),
+              el("c:lvl", {}, [cPt("0", "level-2")]),
             ]),
           ]),
         ]),
@@ -196,7 +208,7 @@ describe("readChartTable", () => {
     );
     const table = readChartTable(chartRoot, FRAME);
     expect(table?.rows[1]?.cells[0]).toEqual({
-      blocks: [{ kind: "paragraph", runs: [{ text: "inner" }] }],
+      blocks: [{ kind: "paragraph", runs: [{ text: "level-2" }] }],
     });
   });
 
