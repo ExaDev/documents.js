@@ -162,6 +162,16 @@ describe("resolveBorderEdge / borderStyleTokenFor", () => {
       }),
     ).toBe(BORDER_STYLE_DOTTED);
   });
+
+  it("maps a double style both ways", () => {
+    expect(
+      borderStyleTokenFor({
+        color: { r: 0, g: 0, b: 0 },
+        widthPt: 0.75,
+        style: "double",
+      }),
+    ).toBe(BORDER_STYLE_DOUBLE);
+  });
 });
 
 describe("resolveFillBackground", () => {
@@ -308,6 +318,23 @@ describe("applyTint", () => {
     expect(shaded.b).toBeCloseTo(0);
   });
 
+  it("tints pure black to a clean grey rather than a hue-division-by-zero NaN", () => {
+    // Black and white are the one case where max === min AND max + min is 0 or 2 -- the two values whose own s-formula denominators (max + min, and 2 - max - min) are themselves zero. Grey (0.5, 0.5, 0.5) computes a clean s = 0 through that division even without a dedicated achromatic shortcut; black and white do not, so only they can prove the shortcut is doing real work rather than merely restating what division already gives.
+    expect(applyTint({ r: 0, g: 0, b: 0 }, 0.5)).toStrictEqual({
+      r: 0.5,
+      g: 0.5,
+      b: 0.5,
+    });
+  });
+
+  it("shades pure white to a clean grey rather than a hue-division-by-zero NaN", () => {
+    expect(applyTint({ r: 1, g: 1, b: 1 }, -0.5)).toStrictEqual({
+      r: 0.5,
+      g: 0.5,
+      b: 0.5,
+    });
+  });
+
   it("tints an achromatic colour (grey) without introducing hue", () => {
     const grey = { r: 0.5, g: 0.5, b: 0.5 };
     const tinted = applyTint(grey, 0.5);
@@ -358,11 +385,17 @@ describe("applyTint", () => {
   }
 
   it.each([
-    // A lightened variant of blue (b uniquely max, l <= 0.5) -- the hue branch neither red (max === r) nor the green case below exercises.
+    // A lightened variant of blue (b uniquely max, l <= 0.5) -- the hue branch neither red (max === r) nor the green case below exercises. r === g here, so this cannot by itself tell (r - g) / d apart from (r - g) * d (both are 0 either way); the case directly below is what needs r !== g.
     {
       label: "b-dominant, l<=0.5",
       color: { r: 0.2, g: 0.2, b: 0.6 },
       tint: 0.5,
+    },
+    // b uniquely max again, but with r !== g this time -- proving the hue term is genuinely (r - g) / d, not (r - g) * d, which the case above cannot distinguish since its own r - g is 0.
+    {
+      label: "b-dominant with r!==g",
+      color: { r: 0.3, g: 0.1, b: 0.7 },
+      tint: 0.2,
     },
     // g uniquely max, l > 0.5 -- the s formula's own d / (2 - max - min) branch, which red's exact 0.5 lightness never selects.
     { label: "g-dominant, l>0.5", color: { r: 0.6, g: 1, b: 0.7 }, tint: 0.5 },

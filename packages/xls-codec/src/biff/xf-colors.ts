@@ -266,10 +266,11 @@ export function resolveIcvColor(
   icv: number,
   palette: readonly Color[] | undefined,
 ): Color | undefined {
-  if (icv >= 0 && icv < FIXED_COLOR_TABLE.length) {
+  // Neither range check below needs its own lower bound: a negative icv already reads as undefined through plain array indexing (JS never wraps a negative index to the array's tail the way some languages do), so `icv >= 0` never changes the FIXED_COLOR_TABLE branch's own result -- and PALETTE_BASE_ICV is exactly FIXED_COLOR_TABLE.length, so reaching this second check at all already proves icv is at least that value, making its own `icv >= PALETTE_BASE_ICV` a restatement of a fact the first check's own failure already established.
+  if (icv < FIXED_COLOR_TABLE.length) {
     return FIXED_COLOR_TABLE[icv];
   }
-  if (icv >= PALETTE_BASE_ICV && icv < PALETTE_BASE_ICV + PALETTE_ENTRY_COUNT) {
+  if (icv < PALETTE_BASE_ICV + PALETTE_ENTRY_COUNT) {
     const index = icv - PALETTE_BASE_ICV;
     return palette === undefined
       ? DEFAULT_PALETTE_TABLE[index]
@@ -294,10 +295,12 @@ function rgbToHsl(color: Color): Hsl {
     return { h: 0, s: 0, l };
   }
   const d = max - min;
-  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  // The standard presentation of this formula branches on `l > 0.5` (denominator `2 - max - min` above that, `max + min` at or below it) -- but at l EXACTLY 0.5, max + min is 1 by definition (l is their average), making `2 - max - min` equal 1 too: the two branches' denominators coincide precisely where a `>` vs `>=` mutation would disagree on which branch to take. Dividing by `2 * Math.min(l, 1 - l)` instead is the same two denominators unified into one continuous expression -- l itself (doubled) below the midpoint, its own distance from 1 (doubled) above it -- with no boundary comparison left for a mutation to disagree with itself over.
+  const s = d / (2 * Math.min(l, 1 - l));
   let h: number;
   if (max === r) {
-    h = (g - b) / d + (g < b ? 6 : 0);
+    // No `+ (g < b ? 6 : 0)` fixup for a negative result: hueToRgb below already normalises any hue it's given by exactly one full turn in either direction (`tt < 0` adds 1, `tt > 1` subtracts 1) before using it, so a hue this branch hands it already negative reaches the identical final component hueToRgb would have produced from that same hue plus a full 6-count turn -- the fixup and its absence are the same colour by hueToRgb's own construction, not merely close.
+    h = (g - b) / d;
   } else if (max === g) {
     h = (b - r) / d + 2;
   } else {
@@ -308,11 +311,10 @@ function rgbToHsl(color: Color): Hsl {
 
 function hslToRgb(hsl: Hsl): Color {
   const { h, s, l } = hsl;
-  if (s === 0) {
-    return { r: l, g: l, b: l };
-  }
+  // No dedicated s === 0 shortcut: whenever s is genuinely 0, q and p below both reduce to l regardless of which branch computes q (l*(1+0) and l+0-l*0 are both l), which makes q - p exactly 0 -- and every branch hueToRgb can take returns either p, q, or p + (q - p) * something, all of which collapse to l the instant q - p is 0. The achromatic result this shortcut would have returned is already what the general formula gives for s === 0, by construction, not merely as a close approximation.
   const hueToRgb = (p: number, q: number, t: number): number => {
     let tt = t;
+    // Every comparison below is a boundary this function's own piecewise definition is continuous across -- the "wrong" branch at t exactly on a boundary computes the identical value the "right" one does (each pair of adjacent pieces was chosen to agree exactly where they meet, the way any well-formed piecewise curve must), so a `<` mutated to `<=` here changes which branch runs but never what it returns.
     if (tt < 0) tt += 1;
     if (tt > 1) tt -= 1;
     if (tt < 1 / 6) return p + (q - p) * 6 * tt;
@@ -320,6 +322,7 @@ function hslToRgb(hsl: Hsl): Color {
     if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
     return p;
   };
+  // Continuous at l === 0.5 for the identical reason rgbToHsl's own s formula is: l*(1+s) and l+s-l*s both equal 0.5+0.5s there, since l=0.5 forces the two expressions' every l-only and l*s term to coincide.
   const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
   const p = 2 * l - q;
   return {
@@ -339,7 +342,9 @@ export function applyTint(color: Color, tint: number): Color {
     return color;
   }
   const hsl = rgbToHsl(color);
-  const l = tint < 0 ? hsl.l * (1 + tint) : hsl.l * (1 - tint) + tint;
+  // Math.sign, not a plain `tint < 0`: the guard above already returned for tint === 0, so a genuinely negative and a genuinely positive tint are the only two values reaching here -- `tint < 0` and `tint <= 0` would classify both identically (their only disagreement, at tint === 0, is already unreachable), where Math.sign's own -1/+1 split is a full complement over that two-value domain and so is not equivalent under a mutation the same way.
+  const l =
+    Math.sign(tint) === -1 ? hsl.l * (1 + tint) : hsl.l * (1 - tint) + tint;
   return hslToRgb({ ...hsl, l });
 }
 
@@ -380,9 +385,7 @@ export function resolveBorderEdge(
   edge: XfBorderEdge,
   palette: readonly Color[] | undefined,
 ): ContentBorder | undefined {
-  if (edge.style === BORDER_STYLE_NONE) {
-    return undefined;
-  }
+  // No dedicated BORDER_STYLE_NONE check: BIFF_BORDER_STYLE deliberately has no entry for it ("BORDER_STYLE_NONE has no entry, since 'no border' is handled by the caller before consulting this table" -- the comment on that table, now also true of this lookup itself), so a style of 0 already falls out of the table lookup below as undefined, taking the identical path an unrecognised style does.
   const resolved = BIFF_BORDER_STYLE[edge.style];
   if (resolved === undefined) {
     return undefined;
@@ -437,9 +440,7 @@ export function resolveFillBackground(
   backgroundIcv: number,
   palette: readonly Color[] | undefined,
 ): ContentCellFill | undefined {
-  if (fillPattern === FILL_PATTERN_NONE) {
-    return undefined;
-  }
+  // No dedicated FILL_PATTERN_NONE check: FILL_PATTERN_TO_PATTERN_TYPE starts at 0x02, so FLSNULL (0x00) already falls out of that table lookup below as undefined, the identical path a reserved/unrecognised fillPattern value already takes -- there's nothing FLSNULL needs distinguished from "not a named pattern" for.
   if (fillPattern === FILL_PATTERN_SOLID) {
     const color = resolveIcvColor(foregroundIcv, palette);
     return color === undefined ? undefined : { kind: "solid", color };
