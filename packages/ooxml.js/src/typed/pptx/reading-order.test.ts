@@ -159,6 +159,24 @@ describe("assignReadingOrder", () => {
     expect(order([shape("only", 10, 10, 10, 10)])).toEqual(["only"]);
   });
 
+  it("does not treat two shapes touching exactly at a shared boundary as a gap", () => {
+    // X and Y share a boundary on the vertical axis with zero space between them (X ends at y=100 exactly where Y starts) -- a real gap requires a strictly positive distance, not merely non-overlap, or this touching pair would wrongly be split into two separate rows before Z's own genuine gap is even considered. Grouped correctly as one row, [X, Y] recurses and finds a genuine horizontal gap between them, reading Y (left) before X (right); split incorrectly into two rows, they would instead read in their row order, X then Y.
+    const shapes = [
+      shape("x", 100, 0, 100, 100),
+      shape("y", 0, 100, 50, 50),
+      shape("z", 0, 300, 100, 100),
+    ];
+
+    expect(order(shapes)).toEqual(["y", "x", "z"]);
+  });
+
+  it("measures a gap as the true distance between shapes, not their start plus the reach before them", () => {
+    // Vertically, A sits a mere 10pt below a very tall preceding reach (1000pt), so summing start and reach instead of subtracting would inflate that gap into easily the largest ratio in the whole comparison -- wrongly making rows the winning axis even though the real vertical gap is tiny next to the real horizontal one. A is placed above-right and B below-left so that choosing the wrong axis (rows, sorted top to bottom) reverses their order from the correct one (columns, sorted left to right).
+    const shapes = [shape("a", 0, 1010, 50, 40), shape("b", 80, 0, 50, 1000)];
+
+    expect(order(shapes)).toEqual(["a", "b"]);
+  });
+
   it("returns the array in document order, ranking rather than reordering", () => {
     // The point of the whole design: sourcePath is assigned as slides[N].shapes[N], so the array must
     // keep naming the positions it names. Only the ranks describe the reading order.
