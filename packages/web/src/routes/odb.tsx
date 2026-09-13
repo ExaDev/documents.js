@@ -23,12 +23,12 @@ export const Route = createFileRoute("/odb")({
 
 // The .odb browsing tool: a database front-end package's inventory (connection, table/query/form/report names) alongside its embedded engine's actual table data, read through the tier-dispatching decoder the conversions use and previewed as a spreadsheet -- one sheet per table.
 function OdbPage() {
-  const [fileName, setFileName] = useState("");
+  const [fileName, setFileName] = useState<string>();
   const readOdb = useReadOdb();
 
   const handleFile = (opened: OpenedFile) => {
     setFileName(opened.name);
-    readOdb.reset();
+    // useMutation's own "pending" dispatch already clears the previous data/error before this call's result settles -- a separate reset() call immediately beforehand would only repeat that, never add a state transition of its own.
     readOdb.mutate(
       { bytes: opened.bytes },
       {
@@ -39,7 +39,8 @@ function OdbPage() {
     );
   };
 
-  const inventory = readOdb.data?.inventory;
+  // readOdb.data's own output schema requires `inventory`, so once data is present its inventory is too -- a separate `inventory !== undefined` guard alongside `data !== undefined` would be checking a fact the type already guarantees, never a real second condition.
+  const data = readOdb.data;
 
   return (
     <Container size="lg" py="xl">
@@ -55,24 +56,24 @@ function OdbPage() {
             The database could not be read: {String(readOdb.error)}
           </Alert>
         )}
-        {readOdb.data !== undefined && inventory !== undefined && (
+        {data !== undefined && (
           <Paper withBorder p="md">
             <Stack gap="xs">
               <Text size="sm" c="dimmed">
-                Connection: {inventory.connection?.type ?? "none"}
-                {inventory.connection?.url !== undefined
-                  ? ` (${inventory.connection.url})`
+                Connection: {data.inventory.connection?.type ?? "none"}
+                {data.inventory.connection?.url !== undefined
+                  ? ` (${data.inventory.connection.url})`
                   : ""}
               </Text>
               <Group gap="xs">
-                <Text size="sm">{inventory.tables.length} tables</Text>
-                <Text size="sm">{inventory.queries.length} queries</Text>
-                <Text size="sm">{inventory.forms.length} forms</Text>
-                <Text size="sm">{inventory.reports.length} reports</Text>
+                <Text size="sm">{data.inventory.tables.length} tables</Text>
+                <Text size="sm">{data.inventory.queries.length} queries</Text>
+                <Text size="sm">{data.inventory.forms.length} forms</Text>
+                <Text size="sm">{data.inventory.reports.length} reports</Text>
               </Group>
-              {inventory.queries.length > 0 && (
+              {data.inventory.queries.length > 0 && (
                 <List size="sm" withPadding>
-                  {inventory.queries.map((query) => (
+                  {data.inventory.queries.map((query) => (
                     <List.Item key={query.name}>{query.name}</List.Item>
                   ))}
                 </List>
@@ -80,11 +81,13 @@ function OdbPage() {
             </Stack>
           </Paper>
         )}
-        {readOdb.data !== undefined && (
+        {data !== undefined && (
           <SheetPreview
-            label={fileName === "" ? "database" : fileName}
+            label={
+              fileName === undefined || fileName === "" ? "database" : fileName
+            }
             format="ods"
-            content={readOdb.data.content}
+            content={data.content}
           />
         )}
       </Stack>
