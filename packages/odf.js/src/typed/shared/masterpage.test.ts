@@ -98,6 +98,61 @@ describe("resolveDrawPageSize", () => {
     expect(resolveDrawPageSize(page, pkg)).toBeUndefined();
   });
 
+  it("does not resolve a nameless style:master-page when the page itself has no draw:master-page-name", () => {
+    // A style:master-page with no style:name at all would make attrValue(element, "style:name") itself resolve to undefined -- coincidentally equal to an undefined masterPageName -- if findMasterPageElement didn't short-circuit before ever reaching the search.
+    const pkg: Package = {
+      parts: {
+        "styles.xml": {
+          kind: "xml",
+          nodes: [
+            el("office:document-styles", {}, [
+              el("office:automatic-styles", {}, [
+                el("style:page-layout", { "style:name": "PM1" }, [
+                  el("style:page-layout-properties", {
+                    "fo:page-width": "720pt",
+                    "fo:page-height": "540pt",
+                  }),
+                ]),
+              ]),
+              el("office:master-styles", {}, [
+                el("style:master-page", { "style:page-layout-name": "PM1" }),
+              ]),
+            ]),
+          ],
+        },
+      },
+    };
+    expect(resolveDrawPageSize(el("draw:page"), pkg)).toBeUndefined();
+  });
+
+  it("does not resolve a nameless style:page-layout when the master page itself has no style:page-layout-name", () => {
+    // Mirrors the case above one link further down the chain: a style:page-layout with no style:name at all would coincidentally match an undefined pageLayoutName if findPageLayoutElement didn't short-circuit first.
+    const pkg: Package = {
+      parts: {
+        "styles.xml": {
+          kind: "xml",
+          nodes: [
+            el("office:document-styles", {}, [
+              el("office:automatic-styles", {}, [
+                el("style:page-layout", {}, [
+                  el("style:page-layout-properties", {
+                    "fo:page-width": "720pt",
+                    "fo:page-height": "540pt",
+                  }),
+                ]),
+              ]),
+              el("office:master-styles", {}, [
+                el("style:master-page", { "style:name": "Default" }),
+              ]),
+            ]),
+          ],
+        },
+      },
+    };
+    const page = el("draw:page", { "draw:master-page-name": "Default" });
+    expect(resolveDrawPageSize(page, pkg)).toBeUndefined();
+  });
+
   it("returns undefined when there is no styles.xml part at all", () => {
     const page = el("draw:page", { "draw:master-page-name": "Default" });
     expect(resolveDrawPageSize(page, { parts: {} })).toBeUndefined();
