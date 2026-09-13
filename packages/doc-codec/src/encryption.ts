@@ -109,10 +109,11 @@ function verifyPassword(
     header.encryptedVerifierHash,
     OFFICE_RC4_DOC_BLOCK_SIZE,
   );
+  // No separate length check: md5 always returns a fixed 16-byte digest, and decryptedVerifierHash is always exactly OFFICE_RC4_VERIFIER_LENGTH (16) bytes, decrypted from header.encryptedVerifierHash's own fixed-size span -- the two arrays are always the same length, never merely usually so.
   const computedHash = md5(decryptedVerifier);
-  const matches =
-    computedHash.length === decryptedVerifierHash.length &&
-    computedHash.every((byte, index) => byte === decryptedVerifierHash[index]);
+  const matches = computedHash.every(
+    (byte, index) => byte === decryptedVerifierHash[index],
+  );
   if (!matches) {
     throw new DocUnsupportedError(
       "incorrect password for RC4-encrypted document",
@@ -197,19 +198,16 @@ function decryptDocStreamsXor(
   const headerKey = (lKey >>> 16) & 0xffff;
   const headerVerifier = lKey & 0xffff;
 
-  // A password too long or carrying a character outside single-byte ASCII/Latin-1 cannot be the real one -- see xls-codec's own workbook/encryption.ts for the identical reasoning.
+  // A password too long or carrying a character outside single-byte ASCII/Latin-1 cannot be the real one -- see xls-codec's own workbook/encryption.ts for the identical reasoning. archive-codec's own createXorObfuscationKey/createXorObfuscationPasswordVerifier throw only RangeError for exactly this reason, so no instanceof check or fallback rethrow is needed: whatever they throw here always means the same thing.
   let computedKey: number;
   let computedVerifier: number;
   try {
     computedKey = createXorObfuscationKey(password);
     computedVerifier = createXorObfuscationPasswordVerifier(password);
-  } catch (error) {
-    if (error instanceof RangeError) {
-      throw new DocUnsupportedError(
-        "incorrect password for XOR-obfuscated document",
-      );
-    }
-    throw error;
+  } catch {
+    throw new DocUnsupportedError(
+      "incorrect password for XOR-obfuscated document",
+    );
   }
   if (computedKey !== headerKey || computedVerifier !== headerVerifier) {
     throw new DocUnsupportedError(
