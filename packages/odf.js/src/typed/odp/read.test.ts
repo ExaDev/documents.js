@@ -369,6 +369,15 @@ describe("readOdpContent", () => {
     expect(slides).toHaveLength(2);
   });
 
+  it("omits the 'source' key entirely from a slide with no residue, rather than carrying it set to undefined", () => {
+    const { slides } = readOdpContent(buildFixturePackage());
+    expect(Object.hasOwn(slides[0]!, "source")).toBe(false);
+  });
+
+  it("omits the package-level 'source' key entirely from readOdp when nothing was quarantined", () => {
+    expect(Object.hasOwn(readOdp(buildFixturePackage()), "source")).toBe(false);
+  });
+
   it("resolves slide size from the master-page -> page-layout chain (draw:master-page-name -> style:master-page -> style:page-layout-name -> style:page-layout-properties)", () => {
     const { slides } = readOdpContent(buildFixturePackage());
     expect(slides[0]?.size).toEqual({ widthPt: 720, heightPt: 540 });
@@ -607,6 +616,37 @@ describe("readOdpContent: residue rows", () => {
       "draw:master-page-name": "Default",
       "draw:style-name": "dp1",
     });
+    const { slides } = readOdpContent(slidePackage(page, {}, automaticStyles));
+    expect(slides[0]?.source).toBeUndefined();
+  });
+
+  it("finds no drawing-page style at all when the slide carries no draw:style-name, even if a nameless drawing-page style happens to exist", () => {
+    // The automatic style below carries a "drawing-page" family but no style:name attribute at all, so attrValue(style, "style:name") itself resolves to undefined -- coincidentally equal to an undefined draw:style-name -- if findDrawingPageProperties didn't short-circuit before ever reaching the style walk.
+    const automaticStyles = el("office:automatic-styles", {}, [
+      el("style:style", { "style:family": "drawing-page" }, [
+        el("style:drawing-page-properties", {
+          "presentation:transition-type": "automatic",
+        }),
+      ]),
+    ]);
+    const page = el("draw:page", { "draw:master-page-name": "Default" }, []);
+    const { slides } = readOdpContent(slidePackage(page, {}, automaticStyles));
+    expect(slides[0]?.source).toBeUndefined();
+  });
+
+  it("skips a same-named style whose family is not drawing-page", () => {
+    const automaticStyles = el("office:automatic-styles", {}, [
+      el("style:style", { "style:name": "dp1", "style:family": "paragraph" }, [
+        el("style:drawing-page-properties", {
+          "presentation:transition-type": "automatic",
+        }),
+      ]),
+    ]);
+    const page = el(
+      "draw:page",
+      { "draw:master-page-name": "Default", "draw:style-name": "dp1" },
+      [],
+    );
     const { slides } = readOdpContent(slidePackage(page, {}, automaticStyles));
     expect(slides[0]?.source).toBeUndefined();
   });
