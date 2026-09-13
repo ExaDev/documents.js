@@ -271,6 +271,16 @@ describe("readNotesText", () => {
     expect(readNotesText(readRecordAt(bytes, 0))).toBe("Top box\nBottom box");
   });
 
+  it("contributes no separator for an empty-text shape sitting between two real ones", () => {
+    // Distinguishes actually skipping the empty body from merely joining it in: an unskipped empty body would still contribute its own blank paragraph, producing an extra "\n\n" pair around it rather than a single join between the two real bodies.
+    const bytes = notesContainer(0x0100, [
+      notesShape({ spid: 2, text: "Top box" }),
+      notesShape({ spid: 3, text: "" }),
+      notesShape({ spid: 4, text: "Bottom box" }),
+    ]);
+    expect(readNotesText(readRecordAt(bytes, 0))).toBe("Top box\nBottom box");
+  });
+
   it("reports no text for a NotesContainer carrying no drawing at all", () => {
     const bytes = container(RT_Notes, [notesAtom(0x0100)]);
     expect(readNotesText(readRecordAt(bytes, 0))).toBe("");
