@@ -343,6 +343,41 @@ describe("body constructs", () => {
     expect(out).not.toContain("\\pagebb");
   });
 
+  it("writes a non-default font index, a non-default size, and every boolean character property a run carries", () => {
+    // fontFamily mints "Courier New" at table index 1 (index 0 is the default "Times New Roman", never restated), and sizePt: 14 -> 28 half-points, distinct from DEFAULT_FONT_SIZE_HALF_POINTS (24) -- both genuinely non-default values, unlike the many other tests in this file that only ever exercise the DEFAULT font/size and so cannot tell \f0/\fs24 being written from being omitted. Checked as one contiguous run group, not loose substrings, since \f1 alone would also match the {\fonttbl ...} entry the same fontFamily mints -- a mutant deleting runProperties' own \f1 would leave that unrelated match standing.
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [
+            {
+              text: "x",
+              fontFamily: "Courier New",
+              sizePt: 14,
+              bold: true,
+              italic: true,
+              underline: true,
+              strike: true,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("{\\f1\\fs28\\b\\i\\ul\\strike x}");
+  });
+
+  it("writes no \\ul/\\strike for an explicit false, distinct from true -- undefined alone cannot tell the two BooleanLiteral branches apart", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x", underline: false, strike: false }],
+        },
+      ]),
+    );
+    expect(out).toContain("\\pard\\plain {x}");
+  });
+
   it("indents a list item's own marker one step per level (LIST_LEVEL_INDENT_TWIPS * (level + 1)), not a fixed or divided amount", () => {
     const out = write(
       wordprocessing([
@@ -2109,6 +2144,23 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  it("resets to \\pard after the table, before whatever follows, so a paragraph after it does not inherit \\intbl", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "table",
+          columnWidthsPt: [72],
+          rows: [{ cells: [{ blocks: [] }] }],
+        },
+        { kind: "paragraph", runs: [{ text: "after" }] },
+      ]),
+    );
+    // A bare \pard of its own, on its own line, distinct from the following paragraph's own \pard\plain -- removing writeTable's own trailing reset would leave \row immediately followed by the next paragraph's \pard\plain with nothing bare in between.
+    expect(out).toMatch(/\\row\n\\pard\n\\pard\\plain \{after\}/);
+    // A cell with no blocks at all writes wroteBlock's own fallback shell rather than leaving the \intbl paragraph shell out entirely -- wroteBlock starts false and this cell's own loop body never sets it, so an empty cell is the one case that proves the initial value, not just later reassignment, is load-bearing.
+    expect(out).toContain("\\pard\\plain\\intbl ");
+  });
+
   it("mints a font table entry for a run's own font family inside a table cell, not only at the top block level", () => {
     // The table-collecting pass's own cell-block loop (noteBlock recursing into cell.blocks) must reach a cell's runs, distinct from the body-writing pass that clearly already does (writeCellBlocks below has its own coverage) -- a table with no font this survey pass ever saw would still write \fN references the font table itself never minted.
     const out = write(
@@ -3310,6 +3362,26 @@ describe("round trip through this package's own reader", () => {
     expect(out).toContain(`\\revdttm${String(dttm)}`);
   });
 
+  it("writes a provenance extent's own \\revised flag with no \\revauthN at all when it carries no author", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "added" }],
+          constructs: [
+            {
+              descriptor: { kind: "provenance", change: "insertion" },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\revised");
+    expect(out).not.toContain("\\revauth");
+  });
+
   it("excludes the run exactly at a provenance extent's own endRun, which is exclusive", () => {
     // Each covered run is written inside its own group with its own freshly-computed \revised (there is no shared \revised0 "off" spelling), so the run exactly at endRun getting the flag too would show up as one extra occurrence, not a missing "off" marker.
     const out = write(
@@ -3540,6 +3612,8 @@ describe("round trip through this package's own reader", () => {
     expect(out).toContain("\\clbrdrt\\brdrs\\brdrw30");
     expect(out).toContain("\\clbrdrb\\brdrdash\\brdrw15");
     expect(out).toContain("\\clcbpat");
+    // colSpan 2 produces two \cellxN column marks for cell B, but its own content must be written only once (against the first, offset === 0 column) -- never repeated into the merge-continuation column too.
+    expect(out.match(/\{B\}/g)).toHaveLength(1);
 
     const beyond = write(
       wordprocessing([
@@ -3697,6 +3771,40 @@ describe("round trip through this package's own reader", () => {
       "paragraph",
       "constructEnd",
     ]);
+  });
+
+  it("defers a paragraph's own \\par past a trailing marker with nothing else after it in the cell", () => {
+    // blocks.slice(index + 1).some(...) asks only whether a REAL cell block (paragraph/image/embeddedObject) follows the marker -- not whether one precedes it, and not the marker itself. A marker as the cell's own last block has nothing after it, so the deferred \par must stay deferred here (RTF's own \cell already ends the cell's last paragraph with no \par of its own needed) rather than being flushed early right before the marker's own spelling: either dropping the slice, or sliding its start back by one (both of which would then also see the PRECEDING paragraph and wrongly conclude something still follows), makes this fire when it should not.
+    const out = write(
+      wordprocessing([
+        {
+          kind: "table",
+          columnWidthsPt: [72],
+          rows: [
+            {
+              cells: [
+                {
+                  blocks: [
+                    {
+                      kind: "constructStart",
+                      descriptor: {
+                        kind: "anchor",
+                        anchorType: "bookmark",
+                        name: "trailing",
+                      },
+                    },
+                    { kind: "paragraph", runs: [{ text: "One" }] },
+                    { kind: "constructEnd" },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).not.toContain("{One}\\par");
+    expect(out).toContain("{One}{\\*\\bkmkend trailing}");
   });
 
   // A marker at index 0 (the case above) can never expose a bug in flushing the PRECEDING paragraph's deferred \par, since there is no preceding paragraph. This cell instead opens the bookmark strictly between the first and second of three paragraphs, so the deferred \par writeCellBlocks owes paragraph one must be flushed before the marker rather than after it -- getting this wrong widens the bookmark to cover paragraph one as well once read back.
