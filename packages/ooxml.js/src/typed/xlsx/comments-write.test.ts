@@ -97,6 +97,24 @@ describe("buildThreadedCommentElements", () => {
       false,
     );
   });
+
+  it("keeps the counter strictly increasing past a reply, so a later cell's root id never collides with an earlier one", () => {
+    // A reply consumes a counter value of its own (root=0, reply=1) before the next cell's root is minted -- if the reply loop's own increment ever ran backwards, this second cell's root would collide with the first cell's root id instead of continuing at 2.
+    const s = sheet([
+      numberCell(0, 0, 1, {
+        comment: { text: "root", replies: [{ text: "reply" }] },
+      }),
+      numberCell(1, 0, 2, { comment: { text: "second root" } }),
+    ]);
+    const elements = buildThreadedCommentElements(s);
+    expect(
+      elements.map((e) => e.attributes.find((a) => a.name === "id")?.value),
+    ).toEqual([
+      "{00000000-0000-0000-0000-000000000000}",
+      "{00000000-0000-0000-0000-000000000001}",
+      "{00000000-0000-0000-0000-000000000002}",
+    ]);
+  });
 });
 
 describe("buildThreadedCommentsRoot", () => {
