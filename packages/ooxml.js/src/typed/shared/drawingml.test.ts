@@ -681,6 +681,37 @@ describe("composeGroupTransform", () => {
     expect(composed?.compositeMirrored).toBe(true);
   });
 
+  it("wraps a negative subtraction result back into [0, 360)", () => {
+    // parent 30deg minus own 90deg is -60deg -- the negative case normalizeDeg's own "add 360" branch exists for, which every other subtraction test above lands on the positive side of.
+    const parent: GroupChildTransform = {
+      offXPt: 0,
+      offYPt: 0,
+      extWidthPt: 400,
+      extHeightPt: 400,
+      childOffXPt: 0,
+      childOffYPt: 0,
+      childExtWidthPt: 400,
+      childExtHeightPt: 400,
+      compositeRotationDeg: 30,
+      compositeMirrored: true,
+    };
+    const own = {
+      offXPt: 200,
+      offYPt: 0,
+      extWidthPt: 200,
+      extHeightPt: 200,
+      childOffXPt: 0,
+      childOffYPt: 0,
+      childExtWidthPt: 200,
+      childExtHeightPt: 200,
+      rotationDeg: 90,
+      flipH: false,
+      flipV: false,
+    };
+    const composed = composeGroupTransform(own, parent);
+    expect(composed?.compositeRotationDeg).toBe(300);
+  });
+
   it("returns undefined when own is undefined", () => {
     expect(composeGroupTransform(undefined, undefined)).toBeUndefined();
   });
