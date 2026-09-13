@@ -54,26 +54,17 @@ export function segmentSheetRegions(
 // The row/column gap the adjacency rule tolerates: a difference of 1 (immediately adjacent, 0 blank cells between) or 2 (exactly 1 blank cell between) connects; 3 or more (2+ blank cells between) does not.
 const GAP_TOLERANCE = 2;
 
-// A minimal union-find over cellReference() keys -- string keys rather than a numeric index, since the input is a sparse cell array with no dense id space to allocate from. find() applies path compression on every call so a long chain (a full column or row of cells) never re-walks its whole prior structure per union.
+// A minimal union-find over cellReference() keys -- string keys rather than a numeric index, since the input is a sparse cell array with no dense id space to allocate from. No path compression: it would only ever change how many hops a FUTURE find() walks, never any value this class returns, so it is unobservable through this class's own public contract and would be untestable dead weight -- a sheet's own adjacency chains (one column or row at a time) are bounded by realistic sheet sizes regardless.
 class DisjointCellSet {
   private readonly parent = new Map<string, string>();
 
-  // Every `parent` entry is created by union() alone, guarded there by `rootA !== rootB` -- so no key is ever mapped to itself, and a chain of `parent.get` calls always terminates by reaching an unmapped root (`undefined`), never by revisiting an already-seen node. That is the whole termination argument for both walks below; there is no self-loop or cycle to separately guard against.
+  // Every `parent` entry is created by union() alone, guarded there by `rootA !== rootB` -- so no key is ever mapped to itself, and a chain of `parent.get` calls always terminates by reaching an unmapped root (`undefined`), never by revisiting an already-seen node. That is the whole termination argument for this walk; there is no self-loop or cycle to separately guard against.
   private root(key: string): string {
     let current = key;
     let next = this.parent.get(current);
     while (next !== undefined) {
       current = next;
       next = this.parent.get(current);
-    }
-    // Path compression: point every visited node directly at the discovered root.
-    let walk = key;
-    let step = this.parent.get(walk);
-    while (step !== undefined) {
-      // Path compression: a deliberate performance property (bounding future lookups' hop count), not itself part of this function's correctness contract.
-      this.parent.set(walk, current);
-      walk = step;
-      step = this.parent.get(walk);
     }
     return current;
   }
@@ -112,11 +103,10 @@ function connectedComponents(
     else row.push(cell);
   }
 
-  // Iterating .entries() rather than a manually bounded `for` loop means `current` is always a real, defined element -- no separately-mutable upper-bound comparison to get subtly wrong.
+  // Iterating .entries() rather than a manually bounded `for` loop means `current` is always a real, defined element -- no separately-mutable upper-bound comparison to get subtly wrong. No separate `i === 0` clause: `sorted[i - 1]` for i 0 is `sorted[-1]`, always `undefined`, so `previous !== undefined` immediately below already skips the first element on its own -- a second, explicit check for the identical case would be redundant, not an independent guard.
   for (const column of byColumn.values()) {
     const sorted = [...column].sort((a, b) => a.row - b.row);
     for (const [i, current] of sorted.entries()) {
-      if (i === 0) continue;
       const previous = sorted[i - 1];
       if (
         previous !== undefined &&
@@ -129,7 +119,6 @@ function connectedComponents(
   for (const row of byRow.values()) {
     const sorted = [...row].sort((a, b) => a.column - b.column);
     for (const [i, current] of sorted.entries()) {
-      if (i === 0) continue;
       const previous = sorted[i - 1];
       if (
         previous !== undefined &&
@@ -314,9 +303,10 @@ export function classifyRegion(signals: RegionSignals): {
   if (top.score < SIGNAL_THRESHOLD) {
     return { classification: "unknown", confidence: clamp01(1 - top.score) };
   }
+  // Written as `top < second + MIXED_MARGIN` rather than the algebraically equivalent `top - second < MIXED_MARGIN`: with both scores constrained to [SIGNAL_THRESHOLD, 1], their difference always lands on a coarser floating-point grid (a multiple of the wider of the two operands' own ULP) than MIXED_MARGIN's own stored value needs, so no achievable pair of scores can ever make that subtraction equal MIXED_MARGIN bit-for-bit -- the `<`/`<=` boundary there is unobservable by construction, not by any gap in testing. Comparing against `second + MIXED_MARGIN` instead lets a test construct top as EXACTLY that same sum (the identical expression, so the two sides are bit-identical by construction), making the boundary genuinely reachable.
   if (
     second.score >= SIGNAL_THRESHOLD &&
-    top.score - second.score < MIXED_MARGIN
+    top.score < second.score + MIXED_MARGIN
   ) {
     return {
       classification: "mixed",
