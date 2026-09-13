@@ -43,8 +43,8 @@ describe("output shape", () => {
     expectBalancedBraces(out);
   });
 
-  it("writes no \\colortbl/\\stylesheet/\\*\\listtable/\\*\\revtbl at all for a document using none of them", () => {
-    // Each of these four tables is genuinely optional -- unlike \fonttbl, which always carries at least the default font -- and each has its own guard against writing an empty destination for nothing.
+  it("writes no \\colortbl/\\stylesheet/\\*\\listtable/\\*\\revtbl/\\info at all for a document using none of them", () => {
+    // Each of these five destinations is genuinely optional -- unlike \fonttbl, which always carries at least the default font -- and each has its own guard against writing an empty destination for nothing. \info's own guard (fields.length > 0) is the only one gating a group built from four independently-optional sub-fields rather than a single table, so an empty document with no metadata at all is the fixture that proves the whole group, not just one field, is skipped.
     const out = write(
       wordprocessing([{ kind: "paragraph", runs: [{ text: "x" }] }]),
     );
@@ -52,6 +52,7 @@ describe("output shape", () => {
     expect(out).not.toContain("\\stylesheet");
     expect(out).not.toContain("\\listtable");
     expect(out).not.toContain("\\revtbl");
+    expect(out).not.toContain("\\info");
   });
 
   it("emits pure 7-bit ASCII whatever the input contained", () => {
@@ -242,10 +243,26 @@ describe("header tables", () => {
       wordprocessing([{ kind: "paragraph", runs: [{ text: "x" }] }], {
         title: "A Title",
         author: "An Author",
+        subject: "A Subject",
+        keywords: ["one", "two"],
       }),
     );
     expect(out).toContain("{\\title A Title}");
     expect(out).toContain("{\\author An Author}");
+    expect(out).toContain("{\\subject A Subject}");
+    // Joined with "; ", not "" -- otherwise "onetwo" would be indistinguishable from a single keyword.
+    expect(out).toContain("{\\keywords one; two}");
+  });
+
+  it("omits \\keywords entirely for an empty keywords array, unlike a genuinely populated one", () => {
+    // keywords !== undefined alone would let [] through; the writer also requires .length > 0, since an empty list carries no keyword to record.
+    const out = write(
+      wordprocessing([{ kind: "paragraph", runs: [{ text: "x" }] }], {
+        keywords: [],
+      }),
+    );
+    expect(out).not.toContain("\\keywords");
+    expect(out).not.toContain("\\info");
   });
 
   it("mints both list tables and references the override by \\lsN", () => {
@@ -3607,10 +3624,41 @@ describe("round trip through this package's own reader", () => {
         },
       ],
     });
-    expect(out).toContain("\\pgwsxn15840\\pghsxn12240");
-    expect(out).toContain("\\marglsxn720");
+    // Document-level geometry (\paperwN family), stated once from the first section: 612pt/792pt/72pt margins at 20 twips/pt.
+    expect(out).toContain(
+      "\\paperw12240\\paperh15840\\margl1440\\margr1440\\margt1440\\margb1440",
+    );
+    // The second section's own geometry, in full, on the section-scoped \pgwsxnN family: 792pt/612pt/36pt margins.
+    expect(out).toContain(
+      "\\sectd\\pgwsxn15840\\pghsxn12240\\marglsxn720\\margrsxn720\\margtsxn720\\margbsxn720",
+    );
     // The document-level geometry is stated once, in the header, from the first section -- not restated per section.
     expect(out.match(/\\paperw/g)).toHaveLength(1);
+  });
+
+  it("writes each section-break kind's own \\sbk* word, and no \\sbk* at all for the two kinds that need none", () => {
+    // "nextPage" is RTF's own default section start and "column" isn't a break kind ContentSection.breakType even carries -- both spellings the SECTION_BREAK_CONTROL_WORDS map genuinely omits, distinct from an undefined breakType only in that .get() is actually called and itself returns undefined, rather than the lookup being skipped outright.
+    const withBreak = (
+      breakType: ContentSection["breakType"],
+    ): ContentDocument => ({
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        { ...LETTER_SECTION, blocks: [{ kind: "paragraph", runs: [] }] },
+        {
+          ...LETTER_SECTION,
+          breakType,
+          blocks: [{ kind: "paragraph", runs: [] }],
+        },
+      ],
+    });
+    expect(write(withBreak("continuous"))).toContain(
+      "\\sectd\\sbknone\\pgwsxn",
+    );
+    expect(write(withBreak("evenPage"))).toContain("\\sectd\\sbkeven\\pgwsxn");
+    expect(write(withBreak("oddPage"))).toContain("\\sectd\\sbkodd\\pgwsxn");
+    expect(write(withBreak("nextPage"))).toContain("\\sectd\\pgwsxn");
+    expect(write(withBreak(undefined))).toContain("\\sectd\\pgwsxn");
   });
 
   it("preserves an embedded object's kind, frame, and nested document through a real OLE compound file", () => {
