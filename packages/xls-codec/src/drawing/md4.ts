@@ -94,7 +94,8 @@ export function md4(message: Uint8Array<ArrayBuffer>): string {
 
   for (let offset = 0; offset < padded.length; offset += BLOCK_SIZE) {
     const x: BlockWords = [
-      view.getUint32(offset + 0 * 4, true),
+      // The first word needs no offset term at all -- `+ 0 * 4` is always exactly `offset` regardless of which arithmetic operator produced the zero, so stating it would only be restating the same value a different, more roundabout way.
+      view.getUint32(offset, true),
       view.getUint32(offset + 1 * 4, true),
       view.getUint32(offset + 2 * 4, true),
       view.getUint32(offset + 3 * 4, true),
