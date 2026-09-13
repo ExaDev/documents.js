@@ -1,5 +1,10 @@
 // A real docx that carries every field `readDocxExtras` (documents.js) reads and `readDocxContent`'s own `ContentDocument` cannot: comments, footnotes, headers, footers, and a numbering definition. `DocxEditor` has no write side for any of these -- comments/footnotes/headers/footers/numbering are none of them addressable through `DocxBody`/`DocxParagraph` -- so this builder starts from a real editor-built package and writes the four extra parts directly, at the exact conventional paths (`word/comments.xml`, `word/footnotes.xml`, `word/header1.xml`/`word/footer1.xml`, `word/numbering.xml`) documents.js's own reader resolves them from with no relationship indirection at all. Ported from document-cli's own src/test-support/docx-extras-fixture.ts.
-import { createDocx, encodePackage, type XmlElement } from "documents.js";
+import {
+  createDocx,
+  encodePackage,
+  type XmlElement,
+  type XmlPart,
+} from "documents.js";
 import { el, txt, xmlDeclaration } from "./ooxml-fixture";
 
 const WORDML_NS =
@@ -21,15 +26,10 @@ export const DOCX_EXTRAS_FIXTURE = {
   numberingLevel: { format: "decimal", text: "%1." },
 } as const;
 
-// A real docx, comments/footnotes/headers/footers/numbering included. The footnotes part also declares a `w:type="separator"` footnote -- the horizontal rule Word always writes alongside real footnotes -- deliberately, since `readDocxExtras`'s own `readFootnotes` (ooxml.js) skips exactly that type; a fixture that omitted it would never exercise the skip at all.
-export function buildDocxWithExtras(): Uint8Array<ArrayBuffer> {
-  const editor = createDocx();
-  editor.body
-    .appendParagraph()
-    .appendRun({ text: "An ordinary body paragraph." });
-  const pkg = editor.toPackage();
+// Each of these five builders returns one extra part's own XmlPart in isolation, with no editor/package/encode-decode round trip involved -- kept as standalone exports (rather than inlined into buildDocxWithExtras below) so a test can assert directly on the exact structure each one produces.
 
-  pkg.parts["word/comments.xml"] = {
+export function buildCommentsPart(): XmlPart {
+  return {
     kind: "xml",
     nodes: [
       xmlDeclaration(),
@@ -45,8 +45,11 @@ export function buildDocxWithExtras(): Uint8Array<ArrayBuffer> {
       ]),
     ],
   };
+}
 
-  pkg.parts["word/footnotes.xml"] = {
+// Declares a `w:type="separator"` footnote -- the horizontal rule Word always writes alongside real footnotes -- deliberately, since `readDocxExtras`'s own `readFootnotes` (ooxml.js) skips exactly that type; a fixture that omitted it would never exercise the skip at all.
+export function buildFootnotesPart(): XmlPart {
+  return {
     kind: "xml",
     nodes: [
       xmlDeclaration(),
@@ -60,8 +63,10 @@ export function buildDocxWithExtras(): Uint8Array<ArrayBuffer> {
       ]),
     ],
   };
+}
 
-  pkg.parts["word/header1.xml"] = {
+export function buildHeaderPart(): XmlPart {
+  return {
     kind: "xml",
     nodes: [
       xmlDeclaration(),
@@ -70,7 +75,10 @@ export function buildDocxWithExtras(): Uint8Array<ArrayBuffer> {
       ]),
     ],
   };
-  pkg.parts["word/footer1.xml"] = {
+}
+
+export function buildFooterPart(): XmlPart {
+  return {
     kind: "xml",
     nodes: [
       xmlDeclaration(),
@@ -79,8 +87,10 @@ export function buildDocxWithExtras(): Uint8Array<ArrayBuffer> {
       ]),
     ],
   };
+}
 
-  pkg.parts["word/numbering.xml"] = {
+export function buildNumberingPart(): XmlPart {
+  return {
     kind: "xml",
     nodes: [
       xmlDeclaration(),
@@ -102,6 +112,21 @@ export function buildDocxWithExtras(): Uint8Array<ArrayBuffer> {
       ]),
     ],
   };
+}
+
+// A real docx, comments/footnotes/headers/footers/numbering included.
+export function buildDocxWithExtras(): Uint8Array<ArrayBuffer> {
+  const editor = createDocx();
+  editor.body
+    .appendParagraph()
+    .appendRun({ text: "An ordinary body paragraph." });
+  const pkg = editor.toPackage();
+
+  pkg.parts["word/comments.xml"] = buildCommentsPart();
+  pkg.parts["word/footnotes.xml"] = buildFootnotesPart();
+  pkg.parts["word/header1.xml"] = buildHeaderPart();
+  pkg.parts["word/footer1.xml"] = buildFooterPart();
+  pkg.parts["word/numbering.xml"] = buildNumberingPart();
 
   return encodePackage(pkg);
 }
