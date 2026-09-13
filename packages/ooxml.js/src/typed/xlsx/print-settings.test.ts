@@ -94,6 +94,35 @@ describe("readPrintSettings: margins", () => {
       leftPt: 36,
     });
   });
+
+  it("reads all four sides from their own distinct attributes, converting inches to points by multiplying, not dividing", () => {
+    const worksheet = el("worksheet", {}, [
+      el("pageMargins", { top: "1", right: "2", bottom: "1.5", left: "0.25" }),
+    ]);
+    const settings = readPrintSettings(worksheet, 0, new Map());
+    expect(settings.margins).toEqual({
+      topPt: 72,
+      rightPt: 144,
+      bottomPt: 108,
+      leftPt: 18,
+    });
+  });
+
+  it("falls back to the default top margin specifically when top alone is absent", () => {
+    const worksheet = el("worksheet", {}, [
+      el("pageMargins", { right: "1", bottom: "1", left: "1" }),
+    ]);
+    expect(readPrintSettings(worksheet, 0, new Map()).margins.topPt).toBe(54);
+  });
+
+  it("falls back to the default left margin specifically when left alone is absent", () => {
+    const worksheet = el("worksheet", {}, [
+      el("pageMargins", { top: "1", right: "1", bottom: "1" }),
+    ]);
+    expect(readPrintSettings(worksheet, 0, new Map()).margins.leftPt).toBe(
+      50.4,
+    );
+  });
 });
 
 describe("readPrintSettings: pageOrder", () => {
@@ -175,6 +204,23 @@ describe("readPrintSettings: manual breaks", () => {
     const settings = readPrintSettings(worksheet, 0, new Map());
     expect(settings.manualBreaks).toEqual({ rows: [2], columns: [] });
   });
+
+  it("includes a break at id 0, the first valid non-negative index", () => {
+    const worksheet = el("worksheet", {}, [
+      el("rowBreaks", {}, [el("brk", { id: "0" })]),
+    ]);
+    const settings = readPrintSettings(worksheet, 0, new Map());
+    expect(settings.manualBreaks).toEqual({ rows: [0], columns: [] });
+  });
+
+  it("still reports manualBreaks when only column breaks are present, with an empty rows array", () => {
+    const worksheet = el("worksheet", {}, [
+      el("colBreaks", {}, [el("brk", { id: "1" })]),
+    ]);
+    const settings = readPrintSettings(worksheet, 0, new Map());
+    expect(Object.hasOwn(settings, "manualBreaks")).toBe(true);
+    expect(settings.manualBreaks).toEqual({ rows: [], columns: [1] });
+  });
 });
 
 describe("readPrintSettings: fit-to-page vs scale", () => {
@@ -185,10 +231,16 @@ describe("readPrintSettings: fit-to-page vs scale", () => {
     expect(Object.hasOwn(settings, "fitToPages")).toBe(false);
   });
 
-  it("omits scalePercent when scale is absent or non-numeric", () => {
+  it("omits scalePercent when scale is non-numeric", () => {
     const worksheet = el("worksheet", {}, [
       el("pageSetup", { scale: "not-a-number" }),
     ]);
+    const settings = readPrintSettings(worksheet, 0, new Map());
+    expect(Object.hasOwn(settings, "scalePercent")).toBe(false);
+  });
+
+  it("omits scalePercent when the scale attribute is absent entirely", () => {
+    const worksheet = el("worksheet", {}, [el("pageSetup", {})]);
     const settings = readPrintSettings(worksheet, 0, new Map());
     expect(Object.hasOwn(settings, "scalePercent")).toBe(false);
   });

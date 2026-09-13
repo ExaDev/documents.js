@@ -178,13 +178,12 @@ export function readPrintSettings(
           : Number(fitToHeightRaw),
     };
   } else {
+    // No separate "is scaleRaw present" guard is needed: Number(undefined) is NaN, and the isFinite check below already rejects that exactly as it rejects any other non-numeric scale attribute.
     const scaleRaw =
       pageSetup === undefined ? undefined : attr(pageSetup, "scale");
-    if (scaleRaw !== undefined) {
-      const scale = Number(scaleRaw);
-      if (Number.isFinite(scale)) {
-        settings.scalePercent = scale;
-      }
+    const scale = Number(scaleRaw);
+    if (Number.isFinite(scale)) {
+      settings.scalePercent = scale;
     }
   }
 
