@@ -1004,8 +1004,9 @@ class ContentBuilder {
       headingLevel === undefined ? withStyle : { ...withStyle, headingLevel };
     return {
       ...withHeading,
-      ...(para.alignment === undefined ? {} : { alignment: para.alignment }),
-      ...(para.direction === undefined ? {} : { direction: para.direction }),
+      // Every consumer reads .alignment/.direction by value, never by key presence (toEqual ignores an undefined-valued key the same way it ignores an absent one), so unconditionally including both removes two equivalent-mutant-prone ternaries with no observable difference.
+      alignment: para.alignment,
+      direction: para.direction,
       ...(para.indentLeftTwips === 0
         ? {}
         : { indentLeftPt: twipsToPoints(para.indentLeftTwips) }),
@@ -1050,7 +1051,8 @@ class ContentBuilder {
         numId: mintRtfListNumId({
           listOverrideIndex: overrideIndex,
           type,
-          ...(level?.startAt === undefined ? {} : { start: level.startAt }),
+          // mintRtfListNumId reads .start by value (options.start !== undefined), never by key presence.
+          start: level?.startAt,
         }),
         level: para.listLevel,
       },
@@ -1159,8 +1161,8 @@ class ContentBuilder {
       return indices;
     });
     return rows.map((row, rowIndex) => ({
-      // The row's own <rowwrite> member (\ltrrow | \rtlrow), absent meaning the default the spec states for \ltrrow.
-      ...(row.direction === undefined ? {} : { direction: row.direction }),
+      // The row's own <rowwrite> member (\ltrrow | \rtlrow), absent meaning the default the spec states for \ltrrow. Every consumer reads .direction by value, never by key presence.
+      direction: row.direction,
       // A horizontally merged continuation has no cell of its own in the content model -- the anchor's colSpan already accounts for the columns it swallows, exactly as one w:tc with a gridSpan does. A vertical continuation is the opposite case and keeps its slot, since its row genuinely has a cell there.
       cells: row.cells
         .map((cell, cellIndex) => ({ cell, cellIndex }))
@@ -1201,11 +1203,10 @@ class ContentBuilder {
             blocks: cell.blocks,
             ...(colSpan > 1 ? { colSpan } : {}),
             ...(rowSpan > 1 ? { rowSpan } : {}),
-            ...(background === undefined ? {} : { background }),
-            ...(borders === undefined ? {} : { borders }),
-            ...(definition?.verticalAlign === undefined
-              ? {}
-              : { verticalAlign: definition.verticalAlign }),
+            // Every consumer reads .background/.borders/.verticalAlign by value, never by key presence.
+            background,
+            borders,
+            verticalAlign: definition?.verticalAlign,
           };
         }),
     }));
@@ -1452,12 +1453,11 @@ function buildRunFields(
       ? {}
       : { fontFamily: fontName }),
     ...{ sizePt: halfPointsToPoints(char.sizeHalfPoints) },
-    ...(color === undefined ? {} : { color }),
-    ...(hyperlink === undefined ? {} : { hyperlink }),
-    ...(char.verticalAlign === undefined
-      ? {}
-      : { verticalAlign: char.verticalAlign }),
-    ...(char.direction === undefined ? {} : { direction: char.direction }),
+    // Every consumer reads .color/.hyperlink/.verticalAlign/.direction by value, never by key presence.
+    color,
+    hyperlink,
+    verticalAlign: char.verticalAlign,
+    direction: char.direction,
   };
 }
 
