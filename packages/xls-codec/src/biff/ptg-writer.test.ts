@@ -193,6 +193,17 @@ describe("compileFormulaText", () => {
         /carries an unrecognised error literal starting at offset 0/,
       );
     });
+
+    it("recognises an error literal mid-formula, matched from its own offset rather than the start of the whole text", () => {
+      // ERROR_RE is anchored with `^`, so matching it against the FULL source text (rather than the slice starting at this token's own offset) would only ever succeed when the error literal happens to be the formula's first character -- every test above puts the literal first, which cannot tell the two apart.
+      expect(compiled("1+#N/A")).toStrictEqual([
+        PTG_INT,
+        ...u16le(1),
+        PTG_ERR,
+        0x2a,
+        PTG_ADD,
+      ]);
+    });
   });
 
   describe("unrecognised input", () => {
@@ -358,6 +369,30 @@ describe("compileFormulaText", () => {
         /expected a word but found "1"/,
       );
     });
+
+    it("refuses a word combining letters, digits, and trailing letters, rather than silently matching just its own leading letters-then-digits prefix", () => {
+      // The combined letters-then-digits pattern is anchored at both ends: without the trailing anchor, it would still match "A1" as a PREFIX of "A1B2" and silently drop the "B2" that follows, rather than rejecting the whole word as no reference at all.
+      expect(() => compileFormulaText("A1B2")).toThrow(
+        /carries "A1B2", which is not a valid cell reference/,
+      );
+    });
+
+    it("accepts a two-letter column with no row digits of its own, split from its row by an explicit dollar sign", () => {
+      // The bare-column check accepts 1 TO 3 letters, not exactly one -- a single-letter column ("A$1", already covered above) cannot tell an exact-one-letter check apart from a 1-3 range; a genuinely multi-letter column here is what needs the wider range to still be accepted at all.
+      expect(() => compileFormulaText("AB$1")).not.toThrow();
+    });
+
+    it("refuses a bare column letter followed directly by an operator, rather than wrongly consuming that operator as this reference's own row-absolute dollar sign", () => {
+      // With no dollar sign actually present after the column, the row must be read from whatever token genuinely follows -- here that's "+" (not a number), so this must fail on ITS OWN, well before the "1" one token further on ever comes into it.
+      expect(() => compileFormulaText("A+1")).toThrow(
+        /expected a number but found "\+"/,
+      );
+    });
+
+    it("accepts a two-digit row number after an explicit dollar sign, not just a single digit", () => {
+      // A single-digit row ("A$1", already covered above) cannot tell "one or more digits" apart from "exactly one digit" -- a genuinely multi-digit row is what needs the wider quantifier to still be accepted.
+      expect(() => compileFormulaText("A$12")).not.toThrow();
+    });
   });
 
   describe("operators", () => {
@@ -444,6 +479,52 @@ describe("compileFormulaText", () => {
         PTG_ADD,
         PTG_PAREN,
       ]);
+    });
+  });
+
+  // Every operator-loop guard above (comparison, concat, additive, multiplicative, power, percent, unary) checks BOTH a token's own type ("op") and its text -- but every formula used to prove the operator itself works also happens to hand it a genuine "op" token, so a mutant that drops the type half of the check and keeps only the text comparison reads identically for all of them. A string literal whose own text happens to equal one of these operator spellings (`"+"`, `"&"`, and so on) is the one input where the two checks disagree: type is "string", not "op", so the real guard must reject it on the type alone, while a text-only guard would wrongly treat the quoted literal as the operator itself.
+  describe("operator guards check a token's own type, not merely its text", () => {
+    it('does not treat a string literal reading "=" as a comparison operator', () => {
+      expect(() => compileFormulaText('1"="')).toThrow(
+        /expected a eof but found/,
+      );
+    });
+
+    it('does not treat a string literal reading "&" as the concatenation operator', () => {
+      expect(() => compileFormulaText('1"&"')).toThrow(
+        /expected a eof but found/,
+      );
+    });
+
+    it('does not treat a string literal reading "+" as the additive operator', () => {
+      expect(() => compileFormulaText('1"+"')).toThrow(
+        /expected a eof but found/,
+      );
+    });
+
+    it('does not treat a string literal reading "*" as the multiplicative operator', () => {
+      expect(() => compileFormulaText('1"*"')).toThrow(
+        /expected a eof but found/,
+      );
+    });
+
+    it('does not treat a string literal reading "^" as the exponentiation operator', () => {
+      expect(() => compileFormulaText('1"^"')).toThrow(
+        /expected a eof but found/,
+      );
+    });
+
+    it('does not treat a string literal reading "%" as the percent operator', () => {
+      // Unlike the binary operators above, percent takes no right operand at all -- so wrongly accepting the string literal as a percent sign here does not even leave a malformed remainder to report: the whole formula would falsely finish parsing clean.
+      expect(() => compileFormulaText('1"%"')).toThrow(
+        /expected a eof but found/,
+      );
+    });
+
+    it('does not treat a string literal reading "+" as a unary prefix operator', () => {
+      expect(() => compileFormulaText('"+"1')).toThrow(
+        /expected a eof but found "1"/,
+      );
     });
   });
 
