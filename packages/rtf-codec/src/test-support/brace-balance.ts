@@ -8,32 +8,12 @@ function countGroupBraces(rtf: string): {
   readonly open: number;
   readonly close: number;
 } {
-  let open = 0;
-  let close = 0;
-  let index = 0;
-  // No explicit index < rtf.length bound: index's own step varies (1 or 2 characters per iteration), but a string index at or past its own length always reads back undefined rather than throwing, and undefined matches none of the branches below -- so the character === undefined check is already the one true stopping condition, exactly the way decodeDbcsBytes's identical lead/trail loop in ../codepage.ts states it.
-  for (;;) {
-    const character = rtf[index];
-    if (character === undefined) {
-      break;
-    }
-    if (character === "\\") {
-      const next = rtf[index + 1];
-      if (next === "\\" || next === "{" || next === "}") {
-        index += 2;
-        continue;
-      }
-      index += 1;
-      continue;
-    }
-    if (character === "{") {
-      open += 1;
-    } else if (character === "}") {
-      close += 1;
-    }
-    index += 1;
-  }
-  return { open, close };
+  // Stripping every two-character escape (\\, \{, \}) first, left to right, non-overlapping, is exactly what a character-by-character scan tracking "am I mid-escape" would do -- RTF's escapes are never longer than two characters, so there is no case a greedy global regex consumes differently. What remains is real, unescaped `{`/`}` delimiters (and any untouched backslash-word sequences, e.g. \b, whose own trailing characters are never brace characters), so counting them by splitting is exact.
+  const withoutEscapes = rtf.replace(/\\[\\{}]/g, "");
+  return {
+    open: withoutEscapes.split("{").length - 1,
+    close: withoutEscapes.split("}").length - 1,
+  };
 }
 
 export function expectBalancedBraces(rtf: string): void {
