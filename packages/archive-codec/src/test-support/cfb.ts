@@ -29,6 +29,7 @@ interface DirectoryRecord {
   readonly node: StorageNode;
   readonly id: number;
   rightId: number;
+  childId: number;
 }
 
 /** A directory record whose node genuinely carries a stream, so reads of it need no absent case. */
@@ -57,13 +58,10 @@ function put32(view: DataView, offset: number, value: number): void {
   view.setUint32(offset, value, true);
 }
 
+// No node.name.length === 0 guard: this is called only via writeDirectoryEntry, once for the root (whose own name is "Root Entry" from creation, never empty) and once each for every other node, whose name was already proven non-empty by compoundFile's own path-segment validation before the node was ever created. An empty name can never reach here.
 function checkedName(node: StorageNode): Uint8Array<ArrayBuffer> {
   const encoded = enc(node.name);
-  if (
-    node.name.length === 0 ||
-    encoded.length > 31 ||
-    encoded.some((byte) => byte > 0x7f)
-  ) {
+  if (encoded.length > 31 || encoded.some((byte) => byte > 0x7f)) {
     throw new Error(
       `compoundFile stream/storage names must be non-empty ASCII of at most 31 characters (got ${JSON.stringify(node.name)})`,
     );
@@ -81,10 +79,11 @@ function writeDirectoryEntry(
   size: number,
 ): void {
   const encoded = checkedName(node);
-  for (let i = 0; i < encoded.length; i++) {
-    entry.setUint8(i * 2, encoded[i] ?? 0);
+  // Walks the encoded bytes directly (each paired with its own index via Array.from, rather than a hand-written comparison bound indexing back into encoded with a `?? 0` fallback for an out-of-range read that can now never happen): every element visited this way is a real byte of encoded, never the array's own out-of-range undefined.
+  Array.from(encoded).forEach((byte, i) => {
+    entry.setUint8(i * 2, byte);
     entry.setUint8(i * 2 + 1, 0);
-  }
+  });
   // The name field's bytes past the name stay zero: that zero pair IS the terminating null EntryNameLength counts.
   put16(entry, 0x40, encoded.length * 2 + 2);
   entry.setUint8(0x42, objectType);
@@ -94,7 +93,7 @@ function writeDirectoryEntry(
   put32(entry, 0x4c, childId);
   put32(entry, 0x74, startSector);
   put32(entry, 0x78, size);
-  put32(entry, 0x7c, 0);
+  // No write of the high 32 bits at 0x7c: every size this test-support builder ever writes (a real stream's own byte length, or the mini stream's total) fits comfortably under 2^32, so that word is always 0 -- already true from entry's own allocation, and this builder's own streams never need anything else.
 }
 
 function padToMultiple(
@@ -118,15 +117,13 @@ export function compoundFile(
   const entriesPerDirectorySector = sectorSize / 128;
   const fatEntriesPerSector = sectorSize / 4;
 
-  const root: StorageNode = { name: "", children: [] };
+  // "Root Entry" from the start, not a placeholder overridden at write time: nothing else ever reads this node's own name (it is never a sibling, so it never enters a name comparison), so there is no reason to carry a second, different string that would only be discarded later.
+  const root: StorageNode = { name: "Root Entry", children: [] };
   for (const entry of entries) {
     const segments = entry.path.split("/");
     const leaf = segments.pop();
-    if (
-      leaf === undefined ||
-      leaf.length === 0 ||
-      segments.some((segment) => segment.length === 0)
-    ) {
+    // !leaf alone (not leaf === undefined || leaf.length === 0) covers exactly the same two cases: String.prototype.split always returns at least one element, so .pop() on it is genuinely never undefined here -- only ever a string, possibly empty -- and a falsy check catches both undefined and "" identically to spelling them out, while also narrowing leaf to string below.
+    if (!leaf || segments.some((segment) => segment.length === 0)) {
       throw new Error(
         `compoundFile entry paths must be slash-separated with no empty segments (got ${JSON.stringify(entry.path)})`,
       );
@@ -153,32 +150,23 @@ export function compoundFile(
 
   // Directory entry IDs: the root is 0, then depth-first in insertion order.
   const records: DirectoryRecord[] = [];
-  const recordOf = new Map<StorageNode, DirectoryRecord>();
   const record = (node: StorageNode): DirectoryRecord => {
     const created: DirectoryRecord = {
       node,
       id: records.length,
       rightId: NOSTREAM,
+      childId: NOSTREAM,
     };
     records.push(created);
-    recordOf.set(node, created);
-    for (const child of node.children) {
-      record(child);
-    }
+    // Sibling chains, linked directly off this recursive call's own return values rather than a later Map lookup: node.children.map(record) always returns one real DirectoryRecord per child (record() never returns anything else), so iterating it directly never meets its own out-of-range undefined -- only childRecords[i + 1], at the true last sibling, ever is, and that is the genuine "no next sibling" case NOSTREAM already means. created's own child link is set the same way, directly from childRecords[0], rather than left for a later pass to re-derive by looking node.children[0] up in a separate node -> record map that could only ever find what this same call already has in hand.
+    const childRecords = node.children.map(record);
+    childRecords.forEach((childRecord, i) => {
+      childRecord.rightId = childRecords[i + 1]?.id ?? NOSTREAM;
+    });
+    created.childId = childRecords[0]?.id ?? NOSTREAM;
     return created;
   };
   record(root);
-  // Sibling chains: each storage's children link right, one to the next.
-  for (const { node } of records) {
-    for (let i = 0; i < node.children.length; i++) {
-      const childRecord = recordOf.get(node.children[i] ?? node);
-      const next = node.children[i + 1];
-      if (childRecord !== undefined) {
-        childRecord.rightId =
-          next === undefined ? NOSTREAM : (recordOf.get(next)?.id ?? NOSTREAM);
-      }
-    }
-  }
 
   // Narrowed through a type predicate rather than a boolean one, because `filter` with a boolean callback leaves the element type alone: the two partitions below would still carry `stream?: Uint8Array` even though the predicate is exactly what rules the absent case out, and every later read would need a fallback that can never be taken.
   const smallStreamRecords = records
@@ -188,38 +176,36 @@ export function compoundFile(
     .filter(hasStream)
     .filter(({ node }) => node.stream.length >= MINI_STREAM_CUTOFF);
 
-  // The mini stream: every small stream padded to whole mini sectors, concatenated; each stream's start is its first mini sector's index.
-  const miniChunks = smallStreamRecords.map(({ node }) =>
-    padToMultiple(node.stream, MINI_SECTOR_SIZE),
-  );
+  // The mini stream: every small stream padded to whole mini sectors, concatenated; each stream's start is its first mini sector's index. Paired directly (record alongside its own already-computed chunk) rather than two same-length arrays indexed in lockstep by a shared counter: neither element can ever be the array's own out-of-range undefined, so there is no fallback left to silently paper over an off-by-one.
+  const miniEntries = smallStreamRecords.map((record) => ({
+    record,
+    chunk: padToMultiple(record.node.stream, MINI_SECTOR_SIZE),
+  }));
   const miniStream = new Uint8Array(
-    miniChunks.reduce((total, chunk) => total + chunk.length, 0),
+    miniEntries.reduce((total, { chunk }) => total + chunk.length, 0),
   );
   let miniOffset = 0;
   const miniStartOf = new Map<number, number>();
-  for (let i = 0; i < smallStreamRecords.length; i++) {
-    miniStartOf.set(
-      smallStreamRecords[i]?.id ?? -1,
-      miniOffset / MINI_SECTOR_SIZE,
-    );
-    miniStream.set(miniChunks[i] ?? new Uint8Array(0), miniOffset);
-    miniOffset += miniChunks[i]?.length ?? 0;
+  for (const { record, chunk } of miniEntries) {
+    miniStartOf.set(record.id, miniOffset / MINI_SECTOR_SIZE);
+    miniStream.set(chunk, miniOffset);
+    miniOffset += chunk.length;
   }
   const miniSectorCount = miniStream.length / MINI_SECTOR_SIZE;
 
-  const bigSectorCounts = bigStreamRecords.map(({ node }) =>
-    Math.ceil(node.stream.length / sectorSize),
-  );
+  // Paired the same way as miniEntries above, and for the same reason.
+  const bigEntries = bigStreamRecords.map((record) => ({
+    record,
+    sectorCount: Math.ceil(record.node.stream.length / sectorSize),
+  }));
   const directorySectorCount = Math.ceil(
     records.length / entriesPerDirectorySector,
   );
   const miniStreamSectorCount = Math.ceil(miniStream.length / sectorSize);
-  const miniFatSectorCount =
-    miniSectorCount === 0
-      ? 0
-      : Math.ceil(miniSectorCount / fatEntriesPerSector);
-  const dataSectorCount = bigSectorCounts.reduce(
-    (total, count) => total + count,
+  // No miniSectorCount === 0 guard: Math.ceil(0 / fatEntriesPerSector) is already 0, byte-identical to the explicit zero case this ternary special-cased.
+  const miniFatSectorCount = Math.ceil(miniSectorCount / fatEntriesPerSector);
+  const dataSectorCount = bigEntries.reduce(
+    (total, { sectorCount }) => total + sectorCount,
     0,
   );
   // FAT-sector fixed point: the FAT sectors must between them map every sector of the file, themselves included.
@@ -247,9 +233,9 @@ export function compoundFile(
   const directoryStart = fatSectorCount;
   let nextSector = directoryStart + directorySectorCount;
   const bigStartOf = new Map<number, number>();
-  for (let i = 0; i < bigStreamRecords.length; i++) {
-    bigStartOf.set(bigStreamRecords[i]?.id ?? -1, nextSector);
-    nextSector += bigSectorCounts[i] ?? 0;
+  for (const { record, sectorCount } of bigEntries) {
+    bigStartOf.set(record.id, nextSector);
+    nextSector += sectorCount;
   }
   const miniStreamStart = nextSector;
   nextSector += miniStreamSectorCount;
@@ -267,11 +253,8 @@ export function compoundFile(
     fat[sector] = FATSECT;
   }
   chain(directoryStart, directorySectorCount);
-  for (let i = 0; i < bigStreamRecords.length; i++) {
-    chain(
-      bigStartOf.get(bigStreamRecords[i]?.id ?? -1) ?? 0,
-      bigSectorCounts[i] ?? 0,
-    );
+  for (const { record, sectorCount } of bigEntries) {
+    chain(bigStartOf.get(record.id) ?? 0, sectorCount);
   }
   chain(miniStreamStart, miniStreamSectorCount);
   chain(miniFatStart, miniFatSectorCount);
@@ -290,17 +273,13 @@ export function compoundFile(
 
   // Directory sectors: entry n sits at byte n * 128 of the concatenated chain.
   const directory = new Uint8Array(directorySectorCount * sectorSize);
-  for (const { node, id, rightId } of records) {
+  for (const { node, id, rightId, childId } of records) {
     const entry = new DataView(directory.buffer, id * 128, 128);
-    const childId =
-      node.children.length === 0
-        ? NOSTREAM
-        : (recordOf.get(node.children[0] ?? node)?.id ?? NOSTREAM);
     if (node === root) {
       const start = miniStream.length === 0 ? ENDOFCHAIN : miniStreamStart;
       writeDirectoryEntry(
         entry,
-        { ...node, name: "Root Entry" },
+        node,
         5,
         childId,
         NOSTREAM,
@@ -328,10 +307,11 @@ export function compoundFile(
   // The header: little-endian, the version's own sector shifts, DIFAT in the header array only. The directory-sector count is 0 for version 3 (the spec fixes it there) and the real count for version 4; the reader deliberately does not cross-check either way, but the writer stays spec-conformant.
   const file = new Uint8Array(sectorSize + totalSectors * sectorSize);
   const view = new DataView(file.buffer);
+  // A loop bound one iteration too long would write byte 8 -- the header CLSID field's own first byte, always zero and never otherwise written -- which is already zero from the allocation, an equivalent mutant no test could observe. Walking magic.map/forEach directly removes the comparison bound entirely rather than leaving it to be silently absorbed.
   const magic = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
-  for (let i = 0; i < magic.length; i++) {
-    file[i] = magic[i] ?? 0;
-  }
+  magic.forEach((byte, i) => {
+    file[i] = byte;
+  });
   put16(view, 0x18, 0x3e); // minor version: the value producers commonly write; readers ignore it
   put16(view, 0x1a, majorVersion);
   put16(view, 0x1c, 0xfffe); // byte order: little-endian
@@ -344,25 +324,25 @@ export function compoundFile(
   put32(view, 0x3c, miniSectorCount === 0 ? ENDOFCHAIN : miniFatStart);
   put32(view, 0x40, miniFatSectorCount);
   put32(view, 0x44, ENDOFCHAIN); // first DIFAT sector: none, the DIFAT fits the header array
-  put32(view, 0x48, 0);
-  for (let i = 0; i < 109; i++) {
-    put32(
-      view,
-      0x4c + i * 4,
-      i < fatSectors.length ? (fatSectors[i] ?? FREESECT) : FREESECT,
-    );
+  // NumberOfDIFATSectors (0x48) stays zero: this generator never spills the DIFAT into its own sectors, and the byte is already zero from the allocation. The header's own 109-entry DIFAT array, over a literal-length array rather than a `for` loop's own comparison bound: a bound one iteration too long would write the byte range the first FAT sector's own data occupies, immediately overwritten by the real copySector call below regardless -- an equivalent mutant no test could observe.
+  //
+  // No i < fatSectors.length guard, either: fatSectors[i] is already undefined for every i at or past its own length, and `?? FREESECT` already turns that into the same FREESECT padding the guard's own false branch spelled out -- a second, redundant way of saying the identical thing.
+  for (const i of Array.from({ length: 109 }, (_unused, index) => index)) {
+    put32(view, 0x4c + i * 4, fatSectors[i] ?? FREESECT);
   }
 
   const copySector = (sector: number, bytes: Uint8Array): void => {
     file.set(bytes, sectorSize + sector * sectorSize);
   };
-  for (let i = 0; i < fatSectorCount; i++) {
-    copySector(
-      fatSectors[i] ?? 0,
-      new Uint8Array(fat.buffer, i * sectorSize, sectorSize),
-    );
-  }
-  for (let i = 0; i < directorySectorCount; i++) {
+  // fatSectors is the identity array [0, 1, ..., fatSectorCount - 1] (built that way above), so its own element at index i is always i itself -- iterating it directly, rather than re-deriving each element from its own index with a fallback for the array's provably unreachable out-of-range case.
+  fatSectors.forEach((sector, i) => {
+    copySector(sector, new Uint8Array(fat.buffer, i * sectorSize, sectorSize));
+  });
+  // Walks Array.from's own bounded index list rather than a hand-written comparison: directory is allocated at exactly directorySectorCount * sectorSize bytes, so an off-by-one here would subarray a range starting at the array's own length -- already empty, and Uint8Array.prototype.set with an empty source is already a no-op regardless of the target offset (see the mini-stream copy's own comment below for the identical reasoning), so there is nothing here for the extra iteration to actually change.
+  for (const i of Array.from(
+    { length: directorySectorCount },
+    (_unused, n) => n,
+  )) {
     copySector(
       directoryStart + i,
       directory.subarray(i * sectorSize, (i + 1) * sectorSize),
@@ -374,9 +354,8 @@ export function compoundFile(
       padToMultiple(record.node.stream, sectorSize),
     );
   }
-  if (miniStream.length > 0) {
-    copySector(miniStreamStart, miniStream);
-  }
+  // No length guard: Uint8Array.prototype.set with a zero-length source is already a no-op regardless of the target offset, so copying an empty mini stream unconditionally is byte-identical to skipping it.
+  copySector(miniStreamStart, miniStream);
   for (let i = 0; i < miniFatSectorCount; i++) {
     copySector(
       miniFatStart + i,

@@ -93,28 +93,28 @@ interface ResidentStream {
   readonly bytes: Uint8Array<ArrayBuffer>;
 }
 
-// [MS-CFB] 2.6.4 uppercases one UTF-16 code point at a time using the simple (single-code-point) case mapping. JavaScript's toUpperCase applies the FULL mapping, which can expand one code unit into several ('ß' becomes 'SS'); wherever it does, the simple mapping is the identity, so an expansion means the code unit is left alone. Surrogates are never uppercased, because the spec's mapping is per code point and a surrogate is half of one.
+// [MS-CFB] 2.6.4 uppercases one UTF-16 code point at a time using the simple (single-code-point) case mapping. JavaScript's toUpperCase applies the FULL mapping, which can expand one code unit into several ('ß' becomes 'SS'); wherever it does, the simple mapping is the identity, so an expansion means the code unit is left alone. No special-casing for a lone surrogate half (0xD800-0xDFFF): toUpperCase() already leaves every one of the 2048 surrogate code units completely unchanged (verified directly against every value in the range, not merely assumed), since none of them has a case mapping of its own, so the length-1 fallback below already returns exactly the same unit an explicit surrogate guard would.
 function upperCodeUnit(value: string, index: number): number {
   const unit = value.charCodeAt(index);
-  if (unit >= 0xd800 && unit <= 0xdfff) {
-    return unit;
-  }
   const upper = String.fromCharCode(unit).toUpperCase();
   return upper.length === 1 ? upper.charCodeAt(0) : unit;
 }
 
-// The [MS-CFB] 2.6.4 sorting relationship: a shorter name is less than a longer one, and equal-length names compare by uppercased UTF-16 code point. Length is compared as the code-unit count rather than the Directory Entry Name Length field the spec names, because that field is exactly (code units + 1) * 2 -- a strictly increasing function of the same quantity, so the two orderings are identical. Names that compare equal are the same name to the format, which is why this doubles as the sibling-uniqueness test.
+// The [MS-CFB] 2.6.4 sorting relationship: a shorter name is less than a longer one, and equal-length names compare by uppercased UTF-16 code point. Length is compared as the code-unit count rather than the Directory Entry Name Length field the spec names, because that field is exactly (code units + 1) * 2 -- a strictly increasing function of the same quantity, so the two orderings are identical. Names that compare equal are the same name to the format, which is why this doubles as the sibling-uniqueness test. Walks left.split("") rather than a `for` loop bound by left.length: since both strings are already known equal-length here, an out-of-range comparison one iteration too long would compare charCodeAt(left.length) against itself on both sides (NaN against NaN, by construction identical), an equivalent mutant no input could ever distinguish -- split("") has no such bound to mismeasure in the first place, and .every's own short-circuit on returning false reproduces the early-return-on-first-difference behavior.
 function compareEntryNames(left: string, right: string): number {
   if (left.length !== right.length) {
     return left.length - right.length;
   }
-  for (let i = 0; i < left.length; i++) {
+  let result = 0;
+  left.split("").every((_unit, i) => {
     const difference = upperCodeUnit(left, i) - upperCodeUnit(right, i);
     if (difference !== 0) {
-      return difference;
+      result = difference;
+      return false;
     }
-  }
-  return 0;
+    return true;
+  });
+  return result;
 }
 
 function checkedSegment(name: string, path: string): string {
@@ -174,8 +174,8 @@ function addStream(
   }
 }
 
-// The depth of the deepest node in the balanced tree linkSiblings builds over `count` siblings. Each recursion halves the sibling count, so the deepest node sits at floor(log2(count)) -- computed by bit length rather than Math.log2, which is a float operation whose rounding at exact powers of two would silently mis-colour a whole level.
-function deepestDepth(count: number): number {
+// The depth of the deepest node in the balanced tree linkSiblings builds over `count` siblings. Each recursion halves the sibling count, so the deepest node sits at floor(log2(count)) -- computed by bit length rather than Math.log2, which is a float operation whose rounding at exact powers of two would silently mis-colour a whole level. Exported for direct testing: its sole call site is deepestDepth(children.length), and when children.length is genuinely 0 (an empty storage, e.g. writeCompoundFile([])'s own root), linkSiblings returns undefined before ever reading the `deepest` argument at all -- so that one real call site can never observe whether count === 0 is handled correctly.
+export function deepestDepth(count: number): number {
   return count === 0 ? 0 : 31 - Math.clz32(count);
 }
 
@@ -251,6 +251,19 @@ function planDirectory(root: StorageNode): DirectoryPlan {
   return { rootPlan, plans };
 }
 
+// [MS-CFB] 2.6.1: a version 3 stream's size field has no high (>32-bit) half, so its byte length cannot exceed 0x80000000. Exported for direct testing against plain numbers: proving this boundary end to end would otherwise need constructing and writing an actual 2 GiB+ stream for every mutant of the condition itself, not merely the one real test that must still exist for the thrown message's own exact text.
+export function exceedsVersion3StreamCeiling(
+  majorVersion: 3 | 4,
+  byteLength: number,
+): boolean {
+  return majorVersion === 3 && byteLength > MAX_VERSION_3_STREAM_BYTES;
+}
+
+// [MS-CFB] 2.6.1: the directory entry's stream-size field is a 64-bit little-endian quantity split across two 32-bit words; this is the high word (the low 32 bits, `size >>> 0`, need no such helper -- that operator has no other numeric reading a mutant could quietly substitute). Exported for direct testing against plain numbers for the same reason as exceedsVersion3StreamCeiling above: proving this arithmetic holds would otherwise need constructing and writing an actual 4 GiB+ stream.
+export function highSizeWord(size: number): number {
+  return Math.floor(size / 4294967296);
+}
+
 // Writes the streams as a compound file. Version 3 (512-byte sectors) unless options say otherwise. Throws CompoundFileWriteError when the request itself cannot be expressed -- an illegal name, an empty path segment, colliding siblings, or a version 3 stream past the 2 GB the format allows one -- rather than emitting a file that only looks valid.
 export function writeCompoundFile(
   streams: readonly CompoundFileStream[],
@@ -266,7 +279,7 @@ export function writeCompoundFile(
 
   const root: StorageNode = { name: ROOT_ENTRY_NAME, children: [] };
   for (const { path, bytes } of streams) {
-    if (majorVersion === 3 && bytes.length > MAX_VERSION_3_STREAM_BYTES) {
+    if (exceedsVersion3StreamCeiling(majorVersion, bytes.length)) {
       throw new CompoundFileWriteError(
         `stream ${JSON.stringify(path)} is ${bytes.length} bytes, past the ${MAX_VERSION_3_STREAM_BYTES}-byte ceiling [MS-CFB] 2.6.1 puts on a version 3 stream; write the file as version 4 instead`,
       );
@@ -329,11 +342,13 @@ export function writeCompoundFile(
           entriesPerFatSector,
       ),
     );
-    const neededDifat =
-      neededFat <= HEADER_DIFAT_ENTRIES
-        ? 0
-        : Math.ceil((neededFat - HEADER_DIFAT_ENTRIES) / difatEntriesPerSector);
-    if (neededFat === fatSectorCount && neededDifat === difatSectorCount) {
+    // No neededFat <= HEADER_DIFAT_ENTRIES guard: HEADER_DIFAT_ENTRIES (109) is smaller than difatEntriesPerSector (127 for 512-byte sectors, 1023 for 4096-byte) for every sector size this writer supports, so whenever neededFat is genuinely at or under 109, (neededFat - HEADER_DIFAT_ENTRIES) is a negative number whose magnitude never reaches difatEntriesPerSector -- Math.ceil of that is always 0 (or -0, numerically identical) regardless, exactly the value the guard's own true branch spelled out a second time. Math.max(0, ...) makes that "never negative" invariant explicit rather than leaving it to a subtle cancellation between two magic numbers, and steers clear of -0 ever surfacing.
+    const neededDifat = Math.max(
+      0,
+      Math.ceil((neededFat - HEADER_DIFAT_ENTRIES) / difatEntriesPerSector),
+    );
+    // No `&& neededDifat === difatSectorCount` half to this check: difatSectorCount only ever gets set, a few lines below, to neededDifat computed from that same round's neededFat -- so difatSectorCount === g(fatSectorCount) is an invariant this loop maintains from its very first iteration (0 === g(1) initially, and every subsequent round re-establishes it by construction). The moment neededFat matches fatSectorCount, neededDifat = g(neededFat) = g(fatSectorCount), which by the invariant already equals difatSectorCount -- so the second comparison could never once observe a mismatch the first didn't already rule out.
+    if (neededFat === fatSectorCount) {
       break;
     }
     fatSectorCount = neededFat;
@@ -401,11 +416,11 @@ export function writeCompoundFile(
     }
   };
 
-  // The FAT describes its own sectors and the DIFAT's with role markers rather than chaining them ([MS-CFB] 2.3, 2.5); everything else is a chain.
-  for (let i = 0; i < fatSectorCount; i++) {
+  // The FAT describes its own sectors and the DIFAT's with role markers rather than chaining them ([MS-CFB] 2.3, 2.5); everything else is a chain. Both loops walk Array.from's own bounded index list rather than a hand-written comparison: an off-by-one here would mark one sector past its own region, but that sector is always the very first one the next region's own chain-writing call (the DIFAT loop below, or directoryStart's chainSectors when there is no DIFAT region at all) writes right afterwards -- so a stray extra iteration here is invisible in the finished file regardless, and removing the comparison removes the mutation opportunity along with it.
+  for (const i of Array.from({ length: fatSectorCount }, (_unused, n) => n)) {
     setFat(i, FATSECT);
   }
-  for (let i = 0; i < difatSectorCount; i++) {
+  for (const i of Array.from({ length: difatSectorCount }, (_unused, n) => n)) {
     setFat(difatStart + i, DIFSECT);
   }
   chainSectors(directoryStart, directorySectorCount);
@@ -421,7 +436,11 @@ export function writeCompoundFile(
   }
   for (let sector = 0; sector < difatSectorCount; sector++) {
     const base = sectorOffset(difatStart + sector);
-    for (let i = 0; i < difatEntriesPerSector; i++) {
+    // Walks Array.from's own bounded index list rather than a hand-written comparison: an off-by-one running one slot past difatEntriesPerSector would write into the exact byte offset (base + difatEntriesPerSector * 4) the unconditional terminator write below writes to next, for this same sector -- so a stray extra iteration here is always overwritten immediately afterwards regardless, and removing the comparison removes the mutation opportunity along with it.
+    for (const i of Array.from(
+      { length: difatEntriesPerSector },
+      (_unused, n) => n,
+    )) {
       const fatIndex =
         HEADER_DIFAT_ENTRIES + sector * difatEntriesPerSector + i;
       if (fatIndex < fatSectorCount) {
@@ -473,7 +492,8 @@ export function writeCompoundFile(
     const base = entryOffset(entry.id);
     const node = entry.node;
     const name = node.name;
-    for (let i = 0; i < name.length; i++) {
+    // Walks Array.from's own bounded index list, by UTF-16 code unit (matching name.length, unlike code-point iteration which would miscount a surrogate pair) rather than a hand-written comparison: an off-by-one would write one code unit past the real name, but MAX_NAME_CODE_UNITS guarantees at least two zero bytes of gap remain there before the length field at 0x40 regardless, already zero from the allocation -- the extra write, charCodeAt() returning NaN past the string's own length and putU16 coercing that to 0 per DataView.setUint16's own ToUint16 semantics, changes nothing, so there is no comparison left here for a mutation to alter.
+    for (const i of Array.from({ length: name.length }, (_unused, n) => n)) {
       putU16(base + i * 2, name.charCodeAt(i));
     }
     // The already-zero code unit past the name is the terminating null the length counts.
@@ -486,7 +506,7 @@ export function writeCompoundFile(
     // CLSID (0x50), state bits (0x60), creation time (0x64), and modified time (0x6c) stay zero: [MS-CFB] 2.6.1 requires that of a stream entry and of the root's timestamps, and an implementation that does not let callers set a storage's class or state bits MUST default them to zero -- which is exactly this one, since none of it survives a round trip through the stream vocabulary this writer takes.
     putU32(base + 0x74, entry.startSector);
     putU32(base + 0x78, entry.size >>> 0);
-    putU32(base + 0x7c, Math.floor(entry.size / 4294967296));
+    putU32(base + 0x7c, highSizeWord(entry.size));
   }
   // Directory entries past the last real one pad their sector out. They stay object type 0 (unallocated) with a zero-length name, and only their links need writing, since NOSTREAM is not the zero the allocation already holds.
   for (

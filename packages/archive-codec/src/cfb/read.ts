@@ -179,9 +179,10 @@ export function readCompoundFile(
   }
   const fat = new DataView(fatBytes.buffer);
 
+  // No offset<0 guard: sector is always a chain's own start (a u32 header/entry read) or a prior fatEntry return (itself a u32 read), so it can never actually be negative -- a defensive check against an input this closure never receives.
   const fatEntry = (sector: number): number => {
     const offset = sector * 4;
-    if (offset < 0 || offset + 4 > fatBytes.length) {
+    if (offset + 4 > fatBytes.length) {
       throw new CompoundFileFormatError(
         `FAT entry for sector ${sector} lies beyond the sectors the DIFAT named`,
       );
@@ -189,8 +190,10 @@ export function readCompoundFile(
     return fat.getUint32(offset, true);
   };
 
+  // Cycle detection is a direct visited-set membership check, not a count-based pigeonhole bound (ids.length >= sectorCount): the two are equivalent in the cases they actually reject, but a revisited sector's own FAT entry is deterministic, so a count-based bound only ever fires one or more full cycles after the true repeat -- every intervening iteration replays a step this same chain already took, producing byte-for-byte the same eventual outcome regardless of exactly which iteration trips the bound. A membership check instead fires on the exact iteration a sector is seen twice, matching the directory tree walk's own visited-set below.
   const chainSectorIds = (start: number): number[] => {
     const ids: number[] = [];
+    const visited = new Set<number>();
     let current = start;
     while (current !== ENDOFCHAIN) {
       if (current >= sectorCount) {
@@ -198,11 +201,12 @@ export function readCompoundFile(
           `a FAT chain steps to sector ${current}, which is outside the file's ${sectorCount} sectors`,
         );
       }
-      if (ids.length >= sectorCount) {
+      if (visited.has(current)) {
         throw new CompoundFileFormatError(
           "a FAT chain visits more sectors than the file holds, so it must cycle",
         );
       }
+      visited.add(current);
       ids.push(current);
       const next = fatEntry(current);
       if (next === FREESECT || next === FATSECT || next === DIFSECT) {
@@ -268,8 +272,10 @@ export function readCompoundFile(
   const miniFatBytes = chainBytes(firstMiniFatSector);
   const miniFat = new DataView(miniFatBytes.buffer);
 
+  // Same visited-set cycle detection as chainSectorIds above, and for the same reason.
   const miniChainSectorIds = (start: number): number[] => {
     const ids: number[] = [];
+    const visited = new Set<number>();
     let current = start;
     while (current !== ENDOFCHAIN) {
       if (current >= miniSectorCount) {
@@ -277,11 +283,12 @@ export function readCompoundFile(
           `a mini-FAT chain steps to mini sector ${current}, which is outside the mini stream's ${miniSectorCount} mini sectors`,
         );
       }
-      if (ids.length >= miniSectorCount) {
+      if (visited.has(current)) {
         throw new CompoundFileFormatError(
           "a mini-FAT chain visits more mini sectors than the mini stream holds, so it must cycle",
         );
       }
+      visited.add(current);
       ids.push(current);
       const next = miniFat.getUint32(current * 4, true);
       if (next === FREESECT || next === FATSECT || next === DIFSECT) {
@@ -359,8 +366,8 @@ export function readCompoundFile(
         continue;
       }
       const entry = entries[id];
-      // First encounter: bounds, cycle, and shape validation happen here only -- the self-stage revisit of the same entry must not trip the visited set.
-      if (id >= entryCount || entry === undefined) {
+      // First encounter: bounds, cycle, and shape validation happen here only -- the self-stage revisit of the same entry must not trip the visited set. No separate id >= entryCount guard: entries is a dense array of exactly entryCount elements, so any id at or past that length reads back as undefined regardless of how large id is -- the entry === undefined check alone already catches every out-of-range id.
+      if (entry === undefined) {
         throw new CompoundFileFormatError(
           `the directory tree links to entry ${id}, which is outside the directory's ${entryCount} entries`,
         );

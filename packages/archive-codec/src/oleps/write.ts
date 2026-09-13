@@ -1,6 +1,5 @@
 import {
   BYTE_ORDER_MARK,
-  GUID_NULL,
   HEADER_SIZE,
   IDENTIFIER_AND_OFFSET_SIZE,
   PROPERTY_SET_HEADER_SIZE,
@@ -28,14 +27,13 @@ export class PropertySetWriteError extends Error {
   }
 }
 
-// [MS-OLEPS] 2.20 UnicodeString's own Characters field: a null-terminated array of 16-bit code units. JS strings are already sequences of UTF-16 code units, so this copies charCodeAt directly rather than re-encoding -- a surrogate pair round-trips as its own two code units with no special-casing needed, since nothing here interprets code-point boundaries.
+// [MS-OLEPS] 2.20 UnicodeString's own Characters field: a null-terminated array of 16-bit code units. `split("")` walks a JS string by UTF-16 code unit (unlike spreading a string, which walks by Unicode code point and would split a surrogate pair across two array entries) -- a surrogate pair round-trips as its own two code units with no special-casing needed, since nothing here interprets code-point boundaries. No explicit terminator write: characterBytes is allocated one 16-bit unit longer than `value` itself and starts zero-filled, so the reserved terminator slot already holds the 0 [MS-OLEPS] 2.20 requires without writing it a second time.
 function encodeUnicodeStringValue(value: string): Uint8Array<ArrayBuffer> {
   const characterBytes = new Uint8Array((value.length + 1) * 2);
   const charView = new DataView(characterBytes.buffer);
-  for (let i = 0; i < value.length; i++) {
-    charView.setUint16(i * 2, value.charCodeAt(i), true);
-  }
-  charView.setUint16(value.length * 2, 0, true); // the null terminator [MS-OLEPS] 2.20 requires
+  value.split("").forEach((unit, i) => {
+    charView.setUint16(i * 2, unit.charCodeAt(0), true);
+  });
   return characterBytes;
 }
 
@@ -49,39 +47,38 @@ function encodeTypedPropertyValue(
 ): Uint8Array<ArrayBuffer> {
   switch (value.type) {
     case "VT_I2": {
+      // Padding (bytes 2-3) and the trailing alignment padding (bytes 6-7) both stay zero: `bytes` is fresh off `new Uint8Array`, which already zero-fills every byte this case does not itself set.
       const bytes = new Uint8Array(TYPED_VALUE_HEADER_SIZE + 4);
       const view = new DataView(bytes.buffer);
       view.setUint16(0, VT_I2, true);
-      view.setUint16(2, 0, true);
       view.setInt16(4, value.value, true);
-      view.setUint16(6, 0, true);
       return bytes;
     }
     case "VT_I4": {
+      // Padding (bytes 2-3) stays zero: `bytes` is fresh off `new Uint8Array`, which already zero-fills every byte this case does not itself set.
       const bytes = new Uint8Array(TYPED_VALUE_HEADER_SIZE + 4);
       const view = new DataView(bytes.buffer);
       view.setUint16(0, VT_I4, true);
-      view.setUint16(2, 0, true);
       view.setInt32(4, value.value, true);
       return bytes;
     }
     case "VT_FILETIME": {
+      // Padding (bytes 2-3) stays zero: `bytes` is fresh off `new Uint8Array`, which already zero-fills every byte this case does not itself set.
       const { low, high } = dateToFiletime(value.value);
       const bytes = new Uint8Array(TYPED_VALUE_HEADER_SIZE + 8);
       const view = new DataView(bytes.buffer);
       view.setUint16(0, VT_FILETIME, true);
-      view.setUint16(2, 0, true);
       view.setUint32(4, low, true);
       view.setUint32(8, high, true);
       return bytes;
     }
     case "VT_LPWSTR": {
+      // Padding (bytes 2-3) stays zero: `bytes` is fresh off `new Uint8Array`, which already zero-fills every byte this case does not itself set.
       const characters = encodeUnicodeStringValue(value.value);
       const paddedLength = padTo4(characters.length);
       const bytes = new Uint8Array(TYPED_VALUE_HEADER_SIZE + 4 + paddedLength);
       const view = new DataView(bytes.buffer);
       view.setUint16(0, VT_LPWSTR, true);
-      view.setUint16(2, 0, true);
       view.setUint32(4, characters.length / 2, true); // Length is in 16-bit units, not bytes
       bytes.set(characters, TYPED_VALUE_HEADER_SIZE + 4);
       return bytes;
@@ -136,9 +133,7 @@ export function writePropertySetStream(
   const streamBytes = new Uint8Array(HEADER_SIZE + propertySetBytes.length);
   const view = new DataView(streamBytes.buffer);
   view.setUint16(0, BYTE_ORDER_MARK, true);
-  view.setUint16(2, 0, true); // Version 0: none of the types this writer emits need version 1's extra features
-  view.setUint32(4, 0, true); // SystemIdentifier is implementation-specific and MUST be ignored by readers ([MS-OLEPS] 2.21); zero rather than impersonating a real OS identifier
-  writeGuid(view, 8, GUID_NULL); // CLSID: this package has no notion of a property set's own associated CLSID to record
+  // Version (bytes 2-3, 0: none of the types this writer emits need version 1's extra features), SystemIdentifier (bytes 4-7, implementation-specific and MUST be ignored by readers per [MS-OLEPS] 2.21, so left at 0 rather than impersonating a real OS identifier), and CLSID (bytes 8-23, this package has no notion of a property set's own associated CLSID, and GUID_NULL is all zero bytes) all stay zero: streamBytes is fresh off `new Uint8Array`, which already zero-fills every byte none of these three fields is written a second time.
   view.setUint32(24, 1, true); // NumPropertySets
   writeGuid(view, 28, propertySet.formatId);
   view.setUint32(44, HEADER_SIZE, true); // Offset0

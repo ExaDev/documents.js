@@ -19,10 +19,10 @@ export function passwordToUtf16LeBytes(
   password: string,
 ): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(password.length * 2);
+  // A DataView write, not raw indexed assignment: an out-of-range DataView offset throws, where a plain `bytes[i] = …` past the array's own end silently does nothing -- so a loop bound one iteration too long fails loudly here instead of leaving the same, indistinguishable output.
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   for (let i = 0; i < password.length; i += 1) {
-    const code = password.charCodeAt(i);
-    bytes[i * 2] = code & 0xff;
-    bytes[i * 2 + 1] = (code >>> 8) & 0xff;
+    view.setUint16(i * 2, password.charCodeAt(i), true);
   }
   return bytes;
 }

@@ -50,7 +50,29 @@ function rotl32(value: number, bits: number): number {
   return ((value << bits) | (value >>> (32 - bits))) >>> 0;
 }
 
-// RFC 1321 3.1/3.2: append 0x80, then zero bytes until the length is 56 mod 64, then the original *bit* length as a 64-bit little-endian integer. The length is split into two 32-bit halves by ordinary arithmetic rather than shifts, since a message longer than 512 MB overflows a 32-bit bit-count while staying exactly representable as a JS number.
+// RFC 1321 3.1: the original *bit* length as a 64-bit quantity, split into two 32-bit halves by ordinary arithmetic rather than shifts, since a message longer than 512 MiB overflows a 32-bit bit-count while staying exactly representable as a JS number. Exported (rather than kept as padMessage's own local arithmetic) so the >2^32 boundary -- reached only by a message past 512 MiB -- is directly testable: hashing an actual 512 MiB buffer through this hand-written implementation to exercise it indirectly would make the test suite itself pathologically slow.
+export function splitBitLength64(bitLength: number): {
+  readonly low: number;
+  readonly high: number;
+} {
+  return {
+    low: bitLength % 0x100000000,
+    high: Math.floor(bitLength / 0x100000000),
+  };
+}
+
+// RFC 1321 3.1/3.2's own 64-bit little-endian bit-length field, as its two 32-bit halves. A dedicated function (rather than padMessage's own inline pair of writes) so the high half's own byte order is directly testable: high is non-zero only for a message past 512 MiB, and hashing an actual buffer that large just to reach it through padMessage would make the test suite itself pathologically slow.
+export function writeBitLength64(
+  view: DataView,
+  offset: number,
+  bitLength: number,
+): void {
+  const { low, high } = splitBitLength64(bitLength);
+  view.setUint32(offset, low, true);
+  view.setUint32(offset + 4, high, true);
+}
+
+// RFC 1321 3.1/3.2: append 0x80, then zero bytes until the length is 56 mod 64, then the original bit length as a 64-bit little-endian integer (DataView's own setUint32 handles the byte order, rather than a hand-rolled per-byte shift-and-mask loop).
 function padMessage(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
   const paddedLength =
     (Math.floor((bytes.length + 8) / BLOCK_BYTES) + 1) * BLOCK_BYTES;
@@ -58,15 +80,7 @@ function padMessage(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
   padded.set(bytes);
   padded[bytes.length] = 0x80;
   const view = new DataView(padded.buffer);
-  const bitLength = bytes.length * 8;
-  let low = bitLength % 0x100000000;
-  let high = Math.floor(bitLength / 0x100000000);
-  for (let i = 0; i < 4; i++) {
-    view.setUint8(paddedLength - 8 + i, low & 0xff);
-    low = Math.floor(low / 256);
-    view.setUint8(paddedLength - 4 + i, high & 0xff);
-    high = Math.floor(high / 256);
-  }
+  writeBitLength64(view, paddedLength - 8, bytes.length * 8);
   return padded;
 }
 

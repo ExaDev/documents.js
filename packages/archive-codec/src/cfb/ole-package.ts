@@ -25,11 +25,9 @@ function readZeroTerminated(
   offset: number,
   fieldName: string,
 ): { readonly value: string; readonly next: number } {
-  let end = offset;
-  while (end < bytes.length && bytes[end] !== 0) {
-    end++;
-  }
-  if (end >= bytes.length) {
+  // indexOf, not a hand-rolled scanning loop with its own bounds check: it already reports "not found" as a single -1 sentinel, so there is exactly one place (below) that decides whether the terminator was found, not two redundant bounds checks that could disagree.
+  const end = bytes.indexOf(0, offset);
+  if (end === -1) {
     throw new OlePackageFormatError(
       `Package stream ends inside its ${fieldName} string with no terminator`,
     );
@@ -85,8 +83,10 @@ function asciiZeroTerminated(
   fieldName: string,
 ): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(value.length + 1); // +1 for the terminator, already zero from the Uint8Array's own zero-fill
-  for (let index = 0; index < value.length; index++) {
-    const code = value.charCodeAt(index);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  // Walks value.split("") rather than a `for` loop bound by value.length: the allocation's own reserved terminator byte sits right after the last character, so a loop bound one iteration too long would write its extra byte there -- a genuinely equivalent mutant, since that byte is already zero and no test could ever observe the difference. split("") has no comparison bound to mismeasure in the first place.
+  value.split("").forEach((char, index) => {
+    const code = char.charCodeAt(0);
     if (code === 0) {
       throw new OlePackageWriteError(
         `Package stream's ${fieldName} contains an embedded NUL byte, which this field's own null-terminated encoding cannot carry: it would silently truncate the field and mis-frame every field written after it`,
@@ -97,8 +97,8 @@ function asciiZeroTerminated(
         `Package stream's ${fieldName} contains a character (U+${code.toString(16).padStart(4, "0")}) outside ASCII; encoding it to an arbitrary windows-1252 byte would need a full codepage table this package does not carry`,
       );
     }
-    bytes[index] = code;
-  }
+    view.setUint8(index, code);
+  });
   return bytes;
 }
 
