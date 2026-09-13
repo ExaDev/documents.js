@@ -71,4 +71,17 @@ if (typeof window !== "undefined") {
       },
     };
   };
+
+  // jsdom implements no Font Loading API at all -- `document.fonts` is simply undefined at runtime, even though lib.dom.d.ts types it as always present. Mantine's autosize Textarea (used by any route with a resizable text box, e.g. the Package/JSON and Editors tools) unconditionally registers a "loadingdone" listener on it the moment it mounts, so any test mounting one needs at least an addEventListener/removeEventListener pair to satisfy that registration; nothing under test ever triggers a real font load, so there is nothing for either to actually do.
+  Object.defineProperty(document, "fonts", {
+    configurable: true,
+    value: {
+      addEventListener: () => {
+        return;
+      },
+      removeEventListener: () => {
+        return;
+      },
+    },
+  });
 }

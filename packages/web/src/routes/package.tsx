@@ -37,21 +37,24 @@ function PackagePage() {
     setFile(opened);
     setFormat(inferred);
     setJson("");
-    readContent.reset();
-    restoreContent.reset();
-    if (inferred !== undefined) {
-      readContent.mutate(
-        { format: inferred, bytes: opened.bytes },
-        {
-          onSuccess: (result) => {
-            setJson(JSON.stringify(result.package, null, 2));
-          },
-          onError: (error) => {
-            notifyError("Could not read document", error);
-          },
-        },
-      );
+    if (inferred === undefined) {
+      // No mutate() follows for this pick, so nothing else clears a previous file's read result on its own -- without this, isPending from a still-settling previous read would keep showing "Loading document structure…" underneath the "does not identify a known format" alert.
+      readContent.reset();
+      return;
     }
+    // A restore still in flight for the previous file belongs to that file, not this one -- left unreset, its own pending state would still show the new file's Restore button as loading the moment this read resolves and the panel reappears.
+    restoreContent.reset();
+    readContent.mutate(
+      { format: inferred, bytes: opened.bytes },
+      {
+        onSuccess: (result) => {
+          setJson(JSON.stringify(result.package, null, 2));
+        },
+        onError: (error) => {
+          notifyError("Could not read document", error);
+        },
+      },
+    );
   };
 
   const handleRestore = () => {

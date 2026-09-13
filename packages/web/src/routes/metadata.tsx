@@ -26,32 +26,41 @@ export const Route = createFileRoute("/metadata")({
 function MetadataPage() {
   const [file, setFile] = useState<OpenedFile | undefined>(undefined);
   const [format, setFormat] = useState<DocumentFormat | undefined>(undefined);
-  const [title, setTitle] = useState("");
-  const [author, setAuthor] = useState("");
+  // An override that wins once the user edits the field, otherwise the read's own value -- this avoids echoing the read result into a second piece of state (which would need a placeholder initial value with no real meaning, since it is always overwritten the moment a read succeeds).
+  const [titleOverride, setTitleOverride] = useState<string | undefined>(
+    undefined,
+  );
+  const [authorOverride, setAuthorOverride] = useState<string | undefined>(
+    undefined,
+  );
   const readMetadata = useReadMetadata();
   const writeMetadata = useWriteMetadata();
   const fileAccess = createFileAccess();
+
+  const title = titleOverride ?? readMetadata.data?.title ?? "";
+  const author = authorOverride ?? readMetadata.data?.author ?? "";
 
   const handleFile = (opened: OpenedFile) => {
     const inferred = inferFormatFromFilename(opened.name);
     setFile(opened);
     setFormat(inferred);
-    readMetadata.reset();
-    writeMetadata.reset();
-    if (inferred !== undefined) {
-      readMetadata.mutate(
-        { format: inferred, bytes: opened.bytes },
-        {
-          onSuccess: (metadata) => {
-            setTitle(metadata.title ?? "");
-            setAuthor(metadata.author ?? "");
-          },
-          onError: (error) => {
-            notifyError("Could not read metadata", error);
-          },
-        },
-      );
+    setTitleOverride(undefined);
+    setAuthorOverride(undefined);
+    if (inferred === undefined) {
+      // No mutate() follows for this pick, so nothing else clears a previous file's read result on its own -- without this, the old data table and title/author fields would stay visible underneath the "could not recognise" alert.
+      readMetadata.reset();
+      return;
     }
+    // A write still in flight for the previous file belongs to that file, not this one -- left unreset, its own pending state would still show the new file's Save button as loading the moment this read resolves and the panel reappears.
+    writeMetadata.reset();
+    readMetadata.mutate(
+      { format: inferred, bytes: opened.bytes },
+      {
+        onError: (error) => {
+          notifyError("Could not read metadata", error);
+        },
+      },
+    );
   };
 
   const handleSave = () => {
@@ -104,14 +113,14 @@ function MetadataPage() {
                 label="Title"
                 value={title}
                 onChange={(event) => {
-                  setTitle(event.currentTarget.value);
+                  setTitleOverride(event.currentTarget.value);
                 }}
               />
               <TextInput
                 label="Author"
                 value={author}
                 onChange={(event) => {
-                  setAuthor(event.currentTarget.value);
+                  setAuthorOverride(event.currentTarget.value);
                 }}
               />
               <Table>
