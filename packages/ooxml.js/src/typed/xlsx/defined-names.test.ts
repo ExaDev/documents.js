@@ -344,6 +344,39 @@ describe("parsePrintTitlesValue", () => {
     });
   });
 
+  it("trims whitespace directly touching a comma-separated segment before parsing it", () => {
+    expect(parsePrintTitlesValue(" Data!$A:$C , Data!$1:$3 ")).toEqual({
+      repeatColumns: { start: 0, end: 2 },
+      repeatRows: { start: 0, end: 2 },
+    });
+  });
+
+  it("reads a genuine multi-digit row band, not just a single digit", () => {
+    expect(parsePrintTitlesValue("10:25")).toEqual({
+      repeatRows: { start: 9, end: 24 },
+    });
+  });
+
+  it("rejects a row segment with a non-digit character before the digits", () => {
+    expect(parsePrintTitlesValue("x3:5")).toEqual({});
+  });
+
+  it("rejects a row segment with a non-digit character after the digits", () => {
+    expect(parsePrintTitlesValue("3x:5")).toEqual({});
+  });
+
+  it("rejects a row segment whose end spec has a non-digit character before its digits", () => {
+    expect(parsePrintTitlesValue("3:x5")).toEqual({});
+  });
+
+  it("rejects a row segment whose end spec has a non-digit character after its digits", () => {
+    expect(parsePrintTitlesValue("3:5x")).toEqual({});
+  });
+
+  it("rejects a mixed digit/letter segment as neither a column nor a row band", () => {
+    expect(parsePrintTitlesValue("1:A")).toEqual({});
+  });
+
   it("normalises a reversed column band (end before start) to ascending order", () => {
     expect(parsePrintTitlesValue("$C:$A")).toEqual({
       repeatColumns: { start: 0, end: 2 },
@@ -418,6 +451,18 @@ describe("buildPrintAreaValue", () => {
     const range = { startRow: 2, startColumn: 1, endRow: 5, endColumn: 4 };
     const built = buildPrintAreaValue("Sheet1", range);
     expect(parsePrintAreaValue(built)).toEqual(range);
+  });
+
+  it("writes a genuine multi-letter column reference beyond Z", () => {
+    // Column index 26 is "AA" -- a single-letter column would not distinguish a regex/loop that stops after one character.
+    expect(
+      buildPrintAreaValue("Sheet1", {
+        startRow: 0,
+        startColumn: 26,
+        endRow: 0,
+        endColumn: 26,
+      }),
+    ).toBe("Sheet1!$AA$1:$AA$1");
   });
 });
 
