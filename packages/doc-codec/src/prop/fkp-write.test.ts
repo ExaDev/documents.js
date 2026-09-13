@@ -95,6 +95,33 @@ describe("buildChpxPages", () => {
       /a single character-formatting run does not fit/,
     );
   });
+
+  it("accepts two runs whose own record region lands exactly on the front region's own boundary, not one byte short", () => {
+    // Two 247-byte grpprls: their own records (1 length-prefix byte + 247 apiece) leave the record region's own writeAt landing exactly at frontUsed for this two-run page -- found by direct arithmetic search, not a round number.
+    const grpprl = Array.from({ length: 247 }, (_u, index) => index & 0xff);
+    const pages = buildChpxPages(
+      [
+        { fc: 0, grpprl },
+        { fc: 2, grpprl },
+      ],
+      10,
+    );
+    expect(pages).toHaveLength(1);
+  });
+
+  it("throws when a single run's grpprl fits alone but a second, oversized run does not fit beside it", () => {
+    // The first run fits comfortably alone; the second run's own grpprl already exceeds MAX_CHPX_RECORD_GRPPRL on its own, so this is the batching loop's own "fresh batch of one, still too big" throw, not the "first item already doesn't fit" one the previous test exercises.
+    const tooLarge = Array.from({ length: 0x100 }, (_u, index) => index & 0xff);
+    expect(() =>
+      buildChpxPages(
+        [
+          { fc: 0, grpprl: [0x01] },
+          { fc: 2, grpprl: tooLarge },
+        ],
+        10,
+      ),
+    ).toThrow(/a single character-formatting run does not fit/);
+  });
 });
 
 describe("buildPapxPages", () => {
@@ -163,6 +190,33 @@ describe("buildPapxPages", () => {
     const tooLarge = Array.from({ length: 0x1fe }, (_u, index) => index & 0xff); // + 2-byte istd exceeds MAX_GRP_PRL_AND_ISTD (0x1fe).
     expect(() =>
       buildPapxPages([{ fc: 0, istd: 0, grpprl: tooLarge }], 10),
+    ).toThrow(/a single paragraph-formatting record does not fit/);
+  });
+
+  it("accepts two paragraphs whose own record region lands exactly on the front region's own boundary, not one byte short", () => {
+    // Two 232-byte grpprls: their own GrpPrlAndIstd records leave the record region's own writeAt landing exactly at frontUsed for this two-paragraph page -- found by direct arithmetic search, not a round number.
+    const grpprl = Array.from({ length: 232 }, (_u, index) => index & 0xff);
+    const pages = buildPapxPages(
+      [
+        { fc: 0, istd: 0, grpprl },
+        { fc: 2, istd: 0, grpprl },
+      ],
+      10,
+    );
+    expect(pages).toHaveLength(1);
+  });
+
+  it("throws when a single paragraph's grpprl fits alone but a second, oversized one does not fit beside it", () => {
+    // The first paragraph fits comfortably alone; the second's own GrpPrlAndIstd already exceeds MAX_GRP_PRL_AND_ISTD on its own, so this is the batching loop's own "fresh batch of one, still too big" throw, not the "first item already doesn't fit" one the previous test exercises.
+    const tooLarge = Array.from({ length: 0x1fe }, (_u, index) => index & 0xff);
+    expect(() =>
+      buildPapxPages(
+        [
+          { fc: 0, istd: 0, grpprl: [0x01] },
+          { fc: 2, istd: 0, grpprl: tooLarge },
+        ],
+        10,
+      ),
     ).toThrow(/a single paragraph-formatting record does not fit/);
   });
 });
