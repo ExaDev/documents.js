@@ -62,12 +62,11 @@ export function readHeaderFooterStories(
 
   const stories: HeaderFooterStory[] = [];
   for (let section = 0; section < sectionCount; section += 1) {
-    for (let slotIndex = 0; slotIndex < SLOT_ORDER.length; slotIndex += 1) {
+    // Iterated as [index, slot] pairs rather than a numeric slotIndex bounded by its own `< SLOT_ORDER.length` check: SLOT_ORDER is a fixed 6-element array, so that bound and this loop's own `slot === undefined` guard below it were two ways of expressing the identical fact, leaving the numeric comparison unable to ever diverge from the guard that already covers it.
+    for (const [slotIndex, slot] of SLOT_ORDER.entries()) {
       const entries =
         perSectionStories[section * SLOT_ORDER.length + slotIndex];
       if (entries === undefined || entries.length === 0) continue;
-      const slot = SLOT_ORDER[slotIndex];
-      if (slot === undefined) continue;
       stories.push({ section, slot, blocks: assembleBlocks(entries) });
     }
   }

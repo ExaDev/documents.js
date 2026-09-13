@@ -1,4 +1,4 @@
-import { readUint32LE, slice } from "./bytes";
+import { readUint32LE } from "./bytes";
 import { DocFormatError } from "./errors";
 
 // The PLC ("PLex of Cps"), [MS-DOC] 2.2.2 -- the one container shape that carries almost every mapping in the format: an array of 4-byte keys followed by an array of fixed-size data elements, with exactly one more key than element, so key[i] and key[i+1] bracket the range element i describes. The keys are character positions in PlcPcd and byte offsets in PlcBteChpx/PlcBtePapx ("Where most PLCs map CPs to data, the PlcBteChpx maps stream offsets to data instead"), but the layout and the element-count arithmetic are identical, so one parser serves both rather than each caller re-deriving the split point.
@@ -11,6 +11,8 @@ export interface Plc {
   readonly count: number;
   /** The bytes of data element i, a view into the PLC's own bytes rather than a copy. */
   element(index: number): Uint8Array;
+  /** `keys[index]`, without the `noUncheckedIndexedAccess` `| undefined` a plain index read would carry -- every caller already only asks for an index bounded by its own bracketing arithmetic (0..count for a key, 0..count - 1 for an element), so this is the one place that bound is actually checked and reported, rather than each caller repeating an unreachable defensive guard of its own. */
+  keyAt(index: number): number;
 }
 
 export function parsePlc(
@@ -58,12 +60,18 @@ export function parsePlc(
           `${what} has ${count} data elements; element ${index} was requested`,
         );
       }
-      return slice(
-        bytes,
-        dataStart + index * elementSize,
-        elementSize,
-        `${what} element ${index}`,
-      );
+      // No slice() bounds check here: parsePlc's own derivation of count from bytes.length (above) already guarantees dataStart + index * elementSize + elementSize <= bytes.length for every index this guard admits (0..count - 1), so subarray's own range can never actually run past bytes.
+      const offset = dataStart + index * elementSize;
+      return bytes.subarray(offset, offset + elementSize);
+    },
+    keyAt(index: number): number {
+      const key = keys[index];
+      if (key === undefined) {
+        throw new DocFormatError(
+          `${what} has ${keys.length} keys; key ${index} was requested`,
+        );
+      }
+      return key;
     },
   };
 }

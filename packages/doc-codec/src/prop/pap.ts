@@ -114,7 +114,8 @@ function lineSpacingFromLspd(operand: Uint8Array): number | undefined {
   const dyaLine = readInt16LE(operand, 0);
   const fMultLinespace = readUint16LE(operand, 2);
   if (fMultLinespace !== 0x0001) return undefined;
-  if (dyaLine < 0 || dyaLine > LSPD_MAX_MULTIPLE_DYA_LINE) return undefined;
+  // No separate `dyaLine < 0` guard: a negative dyaLine already yields a negative multiple below, which the closing `multiple > 0` ternary already discards identically to an early return would.
+  if (dyaLine > LSPD_MAX_MULTIPLE_DYA_LINE) return undefined;
   const multiple = dyaLine / LSPD_MULTIPLE_DIVISOR;
   return multiple > 0 ? multiple : undefined;
 }
@@ -192,8 +193,7 @@ export function applyParagraphSprms(
         into.innerTtpMark = readUint8(prl.operand, 0) !== 0;
         break;
       default:
-        // Every other paragraph sprm is a property this reader does not convert; see the README's scope note.
-        break;
+      // Every other paragraph sprm is a property this reader does not convert; see the README's scope note. No `break` follows: `default` is this switch's own last clause, so control already falls through to the closing brace with or without one.
     }
   }
   return into;

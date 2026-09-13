@@ -1,5 +1,4 @@
 import { readInt16LE, readUint16LE, readUint32LE, slice } from "../bytes";
-import { DocFormatError } from "../errors";
 import type { Fib } from "../fib/fib";
 import { parsePlc } from "../plc";
 import { SGC, readGrpprl, type Prl } from "./sprm";
@@ -68,8 +67,7 @@ export function applySectionSprms(
         into.marginBottomPt = marginFromYas(readInt16LE(prl.operand, 0));
         break;
       default:
-        // Every other section sprm is a property this reader does not convert; see this module's own top comment.
-        break;
+      // Every other section sprm is a property this reader does not convert; see this module's own top comment. No `break` follows: `default` is this switch's own last clause, so control already falls through to the closing brace with or without one.
     }
   }
   return into;
@@ -99,12 +97,7 @@ export function readAllSectionProperties(
   }
   const sections: DocSectionProperties[] = [];
   for (let index = 0; index < plc.count; index += 1) {
-    const startCp = plc.keys[index];
-    if (startCp === undefined) {
-      throw new DocFormatError(
-        `internal defect: PlcfSed key ${index} is absent from a PLC of ${plc.count} elements`,
-      );
-    }
+    const startCp = plc.keyAt(index);
     const sed = plc.element(index);
     const fcSepx = readUint32LE(sed, SED_FC_SEPX_OFFSET);
     const cb = readUint16LE(wordDocument, fcSepx);

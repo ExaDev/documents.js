@@ -75,24 +75,19 @@ function readRc4Header(table: Uint8Array<ArrayBuffer>): DocRc4Header {
       `this document uses RC4 CryptoAPI encryption (EncryptionVersionInfo ${versionMajor}.${versionMinor}, [MS-DOC] 2.2.6.3), which this reader does not decrypt`,
     );
   }
+  // Sliced directly rather than through checkedSubarray's own bounds check: `header` is already exactly RC4_HEADER_SIZE bytes (checkedSubarray's own call above guarantees it), and HEADER_OFFSET.salt/encryptedVerifier/encryptedVerifierHash back-to-back at OFFICE_RC4_VERIFIER_LENGTH apiece add up to exactly that same RC4_HEADER_SIZE with no slack -- there is no header this function ever sees for which one of these three could run past its own end.
   return {
-    salt: checkedSubarray(
-      header,
+    salt: header.subarray(
       HEADER_OFFSET.salt,
-      OFFICE_RC4_VERIFIER_LENGTH,
-      "EncryptionHeader.Salt",
+      HEADER_OFFSET.salt + OFFICE_RC4_VERIFIER_LENGTH,
     ),
-    encryptedVerifier: checkedSubarray(
-      header,
+    encryptedVerifier: header.subarray(
       HEADER_OFFSET.encryptedVerifier,
-      OFFICE_RC4_VERIFIER_LENGTH,
-      "EncryptionHeader.EncryptedVerifier",
+      HEADER_OFFSET.encryptedVerifier + OFFICE_RC4_VERIFIER_LENGTH,
     ),
-    encryptedVerifierHash: checkedSubarray(
-      header,
+    encryptedVerifierHash: header.subarray(
       HEADER_OFFSET.encryptedVerifierHash,
-      OFFICE_RC4_VERIFIER_LENGTH,
-      "EncryptionHeader.EncryptedVerifierHash",
+      HEADER_OFFSET.encryptedVerifierHash + OFFICE_RC4_VERIFIER_LENGTH,
     ),
   };
 }
@@ -114,10 +109,11 @@ function verifyPassword(
     header.encryptedVerifierHash,
     OFFICE_RC4_DOC_BLOCK_SIZE,
   );
+  // No separate length check: md5 always returns a fixed 16-byte digest, and decryptedVerifierHash is always exactly OFFICE_RC4_VERIFIER_LENGTH (16) bytes, decrypted from header.encryptedVerifierHash's own fixed-size span -- the two arrays are always the same length, never merely usually so.
   const computedHash = md5(decryptedVerifier);
-  const matches =
-    computedHash.length === decryptedVerifierHash.length &&
-    computedHash.every((byte, index) => byte === decryptedVerifierHash[index]);
+  const matches = computedHash.every(
+    (byte, index) => byte === decryptedVerifierHash[index],
+  );
   if (!matches) {
     throw new DocUnsupportedError(
       "incorrect password for RC4-encrypted document",
@@ -202,19 +198,16 @@ function decryptDocStreamsXor(
   const headerKey = (lKey >>> 16) & 0xffff;
   const headerVerifier = lKey & 0xffff;
 
-  // A password too long or carrying a character outside single-byte ASCII/Latin-1 cannot be the real one -- see xls-codec's own workbook/encryption.ts for the identical reasoning.
+  // A password too long or carrying a character outside single-byte ASCII/Latin-1 cannot be the real one -- see xls-codec's own workbook/encryption.ts for the identical reasoning. archive-codec's own createXorObfuscationKey/createXorObfuscationPasswordVerifier throw only RangeError for exactly this reason, so no instanceof check or fallback rethrow is needed: whatever they throw here always means the same thing.
   let computedKey: number;
   let computedVerifier: number;
   try {
     computedKey = createXorObfuscationKey(password);
     computedVerifier = createXorObfuscationPasswordVerifier(password);
-  } catch (error) {
-    if (error instanceof RangeError) {
-      throw new DocUnsupportedError(
-        "incorrect password for XOR-obfuscated document",
-      );
-    }
-    throw error;
+  } catch {
+    throw new DocUnsupportedError(
+      "incorrect password for XOR-obfuscated document",
+    );
   }
   if (computedKey !== headerKey || computedVerifier !== headerVerifier) {
     throw new DocUnsupportedError(

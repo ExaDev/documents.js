@@ -58,11 +58,34 @@ describe("parsePlc", () => {
     expect(() => parsePlc(new Uint8Array(3), 8, "PlcPcd")).toThrow(
       DocFormatError,
     );
+    expect(() => parsePlc(new Uint8Array(3), 8, "PlcPcd")).toThrow(
+      /PlcPcd is 3 bytes, too short/,
+    );
+  });
+
+  it("rejects a negative element size, naming it in the message", () => {
+    expect(() => parsePlc(new Uint8Array(8), -1, "PlcPcd")).toThrow(
+      /PlcPcd was parsed with an element size of -1, which is not a non-negative integer/,
+    );
+  });
+
+  it("rejects a non-integer element size", () => {
+    expect(() => parsePlc(new Uint8Array(8), 1.5, "PlcPcd")).toThrow(
+      /which is not a non-negative integer/,
+    );
   });
 
   it("rejects keys that are not in ascending order, which the spec requires of every PLC", () => {
     const bytes = plcBytes([10, 5], [new Array<number>(8).fill(0)]);
     expect(() => parsePlc(bytes, 8, "PlcPcd")).toThrow(/ascending/);
+  });
+
+  it("accepts two adjacent equal keys -- ascending order permits a non-decreasing run, not only a strictly increasing one", () => {
+    const bytes = plcBytes(
+      [5, 5, 10],
+      [new Array<number>(8).fill(0), new Array<number>(8).fill(0)],
+    );
+    expect(() => parsePlc(bytes, 8, "PlcPcd")).not.toThrow();
   });
 
   it("accepts an empty PLC of one terminating key and no data elements", () => {
@@ -77,8 +100,44 @@ describe("parsePlc", () => {
       8,
       "PlcPcd",
     );
-    expect(() => plc.element(1)).toThrow(DocFormatError);
-    expect(() => plc.element(-1)).toThrow(DocFormatError);
+    expect(() => plc.element(1)).toThrow(
+      /PlcPcd has 1 data elements; element 1 was requested/,
+    );
+    expect(() => plc.element(-1)).toThrow(
+      /PlcPcd has 1 data elements; element -1 was requested/,
+    );
+  });
+
+  it("rejects element(count) even with a zero-byte element size, where slice's own bounds check alone could never catch it", () => {
+    // A zero-byte element makes every slice(bytes, offset, 0, ...) trivially satisfiable regardless of offset, so this is the one construction that isolates parsePlc's own index >= count guard from slice's independent bounds check.
+    const plc = parsePlc(plcBytes([0, 1, 2], []), 0, "PlcPcd");
+    expect(plc.count).toBe(2);
+    expect(() => plc.element(2)).toThrow(DocFormatError);
+  });
+
+  it("keyAt reads back every key a valid Plc actually carries, including the trailing terminator", () => {
+    const plc = parsePlc(
+      plcBytes(
+        [0, 4, 9],
+        [new Array<number>(8).fill(0), new Array<number>(8).fill(1)],
+      ),
+      8,
+      "PlcPcd",
+    );
+    expect(plc.keyAt(0)).toBe(0);
+    expect(plc.keyAt(1)).toBe(4);
+    expect(plc.keyAt(2)).toBe(9);
+  });
+
+  it("keyAt rejects an index past the last key, naming this Plc's own key count", () => {
+    const plc = parsePlc(
+      plcBytes([0, 1], [new Array<number>(8).fill(0)]),
+      8,
+      "PlcPcd",
+    );
+    expect(() => plc.keyAt(2)).toThrow(
+      /PlcPcd has 2 keys; key 2 was requested/,
+    );
   });
 });
 
@@ -100,5 +159,15 @@ describe("findLargestAtMost", () => {
   it("returns undefined at or past the last key, which every algorithm treats as out of range", () => {
     expect(findLargestAtMost(keys, 30)).toBeUndefined();
     expect(findLargestAtMost(keys, 31)).toBeUndefined();
+  });
+
+  it("throws naming the actual absent index and array length when a key the search visits is missing", () => {
+    // No real Plc/ChpxFkp/PapxFkp caller ever hands findLargestAtMost a sparse array (every key comes from a dense, fully-populated push loop), so this deliberately holed array -- built with a genuine gap at index 1 rather than a dense array a `delete` would punch a hole into -- is the only way to exercise the guard at all.
+    const sparseKeys: number[] = [];
+    sparseKeys[0] = 0;
+    sparseKeys[2] = 20;
+    expect(() => findLargestAtMost(sparseKeys, 15)).toThrow(
+      /PLC key 1 is absent from a 3-key array/,
+    );
   });
 });

@@ -1,4 +1,4 @@
-import type { ContentBorder } from "document-schema.js";
+import type { ContentBorder, ContentCellFill } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { DocFormatError } from "../errors";
 import { readGrpprl } from "../prop/sprm";
@@ -6,12 +6,14 @@ import {
   BRC80_SIZE,
   BRC_SIZE,
   SHD_SIZE,
+  cellBordersFrom,
   readBrc,
   readBrc80,
   readShd,
   readShd80,
   readTableBordersOperand,
   readTableBordersOperand80,
+  borderNeedsExactColor,
   writeBrc,
   writeBrc80,
   writeShd,
@@ -23,6 +25,7 @@ import { encodeTableRowGrpprl, type TableCellToWrite } from "./tap-write";
 
 const BLACK = { r: 0, g: 0, b: 0 };
 const RED = { r: 1, g: 0, b: 0 };
+const WHITE = { r: 1, g: 1, b: 1 };
 
 function bytes(values: readonly number[]): Uint8Array {
   return Uint8Array.from(values);
@@ -128,6 +131,26 @@ describe("Brc80", () => {
     );
     expect(() => writeBrc80({ color: RED, widthPt: 0.1 })).toThrow(
       DocFormatError,
+    );
+  });
+
+  it("does not append the double-border clause to a single-line border's own refusal message", () => {
+    expect(() => writeBrc80({ color: RED, widthPt: 0.1 })).not.toThrow(
+      /one line's own width/,
+    );
+  });
+
+  it("ends a single-line border's own refusal message right after 'increments', appending nothing at all", () => {
+    expect(() => writeBrc80({ color: RED, widthPt: 0.1 })).toThrow(
+      /1\/8-point increments$/,
+    );
+  });
+
+  it("appends the double-border clause to a double border's own refusal message", () => {
+    expect(() =>
+      writeBrc80({ color: RED, widthPt: 0.1, style: "double" }),
+    ).toThrow(
+      /outside the 0\.1875\.\.95\.8125pt range .* of one line's own width, a double border's field being one third of its total rendered width/,
     );
   });
 
@@ -414,7 +437,8 @@ describe("Shd", () => {
     const diagCross = [
       0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x13, 0x00,
     ];
-    expect(readShd(bytes(diagCross), 0)).toEqual({
+    // toStrictEqual, not toEqual: with both colours automatic, readShd must omit foregroundColor/backgroundColor entirely rather than state them present-but-undefined -- toEqual treats the two the same and would not catch a mutant that always spreads the key in.
+    expect(readShd(bytes(diagCross), 0)).toStrictEqual({
       kind: "pattern",
       patternType: "diagonalCross",
     });
@@ -463,6 +487,13 @@ describe("Shd", () => {
       kind: "pattern",
       patternType: "diagonalCross",
     });
+  });
+
+  it("names the actual unrecognised kind writing a fill outside 'solid'/'pattern' entirely", () => {
+    const bogus = { kind: "gradient" } as unknown as ContentCellFill;
+    expect(() => writeShd(bogus)).toThrow(
+      /cannot write a cell fill with kind 'gradient'/,
+    );
   });
 
   it("throws writing a SpreadsheetML-only pattern type Word's own Ipat vocabulary has no member for", () => {
@@ -519,6 +550,44 @@ describe("Shd80", () => {
       foregroundColor: { r: 1, g: 0, b: 0 },
       backgroundColor: { r: 1, g: 1, b: 1 },
     });
+  });
+});
+
+describe("cellBordersFrom", () => {
+  it("returns undefined when no side states a border at all", () => {
+    expect(
+      cellBordersFrom({
+        top: undefined,
+        left: undefined,
+        bottom: undefined,
+        right: undefined,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("carries only the sides that state a border, in CELL_BORDER_SIDES order", () => {
+    const top: ContentBorder = { color: RED, widthPt: 1 };
+    const right: ContentBorder = { color: BLACK, widthPt: 0.5 };
+    expect(
+      cellBordersFrom({
+        top,
+        left: undefined,
+        bottom: undefined,
+        right,
+      }),
+    ).toEqual({ top, right });
+  });
+
+  it("carries all four sides when every one states a border", () => {
+    const border: ContentBorder = { color: RED, widthPt: 1 };
+    expect(
+      cellBordersFrom({
+        top: border,
+        left: border,
+        bottom: border,
+        right: border,
+      }),
+    ).toEqual({ top: border, left: border, bottom: border, right: border });
   });
 });
 
@@ -657,5 +726,32 @@ describe("encodeTableRowGrpprl", () => {
     expect(setBrc).toHaveLength(1);
     // bordersToApply, the operand's fourth byte: top | left | bottom | right.
     expect(setBrc[0]?.operand[3]).toBe(0x0f);
+  });
+});
+
+describe("borderNeedsExactColor", () => {
+  const bordered = (color: {
+    r: number;
+    g: number;
+    b: number;
+  }): ContentBorder => ({ color, widthPt: 1 });
+
+  it("is false for a colour that already sits exactly on a palette entry", () => {
+    expect(borderNeedsExactColor(bordered(RED))).toBe(false);
+  });
+
+  it("is true when only the red component differs from the nearest palette entry", () => {
+    // Nearest to WHITE (0x08, 255/255/255): only r rounds to something other than 255.
+    expect(borderNeedsExactColor(bordered({ ...WHITE, r: 0.95 }))).toBe(true);
+  });
+
+  it("is true when only the green component differs from the nearest palette entry", () => {
+    // Nearest to RED (0x06, 255/0/0): only g rounds to something other than 0.
+    expect(borderNeedsExactColor(bordered({ ...RED, g: 0.05 }))).toBe(true);
+  });
+
+  it("is true when only the blue component differs from the nearest palette entry", () => {
+    // Nearest to BLACK (0x01, 0/0/0): only b rounds to something other than 0.
+    expect(borderNeedsExactColor(bordered({ ...BLACK, b: 0.05 }))).toBe(true);
   });
 });

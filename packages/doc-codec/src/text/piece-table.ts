@@ -81,13 +81,8 @@ export function parseClx(clx: Uint8Array): PieceTable {
     const element = plc.element(index);
     const bits = readUint16LE(element, 0);
     const fcCompressed = readUint32LE(element, 2);
-    const cpStart = plc.keys[index];
-    const cpEnd = plc.keys[index + 1];
-    if (cpStart === undefined || cpEnd === undefined) {
-      throw new DocFormatError(
-        `PlcPcd element ${index} has no bracketing character positions, so its text range is undefined`,
-      );
-    }
+    const cpStart = plc.keyAt(index);
+    const cpEnd = plc.keyAt(index + 1);
     pieces.push({
       cpStart,
       cpEnd,
@@ -98,10 +93,8 @@ export function parseClx(clx: Uint8Array): PieceTable {
     });
   }
 
-  const lastCp = plc.keys[plc.keys.length - 1];
-  if (lastCp === undefined) {
-    throw new DocFormatError("PlcPcd carries no character positions at all");
-  }
+  // A PLC always carries count + 1 keys (see parsePlc's own invariant), and count is a non-negative integer, so there is always at least one key here -- keyAt's own bounds check is never actually reachable from a real Plc, but going through it rather than raw indexing keeps this the one place that fact is asserted instead of assumed.
+  const lastCp = plc.keyAt(plc.keys.length - 1);
   return { pieces, cpKeys: plc.keys, lastCp };
 }
 

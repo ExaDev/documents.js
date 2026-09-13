@@ -137,9 +137,9 @@ describe("parseClx", () => {
     expect(table.pieces[0]?.fc).toBe(0x200);
   });
 
-  it("rejects a Clx whose first byte is neither a Prc nor the Pcdt marker", () => {
+  it("rejects a Clx whose first byte is neither a Prc nor the Pcdt marker, naming the offset and the byte", () => {
     expect(() => parseClx(new Uint8Array([0x03, 0, 0, 0, 0]))).toThrow(
-      DocFormatError,
+      /Clx element at offset 0 begins with clxt 0x03, which is neither a Prc \(0x01\) nor the Pcdt \(0x02\)/,
     );
   });
 
@@ -147,21 +147,76 @@ describe("parseClx", () => {
     expect(() => parseClx(new Uint8Array(0))).toThrow(DocFormatError);
   });
 
-  it("rejects a Pcdt whose declared lcb runs past the end of the Clx", () => {
+  it("rejects a Pcdt whose declared lcb runs past the end of the Clx, naming 'Clx Pcdt PlcPcd'", () => {
     const bytes = new Uint8Array([0x02, 0xff, 0xff, 0x00, 0x00, 0, 0, 0, 0]);
-    expect(() => parseClx(bytes)).toThrow(DocFormatError);
+    expect(() => parseClx(bytes)).toThrow(
+      /Clx Pcdt PlcPcd read of 65535 bytes at offset 5/,
+    );
   });
 
-  it("rejects a Prc whose declared cbGrpprl runs past the end of the Clx", () => {
-    const bytes = new Uint8Array([0x01, 0xff, 0x7f, 0x00]);
-    expect(() => parseClx(bytes)).toThrow(DocFormatError);
+  it("rejects a Pcdt whose lcb is in range but does not yield a whole number of Pcds, naming 'PlcPcd'", () => {
+    // A 6-byte PlcPcd is 4 bytes short of even the smallest valid one (4 keys + 1 Pcd of PCD_SIZE), and 6 is not of the form 4 + n * (4 + PCD_SIZE) for any integer n, so parsePlc itself rejects it under the label parseClx passes it.
+    const bytes = new Uint8Array([
+      0x02, 0x06, 0x00, 0x00, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ]);
+    expect(() => parseClx(bytes)).toThrow(/PlcPcd is 6 bytes/);
+  });
+
+  it("accepts a Prc that consumes exactly every remaining byte, deferring to the next read's own out-of-bounds error rather than this Prc's own bounds guard", () => {
+    // cbGrpprl 1 plus the 3-byte header consumes all 4 bytes, landing cursor exactly on clx.length -- not past it, so this loop's own "runs past the end" guard must not fire here at all; the very next iteration's clxt read is what actually reports running out of bytes.
+    const bytes = new Uint8Array([0x01, 0x01, 0x00, 0xab]);
+    expect(() => parseClx(bytes)).toThrow(
+      /uint8 read of 1 bytes at offset 4 runs past the end of a 4-byte stream/,
+    );
+  });
+
+  it("rejects a Prc whose declared cbGrpprl is in range but still runs past the end of the Clx, naming the offset and byte counts", () => {
+    const bytes = new Uint8Array([0x01, 0x0a, 0x00, 0x00]); // cbGrpprl 10, but only 4 bytes exist at all.
+    expect(() => parseClx(bytes)).toThrow(
+      /Clx Prc at offset 0 declares a 10-byte GrpPrl that runs past the end of the 4-byte Clx/,
+    );
   });
 
   it("rejects a negative cbGrpprl, which the signed field permits and no valid file carries", () => {
     const bytes = new Uint8Array([
       0x01, 0x00, 0x80, 0x02, 0, 0, 0, 0, 0, 0, 0, 0,
     ]);
-    expect(() => parseClx(bytes)).toThrow(DocFormatError);
+    expect(() => parseClx(bytes)).toThrow(
+      /Clx Prc at offset 0 declares cbGrpprl -32768, outside the 0\.\.0x3FA2 range/,
+    );
+  });
+
+  it("rejects a cbGrpprl one past the format's own 0x3FA2 maximum", () => {
+    const cbGrpprl = 0x3fa3;
+    const bytes = new Uint8Array([
+      0x01,
+      cbGrpprl & 0xff,
+      (cbGrpprl >> 8) & 0xff,
+      0x02,
+    ]);
+    expect(() => parseClx(bytes)).toThrow(
+      /declares cbGrpprl 16291, outside the 0\.\.0x3FA2 range/,
+    );
+  });
+
+  it("accepts a Prc whose cbGrpprl is exactly zero, the range's own lower bound", () => {
+    const bytes = clxBytes({
+      prcs: [[]],
+      cps: [0, 4],
+      pcds: [pcd({ fc: 0x200, compressed: true })],
+    });
+    expect(() => parseClx(bytes)).not.toThrow();
+  });
+
+  it("accepts a Prc whose cbGrpprl is exactly the format's own 0x3FA2 maximum", () => {
+    const cbGrpprl = 0x3fa2;
+    const grpprl = new Array<number>(cbGrpprl).fill(0);
+    const bytes = clxBytes({
+      prcs: [grpprl],
+      cps: [0, 4],
+      pcds: [pcd({ fc: 0x200, compressed: true })],
+    });
+    expect(() => parseClx(bytes)).not.toThrow();
   });
 
   it("exposes the character positions as a lookup key array covering every piece", () => {
@@ -172,10 +227,14 @@ describe("parseClx", () => {
 });
 
 describe("characterOffset", () => {
-  it("rejects a character position outside the piece it is asked about", () => {
+  it("rejects a character position outside the piece it is asked about, naming the position and the piece's own range", () => {
     const piece = parseClx(SPEC_EXAMPLE).pieces[0];
     if (piece === undefined) throw new Error("piece 0 must be present");
-    expect(() => characterOffset(piece, 6)).toThrow(DocFormatError);
-    expect(() => characterOffset(piece, -1)).toThrow(DocFormatError);
+    expect(() => characterOffset(piece, 6)).toThrow(
+      /character position 6 is outside the piece covering \[0, 6\)/,
+    );
+    expect(() => characterOffset(piece, -1)).toThrow(
+      /character position -1 is outside the piece covering \[0, 6\)/,
+    );
   });
 });

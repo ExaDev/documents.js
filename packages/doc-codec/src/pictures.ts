@@ -26,9 +26,11 @@ const RECORD_HEADER_SIZE = 8;
 const BLIP_JPEG = 0xf01d;
 /** OfficeArtBlipPNG, [MS-ODRAW] 2.2.28. */
 const BLIP_PNG = 0xf01e;
-/** rh.recInstance values naming a single rgbUid (16 bytes) rather than two (32 bytes) -- [MS-ODRAW] 2.2.27's own table for JPEG (RGB and CMYK) and 2.2.28's for PNG. */
+/** rh.recInstance values naming a single rgbUid rather than two -- [MS-ODRAW] 2.2.27's own table for JPEG (RGB and CMYK) and 2.2.28's for PNG. */
 const ONE_UID_INSTANCES = new Set([0x046a, 0x06e2, 0x06e0]);
 const TWO_UID_INSTANCES = new Set([0x046b, 0x06e3, 0x06e1]);
+const ONE_UID_BYTES = 16;
+const TWO_UID_BYTES = 32;
 /** The one byte following rgbUid(1|2) in every OfficeArtBlip variant this module reads, before the raw file bytes themselves. */
 const BLIP_TAG_SIZE = 1;
 
@@ -51,6 +53,17 @@ function readRecordHeader(data: Uint8Array, offset: number): RecordHeader {
   };
 }
 
+/** The one byte past PICF's own fixed 68 bytes, skipping past MFPF.mm's MM_SHAPEFILE-only cchPicName/stPicName pair (the source file's own name, [MS-DOC] 2.9.181) when present. Exported so its own contract -- how far past PICF the OfficeArt container chain actually begins -- is directly testable: findBlipRecord's own forward scan for a validated blip is robust enough to find the real blip even starting from the wrong offset (scanning straight through a skipped filename's bytes finds nothing signature-shaped there and simply continues), which means asserting only on readInlinePicture's own final result can never tell a correct skip from a wrong one apart. */
+export function skipPicName(
+  dataStream: Uint8Array,
+  mm: number,
+  afterPicf: number,
+): number {
+  if (mm !== MM_SHAPEFILE) return afterPicf;
+  const cchPicName = readUint8(dataStream, afterPicf);
+  return afterPicf + 1 + cchPicName;
+}
+
 /** Resolves one inline picture character's own sprmCPicLocation offset into a ContentImageBlock, or undefined when the picture's own blip is a format this package does not decode (see this module's own top comment) -- never thrown, since an unsupported picture format is exactly the kind of absence the rest of this reader already treats as "read with fewer properties than it states" rather than a document-level failure. */
 export function readInlinePicture(
   dataStream: Uint8Array,
@@ -68,11 +81,7 @@ export function readInlinePicture(
   const mx = readUint16LE(picf, PICF_MX_OFFSET);
   const my = readUint16LE(picf, PICF_MY_OFFSET);
 
-  let cursor = picLocation + PICF_SIZE;
-  if (mm === MM_SHAPEFILE) {
-    const cchPicName = readUint8(dataStream, cursor);
-    cursor += 1 + cchPicName;
-  }
+  const cursor = skipPicName(dataStream, mm, picLocation + PICF_SIZE);
 
   // Locating the blip: the containers between PICF and the blip are wrapper shapes this reader has no need to look inside, and producers disagree on the nesting -- Word writes InlineSpContainer > SpContainer > blip, while LibreOffice (confirmed against a real LibreOffice-produced .doc corpus file, 2026-09-10) emits a chain whose container lengths do not walk to the blip (its property-table record's recLen spans past the blip entirely), so header-walking mis-parses it. The robust spelling-independent locator: scan forward from PICF's end for a record header whose type is a known blip, whose instance names a known rgbUid count, whose length stays inside the Data stream, and whose payload actually begins with that format's own file signature -- a validated blip, not merely a well-formed header. The signature check is what makes a false positive on wrapper bytes effectively impossible: no container prefix preceding a real blip starts with a PNG or JPEG signature at exactly the uid-and-tag-derived offset.
   const found = findBlipRecord(dataStream, cursor);
@@ -84,9 +93,9 @@ export function readInlinePicture(
   if (format === undefined) return undefined;
 
   const uidBytes = ONE_UID_INSTANCES.has(blipHeader.recInstance)
-    ? 16
+    ? ONE_UID_BYTES
     : TWO_UID_INSTANCES.has(blipHeader.recInstance)
-      ? 32
+      ? TWO_UID_BYTES
       : undefined;
   if (uidBytes === undefined) return undefined;
 
@@ -143,27 +152,37 @@ interface FoundBlip {
   readonly offset: number;
 }
 
+/** The least a real find can ever need past a record header: the smaller rgbUid (ONE_UID_BYTES) + the tag byte + the shorter of the two file signatures this reader validates (JPEG's, 2 bytes). A candidate header that does not even leave this much room behind it can never validate, so the scan below never bothers reading one. */
+const MIN_BLIP_TAIL_BYTES =
+  ONE_UID_BYTES +
+  BLIP_TAG_SIZE +
+  Math.min(PNG_SIGNATURE.length, JPEG_SIGNATURE.length);
+
 /** Scans forward from `from` for a validated blip record (see readInlinePicture's own locating note) -- every candidate header of a blip type must also carry a known rgbUid instance count, a length inside the stream, and payload bytes starting with its format's own file signature. */
 function findBlipRecord(data: Uint8Array, from: number): FoundBlip | undefined {
-  for (let at = from; at + RECORD_HEADER_SIZE <= data.length; at++) {
+  for (
+    let at = from;
+    at + RECORD_HEADER_SIZE + MIN_BLIP_TAIL_BYTES <= data.length;
+    at++
+  ) {
     const header = readRecordHeader(data, at);
     const format = blipFormat(header.recType);
     if (format === undefined) {
       continue;
     }
     const uidBytes = ONE_UID_INSTANCES.has(header.recInstance)
-      ? 16
+      ? ONE_UID_BYTES
       : TWO_UID_INSTANCES.has(header.recInstance)
-        ? 32
+        ? TWO_UID_BYTES
         : undefined;
     if (uidBytes === undefined) {
       continue;
     }
     const payloadStart = at + RECORD_HEADER_SIZE + uidBytes + BLIP_TAG_SIZE;
     const signature = format === "png" ? PNG_SIGNATURE : JPEG_SIGNATURE;
+    // No separate payloadStart + signature.length <= data.length bounds check is needed: payloadHasSignature indexes past data's own end via a plain data[start + i] read, which is undefined for any out-of-range i, and undefined !== a real signature byte is already false -- so a signature that runs off the end of data is already rejected by payloadHasSignature itself, on its own.
     if (
       header.recLen > uidBytes + BLIP_TAG_SIZE &&
-      payloadStart + signature.length <= data.length &&
       payloadHasSignature(data, payloadStart, signature)
     ) {
       return { header, offset: at };
