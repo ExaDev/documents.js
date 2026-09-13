@@ -28,14 +28,18 @@ describe("resolveOpfPath", () => {
     expect(() => resolveOpfPath("<not-a-container/>")).toThrow(
       EpubInvalidContainerError,
     );
+    expect(() => resolveOpfPath("<not-a-container/>")).toThrow(
+      "META-INF/container.xml has no <container> root element",
+    );
   });
 
   it("throws EpubInvalidContainerError when there is no <rootfiles> element", () => {
-    expect(() =>
-      resolveOpfPath(
-        '<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"/>',
-      ),
-    ).toThrow(EpubInvalidContainerError);
+    const xml =
+      '<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"/>';
+    expect(() => resolveOpfPath(xml)).toThrow(EpubInvalidContainerError);
+    expect(() => resolveOpfPath(xml)).toThrow(
+      "META-INF/container.xml has no <rootfiles> element",
+    );
   });
 
   it("throws EpubInvalidContainerError when no rootfile carries a full-path", () => {
@@ -43,5 +47,8 @@ describe("resolveOpfPath", () => {
       <rootfiles><rootfile media-type="application/oebps-package+xml"/></rootfiles>
     </container>`;
     expect(() => resolveOpfPath(xml)).toThrow(EpubInvalidContainerError);
+    expect(() => resolveOpfPath(xml)).toThrow(
+      "META-INF/container.xml names no rootfile with a full-path attribute",
+    );
   });
 });
