@@ -40,6 +40,15 @@ describe("resolveOdfListKind", () => {
     expect(resolveOdfListKind({ parts: {} }, undefined)).toBeUndefined();
   });
 
+  it("undefined style name resolves to undefined even when a real, matchable list-style exists", () => {
+    // A text:list-style with no style:name attribute at all would make attrValue(el, "style:name") itself return undefined -- coincidentally equal to an undefined styleName -- if this function didn't short-circuit on an undefined styleName before ever reaching the lookup. Giving it a level-1 ordered child means a version that skipped the short-circuit would resolve "ordered" here instead of undefined.
+    const style = el("text:list-style", {}, [
+      el("text:list-level-style-number", { "text:level": "1" }),
+    ]);
+    const pkg = packageWithAutomaticStyles(style);
+    expect(resolveOdfListKind(pkg, undefined)).toBeUndefined();
+  });
+
   it("resolves an ordered list style from its level-1 text:list-level-style-number", () => {
     const style = el("text:list-style", { "style:name": "L1" }, [
       el("text:list-level-style-number", { "text:level": "1" }),
@@ -67,6 +76,22 @@ describe("resolveOdfListKind", () => {
   it("only a level-1 child counts -- a level-2-only number style resolves to undefined, not ordered", () => {
     const style = el("text:list-style", { "style:name": "L1" }, [
       el("text:list-level-style-number", { "text:level": "2" }),
+    ]);
+    const pkg = packageWithAutomaticStyles(style);
+    expect(resolveOdfListKind(pkg, "L1")).toBeUndefined();
+  });
+
+  it("only a level-1 child counts for a bullet style too -- a level-2-only bullet resolves to undefined", () => {
+    const style = el("text:list-style", { "style:name": "L1" }, [
+      el("text:list-level-style-bullet", { "text:level": "2" }),
+    ]);
+    const pkg = packageWithAutomaticStyles(style);
+    expect(resolveOdfListKind(pkg, "L1")).toBeUndefined();
+  });
+
+  it("only a level-1 child counts for an image style too -- a level-2-only image resolves to undefined", () => {
+    const style = el("text:list-style", { "style:name": "L1" }, [
+      el("text:list-level-style-image", { "text:level": "2" }),
     ]);
     const pkg = packageWithAutomaticStyles(style);
     expect(resolveOdfListKind(pkg, "L1")).toBeUndefined();
@@ -162,6 +187,17 @@ describe("buildOdfListStyle", () => {
     expect(levels).toHaveLength(10);
     expect(attrValue(levels[0]!, "style:num-suffix")).toBe(".");
     expect(attrValue(levels[0]!, "style:num-format")).toBe("1");
+  });
+
+  it("an ordered style's own levels also carry the indent properties, exactly as a bullet style's do", () => {
+    const style = buildOdfListStyle("L1", "ordered");
+    const levels = childrenWithTag(style, "text:list-level-style-number");
+    const props = childrenWithTag(
+      levels[0]!,
+      "style:list-level-properties",
+    )[0]!;
+    expect(attrValue(props, "text:space-before")).toBe("18pt");
+    expect(attrValue(props, "text:min-label-width")).toBe("18pt");
   });
 
   it("a bullet style's own levels carry the real bullet character, never the numbering attributes", () => {
@@ -391,6 +427,23 @@ describe("readOdfListParagraphs", () => {
       paragraphReader(),
     );
     expect(paragraphs).toHaveLength(1);
+  });
+
+  it("ignores an item child that is neither text:p/text:h nor text:list, even one shaped like a nested list inside", () => {
+    // The nested tag ("text:list-header") carries its own text:list-item/text:p descendants specifically so a version that recursed into ANY non-text:p/text:h child (rather than only a genuine text:list) would find and surface this paragraph -- an empty decoy element couldn't tell the two apart.
+    const list = el("text:list", {}, [
+      el("text:list-item", {}, [
+        el("text:list-header", {}, [
+          el("text:list-item", {}, [el("text:p", { id: "decoy" })]),
+        ]),
+      ]),
+    ]);
+    const paragraphs = readOdfListParagraphs(
+      list,
+      { numId: "list1", level: 0 },
+      paragraphReader(),
+    );
+    expect(paragraphs).toEqual([]);
   });
 
   it("recurses into a nested text:list, incrementing level but keeping the SAME numId", () => {
