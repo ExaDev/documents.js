@@ -362,4 +362,175 @@ describe("readNumberingDefinitions", () => {
       /has room for only 1/,
     );
   });
+
+  it("names the correct entry capacity for a PlfLfo buffer whose own length isn't a clean multiple of one LFO plus the header", () => {
+    // A physically real 2-entry PlfLfo (4 + 2*16 = 36 bytes), but declared as 35 bytes -- one byte short of two full entries, so only 1 fits; 35 is not of the form 16k + 4, the only shape floor((length-4)/16) and a length+4 mistake would ever agree on.
+    const { table, fib } = tableStreamWithNumbering([], [1, 2]);
+    const view = new DataView(table.buffer, table.byteOffset, table.byteLength);
+    view.setInt32(fib.fcPlfLfo, 3, true); // lfoMac 3, declaring more than even the full 36 bytes hold.
+    expect(() =>
+      readNumberingDefinitions(table, { ...fib, lcbPlfLfo: 35 }),
+    ).toThrow(/has room for only 1\b/);
+  });
+
+  it("accepts PlfLfo.lfoMac 0, an empty rgLfo naming no lists at all", () => {
+    const { table, fib } = tableStreamWithNumbering([], []);
+    expect(() => readNumberingDefinitions(table, fib)).not.toThrow();
+  });
+
+  it("returns no definitions when only lcbPlfLst is 0, even though lcbPlfLfo names real bytes", () => {
+    const { fib } = tableStreamWithNumbering(
+      [{ lsid: 1, levels: [{ nfc: 0x00, text: [] }] }],
+      [1],
+    );
+    expect(
+      readNumberingDefinitions(new Uint8Array(0), { ...fib, lcbPlfLst: 0 }),
+    ).toEqual({});
+  });
+
+  it("returns no definitions when only lcbPlfLfo is 0, even though lcbPlfLst names real bytes", () => {
+    const { fib } = tableStreamWithNumbering(
+      [{ lsid: 1, levels: [{ nfc: 0x00, text: [] }] }],
+      [1],
+    );
+    expect(
+      readNumberingDefinitions(new Uint8Array(0), { ...fib, lcbPlfLfo: 0 }),
+    ).toEqual({});
+  });
+
+  it("reads rgbxchNums' own full nine-entry array when none of the nine is zero, without reading a tenth byte past it", () => {
+    // Nine placeholders at odd character positions (1,3,...,17), a literal "." at every even position in between -- if the reader ever read a tenth, out-of-range entry, it would land on ixchFollow (always 0x02 in this fixture builder) and wrongly turn position 2's literal "." into a placeholder too.
+    const parts: XstPart[] = [];
+    for (let level = 0; level < 9; level += 1) {
+      parts.push({ placeholderLevel: level });
+      parts.push({ char: "." });
+    }
+    parts.pop(); // drop the trailing literal after the ninth placeholder.
+    const { table, fib } = tableStreamWithNumbering(
+      [{ lsid: 7000, levels: [{ nfc: 0x00, text: parts }] }],
+      [7000],
+    );
+    const definitions = readNumberingDefinitions(table, fib);
+    expect(definitions["1"]?.levels["0"]?.text).toBe(
+      "%1.%2.%3.%4.%5.%6.%7.%8.%9",
+    );
+  });
+
+  it("stops rgbxchNums at its first zero entry, ignoring anything that follows it in the fixed nine-byte array", () => {
+    const { table, fib } = tableStreamWithNumbering(
+      [
+        {
+          lsid: 8000,
+          levels: [
+            {
+              nfc: 0x00,
+              text: [
+                { char: "A" },
+                { char: "B" },
+                { char: "C" },
+                { char: "D" },
+                { char: "E" },
+              ],
+            },
+          ],
+        },
+      ],
+      [8000],
+    );
+    // Every rgbxchNums entry is genuinely 0 in this fixture (no placeholders at all) -- corrupt the second entry to a nonzero value that must still be ignored, since the format's own zero-terminated rule means nothing after the first zero entry counts.
+    const lvlOffset = fib.fcPlfLst + fib.lcbPlfLst;
+    const rgbxchNumsSecondEntryOffset = lvlOffset + 6 + 1; // LVLF: iStartAt(4) + nfc(1) + flags(1), then rgbxchNums.
+    table[rgbxchNumsSecondEntryOffset] = 5;
+    const definitions = readNumberingDefinitions(table, fib);
+    expect(definitions["1"]?.levels["0"]?.text).toBe("ABCDE");
+  });
+
+  it("never reads one character past xstText's own length, even when rgbxchNums names an out-of-range position", () => {
+    const { table, fib } = tableStreamWithNumbering(
+      [
+        {
+          lsid: 8500,
+          levels: [{ nfc: 0x00, text: [{ char: "A" }, { char: "B" }] }],
+        },
+      ],
+      [8500],
+    );
+    const lvlOffset = fib.fcPlfLst + fib.lcbPlfLst;
+    const rgbxchNumsFirstEntryOffset = lvlOffset + 6; // LVLF: iStartAt(4) + nfc(1) + flags(1).
+    table[rgbxchNumsFirstEntryOffset] = 3; // position 3 -- one past this 2-character Xst.
+    const definitions = readNumberingDefinitions(table, fib);
+    expect(definitions["1"]?.levels["0"]?.text).toBe("AB");
+  });
+
+  it("names 'PlfLst' with the exact offset and remaining bytes when the appended LVL array itself runs past the Table stream", () => {
+    const { table, fib } = tableStreamWithNumbering(
+      [{ lsid: 9000, levels: [{ nfc: 0x00, text: [{ char: "A" }] }] }],
+      [9000],
+    );
+    const lvlOffset = fib.fcPlfLst + fib.lcbPlfLst;
+    const truncated = table.subarray(0, lvlOffset + 10); // 10 bytes into the 28-byte LVLF, short of the fixed LVLF_SIZE it needs.
+    expect(() => readNumberingDefinitions(truncated, fib)).toThrow(
+      new RegExp(
+        `PlfLst's own appended LVL array runs past the end of its ${truncated.length}-byte buffer at offset ${lvlOffset}, 28 bytes short of one LVLF`,
+      ),
+    );
+  });
+
+  it("does not treat an appended LVL array that fits exactly within its own 28-byte LVLF as running past the buffer", () => {
+    const { table, fib } = tableStreamWithNumbering(
+      [{ lsid: 9500, levels: [{ nfc: 0x00, text: [{ char: "A" }] }] }],
+      [9500],
+    );
+    const lvlOffset = fib.fcPlfLst + fib.lcbPlfLst;
+    const truncated = table.subarray(0, lvlOffset + 28); // exactly one LVLF, no Xst bytes at all.
+    expect(() => readNumberingDefinitions(truncated, fib)).not.toThrow(
+      /LVL array runs past/,
+    );
+  });
+
+  it("advances past a level's own grpprlPapx/grpprlChpx by their own combined byte length before reading the next level", () => {
+    // A hand-built LVL, bypassing buildLvl (which always writes both as 0-length), so cbGrpprlPapx (3) and cbGrpprlChpx (2) are genuinely distinct nonzero values -- any offset arithmetic that swapped a + for a - would land the Xst read, and the next level's own cursor, somewhere else entirely.
+    const grpprlPapxBytes = [0xbb, 0xbb, 0xbb];
+    const grpprlChpxBytes = [0xaa, 0xaa];
+    const { bytes: xstBytes0 } = buildXst([{ char: "Z" }]);
+    const level0 = [
+      ...i32(1), // iStartAt
+      0x00, // nfc
+      0x00, // flags
+      ...new Array<number>(9).fill(0), // rgbxchNums
+      0x02, // ixchFollow
+      ...i32(0), // dxaIndentSav
+      ...u32(0), // unused2
+      grpprlChpxBytes.length,
+      grpprlPapxBytes.length,
+      0x00, // ilvlRestartLim
+      0x00, // grfhic
+      ...grpprlPapxBytes,
+      ...grpprlChpxBytes,
+      ...xstBytes0,
+    ];
+    const otherLevels = Array.from({ length: 8 }, () =>
+      buildLvl({ nfc: 0x00, text: [{ char: "Y" }] }),
+    ).flat();
+    const rgLstf = buildLstf(9998, false); // non-simple: nine LVLs.
+    const plfLst = [...u16(1), ...rgLstf];
+    const plfLfo = buildPlfLfo([9998]);
+    const plfLstOffset = 16;
+    const plfLstBytes = [...plfLst, ...level0, ...otherLevels];
+    const plfLfoOffset = plfLstOffset + plfLstBytes.length + 8;
+    const table = new Uint8Array(plfLfoOffset + plfLfo.length);
+    table.set(plfLstBytes, plfLstOffset);
+    table.set(plfLfo, plfLfoOffset);
+    const fib = parseFib(
+      buildFib({
+        fcPlfLst: plfLstOffset,
+        lcbPlfLst: plfLst.length,
+        fcPlfLfo: plfLfoOffset,
+        lcbPlfLfo: plfLfo.length,
+      }),
+    );
+    const definitions = readNumberingDefinitions(table, fib);
+    expect(definitions["1"]?.levels["0"]?.text).toBe("Z");
+    expect(definitions["1"]?.levels["1"]?.text).toBe("Y");
+  });
 });
