@@ -85,21 +85,19 @@ function nearestTextCell(
   regionIndexOf: ReadonlyMap<string, number>,
   targetRegionIndex: number | undefined,
 ): CellNeighbourReference | undefined {
-  let nearest: ContentSheetCell | undefined;
-  let nearestPosition = Number.NEGATIVE_INFINITY;
-  for (const candidate of candidates) {
-    const position = positionOf(candidate);
-    if (position >= targetPosition) continue;
-    if (position <= nearestPosition) continue;
-    if (
-      regionIndexOf.get(cellReference(candidate.row, candidate.column)) !==
-      targetRegionIndex
-    )
-      continue;
-    nearest = candidate;
-    nearestPosition = position;
-  }
-  if (nearest === undefined) return undefined;
+  // Candidates strictly before the target, in the target's own region.
+  const qualifying = candidates.filter(
+    (candidate) =>
+      positionOf(candidate) < targetPosition &&
+      regionIndexOf.get(cellReference(candidate.row, candidate.column)) ===
+        targetRegionIndex,
+  );
+  if (qualifying.length === 0) return undefined;
+  // reduce with no initial value: its own TypeScript overload returns T, not T | undefined, so -- unlike a manual loop or .find -- no separate "was anything found" narrowing check is needed once qualifying is known non-empty.
+  const nearest = qualifying.reduce((best, candidate) =>
+    positionOf(candidate) > positionOf(best) ? candidate : best,
+  );
+  const nearestPosition = positionOf(nearest);
   const distance = targetPosition - nearestPosition;
   return {
     ref: { row: nearest.row, column: nearest.column },

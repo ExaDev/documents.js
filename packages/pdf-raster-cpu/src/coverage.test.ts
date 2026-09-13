@@ -124,4 +124,26 @@ describe("CoverageMask", () => {
     evenodd.fillPolygons([outer, inner], "evenodd");
     expect(evenodd.countAt(centreIndex)).toBe(0);
   });
+
+  it("cuts a hole under nonzero when the inner ring is wound the opposite way to the outer one", () => {
+    // The outer square's own vertex order, reversed for the inner square: the two windings cancel back to exactly zero over the inner ring, reading as a hole under nonzero even though evenodd would already have cut the same hole for either winding.
+    const outer = [
+      { x: 1, y: 1 },
+      { x: 6, y: 1 },
+      { x: 6, y: 6 },
+      { x: 1, y: 6 },
+    ];
+    const reversedInner = [
+      { x: 2, y: 2 },
+      { x: 2, y: 5 },
+      { x: 5, y: 5 },
+      { x: 5, y: 2 },
+    ];
+    const centreIndex = 3 * 8 + 3;
+    const mask = new CoverageMask(8, 8);
+    mask.fillPolygons([outer, reversedInner], "nonzero");
+    expect(mask.countAt(centreIndex)).toBe(0);
+    // The outer ring itself, between the two squares, is still solid: only the inner square's own interior is cancelled out.
+    expect(mask.countAt(1 * 8 + 3)).toBeGreaterThan(0);
+  });
 });

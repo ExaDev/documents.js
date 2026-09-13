@@ -110,6 +110,11 @@ describe("styleSemanticsFor", () => {
       expect(styleSemanticsFor(systemStyle)).toBeUndefined();
     },
   );
+
+  // One past the heading range's own upper bound (75): every existing case above either lands inside a range or well below all of them, so nothing yet proves the heading and not-indented ranges actually stop where the SDK says they do, rather than continuing to swallow everything above their first value.
+  it("gives system style 76, one past the heading range, no structural meaning", () => {
+    expect(styleSemanticsFor(76)).toBeUndefined();
+  });
 });
 
 describe("style scope pairing", () => {
@@ -151,6 +156,14 @@ describe("paragraph number display", () => {
     "does not treat subfunction %i as a paragraph number",
     (subfunction) => {
       expect(isParagraphNumberDisplayOn(subfunction)).toBe(false);
+    },
+  );
+
+  // The On code itself, and an unrelated subfunction, must both fail isParagraphNumberDisplayOff -- otherwise a version that always answers true regardless of input would pass every existing check here.
+  it.each([0x0c, 0x04])(
+    "does not treat subfunction %i as the paragraph number display Off code",
+    (subfunction) => {
+      expect(isParagraphNumberDisplayOff(subfunction)).toBe(false);
     },
   );
 
@@ -207,5 +220,47 @@ describe("readStyleBeginBlock", () => {
 
   it("returns undefined for a packet too short to carry the text-block header", () => {
     expect(readStyleBeginBlock(new Uint8Array([0, 0]))).toBeUndefined();
+  });
+
+  it("returns undefined for a packet too short to even hold the pid count", () => {
+    expect(readStyleBeginBlock(new Uint8Array(0))).toBeUndefined();
+  });
+
+  // A pid count (60) whose doubled byte cost the packet plainly cannot afford: the overrun check must reject it using the real byte cost, not an under- or negatively-computed one that would let the walk proceed and misread bytes 30-58 past where the pid list truly ends.
+  it("rejects a pid count whose doubled byte cost overruns the packet", () => {
+    const bytes = new Array<number>(60).fill(0);
+    bytes[0] = 60; // pid count = 60, low byte
+    bytes[42] = 5; // only reachable, and only turns into a real answer, if afterPids is mis-computed
+    expect(readStyleBeginBlock(new Uint8Array(bytes))).toBeUndefined();
+  });
+
+  // The text-block header exactly fills the packet (afterPids + TEXT_BLOCK_HEADER_SIZE === packet.length), with no bytes to spare -- the one boundary where "runs past" and "fits exactly" disagree. The begin block's own relative offset points back into the header's own bytes here (harmless: this function only cares about bounds, not what the header fields themselves say), so a real, in-bounds slice is still the correct answer.
+  it("reads a begin block from a packet whose header exactly fills it, with nothing to spare", () => {
+    const bytes = new Array<number>(20).fill(0); // pid count (2) + TEXT_BLOCK_HEADER_SIZE (18) = 20, exactly
+    putUint32(bytes, 12, 5); // beginningStyleTextSize = 5; relativeOffset and paragraphTextSize stay 0
+    expect(readStyleBeginBlock(new Uint8Array(bytes))).toEqual(
+      new Uint8Array(bytes.slice(0, 5)),
+    );
+  });
+
+  // The header's own fourth field (extraStyleTextSize) is never read by this function -- only relativeOffset, paragraphTextSize, and beginningStyleTextSize are -- but the room guard still checks for all four LONGs' worth of space, TEXT_BLOCK_HEADER_SIZE (18) bytes past afterPids. A packet with room for exactly the three real reads (14 bytes past afterPids) but not the fourth still states a begin block that would, on the bytes read alone, appear to fit within those same 14 bytes -- proving the guard's own room requirement is load-bearing rather than redundant with the reads it precedes.
+  it("rejects a packet whose header has room for the three fields this function reads but not the fourth it never reads", () => {
+    const bytes = new Array<number>(16).fill(0); // pid count (2) + 14: exactly enough for relativeOffset/paragraphTextSize/beginningStyleTextSize, one 4-byte field short of the full header
+    putUint32(bytes, 12, 3); // beginningStyleTextSize = 3; relativeOffset and paragraphTextSize stay 0, so a begin block of bytes 0-2 would otherwise fit inside these 16 bytes
+    expect(readStyleBeginBlock(new Uint8Array(bytes))).toBeUndefined();
+  });
+
+  // A nonzero pid count whose doubled byte cost, if computed with the wrong sign, still lands on a small, in-bounds (but wrong) afterPids rather than a deeply negative one a later throw would catch -- unlike the overrun case above, this proves the addition itself (not just its magnitude) is load-bearing.
+  it("computes afterPids by adding the pid list's own byte cost, not subtracting it", () => {
+    const bytes = new Array<number>(30).fill(0);
+    bytes[0] = 1; // pid count = 1, so afterPids = 2 + 1 * 2 = 4
+    putUint32(bytes, 6, 24); // relativeOffset at afterPids + 2 = 6
+    putUint32(bytes, 14, 3); // beginningStyleTextSize at afterPids + 10 = 14
+    bytes[24] = 9;
+    bytes[25] = 9;
+    bytes[26] = 9; // the begin block itself, at relativeOffset (24) + paragraphTextSize (0)
+    expect(readStyleBeginBlock(new Uint8Array(bytes))).toEqual(
+      new Uint8Array([9, 9, 9]),
+    );
   });
 });

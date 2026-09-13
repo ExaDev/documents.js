@@ -54,35 +54,25 @@ export function segmentSheetRegions(
 // The row/column gap the adjacency rule tolerates: a difference of 1 (immediately adjacent, 0 blank cells between) or 2 (exactly 1 blank cell between) connects; 3 or more (2+ blank cells between) does not.
 const GAP_TOLERANCE = 2;
 
-// A minimal union-find over cellReference() keys -- string keys rather than a numeric index, since the input is a sparse cell array with no dense id space to allocate from. find() applies path compression on every call so a long chain (a full column or row of cells) never re-walks its whole prior structure per union.
+// A minimal union-find over cellReference() keys -- string keys rather than a numeric index, since the input is a sparse cell array with no dense id space to allocate from. No path compression: it would only ever change how many hops a FUTURE find() walks, never any value this class returns, so it is unobservable through this class's own public contract and would be untestable dead weight -- a sheet's own adjacency chains (one column or row at a time) are bounded by realistic sheet sizes regardless.
 class DisjointCellSet {
   private readonly parent = new Map<string, string>();
 
+  // Every `parent` entry is created by union() alone, guarded there by `rootA !== rootB` -- so no key is ever mapped to itself, and a chain of `parent.get` calls always terminates by reaching an unmapped root (`undefined`), never by revisiting an already-seen node. That is the whole termination argument for this walk; there is no self-loop or cycle to separately guard against.
   private root(key: string): string {
     let current = key;
     let next = this.parent.get(current);
-    while (next !== undefined && next !== current) {
+    while (next !== undefined) {
       current = next;
       next = this.parent.get(current);
     }
-    // Path compression: point every visited node directly at the discovered root.
-    let walk = key;
-    let step = this.parent.get(walk);
-    while (step !== undefined && step !== current) {
-      this.parent.set(walk, current);
-      walk = step;
-      step = this.parent.get(walk);
-    }
     return current;
-  }
-
-  ensure(key: string): void {
-    if (!this.parent.has(key)) this.parent.set(key, key);
   }
 
   union(a: string, b: string): void {
     const rootA = this.root(a);
     const rootB = this.root(b);
+    // This guard is load-bearing, not merely an optimisation: without it, unioning two keys that already share a root would map that root to itself, and root()'s own walk (which stops only on an undefined parent) would loop forever chasing a node that points at itself.
     if (rootA !== rootB) this.parent.set(rootA, rootB);
   }
 
@@ -99,8 +89,8 @@ function keyOf(cell: ContentSheetCell): string {
 function connectedComponents(
   cells: readonly ContentSheetCell[],
 ): ContentSheetCell[][] {
+  // No pre-population step for cells that never participate in a union: root() already returns an unmapped key as its own root (the while loop's own `next !== undefined` guard falls through immediately), the identical result a `parent.set(key, key)` pre-population would produce -- so an isolated cell with no adjacent neighbour resolves to itself as its own component either way, and a cell that does end up unioned gets its parent entry from union()'s own `this.parent.set` regardless of whether it was pre-populated first.
   const dsu = new DisjointCellSet();
-  for (const cell of cells) dsu.ensure(keyOf(cell));
 
   const byColumn = new Map<number, ContentSheetCell[]>();
   const byRow = new Map<number, ContentSheetCell[]>();
@@ -113,14 +103,13 @@ function connectedComponents(
     else row.push(cell);
   }
 
+  // Iterating .entries() rather than a manually bounded `for` loop means `current` is always a real, defined element -- no separately-mutable upper-bound comparison to get subtly wrong. No separate `i === 0` clause: `sorted[i - 1]` for i 0 is `sorted[-1]`, always `undefined`, so `previous !== undefined` immediately below already skips the first element on its own -- a second, explicit check for the identical case would be redundant, not an independent guard.
   for (const column of byColumn.values()) {
     const sorted = [...column].sort((a, b) => a.row - b.row);
-    for (let i = 1; i < sorted.length; i++) {
+    for (const [i, current] of sorted.entries()) {
       const previous = sorted[i - 1];
-      const current = sorted[i];
       if (
         previous !== undefined &&
-        current !== undefined &&
         current.row - previous.row <= GAP_TOLERANCE
       ) {
         dsu.union(keyOf(previous), keyOf(current));
@@ -129,12 +118,10 @@ function connectedComponents(
   }
   for (const row of byRow.values()) {
     const sorted = [...row].sort((a, b) => a.column - b.column);
-    for (let i = 1; i < sorted.length; i++) {
+    for (const [i, current] of sorted.entries()) {
       const previous = sorted[i - 1];
-      const current = sorted[i];
       if (
         previous !== undefined &&
-        current !== undefined &&
         current.column - previous.column <= GAP_TOLERANCE
       ) {
         dsu.union(keyOf(previous), keyOf(current));
@@ -152,16 +139,16 @@ function connectedComponents(
   return [...components.values()];
 }
 
-function boundingRange(cells: readonly ContentSheetCell[]): CellRange {
+export function boundingRange(cells: readonly ContentSheetCell[]): CellRange {
   let startRow = Number.POSITIVE_INFINITY;
   let startColumn = Number.POSITIVE_INFINITY;
   let endRow = Number.NEGATIVE_INFINITY;
   let endColumn = Number.NEGATIVE_INFINITY;
   for (const cell of cells) {
-    if (cell.row < startRow) startRow = cell.row;
-    if (cell.row > endRow) endRow = cell.row;
-    if (cell.column < startColumn) startColumn = cell.column;
-    if (cell.column > endColumn) endColumn = cell.column;
+    startRow = Math.min(startRow, cell.row);
+    endRow = Math.max(endRow, cell.row);
+    startColumn = Math.min(startColumn, cell.column);
+    endColumn = Math.max(endColumn, cell.column);
   }
   return { startRow, startColumn, endRow, endColumn };
 }
@@ -169,7 +156,8 @@ function boundingRange(cells: readonly ContentSheetCell[]): CellRange {
 // The value-kind vocabulary treated as "numeric" for classification purposes: the three ContentCellValue variants that carry a computed magnitude. Deliberately excludes 'date'/'time'/'dateTime' (structured, but not what distinguishes a calculation-heavy 'model' region from a plain data 'table') and 'boolean'/'error' (neither is a signal either way for this heuristic).
 const NUMERIC_VALUE_KINDS = new Set(["number", "percentage", "currency"]);
 
-interface RegionSignals {
+// Exported alongside computeSignals/classifyRegion below purely for direct unit testing: the two functions' own scoring arithmetic (weighted sums, ratios, the rowRegularity coefficient-of-variation formula) has far more branches and boundary constants than a hand-built sheet of cells can economically pin one at a time through segmentSheetRegions alone -- the same "extract for direct testability" rationale hash.ts's own writeBitLength already follows in this package.
+export interface RegionSignals {
   readonly cellCount: number;
   readonly rowSpan: number;
   readonly colSpan: number;
@@ -184,7 +172,9 @@ interface RegionSignals {
 }
 
 // Computes the statistics classifyRegion's heuristics read. Each is a plain, cheap-to-explain measurement over the region's own cells -- no external corpus, no learned weights, just the signals a human skimming the sheet would themselves reach for.
-function computeSignals(cells: readonly ContentSheetCell[]): RegionSignals {
+export function computeSignals(
+  cells: readonly ContentSheetCell[],
+): RegionSignals {
   const rows = new Set<number>();
   const columns = new Set<number>();
   const rowCounts = new Map<number, number>();
@@ -213,19 +203,17 @@ function computeSignals(cells: readonly ContentSheetCell[]): RegionSignals {
   const perRowCounts = [...rowCounts.values()];
   const meanRowCount =
     perRowCounts.reduce((sum, count) => sum + count, 0) / perRowCounts.length;
-  const rowRegularity =
-    perRowCounts.length <= 1
-      ? 1
-      : clamp01(
-          1 -
-            Math.sqrt(
-              perRowCounts.reduce(
-                (sum, count) => sum + (count - meanRowCount) ** 2,
-                0,
-              ) / perRowCounts.length,
-            ) /
-              meanRowCount,
-        );
+  // No separate "at most one row" shortcut: computeSignals is only ever called with a non-empty cell array, so perRowCounts.length is always >= 1, and for exactly one row the formula below already reduces to 1 on its own (a single count's own variance from its own mean is always 0).
+  const rowRegularity = clamp01(
+    1 -
+      Math.sqrt(
+        perRowCounts.reduce(
+          (sum, count) => sum + (count - meanRowCount) ** 2,
+          0,
+        ) / perRowCounts.length,
+      ) /
+        meanRowCount,
+  );
 
   // Header-row heuristic: the SIGNAL a table's header row actually provides is that it is text where the rows below it are not -- so this checks the region's own topmost populated row is predominantly text (>= 80%, tolerating one stray non-text header cell) AND at least one other row in the region is predominantly numeric/formula (>= 50%). Neither threshold is load-bearing on its own; the pair together is what separates "the first row happens to be text" (also true of a single-column prose block) from "the first row is uniquely textual among otherwise-numeric rows" (a real header).
   const topRowCells = cells.filter((cell) => cell.row === minRow);
@@ -268,7 +256,7 @@ const MIXED_MARGIN = 0.15;
 // A cell whose average string length reaches this many characters is treated as fully "sentence-like" for the prose signal (a short label like a header cell contributes far less prose evidence than a genuine sentence of commentary); chosen as a rough sentence-fragment length, not a corpus-fitted constant.
 const PROSE_LENGTH_NORM = 40;
 
-function classifyRegion(signals: RegionSignals): {
+export function classifyRegion(signals: RegionSignals): {
   classification: RegionClassification;
   confidence: number;
 } {
@@ -299,26 +287,26 @@ function classifyRegion(signals: RegionSignals): {
     0.7 * signals.formulaFraction + 0.3 * signals.numericFraction,
   );
 
-  const scored = (
-    [
-      { kind: "table", score: tableScore },
-      { kind: "prose", score: proseScore },
-      { kind: "model", score: modelScore },
-    ] satisfies { kind: RegionClassification; score: number }[]
-  ).sort((a, b) => b.score - a.score);
-  const top = scored[0];
-  const second = scored[1];
-  if (top === undefined || second === undefined) {
-    // Unreachable: the literal array above always has exactly three entries.
-    return { classification: "unknown", confidence: 1 };
-  }
+  // Typed as a fixed 3-tuple, not a general array, so scored[0]/scored[1] below are known-defined at the type level under noUncheckedIndexedAccess -- Array.prototype.sort's `this`-typed return preserves the tuple shape through the sort, so there is no "what if the array were some other length" case for TypeScript (or a mutation test) to ever have to guard against.
+  const scored: [
+    { kind: RegionClassification; score: number },
+    { kind: RegionClassification; score: number },
+    { kind: RegionClassification; score: number },
+  ] = [
+    { kind: "table", score: tableScore },
+    { kind: "prose", score: proseScore },
+    { kind: "model", score: modelScore },
+  ];
+  scored.sort((a, b) => b.score - a.score);
+  const [top, second] = scored;
 
   if (top.score < SIGNAL_THRESHOLD) {
     return { classification: "unknown", confidence: clamp01(1 - top.score) };
   }
+  // Written as `top < second + MIXED_MARGIN` rather than the algebraically equivalent `top - second < MIXED_MARGIN`: with both scores constrained to [SIGNAL_THRESHOLD, 1], their difference always lands on a coarser floating-point grid (a multiple of the wider of the two operands' own ULP) than MIXED_MARGIN's own stored value needs, so no achievable pair of scores can ever make that subtraction equal MIXED_MARGIN bit-for-bit -- the `<`/`<=` boundary there is unobservable by construction, not by any gap in testing. Comparing against `second + MIXED_MARGIN` instead lets a test construct top as EXACTLY that same sum (the identical expression, so the two sides are bit-identical by construction), making the boundary genuinely reachable.
   if (
     second.score >= SIGNAL_THRESHOLD &&
-    top.score - second.score < MIXED_MARGIN
+    top.score < second.score + MIXED_MARGIN
   ) {
     return {
       classification: "mixed",

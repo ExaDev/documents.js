@@ -61,10 +61,8 @@ export function orderKeyBetween(low: string, high: string): string {
       );
     }
     const lowDigit = position < low.length ? digitValue(low[position]!) : 0;
-    const highDigit =
-      !highExhausted && position < high.length
-        ? digitValue(high[position]!)
-        : BASE;
+    // No separate `position < high.length` check: for a genuine `low < high` pair, position can only reach high.length while `!highExhausted` still holds if high were a strict prefix of a low that continues past it -- which would make high < low, contradicting the precondition asserted above. So whenever `!highExhausted` is true, position is already known to be within high's own length; once highExhausted flips true, this ternary's other operand already forces the BASE branch regardless of position.
+    const highDigit = !highExhausted ? digitValue(high[position]!) : BASE;
     if (lowDigit === highDigit) {
       prefix += toBase36(lowDigit);
       position += 1;
