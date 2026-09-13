@@ -34,6 +34,15 @@ function sttbfFfnWithRecord(record: readonly number[]): Uint8Array {
 }
 
 describe("parseFontTable", () => {
+  it("names 'SttbfFfn entry 0' when a declared cch runs past the STTB's own end", () => {
+    const bytes = new Uint8Array(4 + 1 + 3);
+    const view = new DataView(bytes.buffer);
+    view.setUint16(0, 1, true); // cData.
+    view.setUint16(2, 0, true); // cbExtra.
+    bytes[4] = 50; // cch declares 50 bytes, but only 3 remain.
+    expect(() => parseFontTable(bytes)).toThrow(/SttbfFfn entry 0/);
+  });
+
   it("rejects an FFN record too short to hold even its own fixed head plus xszFfn's null terminator", () => {
     const table = sttbfFfnWithRecord(new Array<number>(10).fill(0));
     expect(() => parseFontTable(table)).toThrow(DocFormatError);
@@ -48,6 +57,20 @@ describe("parseFontTable", () => {
     const table = sttbfFfnWithRecord(record);
     expect(() => parseFontTable(table)).toThrow(
       /FFN record 0's xszFfn runs to the end of the record with no null terminator/,
+    );
+  });
+
+  it("accepts an FFN record of exactly the fixed 39-byte head plus a 2-byte null terminator, the smallest valid record", () => {
+    const record = new Array<number>(41).fill(0);
+    const table = sttbfFfnWithRecord(record);
+    expect(parseFontTable(table)).toEqual([""]);
+  });
+
+  it("rejects an FFN record one byte short of the fixed head plus its own null terminator", () => {
+    const record = new Array<number>(40).fill(0);
+    const table = sttbfFfnWithRecord(record);
+    expect(() => parseFontTable(table)).toThrow(
+      /FFN record 0 is 40 bytes, shorter than the fixed 39-byte head/,
     );
   });
 
