@@ -106,6 +106,22 @@ describe("readWorkbookDefinitions", () => {
     });
   });
 
+  it("skips a non-table relationship by its own type, even when its target happens to be a well-formed table element", () => {
+    // Proves the type-suffix guard filters on the relationship's own Type, not merely on whether the target later fails the name/ref check -- a distractor relationship pointed at a genuinely complete table-shaped part must still be skipped.
+    const pkg = basePackage([
+      el("Relationship", {
+        Id: "rId1",
+        Type: REL_DRAWING,
+        Target: "../tables/table1.xml",
+      }),
+    ]);
+    pkg.parts["xl/tables/table1.xml"] = tablePart({
+      name: "SalesTable",
+      ref: "A1:B2",
+    });
+    expect(readWorkbookDefinitions(pkg)).toBeUndefined();
+  });
+
   it("skips a table part missing its own name attribute", () => {
     const pkg = basePackage([
       el("Relationship", {
