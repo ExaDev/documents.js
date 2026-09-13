@@ -119,6 +119,13 @@ describe("applyParagraphSprms", () => {
     ).toBeUndefined();
   });
 
+  it("accepts a dyaLine of exactly the multiplier form's own maximum", () => {
+    expect(
+      applyParagraphSprms([prl(0x6412, [...int16(0x7bc0), 1, 0])], {})
+        .lineSpacing,
+    ).toBe(0x7bc0 / 240);
+  });
+
   it("leaves lineSpacing unset when dyaLine resolves to a non-positive multiple", () => {
     expect(
       applyParagraphSprms([prl(0x6412, [...int16(0), 1, 0])], {}).lineSpacing,
@@ -182,8 +189,14 @@ describe("applyParagraphSprms", () => {
     expect(applyParagraphSprms([characterSprm], {}).istd).toBeUndefined();
   });
 
-  it("ignores an unrecognised paragraph sprm without touching any property", () => {
+  it("ignores a character-family sprm that never reaches the paragraph switch at all", () => {
     const result = applyParagraphSprms([prl(0x0000, [0])], { istd: 4 });
+    expect(result.istd).toBe(4);
+  });
+
+  it("falls through the switch's own default case for a paragraph-family sprm this reader does not convert", () => {
+    // sgc bits 10-12 of 0x0400 decode to SGC.paragraph (1), but the full value matches none of the SPRM_P_* opcodes this reader handles -- the one way to actually reach the switch's default case rather than the sgc guard above it.
+    const result = applyParagraphSprms([prl(0x0400, [0])], { istd: 4 });
     expect(result.istd).toBe(4);
   });
 
