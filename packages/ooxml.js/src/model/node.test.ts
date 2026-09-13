@@ -21,6 +21,13 @@ describe("isXmlNode: non-record inputs", () => {
     expect(isXmlNode({})).toBe(false);
     expect(isXmlNode({ type: "unknown" })).toBe(false);
   });
+
+  it("is false for an unrecognised type even when the value otherwise carries every field a valid element needs", () => {
+    // Proves the "element" branch is reached only when type === "element", not merely because the value happens to shape-match an element -- a value shaped exactly like a valid element under an unrecognised type name must still fall through to the final `return false`.
+    expect(
+      isXmlNode({ type: "unknown", tag: "a", attributes: [], children: [] }),
+    ).toBe(false);
+  });
 });
 
 describe("isXmlNode: text/cdata/comment", () => {
