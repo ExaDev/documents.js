@@ -255,15 +255,15 @@ function splitAtLostBoundaries(
 ): number[] {
   const subSpans: number[] = [];
   let start = column;
-  // Every column position across the cell's own span, filtered down to the interior ones: length span (not span - 1) leaves nothing left to mutate arithmetically -- it already stops one short of column + span on its own, with no offset to shift -- so only the cell's own left edge (column, at index 0) still needs excluding, done here by an ordinary equality filter rather than a subtraction. Both edges are always this row's own already-stated boundaries (every cell's own left/right edge is trivially "recoverable" from its own row), so they can never themselves be members of lostBoundaries.
-  Array.from({ length: span }, (_ignored, index) => column + index)
-    .filter((position) => position !== column)
-    .forEach((position) => {
+  // Every column position across the cell's own span, column itself included rather than filtered out separately: length span (not span - 1) already leaves nothing to mutate arithmetically (it stops one short of column + span on its own, with no offset to shift), and column needs no exclusion of its own either, since it is always this row's own already-stated left edge (every cell's own left/right edge is trivially "recoverable" from its own row) and so can never itself be a member of lostBoundaries -- checking it here answers `false` regardless, exactly as an excluded position would have.
+  Array.from({ length: span }, (_ignored, index) => column + index).forEach(
+    (position) => {
       if (lostBoundaries.has(position)) {
         subSpans.push(position - start);
         start = position;
       }
-    });
+    },
+  );
   subSpans.push(column + span - start);
   return subSpans;
 }
