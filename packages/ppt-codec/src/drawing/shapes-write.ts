@@ -227,13 +227,13 @@ export interface DrawingWritten {
   readonly maxSpid: number;
 }
 
-// Everything a drawing's writer needs from the document around it: the font resolver the text body shares, the blip-store resolver that assigns a picture its one-based pib (called only for an image whose format this writer can blip -- png or jpeg), the diagnostic sink every deliberate drop fires through, whether a whole-block drop should throw instead of merely reporting (see reportDrop below), and a human name for where this drawing sits, so a drop message says "slide 2" rather than an index the caller has to decode.
+// Everything a drawing's writer needs from the document around it: the font resolver the text body shares, the blip-store resolver that assigns a picture its one-based pib (called only for an image whose format this writer can blip -- png or jpeg), a function stating each diagnostic message's own reason against a human name for where this drawing sits (so a message reads "slide 2: ..." rather than naming an index the caller has to decode), the diagnostic sink every deliberate drop fires through, and whether a whole-block drop should throw instead of merely reporting (see reportDrop below). describeMessage is a function rather than a plain location string field: write.ts's own contextFor is the only place that ever has a real location to state, and the main master's placeholders and a notes container's plain-text body -- which can never actually produce a diagnostic at all -- pass the identity function, needing no location value, unobservable or otherwise, to state one.
 export interface DrawingWriteContext {
   readonly fontIndexOf: (family: string) => number;
   readonly blipIndexOf: (image: ContentImageBlock) => number;
+  readonly describeMessage: (reason: string) => string;
   readonly sink: PptDiagnosticSink;
   readonly strict: boolean;
-  readonly location: string;
 }
 
 // The one place a whole-block drop (a block that does not appear in the written output at all -- BLOCK_DROPPED, IMAGE_DROPPED) decides between WritePptOptions' two policies: reported through the sink alone (the default, matching every existing caller's own current behaviour), or reported AND thrown as a PptUnsupportedContentError, for a caller that would rather fail the whole conversion than ship a file quietly missing content it asked for. A lossy-but-still-written narrowing (TABLE_SPAN_DROPPED, a merged cell writing one column/row wide rather than vanishing) is never routed through this: it is a fidelity approximation, not an omission, and always stays sink-only regardless of the caller's policy.
@@ -266,7 +266,7 @@ function planShapeBlocks(
     reportDrop(context, {
       code: PptDiagnosticCodes.BLOCK_DROPPED,
       severity: "warning",
-      message: `${context.location}: ${reason}`,
+      message: context.describeMessage(reason),
     });
   };
   for (const block of blocks) {
@@ -282,7 +282,9 @@ function planShapeBlocks(
         reportDrop(context, {
           code: PptDiagnosticCodes.IMAGE_DROPPED,
           severity: "warning",
-          message: `${context.location}: an image block in format '${block.format}' is dropped; MSOBLIPTYPE gives this writer a blip record for PNG and JPEG only`,
+          message: context.describeMessage(
+            `an image block in format '${block.format}' is dropped; MSOBLIPTYPE gives this writer a blip record for PNG and JPEG only`,
+          ),
         });
         continue;
       }
@@ -290,7 +292,9 @@ function planShapeBlocks(
         reportDrop(context, {
           code: PptDiagnosticCodes.IMAGE_DROPPED,
           severity: "warning",
-          message: `${context.location}: a second image block is dropped; a shape carries exactly one blip-store reference, and an earlier image already consumed it`,
+          message: context.describeMessage(
+            "a second image block is dropped; a shape carries exactly one blip-store reference, and an earlier image already consumed it",
+          ),
         });
         continue;
       }
@@ -324,7 +328,9 @@ function planShapeBlocks(
       reportDrop(context, {
         code: PptDiagnosticCodes.IMAGE_DROPPED,
         severity: "warning",
-        message: `${context.location}: an image block is dropped; a shape carrying a table becomes a table group, which has no blip reference of its own`,
+        message: context.describeMessage(
+          "an image block is dropped; a shape carrying a table becomes a table group, which has no blip reference of its own",
+        ),
       });
     }
     return { pib: undefined, textBlocks: [], table };
@@ -444,14 +450,18 @@ function writeTableGroup(
         context.sink({
           code: PptDiagnosticCodes.TABLE_SPAN_DROPPED,
           severity: "warning",
-          message: `${context.location}: a table cell's colSpan ${String(cell.colSpan)} is dropped; a PowerPoint 97-2003 table is a strict grid of shapes with no merge records, so the cell is written one column wide`,
+          message: context.describeMessage(
+            `a table cell's colSpan ${String(cell.colSpan)} is dropped; a PowerPoint 97-2003 table is a strict grid of shapes with no merge records, so the cell is written one column wide`,
+          ),
         });
       }
       if (cell.rowSpan !== undefined && cell.rowSpan > 1) {
         context.sink({
           code: PptDiagnosticCodes.TABLE_SPAN_DROPPED,
           severity: "warning",
-          message: `${context.location}: a table cell's rowSpan ${String(cell.rowSpan)} is dropped; a PowerPoint 97-2003 table is a strict grid of shapes with no merge records, so the cell is written one row tall`,
+          message: context.describeMessage(
+            `a table cell's rowSpan ${String(cell.rowSpan)} is dropped; a PowerPoint 97-2003 table is a strict grid of shapes with no merge records, so the cell is written one row tall`,
+          ),
         });
       }
       for (const block of cell.blocks) {
@@ -459,7 +469,9 @@ function writeTableGroup(
           reportDrop(context, {
             code: PptDiagnosticCodes.BLOCK_DROPPED,
             severity: "warning",
-            message: `${context.location}: a '${block.kind}' block inside a table cell is dropped; a table cell in this format is a plain text-box shape with no property table or object reference of its own`,
+            message: context.describeMessage(
+              `a '${block.kind}' block inside a table cell is dropped; a table cell in this format is a plain text-box shape with no property table or object reference of its own`,
+            ),
           });
         }
       }
