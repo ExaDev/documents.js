@@ -110,15 +110,24 @@ vi.mock("../ui/DiagnosticsPanel", () => ({
   ),
 }));
 
-let inspectPanelCalls: { data?: { backing: string }; loading?: boolean }[] = [];
+let inspectPanelCalls: {
+  data?: { backing: string };
+  loading?: boolean;
+  error?: unknown;
+}[] = [];
 vi.mock("../ui/InspectPanel", () => ({
-  InspectPanel: (props: { data?: { backing: string }; loading?: boolean }) => {
+  InspectPanel: (props: {
+    data?: { backing: string };
+    loading?: boolean;
+    error?: unknown;
+  }) => {
     inspectPanelCalls.push(props);
     return (
       <div
         data-testid="inspect-panel"
         data-backing={props.data?.backing ?? ""}
         data-loading={String(props.loading === true)}
+        data-has-error={String(props.error !== undefined)}
       />
     );
   },
@@ -319,7 +328,7 @@ describe("ConvertLayout", () => {
     originalTestId: string;
     convertedTestId: string;
   }[])(
-    "converts $sourceFile ($source -> $target) into the right Original/Converted preview pair",
+    "converts $sourceFile ($source -> $target) into the right Original/Converted preview pair, each free of error, and inspected via the right backing",
     async ({ sourceFile, source, target, originalTestId, convertedTestId }) => {
       const client = baseClient();
       vi.mocked(client.convert).mockResolvedValue({
@@ -333,6 +342,9 @@ describe("ConvertLayout", () => {
         latestOnFile?.(openedFile(sourceFile));
       });
       expect(latestSelects.From?.value).toBe(source);
+      expect(mounted.container.textContent).not.toContain("Could not detect");
+      expect(latestSelects.To?.disabled).toBe(false);
+      expect(latestSelects.From?.description).toBe("Detected from file");
 
       act(() => {
         latestSelects.To?.onChange(target);
@@ -360,9 +372,128 @@ describe("ConvertLayout", () => {
       expect(converted).not.toBeNull();
       expect(original?.getAttribute("data-format")).toBe(source);
       expect(converted?.getAttribute("data-format")).toBe(target);
+      expect(original?.getAttribute("data-has-error")).toBe("false");
+      expect(converted?.getAttribute("data-has-error")).toBe("false");
+
+      // Every content.read/pdf.inspect call this pair should have triggered has resolved and fed an InspectPanel with the backing its own source/target format implies, and none of them carries an error either.
+      const inspectPanels = mounted.container.querySelectorAll(
+        '[data-testid="inspect-panel"]',
+      );
+      expect(inspectPanels).toHaveLength(2);
+      expect(inspectPanels[0]!.getAttribute("data-backing")).toBe(
+        source === "pdf" ? "pdf" : "content",
+      );
+      expect(inspectPanels[1]!.getAttribute("data-backing")).toBe(
+        target === "pdf" ? "pdf" : "content",
+      );
+      expect(inspectPanels[0]!.getAttribute("data-has-error")).toBe("false");
+      expect(inspectPanels[1]!.getAttribute("data-has-error")).toBe("false");
+
+      const expectedContentReadCalls =
+        (source === "pdf" ? 0 : 1) + (target === "pdf" ? 0 : 1);
+      const expectedPdfInspectCalls =
+        (source === "pdf" ? 1 : 0) + (target === "pdf" ? 1 : 0);
+      expect(client.content.read).toHaveBeenCalledTimes(
+        expectedContentReadCalls,
+      );
+      expect(client.pdf.inspect).toHaveBeenCalledTimes(expectedPdfInspectCalls);
       mounted.unmount();
     },
   );
+
+  it("builds From as a sorted, deduplicated list of every conversion pair's source, and disables every To option the picked source cannot reach", async () => {
+    vi.mocked(getRpcClient).mockReturnValue(baseClient());
+    const mounted = mountConvertLayout();
+
+    act(() => {
+      latestOnFile?.(openedFile("a.docx"));
+    });
+    await vi.waitFor(() => {
+      expect(latestSelects.From?.data).not.toEqual([]);
+    });
+
+    expect(latestSelects.From?.data).toEqual([
+      "docx",
+      "markdown",
+      "odf",
+      "pdf",
+      "pptx",
+      "xlsx",
+    ]);
+    const targetData = latestSelects.To?.data as {
+      value: string;
+      disabled: boolean;
+    }[];
+    const byValue = Object.fromEntries(
+      targetData.map((entry) => [entry.value, entry.disabled]),
+    );
+    expect(byValue.pptx).toBe(false);
+    expect(byValue.pdf).toBe(true);
+    expect(byValue.xlsx).toBe(true);
+    mounted.unmount();
+  });
+
+  it("clears the description once the source is overridden away from the auto-detected format", () => {
+    vi.mocked(getRpcClient).mockReturnValue(baseClient());
+    const mounted = mountConvertLayout();
+
+    act(() => {
+      latestOnFile?.(openedFile("a.docx"));
+    });
+    expect(latestSelects.From?.description).toBe("Detected from file");
+
+    act(() => {
+      latestSelects.From?.onChange("odt");
+    });
+    expect(latestSelects.From?.description).toBeUndefined();
+    mounted.unmount();
+  });
+
+  it("clears a previous conversion's Done panel when the next pick's extension is unrecognised", async () => {
+    const client = baseClient();
+    vi.mocked(client.convert).mockResolvedValue({
+      document: { format: "pdf", bytes: new Uint8Array([1]) },
+      diagnostics: [],
+    });
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountConvertLayout();
+
+    act(() => {
+      latestOnFile?.(openedFile("a.docx"));
+    });
+    act(() => {
+      latestSelects.To?.onChange("pdf");
+    });
+    click(convertButton(mounted.container));
+    await vi.waitFor(() => {
+      expect(
+        mounted.container.querySelector('[data-testid="diagnostics-panel"]'),
+      ).not.toBeNull();
+    });
+
+    act(() => {
+      latestOnFile?.(openedFile("notes.xyz"));
+    });
+
+    expect(
+      mounted.container.querySelector('[data-testid="diagnostics-panel"]'),
+    ).toBeNull();
+    mounted.unmount();
+  });
+
+  it("never prefetches original content for a file whose extension is unrecognised", () => {
+    const client = baseClient();
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountConvertLayout();
+
+    act(() => {
+      latestOnFile?.(openedFile("notes.xyz"));
+    });
+
+    expect(client.content.read).not.toHaveBeenCalled();
+    expect(client.pdf.inspect).not.toHaveBeenCalled();
+    mounted.unmount();
+  });
 
   it("notifies and shows no Done panel when the conversion rejects", async () => {
     const client = baseClient();
