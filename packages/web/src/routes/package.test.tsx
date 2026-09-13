@@ -195,6 +195,31 @@ describe("PackagePage", () => {
     mounted.unmount();
   });
 
+  it("stops showing the loading text for a still-in-flight read once the next pick's extension is unrecognised", async () => {
+    const client = createMockRpcClient();
+    vi.mocked(client.content.read).mockReturnValue(new Promise(() => {}));
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountPackagePage();
+
+    act(() => {
+      latestOnFile?.(openedFile("report.docx"));
+    });
+    await vi.waitFor(() => {
+      expect(mounted.container.textContent).toContain(
+        "Loading document structure…",
+      );
+    });
+
+    act(() => {
+      latestOnFile?.(openedFile("notes.xyz"));
+    });
+
+    expect(mounted.container.textContent).not.toContain(
+      "Loading document structure…",
+    );
+    mounted.unmount();
+  });
+
   it("does not carry a previous file's in-flight restore state into the next file's Restore button", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.content.read).mockResolvedValue({
