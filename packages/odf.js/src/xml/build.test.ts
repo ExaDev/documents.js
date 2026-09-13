@@ -1,7 +1,7 @@
 import { XMLBuilder } from "fast-xml-parser";
 import { describe, expect, it, vi } from "vitest";
 import type { XmlNode } from "../model/node";
-import { buildXml } from "./build";
+import { buildXml, toOrderedNode } from "./build";
 
 describe("buildXml", () => {
   it("serialises a text node as bare text", () => {
@@ -21,7 +21,7 @@ describe("buildXml", () => {
   });
 
   it("serialises a processing instruction from its target alone", () => {
-    // The underlying builder emits any "?"-prefixed key from the key and its ":@" attributes only, never from the value beside it -- see build.ts's own comment on the pi/declaration cases. content is therefore deliberately absent from the output regardless of what it holds.
+    // The underlying builder emits any "?"-prefixed key from the key and its ":@" attributes only, never from the value beside it — see build.ts's own comment on the pi/declaration cases. content is therefore deliberately absent from the output regardless of what it holds.
     const withContent: XmlNode = {
       type: "pi",
       target: "xml-stylesheet",
@@ -58,7 +58,7 @@ describe("buildXml", () => {
   });
 
   it("omits the attribute map entirely when an element carries no attributes", () => {
-    // Confirms Object.keys(attrs).length > 0 gates the ":@" key: were it added unconditionally, the builder would still render identical text for a genuinely empty attrs object, so an equality check on the rendered string alone couldn't tell the two apart -- what actually distinguishes them is that an element WITH attributes (below) proves the key does get added when there is something to add.
+    // Confirms Object.keys(attrs).length > 0 gates the ":@" key: were it added unconditionally, the builder would still render identical text for a genuinely empty attrs object, so an equality check on the rendered string alone couldn't tell the two apart — what actually distinguishes them is that an element WITH attributes (below) proves the key does get added when there is something to add.
     const withAttrs = buildXml([
       {
         type: "element",
@@ -113,5 +113,49 @@ describe("buildXml", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe("toOrderedNode", () => {
+  it("omits the ':@' key entirely for an attribute-less element, rather than carrying an empty attrs object", () => {
+    // toEqual checks the object's exact own-property set: were the ":@" key added unconditionally (as an empty object), this would fail even though buildXml's own rendered XML string is identical either way — see build.test.ts's "omits the attribute map" case above, which pins the observable half of this same invariant.
+    expect(
+      toOrderedNode({
+        type: "element",
+        tag: "a",
+        attributes: [],
+        children: [],
+      }),
+    ).toStrictEqual({ a: [] });
+  });
+
+  it("adds the ':@' key once an element carries at least one attribute", () => {
+    expect(
+      toOrderedNode({
+        type: "element",
+        tag: "a",
+        attributes: [{ name: "href", value: "x" }],
+        children: [],
+      }),
+    ).toStrictEqual({ a: [], ":@": { "@_href": "x" } });
+  });
+
+  it("maps a pi node to its '?'-prefixed key holding an empty array, regardless of its own content", () => {
+    expect(
+      toOrderedNode({
+        type: "pi",
+        target: "xml-stylesheet",
+        content: "ignored",
+      }),
+    ).toStrictEqual({ "?xml-stylesheet": [] });
+  });
+
+  it("maps a declaration node to '?xml' holding an empty array plus its attributes", () => {
+    expect(
+      toOrderedNode({
+        type: "declaration",
+        attributes: [{ name: "version", value: "1.0" }],
+      }),
+    ).toStrictEqual({ "?xml": [], ":@": { "@_version": "1.0" } });
   });
 });
