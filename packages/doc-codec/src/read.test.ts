@@ -16,6 +16,7 @@ import {
 import { ContentDocumentSchema } from "document-schema.js";
 import type { ContentBlock, ContentParagraph } from "document-schema.js";
 import { describe, expect, it } from "vitest";
+import { readUint32LE } from "./bytes";
 import { isDocBytes } from "./detect";
 import { DocFormatError, DocUnsupportedError } from "./errors";
 import {
@@ -431,6 +432,41 @@ describe("readDocContent", () => {
     ]);
     expect(document.sections[1]?.blocks).toEqual([
       { kind: "paragraph", runs: [{ text: "three" }] },
+    ]);
+  });
+
+  it("never treats the first section's own startCp as a manual-page-break boundary, even if PlcfSed's own aCp[0] were corrupted off its structural 0", () => {
+    // The first section's startCp is always 0 in any real file (nothing precedes the document's own first character), so no ordinary construction can ever place a real paragraph's endCp on it -- corrupting PlcfSed's own aCp[0] directly is the only way to prove markManualPageBreaks genuinely excludes the first section rather than happening to never collide with it.
+    const SECOND_GEOMETRY = [0x1f, 0xb0, 0x40, 0x1f, 0x20, 0xb0, 0xa0, 0x27];
+    const bytes = buildDoc({
+      paragraphs: [
+        { runs: [{ text: "one" }], mark: SECTION_MARK, pageBreak: true },
+        { runs: [{ text: "two" }], mark: SECTION_MARK },
+        { runs: [{ text: "three" }] },
+      ],
+      sections: [SECTION_GEOMETRY, SECOND_GEOMETRY],
+    });
+    const { wordDocument, table } = readDocStreams(bytes);
+    const fcPlcfSed = readUint32LE(
+      wordDocument,
+      FIB_FC_LCB_BLOB_OFFSET + FC_LCB_VALUE_INDEX.fcPlcfSed * 4,
+    );
+    const patchedTable = new Uint8Array(table);
+    // PlcfSed's own aCp[0] sits at its first 4 bytes -- corrupted here from the real 0 to 4, "one"'s own endCp (3 characters plus its own terminator).
+    new DataView(patchedTable.buffer).setUint32(fcPlcfSed, 4, true);
+    const document = readDocContent(
+      compoundFile([
+        { path: "WordDocument", bytes: new Uint8Array(wordDocument) },
+        { path: "1Table", bytes: patchedTable },
+      ]),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error("a .doc always reads back as a wordprocessing document");
+    }
+    expect(document.sections[0]?.blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "one" }] },
+      { kind: "pageBreak" },
+      { kind: "paragraph", runs: [{ text: "two" }] },
     ]);
   });
 
@@ -931,6 +967,45 @@ describe("readDocContent", () => {
     expect(textOf(paragraphAt(document, 2))).toBe("plain");
   });
 
+  it("reads the same never-closes-a-row run as paragraphs even at the end of a non-last section, not a refusal", () => {
+    // Only the true last section's own walk ever passes documentStreamEnds true to assembleBlocks -- an earlier section ending in this identical unclosed run must still degrade to paragraphs (the wider document continues past it, in its own next section), not throw the "ends without a row-ending mark" refusal that firing here would mean documentStreamEnds leaked into a section that is not actually the document's last.
+    const inTable = [
+      0x16,
+      0x24,
+      0x01, // sprmPFInTable, true.
+      0x49,
+      0x66,
+      0x01,
+      0x00,
+      0x00,
+      0x00, // sprmPItap, depth 1.
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "flagged" }],
+            grpprl: inTable,
+            mark: SECTION_MARK,
+          },
+          { runs: [{ text: "second section" }] },
+        ],
+        sections: [[], []],
+      }),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error("a .doc always reads as a wordprocessing document");
+    }
+    expect(document.sections).toHaveLength(2);
+    const firstSectionBlocks = document.sections[0]?.blocks ?? [];
+    expect(firstSectionBlocks.map((block) => block.kind)).toEqual([
+      "paragraph",
+    ]);
+    if (firstSectionBlocks[0]?.kind === "paragraph") {
+      expect(textOf(firstSectionBlocks[0])).toBe("flagged");
+    }
+  });
+
   it("reads a document whose Plcfhdd carries Word 97's placeholder CPs (-1, and past the header document's own end) without refusing", () => {
     // Build a genuine well-formed header document first, then corrupt its Plcfhdd into the shape a real Word 97 file carries when a document has (mostly) no headers: separator-story keys replaced by -1 placeholders and one CP past ccpHdd. The per-section slots' own keys stay well formed, so the one real story must still come through.
     const original = buildDoc({
@@ -1081,6 +1156,19 @@ describe("readDocContent's own bounds labels", () => {
     expect(() =>
       readDocContent(docWithLcb(FC_LCB_VALUE_INDEX.lcbPlcfBtePapx, 0x7fffffff)),
     ).toThrow(/PlcBtePapx in the Table stream/);
+  });
+
+  it("names 'PlcBteChpx' (not the slice label) when the bin table's own bytes are not a whole number of elements", () => {
+    // A short-but-in-range lcb: the slice into the Table stream itself succeeds, so this is PropertyBinTable's own parsePlc call throwing, naming the constructor's own `what`, distinct from the slice label the previous test covers.
+    expect(() =>
+      readDocContent(docWithLcb(FC_LCB_VALUE_INDEX.lcbPlcfBteChpx, 5)),
+    ).toThrow(/PlcBteChpx is 5 bytes, which does not yield a whole number/);
+  });
+
+  it("names 'PlcBtePapx' (not the slice label) when the bin table's own bytes are not a whole number of elements", () => {
+    expect(() =>
+      readDocContent(docWithLcb(FC_LCB_VALUE_INDEX.lcbPlcfBtePapx, 5)),
+    ).toThrow(/PlcBtePapx is 5 bytes, which does not yield a whole number/);
   });
 
   it("names 'SttbfFfn in the Table stream' when lcbSttbfFfn runs past the Table stream", () => {
