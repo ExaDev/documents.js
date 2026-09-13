@@ -1,6 +1,6 @@
 import { encodePng } from "byte-codec";
 import { describe, expect, it } from "vitest";
-import { type PptRecord, readRecordAt } from "../record/tree";
+import { type PptRecord, findDescendants, readRecordAt } from "../record/tree";
 import {
   OfficeArtBStoreContainer,
   OfficeArtBlipJPEG,
@@ -64,8 +64,9 @@ function fbse(options: {
   readonly embedded: Uint8Array<ArrayBuffer> | undefined;
   readonly cRef?: number;
   readonly foDelay?: number;
+  readonly name?: Uint8Array<ArrayBuffer>;
 }): Uint8Array<ArrayBuffer> {
-  const { blipType, embedded } = options;
+  const { blipType, embedded, name } = options;
   const cRef = options.cRef ?? 1;
   const foDelay = options.foDelay ?? 0;
   return atom(
@@ -81,7 +82,8 @@ function fbse(options: {
       u8(0),
       u8(0),
       u8(0),
-      u8(0),
+      u8(name?.length ?? 0),
+      ...(name === undefined ? [] : [name]),
       ...(embedded === undefined ? [] : [embedded]),
     ),
     { recVer: 0x2, recInstance: blipType },
@@ -161,6 +163,22 @@ describe("readBlipStore", () => {
     expect(store[1]?.format).toBe("jpeg");
   });
 
+  it("locates the embedded blip past a real nameData, not merely at the fixed 36-byte offset", () => {
+    // cbName is 0 in every other fixture here, where +cbName and -cbName land on the identical offset; a real nameData run of nonzero length is the only way to prove the embedded blip is found past it, not before it.
+    const png = pngBytes();
+    const store = readBlipStore(
+      documentWithStore(
+        fbse({
+          blipType: 0x06,
+          embedded: pngBlip(png),
+          name: new Uint8Array(4),
+        }),
+      ),
+      undefined,
+    );
+    expect(store).toEqual([{ format: "png", bytes: png }]);
+  });
+
   it("reads an absent store as empty rather than failing", () => {
     const empty = container(RT_Document, []);
     expect(readBlipStore(readRecordAt(empty, 0), undefined)).toEqual([]);
@@ -231,6 +249,18 @@ describe("readBlipStore", () => {
       "a blip record of type 0xf01e declares 6e0 as its instance (so 1 digest(s)) but carries only 10 bytes",
     );
   });
+
+  it("accepts a blip record carrying exactly its own 17-byte uid-and-tag minimum, with no picture bytes left over", () => {
+    // uidCount 1 * 16 + the 1-byte tag = 17: the boundary itself, not the too-short case above.
+    const exact = atom(OfficeArtBlipPNG, concatBytes(ZERO_DIGEST, u8(0xff)), {
+      recInstance: 0x6e0,
+    });
+    const store = readBlipStore(
+      documentWithStore(fbse({ blipType: 0x06, embedded: exact })),
+      undefined,
+    );
+    expect(store).toEqual([{ format: "png", bytes: new Uint8Array(0) }]);
+  });
 });
 
 describe("blipForPib", () => {
@@ -259,6 +289,48 @@ describe("writeDrawingGroupContainer / readBlipStore round trip", () => {
     });
     const document = container(RT_Document, [drawingGroup]);
     expect(readBlipStore(readRecordAt(document, 0), undefined)).toEqual(blips);
+  });
+
+  it("states each format's own MSOBLIPTYPE, blip recInstance, and the store's own entry count in the raw bytes -- none of which this package's own reader depends on to round-trip", () => {
+    // uidCount ((recInstance & 1) + 1) happens to come out to 1 -- the same value -- for both PNG's 0x6E0 and JPEG's 0x46A, so a reader-behavioural round trip alone cannot tell a swapped or wrong blip recInstance apart from a correct one; only reading the header field back directly can.
+    const blips: readonly PptBlip[] = [
+      { format: "png", bytes: pngBytes() },
+      { format: "jpeg", bytes: jpegBytes() },
+    ];
+    const drawingGroup = writeDrawingGroupContainer(blips, {
+      spidMax: 4,
+      shapeCount: 3,
+      drawingCount: 2,
+    });
+    const document = readRecordAt(container(RT_Document, [drawingGroup]), 0);
+    const store = findDescendants(document, OfficeArtBStoreContainer)[0];
+    if (store === undefined) {
+      throw new Error("expected an OfficeArtBStoreContainer");
+    }
+    expect(store.header.recInstance).toBe(2);
+    const [pngFbse, jpegFbse] = findDescendants(document, OfficeArtFBSE);
+    if (pngFbse === undefined || jpegFbse === undefined) {
+      throw new Error("expected two FBSE entries");
+    }
+    // btWin32/btMacOS, the FBSE's own first two data bytes, and the FBSE's own header recInstance -- all three state MSOBLIPTYPE (0x06 PNG, 0x05 JPEG).
+    expect(pngFbse.data[0]).toBe(0x06);
+    expect(pngFbse.data[1]).toBe(0x06);
+    expect(pngFbse.header.recInstance).toBe(0x06);
+    expect(jpegFbse.data[0]).toBe(0x05);
+    expect(jpegFbse.data[1]).toBe(0x05);
+    expect(jpegFbse.header.recInstance).toBe(0x05);
+    // The embedded blip sits at a computed byte offset inside the FBSE's own atom data, not as a formal child record a container-walking helper like findDescendants would reach -- read directly at the fixed 36-byte head's own end, exactly as readStoreEntry itself does.
+    const FBSE_FIXED_SIZE = 36;
+    const pngBlipRecord = readRecordAt(
+      pngFbse.stream,
+      pngFbse.dataOffset + FBSE_FIXED_SIZE,
+    );
+    const jpegBlipRecord = readRecordAt(
+      jpegFbse.stream,
+      jpegFbse.dataOffset + FBSE_FIXED_SIZE,
+    );
+    expect(pngBlipRecord.header.recInstance).toBe(0x6e0);
+    expect(jpegBlipRecord.header.recInstance).toBe(0x46a);
   });
 
   it("writes no blip store at all for a picture-free document", () => {
