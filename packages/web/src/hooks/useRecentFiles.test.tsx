@@ -1,7 +1,43 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+/// <reference lib="dom" />
+import { act } from "react";
+import { createRoot } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { db } from "../db/dexie";
-import { recordRecentFile, removeRecentFile } from "./useRecentFiles";
+import {
+  recordRecentFile,
+  removeRecentFile,
+  type RecentFileEntry,
+  useRecentFiles,
+} from "./useRecentFiles";
+
+function mountUseRecentFiles() {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const result: { current: ReturnType<typeof useRecentFiles> } = {
+    current: undefined,
+  };
+
+  function Harness() {
+    result.current = useRecentFiles();
+    return null;
+  }
+
+  act(() => {
+    root.render(<Harness />);
+  });
+
+  return {
+    result,
+    unmount: () => {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    },
+  };
+}
 
 beforeEach(async () => {
   await db.recentFiles.clear();
@@ -9,6 +45,42 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await db.recentFiles.clear();
+});
+
+describe("useRecentFiles", () => {
+  it("returns entries ordered by lastOpenedAt, most recent first", async () => {
+    await db.recentFiles.bulkAdd([
+      { format: "docx", name: "oldest", sizeBytes: 1, lastOpenedAt: 1 },
+      { format: "docx", name: "newest", sizeBytes: 1, lastOpenedAt: 2 },
+    ]);
+    const { result, unmount } = mountUseRecentFiles();
+    await vi.waitFor(() => {
+      expect(result.current).toBeDefined();
+    });
+    expect(result.current?.map((entry) => entry.name)).toEqual([
+      "newest",
+      "oldest",
+    ]);
+    unmount();
+  });
+
+  it("caps the returned list at 20 entries even when more exist", async () => {
+    const entries: (RecentFileEntry & { lastOpenedAt: number })[] = Array.from(
+      { length: 25 },
+      (_, index) => ({
+        format: "docx",
+        name: `file-${index}`,
+        sizeBytes: 1,
+        lastOpenedAt: index,
+      }),
+    );
+    await db.recentFiles.bulkAdd(entries);
+    const { result, unmount } = mountUseRecentFiles();
+    await vi.waitFor(() => {
+      expect(result.current?.length).toBe(20);
+    });
+    unmount();
+  });
 });
 
 describe("recordRecentFile", () => {
