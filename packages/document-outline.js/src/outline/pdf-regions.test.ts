@@ -1240,7 +1240,8 @@ describe("attachCaptions", () => {
       "Figure 1.",
     );
     const [region] = attachCaptions([figureRegion, caption]);
-    expect(region).toBe(figureRegion); // unaffected, non-column/unknown region passes through
+    // The figure itself is no longer untouched: it now carries the matched caption's text on its own `caption` field, in addition to the caption staying its own 'caption'-classified region below.
+    expect(region).toEqual({ ...figureRegion, caption: "Figure 1." });
     const result = attachCaptions([figureRegion, caption])[1]!;
     expect(result.classification).toBe("caption");
   });
