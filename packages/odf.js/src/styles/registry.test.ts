@@ -113,6 +113,43 @@ describe("StyleRegistry.forPart: construction", () => {
     const registry = StyleRegistry.forPart(contentPackage(), "content.xml");
     expect(registry.names()).toEqual([]);
   });
+
+  it("resolves a part path with a directory prefix by its own base name, not the full path", () => {
+    const pkg: Package = {
+      parts: {
+        "objects/1/content.xml": {
+          kind: "xml",
+          nodes: [el("office:document-content")],
+        },
+      },
+    };
+    // If the base-name extraction were ever skipped, the full path "objects/1/content.xml" would match neither "content.xml" nor "styles.xml" by strict equality and forPart would throw instead of recognising this as a content part.
+    expect(() =>
+      StyleRegistry.forPart(pkg, "objects/1/content.xml"),
+    ).not.toThrow();
+  });
+
+  it("inserts office:automatic-styles before office:master-styles when there is no office:body", () => {
+    const masterStyles = el("office:master-styles");
+    const pkg = stylesPackage([masterStyles]);
+    StyleRegistry.forPart(pkg, "styles.xml");
+    const root = rootElementOf(pkg, "styles.xml");
+    const tags = root.children.map((c) =>
+      c.type === "element" ? c.tag : c.type,
+    );
+    expect(tags).toEqual(["office:automatic-styles", "office:master-styles"]);
+  });
+
+  it("inserts office:automatic-styles before office:settings when there is no office:body or office:master-styles", () => {
+    const settings = el("office:settings");
+    const pkg = stylesPackage([settings]);
+    StyleRegistry.forPart(pkg, "styles.xml");
+    const root = rootElementOf(pkg, "styles.xml");
+    const tags = root.children.map((c) =>
+      c.type === "element" ? c.tag : c.type,
+    );
+    expect(tags).toEqual(["office:automatic-styles", "office:settings"]);
+  });
 });
 
 describe("rule (a): adoption on construction", () => {
@@ -225,6 +262,45 @@ describe("rule (a): adoption on construction", () => {
         family: "paragraph",
       }),
     ).toBe("PS3");
+  });
+
+  it("does not adopt or reserve a differently-tagged element carrying style:name/style:family attributes shaped just like a real style:style", () => {
+    const impostor = el("style:default-style", {
+      "style:name": "T1",
+      "style:family": "text",
+    });
+    const pkg = contentPackage([el("office:automatic-styles", {}, [impostor])]);
+    const registry = StyleRegistry.forPart(pkg, "content.xml");
+    expect(registry.names()).toEqual([]);
+    // If the impostor's own tag were never checked, "T1" would already be reserved and this mint would have to skip straight to "T2".
+    expect(registry.intern(BOLD)).toBe("T1");
+  });
+
+  it("adopts an existing style's own style:parent-style-name into its fingerprint, distinguishing a matching request from one with no parent", () => {
+    const existing = el(
+      "style:style",
+      {
+        "style:name": "P5",
+        "style:family": "paragraph",
+        "style:parent-style-name": "Heading1",
+      },
+      [el("style:paragraph-properties", { "fo:text-align": "center" })],
+    );
+    const pkg = contentPackage([el("office:automatic-styles", {}, [existing])]);
+    const registry = StyleRegistry.forPart(pkg, "content.xml");
+    expect(
+      registry.intern({
+        properties: { alignment: "center" },
+        family: "paragraph",
+        parentStyleName: "Heading1",
+      }),
+    ).toBe("P5");
+    expect(
+      registry.intern({
+        properties: { alignment: "center" },
+        family: "paragraph",
+      }),
+    ).not.toBe("P5");
   });
 });
 
@@ -460,6 +536,20 @@ describe("rule (d): name minting is collision-checked across all four containers
     });
     expect(registry.intern(CENTER_PARAGRAPH)).toBe("P2");
   });
+
+  it("does not reserve a name/family carried by a differently-tagged element when scanning office:styles for reservations", () => {
+    const impostor = el("style:default-style", {
+      "style:name": "P1",
+      "style:family": "paragraph",
+    });
+    const pkg = contentPackage([
+      el("office:styles", {}, [impostor]),
+      el("office:automatic-styles"),
+    ]);
+    const registry = StyleRegistry.forPart(pkg, "content.xml");
+    // "P1" was never actually reserved -- a name/family check without the tag check would wrongly reserve it, forcing this mint to skip to "P2".
+    expect(registry.intern(CENTER_PARAGRAPH)).toBe("P1");
+  });
 });
 
 describe("rule (e): content.xml and styles.xml registries use distinct name-minting prefixes", () => {
@@ -664,6 +754,37 @@ describe("gc()", () => {
     });
     expect(registry.gc(new Set([name]))).toBe(0);
     expect(registry.names()).toEqual([name]);
+  });
+
+  it("gc'ing a minted, fingerprint-matchable style also forgets its own fingerprint entry, so a later identical request mints fresh rather than returning the now-removed name", () => {
+    const registry = StyleRegistry.forPart(contentPackage(), "content.xml");
+    const minted = registry.intern(BOLD);
+    expect(minted).toBe("T1");
+
+    expect(registry.gc(new Set())).toBe(1);
+    expect(registry.names()).toEqual([]);
+
+    const next = registry.intern(BOLD); // identical fingerprint to the gc'd style
+    expect(next).not.toBe("T1"); // T1 no longer exists; reusing it would be a dangling reference
+    expect(next).toBe("T2");
+  });
+
+  it("gc'ing an adopted, fingerprint-matchable style also forgets its own fingerprint entry, the same as a minted one", () => {
+    const existing = el(
+      "style:style",
+      { "style:name": "T1", "style:family": "text" },
+      [el("style:text-properties", { "fo:font-weight": "bold" })],
+    );
+    const pkg = contentPackage([el("office:automatic-styles", {}, [existing])]);
+    const registry = StyleRegistry.forPart(pkg, "content.xml");
+    expect(registry.names()).toEqual(["T1"]);
+
+    expect(registry.gc(new Set())).toBe(1);
+    expect(registry.names()).toEqual([]);
+
+    const next = registry.intern(BOLD);
+    expect(next).not.toBe("T1");
+    expect(next).toBe("T2");
   });
 });
 
