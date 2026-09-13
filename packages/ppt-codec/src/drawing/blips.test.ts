@@ -194,6 +194,18 @@ describe("readBlipStore", () => {
     expect(store).toEqual([]);
   });
 
+  it("reads a slot whose cRef sets only its own most significant byte, not just its least", () => {
+    // 0x01000000 has every byte zero except the most significant one -- cRefIsZero's own four-byte check must genuinely test each of the four, not treat any one of them as always zero.
+    const png = pngBytes();
+    const store = readBlipStore(
+      documentWithStore(
+        fbse({ blipType: 0x06, embedded: pngBlip(png), cRef: 0x01000000 }),
+      ),
+      undefined,
+    );
+    expect(store).toEqual([{ format: "png", bytes: png }]);
+  });
+
   it("skips a cRef-0 empty slot even when its foDelay names a real Pictures-stream offset", () => {
     // cRef 0 and foDelay FO_DELAY_NONE are two independent reasons a slot contributes nothing -- this proves cRef alone is enough, distinctly from the combined case above.
     const store = readBlipStore(

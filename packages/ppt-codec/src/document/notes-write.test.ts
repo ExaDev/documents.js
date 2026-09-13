@@ -9,9 +9,9 @@ import { writeNotesAtom, writeNotesContainer } from "./notes-write";
 const CONTEXT: DrawingWriteContext = {
   fontIndexOf: () => 0,
   blipIndexOf: () => 1,
+  describeMessage: (reason) => reason,
   sink: NOOP_PPT_DIAGNOSTIC_SINK,
   strict: false,
-  location: "test",
 };
 
 describe("writeNotesAtom", () => {
