@@ -4,7 +4,7 @@ import type {
   ContentRun,
 } from "document-schema.js";
 import { readInt32LE, readUint16LE, readUint32LE, slice } from "../bytes";
-import { DocFormatError } from "../errors";
+import { assertDefined, DocFormatError } from "../errors";
 import { type PropertyBinTable } from "../prop/fkp";
 import {
   applyCharacterSprms,
@@ -55,6 +55,14 @@ export interface ParagraphEntry {
   readonly endCp: number;
 }
 
+// Every message below names an invariant readTextRange (text/characters.ts) already maintains, never one a caller's own input could violate: `fcs` is built there one push per character alongside `text` itself, so the two are always the same length and an index valid in one is valid in the other. Exported for this package's own tests only, so a change to the actual wording stays directly testable even though nothing in the public read path can trigger it.
+export function noByteOffsetForParagraphMarkMessage(index: number): string {
+  return `character ${index} has no byte offset, so its paragraph's properties cannot be located`;
+}
+export function noByteOffsetForTrailingParagraphMessage(index: number): string {
+  return `character ${index} has no byte offset, so the trailing paragraph's properties cannot be located`;
+}
+
 // Splits the logical text stream into paragraphs at the marks [MS-DOC] 2.4.2 names as paragraph ends, and each paragraph into runs at the boundaries of the character-formatting exceptions covering it.
 export function readParagraphs(
   text: string,
@@ -63,36 +71,30 @@ export function readParagraphs(
 ): ParagraphEntry[] {
   const entries: ParagraphEntry[] = [];
   let start = 0;
-  for (let index = 0; index < text.length; index += 1) {
-    const code = text.charCodeAt(index);
-    if (!endsParagraph(code)) continue;
-    // The mark's own byte offset is what the paragraph's PAPX is keyed on, and the mark itself is structure rather than text, so it ends the range without joining it.
-    const markFc = fcs[index];
-    if (markFc === undefined) {
-      throw new DocFormatError(
-        `character ${index} has no byte offset, so its paragraph's properties cannot be located`,
+  Array.from({ length: text.length }, (_ignored, index) => index).forEach(
+    (index) => {
+      const code = text.charCodeAt(index);
+      if (!endsParagraph(code)) return;
+      // The mark's own byte offset is what the paragraph's PAPX is keyed on, and the mark itself is structure rather than text, so it ends the range without joining it.
+      const markFc = fcs[index];
+      assertDefined(markFc, noByteOffsetForParagraphMarkMessage(index));
+      entries.push(
+        buildParagraph(
+          text.slice(start, index),
+          fcs.slice(start, index),
+          markFc,
+          code,
+          index + 1,
+          context,
+        ),
       );
-    }
-    entries.push(
-      buildParagraph(
-        text.slice(start, index),
-        fcs.slice(start, index),
-        markFc,
-        code,
-        index + 1,
-        context,
-      ),
-    );
-    start = index + 1;
-  }
+      start = index + 1;
+    },
+  );
   // A document whose last character is not a paragraph mark is malformed by [MS-DOC]'s own account, but its trailing text is real and the honest thing is to keep it rather than drop content on a technicality. Its properties are located from its first character instead of a mark it does not have; PARAGRAPH_MARK stands in for the terminator this trailing text does not have.
   if (start < text.length) {
     const firstFc = fcs[start];
-    if (firstFc === undefined) {
-      throw new DocFormatError(
-        `character ${start} has no byte offset, so the trailing paragraph's properties cannot be located`,
-      );
-    }
+    assertDefined(firstFc, noByteOffsetForTrailingParagraphMessage(start));
     entries.push(
       buildParagraph(
         text.slice(start),
@@ -211,15 +213,17 @@ function buildParagraphBlocks(
     blocks.push({ kind: "paragraph", runs, ...attributes });
   };
 
-  for (let index = 0; index < text.length; index += 1) {
-    if (text.charCodeAt(index) !== INLINE_PICTURE) continue;
-    flushSegment(index);
-    const fc = fcs[index];
-    const image =
-      fc === undefined ? undefined : resolveInlinePicture(context, fc);
-    if (image !== undefined) blocks.push(image);
-    segmentStart = index + 1;
-  }
+  Array.from({ length: text.length }, (_ignored, index) => index).forEach(
+    (index) => {
+      if (text.charCodeAt(index) !== INLINE_PICTURE) return;
+      flushSegment(index);
+      const fc = fcs[index];
+      const image =
+        fc === undefined ? undefined : resolveInlinePicture(context, fc);
+      if (image !== undefined) blocks.push(image);
+      segmentStart = index + 1;
+    },
+  );
   flushSegment(text.length);
 
   // A paragraph that ends up with no real block at all -- an ordinary blank paragraph, or one whose only picture anchor pointed at a format this reader does not decode (pictures.ts's own scope note) -- still needs its own genuine, empty ContentParagraph: every existing caller of this pipeline already expects one for a blank line or an empty table cell. A paragraph that DID produce at least one real block (non-empty text, a resolved image) never reaches this: the whole point of splitting around an image is that the image itself carries the paragraph's real content, and a synthetic empty wrapper alongside it would be a block this paragraph never actually had.
@@ -298,6 +302,40 @@ function paragraphAttributes(
   return attributes;
 }
 
+// Every message below names an invariant this module already maintains elsewhere in the same function, never one a caller's input could violate -- see each call site's own comment. Exported for this package's own tests only, so a change to the actual wording stays directly testable even though nothing in the public read path can trigger it.
+export function noByteOffsetForCharacterMessage(index: number): string {
+  return `character ${index} of a paragraph has no byte offset, so its formatting cannot be located`;
+}
+export function noOpenFieldWhileInInstructionMessage(): string {
+  return "internal defect: inInstruction is true with no open field on the stack, but it is only ever set true in the same statement that pushes one";
+}
+
+// One character's own resolved formatting, computed once per distinct (paragraphIstd, grpprl) key and cached on context.characterProperties for the rest of the whole read: a Chpx exception routinely spans many runs and many paragraphs (a document in one font is one exception covering all of it), so a per-paragraph cache would re-parse the same grpprl once per paragraph and never hit. Exported for this package's own tests only, so the cache actually being populated (as opposed to merely returning the right value this once) stays directly testable: buildRuns's own `??` never re-reads the cache after a hit, so nothing in the ordinary read path observes whether this function's own `.set()` genuinely ran.
+export function computeCharacterProperties(
+  key: string,
+  grpprl: Uint8Array | undefined,
+  paragraphStyleCharacterPrls: readonly Prl[],
+  context: ReadContext,
+): CharacterProperties {
+  const properties: CharacterProperties = {};
+  applyCharacterSprms(paragraphStyleCharacterPrls, properties, context.fonts);
+  if (grpprl !== undefined) {
+    const runPrls = readGrpprl(grpprl);
+    // A run's own sprmCIstd names a character style, which is resolved and folded in AFTER the paragraph style's own defaults but BEFORE the run's direct exceptions -- the same "more specific wins" precedence the paragraph/direct-exception layering above already follows, applied one level deeper.
+    const characterIstd = characterIstdFromGrpprl(runPrls);
+    if (characterIstd !== undefined && context.styles !== undefined) {
+      applyCharacterSprms(
+        resolveStyleFormatting(context.styles, characterIstd).characterPrls,
+        properties,
+        context.fonts,
+      );
+    }
+    applyCharacterSprms(runPrls, properties, context.fonts);
+  }
+  context.characterProperties.set(key, properties);
+  return properties;
+}
+
 // Groups the paragraph's characters into runs of identical direct character formatting. The grouping key is the identity of the Chpx covering each character -- its position and length within the WordDocument stream -- rather than the resolved properties, so two runs that happen to resolve to the same values but come from different exceptions stay distinct, exactly as the file states them. The paragraph's own istd joins the key too: the SAME raw Chpx bytes routinely cover runs in different paragraphs (a Chpx exception spans until the next one, paragraph boundaries notwithstanding), and since a paragraph's style now contributes character defaults, two paragraphs in different styles sharing one Chpx no longer resolve to the same properties.
 function buildRuns(
   text: string,
@@ -316,12 +354,15 @@ function buildRuns(
       : [];
   // Field state, per [MS-DOC] 2.8.25's field characters: everything between a begin (0x13) and a separator (0x14) is the field's instruction rather than its displayed result, and a field with no separator displays nothing at all.
   //
-  // A stack rather than a depth counter, because fields nest and the enclosing field's own state has to survive the inner one. A nested field appears inside the OUTER field's instruction as often as inside its result, so on reaching the inner field's end, whether text resumes depends on which side of its own separator the outer field had reached -- a counter cannot express that, and would resume in instruction mode (dropping real text) whenever an inner field closed inside an outer field's result.
-  const enclosingInstruction: boolean[] = [];
+  // A stack of one record per OPEN field rather than three parallel arrays (the enclosing inInstruction flag to restore, the accumulated instruction text, and the runs[] index the result starts at): all three are pushed at the identical point (a field's own begin) and popped at the identical point (its own end), so keeping them in three separately-indexed arrays could only ever let them silently drift apart, never usefully vary independently. A stack rather than a depth counter, because fields nest and the enclosing field's own state has to survive the inner one -- a nested field appears inside the OUTER field's instruction as often as inside its result, so on reaching the inner field's end, whether text resumes depends on which side of its own separator the outer field had reached, which a counter cannot express.
+  interface OpenField {
+    wasInInstruction: boolean;
+    instructionText: string;
+    /** The runs[] index this field's own result starts at, so a completed HYPERLINK field can tag exactly its own result runs with the instruction's URI -- the inverse of the writer's own field spelling (table/write.ts's plainRuns). Set once this field reaches its own separator; a field that never does (its own end arrives first) stays undefined, so its result -- which never existed -- is never tagged. */
+    resultStart: number | undefined;
+  }
+  const openFields: OpenField[] = [];
   let inInstruction = false;
-  // Per-field instruction text and the runs[] index each field's own result starts at, so a completed HYPERLINK field can tag exactly its own result runs with the instruction's URI -- the inverse of the writer's own field spelling (table/write.ts's plainRuns). One entry per open field, pushed at its begin and popped at its end, mirroring enclosingInstruction's own nesting.
-  const instructionTexts: string[] = [];
-  const resultStarts: number[] = [];
 
   const flush = (): void => {
     if (currentText !== "") {
@@ -334,94 +375,74 @@ function buildRuns(
     const code = text.charCodeAt(index);
     if (code === FIELD_BEGIN) {
       flush();
-      enclosingInstruction.push(inInstruction);
-      instructionTexts.push("");
+      openFields.push({
+        wasInInstruction: inInstruction,
+        instructionText: "",
+        resultStart: undefined,
+      });
       inInstruction = true;
       continue;
     }
     if (code === FIELD_SEPARATOR) {
       inInstruction = false;
-      resultStarts.push(runs.length);
+      // A stray separator with no open field (malformed nesting) has nowhere of its own to record a result start, and is left as a no-op rather than growing state nothing will ever pop.
+      const top = openFields[openFields.length - 1];
+      if (top !== undefined) top.resultStart = runs.length;
       continue;
     }
     if (code === FIELD_END) {
       // Flush the pending result text FIRST: the field's own characters carry distinct formatting (their fSpec grpprl), but the result text and whatever follows can share one formatting stretch -- without this flush they would land in one run, and the hyperlink tagging below would have no boundary to stop at (the field's result would bleed into the following plain text, or vice versa the pending result would never become a run at all before the tagging pass).
       flush();
       // An unmatched end -- one the text carries with no begin before it -- pops nothing and leaves the state alone rather than flipping it, so malformed field nesting cannot swallow the rest of the paragraph.
-      inInstruction = enclosingInstruction.pop() ?? inInstruction;
-      const instruction = instructionTexts.pop();
-      const resultStart = resultStarts.pop();
-      if (instruction !== undefined && resultStart !== undefined) {
+      const top = openFields.pop();
+      inInstruction = top?.wasInInstruction ?? inInstruction;
+      if (top?.resultStart !== undefined) {
+        const resultStart = top.resultStart;
         // [MS-DOC] 2.8.25 + real-producer bytes (LibreOffice 26.2's Word 97 export): a hyperlink field's instruction is ` HYPERLINK "<uri>" ` -- spaces around, double-quoted URI. Tolerant of surrounding whitespace variation; anything else is a field this reader does not model, and its result runs pass through untagged exactly as before.
-        const match = /^\s*HYPERLINK\s+"([^"]*)"\s*$/.exec(instruction);
+        const match = /^\s*HYPERLINK\s+"[^"]*"\s*$/.exec(top.instructionText);
         if (match !== null) {
-          const uri = match[1];
-          if (uri !== undefined) {
-            for (let i = resultStart; i < runs.length; i += 1) {
-              const run = runs[i];
-              if (run !== undefined) {
-                runs[i] = { ...run, hyperlink: uri };
-              }
-            }
-          }
+          // The URI by its own quote positions in the whole match (match[0], always a real string) rather than a capturing group (match[1], typed string | undefined regardless of the group never actually being optional here) -- the pattern's own two literal quotes are the only quote characters [^"]* can ever let through, so they are unambiguously the URI's own delimiters.
+          const whole = match[0];
+          const uri = whole.slice(
+            whole.indexOf('"') + 1,
+            whole.lastIndexOf('"'),
+          );
+          runs.slice(resultStart).forEach((run, offset) => {
+            runs[resultStart + offset] = { ...run, hyperlink: uri };
+          });
         }
       }
       continue;
     }
     if (inInstruction) {
-      // Instruction text is not displayed, but it IS the field's payload -- accumulate it for the HYPERLINK lift above rather than discarding it on the floor.
-      const top = instructionTexts.length - 1;
-      const ch = text[index];
-      if (top >= 0 && ch !== undefined) {
-        const slot = instructionTexts[top];
-        if (slot !== undefined) {
-          instructionTexts[top] = slot + ch;
-        }
-      }
+      // Instruction text is not displayed, but it IS the field's payload -- accumulate it for the HYPERLINK lift above rather than discarding it on the floor. Rebuilt from the code unit already in hand (as the line-break handling below already does) rather than indexed back out of the string, matching this same loop's own established reasoning for why that read is safe.
+      const top = openFields[openFields.length - 1];
+      assertDefined(top, noOpenFieldWhileInInstructionMessage());
+      top.instructionText += String.fromCharCode(code);
       continue;
     }
     if (isAnchorOnly(code)) continue;
 
     const fc = fcs[index];
-    if (fc === undefined) {
-      throw new DocFormatError(
-        `character ${index} of a paragraph has no byte offset, so its formatting cannot be located`,
-      );
-    }
+    assertDefined(fc, noByteOffsetForCharacterMessage(index));
     const grpprl = context.chpxTable.chpxGrpprl(fc);
-    const chpxKey =
-      grpprl === undefined
-        ? "none"
-        : `${grpprl.byteOffset}:${grpprl.byteLength}`;
-    const key = `${paragraphIstd ?? "none"}:${chpxKey}`;
+    // A single JSON-array key rather than a hand-rolled template with its own "none"/undefined sentinel for each absent half: JSON.stringify already gives undefined its own well-defined (and, unlike a hand-picked sentinel word, collision-proof) spelling, null, so no two distinct (paragraphIstd, grpprl) pairs can ever stringify to the same key.
+    const key = JSON.stringify([
+      paragraphIstd,
+      grpprl?.byteOffset,
+      grpprl?.byteLength,
+    ]);
     if (key !== currentKey) {
       flush();
       currentKey = key;
-      let properties = context.characterProperties.get(key);
-      if (properties === undefined) {
-        properties = {};
-        applyCharacterSprms(
+      currentProperties =
+        context.characterProperties.get(key) ??
+        computeCharacterProperties(
+          key,
+          grpprl,
           paragraphStyleCharacterPrls,
-          properties,
-          context.fonts,
+          context,
         );
-        if (grpprl !== undefined) {
-          const runPrls = readGrpprl(grpprl);
-          // A run's own sprmCIstd names a character style, which is resolved and folded in AFTER the paragraph style's own defaults but BEFORE the run's direct exceptions -- the same "more specific wins" precedence the paragraph/direct-exception layering above already follows, applied one level deeper.
-          const characterIstd = characterIstdFromGrpprl(runPrls);
-          if (characterIstd !== undefined && context.styles !== undefined) {
-            applyCharacterSprms(
-              resolveStyleFormatting(context.styles, characterIstd)
-                .characterPrls,
-              properties,
-              context.fonts,
-            );
-          }
-          applyCharacterSprms(runPrls, properties, context.fonts);
-        }
-        context.characterProperties.set(key, properties);
-      }
-      currentProperties = properties;
     }
     // A line break inside a paragraph is a real break in the text rather than a paragraph boundary, so it survives as a newline instead of being dropped as a control character. Rebuilt from the code unit already in hand rather than indexed back out of the string, which the loop bound has established is present but the type of an indexed read cannot.
     currentText += String.fromCharCode(code === LINE_BREAK ? 0x0a : code);
@@ -443,8 +464,12 @@ export function splitEntriesByBoundaries(
     () => [],
   );
   let index = 0;
+  // Bounded by boundaries[index + 1] itself being a real entry rather than by comparing index against groupCount separately: the two conditions agree everywhere boundaries is non-empty (index + 1 names a real slot exactly when index < groupCount), and for an empty boundaries array both index and groupCount are already 0, where this loop cannot run either way -- so there is no separate arithmetic bound left to drift out of step with the array it is actually walking.
   const advancePastEmptyGroups = (): void => {
-    while (index < groupCount && boundaries[index] === boundaries[index + 1]) {
+    while (
+      boundaries[index + 1] !== undefined &&
+      boundaries[index] === boundaries[index + 1]
+    ) {
       index += 1;
     }
   };
