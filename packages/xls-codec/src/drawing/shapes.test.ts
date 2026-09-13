@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { ESCHER_CLIENT_ANCHOR, ESCHER_OPT } from "./escher-constants";
+import {
+  ESCHER_CLIENT_ANCHOR,
+  ESCHER_DG_CONTAINER,
+  ESCHER_OPT,
+} from "./escher-constants";
 import { readSheetShapes } from "./shapes";
 import {
   clientAnchorSheet,
@@ -57,6 +61,20 @@ describe("readSheetShapes", () => {
 
     expect(readSheetShapes(bytes).map((shape) => shape.spid)).toStrictEqual([
       50,
+    ]);
+  });
+
+  it("excludes a top-level record that merely shares DgContainer's own recType while not being a container at all", () => {
+    // The recType half of the DgContainer search alone can't rule this one out -- it genuinely carries ESCHER_DG_CONTAINER's own recType value, just on a plain ATOM instead of a container. Only requiring BOTH halves together excludes it, and doing so wrongly would try to read a container's children off an atom that has none.
+    const anchor = clientAnchorSheet(0, 0, 0, 0, 1, 0, 1, 0);
+    const bogusAtom = escherAtom(ESCHER_DG_CONTAINER, 0, []);
+    const bytes = new Uint8Array([
+      ...bogusAtom,
+      ...drawingBytes([rectangleShape(51, anchor)]),
+    ]);
+
+    expect(readSheetShapes(bytes).map((shape) => shape.spid)).toStrictEqual([
+      51,
     ]);
   });
 
@@ -181,6 +199,19 @@ describe("readSheetShapes", () => {
 
     expect(shapes).toHaveLength(1);
     expect(shapes[0]?.blipIndex).toBeUndefined();
+  });
+
+  it("ignores a well-formed FOPTE entry whose own opid is not pib's", () => {
+    // A single-entry Opt table is otherwise indistinguishable from a real pib entry unless the opid itself is what's actually checked -- this entry is exactly as well-formed as a real pib one, just naming a different property.
+    const anchor = clientAnchorSheet(0, 0, 0, 0, 1, 0, 1, 0);
+    const picture = escherContainer(0xf004, 0, [
+      spAtom(SHAPE_TYPE_PICTURE_FRAME, 90, 0),
+      optAtom([foptEntry(0x0099, 42)]),
+      anchor,
+    ]);
+    const bytes = drawingBytes([picture]);
+
+    expect(readSheetShapes(bytes)[0]?.blipIndex).toBeUndefined();
   });
 
   it("recurses into a nested shape group, skipping the group's own shape record", () => {
