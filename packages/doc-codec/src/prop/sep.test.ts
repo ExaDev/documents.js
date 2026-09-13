@@ -62,8 +62,16 @@ describe("applySectionSprms", () => {
     expect(applySectionSprms([characterSprm], {}).pageWidthPt).toBeUndefined();
   });
 
-  it("ignores an unrecognised section sprm without touching any property", () => {
+  it("ignores a paragraph-family sprm that never reaches the section switch at all", () => {
     const result = applySectionSprms([prl(0x0000, [0])], {
+      pageWidthPt: 400,
+    });
+    expect(result.pageWidthPt).toBe(400);
+  });
+
+  it("falls through the switch's own default case for a section-family sprm this reader does not convert", () => {
+    // sgc bits 10-12 of 0x1000 decode to SGC.section (4), but the full value matches none of the SPRM_S_* opcodes this reader handles -- the one way to actually reach the switch's default case rather than the sgc guard above it.
+    const result = applySectionSprms([prl(0x1000, [0])], {
       pageWidthPt: 400,
     });
     expect(result.pageWidthPt).toBe(400);
@@ -104,6 +112,34 @@ describe("readAllSectionProperties", () => {
         lcbPlcfSed: 100,
       }),
     ).toThrow(/PlcfSed in the Table stream/);
+  });
+
+  it("names 'PlcfSed' when the PlcfSed's own declared size fails parsePlc's element-count arithmetic", () => {
+    expect(() =>
+      readAllSectionProperties(new Uint8Array(0), new Uint8Array(20), {
+        fcPlcfSed: 0,
+        lcbPlcfSed: 10, // (10 - 4) / (4 + 12) = 0.375, not a whole number of Sed elements.
+      }),
+    ).toThrow(/PlcfSed is 10 bytes/);
+  });
+
+  it("names 'Sepx grpprl in the WordDocument stream' when the declared Sepx runs past the WordDocument's own end", () => {
+    const table = new Uint8Array(20);
+    const view = new DataView(table.buffer);
+    view.setUint32(0, 0, true); // aCp[0].
+    view.setUint32(4, 0, true); // aCp[1] (ccpText).
+    view.setUint32(10, 0, true); // sed.fcSepx -- points at wordDocument offset 0.
+    view.setUint32(16, 0xffffffff, true); // sed.fcMpr -- ignored.
+
+    const wordDocument = new Uint8Array(4);
+    new DataView(wordDocument.buffer).setUint16(0, 10, true); // Sepx.cb declares 10 bytes, but only 2 remain after it.
+
+    expect(() =>
+      readAllSectionProperties(wordDocument, table, {
+        fcPlcfSed: 0,
+        lcbPlcfSed: 20,
+      }),
+    ).toThrow(/Sepx grpprl in the WordDocument stream/);
   });
 
   it("resolves a real single-section document's own page size from its PlcfSed/Sepx", () => {
