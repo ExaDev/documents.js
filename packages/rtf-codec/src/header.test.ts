@@ -107,6 +107,28 @@ describe("font table", () => {
       `A${String.fromCodePoint(233)}B${String.fromCodePoint(0xffff)}C`,
     );
   });
+
+  it("does not add 0x1_00_00 to \\u0, the boundary case that is exactly zero rather than negative", () => {
+    // code < 0 is false for code === 0 -- a <= mutation would wrongly take the negative-encoding branch for this exact boundary value, producing U+10000 instead of NUL.
+    const { fonts } = headerOf("{\\rtf1{\\fonttbl{\\f0\\froman A\\u0B;}}}");
+    expect(fonts.get(0)?.name).toBe(`A${String.fromCodePoint(0)}B`);
+  });
+
+  it("skips more than one non-brace token before finding the next <fontinfo>'s own opening brace", () => {
+    // Two \filetbl-unrelated bare control words ahead of the first braced font entry: parseFontTable's own char-by-char pre-scan must step forward through both, not just tolerate a single one.
+    const { fonts } = headerOf(
+      "{\\rtf1{\\fonttbl\\deflang1033\\ftnbj{\\f0\\froman Arial;}}}",
+    );
+    expect(fonts.get(0)?.name).toBe("Arial");
+  });
+
+  it("does not let an unrelated control word with its own numeric parameter clobber the codepage as if it were \\cpgN", () => {
+    // \fprq carries no field this reader records at all (see readFontInfo's own comment); reaching this table entry with a defined param must never fall into the \cpg branch merely for being the last check in the chain.
+    const { fonts } = headerOf(
+      "{\\rtf1{\\fonttbl{\\f0\\fswiss\\cpg1251\\fprq2 Arial Cyr;}}}",
+    );
+    expect(fonts.get(0)?.codepage).toBe(1251);
+  });
 });
 
 describe("color table", () => {
@@ -217,6 +239,36 @@ describe("style sheet", () => {
     expect(styles.get(0)?.name).toBe("Normal");
     expect(styles.has(10)).toBe(false);
   });
+
+  it("prefers \\outlinelevelN over a conflicting 'heading N' style name", () => {
+    const { styles } = headerOf(
+      "{\\rtf1{\\stylesheet{\\s5\\outlinelevel3\\snext0 heading 1;}}}",
+    );
+    expect(styles.get(5)?.headingLevel).toBe(4);
+  });
+
+  it("does not let a bare \\outlinelevel with no digits clobber an already-recorded \\outlinelevelN", () => {
+    const { styles } = headerOf(
+      "{\\rtf1{\\stylesheet{\\s6\\outlinelevel2\\outlinelevel\\snext0 Body;}}}",
+    );
+    expect(styles.get(6)?.headingLevel).toBe(3);
+  });
+
+  it("skips a nested group inside a style entry whole, rather than reading a stray \\sN inside it as this entry's own handle", () => {
+    const { styles } = headerOf(
+      "{\\rtf1{\\stylesheet{\\s3{\\*\\keycode\\s99}\\snext0 My Style;}}}",
+    );
+    expect(styles.get(3)?.name).toBe("My Style");
+    expect(styles.has(99)).toBe(false);
+  });
+
+  it("skips a stray text byte between two style groups rather than misreading it as the next entry's own opening brace", () => {
+    // The tokenizer drops bare CR/LF as pure whitespace, but a literal space here is a real "text" token some producers still emit for readability between destination groups -- treating it as if it were a groupStart would fold the whole of the next entry into a bogus, mis-scoped one and lose it.
+    const { styles } = headerOf(
+      "{\\rtf1{\\stylesheet{\\s1\\snext0 heading 1;} {\\s2\\snext0 heading 2;}}}",
+    );
+    expect(styles.get(2)?.name).toBe("heading 2");
+  });
 });
 
 describe("list and list override tables", () => {
@@ -239,6 +291,74 @@ describe("list and list override tables", () => {
 
   it("has nothing for an \\lsN no override declares", () => {
     expect(headerOf(sample).lists.has(9)).toBe(false);
+  });
+
+  it("skips a stray text byte between two \\list groups rather than misreading it as the next \\list's own opening brace", () => {
+    const lists = headerOf(
+      "{\\rtf1{\\*\\listtable" +
+        "{\\list\\listtemplateid1\\listsimple{\\listlevel\\levelnfc23\\leveljc0\\levelstartat1{\\leveltext \\'01\\u183 ?;}{\\levelnumbers;}}\\listid201}" +
+        " {\\list\\listtemplateid2\\listsimple{\\listlevel\\levelnfc0\\leveljc0\\levelstartat1{\\leveltext \\'02\\'00.;}{\\levelnumbers\\'01;}}\\listid202}" +
+        "}{\\*\\listoverridetable{\\listoverride\\listid202\\listoverridecount0\\ls1}}}",
+    ).lists;
+    expect(lists.get(1)?.levels[0]?.numberFormat).toBe(0);
+  });
+
+  it("does not treat an unrelated group inside \\*\\listtable as if it were a \\list", () => {
+    const lists = headerOf(
+      "{\\rtf1{\\*\\listtable{\\unknowndest\\listid999}}" +
+        "{\\*\\listoverridetable{\\listoverride\\listid999\\listoverridecount0\\ls1}}}",
+    ).lists;
+    expect(lists.has(1)).toBe(false);
+  });
+
+  it("does not read a stray \\levelnfc/\\levelstartat inside a <listlevel>'s own nested {\\leveltext ...} as if it were the level's own", () => {
+    const lists = headerOf(
+      "{\\rtf1{\\*\\listtable{\\list\\listtemplateid1\\listsimple" +
+        "{\\listlevel\\levelnfc0\\leveljc0\\levelstartat1{\\leveltext\\levelnfc99\\levelstartat88 \\'02\\'00.;}{\\levelnumbers\\'01;}}" +
+        "\\listid302}}{\\*\\listoverridetable{\\listoverride\\listid302\\listoverridecount0\\ls1}}}",
+    ).lists;
+    expect(lists.get(1)?.levels[0]?.numberFormat).toBe(0);
+    expect(lists.get(1)?.levels[0]?.startAt).toBe(1);
+  });
+
+  it("does not treat an unrelated group inside a \\list as if it were its own \\listlevel", () => {
+    const lists = headerOf(
+      "{\\rtf1{\\*\\listtable{\\list\\listtemplateid1\\listsimple" +
+        "{\\unknowndest\\levelnfc99}" +
+        "{\\listlevel\\levelnfc0\\leveljc0\\levelstartat1{\\leveltext \\'02\\'00.;}{\\levelnumbers\\'01;}}" +
+        "\\listid301}}{\\*\\listoverridetable{\\listoverride\\listid301\\listoverridecount0\\ls1}}}",
+    ).lists;
+    // Only the real <listlevel> group contributes -- the unrelated group must not become a bogus, wrongly-numbered-23 level 0.
+    expect(lists.get(1)?.levels).toHaveLength(1);
+    expect(lists.get(1)?.levels[0]?.numberFormat).toBe(0);
+  });
+
+  it("does not let a control word named something other than \\listidN set the list's own id", () => {
+    // \listtemplateid999 carries a numeric param too, but only the exact name \listid may set listId -- placed AFTER the real \listidN so a wrongly-matched value would visibly stick rather than just get overwritten again by coincidence.
+    const lists = headerOf(
+      "{\\rtf1{\\*\\listtable{\\list\\listid401\\listtemplateid999\\listsimple" +
+        "{\\listlevel\\levelnfc0\\leveljc0\\levelstartat1{\\leveltext \\'02\\'00.;}{\\levelnumbers\\'01;}}}}" +
+        "{\\*\\listoverridetable{\\listoverride\\listid401\\listoverridecount0\\ls1}}}",
+    ).lists;
+    expect(lists.get(1)?.levels[0]?.numberFormat).toBe(0);
+  });
+
+  it("does not let a bare \\listid with no digits clobber an already-recorded \\listidN", () => {
+    const lists = headerOf(
+      "{\\rtf1{\\*\\listtable{\\list\\listid402\\listid\\listsimple" +
+        "{\\listlevel\\levelnfc0\\leveljc0\\levelstartat1{\\leveltext \\'02\\'00.;}{\\levelnumbers\\'01;}}}}" +
+        "{\\*\\listoverridetable{\\listoverride\\listid402\\listoverridecount0\\ls1}}}",
+    ).lists;
+    expect(lists.get(1)?.levels[0]?.numberFormat).toBe(0);
+  });
+
+  it("does not let a bare \\levelstartat with no digits clobber an already-recorded \\levelstartatN inside a \\listlevel", () => {
+    const lists = headerOf(
+      "{\\rtf1{\\*\\listtable{\\list\\listtemplateid1\\listsimple" +
+        "{\\listlevel\\levelnfc0\\leveljc0\\levelstartat9\\levelstartat{\\leveltext \\'02\\'00.;}{\\levelnumbers\\'01;}}" +
+        "\\listid403}}{\\*\\listoverridetable{\\listoverride\\listid403\\listoverridecount0\\ls1}}}",
+    ).lists;
+    expect(lists.get(1)?.levels[0]?.startAt).toBe(9);
   });
 });
 
@@ -319,6 +439,74 @@ describe("list override levels", () => {
     expect(lists.get(1)?.levels[0]?.startAt).toBe(5);
     expect(lists.get(2)?.levels[0]?.startAt).toBe(1);
   });
+
+  it("skips a stray text byte between two \\listoverride groups rather than misreading it as the next one's own opening brace", () => {
+    const lists = listsFor(
+      "{\\listoverride\\listid101\\listoverridecount0\\ls1}" +
+        " {\\listoverride\\listid101\\listoverridecount1{\\lfolevel\\listoverridestartat\\levelstartat8}\\ls2}",
+    );
+    expect(lists.get(2)?.levels[0]?.startAt).toBe(8);
+  });
+
+  it("does not treat an unrelated group inside a \\listoverride as if it were its own \\lfolevel", () => {
+    const lists = listsFor(
+      "{\\listoverride\\listid101\\listoverridecount1" +
+        "{\\unknowndest\\levelstartat77}" +
+        "{\\lfolevel\\listoverridestartat\\levelstartat9}\\ls1}",
+    );
+    expect(lists.get(1)?.levels[0]?.startAt).toBe(9);
+  });
+
+  it("does not let a bare \\listid or \\ls with no digits clobber an already-recorded value", () => {
+    const lists = listsFor(
+      "{\\listoverride\\listid101\\listid\\listoverridecount0\\ls3\\ls}",
+    );
+    expect(lists.get(3)?.levels[0]?.numberFormat).toBe(0);
+  });
+
+  it("does not let a control word named something other than \\listid or \\ls set the override's own id fields", () => {
+    // \listoverridecount0 itself carries a numeric param -- placed AFTER the real \ls1 so a wrongly-matched value would visibly stick.
+    const lists = listsFor(
+      "{\\listoverride\\listid101\\ls1\\listoverridecount0}",
+    );
+    expect(lists.get(1)?.levels[0]?.numberFormat).toBe(0);
+  });
+
+  it("does not treat an unrelated group inside a \\lfolevel as if it were its own <listlevel>", () => {
+    const lists = listsFor(
+      "{\\listoverride\\listid101\\listoverridecount1" +
+        "{\\lfolevel\\listoverrideformat1{\\unknowndest\\levelnfc99}" +
+        "{\\listlevel\\levelnfc23\\leveljc0\\levelstartat1{\\leveltext \\'01\\u183 ?;}{\\levelnumbers;}}}\\ls1}",
+    );
+    expect(lists.get(1)?.levels[0]?.numberFormat).toBe(23);
+  });
+
+  it("does not let a bare \\levelstartat with no digits inside a \\lfolevel clobber an already-recorded one", () => {
+    const lists = listsFor(
+      "{\\listoverride\\listid101\\listoverridecount1" +
+        "{\\lfolevel\\listoverridestartat\\levelstartat6\\levelstartat}\\ls1}",
+    );
+    expect(lists.get(1)?.levels[0]?.startAt).toBe(6);
+  });
+
+  it("does not let a control word named something other than \\levelstartat set the \\lfolevel's own start-at", () => {
+    // \listoverridestartat itself carries no param at all here, and \listoverrideformat1 does -- neither is \levelstartat, so placing one right after the real \levelstartat6 must not overwrite it.
+    const lists = listsFor(
+      "{\\listoverride\\listid101\\listoverridecount1" +
+        "{\\lfolevel\\listoverridestartat\\levelstartat6\\listoverrideformat1}\\ls1}",
+    );
+    expect(lists.get(1)?.levels[0]?.startAt).toBe(6);
+  });
+
+  it("prefers the nested <listlevel>'s own start-at over a redundant direct \\levelstartatN when both are given", () => {
+    // A malformed producer stating both is exactly the case applyListOverride's own level-replacement precedence exists for: the whole-level replacement must win over the otherwise-independent direct override.
+    const lists = listsFor(
+      "{\\listoverride\\listid101\\listoverridecount1" +
+        "{\\lfolevel\\levelstartat50\\listoverrideformat1" +
+        "{\\listlevel\\levelnfc23\\leveljc0\\levelstartat99{\\leveltext \\'01\\u183 ?;}{\\levelnumbers;}}}\\ls1}",
+    );
+    expect(lists.get(1)?.levels[0]?.startAt).toBe(99);
+  });
 });
 
 describe("document properties", () => {
@@ -336,11 +524,16 @@ describe("document properties", () => {
   });
 
   it("reads the paper size and margins, in twips", () => {
+    // Every one of the six fields gets its own distinct value, so a switch case that silently did nothing (or a case label swapped for a neighbour's) would leave a field at its default rather than merely matching a sibling's value by coincidence.
     const header = headerOf(
-      "{\\rtf1\\ansi\\paperw11906\\paperh16838\\margl1134\\margr1134\\margt1417\\margb1417}",
+      "{\\rtf1\\ansi\\paperw11906\\paperh16838\\margl1001\\margr1002\\margt1003\\margb1004}",
     );
     expect(header.page.paperWidthTwips).toBe(11_906);
-    expect(header.page.marginTopTwips).toBe(1417);
+    expect(header.page.paperHeightTwips).toBe(16_838);
+    expect(header.page.marginLeftTwips).toBe(1001);
+    expect(header.page.marginRightTwips).toBe(1002);
+    expect(header.page.marginTopTwips).toBe(1003);
+    expect(header.page.marginBottomTwips).toBe(1004);
   });
 
   it("falls back to the spec's own stated defaults when no page geometry is declared", () => {
@@ -379,6 +572,51 @@ describe("document properties", () => {
   it("leaves every {\\info ...} field entirely absent when its own value is empty", () => {
     const header = headerOf("{\\rtf1\\ansi{\\info{\\title}}}");
     expect(header.metadata).not.toHaveProperty("title");
+  });
+
+  it("does not treat an unrecognized {\\info ...} field as \\operator just for reaching the end of the else-if chain", () => {
+    const header = headerOf(
+      "{\\rtf1\\ansi{\\info{\\manager Someone Else}{\\operator Jane Roe}}}",
+    );
+    expect(header.metadata.creator).toBe("Jane Roe");
+  });
+
+  it("skips a stray text byte between two {\\info ...} fields rather than misreading it as the next field's own opening brace", () => {
+    const header = headerOf(
+      "{\\rtf1\\ansi{\\info{\\title A Document} {\\author John Doe}}}",
+    );
+    expect(header.metadata.author).toBe("John Doe");
+  });
+
+  it("does not read a document property from inside a nested destination group, only at the file group's own top level", () => {
+    // \paperw999 sits inside a font entry here -- nonsensical RTF, but nothing stops a malformed producer from emitting it, and the document-properties sweep must skip the whole {\fonttbl ...} group rather than linearly scanning through it.
+    const header = headerOf(
+      "{\\rtf1\\ansi{\\fonttbl{\\f0\\froman\\paperw999 Arial;}}}",
+    );
+    expect(header.page.paperWidthTwips).toBe(12_240);
+  });
+
+  it("skips a stray text byte between two top-level destination groups rather than misreading it as the next one's own opening brace", () => {
+    const header = headerOf(
+      "{\\rtf1\\ansi{\\fonttbl{\\f0\\froman Arial;}} {\\colortbl;\\red10\\green20\\blue30;}}",
+    );
+    expect(header.fonts.get(0)?.name).toBe("Arial");
+    expect(header.colors[1]).toEqual({ r: 10 / 255, g: 20 / 255, b: 30 / 255 });
+  });
+});
+
+describe("revision table", () => {
+  it("reads each author name, trimmed, in table order", () => {
+    // Leading/trailing spaces around "Spacey Author" are genuinely part of the group's own text run (nothing here is a control-word delimiter), so only .trim() removes them.
+    const header = headerOf(
+      "{\\rtf1{\\*\\revtbl{Unknown;}{ Spacey Author ;}}}",
+    );
+    expect(header.revisionAuthors).toEqual(["Unknown", "Spacey Author"]);
+  });
+
+  it("skips a stray text byte between two revision-author groups rather than misreading it as the next one's own opening brace", () => {
+    const header = headerOf("{\\rtf1{\\*\\revtbl{Unknown;} {Second Author;}}}");
+    expect(header.revisionAuthors).toEqual(["Unknown", "Second Author"]);
   });
 });
 
