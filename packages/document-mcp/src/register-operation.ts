@@ -25,9 +25,8 @@ export function registerOperation(
       title: operation.title,
       description: operation.description,
       inputSchema: operation.inputSchema,
-      ...(operation.outputSchema === undefined
-        ? {}
-        : { outputSchema: operation.outputSchema }),
+      // registerTool's own outputSchema handling already treats an explicit undefined identically to the key being absent altogether (both `if (tool.outputSchema)` at dispatch and its outputSchemaJson memoisation short-circuit on undefined), so there is no observable difference to preserve by omitting the key -- passing it through unconditionally removes a branch that could never actually change behaviour.
+      outputSchema: operation.outputSchema,
     },
     async (args: unknown, ctx) => {
       try {
