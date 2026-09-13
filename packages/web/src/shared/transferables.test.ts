@@ -51,7 +51,7 @@ describe("cloneAndCollectTransferableBuffers", () => {
     expect(original.buffer.byteLength).toBe(3);
   });
 
-  it("clones Uint8Arrays nested inside arrays too", () => {
+  it("clones Uint8Arrays nested inside objects that are themselves inside an array", () => {
     const original = new Uint8Array([9]);
     const message = { chapters: [{ bytes: original }] };
 
@@ -61,5 +61,22 @@ describe("cloneAndCollectTransferableBuffers", () => {
     if (chapter === undefined) throw new Error("expected a chapter");
     expect(chapter.bytes).not.toBe(original);
     expect(Array.from(chapter.bytes)).toEqual([9]);
+  });
+
+  it("clones every Uint8Array that is itself a direct array element, in order", () => {
+    const first = new Uint8Array([1]);
+    const second = new Uint8Array([2]);
+    const message = { chapters: [first, second] };
+
+    const transfer = cloneAndCollectTransferableBuffers(message);
+
+    expect(message.chapters[0]).not.toBe(first);
+    expect(message.chapters[1]).not.toBe(second);
+    expect(Array.from(message.chapters[0] as Uint8Array)).toEqual([1]);
+    expect(Array.from(message.chapters[1] as Uint8Array)).toEqual([2]);
+    expect(transfer).toEqual([
+      (message.chapters[0] as Uint8Array).buffer,
+      (message.chapters[1] as Uint8Array).buffer,
+    ]);
   });
 });
