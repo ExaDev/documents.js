@@ -436,7 +436,11 @@ export function writeCompoundFile(
   }
   for (let sector = 0; sector < difatSectorCount; sector++) {
     const base = sectorOffset(difatStart + sector);
-    for (let i = 0; i < difatEntriesPerSector; i++) {
+    // Walks Array.from's own bounded index list rather than a hand-written comparison: an off-by-one running one slot past difatEntriesPerSector would write into the exact byte offset (base + difatEntriesPerSector * 4) the unconditional terminator write below writes to next, for this same sector -- so a stray extra iteration here is always overwritten immediately afterwards regardless, and removing the comparison removes the mutation opportunity along with it.
+    for (const i of Array.from(
+      { length: difatEntriesPerSector },
+      (_unused, n) => n,
+    )) {
       const fatIndex =
         HEADER_DIFAT_ENTRIES + sector * difatEntriesPerSector + i;
       if (fatIndex < fatSectorCount) {
