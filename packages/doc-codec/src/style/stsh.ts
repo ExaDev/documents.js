@@ -234,6 +234,56 @@ export function headingLevelFromIstd(istd: number): number | undefined {
   return istd >= 1 && istd <= 9 ? istd : undefined;
 }
 
+/** The first istd writeDocContent assigns a non-heading named style -- istd 0 stays reserved for a paragraph with neither styleId nor an in-range headingLevel, and istd 1-9 for headingLevelFromIstd's own heading-implied slots, so the first genuinely free slot for an arbitrary style name is 10. */
+const FIRST_NON_HEADING_ISTD = 10;
+/** headingLevelFromIstd's own upper bound restated here as a named constant, so mintStyleIstds' own range check and the read-side rule it must agree with can never drift apart silently. */
+const MAX_HEADING_ISTD = 9;
+
+/** writeDocContent's own per-paragraph input to mintStyleIstds: just the two fields the istd-minting rule actually reads, so a caller with a fuller paragraph-properties type can pass it straight through. */
+export interface StyleIdentityInput {
+  readonly styleId?: string;
+  readonly headingLevel?: number;
+}
+
+export interface MintedStyleIstds {
+  /** One istd per input paragraph, in the same order. */
+  readonly istds: readonly number[];
+  /** Every minted istd's own style name -- a heading-implied 1-9 slot's default ("Heading N") or the paragraph's own styleId, and every named style's own styleId -- ready for buildStshForStyles. An istd no paragraph reached (including istd 0, whenever no paragraph's own styleId is genuinely "Normal") carries no entry. */
+  readonly styleNames: ReadonlyMap<number, string>;
+}
+
+// Mints a real istd for every distinct paragraph style: a headingLevel of 1-9 maps directly to that istd (headingLevelFromIstd's own read-side rule, so a re-read derives the identical headingLevel back regardless of what styleId names it), and every other named styleId gets its own istd starting at FIRST_NON_HEADING_ISTD. This mints style IDENTITY only -- name, kind, istd -- with no formatting of its own: every property writeDocContent itself emits is already, unconditionally, a direct exception (see buildStshForStyles's own comment and the README's scope note, ExaDev/documents.js#1059). A paragraph with neither styleId nor an in-range headingLevel gets istd 0, left an empty hole rather than a real "Normal" entry -- minting one there unconditionally would round-trip an absent styleId into a real "Normal" string on the next read, which is not what the source document stated. A paragraph whose own styleId literally IS "Normal" is treated like any other named style and mints its own real entry (not necessarily at istd 0), so that distinction survives. A headingLevel outside 1-9 (the schema's own field is unbounded, "ODF alone permits ten levels") has no istd slot to round-trip through at all -- a genuine format-boundary limit, so such a paragraph falls back to its styleId (or istd 0) exactly as if it carried no headingLevel. Extracted out of writeDocContent's own body (ExaDev/documents.js) so this rule's own boundaries -- the heading range, first-use istd assignment, and per-heading-number name defaulting -- are directly testable rather than only reachable through a full write+read round trip.
+export function mintStyleIstds(
+  paragraphs: readonly StyleIdentityInput[],
+): MintedStyleIstds {
+  const styleNames = new Map<number, string>();
+  const istdByStyleId = new Map<string, number>();
+  let nextNonHeadingIstd = FIRST_NON_HEADING_ISTD;
+  const istdOf = (properties: StyleIdentityInput): number => {
+    const heading = properties.headingLevel;
+    if (heading !== undefined && heading >= 1 && heading <= MAX_HEADING_ISTD) {
+      if (!styleNames.has(heading)) {
+        styleNames.set(
+          heading,
+          properties.styleId ?? `Heading ${String(heading)}`,
+        );
+      }
+      return heading;
+    }
+    const styleId = properties.styleId;
+    if (styleId === undefined) return 0;
+    const existing = istdByStyleId.get(styleId);
+    if (existing !== undefined) return existing;
+    const istd = nextNonHeadingIstd;
+    nextNonHeadingIstd += 1;
+    istdByStyleId.set(styleId, istd);
+    styleNames.set(istd, styleId);
+    return istd;
+  };
+  const istds = paragraphs.map((entry) => istdOf(entry));
+  return { istds, styleNames };
+}
+
 // Mints a real STSH from a set of paragraph-kind style names, keyed by the istd each occupies -- a heading-implied istd 1-9 per headingLevelFromIstd's own rule, every other named style at its own istd >= 10 in whatever order the caller assigned. An istd this map has no entry for -- including istd 0 whenever no paragraph's own styleId is genuinely "Normal" -- is left an empty hole ([MS-DOC] 2.9.271's own "A style definition can be empty, in which case cbStd MUST be 0"), so a heading level (or istd 0) the document never names need not occupy real bytes; an empty names map (cstd 0) is the same genuinely spec-conformant zero-style STSH this package always wrote before #1059 minted real entries at all -- write.ts always writes one, never omits fcStshf/lcbStshf entirely, because FibRgFcLcb97's own lcbStshf field "MUST be a nonzero value" (a document with no style sheet at all is not a construct [MS-DOC] permits, even though this package's own reader tolerates lcbStshf 0 -- see read.ts). Every entry is written with an empty grLPUpxSw -- two LPUpxPapx/LPUpxChpx entries, both zero-length -- since writeDocContent has no style-vs-direct-formatting split to draw a real one from: every property it writes is already, unconditionally, a paragraph's or run's own direct exception (see the README's own scope note). This mints style IDENTITY only, so a paragraph's own styleId/headingLevel round-trips through a real STSH entry instead of always reading back istd 0 (ExaDev/documents.js#1059).
 export function buildStshForStyles(
   names: ReadonlyMap<number, string>,
