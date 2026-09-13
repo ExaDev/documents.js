@@ -84,18 +84,14 @@ export interface CorePropertiesOverrides {
   readonly keywords?: readonly string[];
 }
 
-// The namespace prefix a tag is qualified with ("dc:title" -> "dc"), or undefined for an unprefixed tag.
-function namespacePrefixOf(tag: string): string | undefined {
-  const colonIndex = tag.indexOf(":");
-  return colonIndex === -1 ? undefined : tag.slice(0, colonIndex);
+// The namespace prefix a tag is qualified with ("dc:title" -> "dc"). No "no colon" branch: this is only ever called, via ensureNamespaceDeclared below, with one of "dc:title" / "dc:creator" / "dc:subject" / "cp:keywords" -- every one of them colon-qualified -- so colonIndex is always >= 0 in practice and a branch handling its absence would be unreachable.
+function namespacePrefixOf(tag: string): string {
+  return tag.slice(0, tag.indexOf(":"));
 }
 
 // Ensures `root` declares the xmlns binding a newly appended element's prefix needs. A legally-minimal docProps/core.xml declaring only the cp namespace (every core-properties child is optional, so a real producer writing only cp:keywords has no reason to ever declare dc) would otherwise gain an unbound dc:title/dc:creator/dc:subject child -- a fatal XML namespace well-formedness error real consumers (Word, LibreOffice) reject outright. Only called from the "create a new element" branch below: an EXISTING element's prefix was already legally bound by whatever produced the source document, so patching its text alone never needs this. Idempotent -- patching two dc-prefixed fields that both need creating (title and author, say) declares xmlns:dc once, not twice.
 function ensureNamespaceDeclared(root: XmlElement, tag: string): void {
   const prefix = namespacePrefixOf(tag);
-  if (prefix === undefined) {
-    return;
-  }
   const uri = CORE_PROPERTIES_NAMESPACE_URI_FOR_PREFIX[prefix];
   if (uri === undefined) {
     return;
