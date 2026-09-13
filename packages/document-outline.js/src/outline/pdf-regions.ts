@@ -540,6 +540,14 @@ export function attachCaptions(regions: readonly PdfRegion[]): PdfRegion[] {
   });
 }
 
+// A region's own text content, joined and trimmed. Non-text items contribute nothing.
+function regionText(region: PdfRegion): string {
+  return region.items
+    .map((item) => (item.kind === "text" ? item.text : ""))
+    .join(" ")
+    .trim();
+}
+
 export function horizontallyOverlaps(
   a: PdfRegionBounds,
   b: PdfRegionBounds,
