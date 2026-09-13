@@ -86,8 +86,9 @@ function readToggle(el: XmlElement | undefined): boolean | undefined {
   if (el === undefined) {
     return undefined;
   }
+  // No separate "val is absent" arm is needed: when val is genuinely undefined, each of the three comparisons below is already true on its own (undefined !== "0", etc.), so the combined check already reads absence as on.
   const val = attr(el, "w:val");
-  return val === undefined || (val !== "0" && val !== "false" && val !== "off");
+  return val !== "0" && val !== "false" && val !== "off";
 }
 
 // w:u/@w:val is one of many underline styles (single/double/thick/dotted/...); "none" is the only value that means off. Unlike the toggle properties above, w:u always carries @w:val -- there's no bare-presence-means-on form.
