@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { MAX_WALK_DEPTH } from "archive-codec";
+import {
+  MAX_WALK_DEPTH,
+  writeCompoundFile,
+  writeOlePackage,
+} from "archive-codec";
 import { unzipPackage, zipPackage } from "../zip";
 import { oleObjectBin } from "../test-support/cfb";
 import {
@@ -77,6 +81,30 @@ describe("readEmbeddedOoxmlPayload", () => {
     });
   });
 
+  it("finds the 'Package' stream by its own name among several, not merely the first stream the compound file's directory tree visits", () => {
+    // The directory's sibling tree is name-sorted (see archive-codec's own README), so "Decoy" -- alphabetically before "Package" -- is genuinely visited first; only a check against the stream's own path, not "whichever comes first", can tell them apart.
+    const packageBytes = writeOlePackage({
+      label: "Book1.xlsx",
+      sourcePath: "",
+      tempPath: "",
+      fileBytes: minimalXlsxBytes(),
+    });
+    const bytes = writeCompoundFile([
+      { path: "Decoy", bytes: enc("not a Package stream at all") },
+      { path: "Package", bytes: packageBytes },
+    ]);
+    const payload = readEmbeddedOoxmlPayload(bytes);
+    expect(payload?.objectKind).toBe("spreadsheet");
+    const sheet =
+      payload?.document.kind === "spreadsheet"
+        ? payload.document.sheets[0]
+        : undefined;
+    expect(sheet?.cells[0]?.value).toEqual({
+      kind: "string",
+      value: "Recovered cell",
+    });
+  });
+
   it("returns undefined for a well-formed compound file carrying no Package stream (native legacy streams stay opaque)", () => {
     // A .bin whose CFB holds a native stream (BIFF Workbook, WordDocument, ...) rather than a Package stream: outside this recovery's scope by design, so the payload degrades to nothing without a throw.
     expect(
@@ -95,6 +123,13 @@ describe("readEmbeddedOoxmlPayload", () => {
         oleObjectBin(enc("just some packaged text, not a zip")),
       ),
     ).toBeUndefined();
+  });
+
+  it("returns undefined immediately for bytes carrying neither the ZIP nor the compound-file magic at all, never entering the parse", () => {
+    // Neither isZipArchive nor isCompoundFile recognise this input -- the gate above must short-circuit to undefined itself, rather than only degrading via the catch block once a parse attempt throws.
+    expect(readEmbeddedOoxmlPayload(enc("plain text, not an archive"))).toBe(
+      undefined,
+    );
   });
 
   it("returns undefined for a non-ZIP payload (the classic OLE compound file)", () => {
@@ -127,6 +162,29 @@ describe("readEmbeddedOoxmlPayload", () => {
       ),
     });
     expect(readEmbeddedOoxmlPayload(bytes)).toBeUndefined();
+  });
+
+  it("uses the genuine root-level part over a same-named entry nested inside a ZIP-within-the-payload, never letting the nested one overwrite it", () => {
+    // A nested archive's own entries are ancestors.length > 0 -- excluded from the flattened package the outer payload's own parts build from, exactly as the walk's own root-entry set is. A decoy nested zip carrying its own "xl/workbook.xml" must never be allowed to clobber the payload's genuine root-level one.
+    const basePkg = unzipPackage(minimalXlsxBytes());
+    const decoy = zipPackage({
+      "xl/workbook.xml": enc("this is not a real workbook part at all"),
+    });
+    const bombShaped = zipPackage({
+      ...basePkg,
+      "word/embeddings/decoy.zip": decoy,
+    });
+    const payload = readEmbeddedOoxmlPayload(bombShaped);
+    expect(payload?.objectKind).toBe("spreadsheet");
+    const sheet =
+      payload?.document.kind === "spreadsheet"
+        ? payload.document.sheets[0]
+        : undefined;
+    expect(sheet?.name).toBe("Embedded");
+    expect(sheet?.cells[0]?.value).toEqual({
+      kind: "string",
+      value: "Recovered cell",
+    });
   });
 
   it("returns undefined for a payload whose entries nest ZIPs beyond archive-codec's walk depth, even when its root is a valid xlsx", () => {
