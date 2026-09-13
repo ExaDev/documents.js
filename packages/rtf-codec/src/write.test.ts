@@ -441,7 +441,7 @@ describe("body constructs", () => {
 
   // The identical silent-drop shape a checkbox's own dropped `value` had, but for a field the checkbox controlType has no concept of at all: `options` is the dropDown/comboBox choice list.
   it("reports a checkbox's options list through the diagnostic sink, rather than dropping it silently", () => {
-    const codes: string[] = [];
+    const diagnostics: { code: string; message: string }[] = [];
     const out = text(
       writeRtfContent(
         wordprocessing([
@@ -462,11 +462,23 @@ describe("body constructs", () => {
             ],
           },
         ]),
-        { sink: (diagnostic) => codes.push(diagnostic.code) },
+        {
+          sink: (diagnostic) =>
+            diagnostics.push({
+              code: diagnostic.code,
+              message: diagnostic.message,
+            }),
+        },
       ),
     );
     expect(out).not.toContain("\\ffl");
-    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a checkbox contentControl's options list (2 entries) is dropped: a checkbox has no choice list at all, in RTF or in the harmonised contentControl vocabulary itself",
+      },
+    ]);
     expectBalancedBraces(out);
   });
 
@@ -499,7 +511,7 @@ describe("body constructs", () => {
 
   // A plainText field carrying `checked`/`options` -- fields that name concepts a text field simply does not have -- is the same sibling gap in a third shape.
   it("reports a plainText field's checked state and options list through the diagnostic sink, rather than dropping either silently", () => {
-    const diagnostics: string[] = [];
+    const diagnostics: { code: string; message: string }[] = [];
     const out = text(
       writeRtfContent(
         wordprocessing([
@@ -520,15 +532,28 @@ describe("body constructs", () => {
             ],
           },
         ]),
-        { sink: (diagnostic) => diagnostics.push(diagnostic.code) },
+        {
+          sink: (diagnostic) =>
+            diagnostics.push({
+              code: diagnostic.code,
+              message: diagnostic.message,
+            }),
+        },
       ),
     );
     expect(out).not.toContain("\\ffl");
-    expect(
-      diagnostics.filter(
-        (code) => code === RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
-      ),
-    ).toHaveLength(2);
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a plainText contentControl's checked state (true) is dropped: a text field has no boolean checked state at all, in RTF or in the harmonised contentControl vocabulary itself",
+      },
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a plainText contentControl's options list (2 entries) is dropped: a text field has no choice list at all, in RTF or in the harmonised contentControl vocabulary itself",
+      },
+    ]);
     expectBalancedBraces(out);
   });
 
@@ -565,7 +590,7 @@ describe("body constructs", () => {
 
   // The identical sibling gap in a fourth shape: `checked` is the checkbox/radio boolean, and a dropDown has no concept of it either -- the checkbox branch reports a stray `options`, the plainText branch reports a stray `checked` and `options`, and this closes the one remaining combination this function's own sink-reporting rule covers.
   it("reports a dropDown field's checked state through the diagnostic sink, rather than dropping it silently", () => {
-    const codes: string[] = [];
+    const diagnostics: { code: string; message: string }[] = [];
     const out = text(
       writeRtfContent(
         wordprocessing([
@@ -586,11 +611,23 @@ describe("body constructs", () => {
             ],
           },
         ]),
-        { sink: (diagnostic) => codes.push(diagnostic.code) },
+        {
+          sink: (diagnostic) =>
+            diagnostics.push({
+              code: diagnostic.code,
+              message: diagnostic.message,
+            }),
+        },
       ),
     );
     expect(out).toContain("{\\*\\ffl Hello}");
-    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a dropDown contentControl's checked state (true) is dropped: a dropdown has no boolean checked state at all, in RTF or in the harmonised contentControl vocabulary itself",
+      },
+    ]);
     expectBalancedBraces(out);
   });
 
@@ -881,7 +918,7 @@ describe("body constructs", () => {
 
   // [MS-DOC] 2.9.78 FFData.hsttbDropList "MUST NOT exceed 25" entries -- not an arbitrary limit, since FFDataBits' own iRes field reserves index 25 as its "undefined selection" sentinel (FORM_FIELD_RESULT_UNDEFINED in constructs.ts). A 26th option would sit exactly where a real Word/DOC consumer expects "no selection".
   it("truncates a dropDown's options at the MS-DOC 25-entry cap and reports it through the diagnostic sink", () => {
-    const codes: string[] = [];
+    const diagnostics: { code: string; message: string }[] = [];
     const options = Array.from(
       { length: 30 },
       (_, index) => `Option ${String(index)}`,
@@ -905,10 +942,22 @@ describe("body constructs", () => {
             ],
           },
         ]),
-        { sink: (diagnostic) => codes.push(diagnostic.code) },
+        {
+          sink: (diagnostic) =>
+            diagnostics.push({
+              code: diagnostic.code,
+              message: diagnostic.message,
+            }),
+        },
       ),
     );
-    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a dropDown contentControl's 30 options exceed [MS-DOC] 2.9.78 FFData.hsttbDropList's own 25-entry limit; only the first 25 are written",
+      },
+    ]);
     expect(out).toContain("{\\*\\ffl Option 0}");
     expect(out).toContain("{\\*\\ffl Option 24}");
     expect(out).not.toContain("{\\*\\ffl Option 25}");
@@ -1098,7 +1147,7 @@ describe("body constructs", () => {
 
   // `value` names the field's CURRENT scalar value and \ffdeftext names its DEFAULT/reset text -- a genuinely different fact this codec's own reader never restores back onto `value` (see "writes a plainText contentControl's value into \ffdeftext but does not read it back as `value`" in the "round trip through this package's own reader" describe block below), so writing `value` into \ffdeftext is reported through the diagnostic sink for consistency with every other cross-field mis-slot this function reports, even though the string itself is written rather than dropped.
   it("reports a plainText contentControl's value through the diagnostic sink when it is written into \\ffdeftext", () => {
-    const codes: string[] = [];
+    const diagnostics: { code: string; message: string }[] = [];
     const out = text(
       writeRtfContent(
         wordprocessing([
@@ -1119,11 +1168,23 @@ describe("body constructs", () => {
             ],
           },
         ]),
-        { sink: (diagnostic) => codes.push(diagnostic.code) },
+        {
+          sink: (diagnostic) =>
+            diagnostics.push({
+              code: diagnostic.code,
+              message: diagnostic.message,
+            }),
+        },
       ),
     );
     expect(out).toContain("{\\*\\ffdeftext Jane Doe}");
-    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a plainText contentControl's value 'Jane Doe' is written into {\\*\\ffdeftext ...}, FFData.xstzTextDef's default/reset text, not a slot for the field's current value: this codec's own reader does not restore \\ffdeftext back onto `value`, so this does not round-trip",
+      },
+    ]);
     expectBalancedBraces(out);
   });
 
