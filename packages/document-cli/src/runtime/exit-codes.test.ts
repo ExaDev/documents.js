@@ -1,6 +1,9 @@
 import {
   CsvSheetNotFoundError,
   CsvSheetNotSpecifiedError,
+  HsqldbSqlEvaluationError,
+  HsqldbSqlParseError,
+  HsqldbSqlUnsupportedError,
   OdbNoEmbeddedDataSourceError,
   OdbReportNotSpecifiedError,
   OdbTableNotFoundError,
@@ -11,6 +14,7 @@ import {
   PdfParseError,
   SvgMultiPageNotSpecifiedError,
   SvgPageNotFoundError,
+  UnsupportedFontSourceFormatError,
 } from "documents.js";
 import { describe, expect, it } from "vitest";
 import {
@@ -18,6 +22,7 @@ import {
   EXIT_INTERRUPTED,
   EXIT_NEEDS_INFO,
   EXIT_TIMEOUT,
+  EXIT_USAGE_ERROR,
   mapErrorToExit,
 } from "./exit-codes";
 
@@ -126,6 +131,39 @@ describe("mapErrorToExit", () => {
     expect(mapErrorToExit(new SvgPageNotFoundError(7, 3), undefined)).toBe(
       EXIT_NEEDS_INFO,
     );
+  });
+
+  it("maps UnsupportedFontSourceFormatError to EXIT_USAGE_ERROR", () => {
+    expect(
+      mapErrorToExit(new UnsupportedFontSourceFormatError("xlsx"), undefined),
+    ).toBe(EXIT_USAGE_ERROR);
+  });
+
+  it("maps HsqldbSqlUnsupportedError to EXIT_INPUT_ERROR", () => {
+    expect(
+      mapErrorToExit(
+        new HsqldbSqlUnsupportedError("JOIN", "SELECT * FROM a JOIN b"),
+        undefined,
+      ),
+    ).toBe(EXIT_INPUT_ERROR);
+  });
+
+  it("maps HsqldbSqlParseError to EXIT_INPUT_ERROR", () => {
+    expect(
+      mapErrorToExit(
+        new HsqldbSqlParseError("missing FROM", "SELECT 1", 8),
+        undefined,
+      ),
+    ).toBe(EXIT_INPUT_ERROR);
+  });
+
+  it("maps HsqldbSqlEvaluationError to EXIT_INPUT_ERROR", () => {
+    expect(
+      mapErrorToExit(
+        new HsqldbSqlEvaluationError("unknown column X", "SELECT X FROM a"),
+        undefined,
+      ),
+    ).toBe(EXIT_INPUT_ERROR);
   });
 
   it("maps PdfEncryptedError to EXIT_INPUT_ERROR", () => {
