@@ -1,8 +1,4 @@
-import {
-  CompoundFileFormatError,
-  isCompoundFile,
-  readCompoundFile,
-} from "archive-codec";
+import { isCompoundFile, readCompoundFile } from "archive-codec";
 
 import { BiffFormatError } from "./biff/records";
 
@@ -72,19 +68,13 @@ export function readWorkbookStreams(
   );
 }
 
-/** archive-codec's own reader, with its typed error left to propagate and every other failure wrapped, so a caller catching BiffFormatError sees one error type for "this is not a workbook this package can read". */
+/** archive-codec's own reader, with every failure it can throw -- its own typed CompoundFileFormatError, or a raw RangeError from a DataView read on a malformed mini-FAT chain -- wrapped into BiffFormatError, so a caller catching that one type sees one error type for "this is not a workbook this package can read" regardless of which layer inside archive-codec actually noticed the corruption. */
 function readWorkbookContainer(
   bytes: Uint8Array<ArrayBuffer>,
 ): ReturnType<typeof readCompoundFile> {
   try {
     return readCompoundFile(bytes);
   } catch (error) {
-    if (error instanceof CompoundFileFormatError) {
-      throw new BiffFormatError(
-        `compound-file container could not be read: ${error.message}`,
-      );
-    }
-    // archive-codec's own reader can surface a raw RangeError from a DataView read on a malformed mini-FAT chain, which is a corrupt file rather than a bug here.
     throw new BiffFormatError(
       `compound-file container could not be read: ${error instanceof Error ? error.message : String(error)}`,
     );
