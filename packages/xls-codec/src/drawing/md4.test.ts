@@ -25,4 +25,12 @@ describe("md4", () => {
       expect(md4(new TextEncoder().encode(message))).toBe(digest);
     }
   });
+
+  it("pads a 56-byte message correctly, the one length RFC 1320's own vectors never exercise", () => {
+    // The padding scheme (RFC 1320 section 3.1) appends a 0x80 byte then zero bytes up to a 64-byte block boundary minus 8, leaving room for the 8-byte length field -- so a message of exactly 56 bytes leaves zero bytes of room in its own block for that 0x80 plus the length field, and must instead pad out to a whole second block. None of RFC 1320's own A.5 vectors (lengths 0, 1, 3, 14, 26, 62, 80) land on 56 or 57 bytes, the narrow window where an off-by-one in the padding-length arithmetic changes which block boundary is chosen. Digest independently computed via OpenSSL's own MD4 implementation (`openssl dgst -md4 -provider legacy -provider default`), not derived from this package's own code.
+    const message = "abcdefgh".repeat(7); // 56 bytes
+    expect(md4(new TextEncoder().encode(message))).toBe(
+      "480276f2170f9668bc949a7fc46b5ead",
+    );
+  });
 });
