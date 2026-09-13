@@ -135,6 +135,22 @@ describe("readNumberingDefinitions", () => {
     const definitions = readNumberingDefinitions(packageWithNumbering([num]));
     expect(definitions["7"]).toBeUndefined();
   });
+
+  it("skips a w:startOverride whose own ilvl names a level the base abstractNum does not define, rather than fabricating one", () => {
+    const abstractNum = el("w:abstractNum", { "w:abstractNumId": "0" }, [
+      lvlEl("0", "decimal", "%1.", { start: "1" }),
+    ]);
+    const num = el("w:num", { "w:numId": "8" }, [
+      el("w:abstractNumId", { "w:val": "0" }),
+      el("w:lvlOverride", { "w:ilvl": "5" }, [
+        el("w:startOverride", { "w:val": "9" }),
+      ]),
+    ]);
+    const definitions = readNumberingDefinitions(
+      packageWithNumbering([abstractNum, num]),
+    );
+    expect(Object.keys(definitions["8"]?.levels ?? {})).toEqual(["0"]);
+  });
 });
 
 describe("buildNumberingElement", () => {
@@ -164,5 +180,107 @@ describe("buildNumberingElement", () => {
           ),
     );
     expect(readNumberingDefinitions(written)).toEqual(definitions);
+  });
+
+  it("declares the WordprocessingML namespace on its own root element", () => {
+    const element = buildNumberingElement({
+      "1": { levels: { "0": { format: "decimal", text: "%1.", startAt: 1 } } },
+    });
+    expect(element?.tag).toBe("w:numbering");
+    expect(element?.attributes).toEqual([
+      {
+        name: "xmlns:w",
+        value: "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+      },
+    ]);
+  });
+
+  it("orders a definition's own levels NUMERICALLY by ilvl, not lexicographically (ilvl '10' sorts after '2', not before it)", () => {
+    const definitions = {
+      "1": {
+        levels: {
+          "10": { format: "decimal", text: "%2.", startAt: 1 },
+          "2": { format: "decimal", text: "%1.", startAt: 1 },
+        },
+      },
+    };
+    const element = buildNumberingElement(definitions);
+    const abstractNum = (element?.children ?? []).find(
+      (child): child is XmlElement =>
+        child.type === "element" && child.tag === "w:abstractNum",
+    );
+    const levelIlvls = (abstractNum?.children ?? [])
+      .filter(
+        (child): child is XmlElement =>
+          child.type === "element" && child.tag === "w:lvl",
+      )
+      .map((child) => child.attributes.find((a) => a.name === "w:ilvl")?.value);
+    expect(levelIlvls).toEqual(["2", "10"]);
+  });
+
+  it("still sorts by genuine numeric value for a non-canonical ilvl string a plain object would not itself enumerate in ascending order (ilvl '00' before '10')", () => {
+    // Object property enumeration order hoists CANONICAL non-negative-integer string keys ('2', '10', ...) into ascending numeric order on its own, with no sort needed -- which is exactly why the '10'/'2' case above cannot, by itself, distinguish a real numeric sort from no sort at all, or from a broken comparator. '00' is not a canonical integer key (String(Number('00')) !== '00'), so it is enumerated in plain insertion order instead, after every canonical key -- letting a genuinely numeric comparator (rather than none, or a nonsensical one) show through.
+    const definitions = {
+      "1": {
+        levels: {
+          "10": { format: "decimal", text: "%2.", startAt: 1 },
+          "00": { format: "decimal", text: "%1.", startAt: 1 },
+        },
+      },
+    };
+    const element = buildNumberingElement(definitions);
+    const abstractNum = (element?.children ?? []).find(
+      (child): child is XmlElement =>
+        child.type === "element" && child.tag === "w:abstractNum",
+    );
+    const levelIlvls = (abstractNum?.children ?? [])
+      .filter(
+        (child): child is XmlElement =>
+          child.type === "element" && child.tag === "w:lvl",
+      )
+      .map((child) => child.attributes.find((a) => a.name === "w:ilvl")?.value);
+    expect(levelIlvls).toEqual(["00", "10"]);
+  });
+
+  it("similarly sorts numIds by genuine numeric value even for a non-canonical numId string ('00' before '10')", () => {
+    const definitions = {
+      "10": { levels: { "0": { format: "decimal", text: "%1.", startAt: 1 } } },
+      "00": { levels: { "0": { format: "decimal", text: "%1.", startAt: 1 } } },
+    };
+    const element = buildNumberingElement(definitions);
+    const numIds = (element?.children ?? [])
+      .filter(
+        (child): child is XmlElement =>
+          child.type === "element" && child.tag === "w:abstractNum",
+      )
+      .map(
+        (child) =>
+          child.attributes.find((a) => a.name === "w:abstractNumId")?.value,
+      );
+    expect(numIds).toEqual(["00", "10"]);
+  });
+
+  it("omits a level whose value is genuinely undefined despite carrying an own key, rather than writing a hole into w:abstractNum's children", () => {
+    const definitions = {
+      "1": {
+        levels: {
+          "0": { format: "decimal", text: "%1.", startAt: 1 },
+          "1": undefined,
+        },
+      },
+    } as unknown as Parameters<typeof buildNumberingElement>[0];
+    const element = buildNumberingElement(definitions);
+    const abstractNum = (element?.children ?? []).find(
+      (child): child is XmlElement =>
+        child.type === "element" && child.tag === "w:abstractNum",
+    );
+    const levels = (abstractNum?.children ?? []).filter(
+      (child): child is XmlElement =>
+        child.type === "element" && child.tag === "w:lvl",
+    );
+    expect(levels).toHaveLength(1);
+    expect(levels[0]?.attributes.find((a) => a.name === "w:ilvl")?.value).toBe(
+      "0",
+    );
   });
 });

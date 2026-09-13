@@ -2,9 +2,11 @@ import type { Package } from "../../model/package";
 import type { XmlElement } from "../../model/node";
 import { describe, expect, it } from "vitest";
 import { el } from "../../xml/fragment";
+import { EMPTY_THEME } from "../shared/drawingml";
 import {
   findMatchingPlaceholder,
   readPlaceholderKey,
+  readRunPropertiesFromElement,
   resolveDefaultRunProperties,
   resolvePlaceholderXfrm,
   resolveSlideInheritance,
@@ -194,6 +196,29 @@ describe("resolveSlideInheritance", () => {
     expect(context.colorMap.get("tx1")).toBe("dk1");
   });
 
+  it("finds the slideLayout relationship by its own type suffix, not merely the first relationship listed", () => {
+    const pkg = buildFixturePackage();
+    pkg.parts["ppt/slides/_rels/slide1.xml.rels"] = {
+      kind: "xml",
+      nodes: [
+        rels([
+          {
+            id: "rId0",
+            type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide",
+            target: "../notesSlides/notesSlide1.xml",
+          },
+          {
+            id: "rId1",
+            type: SLIDE_LAYOUT_REL,
+            target: "../slideLayouts/slideLayout1.xml",
+          },
+        ]),
+      ],
+    };
+    const context = resolveSlideInheritance(pkg, "ppt/slides/slide1.xml");
+    expect(context.layoutRoot?.tag).toBe("p:sldLayout");
+  });
+
   it("degrades to undefined roots and an empty theme when the slide has no layout relationship", () => {
     const pkg: Package = {
       parts: { "ppt/slides/slide1.xml": { kind: "xml", nodes: [el("p:sld")] } },
@@ -267,6 +292,33 @@ describe("findMatchingPlaceholder", () => {
       findMatchingPlaceholder(root, { type: "title", idx: undefined }),
     ).toBeUndefined();
   });
+
+  it("falls back to matching by type when an idx is given but no shape carries it", () => {
+    // key.idx names a shape nothing in root actually has -- the idx branch must not short-circuit to "no match" on that alone, since a genuine type match still exists to fall back to.
+    const root = el("p:sldLayout", {}, [
+      el("p:cSld", {}, [
+        el("p:spTree", {}, [placeholderShape({ type: "title" })]),
+      ]),
+    ]);
+    const match = findMatchingPlaceholder(root, { type: "title", idx: "99" });
+    if (match === undefined) {
+      throw new Error("expected a match");
+    }
+    expect(readPlaceholderKey(match)).toEqual({
+      type: "title",
+      idx: undefined,
+    });
+  });
+
+  it("returns undefined, rather than an untyped shape, when the key names neither an idx nor a type", () => {
+    // A shape with no p:ph type attribute at all also normalizes to an undefined type -- the function must still refuse to treat "no type to match" as a match against "no type on the shape", since that is not what the caller asked for.
+    const root = el("p:sldLayout", {}, [
+      el("p:cSld", {}, [el("p:spTree", {}, [placeholderShape({})])]),
+    ]);
+    expect(
+      findMatchingPlaceholder(root, { type: undefined, idx: undefined }),
+    ).toBeUndefined();
+  });
 });
 
 describe("resolvePlaceholderXfrm", () => {
@@ -323,6 +375,31 @@ describe("resolvePlaceholderXfrm", () => {
   });
 });
 
+describe("readRunPropertiesFromElement", () => {
+  const context = {
+    layoutRoot: undefined,
+    masterRoot: undefined,
+    theme: EMPTY_THEME,
+    colorMap: new Map<string, string>(),
+  };
+
+  it("leaves sizePt/bold/italic undefined for an element carrying none of sz/b/i at all", () => {
+    const props = readRunPropertiesFromElement(el("a:rPr"), context);
+    expect(props.sizePt).toBeUndefined();
+    expect(props.bold).toBeUndefined();
+    expect(props.italic).toBeUndefined();
+  });
+
+  it("resolves bold/italic to false for an explicit '0', not just for an absent attribute", () => {
+    const props = readRunPropertiesFromElement(
+      el("a:rPr", { b: "0", i: "0" }),
+      context,
+    );
+    expect(props.bold).toBe(false);
+    expect(props.italic).toBe(false);
+  });
+});
+
 describe("resolveDefaultRunProperties", () => {
   it("resolves size, bold, theme font, and theme colour from the title style", () => {
     const pkg = buildFixturePackage();
@@ -362,5 +439,26 @@ describe("resolveDefaultRunProperties", () => {
       colorMap: new Map(),
     };
     expect(resolveDefaultRunProperties("title", 0, context)).toEqual({});
+  });
+
+  it("falls back to the otherStyle level for a placeholder type that is neither title nor body", () => {
+    const pkg = buildFixturePackage();
+    const context = resolveSlideInheritance(pkg, "ppt/slides/slide1.xml");
+    expect(resolveDefaultRunProperties(undefined, 0, context).sizePt).toBe(12);
+  });
+
+  it("clamps a negative level to 0, resolving the identical style level 0 itself would", () => {
+    const pkg = buildFixturePackage();
+    const context = resolveSlideInheritance(pkg, "ppt/slides/slide1.xml");
+    expect(resolveDefaultRunProperties("title", -1, context).sizePt).toBe(44);
+  });
+
+  it("clamps a level above 8 down to 8, never wrapping back to an earlier level's own style", () => {
+    // The fixture master defines only a:lvl1pPr -- a level clamped down to 0 instead of up to 8 would wrongly resolve it.
+    const pkg = buildFixturePackage();
+    const context = resolveSlideInheritance(pkg, "ppt/slides/slide1.xml");
+    expect(
+      resolveDefaultRunProperties("title", 20, context).sizePt,
+    ).toBeUndefined();
   });
 });
