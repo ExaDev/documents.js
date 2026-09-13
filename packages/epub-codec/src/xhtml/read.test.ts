@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { EpubDiagnostic } from "../diagnostics";
-import { readXhtmlBody } from "./read";
+import { readXhtmlBody, scanXhtmlAnchors } from "./read";
 
 const CONTENT_WIDTH_PT = 451.28; // A4 minus 1in margins each side, matching src/read.ts's own default section geometry
 
@@ -195,6 +195,22 @@ describe("hyperlinks", () => {
   });
 });
 
+describe("scanXhtmlAnchors", () => {
+  it("finds an id-bearing element at any depth, not just a direct child of <body>", () => {
+    const xml = body('<div><section><p id="deep">text</p></section></div>');
+    const scan = scanXhtmlAnchors(xml);
+    expect(scan.idElements.has("deep")).toBe(true);
+  });
+
+  it("collects only real <a href> elements, never a same-tagged href-less <a> nor an unrelated element that merely carries an href attribute", () => {
+    const xml = body(
+      '<div href="#bogus">not a link</div><a>no href</a><a href="#target">real link</a>',
+    );
+    const scan = scanXhtmlAnchors(xml);
+    expect(scan.anchors).toHaveLength(1);
+  });
+});
+
 describe("lists", () => {
   it("maps a simple unordered list", () => {
     const blocks = read(body("<ul><li>a</li><li>b</li></ul>"));
@@ -255,7 +271,11 @@ describe("lists", () => {
       },
     ]);
     expect(sink).toHaveBeenCalledWith(
-      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+      expect.objectContaining({
+        code: "epub/list-content-outside-item",
+        message:
+          "content sits directly inside a <ul> rather than inside an <li> (not valid HTML5); recovered as a continuation of the preceding <li>'s own content",
+      }),
     );
   });
 
@@ -297,7 +317,11 @@ describe("lists", () => {
       },
     ]);
     expect(sink).toHaveBeenCalledWith(
-      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+      expect.objectContaining({
+        code: "epub/list-content-outside-item",
+        message:
+          "content sits directly inside a <ul> before its first <li> (not valid HTML5); recovered as ordinary content immediately before the list, inheriting whatever list membership its own enclosing context already carries (none, unless this <ul> is itself nested inside another list's <li>)",
+      }),
     );
   });
 
@@ -1101,6 +1125,18 @@ describe("tables", () => {
     ]);
   });
 
+  it("recovers a stray <ul> sitting directly inside a <table> (not inside any row group) as a genuinely nested list, not as if it were itself a row group", () => {
+    // Only tr/thead/tbody/tfoot are ever treated as row-group-shaped -- a <ul> here must be routed through readContainerChildren's own block-level dispatch (readList, producing a real `list` membership) rather than through collectRowGroupRows, which would instead flatten straight to the <li>'s own bare content with no list membership at all.
+    const blocks = read(
+      body("<table><ul><li>item</li></ul><tr><td>x</td></tr></table>"),
+    );
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      runs: [{ text: "item" }],
+      list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+    });
+  });
+
   it("reads rows nested inside thead/tbody", () => {
     const blocks = read(
       body(
@@ -1580,6 +1616,27 @@ describe("tables", () => {
     );
   });
 
+  it("recovers a stray <img> sitting directly inside a <colgroup> as its own real image block, not degraded to alt text", () => {
+    // Distinguishes routing a <colgroup>'s own stray content through collectColgroupStrayContent (a flat list of the colgroup's OWN children, so a stray <img> reaches readContainerChildren's block-level dispatch and becomes a real ContentImageBlock) from mistakenly treating the whole <colgroup> element itself as one inline stray node (which would instead degrade the same <img> to alt text via buildInlineRuns' own inline-image fallback).
+    const bytes = fakePng(96, 96);
+    const sink = vi.fn();
+    const { blocks } = readXhtmlBody(
+      body(
+        '<table><colgroup><img src="a.png" alt="colimg"/><col/></colgroup><tr><td>x</td></tr></table>',
+      ),
+      {
+        resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    expect(blocks[0]).toMatchObject({ kind: "image" });
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+  });
+
   it("skips a <colgroup>/<script> sitting directly inside a <table>, firing no diagnostic", () => {
     const sink = vi.fn();
     const blocks = read(
@@ -1607,40 +1664,17 @@ describe("tables", () => {
     );
   });
 
-  it("skips a <noscript> sitting directly inside a <table>, but reports the drop unlike script", () => {
-    const sink = vi.fn();
-    const blocks = read(
-      body("<table><noscript>Enable JS</noscript><tr><td>a</td></tr></table>"),
-      sink,
-    );
-    expect(blocks).toEqual([
-      {
-        kind: "table",
-        rows: [
-          {
-            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] }],
-          },
-        ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
-      },
-    ]);
-    expect(sink).not.toHaveBeenCalledWith(
-      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
-    );
-    expect(sink).toHaveBeenCalledWith(
-      expect.objectContaining({ code: "epub/noscript-content-skipped" }),
-    );
-  });
-
-  it("skips a <noscript> sitting directly inside a <colgroup>, but reports the drop unlike script", () => {
-    const sink = vi.fn();
+  it("skips a <noscript> sitting directly inside a <table>, reporting the drop exactly once, alongside a stray <p> that alone triggers the unrecognized-content diagnostic", () => {
+    // If a <noscript> sitting directly inside a <table> ever fell through this guard un-skipped, it would still eventually be skipped by buildInlineRuns' own universal inert-element safety net once fed through the stray-content recovery path -- so the ONLY observable trace of the guard being bypassed is the drop being reported TWICE (once from each guard) rather than once.
+    const sink = vi.fn<(d: EpubDiagnostic) => void>();
     const blocks = read(
       body(
-        "<table><colgroup><col/><noscript>Enable JS</noscript></colgroup><tr><td>a</td></tr></table>",
+        "<table><noscript>Enable JS</noscript><p>stray</p><tr><td>a</td></tr></table>",
       ),
       sink,
     );
     expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "stray" }] },
       {
         kind: "table",
         rows: [
@@ -1651,23 +1685,28 @@ describe("tables", () => {
         columnWidthsPt: [CONTENT_WIDTH_PT],
       },
     ]);
-    expect(sink).not.toHaveBeenCalledWith(
-      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    const noscriptCalls = sink.mock.calls.filter(
+      ([diagnostic]) => diagnostic.code === "epub/noscript-content-skipped",
     );
-    expect(sink).toHaveBeenCalledWith(
-      expect.objectContaining({ code: "epub/noscript-content-skipped" }),
+    expect(noscriptCalls).toHaveLength(1);
+    const unrecognizedCalls = sink.mock.calls.filter(
+      ([diagnostic]) => diagnostic.code === "epub/table-content-unrecognized",
     );
+    expect(unrecognizedCalls).toHaveLength(1);
   });
 
-  it("skips a <noscript> sitting directly inside a <tbody>, but reports the drop unlike script", () => {
-    const sink = vi.fn();
+  it("skips a <noscript> sitting directly inside a <colgroup>, reporting the drop exactly once, alongside a stray <p> that alone triggers the unrecognized-content diagnostic", () => {
+    // A <col/> and a <noscript> together rule out any single mutant that either stops recognising a real <col/> (which would wrongly turn up as unrecognized content) or stops skipping the <noscript> via its own dedicated inert-element guard (which would report the identical drop a SECOND time, once from that guard and once more from buildInlineRuns' own universal inert-element safety net once the un-skipped node is fed through it).
+    const sink = vi.fn<(d: EpubDiagnostic) => void>();
     const blocks = read(
       body(
-        "<table><tbody><noscript>Enable JS</noscript><tr><td>a</td></tr></tbody></table>",
+        // <col> carries no legal children of its own -- a stray text node here is a synthetic probe, not real markup, checking that a genuinely recognised <col> is silently skipped WHOLESALE (its own content never even reaches the recovery path at all) rather than merely having its outer tag treated like any other unrecognised stray element.
+        "<table><colgroup><col>faketext</col><noscript>Enable JS</noscript><p>stray</p></colgroup><tr><td>a</td></tr></table>",
       ),
       sink,
     );
     expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "stray" }] },
       {
         kind: "table",
         rows: [
@@ -1678,12 +1717,44 @@ describe("tables", () => {
         columnWidthsPt: [CONTENT_WIDTH_PT],
       },
     ]);
-    expect(sink).not.toHaveBeenCalledWith(
-      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    const noscriptCalls = sink.mock.calls.filter(
+      ([diagnostic]) => diagnostic.code === "epub/noscript-content-skipped",
     );
-    expect(sink).toHaveBeenCalledWith(
-      expect.objectContaining({ code: "epub/noscript-content-skipped" }),
+    expect(noscriptCalls).toHaveLength(1);
+    const unrecognizedCalls = sink.mock.calls.filter(
+      ([diagnostic]) => diagnostic.code === "epub/table-content-unrecognized",
     );
+    expect(unrecognizedCalls).toHaveLength(1);
+  });
+
+  it("skips a <noscript> sitting directly inside a <tbody>, reporting the drop exactly once, alongside a stray <p> that alone triggers the unrecognized-content diagnostic", () => {
+    const sink = vi.fn<(d: EpubDiagnostic) => void>();
+    const blocks = read(
+      body(
+        "<table><tbody><noscript>Enable JS</noscript><p>stray</p><tr><td>a</td></tr></tbody></table>",
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "stray" }] },
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    const noscriptCalls = sink.mock.calls.filter(
+      ([diagnostic]) => diagnostic.code === "epub/noscript-content-skipped",
+    );
+    expect(noscriptCalls).toHaveLength(1);
+    const unrecognizedCalls = sink.mock.calls.filter(
+      ([diagnostic]) => diagnostic.code === "epub/table-content-unrecognized",
+    );
+    expect(unrecognizedCalls).toHaveLength(1);
   });
 
   it("reads a second <caption> as its own paragraph too, with an additional duplicate-caption diagnostic, instead of silently discarding it", () => {
@@ -1741,6 +1812,22 @@ describe("blockquote", () => {
     expect(paragraph).toMatchObject({ indentLeftPt: 72 });
   });
 
+  it("adds a <dd>'s own extra indent to (not in place of) the blockquote's own quote indent", () => {
+    // Distinguishes the two contributions being summed (the correct behaviour) from being subtracted or otherwise combined -- a quote depth of 1 (36pt) plus one dd's own DEFINITION_BODY_INDENT_PT (36pt) must read back as 72pt, not 0pt.
+    const blocks = read(
+      body("<blockquote><dl><dd>text</dd></dl></blockquote>"),
+    );
+    const paragraph = blocks.find((b) => b.kind === "paragraph");
+    expect(paragraph).toMatchObject({ indentLeftPt: 72 });
+  });
+
+  it("degrades to indent-only structure when a heading is nested arbitrarily deep, not only a direct child", () => {
+    const blocks = read(
+      body("<blockquote><div><h2>Heading</h2></div></blockquote>"),
+    );
+    expect(blocks.some((b) => b.kind === "constructStart")).toBe(false);
+  });
+
   it("degrades to indent-only structure (no division pair) when a heading is inside", () => {
     const blocks = read(body("<blockquote><h2>Heading</h2></blockquote>"));
     expect(blocks).toEqual([
@@ -1772,6 +1859,58 @@ describe("pre / code blocks", () => {
         codeLanguage: "js",
       },
     ]);
+  });
+
+  it("carries no codeLanguage key at all when the <code> has no language- class", () => {
+    const blocks = read(body("<pre><code>plain</code></pre>"));
+    expect(Object.hasOwn(blocks[0] as object, "codeLanguage")).toBe(false);
+  });
+
+  it("requires language- to sit at the very start of the class, or right after whitespace, not merely somewhere in it", () => {
+    // "xlanguage-js" has no whitespace (nor the class's own start) immediately before "language-", so this must NOT be read as a language- token the way "language-js" or "foo language-js" would be.
+    const blocks = read(
+      body('<pre><code class="xlanguage-js">code</code></pre>'),
+    );
+    expect(Object.hasOwn(blocks[0] as object, "codeLanguage")).toBe(false);
+  });
+
+  it("produces no runs at all for a genuinely empty <pre>", () => {
+    const blocks = read(body("<pre></pre>"));
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [], preformatted: true },
+    ]);
+  });
+
+  it("does not treat an ordinary, non-footnote <a> as a footnote reference, keeping the pre on its flat single-run path", () => {
+    const blocks = read(
+      body('<pre>before<a href="https://example.com">link</a>after</pre>'),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "beforelinkafter", fontFamily: "Courier New" }],
+        preformatted: true,
+      },
+    ]);
+  });
+
+  it("names the <img>'s own src in its degrade diagnostic when one is present", () => {
+    let diagnostic: EpubDiagnostic | undefined;
+    read(body('<pre><img src="pic.png" alt="text"/></pre>'), (d) => {
+      diagnostic = d;
+    });
+    expect(diagnostic?.message).toContain('<img src="pic.png">');
+  });
+
+  it("states the exact generic <img> label and full degrade message when the <img> has no src at all", () => {
+    const sink = vi.fn();
+    read(body('<pre><img alt="text"/></pre>'), sink);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message:
+          "<img> inside a <pre>/<code> block cannot become a real image block (this package reads a <pre> as a single text-content paragraph, so there is no block list to insert an image block into); degraded to its alt text",
+      }),
+    );
   });
 
   it("splices an <img>'s alt text into the extracted text with a diagnostic, instead of vanishing", () => {
@@ -1963,6 +2102,85 @@ describe("pre / code blocks", () => {
           endRun: 2,
         },
       ],
+    });
+  });
+
+  it("splices an <img>'s alt text into the run-splitting readPreRuns path too, when the same <pre> also carries a real footnote reference", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        '<pre><img src="a.png" alt="pic"/><a epub:type="noteref" href="#fn1">1</a></pre>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note.</p></aside>',
+      ),
+      sink,
+    );
+    const preParagraph = blocks.find(
+      (b) => b.kind === "paragraph" && b.preformatted === true,
+    );
+    expect(preParagraph).toEqual({
+      kind: "paragraph",
+      runs: [
+        { text: "pic", fontFamily: "Courier New" },
+        { text: "1", fontFamily: "Courier New" },
+      ],
+      preformatted: true,
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 1,
+          endRun: 2,
+        },
+      ],
+    });
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/image-pre-unsupported" }),
+    );
+  });
+
+  it("only wraps the actual <a> footnote reference in a construct, not a same-href-resolving <span> sitting alongside it in the run-splitting readPreRuns path", () => {
+    const blocks = read(
+      body(
+        '<pre>before<span href="#fn1">mid</span><a epub:type="noteref" href="#fn1">1</a>after</pre>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note.</p></aside>',
+      ),
+    );
+    const preParagraph = blocks.find(
+      (b) => b.kind === "paragraph" && b.preformatted === true,
+    );
+    expect(preParagraph).toEqual({
+      kind: "paragraph",
+      runs: [
+        { text: "beforemid", fontFamily: "Courier New" },
+        { text: "1", fontFamily: "Courier New" },
+        { text: "after", fontFamily: "Courier New" },
+      ],
+      preformatted: true,
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 1,
+          endRun: 2,
+        },
+      ],
+    });
+  });
+
+  it("does not mistake a non-<a> element's own href for a footnote reference, even when that href happens to resolve to a real footnote target elsewhere in the document", () => {
+    // Only a genuine <a> can carry a footnote reference (preFootnoteReferenceName/containsFootnoteReference both gate on node.tag === "a" before ever checking where the href resolves) -- a <span href> pointing at the identical fragment must still take the flat, single-run readPreFlatRuns path, not the run-splitting readPreRuns path a real footnote reference would trigger.
+    const blocks = read(
+      body(
+        '<p><a epub:type="noteref" href="#fn1">1</a></p>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note.</p></aside>' +
+          '<pre>before<span href="#fn1">mid</span>after</pre>',
+      ),
+    );
+    const preParagraph = blocks.find(
+      (b) => b.kind === "paragraph" && b.preformatted === true,
+    );
+    expect(preParagraph).toEqual({
+      kind: "paragraph",
+      runs: [{ text: "beforemidafter", fontFamily: "Courier New" }],
+      preformatted: true,
     });
   });
 });
@@ -2234,6 +2452,12 @@ describe("text direction (the dir attribute)", () => {
     // dir="auto" resolves at render time from the content's own first strong character -- a fact ContentParagraph.direction's closed ltr/rtl vocabulary has no member for.
     const blocks = read(body('<p dir="auto">words</p>'));
     expect(blocks[0]).toEqual({ kind: "paragraph", runs: [{ text: "words" }] });
+  });
+
+  it("never sets a direction key at all when nothing in scope ever stated a dir", () => {
+    // toEqual alone would pass even if decorateParagraph always attached a `direction: undefined` property (toEqual ignores undefined-valued keys), so this checks key presence directly.
+    const blocks = read(body("<p>plain</p>"));
+    expect(Object.hasOwn(blocks[0] as object, "direction")).toBe(false);
   });
 });
 
