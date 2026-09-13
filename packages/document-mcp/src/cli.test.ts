@@ -1,8 +1,10 @@
 import type { Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { main } from "./cli";
+import { main, parsePort, readFlag } from "./cli";
 
-// Only the --transport http path is exercised directly here: it binds a real, closeable net.Server this file can assert against and tear down. --transport stdio (main()'s own default) wires MCP's stdio transport directly onto this process's own stdin/stdout and keeps the process alive on open handles rather than returning a handle of its own -- src/tools/*.test.ts already exercises the stdio-registered server end to end via an in-memory transport, and test/smoke.test.mjs exercises the real stdio subprocess path; there is nothing left for a unit test of main() itself to usefully add for that branch without hijacking this test process's own stdio.
+vi.mock("@modelcontextprotocol/server/stdio", () => ({ serveStdio: vi.fn() }));
+
+// The --transport http path is exercised against a real, closeable net.Server this file can assert against and tear down. The --transport stdio path (main()'s own default) has `@modelcontextprotocol/server/stdio`'s own serveStdio mocked at the top of this file instead of calling through for real: the real implementation wires MCP's stdio transport directly onto this process's own stdin/stdout and keeps the process alive on open handles, which src/tools/*.test.ts already exercises end to end via an in-memory transport and test/smoke.test.mjs exercises via a real stdio subprocess -- mocking it here only proves main() reaches and calls it with the right factory, not that the real transport works.
 describe("main", () => {
   const originalArgv = process.argv;
   let server: Server | undefined;
@@ -22,6 +24,31 @@ describe("main", () => {
       });
       server = undefined;
     }
+  });
+
+  it("defaults to stdio transport and wires it to createServer when --transport is omitted entirely", async () => {
+    const { serveStdio } = await import("@modelcontextprotocol/server/stdio");
+    const { createServer } = await import("./server");
+    process.argv = ["node", "bin.js"];
+    const result = await main();
+    expect(result).toBeUndefined();
+    expect(serveStdio).toHaveBeenCalledWith(createServer);
+  });
+
+  it("only scans flags from argv[2] onward, never the node executable or script path themselves", async () => {
+    // Deliberately shapes argv[0]/argv[1] (normally the node binary path and the script path, never flag-shaped) as a decoy --transport flag: with process.argv.slice(2) applied correctly, only the REAL flags starting at index 2 are ever scanned, so main() reaches http with "http". Without the slice, readFlag would find the decoy at index 0 first and treat "carrier-pigeon" as the transport instead, throwing.
+    process.argv = [
+      "--transport",
+      "carrier-pigeon",
+      "--transport",
+      "http",
+      "--port",
+      "0",
+    ];
+    server = await main();
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("document-mcp listening on http://127.0.0.1:"),
+    );
   });
 
   it("binds the default HTTP port when --transport http is given with no --port", async () => {
@@ -106,5 +133,80 @@ describe("main", () => {
       throw new Error("expected a TCP address");
     }
     expect(address.address).toBe("0.0.0.0");
+  });
+});
+
+describe("readFlag", () => {
+  it("returns undefined when the flag is absent entirely", () => {
+    expect(readFlag(["--other", "x"], "port")).toBeUndefined();
+  });
+
+  it("reads a --name value pair", () => {
+    expect(readFlag(["--port", "3000"], "port")).toBe("3000");
+  });
+
+  it("reads a --name=value form", () => {
+    expect(readFlag(["--port=3000"], "port")).toBe("3000");
+  });
+
+  it("returns an empty string for a --name value pair whose value is deliberately empty, distinct from the flag being absent", () => {
+    expect(readFlag(["--host", ""], "host")).toBe("");
+  });
+
+  it("throws when --name is given with nothing after it at all", () => {
+    expect(() => readFlag(["--port"], "port")).toThrow(
+      "--port requires a value",
+    );
+  });
+
+  it("finds the flag regardless of what precedes it in argv", () => {
+    expect(readFlag(["--transport", "http", "--port", "0"], "port")).toBe("0");
+  });
+});
+
+describe("parsePort", () => {
+  it("accepts the lower boundary", () => {
+    expect(parsePort("0")).toBe(0);
+  });
+
+  it("accepts the upper boundary", () => {
+    expect(parsePort("65535")).toBe(65535);
+  });
+
+  it("rejects one above the upper boundary", () => {
+    expect(() => parsePort("65536")).toThrow(
+      '--port must be an integer between 0 and 65535, got "65536"',
+    );
+  });
+
+  it("rejects a negative port", () => {
+    expect(() => parsePort("-1")).toThrow(/--port must be an integer/);
+  });
+
+  it("rejects a non-numeric string", () => {
+    expect(() => parsePort("not-a-number")).toThrow(
+      /--port must be an integer/,
+    );
+  });
+
+  // Number.parseInt("NaN", 10) is itself NaN, and String(NaN) === "NaN" -- the one input where the raw string and the stringified parsed-back number agree despite not being a valid port at all, so this pins the isInteger check rather than only the round-trip string comparison the other cases above already exercise.
+  it("rejects the literal string NaN, which round-trips through String() identically to what it parsed to", () => {
+    expect(() => parsePort("NaN")).toThrow(/--port must be an integer/);
+  });
+
+  it("rejects a decimal port", () => {
+    expect(() => parsePort("3.5")).toThrow(/--port must be an integer/);
+  });
+
+  it("rejects a port with a leading zero, since it round-trips to a different string", () => {
+    expect(() => parsePort("007")).toThrow(/--port must be an integer/);
+  });
+
+  it("rejects trailing garbage after a valid number", () => {
+    expect(() => parsePort("3000abc")).toThrow(/--port must be an integer/);
+  });
+
+  it("accepts a port padded with whitespace, trimmed before the round-trip comparison", () => {
+    expect(parsePort(" 80")).toBe(80);
   });
 });
