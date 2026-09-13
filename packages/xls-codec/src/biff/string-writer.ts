@@ -21,13 +21,9 @@ interface EncodedCharacters {
 
 /** Whether every UTF-16 code unit in `text` fits in a single byte -- the compressed-encoding eligibility test, checked per code UNIT rather than per code point so an astral character (whose two surrogate units are each above 0xFF) is correctly ruled ineligible. */
 function encodeCharacters(text: string): EncodedCharacters {
-  let needsHighByte = false;
-  for (let index = 0; index < text.length; index += 1) {
-    if (text.charCodeAt(index) > 0xff) {
-      needsHighByte = true;
-      break;
-    }
-  }
+  const needsHighByte = Array.from({ length: text.length }, (_, index) =>
+    text.charCodeAt(index),
+  ).some((unit) => unit > 0xff);
   const builder = new RecordBuilder();
   for (let index = 0; index < text.length; index += 1) {
     const unit = text.charCodeAt(index);
