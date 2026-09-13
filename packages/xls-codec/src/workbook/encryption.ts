@@ -182,9 +182,10 @@ function decryptWorkbookRecordsRc4(
     header.encryptedVerifierHash,
   );
   const computedHash = md5(decryptedVerifier);
-  const matches =
-    computedHash.length === decryptedVerifierHash.length &&
-    computedHash.every((byte, index) => byte === decryptedVerifierHash[index]);
+  // No length check first: md5's own digest is always exactly 16 bytes, and decryptedVerifierHash is always exactly OFFICE_RC4_VERIFIER_LENGTH (16) bytes too -- decrypted from a fixed-size EncryptedVerifierHash field readFilePassHeader already took with take(OFFICE_RC4_VERIFIER_LENGTH). The two are never a different length to compare in the first place.
+  const matches = computedHash.every(
+    (byte, index) => byte === decryptedVerifierHash[index],
+  );
   if (!matches) {
     throw new BiffFormatError("incorrect password for RC4-encrypted workbook");
   }
