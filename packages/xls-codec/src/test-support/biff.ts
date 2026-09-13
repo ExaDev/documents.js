@@ -88,11 +88,9 @@ function encodeCharacters(text: string): { flags: number; rgb: number[] } {
       rgb: [...text].map((char) => char.charCodeAt(0)),
     };
   }
-  const rgb: number[] = [];
-  for (let index = 0; index < text.length; index += 1) {
-    const unit = text.charCodeAt(index);
-    rgb.push(unit & 0xff, (unit >> 8) & 0xff);
-  }
+  const rgb = Array.from({ length: text.length }, (_, index) =>
+    text.charCodeAt(index),
+  ).flatMap((unit) => [unit & 0xff, (unit >> 8) & 0xff]);
   return { flags: 0x01, rgb };
 }
 
