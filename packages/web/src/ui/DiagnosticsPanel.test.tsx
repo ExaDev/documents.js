@@ -60,6 +60,14 @@ describe("DiagnosticsPanel", () => {
     expect(html).not.toContain(SPOILER_WRAPPER_CLASS);
   });
 
+  it("does not collapse info diagnostics when exactly at the collapse threshold", () => {
+    const atThreshold = Array.from({ length: 5 }, (_, i) =>
+      diagnostic({ message: `info ${i}` }),
+    );
+    const html = renderPanel(atThreshold);
+    expect(html).not.toContain(SPOILER_WRAPPER_CLASS);
+  });
+
   it("collapses info diagnostics behind a Spoiler once there are more than the threshold", () => {
     const many = Array.from({ length: 6 }, (_, i) =>
       diagnostic({ message: `info ${i}` }),
@@ -88,5 +96,26 @@ describe("DiagnosticsPanel", () => {
     ]);
     expect(html).toContain("the warning");
     expect(html).toContain(SPOILER_WRAPPER_CLASS);
+  });
+
+  it("renders exactly one list each for a warning and an info diagnostic, correctly sorted between them", () => {
+    const html = renderPanel([
+      diagnostic({ severity: "warning", message: "the warning" }),
+      diagnostic({ severity: "info", message: "the info" }),
+    ]);
+    const listCount = (html.match(/mantine-List-root/g) ?? []).length;
+    expect(listCount).toBe(2);
+  });
+
+  it("renders no warnings list at all when there are no warnings", () => {
+    const html = renderPanel([diagnostic({ severity: "info" })]);
+    const listCount = (html.match(/mantine-List-root/g) ?? []).length;
+    expect(listCount).toBe(1);
+  });
+
+  it("renders no info list at all when there is no info", () => {
+    const html = renderPanel([diagnostic({ severity: "warning" })]);
+    const listCount = (html.match(/mantine-List-root/g) ?? []).length;
+    expect(listCount).toBe(1);
   });
 });
