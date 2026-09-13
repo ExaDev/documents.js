@@ -100,6 +100,49 @@ describe("escaping", () => {
     );
     expect(out).toContain("a\\tab b\\line c");
   });
+
+  it("writes a carriage return as \\line too, the same as a line feed", () => {
+    const out = write(
+      wordprocessing([{ kind: "paragraph", runs: [{ text: "a\rb" }] }]),
+    );
+    expect(out).toContain("a\\line b");
+  });
+
+  it("passes the printable-ASCII boundary characters through unescaped", () => {
+    // 0x20 (space) and 0x7E (~) are the first and last bytes the >= 0x20 && < 0x7f range admits -- both must pass through literally, not fall into the \\uN escape path.
+    const out = write(
+      wordprocessing([{ kind: "paragraph", runs: [{ text: "a b~c" }] }]),
+    );
+    expect(out).toContain("a b~c");
+    expect(out).not.toContain("\\u32");
+    expect(out).not.toContain("\\u126");
+  });
+
+  it("escapes 0x7F (DEL), one past the printable-ASCII range's own upper bound, as \\uN", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: `a${String.fromCharCode(0x7f)}b` }],
+        },
+      ]),
+    );
+    expect(out).toContain("\\u127 ?");
+  });
+
+  it("writes 0x7FFF, the last positive code unit, as a positive \\uN parameter", () => {
+    // The spec's own signed-negative rule is stated as "greater than 32767" -- 0x7FFF (32767) itself is the boundary value that must NOT flip to negative.
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: String.fromCharCode(0x7f_ff) }],
+        },
+      ]),
+    );
+    expect(out).toContain("\\u32767 ?");
+    expect(out).not.toContain("\\u-32767");
+  });
 });
 
 describe("header tables", () => {
@@ -288,6 +331,16 @@ describe("body constructs", () => {
     );
     expect(unstated).not.toContain("\\rtldoc");
     expect(unstated).not.toContain("\\ltrdoc");
+  });
+
+  it("writes an explicitly-stated metadata.direction: 'ltr' as \\ltrdoc", () => {
+    const out = write(
+      wordprocessing([{ kind: "paragraph", runs: [{ text: "x" }] }], {
+        direction: "ltr",
+      }),
+    );
+    expect(out).toContain("\\ltrdoc");
+    expect(out).not.toContain("\\rtldoc");
   });
 
   it("writes a hyperlink run as the HYPERLINK field production", () => {
@@ -1443,6 +1496,8 @@ describe("body constructs", () => {
     expect(out).not.toContain("\\ffownhelp");
     expect(out).not.toContain("\\ffhelptext");
     expect(out).not.toContain("\\ffname");
+    // The exact payload, not just the absence of specific control words: with no lock, no alias, no tag, and no controlType-specific field, formFieldPayload's own return is the \fftype fragment alone -- pinning this catches any of its other now-unused fragments (ffNameString, ffDefTextString, ffHelpTextString) starting from a stray non-empty initial value instead of "".
+    expect(out).toContain("{\\*\\formfield{\\fftype0}}");
     expectBalancedBraces(out);
   });
 
@@ -2654,6 +2709,17 @@ describe("round trip through this package's own reader", () => {
     ]);
   });
 
+  it("writes no stray {\\*\\bkmkend ...} for a constructEnd with no matching constructStart at all", () => {
+    // openConstructs starts empty, so popping it here must yield undefined, not a phantom leftover entry -- a malformed input no real ContentDocument produces (flatten.ts guarantees balanced pairs), but the writer's own stack discipline should still degrade to nothing rather than a fabricated bookmark-end name.
+    const out = write(
+      wordprocessing([
+        { kind: "constructEnd" },
+        { kind: "paragraph", runs: [{ text: "x" }] },
+      ]),
+    );
+    expect(out).not.toContain("\\bkmkend");
+  });
+
   it("round-trips a run-level bookmark back onto the same runs", () => {
     const back = roundTrip(
       wordprocessing([
@@ -3040,6 +3106,50 @@ describe("round trip through this package's own reader", () => {
     expect(out).toContain(`\\revdttm${String(dttm)}`);
   });
 
+  it("excludes the run exactly at a provenance extent's own endRun, which is exclusive", () => {
+    // Each covered run is written inside its own group with its own freshly-computed \revised (there is no shared \revised0 "off" spelling), so the run exactly at endRun getting the flag too would show up as one extra occurrence, not a missing "off" marker.
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "before " }, { text: "inside " }, { text: "after" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "provenance",
+                change: "insertion",
+                author: "R",
+              },
+              startRun: 1,
+              endRun: 2,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out.match(/\\revised(?!0)/g)).toHaveLength(1);
+  });
+
+  it("does not treat a non-provenance construct extent as a revision mark", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }, { text: "b" }],
+          constructs: [
+            {
+              descriptor: { kind: "anchor", anchorType: "bookmark", name: "x" },
+              startRun: 0,
+              endRun: 2,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).not.toContain("\\revised");
+    expect(out).not.toContain("\\deleted");
+  });
+
   it("mints a \\*\\revtbl entry for a block-scoped provenance marker's own author too, not only a run-level extent's", () => {
     // noteBlock's own constructStart case (a block-level marker, distinct from a paragraph's run-level constructs array) must reach noteDescriptor on its own path.
     const out = write(
@@ -3204,6 +3314,22 @@ describe("round trip through this package's own reader", () => {
     expect(out).toContain("\\clbrdrt\\brdrs\\brdrw30");
     expect(out).toContain("\\clbrdrb\\brdrdash\\brdrw15");
     expect(out).toContain("\\clcbpat");
+
+    const beyond = write(
+      wordprocessing([
+        {
+          kind: "table",
+          columnWidthsPt: [72],
+          rows: [
+            { cells: [{ blocks: [], rowSpan: 2 }] },
+            { cells: [{ blocks: [] }] },
+            { cells: [{ blocks: [] }] },
+          ],
+        },
+      ]),
+    );
+    // rowSpan: 2 covers exactly one row below the anchor (row 1), never a second (row 2) -- \clvmrg must appear exactly twice, both from row 1's own doubled \trowd (each row's own definition is written both before and after its cells), never a third time from row 2.
+    expect(beyond.match(/\\clvmrg/g)).toHaveLength(2);
 
     const back = roundTrip(document);
     const table = (

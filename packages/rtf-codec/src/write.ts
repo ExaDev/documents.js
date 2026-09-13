@@ -7,6 +7,7 @@
 // EVERY NON-ASCII CHARACTER LEAVES AS \uN. RTF's own advice is to emit "\uN followed by the best ANSI representation it can manage. Often a question mark is used if no reasonable ANSI character exists", and that is exactly what this writer does, with \uc1 declared once so the fallback is one character. It deliberately does NOT try to find a code page that could carry a given character as a \'hh byte: the output is then pure 7-bit ASCII whatever the input contained, which is the property that makes it safe to transmit and trivially diffable, and it costs nothing a reader can see -- a conforming reader takes \uN and discards the fallback. A character outside the Basic Multilingual Plane is emitted as its two UTF-16 code units, which is what "\uN ... represents the Unicode character value expressed as a decimal number" means for a format whose parameter is a signed 16-bit integer, and matches the spec's own instruction that "Unicode values greater than 32767 are expressed as negative numbers".
 
 import {
+  type AnchorDescriptor,
   type ConstructDescriptor,
   type ContentBlock,
   type ContentControlDescriptor,
@@ -236,8 +237,7 @@ function escapeText(text: string): string {
       case "\r":
         out += "\\line ";
         continue;
-      default:
-        break;
+      // No default case: a switch with no matching case already falls through to the code below on its own, exactly what `default: break;` here did.
     }
     const code = character.codePointAt(0) ?? 0;
     if (code >= 0x20 && code < 0x7f) {
@@ -457,13 +457,9 @@ function revisionsCovering(
   extents: readonly RunConstructExtent[],
   index: number,
 ): ProvenanceDescriptor[] {
+  // The kind check lives only in the final type-guard filter below, not here too: this range filter runs before it regardless of an extent's own descriptor kind, and the type guard already narrows the result to ProvenanceDescriptor -- repeating the same check here first would be a redundant, equivalent-mutant-prone AST node with no effect on the final, narrowed result.
   return extents
-    .filter(
-      (extent) =>
-        extent.descriptor.kind === "provenance" &&
-        extent.startRun <= index &&
-        index < extent.endRun,
-    )
+    .filter((extent) => extent.startRun <= index && index < extent.endRun)
     .map((extent) => extent.descriptor)
     .filter(
       (descriptor): descriptor is ProvenanceDescriptor =>
@@ -482,7 +478,8 @@ function verticalMergeCoverage(table: ContentTable): boolean[][] {
       const rowSpan = cell.rowSpan ?? 1;
       for (let next = 1; next < rowSpan; next += 1) {
         const target = covered[rowIndex + next];
-        if (target !== undefined && cellIndex < target.length) {
+        // No cellIndex < target.length check: writeTable only ever reads covered[row]?.[cellIndex] for a cellIndex that row's own row.cells.entries() actually produced, so a phantom flag at an index beyond a shorter row's real cells is never read back either way -- a redundant, equivalent-mutant-prone bound with no consumer that can observe it.
+        if (target !== undefined) {
           target[cellIndex] = true;
         }
       }
@@ -491,8 +488,13 @@ function verticalMergeCoverage(table: ContentTable): boolean[][] {
   return covered;
 }
 
-function nameOf(descriptor: ConstructDescriptor): string {
-  return isBookmarkAnchor(descriptor) ? descriptor.name : "";
+// A properly bookmark-narrowed extent, so its own .descriptor.name is directly accessible with no runtime fallback needed for a case the type checker alone cannot rule out -- .filter() narrows the ARRAY's element type only when the predicate itself is passed directly (not wrapped in an arrow calling a separate helper on one of its properties), which is exactly why this exists instead of reusing isBookmarkAnchor as the filter predicate.
+type BookmarkExtent = RunConstructExtent & { descriptor: AnchorDescriptor };
+
+function isBookmarkExtent(
+  extent: RunConstructExtent,
+): extent is BookmarkExtent {
+  return isBookmarkAnchor(extent.descriptor);
 }
 
 type ContentControlExtent = RunConstructExtent & {
@@ -806,9 +808,7 @@ class RtfWriter {
     this.raw(this.paragraphProperties(paragraph));
     this.raw(" ");
     // A run-scoped construct is a boundary between runs, not a property of one, so its two halves are emitted at the run positions its half-open range names. Closes at a position run before opens, matching the block-marker rule: an extent ending where another begins must not enclose it.
-    const bookmarks = (paragraph.constructs ?? []).filter((extent) =>
-      isBookmarkAnchor(extent.descriptor),
-    );
+    const bookmarks = (paragraph.constructs ?? []).filter(isBookmarkExtent);
     const revisions = (paragraph.constructs ?? []).filter(
       (extent) => extent.descriptor.kind === "provenance",
     );
@@ -845,12 +845,12 @@ class RtfWriter {
   }
 
   private writeRunBoundaries(
-    extents: readonly RunConstructExtent[],
+    extents: readonly BookmarkExtent[],
     position: number,
   ): void {
     for (const extent of extents) {
       if (extent.endRun === position && extent.startRun !== position) {
-        this.raw(`{\\*\\bkmkend ${escapeText(nameOf(extent.descriptor))}}`);
+        this.raw(`{\\*\\bkmkend ${escapeText(extent.descriptor.name)}}`);
       }
     }
     for (const extent of extents) {
@@ -858,7 +858,7 @@ class RtfWriter {
         this.raw(bookmarkStartGroup(extent.descriptor));
         // A point anchor -- startRun === endRun -- opens and closes at the same boundary, so its end is written here rather than waiting for a later position that never differs.
         if (extent.endRun === position) {
-          this.raw(`{\\*\\bkmkend ${escapeText(nameOf(extent.descriptor))}}`);
+          this.raw(`{\\*\\bkmkend ${escapeText(extent.descriptor.name)}}`);
         }
       }
     }
