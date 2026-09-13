@@ -1,5 +1,6 @@
+import type { Package } from "documents.js";
 import { decodePackage } from "documents.js";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { el, txt, xmlDeclaration } from "./ooxml-fixture";
 import {
   buildDocxWithExtras,
@@ -13,9 +14,13 @@ function paragraphWithText(text: string) {
   return el("w:p", {}, [el("w:r", {}, [el("w:t", {}, [txt(text)])])]);
 }
 
-// Pins the exact XML this fixture writes into each of its four hand-authored parts (comments/footnotes/headers-footers/numbering), decoded straight back from the real docx bytes it produces -- otherwise nothing ever asserts on this fixture's own structure beyond whatever documents.js's readDocxExtras happens to surface, which never touches internal plumbing like a comment/footnote's own w:id or a numbering level's w:ilvl/w:abstractNumId.
+// Pins the exact XML this fixture writes into each of its four hand-authored parts (comments/footnotes/headers-footers/numbering), decoded straight back from the real docx bytes it produces -- otherwise nothing ever asserts on this fixture's own structure beyond whatever documents.js's readDocxExtras happens to surface, which never touches internal plumbing like a comment/footnote's own w:id or a numbering level's w:ilvl/w:abstractNumId. buildDocxWithExtras() is called inside beforeAll, matching every other connection/fixture setup in this package's own test suites (e.g. src/tools/compute-formula.test.ts's own beforeEach connect()) -- computed directly at describe-body scope instead, Stryker's mutation testing never observed a single mutant's effect on this fixture at all (every mutant here reported Survived against the unmutated baseline counts, regardless of the mutation), since describe-body code runs once at collection time rather than per test run.
 describe("buildDocxWithExtras", () => {
-  const pkg = decodePackage(buildDocxWithExtras());
+  let pkg: Package;
+
+  beforeAll(() => {
+    pkg = decodePackage(buildDocxWithExtras());
+  });
 
   it("writes word/comments.xml with one authored and one unauthored comment", () => {
     expect(pkg.parts["word/comments.xml"]).toEqual({
