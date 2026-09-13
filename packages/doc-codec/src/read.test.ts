@@ -23,17 +23,21 @@ import {
   FC_LCB_VALUE_INDEX,
   FIB_FC_LCB_BLOB_OFFSET,
   FIB_LKEY_OFFSET,
+  FIB_RG_LW_OFFSET,
+  LW_OFFSET,
 } from "./fib/offsets";
 import { groupAt, readDocContent, readDocStreams } from "./read";
 import type { ParagraphEntry } from "./text/paragraphs";
 import { compoundFile } from "./test-support/cfb";
-import { buildDoc } from "./test-support/doc";
+import { buildDoc, buildInlinePictureBytes } from "./test-support/doc";
 import { buildFib } from "./test-support/fib";
 import {
   CELL_MARK,
   FIELD_BEGIN,
   FIELD_END,
   FIELD_SEPARATOR,
+  FOOTNOTE_REFERENCE,
+  INLINE_PICTURE,
   LINE_BREAK,
   SECTION_MARK,
 } from "./text/special";
@@ -926,7 +930,7 @@ describe("readDocContent", () => {
           data: looping,
         }),
       ),
-    ).toThrow(DocFormatError);
+    ).toThrow(/did not terminate within 16 sprmPHugePapx hops/);
   });
 
   it("throws when a grpprl opens with sprmPHugePapx but the container carries no Data stream", () => {
@@ -936,7 +940,7 @@ describe("readDocContent", () => {
           paragraphs: [{ runs: [{ text: "no data" }], grpprl: HUGE_PAPX_AT_0 }],
         }),
       ),
-    ).toThrow(DocFormatError);
+    ).toThrow(/this compound file carries no Data stream for it to point into/);
   });
 
   it("reads a run of sprmPFInTable paragraphs that never closes a row as paragraphs, not a refusal", () => {
@@ -1114,6 +1118,289 @@ describe("readDocContent", () => {
       buildDoc({ paragraphs: [{ runs: [{ text: "" }] }] }),
     );
     expect(paragraphAt(document, 0).runs).toEqual([]);
+  });
+
+  it("refuses a chain of exactly MAX_PAPX_INDIRECTION_HOPS redirects, one more than this reader permits before reaching a terminal PrcData", () => {
+    const HOPS = 16; // MAX_PAPX_INDIRECTION_HOPS itself: 16 purely-redirecting blobs before the terminal one, one more redirect than the bound allows reading.
+    const REDIRECT_LEN = 2 + 6; // cbGrpprl (2 bytes) + a 6-byte sprmPHugePapx-only grpprl.
+    const terminalGrpprl = [0x5e, 0x84, 0xd0, 0x02]; // sprmPDxaLeft 720 twips, a real terminating exception.
+    const data = new Uint8Array(
+      HOPS * REDIRECT_LEN + 2 + terminalGrpprl.length,
+    );
+    const view = new DataView(data.buffer);
+    for (let i = 0; i < HOPS; i += 1) {
+      const thisOffset = i * REDIRECT_LEN;
+      const nextOffset = (i + 1) * REDIRECT_LEN; // the last redirect's own target is the terminal blob, right after the final redirect.
+      view.setUint16(thisOffset, 6, true); // cbGrpprl: 6 bytes (sprmPHugePapx opcode + 4-byte offset).
+      view.setUint16(thisOffset + 2, 0x6646, true); // sprmPHugePapx opcode.
+      view.setUint32(thisOffset + 4, nextOffset, true);
+    }
+    const terminalStart = HOPS * REDIRECT_LEN;
+    view.setUint16(terminalStart, terminalGrpprl.length, true);
+    data.set(terminalGrpprl, terminalStart + 2);
+    expect(() =>
+      readDocContent(
+        buildDoc({
+          paragraphs: [{ runs: [{ text: "x" }], grpprl: HUGE_PAPX_AT_0 }],
+          data,
+        }),
+      ),
+    ).toThrow(/did not terminate within 16 sprmPHugePapx hops/);
+  });
+
+  it("names 'a sprmPHugePapx-referenced PrcData's GrpPrl' when the PrcData's own declared length runs past the Data stream", () => {
+    const tooShortData = new Uint8Array([200, 0]); // cbGrpprl = 200, but no GrpPrl bytes follow at all.
+    expect(() =>
+      readDocContent(
+        buildDoc({
+          paragraphs: [{ runs: [{ text: "x" }], grpprl: HUGE_PAPX_AT_0 }],
+          data: tooShortData,
+        }),
+      ),
+    ).toThrow(/a sprmPHugePapx-referenced PrcData's GrpPrl/);
+  });
+
+  it("keeps trailing text with no paragraph mark at all, locating its properties from its own first character", () => {
+    const original = buildDoc({
+      paragraphs: [
+        { runs: [{ text: "first" }] },
+        // Its own direct character formatting, not shared with "first" -- a wrong (unsliced) fcs handed to buildRuns for this trailing text would resolve formatting from "first"'s own byte range instead, so this only passes when the trailing text's own bytes are genuinely what gets looked up.
+        { runs: [{ text: "second", grpprl: BOLD_ON }] },
+      ],
+    });
+    const streams = readDocStreams(original);
+    const patched = new Uint8Array(streams.wordDocument);
+    const view = new DataView(
+      patched.buffer,
+      patched.byteOffset,
+      patched.byteLength,
+    );
+    const ccpTextOffset = FIB_RG_LW_OFFSET + LW_OFFSET.ccpText;
+    const ccpText = view.getUint32(ccpTextOffset, true);
+    // Excludes only the very last character (the second paragraph's own mark) from the readable range, leaving "second" as real trailing text with no mark of its own.
+    view.setUint32(ccpTextOffset, ccpText - 1, true);
+    const patchedDoc = compoundFile([
+      { path: "WordDocument", bytes: patched },
+      { path: "1Table", bytes: new Uint8Array(streams.table) },
+    ]);
+    const document = readDocContent(patchedDoc);
+    expect(paragraphs(document)).toHaveLength(2);
+    expect(textOf(paragraphAt(document, 0))).toBe("first");
+    expect(textOf(paragraphAt(document, 1))).toBe("second");
+    expect(paragraphAt(document, 0).runs[0]?.bold).toBeUndefined();
+    expect(paragraphAt(document, 1).runs[0]?.bold).toBe(true);
+  });
+
+  describe("paragraph-level attributes absent by default", () => {
+    it("carries none of alignment/spacing/indent/headingLevel/list/pageBreakBefore on a paragraph that states none of them", () => {
+      const document = readDocContent(
+        buildDoc({ paragraphs: [{ runs: [{ text: "plain" }] }] }),
+      );
+      const paragraph = paragraphAt(document, 0);
+      for (const key of [
+        "alignment",
+        "spacingBeforePt",
+        "spacingAfterPt",
+        "lineSpacing",
+        "indentLeftPt",
+        "indentRightPt",
+        "indentFirstLinePt",
+        "headingLevel",
+        "list",
+        "pageBreakBefore",
+        "styleId",
+      ] as const) {
+        expect(paragraph).not.toHaveProperty(key);
+      }
+    });
+  });
+
+  it("does not set styleId for a style whose own name is empty", () => {
+    const document = readDocContent(
+      buildDoc({
+        styles: [{ name: "" }],
+        paragraphs: [{ runs: [{ text: "x" }], istd: 0 }],
+      }),
+    );
+    expect(paragraphAt(document, 0)).not.toHaveProperty("styleId");
+  });
+
+  describe("sprmPOutLvl's precedence against an istd-derived heading level", () => {
+    it("derives headingLevel from sprmPOutLvl's own zero-based level when the paragraph carries no heading istd", () => {
+      const outlineLevel3 = [0x40, 0x26, 3]; // sprmPOutLvl, level 3.
+      const document = readDocContent(
+        buildDoc({
+          styles: [{ name: "Normal" }],
+          paragraphs: [
+            { runs: [{ text: "x" }], istd: 0, grpprl: outlineLevel3 },
+          ],
+        }),
+      );
+      expect(paragraphAt(document, 0).headingLevel).toBe(4);
+    });
+
+    it("keeps the istd-derived heading level, ignoring sprmPOutLvl entirely, when the paragraph's own istd already supplies one", () => {
+      const outlineLevel5 = [0x40, 0x26, 5]; // sprmPOutLvl, level 5 -- a different level than the style's own istd would derive.
+      const document = readDocContent(
+        buildDoc({
+          styles: [{ name: "Normal" }, { name: "heading 1" }],
+          paragraphs: [
+            { runs: [{ text: "x" }], istd: 1, grpprl: outlineLevel5 },
+          ],
+        }),
+      );
+      expect(paragraphAt(document, 0).headingLevel).toBe(1);
+    });
+  });
+
+  describe("HYPERLINK field matching's own whitespace tolerance", () => {
+    function hyperlinkDocument(
+      instruction: string,
+    ): ReturnType<typeof readDocContent> {
+      const begin = String.fromCharCode(FIELD_BEGIN);
+      const separator = String.fromCharCode(FIELD_SEPARATOR);
+      const end = String.fromCharCode(FIELD_END);
+      return readDocContent(
+        buildDoc({
+          paragraphs: [
+            {
+              runs: [
+                { text: `${begin}${instruction}${separator}the site${end}` },
+              ],
+            },
+          ],
+        }),
+      );
+    }
+
+    it("tags the result at each whitespace boundary the regex still permits", () => {
+      // No leading whitespace at all before HYPERLINK.
+      expect(
+        paragraphAt(hyperlinkDocument('HYPERLINK "https://a.example" '), 0)
+          .runs[0]?.hyperlink,
+      ).toBe("https://a.example");
+      // Two spaces between HYPERLINK and the quoted URI, not exactly one.
+      expect(
+        paragraphAt(hyperlinkDocument(' HYPERLINK  "https://b.example" '), 0)
+          .runs[0]?.hyperlink,
+      ).toBe("https://b.example");
+      // No trailing whitespace at all after the closing quote.
+      expect(
+        paragraphAt(hyperlinkDocument(' HYPERLINK "https://c.example"'), 0)
+          .runs[0]?.hyperlink,
+      ).toBe("https://c.example");
+    });
+
+    it("does not tag the result when HYPERLINK is not the instruction's own first word, or something follows the closing quote", () => {
+      expect(
+        paragraphAt(hyperlinkDocument(' NOTHYPERLINK "https://d.example" '), 0)
+          .runs[0]?.hyperlink,
+      ).toBeUndefined();
+      expect(
+        paragraphAt(
+          hyperlinkDocument(' HYPERLINK "https://e.example" TRAILING'),
+          0,
+        ).runs[0]?.hyperlink,
+      ).toBeUndefined();
+    });
+  });
+
+  it("leaves state untouched for a FIELD_END with no matching FIELD_BEGIN before it", () => {
+    const end = String.fromCharCode(FIELD_END);
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [{ runs: [{ text: `${end}plain text` }] }],
+      }),
+    );
+    expect(textOf(paragraphAt(document, 0))).toBe("plain text");
+  });
+
+  it("tags every one of a HYPERLINK field's own result runs, not only its first, and nothing outside the field", () => {
+    const begin = String.fromCharCode(FIELD_BEGIN);
+    const separator = String.fromCharCode(FIELD_SEPARATOR);
+    const end = String.fromCharCode(FIELD_END);
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [
+              { text: "prefix " },
+              {
+                text: `${begin} HYPERLINK "https://example.com" ${separator}plain`,
+              },
+              // A distinct exception from the result's first run, so the field's result is genuinely two runs rather than one -- the case that distinguishes tagging every result run from tagging only resultStart itself.
+              { text: "bold", grpprl: BOLD_ON },
+              { text: end },
+            ],
+          },
+        ],
+      }),
+    );
+    const runs = paragraphAt(document, 0).runs;
+    expect(runs.map((run) => run.text)).toEqual(["prefix ", "plain", "bold"]);
+    expect(runs[0]?.hyperlink).toBeUndefined();
+    expect(runs[1]?.hyperlink).toBe("https://example.com");
+    expect(runs[2]?.hyperlink).toBe("https://example.com");
+  });
+
+  it("drops a footnote/annotation/drawn-object anchor character from the run text, never emitting it literally", () => {
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [
+              { text: `before${String.fromCharCode(FOOTNOTE_REFERENCE)}after` },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(textOf(paragraphAt(document, 0))).toBe("beforeafter");
+  });
+
+  it("splits a paragraph around an inline picture, resolving sprmCPicLocation even when it is not the run's own first Prl", () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4]);
+    const dataOffset = 200;
+    const { dataStreamBytes, picLocationGrpprl } = buildInlinePictureBytes(
+      dataOffset,
+      png,
+      1000,
+      1000,
+    );
+    // A benign, non-matching sprm placed BEFORE sprmCPicLocation in the picture run's own grpprl -- proving the reader scans past it rather than only ever checking the first Prl.
+    const pictureGrpprl = [...BOLD_ON, ...picLocationGrpprl];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [
+              { text: "before " },
+              {
+                text: String.fromCharCode(INLINE_PICTURE),
+                grpprl: pictureGrpprl,
+              },
+              // Its own direct character formatting, distinct from "before "'s (which carries none): a wrong (unsliced) fcs handed to buildRuns for this second segment would resolve formatting from the whole paragraph's byte 0 instead of this segment's own start, missing this exception entirely.
+              { text: " after", grpprl: ITALIC_ON },
+            ],
+          },
+        ],
+        data: dataStreamBytes,
+      }),
+    );
+    const blocks = paragraphs(document);
+    expect(blocks.map((block) => block.kind)).toEqual([
+      "paragraph",
+      "image",
+      "paragraph",
+    ]);
+    if (blocks[0]?.kind === "paragraph") {
+      expect(textOf(blocks[0])).toBe("before ");
+      expect(blocks[0].runs[0]?.italic).toBeUndefined();
+    }
+    if (blocks[2]?.kind === "paragraph") {
+      expect(textOf(blocks[2])).toBe(" after");
+      expect(blocks[2].runs[0]?.italic).toBe(true);
+    }
   });
 });
 
