@@ -110,6 +110,20 @@ describe("readPptStreams", () => {
     expect(slide?.shapes).toHaveLength(2);
   });
 
+  it("splits the default body text's own carriage return into two paragraphs", () => {
+    // No bodyText option given at all, unlike every other test in this file that exercises paragraph-splitting behaviour -- this is the one test pinning the fixture's own default value, "First point\rSecond point", rather than a value a test supplied explicitly.
+    const { currentUserStream, powerPointDocumentStream } =
+      syntheticPresentation();
+    const [slide] = readPptStreams(
+      currentUserStream,
+      powerPointDocumentStream,
+    ).slides;
+    expect(slide?.shapes[1]?.blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "First point" }] },
+      { kind: "paragraph", runs: [{ text: "Second point" }] },
+    ]);
+  });
+
   it("states no rotationDeg at all for an unrotated plain shape, rather than an explicit undefined", () => {
     // toEqual treats an explicit rotationDeg: undefined as equal to the key being absent, so an object-shape comparison alone can't tell the two apart -- only checking the key's own presence can.
     const { currentUserStream, powerPointDocumentStream } =
@@ -488,9 +502,12 @@ describe("readPptStreams", () => {
     it("rejects a slide whose SlideAtom names a masterIdRef the master list does not contain", () => {
       const { currentUserStream, powerPointDocumentStream } =
         syntheticPresentation({ slideMasterIdRefMismatch: true });
+      // Pins the exact stated value, not just that some rejection fires: the fixture's own masterIdRef is the real master ID (0x80000000, [MS-PPT] 2.2.13's own MasterId minimum) plus one, 2147483649 -- a regex matching only the surrounding words would pass identically for any other wrong value, including the real master ID minus one.
       expect(() =>
         readPptStreams(currentUserStream, powerPointDocumentStream),
-      ).toThrow(/which the master list does not contain/);
+      ).toThrow(
+        /names masterIdRef 2147483649, which the master list does not contain/,
+      );
     });
 
     it("names the UserEditAtom's own docPersistIdRef when it references no persist object", () => {
