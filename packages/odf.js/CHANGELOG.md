@@ -1,3 +1,16 @@
+## [7.25.3](https://github.com/ExaDev/documents.js/compare/odf.js%407.25.2...odf.js%407.25.3) (2026-09-13)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.2
+
+## [7.25.2](https://github.com/ExaDev/documents.js/compare/odf.js%407.25.1...odf.js%407.25.2) (2026-09-11)
+
+### Bug Fixes
+
+* **odf.js:** keep the pinned zip entry mtime inside fflate's valid DOS-date range ([387fb31](https://github.com/ExaDev/documents.js/commit/387fb31073b21c56538ca7419a2c55f3a69942a8))
+
 ## [7.25.1](https://github.com/ExaDev/documents.js/compare/odf.js%407.25.0...odf.js%407.25.1) (2026-09-11)
 
 ### Code Refactoring

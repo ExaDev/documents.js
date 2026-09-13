@@ -1,3 +1,10 @@
+## [1.11.2](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.1...archive-codec%401.11.2) (2026-09-13)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.2
+
 ## [1.11.1](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.0...archive-codec%401.11.1) (2026-09-11)
 
 ### Code Refactoring

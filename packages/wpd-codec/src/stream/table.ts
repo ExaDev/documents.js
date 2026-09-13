@@ -4,8 +4,7 @@ import type {
   ContentCellFill,
   ContentCellPatternType,
 } from "document-schema.js";
-import { uint16At } from "../bytes/view";
-import { WpdFormatError } from "../errors";
+import { byteAt, uint16At } from "../bytes/view";
 import { pointsFromWpu } from "./units";
 
 // -- Tables, per WPFF "D4 Character Functions" (the definition) and "D0 EOL Functions" (the cell and row boundaries) --
@@ -77,7 +76,7 @@ export const CELL_FILL_COLORS_SUBFUNCTION = 0x86;
 
 export interface WpdEmbeddedSubfunction {
   readonly code: number;
-  // The payload between the two gates, or an empty view for the one gateless member.
+  // The payload between the two gates, or an empty view for the one gateless member. For CELL_FORMULA_SUBFUNCTION specifically, this is the tokenised formula alone -- the leading and trailing length words either side of it are framing, not payload, and are stripped here rather than left for a caller to skip.
   readonly data: Uint8Array;
 }
 
@@ -104,34 +103,46 @@ export function readEmbeddedSubfunctions(
   }
 
   const subfunctions: WpdEmbeddedSubfunction[] = [];
-  while (cursor < nonDeletable.length) {
-    const code = nonDeletable[cursor];
-    if (code === undefined) {
-      break;
+  try {
+    for (;;) {
+      const code = nonDeletable[cursor];
+      if (code === undefined) {
+        break;
+      }
+      if (code === DONT_END_PARAGRAPH_STYLE_SUBFUNCTION) {
+        subfunctions.push({ code, data: new Uint8Array(0) });
+        cursor += 1;
+        continue;
+      }
+      // uint16At throws (via byteAt) when the formula subfunction's own 2-byte length field does not fit, caught below exactly as the size-overrun case just after it already is: neither is a stream out of step, both are a record with no readable attributes left.
+      const formulaLength =
+        code === CELL_FORMULA_SUBFUNCTION
+          ? uint16At(nonDeletable, cursor + 1)
+          : undefined;
+      const size =
+        formulaLength === undefined
+          ? EMBEDDED_SUBFUNCTION_SIZES.get(code)
+          : formulaLength + CELL_FORMULA_FRAMING_SIZE;
+      if (size === undefined) {
+        return { subfunctions, truncated: true };
+      }
+      // No separate cursor + size > nonDeletable.length guard is needed: whenever it would be true, cursor + size - 1 is out of bounds, which the end-gate check right below always reads as undefined and therefore never equal to a real code value -- so an overrun is already caught there, by the identical mechanism, on every input.
+      if (nonDeletable[cursor + size - 1] !== code) {
+        // Every embedded subfunction but 0x8D repeats its own code as an end gate, exactly as the enclosing function does. A gate that does not match means the walk is out of step, so it stops here rather than reporting attributes read from the wrong offsets.
+        return { subfunctions, truncated: true };
+      }
+      subfunctions.push({
+        code,
+        // The formula subfunction's own length word brackets the token region on both sides (length, tokens, length again); every other subfunction's payload is simply what sits between its two code gates.
+        data:
+          formulaLength === undefined
+            ? nonDeletable.subarray(cursor + 1, cursor + size - 1)
+            : nonDeletable.subarray(cursor + 3, cursor + 3 + formulaLength),
+      });
+      cursor += size;
     }
-    if (code === DONT_END_PARAGRAPH_STYLE_SUBFUNCTION) {
-      subfunctions.push({ code, data: new Uint8Array(0) });
-      cursor += 1;
-      continue;
-    }
-    const size =
-      code === CELL_FORMULA_SUBFUNCTION
-        ? cursor + 3 <= nonDeletable.length
-          ? uint16At(nonDeletable, cursor + 1) + CELL_FORMULA_FRAMING_SIZE
-          : undefined
-        : EMBEDDED_SUBFUNCTION_SIZES.get(code);
-    if (size === undefined || cursor + size > nonDeletable.length) {
-      return { subfunctions, truncated: true };
-    }
-    if (nonDeletable[cursor + size - 1] !== code) {
-      // Every embedded subfunction but 0x8D repeats its own code as an end gate, exactly as the enclosing function does. A gate that does not match means the walk is out of step, so it stops here rather than reporting attributes read from the wrong offsets.
-      return { subfunctions, truncated: true };
-    }
-    subfunctions.push({
-      code,
-      data: nonDeletable.subarray(cursor + 1, cursor + size - 1),
-    });
-    cursor += size;
+  } catch {
+    return { subfunctions, truncated: true };
   }
   return { subfunctions, truncated: false };
 }
@@ -274,10 +285,30 @@ const PERCENT_STEPS: readonly [number, ContentCellPatternType][] = [
   [95, "percent95"],
 ];
 
-function nearestPercentType(percent: number): ContentCellPatternType {
-  return PERCENT_STEPS.reduce((best, step) =>
-    Math.abs(step[0] - percent) < Math.abs(best[0] - percent) ? step : best,
-  )[1];
+// Precomputed once, at module load, for every one of the 256 possible background shade bytes: which PERCENT_STEPS entry the resulting foreground-coverage percentage is nearest to. The "which candidate is strictly closer" comparison this needs only ever matters across this one, fixed, exhaustively enumerable domain, not per document read, so it runs here rather than inside readCellFill.
+const PATTERN_TYPE_BY_SHADE: readonly ContentCellPatternType[] = Array.from(
+  { length: 256 },
+  (_, shade) => {
+    const foregroundCoveragePercent = 100 - (shade / COLOR_COMPONENT_MAX) * 100;
+    return PERCENT_STEPS.reduce((best, step) =>
+      Math.abs(step[0] - foregroundCoveragePercent) <
+      Math.abs(best[0] - foregroundCoveragePercent)
+        ? step
+        : best,
+    )[1];
+  },
+);
+
+// Exported for this package's own tests only, so the throw below is proven genuine by a direct, out-of-range call rather than left as a promise the one real caller (readCellFill, always passing a Uint8Array byte read) could never actually keep.
+export function nearestPercentType(shade: number): ContentCellPatternType {
+  const patternType = PATTERN_TYPE_BY_SHADE[shade];
+  if (patternType === undefined) {
+    // PATTERN_TYPE_BY_SHADE has exactly 256 entries, one for every possible byte value 0-255, and shade is always a Uint8Array byte read -- this is an invariant violation, not a truncated-input case, so it is thrown rather than degraded from.
+    throw new RangeError(
+      `Shade byte ${String(shade)} is outside the 0-255 range a fill's own shading byte can ever hold.`,
+    );
+  }
+  return patternType;
 }
 
 export interface WpdCellFill {
@@ -286,42 +317,33 @@ export interface WpdCellFill {
   readonly blended: boolean;
 }
 
-function colorAt(data: Uint8Array, offset: number): Color | undefined {
-  const r = data[offset];
-  const g = data[offset + 1];
-  const b = data[offset + 2];
-  if (r === undefined || g === undefined || b === undefined) {
-    return undefined;
-  }
+// Throws (via byteAt) rather than returning undefined for a truncated read: readCellFill's own two calls have different needs from that failure -- the background call needs a graceful "no fill" outcome, the foreground call's own bytes are already proven present by the time it runs, so a genuine failure there is a real invariant violation worth propagating loudly rather than a case to degrade from.
+function colorAt(data: Uint8Array, offset: number): Color {
   return {
-    r: r / COLOR_COMPONENT_MAX,
-    g: g / COLOR_COMPONENT_MAX,
-    b: b / COLOR_COMPONENT_MAX,
+    r: byteAt(data, offset) / COLOR_COMPONENT_MAX,
+    g: byteAt(data, offset + 1) / COLOR_COMPONENT_MAX,
+    b: byteAt(data, offset + 2) / COLOR_COMPONENT_MAX,
   };
 }
 
 export function readCellFill(data: Uint8Array): WpdCellFill | undefined {
-  const background = colorAt(data, RGBS_SIZE);
-  if (background === undefined) {
+  let background: Color;
+  let backgroundShade: number | undefined;
+  try {
+    background = colorAt(data, RGBS_SIZE);
+    backgroundShade = data[RGBS_SIZE + SHADE_OFFSET];
+  } catch {
     return undefined;
   }
-  const backgroundShade = data[RGBS_SIZE + SHADE_OFFSET];
   if (backgroundShade === undefined || backgroundShade === FULL_SHADE) {
     return { fill: { kind: "solid", color: background }, blended: false };
   }
+  // Foreground occupies the buffer's first three bytes, well within data's own length -- already proven at least eight by the successful background and shade reads just above. colorAt throwing here would be a genuine, worth-surfacing invariant violation, not a truncated-input case to degrade from, so it is left to propagate rather than caught.
   const foreground = colorAt(data, 0);
-  if (foreground === undefined) {
-    // Believed unreachable: foreground occupies the buffer's first three bytes, background occupies the four bytes right after foreground's own RGBS quad, and background's own shade byte was just read above at offset RGBS_SIZE + SHADE_OFFSET (7) -- so data already has at least eight bytes by this point, which foreground's own bytes at offsets 0-2 are well within. The check exists because noUncheckedIndexedAccess cannot see that positional invariant, not because it can genuinely fire; if it ever does, the record is corrupt in a way worth surfacing rather than papering over with a guessed colour.
-    throw new WpdFormatError(
-      "Cell fill has a readable background colour but an unreadable foreground colour, which the RGBS pair's own contiguous layout should make impossible.",
-    );
-  }
-  const foregroundCoveragePercent =
-    100 - (backgroundShade / COLOR_COMPONENT_MAX) * 100;
   return {
     fill: {
       kind: "pattern",
-      patternType: nearestPercentType(foregroundCoveragePercent),
+      patternType: nearestPercentType(backgroundShade),
       foregroundColor: foreground,
       backgroundColor: background,
     },

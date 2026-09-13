@@ -12,144 +12,155 @@ const FREESECT = 0xffffffff;
 const ENDOFCHAIN = 0xfffffffe;
 const FATSECT = 0xfffffffd;
 const NOSTREAM = 0xffffffff;
+const DIFAT_ENTRY_COUNT = 109;
 
 function sectorsFor(byteLength: number, sectorSize: number): number {
   return Math.ceil(byteLength / sectorSize);
 }
 
-function writeDirectoryEntry(
+function writeChain(table: Uint32Array, start: number, count: number): void {
+  Array.from({ length: count }, (_, offset) => offset).forEach((offset) => {
+    table[start + offset] =
+      offset === count - 1 ? ENDOFCHAIN : start + offset + 1;
+  });
+}
+
+// The fields every directory entry carries regardless of its own name: object type, sibling/child links (this fixture's two entries are unrelated siblings, so both left and right stay NOSTREAM's own 0xFF fill), child id, start sector, and size. Name and name-length are deliberately NOT written here: archive-codec's own reader (src/cfb/read.ts) only validates and reads an entry's name/nameLength once the directory tree walk reaches it via root.child, and the root entry itself (id 0) is read directly as entries[0] without ever entering that walk -- "its own name is the 'Root Entry' convention and nothing depends on it" -- so the root is the one caller with no real name value to write, and every non-root caller writes its own name separately, after this.
+function writeDirectoryEntryFields(
   directory: Uint8Array,
   id: number,
-  name: string,
   objectType: number,
   childId: number,
   startSector: number,
   size: number,
 ): void {
+  const entryOffset = id * DIRECTORY_ENTRY_SIZE;
   const view = new DataView(
     directory.buffer,
-    directory.byteOffset + id * DIRECTORY_ENTRY_SIZE,
+    directory.byteOffset + entryOffset,
     DIRECTORY_ENTRY_SIZE,
   );
-  for (let index = 0; index < name.length; index += 1) {
-    view.setUint16(index * 2, name.charCodeAt(index), true);
-  }
-  // The zero pair past the last character is the terminating null this length counts.
-  view.setUint16(0x40, name.length * 2 + 2, true);
   view.setUint8(0x42, objectType);
-  view.setUint8(0x43, 1); // colour flag: black, meaningless to a structural reader
-  view.setUint32(0x44, NOSTREAM, true); // left sibling
-  view.setUint32(0x48, NOSTREAM, true); // right sibling
+  new Uint8Array(
+    directory.buffer,
+    directory.byteOffset + entryOffset + 0x44,
+    8,
+  ).fill(0xff);
   view.setUint32(0x4c, childId, true);
   view.setUint32(0x74, startSector, true);
   view.setUint32(0x78, size, true);
-  view.setUint32(0x7c, 0, true);
+}
+
+// The name and its own length field, per [MS-CFB] 2.6.1: only a non-root entry's name is ever read back (see writeDirectoryEntryFields' own comment), so this is called for every entry except the root.
+function writeDirectoryEntryName(
+  directory: Uint8Array,
+  id: number,
+  name: string,
+): void {
+  const entryOffset = id * DIRECTORY_ENTRY_SIZE;
+  const view = new DataView(
+    directory.buffer,
+    directory.byteOffset + entryOffset,
+    DIRECTORY_ENTRY_SIZE,
+  );
+  for (const [index, character] of [...name].entries()) {
+    view.setUint16(index * 2, character.charCodeAt(0), true);
+  }
+  view.setUint16(0x40, name.length * 2 + 2, true);
 }
 
 export function compoundFileWithStream(
   name: string,
   stream: Uint8Array,
-): Uint8Array {
+): Uint8Array<ArrayBuffer> {
   const inMiniStream = stream.length < MINI_STREAM_CUTOFF;
 
-  // The mini stream is every small stream padded to whole mini sectors and concatenated; here that is the one stream.
-  const miniStream = inMiniStream
-    ? new Uint8Array(
-        sectorsFor(stream.length, MINI_SECTOR_SIZE) * MINI_SECTOR_SIZE,
-      )
-    : new Uint8Array(0);
-  miniStream.set(inMiniStream ? stream : new Uint8Array(0));
+  // The mini stream area's own declared pool size, per [MS-CFB]'s own mini-sector granularity: archive-codec's reader (src/cfb/read.ts) carves each entry's own mini-sectors out of a pool bounded by exactly this many bytes (the root entry's own `size` field), so it must be rounded up to a whole number of 64-byte mini sectors even though the real stream data inside it is shorter -- a pool declared only as large as the raw stream would undercount the mini-sector chain by one whenever the stream's own length is not itself a multiple of MINI_SECTOR_SIZE.
+  const miniStreamPoolSize = inMiniStream
+    ? sectorsFor(stream.length, MINI_SECTOR_SIZE) * MINI_SECTOR_SIZE
+    : 0;
 
-  const directorySectorCount = 1; // two entries fit one 512-byte sector
+  const directorySectorCount = 1;
   const bigStreamSectorCount = inMiniStream
     ? 0
     : sectorsFor(stream.length, SECTOR_SIZE);
-  const miniStreamSectorCount = sectorsFor(miniStream.length, SECTOR_SIZE);
+  const miniStreamSectorCount = sectorsFor(miniStreamPoolSize, SECTOR_SIZE);
   const miniFatSectorCount = inMiniStream ? 1 : 0;
-  const fatSectorCount = 1; // one FAT sector maps 128 sectors, far more than this file uses
+  const fatSectorCount = 1;
 
-  const bigStreamStart = fatSectorCount + directorySectorCount;
-  const miniStreamStart = bigStreamStart + bigStreamSectorCount;
-  const miniFatStart = miniStreamStart + miniStreamSectorCount;
-  const totalSectors =
-    fatSectorCount +
-    directorySectorCount +
-    bigStreamSectorCount +
-    miniStreamSectorCount +
-    miniFatSectorCount;
+  const regionSizes = [
+    fatSectorCount,
+    directorySectorCount,
+    bigStreamSectorCount,
+    miniStreamSectorCount,
+    miniFatSectorCount,
+  ];
+  const regionStarts = regionSizes.reduce<number[]>(
+    (starts, size) => [...starts, (starts.at(-1) ?? 0) + size],
+    [0],
+  );
+  const [
+    ,
+    ,
+    bigStreamStart = 0,
+    miniStreamStart = 0,
+    miniFatStart = 0,
+    totalSectors = 0,
+  ] = regionStarts;
 
   const fat = new Uint32Array(SECTOR_SIZE / 4).fill(FREESECT);
   fat[0] = FATSECT;
-  const chain = (start: number, count: number): void => {
-    for (let index = 0; index < count; index += 1) {
-      fat[start + index] = index === count - 1 ? ENDOFCHAIN : start + index + 1;
-    }
-  };
-  chain(fatSectorCount, directorySectorCount);
-  chain(bigStreamStart, bigStreamSectorCount);
-  chain(miniStreamStart, miniStreamSectorCount);
-  chain(miniFatStart, miniFatSectorCount);
-
-  const miniFat = new Uint32Array(SECTOR_SIZE / 4).fill(FREESECT);
-  if (inMiniStream) {
-    const miniSectorCount = sectorsFor(stream.length, MINI_SECTOR_SIZE);
-    for (let index = 0; index < miniSectorCount; index += 1) {
-      miniFat[index] = index === miniSectorCount - 1 ? ENDOFCHAIN : index + 1;
-    }
-  }
+  writeChain(fat, fatSectorCount, directorySectorCount);
+  writeChain(fat, bigStreamStart, bigStreamSectorCount);
+  writeChain(fat, miniStreamStart, miniStreamSectorCount);
+  writeChain(fat, miniFatStart, miniFatSectorCount);
 
   const directory = new Uint8Array(directorySectorCount * SECTOR_SIZE);
-  writeDirectoryEntry(
+  writeDirectoryEntryFields(
     directory,
     0,
-    "Root Entry",
     5,
     1,
-    miniStream.length === 0 ? ENDOFCHAIN : miniStreamStart,
-    miniStream.length,
+    miniStreamPoolSize === 0 ? ENDOFCHAIN : miniStreamStart,
+    miniStreamPoolSize,
   );
-  writeDirectoryEntry(
+  writeDirectoryEntryFields(
     directory,
     1,
-    name,
     2,
     NOSTREAM,
     inMiniStream ? 0 : bigStreamStart,
     stream.length,
   );
+  writeDirectoryEntryName(directory, 1, name);
 
   const file = new Uint8Array(SECTOR_SIZE + totalSectors * SECTOR_SIZE);
   const view = new DataView(file.buffer);
   file.set([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1], 0);
-  view.setUint16(0x18, 0x3e, true); // minor version, the value real producers write
-  view.setUint16(0x1a, 3, true); // major version
-  view.setUint16(0x1c, 0xfffe, true); // little-endian byte order
-  view.setUint16(0x1e, 9, true); // sector shift: 2^9 = 512
-  view.setUint16(0x20, 6, true); // mini sector shift: 2^6 = 64
-  view.setUint32(0x28, 0, true); // directory sector count: fixed at 0 for version 3
-  view.setUint32(0x2c, fatSectorCount, true);
+  view.setUint16(0x1a, 3, true);
+  view.setUint16(0x1c, 0xfffe, true);
+  view.setUint16(0x1e, 9, true);
+  view.setUint16(0x20, 6, true);
   view.setUint32(0x30, fatSectorCount, true);
   view.setUint32(0x38, MINI_STREAM_CUTOFF, true);
   view.setUint32(0x3c, inMiniStream ? miniFatStart : ENDOFCHAIN, true);
-  view.setUint32(0x40, miniFatSectorCount, true);
-  view.setUint32(0x44, ENDOFCHAIN, true); // first DIFAT sector: none needed
-  view.setUint32(0x48, 0, true);
-  for (let index = 0; index < 109; index += 1) {
-    view.setUint32(0x4c + index * 4, index === 0 ? 0 : FREESECT, true);
-  }
+  view.setUint32(0x44, ENDOFCHAIN, true);
+
+  const difat = new Uint32Array(file.buffer, 0x4c, DIFAT_ENTRY_COUNT);
+  difat.fill(FREESECT);
+  difat[0] = 0;
 
   const putSector = (sector: number, bytes: Uint8Array): void => {
     file.set(bytes, SECTOR_SIZE + sector * SECTOR_SIZE);
   };
   putSector(0, new Uint8Array(fat.buffer));
   putSector(fatSectorCount, directory);
-  if (!inMiniStream) {
-    putSector(bigStreamStart, stream);
-  }
-  if (miniStream.length > 0) {
-    putSector(miniStreamStart, miniStream);
-  }
+  // Written unconditionally at bigStreamStart, in the mini-stream case too: bigStreamSectorCount is 0 whenever inMiniStream, which makes bigStreamStart and miniStreamStart the very same region start (the cumulative region-size walk above never advances between them), and file's own backing buffer starts fully zeroed, so writing the raw, unpadded stream there lands on exactly the same bytes a separately zero-padded copy would have -- the trailing pad bytes miniStreamPoolSize declares are already zero either way.
+  putSector(bigStreamStart, stream);
   if (inMiniStream) {
+    const miniSectorCount = sectorsFor(stream.length, MINI_SECTOR_SIZE);
+    const miniFat = new Uint32Array(SECTOR_SIZE / 4).fill(FREESECT);
+    writeChain(miniFat, 0, miniSectorCount);
     putSector(miniFatStart, new Uint8Array(miniFat.buffer));
   }
   return file;

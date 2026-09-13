@@ -178,14 +178,9 @@ function resolveHeadingGroup(
   group: HeadingGroupNode,
 ): HeadingGroupNode {
   const own = chainWithRef(chain, group);
-  // An empty chain plus no own ref is the no-entry case; anything else resolves, and resolveStyleChain itself is the loud refusal on a ref the table does not carry.
-  const entry = own.length > 0 ? resolveStyleChain(styles, own) : undefined;
-  let anchor = group.node;
-  if (entry !== undefined) {
-    const applied = applyEntry(entry, group.node);
-    assertResolvedHeadingAnchor(applied);
-    anchor = applied;
-  }
+  // Always resolved unconditionally, even for an empty chain: resolveStyleChain(styles, []) returns `{}` rather than throwing, and applyEntry({}, node) returns `node` by the identical reference -- so there is no separate "no entry" case to special-case here.
+  const anchor = applyEntry(resolveStyleChain(styles, own), group.node);
+  assertResolvedHeadingAnchor(anchor);
   const children = resolveSectionChildren(styles, own, group.children);
   if (
     group.style === undefined &&
@@ -202,13 +197,9 @@ function resolveListGroup(
   group: ListGroupNode,
 ): ListGroupNode {
   const own = chainWithRef(chain, group);
-  const entry = own.length > 0 ? resolveStyleChain(styles, own) : undefined;
-  let anchor = group.node;
-  if (entry !== undefined) {
-    const applied = applyEntry(entry, group.node);
-    assertResolvedListAnchor(applied);
-    anchor = applied;
-  }
+  // Identical reasoning to resolveHeadingGroup above: resolveStyleChain(styles, []) returns `{}` rather than throwing, and applyEntry({}, node) returns `node` by the identical reference, so there is no separate "no entry" case to special-case here.
+  const anchor = applyEntry(resolveStyleChain(styles, own), group.node);
+  assertResolvedListAnchor(anchor);
   const children = resolveListChildren(styles, own, group.children);
   if (
     group.style === undefined &&
@@ -219,8 +210,8 @@ function resolveListGroup(
   return { node: anchor, children };
 }
 
-// applyEntry is typed on the loose ContentParagraph, so a resolved anchor comes back with its REQUIRED grouping signal widened to optional; these assertions re-narrow it without a cast. Resolution fills gaps and never removes fields, so the signal always survives -- and if the schema helpers' fill-only contract ever broke, the throw is loud rather than a silently mistyped anchor.
-function assertResolvedHeadingAnchor(
+// applyEntry is typed on the loose ContentParagraph, so a resolved anchor comes back with its REQUIRED grouping signal widened to optional; these assertions re-narrow it without a cast. Resolution fills gaps and never removes fields, so the signal always survives through this module's own construction path -- document-schema.js's applyParagraphStyleProperties (the only function that ever produces the `paragraph` either assertion receives here) builds its result as `{ ...paragraph }` first, so every field the input paragraph already carries survives verbatim regardless of what any StyleEntry supplies. Exported, like pdf-regions.ts's own internal helpers, purely so the throw itself -- a defensive guard against that fill-only contract ever regressing, not a case this module's own callers can trigger -- has a direct test exercising it instead of relying on a real resolution path that can never reach it.
+export function assertResolvedHeadingAnchor(
   paragraph: ContentParagraph,
 ): asserts paragraph is ContentParagraph & { headingLevel: number } {
   if (paragraph.headingLevel === undefined)
@@ -229,7 +220,7 @@ function assertResolvedHeadingAnchor(
     );
 }
 
-function assertResolvedListAnchor(
+export function assertResolvedListAnchor(
   paragraph: ContentParagraph,
 ): asserts paragraph is ContentParagraph & {
   list: NonNullable<ContentParagraph["list"]>;
@@ -288,12 +279,12 @@ function resolveListChildren(
   return changed ? out : children;
 }
 
+// No separate empty-chain early return: an empty chain is exactly resolveStyleChain(styles, [])'s own no-refs case, which returns `{}` rather than throwing, and applyEntry({}, leaf) already returns `leaf` by the identical reference -- calling through unconditionally computes the exact same no-op a special case would skip computing.
 function resolveParagraphLeaf(
   styles: StylesTable,
   chain: readonly string[],
   leaf: ContentParagraph,
 ): ContentParagraph {
-  if (chain.length === 0) return leaf;
   return applyEntry(resolveStyleChain(styles, chain), leaf);
 }
 

@@ -1,3 +1,47 @@
+## [2.11.18](https://github.com/ExaDev/documents.js/compare/web%402.11.17...web%402.11.18) (2026-09-13)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.2
+- Updated markdown-codec to 6.7.2
+- Updated documents.js to 7.20.7
+
+## [2.11.17](https://github.com/ExaDev/documents.js/compare/web%402.11.16...web%402.11.17) (2026-09-12)
+
+
+### Dependencies
+
+- Updated documents.js to 7.20.6
+
+## [2.11.16](https://github.com/ExaDev/documents.js/compare/web%402.11.15...web%402.11.16) (2026-09-12)
+
+
+### Dependencies
+
+- Updated documents.js to 7.20.5
+
+## [2.11.15](https://github.com/ExaDev/documents.js/compare/web%402.11.14...web%402.11.15) (2026-09-12)
+
+
+### Dependencies
+
+- Updated documents.js to 7.20.4
+
+## [2.11.14](https://github.com/ExaDev/documents.js/compare/web%402.11.13...web%402.11.14) (2026-09-11)
+
+
+### Dependencies
+
+- Updated documents.js to 7.20.3
+
+## [2.11.13](https://github.com/ExaDev/documents.js/compare/web%402.11.12...web%402.11.13) (2026-09-11)
+
+
+### Dependencies
+
+- Updated documents.js to 7.20.2
+
 ## [2.11.12](https://github.com/ExaDev/documents.js/compare/web%402.11.11...web%402.11.12) (2026-09-11)
 
 ### Code Refactoring

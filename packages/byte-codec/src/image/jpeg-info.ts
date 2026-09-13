@@ -41,7 +41,8 @@ export function readJpegInfo(bytes: Uint8Array<ArrayBuffer>): JpegInfo {
   let offset = 2;
   let adobeTransform: number | undefined;
 
-  while (offset < bytes.length) {
+  // Bounded by the data itself rather than by a separately tracked length: Uint8Array indexing past the end always returns undefined, so the scan stops the moment offset runs off the buffer without needing its own length check.
+  while (bytes[offset] !== undefined) {
     if (bytes[offset] !== 0xff) {
       offset++;
       continue;

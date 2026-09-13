@@ -47,11 +47,9 @@ const SYSTEM_STYLE_NONE = 0xff;
 export function readSystemStyleNumber(
   nonDeletable: Uint8Array,
 ): number | undefined {
+  // No separate undefined check is needed: value is already undefined when the byte is absent, so returning it as-is in that case already answers undefined -- exactly what an explicit check-and-return-undefined would do.
   const value = nonDeletable[SYSTEM_STYLE_NUMBER_OFFSET];
-  if (value === undefined || value === SYSTEM_STYLE_NONE) {
-    return undefined;
-  }
-  return value;
+  return value === SYSTEM_STYLE_NONE ? undefined : value;
 }
 
 // The SDK's own enumeration, transcribed for the entries the shared content schema has a structural spelling for. Everything else it lists -- footnote and endnote number styles, box number styles, table-of-contents and index levels, header and footer styles, hypertext, captions -- names a region whose own construct this package does not lift, so those numbers open a scope that carries no heading level and no list level rather than being forced onto the nearest thing that fits.
@@ -143,24 +141,27 @@ const TEXT_BLOCK_HEADER_SIZE = 2 + 4 * 4; // [number of text blocks] then four L
 export function readStyleBeginBlock(
   packet: Uint8Array,
 ): Uint8Array | undefined {
-  if (packet.length < 2) {
+  // uint16At throws (via byteAt) rather than returning undefined for a read that runs past packet's own end, caught below -- so the PID count word itself needs no separate room check ahead of reading it. The afterPids + TEXT_BLOCK_HEADER_SIZE guard just below stays a plain comparison, not a throw-and-catch substitute: it checks room for the whole four-LONG text-block header even though only three of those four longs are ever read here, so a bare throw on the actual reads alone cannot stand in for it.
+  try {
+    const pidCount = uint16At(packet, PID_COUNT_OFFSET);
+    const afterPids = 2 + pidCount * 2;
+    if (afterPids + TEXT_BLOCK_HEADER_SIZE > packet.length) {
+      return undefined;
+    }
+    const relativeOffset = uint32At(packet, afterPids + 2);
+    const paragraphTextSize = uint32At(packet, afterPids + 6);
+    const beginningStyleTextSize = uint32At(packet, afterPids + 10);
+    if (beginningStyleTextSize === 0) {
+      return undefined;
+    }
+    const start = relativeOffset + paragraphTextSize;
+    const end = start + beginningStyleTextSize;
+    // No separate start < 0 guard is needed: relativeOffset and paragraphTextSize are both unsigned 32-bit reads, so start can never be negative.
+    if (end > packet.length) {
+      return undefined;
+    }
+    return packet.subarray(start, end);
+  } catch {
     return undefined;
   }
-  const pidCount = uint16At(packet, PID_COUNT_OFFSET);
-  const afterPids = 2 + pidCount * 2;
-  if (afterPids + TEXT_BLOCK_HEADER_SIZE > packet.length) {
-    return undefined;
-  }
-  const relativeOffset = uint32At(packet, afterPids + 2);
-  const paragraphTextSize = uint32At(packet, afterPids + 6);
-  const beginningStyleTextSize = uint32At(packet, afterPids + 10);
-  if (beginningStyleTextSize === 0) {
-    return undefined;
-  }
-  const start = relativeOffset + paragraphTextSize;
-  const end = start + beginningStyleTextSize;
-  if (start < 0 || end > packet.length) {
-    return undefined;
-  }
-  return packet.subarray(start, end);
 }

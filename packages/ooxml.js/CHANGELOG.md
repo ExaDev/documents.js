@@ -1,3 +1,31 @@
+## [8.14.5](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.14.4...ooxml.js%408.14.5) (2026-09-13)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.2
+- Updated archive-codec to 1.11.2
+
+## [8.14.4](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.14.3...ooxml.js%408.14.4) (2026-09-12)
+
+
+### Dependencies
+
+- Updated excel-number-format to 1.2.3
+
+## [8.14.3](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.14.2...ooxml.js%408.14.3) (2026-09-11)
+
+
+### Dependencies
+
+- Updated excel-number-format to 1.2.2
+
+## [8.14.2](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.14.1...ooxml.js%408.14.2) (2026-09-11)
+
+### Bug Fixes
+
+* **ooxml.js:** keep the pinned zip entry mtime inside fflate's valid DOS-date range ([b593da8](https://github.com/ExaDev/documents.js/commit/b593da83b1f5bdbad900ccdde909240a3f8664ac))
+
 ## [8.14.1](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.14.0...ooxml.js%408.14.1) (2026-09-11)
 
 ### Code Refactoring

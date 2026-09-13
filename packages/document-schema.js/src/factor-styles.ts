@@ -1,5 +1,10 @@
 import { canonicalKey } from "./canonicalise";
-import type { ContentDocument, ContentParagraph, ContentRun } from "./content";
+import type {
+  ContentDocument,
+  ContentParagraph,
+  ContentRun,
+  ContentVector,
+} from "./content";
 import {
   decomposeDrawPage,
   decomposeSection,
@@ -18,7 +23,6 @@ import type { DocumentTree } from "./package";
 import type {
   DrawPageGroupNode,
   HeadingGroupNode,
-  HeadingParagraph,
   ListChild,
   ListGroupNode,
   SectionChild,
@@ -80,27 +84,14 @@ type MintWrapper =
   | ShapeConstructGroupNode;
 
 // One child position of any block flow: the union of the section, list, and shape flows' child vocabularies. ListChild and ShapeChild are the identical type (ListGroupNode | ShapeConstructGroupNode | TreeBlockLeaf) since 4.1.0, no longer a sub-range of SectionChild (which carries SectionConstructGroupNode instead) -- so the extent walk needs both halves explicitly to serve all three flows with one function.
-type FlowChild = SectionChild | ListChild;
+// SectionChild | ListChild covers every block-flow position; ShapeGroupNode | ContentVector additionally covers a slide's own children (ShapeGroupNode[]) and a draw page's (ShapeGroupNode | ContentVector) -- flowExtent and childWrappers both walk every MintWrapper kind's children generically (recurse into anything carrying its own node+children, treat a bare paragraph leaf as an anchor, skip everything else), so this is the one union wide enough for every kind's own children type.
+type FlowChild = SectionChild | ListChild | ShapeGroupNode | ContentVector;
 
-// Per-kind narrowers over MintWrapper. These exist because TypeScript does not narrow a union from a comparison against a NESTED discriminant (`wrapper.node.kind === 'section'` narrows wrapper.node at best, never `wrapper`) -- the identical reason src/package-node.ts writes per-kind predicates, and an explicit guard is what narrows the wrapper itself. A shape group is the no-kind arm (ContentShape carries no kind field); heading and list groups share the 'paragraph' node discriminant and stay one arm because the minting walk treats every anchor alike. SectionGroupNode, SectionConstructGroupNode, and ShapeConstructGroupNode get no guard of their own: none of their node kinds ('section', or one of the six construct kinds) matches any check below, so all three fall through to the shared "no anchor" default at the foot of extentOf/childWrappers.
-function isShapeGroupWrapper(wrapper: MintWrapper): wrapper is ShapeGroupNode {
-  return !("kind" in wrapper.node);
-}
-
+// The one per-kind narrower extentOf/childWrappers still need: TypeScript does not narrow a union from a comparison against a NESTED discriminant (`wrapper.node.kind === 'paragraph'` narrows wrapper.node at best, never `wrapper`), so an explicit guard is what narrows the wrapper itself. Every OTHER MintWrapper kind (shape, slide, draw page, section, and both construct-group variants) has no anchor of its own, so extentOf and childWrappers both treat them alike via their own shared, kind-agnostic defaults -- see each function's own comment.
 function isAnchorGroupWrapper(
   wrapper: MintWrapper,
 ): wrapper is HeadingGroupNode | ListGroupNode {
   return "kind" in wrapper.node && wrapper.node.kind === "paragraph";
-}
-
-function isSlideGroupWrapper(wrapper: MintWrapper): wrapper is SlideGroupNode {
-  return "kind" in wrapper.node && wrapper.node.kind === "slide";
-}
-
-function isDrawPageGroupWrapper(
-  wrapper: MintWrapper,
-): wrapper is DrawPageGroupNode {
-  return "kind" in wrapper.node && wrapper.node.kind === "drawPage";
 }
 
 // Heading vs list within the anchor arm, discriminated the way decompose constructs them (a paragraph carrying both signals becomes a heading anchor -- headings win).
@@ -175,37 +166,18 @@ export function factorStyles(pkg: DocumentTree): DocumentTree {
     ...(pkg.fonts !== undefined ? { fonts: pkg.fonts } : {}),
     ...(pkg.source !== undefined ? { source: pkg.source } : {}),
   };
-  if (
-    pkg.definitions === undefined &&
-    pkg.fonts === undefined &&
-    pkg.source === undefined
-  )
-    return reassembled;
   return { ...reassembled, ...carried };
 }
 
 // --- The plan: extents, candidates, selection -----------------------------------------------------------
 
 // The paragraphs a wrapper's ref would overlay onto: the wrapper's own anchor (heading and list groups) plus, recursively, nested group anchors and bare paragraph leaves inside the block flow. This is exactly flatten.ts's resolution extent -- the same walk boundary, the same exclusions -- because exactness is proven against exactly the nodes resolution touches.
+//
+// Only the anchor-group arm is special-cased: a heading or list group's own anchor paragraph contributes itself, on top of its flow. Every other wrapper kind -- a shape group, a slide, a draw page, a section group, or a construct group -- has no anchor of its own, so its whole contribution is exactly its flow's own extent; flowExtent already walks any wrapper kind's children generically (recursing into anything carrying its own node+children, collecting a bare paragraph leaf, skipping everything else), so there is nothing left for a per-kind arm to do differently for any of them.
 function extentOf(wrapper: MintWrapper): ContentParagraph[] {
-  if (isShapeGroupWrapper(wrapper)) {
-    // A shape group: no anchor of its own, its list-flow children carry everything.
-    return flowExtent(wrapper.children);
-  }
   if (isAnchorGroupWrapper(wrapper)) {
     return [wrapper.node, ...flowExtent(wrapper.children)];
   }
-  if (isSlideGroupWrapper(wrapper)) {
-    return wrapper.children.flatMap(extentOf);
-  }
-  if (isDrawPageGroupWrapper(wrapper)) {
-    const paragraphs: ContentParagraph[] = [];
-    for (const child of wrapper.children) {
-      if ("node" in child) paragraphs.push(...extentOf(child));
-    }
-    return paragraphs;
-  }
-  // A section group or a construct group (section or shape variant): no anchor of its own, its whole flow is the extent -- a construct descriptor is never a paragraph, so it never contributes a paragraph itself, exactly like a plain section group's descriptor.
   return flowExtent(wrapper.children);
 }
 
@@ -223,24 +195,26 @@ function flowExtent(children: readonly FlowChild[]): ContentParagraph[] {
 }
 
 // A tuple of just the keys in `keys` that the paragraph actually carries -- the candidate identity for the paragraph namespace. Absent keys are omitted, not set to undefined, so canonicalKey treats both spellings of absence identically.
+// `keys` is always commonParagraphKeys' own result for this exact extent (bestParagraphCandidate is the sole caller), which by construction already guarantees every key in the list is present on every paragraph of that extent -- so unlike a general-purpose "pick present keys" helper, this one can assign unconditionally rather than checking for an absence its own caller has already ruled out.
 function paragraphTuple(
   paragraph: ContentParagraph,
   keys: readonly ParagraphKey[],
 ): StyleParagraphProperties {
   const tuple: Record<string, unknown> = {};
   for (const key of keys) {
-    if (paragraph[key] !== undefined) tuple[key] = paragraph[key];
+    tuple[key] = paragraph[key];
   }
   return tuple;
 }
 
+// The same reasoning as paragraphTuple's own comment above: `keys` is always commonRunKeys' own result for this exact set of runs (bestRunCandidate is the sole caller), which already guarantees every key is present on every run in the set.
 function runTuple(
   run: ContentRun,
   keys: readonly RunKey[],
 ): StyleRunProperties {
   const tuple: Record<string, unknown> = {};
   for (const key of keys) {
-    if (run[key] !== undefined) tuple[key] = run[key];
+    tuple[key] = run[key];
   }
   return tuple;
 }
@@ -261,8 +235,8 @@ function commonRunKeys(
   extent: readonly ContentParagraph[],
   frozen: ReadonlySet<RunKey>,
 ): readonly RunKey[] {
+  // No zero-runs guard: when the extent has no runs at all, bestRunCandidate's own inner loop over each paragraph's runs never executes regardless of which keys this returns, so returning the full (vacuously-common) key set for that input is behaviourally identical to returning [].
   const runs = extent.flatMap((paragraph) => paragraph.runs);
-  if (runs.length === 0) return [];
   return RUN_STYLE_KEYS.filter(
     (key) => !frozen.has(key) && runs.every((run) => run[key] !== undefined),
   );
@@ -358,39 +332,32 @@ interface Branch {
   readonly factoredRuns: ReadonlySet<ContentRun>;
 }
 
-// One accumulated table entry: its resolved content, the wrappers referencing it, and the ordering inputs (total stripped positions and the first wrapper's pre-order visit index).
+// One accumulated table entry: its resolved content, the wrappers referencing it, and the total stripped positions feeding its frequency. Entry ORDER (the "first occurrence" tie-break) needs no field of its own here: entries.values() already yields ascending pre-order-visit order for free, since each entry is inserted into the Map at the moment plan() first visits the wrapper that mints it, and Map iteration is insertion order -- see mint()'s own sort comment.
 interface MintedEntry {
   readonly content: StyleEntry;
   readonly wrappers: MintWrapper[];
   frequency: number;
-  firstVisit: number;
 }
 
-// Visits one wrapper outermost-first: selects at most one entry here, records its strips against this wrapper, freezes its keys for everything below, then recurses into the child wrappers with the branch bookkeeping extended (copy-on-descend, so sibling branches stay independent). `visit.index` numbers wrappers in pre-order -- the "first occurrence" arm of the entry ordering rule.
+// Visits one wrapper outermost-first: selects at most one entry here, records its strips against this wrapper, freezes its keys for everything below, then recurses into the child wrappers with the branch bookkeeping extended (copy-on-descend, so sibling branches stay independent).
 function plan(
   wrapper: MintWrapper,
-  visit: { index: number },
   branch: Branch,
   state: MintState,
   entries: Map<string, MintedEntry>,
 ): void {
   const extent = extentOf(wrapper);
-  const paragraphCandidate =
-    extent.length > 0
-      ? bestParagraphCandidate(
-          extent,
-          commonParagraphKeys(extent, branch.frozenParagraphs),
-          branch.factoredParagraphs,
-        )
-      : undefined;
-  const runCandidate =
-    extent.length > 0
-      ? bestRunCandidate(
-          extent,
-          commonRunKeys(extent, branch.frozenRuns),
-          branch.factoredRuns,
-        )
-      : undefined;
+  // No length guard: both candidate functions already return undefined for an empty extent (their loops simply never run), so a wrapper with no paragraphs at all is handled identically whether or not this call is skipped.
+  const paragraphCandidate = bestParagraphCandidate(
+    extent,
+    commonParagraphKeys(extent, branch.frozenParagraphs),
+    branch.factoredParagraphs,
+  );
+  const runCandidate = bestRunCandidate(
+    extent,
+    commonRunKeys(extent, branch.frozenRuns),
+    branch.factoredRuns,
+  );
 
   const nextFrozenParagraphs = new Set(branch.frozenParagraphs);
   const nextFrozenRuns = new Set(branch.frozenRuns);
@@ -412,7 +379,6 @@ function plan(
         frequency:
           (paragraphCandidate?.positions.length ?? 0) +
           (runCandidate?.positions.length ?? 0),
-        firstVisit: visit.index,
       });
     } else {
       existing.wrappers.push(wrapper);
@@ -438,7 +404,6 @@ function plan(
     state.wrapperStrips.set(wrapper, strips);
   }
 
-  visit.index += 1;
   const next: Branch = {
     frozenParagraphs: nextFrozenParagraphs,
     frozenRuns: nextFrozenRuns,
@@ -446,31 +411,15 @@ function plan(
     factoredRuns: nextFactoredRuns,
   };
   for (const child of childWrappers(wrapper)) {
-    plan(child, visit, next, state, entries);
+    plan(child, next, state, entries);
   }
 }
 
 // The direct child wrappers of a wrapper, in document order -- the pre-order walk's recursion set.
+// One loop serves every MintWrapper kind: a slide's children (always ShapeGroupNode, always
+// carrying node+children) are all kept; a draw page's (ShapeGroupNode | ContentVector) keeps the
+// shape groups and skips the vectors (which carry neither); a section/heading/list/shape/ construct group's flow keeps its nested groups and skips its leaves -- the identical "has its own node and children" test picks out exactly the wrapper positions in every one of these child vocabularies, so no per-kind dispatch is needed at all.
 function childWrappers(wrapper: MintWrapper): MintWrapper[] {
-  if (isShapeGroupWrapper(wrapper) || isAnchorGroupWrapper(wrapper)) {
-    // A shape's flow and a heading/list group's flow share the loop: nested groups are the child wrappers, leaves are not. An explicit loop rather than filter's type-guard overload because children arrives as a union of array types, whose filter signature TypeScript resolves without the predicate.
-    const wrappers: MintWrapper[] = [];
-    for (const child of wrapper.children) {
-      if ("node" in child && "children" in child) wrappers.push(child);
-    }
-    return wrappers;
-  }
-  if (isSlideGroupWrapper(wrapper)) {
-    return [...wrapper.children];
-  }
-  if (isDrawPageGroupWrapper(wrapper)) {
-    const shapes: ShapeGroupNode[] = [];
-    for (const child of wrapper.children) {
-      if ("node" in child) shapes.push(child);
-    }
-    return shapes;
-  }
-  // A section group: its flow's nested groups are the child wrappers.
   const wrappers: MintWrapper[] = [];
   for (const child of wrapper.children) {
     if ("node" in child && "children" in child) wrappers.push(child);
@@ -485,7 +434,6 @@ export function mint(pkg: DocumentTree): DocumentTree {
     wrapperStrips: new Map(),
   };
   const entries = new Map<string, MintedEntry>();
-  const visit = { index: 0 };
   const rootBranch: Branch = {
     frozenParagraphs: new Set(),
     frozenRuns: new Set(),
@@ -493,29 +441,22 @@ export function mint(pkg: DocumentTree): DocumentTree {
     factoredRuns: new Set(),
   };
   switch (pkg.kind) {
+    // The three container-rooted kinds share this identical body -- pkg.children is a MintWrapper[] for every one of them (SectionGroupNode[]/SlideGroupNode[]/DrawPageGroupNode[]), and plan() itself dispatches on each wrapper's own node.kind, not on which switch arm reached it. Combined deliberately rather than left as three textually-identical arms: with three separate arms, an empty (fallen-through) "wordprocessing" arm would fall into "presentation"'s byte-identical loop and reach the exact same result, making the case label itself unobservable to a test.
     case "wordprocessing":
-      for (const root of pkg.children)
-        plan(root, visit, rootBranch, state, entries);
-      break;
     case "presentation":
-      for (const root of pkg.children)
-        plan(root, visit, rootBranch, state, entries);
-      break;
     case "drawing":
-      for (const root of pkg.children)
-        plan(root, visit, rootBranch, state, entries);
+      for (const root of pkg.children) plan(root, rootBranch, state, entries);
       break;
-    // A spreadsheet's roots are sheet groups (no block flow, never minted) and a formula package's single child is a leaf: neither holds a wrapper to visit.
+    // A spreadsheet's roots are sheet groups (no block flow, never minted) and a formula package's single child is a leaf: neither holds a wrapper to visit -- both arms are genuinely empty, the switch's own last arms, so there is nothing to break out of.
     case "spreadsheet":
     case "formula":
-      break;
   }
   if (entries.size === 0) {
     return pkg;
   }
-  // Entry ids in (descending total frequency, first wrapper visit) order -- the deterministic table order the plan locks. The comparator is total at two arms: one wrapper mints at most one entry, so distinct entries always have distinct first visits and a further tie-break arm could never bind.
+  // Entry ids in (descending total frequency, first wrapper visit) order -- the deterministic table order the plan locks. entries.values() already yields ascending pre-order-visit order for free (each entry is inserted into the Map at the moment plan() first mints it, and Map iteration is insertion order), and Array.prototype.sort has been a STABLE sort by spec since ES2019 -- so sorting by descending frequency alone, with no explicit tie-break, already preserves each frequency-tied group's own relative (ascending pre-order-visit) insertion order exactly as a manual first-visit tie-break would, without a second comparator arm -- or a recorded firstVisit field -- to state or get wrong.
   const ordered = [...entries.values()].sort(
-    (a, b) => b.frequency - a.frequency || a.firstVisit - b.firstVisit,
+    (a, b) => b.frequency - a.frequency,
   );
   const styles: StylesTable = {};
   ordered.forEach((entry, index) => {
@@ -605,9 +546,9 @@ function rebuildSlideGroup(
     rebuildShapeGroup(shape, inner, state),
   );
   const ref = state.wrapperRefs.get(group);
-  const unchanged =
-    ref === undefined &&
-    children.every((child, index) => child === group.children[index]);
+  const unchanged = children.every(
+    (child, index) => child === group.children[index],
+  );
   return unchanged
     ? group
     : {
@@ -628,9 +569,9 @@ function rebuildDrawPageGroup(
     "node" in child ? rebuildShapeGroup(child, inner, state) : child,
   );
   const ref = state.wrapperRefs.get(group);
-  const unchanged =
-    ref === undefined &&
-    children.every((child, index) => child === group.children[index]);
+  const unchanged = children.every(
+    (child, index) => child === group.children[index],
+  );
   return unchanged
     ? group
     : {
@@ -651,9 +592,9 @@ function rebuildSectionGroup(
     rebuildSectionChild(child, inner, state),
   );
   const ref = state.wrapperRefs.get(group);
-  const unchanged =
-    ref === undefined &&
-    children.every((child, index) => child === group.children[index]);
+  const unchanged = children.every(
+    (child, index) => child === group.children[index],
+  );
   return unchanged
     ? group
     : {
@@ -712,9 +653,9 @@ function rebuildShapeGroup(
     rebuildListChild(child, inner, state),
   );
   const ref = state.wrapperRefs.get(group);
-  const unchanged =
-    ref === undefined &&
-    children.every((child, index) => child === group.children[index]);
+  const unchanged = children.every(
+    (child, index) => child === group.children[index],
+  );
   return unchanged
     ? group
     : {
@@ -735,9 +676,9 @@ function rebuildSectionConstructGroup(
     rebuildSectionChild(child, inner, state),
   );
   const ref = state.wrapperRefs.get(group);
-  const unchanged =
-    ref === undefined &&
-    children.every((child, index) => child === group.children[index]);
+  const unchanged = children.every(
+    (child, index) => child === group.children[index],
+  );
   return unchanged
     ? group
     : {
@@ -758,9 +699,9 @@ function rebuildShapeConstructGroup(
     rebuildListChild(child, inner, state),
   );
   const ref = state.wrapperRefs.get(group);
-  const unchanged =
-    ref === undefined &&
-    children.every((child, index) => child === group.children[index]);
+  const unchanged = children.every(
+    (child, index) => child === group.children[index],
+  );
   return unchanged
     ? group
     : {
@@ -782,13 +723,11 @@ function rebuildHeadingGroup(
 ): HeadingGroupNode {
   const inner = innerChain(group, chain, state);
   const anchor = rebuildParagraph(group.node, inner);
-  assertHeadingAnchor(anchor);
   const children = group.children.map((child) =>
     rebuildChild(child, inner, state),
   );
   const ref = state.wrapperRefs.get(group);
   const unchanged =
-    ref === undefined &&
     anchor === group.node &&
     children.every((child, index) => child === group.children[index]);
   return unchanged
@@ -808,13 +747,11 @@ function rebuildListGroup(
 ): ListGroupNode {
   const inner = innerChain(group, chain, state);
   const anchor = rebuildParagraph(group.node, inner);
-  assertListAnchor(anchor);
   const children = group.children.map((child) =>
     rebuildChild(child, inner, state),
   );
   const ref = state.wrapperRefs.get(group);
   const unchanged =
-    ref === undefined &&
     anchor === group.node &&
     children.every((child, index) => child === group.children[index]);
   return unchanged
@@ -822,30 +759,13 @@ function rebuildListGroup(
     : { node: anchor, ...(ref !== undefined ? { style: ref } : {}), children };
 }
 
-// rebuildParagraph is typed on the loose ContentParagraph, so a rebuilt anchor comes back with its REQUIRED grouping signal widened to optional; these assertions re-narrow it without a cast, exactly as flatten.ts does for resolved anchors. Stripping only ever deletes mintable style keys (never headingLevel or list -- see the module doc), so the signal always survives; the throw is the loud guard if that contract ever broke.
-function assertHeadingAnchor(
-  paragraph: ContentParagraph,
-): asserts paragraph is HeadingParagraph {
-  if (paragraph.headingLevel === undefined)
-    throw new Error(
-      "factorStyles: stripping dropped a heading anchor's headingLevel",
-    );
-}
-
-function assertListAnchor(
-  paragraph: ContentParagraph,
-): asserts paragraph is ListGroupNode["node"] {
-  if (paragraph.list === undefined)
-    throw new Error(
-      "factorStyles: stripping dropped a list anchor's list membership",
-    );
-}
-
 // One paragraph (leaf or anchor): stripped -- copied sans its minted keys -- when a wrapper on its chain factored it (chain-scoped, so an aliased position is stripped by its own branch's minter, never another branch's), with its runs rebuilt through the same copy-or-share rule. Returns the same object when nothing under it changed.
-function rebuildParagraph(
-  paragraph: ContentParagraph,
+//
+// Generic over the paragraph's own type (rather than fixed to the loose ContentParagraph) so a heading or list anchor keeps its REQUIRED grouping signal (headingLevel/list) through the round trip with no re-narrowing at the call site -- neither an assertion function nor a banned `as` cast. This is sound with no runtime check because PARAGRAPH_STYLE_KEYS (the only source stripParagraphKeys ever draws a strip's key list from, transitively through commonParagraphKeys/bestParagraphCandidate) never contains "headingLevel" or "list" -- see the module doc -- so stripping can never touch either signal, on a HeadingParagraph, a ListParagraph, or a bare ContentParagraph leaf alike.
+function rebuildParagraph<P extends ContentParagraph>(
+  paragraph: P,
   chain: ChainStrips,
-): ContentParagraph {
+): P {
   const strips = paragraphStripsOf(chain, paragraph);
   const base =
     strips === undefined ? paragraph : stripParagraphKeys(paragraph, strips);
@@ -862,12 +782,12 @@ function rebuildParagraph(
   return { ...base, runs };
 }
 
-// Copies a paragraph sans the named keys -- copy-then-delete, never destructuring the keys out (an unused binding) and never mutating the input (decompose embedded the caller's own node objects, and the layout pass's frames ride on them). Every mintable paragraph key is optional on ContentParagraph, so the deletes are type-honest.
-function stripParagraphKeys(
-  paragraph: ContentParagraph,
+// Copies a paragraph sans the named keys -- copy-then-delete, never destructuring the keys out (an unused binding) and never mutating the input (decompose embedded the caller's own node objects, and the layout pass's frames ride on them). Every mintable paragraph key is optional on ContentParagraph, so the deletes are type-honest. Generic for the same reason rebuildParagraph is: preserves a heading/list anchor's own narrower type through the copy.
+function stripParagraphKeys<P extends ContentParagraph>(
+  paragraph: P,
   keys: readonly ParagraphKey[],
-): ContentParagraph {
-  const copy: ContentParagraph = { ...paragraph };
+): P {
+  const copy = { ...paragraph };
   for (const key of keys) Reflect.deleteProperty(copy, key);
   return copy;
 }

@@ -69,13 +69,46 @@ describe("rational", () => {
     });
   });
 
-  it("throws on division by zero", () => {
+  it("divides by a rational whose own numerator is not 1, distinguishing the cross-multiplication from a same-result division", () => {
+    // (1/2) / (3/4) = 4/6 = 2/3 -- the divisor's numerator (3) is not 1, so a*d/(b*n) and a*d*(b*n) (or a*d/(b*n) with integer BigInt division instead of the correct cross-multiply) would disagree here, unlike the "divides exactly" case above where the divisor's numerator is 1 and every wrong formula happens to coincide with the right one.
+    const result = divideRational(
+      toRational({ numerator: "1", denominator: "2" }),
+      toRational({ numerator: "3", denominator: "4" }),
+    );
+    expect(toExactRational(result)).toEqual({
+      numerator: "2",
+      denominator: "3",
+    });
+  });
+
+  it("throws on division by zero with its own specific message, before reduce's own zero-denominator guard could ever produce a different one", () => {
     expect(() =>
       divideRational(
         toRational({ numerator: "1", denominator: "2" }),
         toRational({ numerator: "0", denominator: "1" }),
       ),
-    ).toThrow(RangeError);
+    ).toThrow("rational.ts: division by zero");
+  });
+
+  it("throws when a supplied Rational carries a zero denominator, even though toRational's own callers never construct one", () => {
+    // Rational is a plain interface, not a validated type -- reduce()'s own d === 0n guard is the only thing standing between a directly-constructed zero-denominator Rational and a silent BigInt division-by-zero further down. Exercised here via addRational since reduce itself is not exported.
+    expect(() => addRational({ n: 1n, d: 0n }, { n: 1n, d: 1n })).toThrow(
+      RangeError,
+    );
+    expect(() => addRational({ n: 1n, d: 0n }, { n: 1n, d: 1n })).toThrow(
+      "rational.ts: denominator must not be zero",
+    );
+  });
+
+  it("reduces a zero numerator to the canonical 0/1 through the same general path as any other value, for either sign of denominator", () => {
+    expect(toExactRational({ n: 0n, d: 5n })).toEqual({
+      numerator: "0",
+      denominator: "1",
+    });
+    expect(toExactRational({ n: 0n, d: -5n })).toEqual({
+      numerator: "0",
+      denominator: "1",
+    });
   });
 
   it("canonicalises negative and zero values to document-schema.js's exact spelling", () => {

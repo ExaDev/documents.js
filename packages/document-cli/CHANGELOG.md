@@ -1,3 +1,72 @@
+## [5.11.6](https://github.com/ExaDev/documents.js/compare/document-cli%405.11.5...document-cli%405.11.6) (2026-09-13)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.2
+- Updated odf.js to 7.25.3
+- Updated document-outline.js to 3.8.0
+- Updated documents.js to 7.20.7
+
+## [5.11.5](https://github.com/ExaDev/documents.js/compare/document-cli%405.11.4...document-cli%405.11.5) (2026-09-12)
+
+
+### Dependencies
+
+- Updated documents.js to 7.20.6
+
+## [5.11.4](https://github.com/ExaDev/documents.js/compare/document-cli%405.11.3...document-cli%405.11.4) (2026-09-12)
+
+
+### Dependencies
+
+- Updated documents.js to 7.20.5
+
+## [5.11.3](https://github.com/ExaDev/documents.js/compare/document-cli%405.11.2...document-cli%405.11.3) (2026-09-12)
+
+
+### Dependencies
+
+- Updated document-outline.js to 3.7.3
+- Updated documents.js to 7.20.4
+
+## [5.11.2](https://github.com/ExaDev/documents.js/compare/document-cli%405.11.1...document-cli%405.11.2) (2026-09-11)
+
+
+### Dependencies
+
+- Updated documents.js to 7.20.3
+
+## [5.11.1](https://github.com/ExaDev/documents.js/compare/document-cli%405.11.0...document-cli%405.11.1) (2026-09-11)
+
+
+### Dependencies
+
+- Updated odf.js to 7.25.2
+- Updated documents.js to 7.20.2
+
+## [5.11.0](https://github.com/ExaDev/documents.js/compare/document-cli%405.10.0...document-cli%405.11.0) (2026-09-11)
+
+### Features
+
+* **ci:** build ARM64 Linux and Windows SEA binaries too ([78cfe9f](https://github.com/ExaDev/documents.js/commit/78cfe9fae5c8478ea47a69a9a6dcc723bb696bb4))
+
+## [5.10.0](https://github.com/ExaDev/documents.js/compare/document-cli%405.9.0...document-cli%405.10.0) (2026-09-11)
+
+### Features
+
+* **ci:** build Intel macOS SEA binaries alongside Apple Silicon ([f0a48a1](https://github.com/ExaDev/documents.js/commit/f0a48a19050089f14ecc8a94430a0278bb2b35d8))
+
+## [5.9.0](https://github.com/ExaDev/documents.js/compare/document-cli%405.8.3...document-cli%405.9.0) (2026-09-11)
+
+### Features
+
+* **document-cli:** build a Node SEA single-executable binary ([b933fcf](https://github.com/ExaDev/documents.js/commit/b933fcf180bd67c09442e32015a00b6f5bc2edbc))
+
+### Documentation
+
+* document the Node SEA binary distribution for cli/mcp/rest ([420ea7c](https://github.com/ExaDev/documents.js/commit/420ea7cf34e2073950f7e1b823c86f403a8bf25a))
+
 ## [5.8.3](https://github.com/ExaDev/documents.js/compare/document-cli%405.8.2...document-cli%405.8.3) (2026-09-11)
 
 ### Code Refactoring

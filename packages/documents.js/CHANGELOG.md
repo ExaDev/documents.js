@@ -1,3 +1,67 @@
+## [7.20.7](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.6...documents.js%407.20.7) (2026-09-13)
+
+
+### Dependencies
+
+- Updated byte-codec to 1.5.3
+- Updated document-schema.js to 7.11.2
+- Updated archive-codec to 1.11.2
+- Updated epub-codec to 1.5.3
+- Updated markdown-codec to 6.7.2
+- Updated odf.js to 7.25.3
+- Updated pdf-codec to 4.8.3
+- Updated doc-codec to 2.10.2
+- Updated ooxml.js to 8.14.5
+- Updated ppt-codec to 1.7.3
+- Updated rtf-codec to 4.4.2
+- Updated wpd-codec to 3.5.3
+- Updated xls-codec to 4.15.4
+
+## [7.20.6](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.5...documents.js%407.20.6) (2026-09-12)
+
+
+### Dependencies
+
+- Updated wpd-codec to 3.5.2
+
+## [7.20.5](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.4...documents.js%407.20.5) (2026-09-12)
+
+
+### Dependencies
+
+- Updated ooxml.js to 8.14.4
+- Updated xls-codec to 4.15.3
+
+## [7.20.4](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.3...documents.js%407.20.4) (2026-09-12)
+
+
+### Dependencies
+
+- Updated byte-codec to 1.5.2
+- Updated pdf-codec to 4.8.2
+- Updated ppt-codec to 1.7.2
+
+## [7.20.3](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.2...documents.js%407.20.3) (2026-09-11)
+
+
+### Dependencies
+
+- Updated ooxml.js to 8.14.3
+- Updated xls-codec to 4.15.2
+
+## [7.20.2](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.1...documents.js%407.20.2) (2026-09-11)
+
+### Tests
+
+* **documents.js:** stop mutating process.env.TZ to test date/time decoding ([99ce0e0](https://github.com/ExaDev/documents.js/commit/99ce0e0e3c2e58bf5848d6a0f5d7371b2979a6c4))
+
+
+### Dependencies
+
+- Updated epub-codec to 1.5.2
+- Updated odf.js to 7.25.2
+- Updated ooxml.js to 8.14.2
+
 ## [7.20.1](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.0...documents.js%407.20.1) (2026-09-11)
 
 ### Code Refactoring

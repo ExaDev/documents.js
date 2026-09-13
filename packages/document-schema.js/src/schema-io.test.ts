@@ -165,6 +165,18 @@ describe("documentSchemaKindOf", () => {
     expect(documentSchemaKindOf("a string")).toBeUndefined();
     expect(documentSchemaKindOf(["array", "not", "record"])).toBeUndefined();
   });
+
+  it("requires the URI to actually start with the jsdelivr https origin, not merely contain it", () => {
+    const real = uriForVersion(installedMajor, "document-tree");
+    expect(
+      documentSchemaKindOf({ $schema: `http://evil.example/${real}` }),
+    ).toBeUndefined();
+  });
+
+  it("requires the URI to end at .schema.json, not merely start with a valid prefix", () => {
+    const real = uriForVersion(installedMajor, "document-tree");
+    expect(documentSchemaKindOf({ $schema: `${real}.extra` })).toBeUndefined();
+  });
 });
 
 describe("documentFromJson dispatches on the $schema URI", () => {
@@ -295,6 +307,72 @@ describe("documentFromJson dispatches on the $schema URI", () => {
     expect(() =>
       documentFromJson({ $schema: schemaUriFor("DocumentTree") }),
     ).not.toThrow(UnrecognizedDocumentSchemaError);
+  });
+
+  it("parses the major from the very start of the version string, not from wherever a digit first appears", () => {
+    // "v1.0.0" has no leading digit at all -- majorVersionOf must fail to parse it, which routes this dump into the "newer major" (upgrade) branch rather than treating captured "1" as an older major.
+    const dump = {
+      $schema: uriForVersion("v1.0.0", "document-tree"),
+    };
+    try {
+      documentFromJson(dump);
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(SchemaVersionMismatchError);
+      if (!(error instanceof SchemaVersionMismatchError)) throw error;
+      expect(error.message).toContain("Upgrade document-schema.js");
+    }
+  });
+
+  it("captures every leading digit of the major, not just the first one", () => {
+    // A two-digit major well past the installed one: if only the first digit were captured, "12" would be misread as "1", which is OLDER than the installed major(7) rather than newer.
+    const dump = {
+      $schema: uriForVersion(12, "document-tree"),
+    };
+    try {
+      documentFromJson(dump);
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(SchemaVersionMismatchError);
+      if (!(error instanceof SchemaVersionMismatchError)) throw error;
+      expect(error.message).toContain("Upgrade document-schema.js");
+      expect(error.message).not.toContain("formatVersion");
+    }
+  });
+
+  it("names each error class via its own .name, not a shared or empty string", () => {
+    expect(new UnrecognizedDocumentSchemaError("x").name).toBe(
+      "UnrecognizedDocumentSchemaError",
+    );
+    expect(new LayoutSchemaDemotedError("x").name).toBe(
+      "LayoutSchemaDemotedError",
+    );
+    expect(new DocumentPackageRenamedError("x").name).toBe(
+      "DocumentPackageRenamedError",
+    );
+    expect(new SchemaVersionMismatchError("x", "1.0.0", "2.0.0").name).toBe(
+      "SchemaVersionMismatchError",
+    );
+  });
+
+  it("UnrecognizedDocumentSchemaError's message names the actual offending schema value", () => {
+    const error = new UnrecognizedDocumentSchemaError("bogus");
+    expect(error.message).toBe(
+      'documentFromJson: value has no recognized "$schema" property (expected one of the document-schema.js .schema.json URIs; found: "bogus").',
+    );
+  });
+
+  it("SchemaVersionMismatchError treats an equal major as neither older nor newer -- it never actually occurs via documentFromJson (an equal major always parses), so this pins the class's own boundary behaviour directly", () => {
+    const error = new SchemaVersionMismatchError("s", "7.0.0", "7.0.0");
+    expect(error.message).toContain("Upgrade document-schema.js");
+    expect(error.message).not.toContain("formatVersion");
+  });
+
+  it("SchemaVersionMismatchError's message names the actual dump and installed versions, not just the branching suffix", () => {
+    const error = new SchemaVersionMismatchError("s", "10.2.1", "9.0.0");
+    expect(error.message).toBe(
+      "documentFromJson: this dump's $schema pins document-schema.js@10.2.1, but the installed release is @9.0.0, and a dump only parses under the major that wrote it. Upgrade document-schema.js to read it.",
+    );
   });
 
   it("a bare DocumentTreeSchema.parse does not version-discriminate: it structurally validates whatever it is handed", () => {

@@ -25,6 +25,20 @@ describe("document-compute.js error classes", () => {
     expect(error.right).toEqual({ time: 1 });
     expect(error.message).toContain("math:add");
     expect(error.message).toContain("extra detail");
+    expect(error.message).toBe(
+      "'math:add' requires compatible dimensions, got length^1 and time^1 (extra detail).",
+    );
+  });
+
+  it("IncompatibleDimensionsError ends the message with a bare full stop when no detail is given", () => {
+    const error = new IncompatibleDimensionsError(
+      "math:pow",
+      { length: 1 },
+      {},
+    );
+    expect(error.message).toBe(
+      "'math:pow' requires compatible dimensions, got length^1 and dimensionless.",
+    );
   });
 
   it("UnboundSymbolError names the missing symbol", () => {
@@ -32,12 +46,18 @@ describe("document-compute.js error classes", () => {
     expect(error.name).toBe("UnboundSymbolError");
     expect(error.symbol).toBe("phi");
     expect(error.message).toContain("phi");
+    expect(error.message).toBe(
+      "symbol 'phi' has no entry in the supplied bindings.",
+    );
   });
 
   it("UnknownUnitError names the missing unit id", () => {
     const error = new UnknownUnitError("imperial:furlong");
     expect(error.name).toBe("UnknownUnitError");
     expect(error.unit).toBe("imperial:furlong");
+    expect(error.message).toBe(
+      "unit 'imperial:furlong' is not registered in the supplied symbol table's units.",
+    );
   });
 
   it("DivisionByZeroError carries the operation", () => {
@@ -64,6 +84,7 @@ describe("document-compute.js error classes", () => {
     );
     expect(error.name).toBe("NumericDomainError");
     expect(error.operation).toBe("math:sqrt");
+    expect(error.message).toBe("'math:sqrt': magnitude must be non-negative.");
   });
 
   it("NonConvergentSolveError carries the method and iteration count", () => {

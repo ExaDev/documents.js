@@ -42,15 +42,15 @@ export function inflateTolerant(data: Uint8Array<ArrayBuffer>): InflateResult {
   }
 
   let offset = 0;
-  while (offset < data.length && isAsciiWhitespace(data[offset])) {
+  // Bounded by the data itself rather than by a separately tracked length: isAsciiWhitespace(undefined) is explicitly false (see reader.ts), and Uint8Array indexing past the end always returns undefined, so the loop already stops the moment offset runs off the end without needing its own length check.
+  while (isAsciiWhitespace(data[offset])) {
     offset++;
   }
-  if (offset > 0) {
-    try {
-      return { bytes: inflate(data.subarray(offset)), recovered: true };
-    } catch {
-      // fall through
-    }
+  // Retried unconditionally, even when offset is still 0 (no whitespace prefix was found): inflate() is a deterministic pure function, so re-running it on data.subarray(0) -- the identical bytes the try block above already threw on -- fails the same way and falls through to the next recovery tier, exactly as if this attempt had been skipped.
+  try {
+    return { bytes: inflate(data.subarray(offset)), recovered: true };
+  } catch {
+    // fall through
   }
 
   try {

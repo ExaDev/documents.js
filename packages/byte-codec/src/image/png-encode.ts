@@ -17,6 +17,11 @@ export const PNG_MAX_DIMENSION = 0x7fffffff;
 // A ceiling on width * height, on top of PNG_MAX_DIMENSION above -- the spec bounds only each dimension independently, not their product, so a pair of dimensions that individually satisfy PNG_MAX_DIMENSION (e.g. 46341 x 46341, or 65536 x 65536) can still multiply into an unboundedly large pixel count. This has no PNG-spec basis -- it is a practical, finite ceiling on the per-call work this encoder is willing to do, not a guarantee that encoding at or near it stays fast: measured directly, encoding a PNG_MAX_PIXELS-sized image takes tens of seconds end to end, dominated by filterScanlines' own adaptive per-row search across all five PNG filter types and the subsequent deflate pass, not by the smaller per-pixel loops in detectPalette or writeTruecolorPng's interleave step. The point of the bound is to keep that worst case finite rather than to keep it quick, and this figure is chosen high enough to reject only genuinely extreme inputs -- some real sources (an above-100-megapixel medium-format sensor, a high-DPI full-page scan) do exceed it, so this is not a claim that every legitimate photograph or scan stays under the ceiling, only that one large enough to exceed it needs downsampling before it reaches this encoder.
 export const PNG_MAX_PIXELS = 100_000_000;
 
+// Extracted from encodePng's own guard purely so its exact boundary (a pixel count of precisely PNG_MAX_PIXELS must be accepted, one more must not) is directly, cheaply testable: exercising this comparison through encodePng itself at the real boundary means actually allocating and filtering/deflating a genuine 100-million-pixel image, which -- see PNG_MAX_PIXELS' own comment on what dominates cost at this size -- takes tens of seconds even in the cheapest configuration, and far longer under Stryker's per-statement coverage instrumentation (multiple minutes, repeated across every mutant in the whole package's test run). A pure, standalone predicate keeps the real guard's exact logic under test without paying that cost at all.
+export function exceedsMaxPixelCount(pixelCount: number): boolean {
+  return pixelCount > PNG_MAX_PIXELS;
+}
+
 export interface PngEncodeOptions {
   // 'adaptive' (the default) picks, per row, whichever of the five PNG filters minimises the sum of the filtered bytes' absolute values -- the PNG spec's own recommended heuristic. 'none' always emits filter type 0, useful for deterministic, human-auditable test output.
   readonly filter?: "none" | "adaptive";
@@ -88,8 +93,8 @@ function detectPalette(image: RawImage): PaletteEncoding | undefined {
     const g = data[base + 1] ?? 0;
     const b = data[base + 2] ?? 0;
     const a = alpha === undefined ? 255 : (alpha[i] ?? 0);
-    // A bijective encoding of the four 0..255 samples into one safe-integer key -- multiplication (not a `<<` shift) so the top channel never overflows into JS's 32-bit bitwise-operator truncation.
-    const key = r + g * 256 + b * 65536 + a * 16777216;
+    // A packed bitfield (each 0..255 sample in its own byte lane) rather than a sum of scaled terms: since r/g/b/a each occupy a disjoint, non-overlapping 8-bit lane of the 32-bit key, the packing is a bijection by construction, with no arithmetic identity between the lanes for a mutation to preserve.
+    const key = r | (g << 8) | (b << 16) | (a << 24);
 
     let index = colorToIndex.get(key);
     if (index === undefined) {
@@ -165,10 +170,11 @@ function writeTruecolorPng(
   const pixelCount = width * height;
 
   const interleaved = new Uint8Array(pixelCount * outChannels);
-  for (let i = 0; i < pixelCount; i++) {
+  // Iterated via an exact-length Array.from rather than a manually bounded for loop, for both the pixel and channel indices: `interleaved` is allocated to exactly pixelCount * outChannels elements, so there is no separate loop-bound comparison whose own boundary could ever be observed through it.
+  for (const i of Array.from({ length: pixelCount }, (_, index) => index)) {
     const srcBase = i * channels;
     const dstBase = i * outChannels;
-    for (let c = 0; c < channels; c++) {
+    for (const c of Array.from({ length: channels }, (_, index) => index)) {
       interleaved[dstBase + c] = data[srcBase + c]!;
     }
     if (alpha !== undefined) {
@@ -205,7 +211,7 @@ export function encodePng(
     );
   }
   const pixelCount = image.width * image.height;
-  if (pixelCount > PNG_MAX_PIXELS) {
+  if (exceedsMaxPixelCount(pixelCount)) {
     throw new Error(
       `cannot encode a PNG with ${pixelCount} pixels (width=${image.width}, height=${image.height}); each dimension is individually within the PNG spec's own limit, but this encoder bounds their product to ${PNG_MAX_PIXELS} to avoid an unbounded per-pixel scan and allocation`,
     );

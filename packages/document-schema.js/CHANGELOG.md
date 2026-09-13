@@ -1,3 +1,31 @@
+## [7.11.2](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.11.1...document-schema.js%407.11.2) (2026-09-13)
+
+### Bug Fixes
+
+* **document-schema.js:** disable ignoreStatic so module-load-time mutants activate ([10e76e6](https://github.com/ExaDev/documents.js/commit/10e76e660220e2e1af30af1a16c2c04adfedd053))
+
+### Code Refactoring
+
+* **document-schema.js:** collapse per-kind wrapper dispatch to shared structural walks ([3a02893](https://github.com/ExaDev/documents.js/commit/3a0289388a1e6ad4302c3d8f7ea89df316c0fae2))
+* **document-schema.js:** drop a1 range-reference's redundant ternary for the unbounded half ([aa24257](https://github.com/ExaDev/documents.js/commit/aa24257ad0b6fb2ca2625e1b544a5349be34af4f))
+* **document-schema.js:** drop factor-styles's unreachable defensive checks ([50f8edf](https://github.com/ExaDev/documents.js/commit/50f8edfddbcece4a1f99de58018294c232f02683))
+* **document-schema.js:** drop isGroupWrapper's unreachable node-record guard ([770c8c7](https://github.com/ExaDev/documents.js/commit/770c8c7ab3c518b9f7f138026ec8db99cc368bb5))
+* **document-schema.js:** drop isImageFormat's redundant typeof guard ([982676d](https://github.com/ExaDev/documents.js/commit/982676d2f392c71a49f6c5d07a8d5a4280730073))
+* **document-schema.js:** drop mathMlDef's unreachable undefined guard ([5b949a2](https://github.com/ExaDev/documents.js/commit/5b949a275142f7e8b7fadd31002d716b466afac8))
+* **document-schema.js:** make rebuildParagraph generic over the anchor type ([4992362](https://github.com/ExaDev/documents.js/commit/4992362a640b621227df8f26d74300421cc26575))
+* **document-schema.js:** strip a hex colour's leading # by position, not a regex capture ([fc92705](https://github.com/ExaDev/documents.js/commit/fc9270557e9e3c1f8792dfbdb840b9d6818edd4d))
+
+### Tests
+
+* **document-schema.js:** add canonicalise's own dedicated unit suite ([9506fe5](https://github.com/ExaDev/documents.js/commit/9506fe5f7b721ff8b1541e974249360f2c805051))
+* **document-schema.js:** add style.ts's own dedicated unit suite ([5cb8b8e](https://github.com/ExaDev/documents.js/commit/5cb8b8e3d00396c8d4b3b3dce31fca7a672b9318))
+* **document-schema.js:** pin decompose's heading/list pop-loop boundaries ([6b31ebf](https://github.com/ExaDev/documents.js/commit/6b31ebf24455decff25ac2aa44bebe964f5f2611))
+* **document-schema.js:** pin flatten's style-resolution chain boundaries ([c641d9f](https://github.com/ExaDev/documents.js/commit/c641d9fcad94059c470d46b16ca2b27765659871))
+* **document-schema.js:** pin math/mathml schema boundaries ([d00d933](https://github.com/ExaDev/documents.js/commit/d00d933d4380db3fdaaf9ff19b13d6542c8a4671))
+* **document-schema.js:** pin schema-io's JSON round-trip error paths ([c5726d0](https://github.com/ExaDev/documents.js/commit/c5726d03795b6c0f57254869adbe8fef272c4142))
+* **document-schema.js:** pin the styles-table entry schemas' field-level boundaries ([6650cfc](https://github.com/ExaDev/documents.js/commit/6650cfc5358c633569e53e39ab684d64fc9df0b7))
+* **document-schema.js:** raise the mutation break threshold to 100 ([0a273cf](https://github.com/ExaDev/documents.js/commit/0a273cf8aed8644933843f9b3cdc6559e7e1b399))
+
 ## [7.11.1](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.11.0...document-schema.js%407.11.1) (2026-09-11)
 
 ### Code Refactoring

@@ -1,5 +1,5 @@
 import { base64ToBytes, decodePackage } from "odf.js";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   embeddedHsqldbCachedOdbBytes,
   embeddedHsqldbMultiIndexOdbBytes,
@@ -17,19 +17,7 @@ import {
 import { HsqldbRowFormatError } from "./rowformat";
 import { parseHsqldbScript } from "./script";
 
-// This suite decodes DATE/TIME/TIMESTAMP columns, which -- per src/hsqldb/rowformat.ts's own documented, inherent format limitation -- are only recoverable correctly when read in the same timezone the fixture was written in (Europe/London, spanning both its GMT and BST halves of the year -- see src/test-support/odb.ts's own module comment on why). Pinned here, not globally, so this file's own TZ mutation never leaks into a sibling test file sharing the same vitest worker process.
-let previousTz: string | undefined;
-beforeAll(() => {
-  previousTz = process.env.TZ;
-  process.env.TZ = "Europe/London";
-});
-afterAll(() => {
-  if (previousTz === undefined) {
-    delete process.env.TZ;
-  } else {
-    process.env.TZ = previousTz;
-  }
-});
+// This suite decodes DATE/TIME/TIMESTAMP columns, which -- per src/hsqldb/rowformat.ts's own documented, inherent format limitation -- are only recoverable correctly when read in the same timezone the fixture was written in (Europe/London, spanning both its GMT and BST halves of the year -- see src/test-support/odb.ts's own module comment on why). Passed explicitly as { timeZone: "Europe/London" } to every call that decodes a real date/time value, rather than by mutating process.env.TZ and relying on the implicit-local-timezone default: a runtime TZ mutation is not observed by Date's local getters inside a worker_threads worker (confirmed against plain Node -- the same mutation works correctly in the main thread but has no effect at all inside a Worker), which is exactly the pool Stryker's vitest-runner forces, so a suite relying on it decoded arbitrarily wrong dates under mutation testing.
 
 function decodedFixture() {
   const pkg = decodePackage(embeddedHsqldbCachedOdbBytes());
@@ -159,6 +147,7 @@ describe("readHsqldbCachedTableRows: byte-level decode against the real fixture"
       { rootPosition: 232, indexCount: 1 },
       1,
       employees.columns,
+      { timeZone: "Europe/London" },
     );
     expect(rows).toEqual([
       [
@@ -244,7 +233,7 @@ describe("readHsqldbCachedTableRows: byte-level decode against the real fixture"
 });
 
 describe("readHsqldbCachedTableRows: caller-supplied timeZone override", () => {
-  // The fixture was written by a JVM in Europe/London (see this file's own beforeAll), so its DATE values only decode to their original calendar day when read in that zone. Reading the same bytes in a materially different zone is exactly the "moved to another host" case the default local-timezone behaviour cannot serve, and is what the option exists for.
+  // The fixture was written by a JVM in Europe/London, so its DATE values only decode to their original calendar day when read in that zone. Reading the same bytes in a materially different zone is exactly the "moved to another host" case a fixed decode zone cannot serve, and is what the option exists for.
   function employeeColumns() {
     const employees = parseHsqldbScript(
       new TextEncoder().encode(HSQLDB_CACHED_SCRIPT_TEXT),
@@ -255,14 +244,15 @@ describe("readHsqldbCachedTableRows: caller-supplied timeZone override", () => {
     return employees.columns;
   }
 
-  it("reinterprets DATE values in an explicitly supplied zone, leaving the default (local) behaviour unchanged", () => {
+  it("reinterprets DATE values differently depending on the explicitly supplied zone", () => {
     const dataBytes = base64ToBytes(decodedFixture().dataBase64);
     const columns = employeeColumns();
-    const local = readHsqldbCachedTableRows(
+    const london = readHsqldbCachedTableRows(
       dataBytes,
       { rootPosition: 232, indexCount: 1 },
       1,
       columns,
+      { timeZone: "Europe/London" },
     );
     const newYork = readHsqldbCachedTableRows(
       dataBytes,
@@ -273,18 +263,8 @@ describe("readHsqldbCachedTableRows: caller-supplied timeZone override", () => {
     );
 
     // Row 0's HIRE_DATE is midnight Europe/London on 2020-01-15 -- 19:00 the previous day in New York.
-    expect(local[0]?.[3]).toEqual({ kind: "date", value: "2020-01-15" });
+    expect(london[0]?.[3]).toEqual({ kind: "date", value: "2020-01-15" });
     expect(newYork[0]?.[3]).toEqual({ kind: "date", value: "2020-01-14" });
-    // Explicitly naming the zone the fixture was written in reproduces the default result exactly.
-    expect(
-      readHsqldbCachedTableRows(
-        dataBytes,
-        { rootPosition: 232, indexCount: 1 },
-        1,
-        columns,
-        { timeZone: "Europe/London" },
-      ),
-    ).toEqual(local);
   });
 
   it("reinterprets TIME and TIMESTAMP values in the supplied zone too, keeping a TIMESTAMP's own nanosecond component intact", () => {
@@ -340,6 +320,7 @@ describe("decodeHsqldbCachedTables: multi-index CACHED tables, against the real 
       HSQLDB_MULTI_INDEX_SCRIPT_TEXT,
       base64ToBytes(dataPart.base64),
       HSQLDB_MULTI_INDEX_PROPERTIES_TEXT,
+      { timeZone: "Europe/London" },
     );
     const byName = new Map(decoded.map((table) => [table.tableName, table]));
 
@@ -420,6 +401,7 @@ describe("decodeHsqldbCachedTables: the Tier 2 orchestration, against the real f
       HSQLDB_CACHED_SCRIPT_TEXT,
       dataBytes,
       HSQLDB_CACHED_PROPERTIES_TEXT,
+      { timeZone: "Europe/London" },
     );
 
     const byName = new Map(decoded.map((table) => [table.tableName, table]));

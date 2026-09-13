@@ -1,3 +1,35 @@
+## [1.0.4](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.3...pdf-raster-cpu%401.0.4) (2026-09-13)
+
+
+### Dependencies
+
+- Updated byte-codec to 1.5.3
+- Updated pdf-codec to 4.8.3
+
+## [1.0.3](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.2...pdf-raster-cpu%401.0.3) (2026-09-12)
+
+### Code Refactoring
+
+* **pdf-raster-cpu:** expose join-wedge boundary decisions for direct testing ([fc28add](https://github.com/ExaDev/documents.js/commit/fc28add302053248a23ffa0ccbbb20499fedf67c))
+* **pdf-raster-cpu:** share subsample-range arithmetic in CoverageMask ([2e8f499](https://github.com/ExaDev/documents.js/commit/2e8f499266e37205140b000902ac1ad030154bf7))
+* **pdf-raster-cpu:** walk CoverageMask's own marked range instead of a computed bbox ([6db7eea](https://github.com/ExaDev/documents.js/commit/6db7eeaa7a1b7b2bd7ab837a9dccf1d4715f039c))
+
+### Documentation
+
+* **pdf-raster-cpu:** describe the 100% mutation gate without disable comments ([051de82](https://github.com/ExaDev/documents.js/commit/051de82a7bd4b56abadf13ead03810e49ed973c1))
+
+## [1.0.2](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.1...pdf-raster-cpu%401.0.2) (2026-09-12)
+
+### Tests
+
+* **pdf-raster-cpu:** reach a 100% mutation score ([4717f16](https://github.com/ExaDev/documents.js/commit/4717f16e909e8dd77613805dcc08c97e0283b18c))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.5.2
+- Updated pdf-codec to 4.8.2
+
 ## [1.0.1](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.0...pdf-raster-cpu%401.0.1) (2026-09-11)
 
 ### Code Refactoring

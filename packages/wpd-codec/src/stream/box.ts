@@ -26,50 +26,49 @@ const FIRST_OVERRIDE_BLOCK_OFFSET = OVERRIDE_FLAGS_OFFSET + 2;
 function walkOverrideBlocks(
   nonDeletable: Uint8Array,
 ): { flags: number; blocks: ReadonlyMap<number, Uint8Array> } | undefined {
-  if (nonDeletable.length < FIRST_OVERRIDE_BLOCK_OFFSET) {
+  // uint16At throws (via byteAt) rather than returning undefined for a read that runs past nonDeletable's own end, caught once below -- so neither the flags word itself nor a block's own size field needs a separate room check ahead of reading it.
+  try {
+    const flags = uint16At(nonDeletable, OVERRIDE_FLAGS_OFFSET);
+    const blocks = new Map<number, Uint8Array>();
+    let cursor = FIRST_OVERRIDE_BLOCK_OFFSET;
+    for (let bit = 15; bit >= 5; bit -= 1) {
+      if ((flags & (1 << bit)) === 0) {
+        continue;
+      }
+      if (bit === OVERRIDE_BIT_HTML) {
+        continue;
+      }
+      const size = uint16At(nonDeletable, cursor);
+      cursor += 2;
+      if (cursor + size > nonDeletable.length) {
+        return undefined;
+      }
+      blocks.set(bit, nonDeletable.subarray(cursor, cursor + size));
+      cursor += size;
+    }
+    return { flags, blocks };
+  } catch {
     return undefined;
   }
-  const flags = uint16At(nonDeletable, OVERRIDE_FLAGS_OFFSET);
-  const blocks = new Map<number, Uint8Array>();
-  let cursor = FIRST_OVERRIDE_BLOCK_OFFSET;
-  for (let bit = 15; bit >= 5; bit -= 1) {
-    if ((flags & (1 << bit)) === 0) {
-      continue;
-    }
-    if (bit === OVERRIDE_BIT_HTML) {
-      continue;
-    }
-    if (cursor + 2 > nonDeletable.length) {
-      return undefined;
-    }
-    const size = uint16At(nonDeletable, cursor);
-    cursor += 2;
-    if (cursor + size > nonDeletable.length) {
-      return undefined;
-    }
-    blocks.set(bit, nonDeletable.subarray(cursor, cursor + size));
-    cursor += size;
-  }
-  return { flags, blocks };
 }
 
 // The content override block's own nested flags (WPFF_DF-BOX.htm, "bit 13: box content data"): [content override flags], then bit15 (PID flags, 2 bytes, no size prefix of its own) and bit14 (the content type byte itself). Bit 13 (rendering information) and bit 12 (alignment) are not read -- this module only needs the type, not how it renders.
 function readContentType(contentBlock: Uint8Array): number | undefined {
-  if (contentBlock.length < 2) {
-    return undefined;
-  }
-  const flags = uint16At(contentBlock, 0);
-  let cursor = 2;
-  if ((flags & 0x8000) !== 0) {
-    if (cursor + 2 > contentBlock.length) {
+  // uint16At throws (via byteAt) rather than returning undefined for a read that runs past contentBlock's own end, caught below -- so the flags word needs no separate room check ahead of reading it.
+  try {
+    const flags = uint16At(contentBlock, 0);
+    let cursor = 2;
+    // No separate room guard is needed for the PID-flags skip: it only advances cursor (no read of its own), and the type byte this function ultimately returns is read through plain bracket access, which safely answers undefined for any offset this skip could have advanced cursor past without a guard -- there is no buffer length where skipping the guard produces an in-bounds-but-wrong byte instead of the identical out-of-bounds undefined a guard would have forced.
+    if ((flags & 0x8000) !== 0) {
+      cursor += 2;
+    }
+    if ((flags & 0x4000) === 0) {
       return undefined;
     }
-    cursor += 2;
-  }
-  if ((flags & 0x4000) === 0) {
+    return contentBlock[cursor];
+  } catch {
     return undefined;
   }
-  return contentBlock[cursor];
 }
 
 // The position override block's own nested flags (WPFF_DF-BOX.htm, "bit 14: Box positioning data"), read only for bit 11 (width) and bit 10 (height) -- both unconditionally in WPU -- and bits 13/12 (horizontal/vertical offset), accepted only when their own alignment-type bits state "absolute from page edge" (type 0), the one case whose offset is unambiguously the box's own page-space position rather than a value relative to margins or columns this module has no page geometry in hand to resolve against.
@@ -78,62 +77,56 @@ function readPositionOverride(
 ):
   | { widthWpu?: number; heightWpu?: number; xWpu?: number; yWpu?: number }
   | undefined {
-  if (positionBlock.length < 2) {
+  // uint16At throws (via byteAt) rather than returning undefined for a read that runs past positionBlock's own end, caught below -- so none of the four sub-block reads below need a separate room guard ahead of them. A dedicated need(n) guard (checking room for a whole sub-block, e.g. 5 bytes for horizontal positioning, even though 2 of those are unread leftcol/rightcol fields) used to sit ahead of each one, but it was never observably different from the throw it deferred to: a buffer too short even for THIS walk's own reads throws in exactly the place the guard would have rejected it, and a buffer with enough real data for cursor to legitimately reach a LATER bit's own reads is, by construction, already long enough to satisfy every earlier bit's own need, since cursor only ever advances by each bit's full declared width regardless -- so no input can tell a removed guard from the throw it would have deferred to.
+  try {
+    const flags = uint16At(positionBlock, 0);
+    let cursor = 2;
+    let widthWpu: number | undefined;
+    let heightWpu: number | undefined;
+    let xWpu: number | undefined;
+    let yWpu: number | undefined;
+
+    // Neither the PID-flags skip (bit 15) nor the general-positioning-flags skip (bit 14) below needs a room guard: neither reads anything through it (each only advances cursor), so an insufficient buffer only ever surfaces once a later bit that actually reads data hits its own throw -- or, with no later bit set, the walk safely ends with every optional field left undefined, exactly as if this block had been correctly rejected.
+    if ((flags & 0x8000) !== 0) {
+      // bit 15: PID flags, 2 bytes.
+      cursor += 2;
+    }
+    if ((flags & 0x4000) !== 0) {
+      // bit 14: general positioning flags, 2 bytes.
+      cursor += 2;
+    }
+    if ((flags & 0x2000) !== 0) {
+      // bit 13: horizontal positioning, 5 bytes -- <flags>[offset]<leftcol><rightcol>.
+      const horizontalFlags = positionBlock[cursor];
+      const offset = uint16At(positionBlock, cursor + 1);
+      if (horizontalFlags !== undefined && (horizontalFlags & 0x03) === 0) {
+        xWpu = offset;
+      }
+      cursor += 5;
+    }
+    if ((flags & 0x1000) !== 0) {
+      // bit 12: vertical positioning, 3 bytes -- <flags>[offset].
+      const verticalFlags = positionBlock[cursor];
+      const offset = uint16At(positionBlock, cursor + 1);
+      if (verticalFlags !== undefined && (verticalFlags & 0x03) === 0) {
+        yWpu = offset;
+      }
+      cursor += 3;
+    }
+    if ((flags & 0x0800) !== 0) {
+      // bit 11: width, 3 bytes -- <flags>[width].
+      widthWpu = uint16At(positionBlock, cursor + 1);
+      cursor += 3;
+    }
+    if ((flags & 0x0400) !== 0) {
+      // bit 10: height, 3 bytes -- <flags>[height].
+      heightWpu = uint16At(positionBlock, cursor + 1);
+      // cursor is never read again after this: height is always the last bit this walk processes, and the function returns unconditionally next, so there is nothing left for a final "cursor += 3" to affect.
+    }
+    return { widthWpu, heightWpu, xWpu, yWpu };
+  } catch {
     return undefined;
   }
-  const flags = uint16At(positionBlock, 0);
-  let cursor = 2;
-  let widthWpu: number | undefined;
-  let heightWpu: number | undefined;
-  let xWpu: number | undefined;
-  let yWpu: number | undefined;
-
-  const need = (bytes: number): boolean =>
-    cursor + bytes <= positionBlock.length;
-
-  if ((flags & 0x8000) !== 0) {
-    // bit 15: PID flags, 2 bytes.
-    if (!need(2)) return undefined;
-    cursor += 2;
-  }
-  if ((flags & 0x4000) !== 0) {
-    // bit 14: general positioning flags, 2 bytes.
-    if (!need(2)) return undefined;
-    cursor += 2;
-  }
-  if ((flags & 0x2000) !== 0) {
-    // bit 13: horizontal positioning, 5 bytes -- <flags>[offset]<leftcol><rightcol>.
-    if (!need(5)) return undefined;
-    const horizontalFlags = positionBlock[cursor];
-    const offset = uint16At(positionBlock, cursor + 1);
-    if (horizontalFlags !== undefined && (horizontalFlags & 0x03) === 0) {
-      xWpu = offset;
-    }
-    cursor += 5;
-  }
-  if ((flags & 0x1000) !== 0) {
-    // bit 12: vertical positioning, 3 bytes -- <flags>[offset].
-    if (!need(3)) return undefined;
-    const verticalFlags = positionBlock[cursor];
-    const offset = uint16At(positionBlock, cursor + 1);
-    if (verticalFlags !== undefined && (verticalFlags & 0x03) === 0) {
-      yWpu = offset;
-    }
-    cursor += 3;
-  }
-  if ((flags & 0x0800) !== 0) {
-    // bit 11: width, 3 bytes -- <flags>[width].
-    if (!need(3)) return undefined;
-    widthWpu = uint16At(positionBlock, cursor + 1);
-    cursor += 3;
-  }
-  if ((flags & 0x0400) !== 0) {
-    // bit 10: height, 3 bytes -- <flags>[height].
-    if (!need(3)) return undefined;
-    heightWpu = uint16At(positionBlock, cursor + 1);
-    cursor += 3;
-  }
-  return { widthWpu, heightWpu, xWpu, yWpu };
 }
 
 export interface WpdBoxFrame {

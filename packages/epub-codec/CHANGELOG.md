@@ -1,3 +1,16 @@
+## [1.5.3](https://github.com/ExaDev/documents.js/compare/epub-codec%401.5.2...epub-codec%401.5.3) (2026-09-13)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.2
+
+## [1.5.2](https://github.com/ExaDev/documents.js/compare/epub-codec%401.5.1...epub-codec%401.5.2) (2026-09-11)
+
+### Bug Fixes
+
+* **epub-codec:** keep the pinned zip entry mtime inside fflate's valid DOS-date range ([d9e8586](https://github.com/ExaDev/documents.js/commit/d9e858618f483505087659f88fbccd3828e961cb))
+
 ## [1.5.1](https://github.com/ExaDev/documents.js/compare/epub-codec%401.5.0...epub-codec%401.5.1) (2026-09-11)
 
 ### Code Refactoring

@@ -1,3 +1,114 @@
+## [4.14.7](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.6...document-mcp%404.14.7) (2026-09-13)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.2
+- Updated odf.js to 7.25.3
+- Updated wpd-codec to 3.5.3
+- Updated documents.js to 7.20.7
+- Updated document-operations to 1.1.7
+
+## [4.14.6](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.5...document-mcp%404.14.6) (2026-09-12)
+
+
+### Dependencies
+
+- Updated wpd-codec to 3.5.2
+- Updated documents.js to 7.20.6
+- Updated document-operations to 1.1.6
+
+## [4.14.5](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.4...document-mcp%404.14.5) (2026-09-12)
+
+
+### Dependencies
+
+- Updated documents.js to 7.20.5
+- Updated document-operations to 1.1.5
+
+## [4.14.4](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.3...document-mcp%404.14.4) (2026-09-12)
+
+
+### Dependencies
+
+- Updated documents.js to 7.20.4
+- Updated document-operations to 1.1.4
+
+## [4.14.3](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.2...document-mcp%404.14.3) (2026-09-11)
+
+
+### Dependencies
+
+- Updated document-operations to 1.1.3
+
+## [4.14.2](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.1...document-mcp%404.14.2) (2026-09-11)
+
+
+### Dependencies
+
+- Updated documents.js to 7.20.3
+- Updated document-operations to 1.1.2
+
+## [4.14.1](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.0...document-mcp%404.14.1) (2026-09-11)
+
+
+### Dependencies
+
+- Updated odf.js to 7.25.2
+- Updated documents.js to 7.20.2
+- Updated document-operations to 1.1.1
+
+## [4.14.0](https://github.com/ExaDev/documents.js/compare/document-mcp%404.13.0...document-mcp%404.14.0) (2026-09-11)
+
+### Features
+
+* **ci:** publish document-rest and document-mcp as GHCR container images ([8cf783b](https://github.com/ExaDev/documents.js/commit/8cf783b6087f78319276e317401c2106c1aca8d0))
+* **document-mcp:** add a --host flag, defaulting to loopback ([3542429](https://github.com/ExaDev/documents.js/commit/35424296d985f76792c9f01cb33ab16a553a7b98))
+
+## [4.13.0](https://github.com/ExaDev/documents.js/compare/document-mcp%404.12.0...document-mcp%404.13.0) (2026-09-11)
+
+### Features
+
+* **ci:** build ARM64 Linux and Windows SEA binaries too ([78cfe9f](https://github.com/ExaDev/documents.js/commit/78cfe9fae5c8478ea47a69a9a6dcc723bb696bb4))
+
+## [4.12.0](https://github.com/ExaDev/documents.js/compare/document-mcp%404.11.0...document-mcp%404.12.0) (2026-09-11)
+
+### Features
+
+* **ci:** build Intel macOS SEA binaries alongside Apple Silicon ([f0a48a1](https://github.com/ExaDev/documents.js/commit/f0a48a19050089f14ecc8a94430a0278bb2b35d8))
+
+## [4.11.0](https://github.com/ExaDev/documents.js/compare/document-mcp%404.10.1...document-mcp%404.11.0) (2026-09-11)
+
+### Features
+
+* **document-mcp:** build a Node SEA single-executable binary ([c69cbb3](https://github.com/ExaDev/documents.js/commit/c69cbb3f3427d379ccbc649a416e36fbced92e55))
+
+### Documentation
+
+* document the Node SEA binary distribution for cli/mcp/rest ([420ea7c](https://github.com/ExaDev/documents.js/commit/420ea7cf34e2073950f7e1b823c86f403a8bf25a))
+
+## [4.10.1](https://github.com/ExaDev/documents.js/compare/document-mcp%404.10.0...document-mcp%404.10.1) (2026-09-11)
+
+
+### Dependencies
+
+- Updated document-operations to 1.1.0
+
+## [4.10.0](https://github.com/ExaDev/documents.js/compare/document-mcp%404.9.3...document-mcp%404.10.0) (2026-09-11)
+
+### Features
+
+* **document-operations:** add the canonical document-mcp operation registry ([06c310f](https://github.com/ExaDev/documents.js/commit/06c310f4077164b9fe21258d12dd52fa560fd3fd))
+
+### Code Refactoring
+
+* **document-mcp:** dispatch every tool through document-operations ([cde790d](https://github.com/ExaDev/documents.js/commit/cde790d8738c8b9368446ea597b292099cd4fcfc))
+
+
+### Dependencies
+
+- Updated document-operations to 1.0.0
+
 ## [4.9.3](https://github.com/ExaDev/documents.js/compare/document-mcp%404.9.2...document-mcp%404.9.3) (2026-09-11)
 
 ### Code Refactoring

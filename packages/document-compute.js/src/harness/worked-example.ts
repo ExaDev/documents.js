@@ -6,15 +6,10 @@ import type {
   SymbolTable,
 } from "document-schema.js";
 import { dimensionsEqual } from "../compute/dimensions";
-import {
-  type EvaluationResult,
-  evaluate,
-  isInterval,
-} from "../compute/evaluate";
+import { evaluateQuantity } from "../compute/evaluate";
 import {
   DivisionByZeroError,
   IncompatibleDimensionsError,
-  NonConvergentSolveError,
   NumericDomainError,
   UnboundSymbolError,
   UnknownUnitError,
@@ -31,7 +26,7 @@ import {
 //
 // A pending definition's right-hand side is evaluated against the LIVE running bindings at the moment its own stated result is reached, never a snapshot taken back when the definition itself was first seen: the common real document orders the general law FIRST ("F = ma"), then gives the specific numbers, then states the answer, so the bindings a definition needs typically do not exist yet at the point the definition line itself appears. This also means a binding restated between a definition and its own result (a document correcting or updating a "given" mid-example) is picked up at its latest value, which is the same reading a person working through the document by hand would give it.
 //
-// Scoped to point-valued (Quantity) answers -- every value this harness ever computes comes from evaluating a CLOSED statement with no bindings (see EMPTY_BINDINGS below), and evaluate() cannot produce an Interval from that: an Interval only ever arises by binding a symbol to one, which requires bindings this harness never has reason to supply. A genuinely interval-valued worked example ("0.87 <= cos(phi) <= 1", #573's own illustration of evaluate()'s interval arithmetic) has no representation in this "symbol = expression" equality grammar at all -- there is no MathExpression leaf for a literal interval, and documents.js's own LaTeX lowering has no compound-inequality-to-range recognition either -- so it is out of scope for this pass rather than silently mishandled: asQuantity below turns the type system's own Quantity | Interval possibility into an explicit "unsupported-construct" gap if it were ever reached, which given the above it structurally cannot be.
+// Scoped to point-valued (Quantity) answers -- every value this harness ever computes comes from evaluating a CLOSED statement with no bindings (see EMPTY_BINDINGS below), and evaluate() cannot produce an Interval from that: an Interval only ever arises by binding a symbol to one, which requires bindings this harness never has reason to supply. A genuinely interval-valued worked example ("0.87 <= cos(phi) <= 1", #573's own illustration of evaluate()'s interval arithmetic) has no representation in this "symbol = expression" equality grammar at all -- there is no MathExpression leaf for a literal interval, and documents.js's own LaTeX lowering has no compound-inequality-to-range recognition either -- so it is out of scope for this pass rather than silently mishandled: every evaluation below goes through evaluateQuantity (evaluate.ts), whose own narrowing turns the type system's Quantity | Interval possibility into an explicit "unsupported-construct" gap rather than a silent assumption -- shared with that module's other point-valued positions rather than restated here, since the reason it holds (all-Quantity bindings) is the same reason in each of them.
 
 // Relative tolerance for comparing evaluate()'s answer against a document's own stated one: worked examples are conventionally rounded to a handful of significant figures by their authors (a textbook writes "6 N", not "6.0000000001 N"), so exact equality would reject every correctly-reproduced answer along with every genuinely wrong one.
 const DEFAULT_RELATIVE_TOLERANCE = 1e-3;
@@ -39,7 +34,7 @@ const DEFAULT_RELATIVE_TOLERANCE = 1e-3;
 const EMPTY_BINDINGS: FormulaBindings = {};
 const EMPTY_SYMBOL_TABLE: SymbolTable = { symbols: [], units: [] };
 
-// One category per document-compute.js error class (errors.ts), so a miss always names the SPECIFIC gap -- a missing symbol binding, an unresolvable unit, a units mismatch, a construct evaluate() does not implement (an Interval-valued result included -- see this module's header comment), a domain error (e.g. sqrt of a negative dimensioned quantity), or a solve that never converged.
+// One category per document-compute.js error class evaluate() can actually raise (errors.ts), so a miss always names the SPECIFIC gap -- a missing symbol binding, an unresolvable unit, a units mismatch, a construct evaluate() does not implement (an Interval-valued result included -- see this module's header comment), or a domain error (e.g. sqrt of a negative dimensioned quantity). errors.ts's remaining class, NonConvergentSolveError, gets no category of its own: only solveFor() raises it, this harness evaluates rather than solves, and a category nothing can ever be classified into is a promise the report cannot keep. Anything else -- including a failure from outside this package's own error hierarchy -- lands in 'other-evaluation-error' rather than being guessed at.
 export type WorkedExampleGap =
   | "unbound-symbol"
   | "unknown-unit"
@@ -47,7 +42,6 @@ export type WorkedExampleGap =
   | "division-by-zero"
   | "unsupported-construct"
   | "numeric-domain"
-  | "non-convergent-solve"
   | "other-evaluation-error";
 
 export interface WorkedExampleMatch {
@@ -110,14 +104,11 @@ function asEquality(expression: MathExpression): EqualityShape | undefined {
   return { targetSymbol: lhs.id, rhs };
 }
 
+// "num", "qty", and "unparsed" are the three MathExpression leaves that can never contain a symbol, but they carry no structure worth recursing into either -- so rather than three separate case labels each independently returning `false` (three string-literal AST nodes a mutation can flip to an identical no-op, since every consumer below only ever coerces this function's result through a truthy/falsy check and can never distinguish `false` from a mutated case simply not matching), they fall through to the same `default: return false` that covers them structurally: any kind not explicitly listed as symbol-bearing above is one.
 function containsSymbol(expression: MathExpression): boolean {
   switch (expression.kind) {
     case "sym":
       return true;
-    case "num":
-    case "qty":
-    case "unparsed":
-      return false;
     case "app":
       return expression.args.some(containsSymbol);
     case "sum":
@@ -129,18 +120,9 @@ function containsSymbol(expression: MathExpression): boolean {
       );
     case "matrix":
       return expression.rows.some((row) => row.some(containsSymbol));
+    default:
+      return false;
   }
-}
-
-// Narrows evaluate()'s Quantity | Interval return type down to this harness's own Quantity-only scope (see the module header comment on why an Interval cannot actually arise here) -- an explicit, named gap rather than a silent narrowing assumption, so a future change to how bindings are built that DID introduce an Interval would surface as data instead of a wrong comparison.
-function asQuantity(value: EvaluationResult): Quantity {
-  if (isInterval(value)) {
-    throw new UnsupportedExpressionError(
-      "runWorkedExampleSequence",
-      "this harness compares point-valued Quantity answers only; a symbol resolving to a range (Interval) has no stated-answer comparison defined yet",
-    );
-  }
-  return value;
 }
 
 function gapFromError(error: unknown): WorkedExampleGap {
@@ -161,9 +143,6 @@ function gapFromError(error: unknown): WorkedExampleGap {
   }
   if (error instanceof NumericDomainError) {
     return "numeric-domain";
-  }
-  if (error instanceof NonConvergentSolveError) {
-    return "non-convergent-solve";
   }
   return "other-evaluation-error";
 }
@@ -247,7 +226,7 @@ export function runWorkedExampleSequence(
 
     let closedValue: Quantity;
     try {
-      closedValue = asQuantity(evaluate(rhs, EMPTY_BINDINGS, symbolTable));
+      closedValue = evaluateQuantity(rhs, EMPTY_BINDINGS, symbolTable);
     } catch (error) {
       outcomes.push({
         outcome: "gap",
@@ -263,7 +242,7 @@ export function runWorkedExampleSequence(
       pending = undefined;
       let actual: Quantity;
       try {
-        actual = asQuantity(evaluate(definitionRhs, bindings, symbolTable));
+        actual = evaluateQuantity(definitionRhs, bindings, symbolTable);
       } catch (error) {
         outcomes.push({
           outcome: "gap",

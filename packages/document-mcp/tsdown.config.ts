@@ -1,6 +1,7 @@
 import { defineConfig } from "tsdown";
+import { seaEntryBuildConfig } from "../../tsdown.sea.shared.ts";
 
-// Two build passes: the library index ("." export -- the createServer factory and any programmatic surface, consumed by an embedder) and the bin script. Both are platform: 'node' -- like document-cli, this package is inherently stdio-bound, not a portable bytes-in/bytes-out library.
+// Two build passes: the library index ("." export -- the createServer factory and any programmatic surface, consumed by an embedder) and the bin script. Both are platform: 'node' -- like document-cli, this package is inherently stdio-bound, not a portable bytes-in/bytes-out library. A third, seaEntryBuildConfig, produces the fully-bundled CommonJS entry a Node SEA binary embeds -- see that shared config's own comment for why it must be CJS with zero external requires.
 export default defineConfig([
   {
     entry: ["src/index.ts"],
@@ -21,4 +22,5 @@ export default defineConfig([
     // Same reasoning as the index entry above: without this, the bin script would build as dist/bin.mjs, which does not match package.json's bin field (./dist/bin.js).
     fixedExtension: false,
   },
+  seaEntryBuildConfig("src/sea-entry.ts"),
 ]);

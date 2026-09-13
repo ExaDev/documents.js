@@ -33,7 +33,7 @@ export function createCpuRasteriser(
 }
 
 // An sRGB colour in the 0..1 floats every draw op carries (document-schema.js's Color); named structurally so this package adds no dependency on the schema package for one lerp's sake.
-interface UnitRgb {
+export interface UnitRgb {
   readonly r: number;
   readonly g: number;
   readonly b: number;
@@ -65,6 +65,11 @@ export class CpuRasteriser implements PageRasteriser {
       mask: new CoverageMask(geometry.widthPx, geometry.heightPx),
     };
     this.decodedImages.clear();
+  }
+
+  // Exposed purely so rasteriser.test.ts can pin the image-decode cache's own behaviour directly (populated on first decode, reused on a repeat, forgotten between pages) -- the same pattern colourBytes/quadCorners/invertMatrix/sampleBilinear below already use for their own arithmetic, needed here because decodePng's own purity means no rendered pixel can ever distinguish a cache hit, a fresh re-decode, or a retained-past-its-page entry from one another.
+  decodedImageForTesting(bytes: Uint8Array<ArrayBuffer>): RawImage | undefined {
+    return this.decodedImages.get(decodeCacheKey(bytes));
   }
 
   draw(op: RasterDrawOp): void {
@@ -105,12 +110,16 @@ export class CpuRasteriser implements PageRasteriser {
   private fillRectOp(op: RasterFillRectOp): void {
     const { geometry, canvas } = this.requirePage("draw");
     const left = Math.max(op.xPx, 0);
-    const right = Math.min(op.xPx + op.widthPx, geometry.widthPx);
     const top = Math.max(op.yPx, 0);
-    const bottom = Math.min(op.yPx + op.heightPx, geometry.heightPx);
-    if (right <= left || bottom <= top) {
-      return; // outside the canvas, or degenerate: no ink either way
-    }
+    // Clamped up to left/top, not merely down to the canvas's own far edge, so right >= left and bottom >= top always hold -- a rect that starts past the canvas, or one whose own width/height is zero or negative, collapses to an exact zero-width or zero-height interval here rather than an inverted one, with no separate degenerate-input guard needed below.
+    const right = Math.max(
+      Math.min(op.xPx + op.widthPx, geometry.widthPx),
+      left,
+    );
+    const bottom = Math.max(
+      Math.min(op.yPx + op.heightPx, geometry.heightPx),
+      top,
+    );
     const colour = colourBytes(op.color);
     const columnStart = Math.floor(left);
     const columnEnd = Math.ceil(right);
@@ -118,15 +127,9 @@ export class CpuRasteriser implements PageRasteriser {
     const rowEnd = Math.ceil(bottom);
     for (let row = rowStart; row < rowEnd; row++) {
       const coverageY = pixelOverlap(row, top, bottom);
-      if (coverageY === 0) {
-        continue;
-      }
       const rowBase = row * geometry.widthPx;
       for (let column = columnStart; column < columnEnd; column++) {
         const coverage = coverageY * pixelOverlap(column, left, right);
-        if (coverage === 0) {
-          continue;
-        }
         this.blendPixel(canvas, rowBase + column, colour, coverage);
       }
     }
@@ -173,44 +176,26 @@ export class CpuRasteriser implements PageRasteriser {
     mask.reset();
     mask.fillPolygons([quad], "nonzero");
     const inverse = invertMatrix(op.matrix);
-    const rowStart = Math.max(
-      0,
-      Math.floor(Math.min(...quad.map((corner) => corner.y))),
-    );
-    const rowEnd = Math.min(
-      geometry.heightPx,
-      Math.ceil(Math.max(...quad.map((corner) => corner.y))),
-    );
-    const columnStart = Math.max(
-      0,
-      Math.floor(Math.min(...quad.map((corner) => corner.x))),
-    );
-    const columnEnd = Math.min(
-      geometry.widthPx,
-      Math.ceil(Math.max(...quad.map((corner) => corner.x))),
-    );
-    for (let row = rowStart; row < rowEnd; row++) {
-      const rowBase = row * geometry.widthPx;
-      for (let column = columnStart; column < columnEnd; column++) {
-        const samples = mask.countAt(rowBase + column);
-        if (samples === 0) {
-          continue;
-        }
-        const [u, v] = inverse(column + 0.5, row + 0.5);
-        const [r, g, b, a] = sampleBilinear(source, u, v);
-        this.blendPixel(
-          canvas,
-          rowBase + column,
-          { r, g, b },
-          (samples / COVERAGE_DENOMINATOR) * a,
-        );
-      }
+    // The linear pixel-index range this one fillPolygons call actually marked, rather than a hand-computed bounding box over the quad's own corners: markedRange() reflects the fill pass's real output, so there is no separately-derived bound that could disagree with it, and the loop below is the same range-walk blendMask uses for a fill or stroke's own mask. No samples-zero skip inside the range: this.blendPixel at alpha 0 leaves the destination byte exactly as it was (bg + (fg - bg) * 0 rounds back to the same already-integer bg), so a gap pixel between two marked spans costs a wasted call, never a wrong one.
+    const { first, last } = mask.markedRange();
+    for (let i = first; i <= last; i++) {
+      const samples = mask.countAt(i);
+      const row = Math.floor(i / geometry.widthPx);
+      const column = i % geometry.widthPx;
+      const [u, v] = inverse(column + 0.5, row + 0.5);
+      const [r, g, b, a] = sampleBilinear(source, u, v);
+      this.blendPixel(
+        canvas,
+        i,
+        { r, g, b },
+        (samples / COVERAGE_DENOMINATOR) * a,
+      );
     }
   }
 
   // The port may hand the same image bytes repeatedly (one XObject drawn for every stamp of a logo); PNG decoding is this backend's most expensive per-op step, so decoded images are cached by content within the page. crc32 over the bytes plus the byte length is the key -- cheap relative to the decode, and two distinct images colliding on both is not a case a page's own content can produce.
   private decodeCached(bytes: Uint8Array<ArrayBuffer>): RawImage {
-    const key = `${bytes.length}:${crc32(bytes)}`;
+    const key = decodeCacheKey(bytes);
     const cached = this.decodedImages.get(key);
     if (cached !== undefined) {
       return cached;
@@ -226,12 +211,10 @@ export class CpuRasteriser implements PageRasteriser {
     color: UnitRgb,
   ): void {
     const colour = colourBytes(color);
-    const pixels = mask.widthPx * mask.heightPx;
-    for (let i = 0; i < pixels; i++) {
+    const { first, last } = mask.markedRange();
+    // No samples-zero skip: this.blendPixel at alpha 0 is a no-op (per fillRectOp's identical reasoning), so a gap pixel between two marked spans costs a wasted call, never a wrong one.
+    for (let i = first; i <= last; i++) {
       const samples = mask.countAt(i);
-      if (samples === 0) {
-        continue;
-      }
       this.blendPixel(canvas, i, colour, samples / COVERAGE_DENOMINATOR);
     }
   }
@@ -256,7 +239,8 @@ export class CpuRasteriser implements PageRasteriser {
   }
 }
 
-function colourBytes(color: UnitRgb): {
+// Exported (from this module only, not from the package's own index) purely so rasteriser.test.ts can pin its arithmetic directly, the same way stroke.test.ts reaches past this package's narrow public surface into dashPolyline.
+export function colourBytes(color: UnitRgb): {
   readonly r: number;
   readonly g: number;
   readonly b: number;
@@ -268,17 +252,22 @@ function colourBytes(color: UnitRgb): {
   };
 }
 
-// The covered fraction of one pixel row (or column) index against the half-open interval [edgeLow, edgeHigh]: the overlap length of [index, index + 1] with it, 0..1.
+// The image-decode cache key, shared between decodeCached's own lookup/populate and decodedImageForTesting's read-only inspection so the two can never disagree about which entry a given set of bytes maps to.
+function decodeCacheKey(bytes: Uint8Array<ArrayBuffer>): string {
+  return `${bytes.length}:${crc32(bytes)}`;
+}
+
+// The covered fraction of one pixel row (or column) index against the half-open interval [edgeLow, edgeHigh]: the overlap length of [index, index + 1] with it, 0..1. No defensive clamp to a minimum of 0: fillRectOp's own rowStart/rowEnd and columnStart/columnEnd already bound index to the exact range where this difference is non-negative (edgeHigh >= edgeLow is an invariant fillRectOp establishes before computing them), so a clamp here would only ever mask a genuinely wrong caller-side range rather than serve a real input.
 function pixelOverlap(
   index: number,
   edgeLow: number,
   edgeHigh: number,
 ): number {
-  return Math.max(0, Math.min(index + 1, edgeHigh) - Math.max(index, edgeLow));
+  return Math.min(index + 1, edgeHigh) - Math.max(index, edgeLow);
 }
 
 // The placement quad in device pixels: the port's matrix maps the unit image square (top-left origin, x right, y down) through PDF's [a b c d e f] row-vector convention, so the corners are the images of (0,0), (1,0), (1,1), (0,1) in order -- a quad whatever rotation the placement carries.
-function quadCorners(matrix: RasterMatrix): readonly Pt[] {
+export function quadCorners(matrix: RasterMatrix): readonly Pt[] {
   const [a, b, c, d, e, f] = matrix;
   const at = (u: number, v: number): Pt => ({
     x: a * u + c * v + e,
@@ -288,7 +277,7 @@ function quadCorners(matrix: RasterMatrix): readonly Pt[] {
 }
 
 // The placement matrix's inverse as a function from device pixels back to the unit image square. A singular matrix never reaches this arithmetic: it maps the unit square to a zero-area quad, the quad covers no subsamples, and the sampler never runs -- the geometry is the guard, so there is no branch for it here.
-function invertMatrix(
+export function invertMatrix(
   matrix: RasterMatrix,
 ): (xPx: number, yPx: number) => readonly [number, number] {
   const [a, b, c, d, e, f] = matrix;
@@ -301,7 +290,7 @@ function invertMatrix(
 }
 
 // Bilinear sample of the decoded source at unit-square coordinates (u, v), edges clamped: a destination pixel whose centre maps just outside the quad's float fuzz samples the nearest edge texel rather than nothing. The clamp lands on the texel-space coordinate itself (not on the floor of it) so the fractional weights stay within [0, 1) -- clamping only the floor would leave a negative fraction extrapolating past the edge texel instead of pinning to it. Returns 0..255 colour floats and a 0..1 alpha (always 1 for a source with no alpha plane -- the shape PNGs this family's own writers emit).
-function sampleBilinear(
+export function sampleBilinear(
   source: RawImage,
   u: number,
   v: number,
@@ -318,8 +307,9 @@ function sampleBilinear(
   );
   const x0 = Math.floor(sx);
   const y0 = Math.floor(sy);
-  const x1 = Math.min(x0 + 1, source.width - 1);
-  const y1 = Math.min(y0 + 1, source.height - 1);
+  // No clamp against source.width/height - 1 here: sx is already clamped there, so x0 can never exceed it, and x1 = x0 + 1 only ever reaches an actual out-of-texture column when x0 is exactly that last column -- the one case where fx (sx - x0) is exactly 0, zeroing out whatever sample(x1, ...) reads (a real value in an adjacent row, or the 0 fallback past the array's own end) before it can enter the interpolation below.
+  const x1 = x0 + 1;
+  const y1 = y0 + 1;
   const fx = sx - x0;
   const fy = sy - y0;
   const channelCount = source.channels === 1 ? 1 : 3;

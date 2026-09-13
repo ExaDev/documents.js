@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BUILTIN_NUMBER_FORMATS,
   classifyNumberFormat,
+  isIsoCurrencyCodeShape,
   MAX_NUMBER_FORMAT_SECTIONS,
   splitNumberFormatSections,
   tokenizeNumberFormat,
@@ -45,6 +46,44 @@ describe("tokenizeNumberFormat: the constructs a regex cannot tell apart", () =>
     expect(
       splitNumberFormatSections(tokenizeNumberFormat('"a;b"0')),
     ).toHaveLength(1);
+  });
+
+  it("runs an unterminated bracket to the end of the format code rather than hanging or throwing", () => {
+    expect(tokenizeNumberFormat("[abc")).toEqual([
+      { kind: "bracket", body: "abc" },
+    ]);
+  });
+
+  it("consumes an empty literal for a trailing \\, _, or * with nothing after it to escape", () => {
+    expect(tokenizeNumberFormat("0\\")).toEqual([
+      { kind: "code", char: "0" },
+      { kind: "literal", text: "" },
+    ]);
+  });
+});
+
+describe("isIsoCurrencyCodeShape: exactly three ASCII letters, case-insensitively", () => {
+  it("accepts three letters in either case", () => {
+    expect(isIsoCurrencyCodeShape("GBP")).toBe(true);
+    expect(isIsoCurrencyCodeShape("gbp")).toBe(true);
+  });
+
+  it("accepts the boundary letters A and Z", () => {
+    expect(isIsoCurrencyCodeShape("AAA")).toBe(true);
+    expect(isIsoCurrencyCodeShape("ABZ")).toBe(true);
+  });
+
+  it("rejects a marker that is not exactly three characters long", () => {
+    expect(isIsoCurrencyCodeShape("AB")).toBe(false);
+    expect(isIsoCurrencyCodeShape("ABCD")).toBe(false);
+  });
+
+  it("rejects a three-character marker containing a digit", () => {
+    expect(isIsoCurrencyCodeShape("AB1")).toBe(false);
+  });
+
+  it("rejects a three-character marker containing a character outside A-Z", () => {
+    expect(isIsoCurrencyCodeShape("AB[")).toBe(false);
   });
 });
 
@@ -158,6 +197,43 @@ describe("classifyNumberFormat: currency by symbol carries no invented code", ()
     expect(classifyNumberFormat("#,##0.00 €")).toEqual({ kind: "currency" });
     expect(classifyNumberFormat("₹#,##0")).toEqual({ kind: "currency" });
   });
+
+  it("extracts the ISO code from a currency bracket with no trailing locale dash", () => {
+    expect(classifyNumberFormat("[$GBP]#,##0.00")).toEqual({
+      kind: "currency",
+      code: "GBP",
+    });
+  });
+
+  it("keeps the first currency bracket's ISO code when a second currency bracket follows", () => {
+    expect(classifyNumberFormat("[$GBP-809][$USD-409]#,##0")).toEqual({
+      kind: "currency",
+      code: "GBP",
+    });
+  });
+});
+
+describe("classifyNumberFormat: elapsed-time bracket bodies", () => {
+  it("treats a single repeated h/m/s letter, of any length, as elapsed", () => {
+    expect(classifyNumberFormat("[s]0").kind).toBe("elapsedTime");
+    expect(classifyNumberFormat("[ss]0").kind).toBe("elapsedTime");
+  });
+
+  it("does not treat a bracket mixing two different h/m/s letters as elapsed", () => {
+    expect(classifyNumberFormat("[hm]:ss").kind).toBe("time");
+  });
+
+  it("does not treat a bracket holding a single non-h/m/s letter as elapsed", () => {
+    expect(classifyNumberFormat("[x]0").kind).toBe("number");
+  });
+
+  it("does not treat an empty bracket as elapsed", () => {
+    expect(classifyNumberFormat("[]0").kind).toBe("number");
+  });
+
+  it("does not read a [$-809]-style locale tag as currency when nothing else gives it a kind", () => {
+    expect(classifyNumberFormat("[$-809]0.00").kind).toBe("number");
+  });
 });
 
 describe("classifyNumberFormat: minutes versus months, the language's other genuine ambiguity", () => {
@@ -184,6 +260,44 @@ describe("classifyNumberFormat: minutes versus months, the language's other genu
   it("always reads a run of three or more m as a month name, never as minutes, even next to an hour", () => {
     expect(classifyNumberFormat("h mmm")).toEqual({ kind: "dateTime" });
     expect(classifyNumberFormat("mmm-yy")).toEqual({ kind: "date" });
+  });
+});
+
+describe("classifyNumberFormat: each date/time signal in isolation", () => {
+  it("reads a bare y run as a date with no d present", () => {
+    expect(classifyNumberFormat("yy").kind).toBe("date");
+  });
+
+  it("reads a bare d run as a date with no y present", () => {
+    expect(classifyNumberFormat("dd").kind).toBe("date");
+  });
+
+  it("reads a bare mm run as a month when no h/y/d/s neighbor resolves the ambiguity in either direction", () => {
+    expect(classifyNumberFormat("mm").kind).toBe("date");
+  });
+
+  it("reads a bare h run as a time", () => {
+    expect(classifyNumberFormat("hh").kind).toBe("time");
+  });
+
+  it("reads a standalone AM/PM marker as a time with no h/m/s present", () => {
+    expect(classifyNumberFormat("AM/PM").kind).toBe("time");
+  });
+});
+
+describe("classifyNumberFormat: scientific notation's bare-e-versus-General distinction", () => {
+  it("reads 'e' followed by a sign as scientific notation, a numeric signal", () => {
+    // @ isolates the numeric signal: with hasText and no numeric signal, the section would classify as text instead.
+    expect(classifyNumberFormat("E+@").kind).toBe("number");
+    expect(classifyNumberFormat("E-@").kind).toBe("number");
+  });
+
+  it("reads a bare 'e' with no following sign as plain text, not scientific notation", () => {
+    expect(classifyNumberFormat("E@").kind).toBe("text");
+  });
+
+  it("classifies a lone unrecognised code character as a plain number", () => {
+    expect(classifyNumberFormat("a").kind).toBe("number");
   });
 });
 

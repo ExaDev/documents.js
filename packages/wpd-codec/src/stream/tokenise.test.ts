@@ -86,12 +86,22 @@ describe("tokeniseDocumentArea", () => {
     expect(() => tokeniseDocumentArea(Uint8Array.from([0xff]), 0)).toThrow(
       WpdFormatError,
     );
+    expect(() => tokeniseDocumentArea(Uint8Array.from([0xff]), 0)).toThrow(
+      "Function code 0xFF at offset 0 cannot appear in a document: -1 is reserved and has no assigned size.",
+    );
   });
 
   it("rejects a fixed-length function whose end gate does not match its begin gate", () => {
     expect(() =>
       tokeniseDocumentArea(Uint8Array.from([0xf2, 12, 0xf3]), 0),
     ).toThrow(/opens with gate 0xF2 but closes with 0xF3/);
+  });
+
+  it("rejects a fixed-length function that runs past the end of the document area", () => {
+    // Attribute On (0xF2) is a 3-byte function; only two bytes are present.
+    expect(() => tokeniseDocumentArea(Uint8Array.from([0xf2, 12]), 0)).toThrow(
+      "The 3-byte fixed-length function 0xF2 at offset 0 runs past the end of the document area at offset 2.",
+    );
   });
 
   it("rejects a variable-length function whose two size fields disagree", () => {
@@ -102,12 +112,36 @@ describe("tokeniseDocumentArea", () => {
     expect(() => tokeniseDocumentArea(bytes, 0)).toThrow(
       /opens with size 11 but closes with size 12/,
     );
+    expect(() => tokeniseDocumentArea(bytes, 0)).toThrow(
+      "The variable-length function 0xD3 at offset 0 opens with size 11 but closes with size 12.",
+    );
   });
 
   it("rejects a variable-length function smaller than its own fields", () => {
     const bytes = Uint8Array.from([0xd3, 0x05, 4, 0, 0x00, 4, 0, 0xd3]);
     expect(() => tokeniseDocumentArea(bytes, 0)).toThrow(
       /declares a size of 4, below the 10 bytes/,
+    );
+    expect(() => tokeniseDocumentArea(bytes, 0)).toThrow(
+      "The variable-length function 0xD3 at offset 0 declares a size of 4, below the 10 bytes its own gates and fields occupy.",
+    );
+  });
+
+  it("rejects a variable-length function whose declared size runs past the document area", () => {
+    // Declares a 50-byte extent but only 5 bytes are actually present.
+    const bytes = Uint8Array.from([0xd3, 0x05, 50, 0, 0x00]);
+    expect(() => tokeniseDocumentArea(bytes, 0)).toThrow(
+      "The variable-length function 0xD3 at offset 0 declares a size of 50, which runs past the end of the document area at offset 5.",
+    );
+  });
+
+  it("rejects a variable-length function whose end gate does not match its begin gate", () => {
+    // Size 10 (the minimum), no prefix IDs, no non-deletable data, trailing size 10 (agrees) -- but the final gate byte (0xD4) does not match the opening group (0xD3).
+    const bytes = Uint8Array.from([
+      0xd3, 0x05, 10, 0, 0x00, 0x00, 0x00, 10, 0, 0xd4,
+    ]);
+    expect(() => tokeniseDocumentArea(bytes, 0)).toThrow(
+      "The variable-length function at offset 0 opens with gate 0xD3 but closes with 0xD4.",
     );
   });
 
@@ -118,6 +152,9 @@ describe("tokeniseDocumentArea", () => {
     ]);
     expect(() => tokeniseDocumentArea(bytes, 0)).toThrow(
       /declares 5 bytes of non-deletable data, but only 1 remain/,
+    );
+    expect(() => tokeniseDocumentArea(bytes, 0)).toThrow(
+      "The variable-length function 0xD3 subgroup 5 at offset 0 declares 5 bytes of non-deletable data, but only 1 remain inside its own 11-byte extent.",
     );
   });
 

@@ -85,12 +85,17 @@ export function readDocumentSummary(packet: Uint8Array): LayoutMetadata {
 
   let cursor = 0;
   for (let group = 0; group < MAX_SUMMARY_GROUPS; group += 1) {
-    if (cursor + GROUP_HEADER_SIZE > packet.length) {
+    // uint16At throws (via byteAt) rather than returning undefined for a read that runs past packet's own end -- caught here and treated exactly like the size check just below, which ends the walk at whatever metadata has already been collected, since a group's own header running past the packet is the same "framing has gone out of step" case that check already handles.
+    let size: number;
+    let tag: number;
+    let type: number;
+    try {
+      size = uint16At(packet, cursor);
+      tag = uint16At(packet, cursor + 2);
+      type = uint16At(packet, cursor + 4);
+    } catch {
       break;
     }
-    const size = uint16At(packet, cursor);
-    const tag = uint16At(packet, cursor + 2);
-    const type = uint16At(packet, cursor + 4);
     if (size < GROUP_HEADER_SIZE || cursor + size > packet.length) {
       break;
     }
@@ -141,7 +146,7 @@ export function readDocumentSummary(packet: Uint8Array): LayoutMetadata {
           break;
         }
         default:
-          break;
+        // No break needed: this is already the switch's last case.
       }
     }
     cursor += size;

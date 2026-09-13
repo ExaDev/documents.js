@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   hsqldbBinaryScriptBytes,
   hsqldbCompressedScriptBytes,
@@ -9,19 +9,7 @@ import {
   parseHsqldbBinaryScript,
 } from "./binary-script";
 
-// The fixtures' own DATE/TIME/TIMESTAMP values were written by a JVM in Europe/London, and -- per src/hsqldb/rowformat.ts's own documented, inherent format limitation -- an epoch-millisecond value only decodes back to its original calendar fields when read in the zone it was written in. Pinned here, not globally, so this file's own TZ mutation never leaks into a sibling test file sharing the same vitest worker process.
-let previousTz: string | undefined;
-beforeAll(() => {
-  previousTz = process.env.TZ;
-  process.env.TZ = "Europe/London";
-});
-afterAll(() => {
-  if (previousTz === undefined) {
-    delete process.env.TZ;
-  } else {
-    process.env.TZ = previousTz;
-  }
-});
+// The fixtures' own DATE/TIME/TIMESTAMP values were written by a JVM in Europe/London, and -- per src/hsqldb/rowformat.ts's own documented, inherent format limitation -- an epoch-millisecond value only decodes back to its original calendar fields when read in the zone it was written in. Passed explicitly as { timeZone: "Europe/London" } below rather than by mutating process.env.TZ: a runtime TZ mutation is not observed by Date's local getters inside a worker_threads worker (the pool Stryker's vitest-runner forces), so relying on the implicit-local-timezone default here decoded arbitrarily wrong dates under mutation testing.
 
 // Exactly what HSQLDB 1.8.0.10 itself reported when it re-opened each generated database and ran SELECT * over every table through its own JDBC driver -- see src/hsqldb/binary-script.ts's own module comment for the generation/oracle account.
 const ORACLE_EMPLOYEES = [
@@ -119,10 +107,9 @@ describe("parseHsqldbBinaryScript: the real hsqldb.script_format=1 fixture", () 
 
   it("recovers every row of every table exactly as HSQLDB 1.8.0.10 itself reported via JDBC", () => {
     const byName = new Map(
-      parseHsqldbBinaryScript(hsqldbBinaryScriptBytes()).tables.map((table) => [
-        table.tableName,
-        table,
-      ]),
+      parseHsqldbBinaryScript(hsqldbBinaryScriptBytes(), {
+        timeZone: "Europe/London",
+      }).tables.map((table) => [table.tableName, table]),
     );
     expect(byName.get("EMPLOYEES")?.rows).toEqual(ORACLE_EMPLOYEES);
     expect(byName.get("TYPE_TEST")?.rows).toEqual(ORACLE_TYPE_TEST);

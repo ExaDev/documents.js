@@ -2,15 +2,21 @@ import type {
   ContentBlock,
   ContentDocument,
   ContentFormula,
+  Quantity,
   SymbolTable,
 } from "document-schema.js";
-import type { EvaluationResult } from "../compute/evaluate";
 import {
   runWorkedExampleSequence,
+  type WorkedExampleGapResult,
+  type WorkedExampleMismatch,
   type WorkedExampleOptions,
-  type WorkedExampleOutcome,
   type WorkedExampleReport,
+  type WorkedExampleUnresolved,
 } from "./worked-example";
+
+// The three outcome kinds formatCorpusReport ever actually formats -- it deliberately never calls formatOutcome for a "match" (see the loop below), so formatOutcome's own parameter type reflects that rather than accepting the full WorkedExampleOutcome union and carrying a switch branch nothing can ever reach.
+type NonMatchOutcome =
+  WorkedExampleMismatch | WorkedExampleGapResult | WorkedExampleUnresolved;
 
 // The corpus-scale half of ExaDev/documents.js#794: extracts the already-lowered formula sequence out of a wordprocessing ContentDocument (the shape a markdown-authored worked-example document actually reads as -- markdown-codec's own $$/\( \) recognition plus documents.js's lowerMarkdownMath, per that pass's own header comment) and runs it through worked-example.ts, then aggregates the same across a whole corpus of documents into one coverage report naming, per document, exactly where its evaluation diverged from what the document itself said the answer was.
 //
@@ -111,10 +117,8 @@ function sumBy<T>(items: readonly T[], project: (item: T) => number): number {
   return items.reduce((total, item) => total + project(item), 0);
 }
 
-function formatOutcome(outcome: WorkedExampleOutcome): string {
+function formatOutcome(outcome: NonMatchOutcome): string {
   switch (outcome.outcome) {
-    case "match":
-      return `match: ${outcome.targetSymbol}`;
     case "mismatch":
       return `MISMATCH: ${outcome.targetSymbol} -- expected ${formatEvaluationResult(outcome.expected)}, got ${formatEvaluationResult(outcome.actual)}`;
     case "gap":
@@ -124,10 +128,8 @@ function formatOutcome(outcome: WorkedExampleOutcome): string {
   }
 }
 
-function formatEvaluationResult(value: EvaluationResult): string {
-  if (value.kind === "interval") {
-    return `[${value.min}, ${value.max}]`;
-  }
+// Takes a Quantity specifically, not the broader EvaluationResult (Quantity | Interval) -- its only call site is formatOutcome's "mismatch" case, formatting WorkedExampleMismatch's own `expected`/`actual` fields, which are typed as Quantity (this harness is scoped to point-valued answers only, per worked-example.ts's own module header comment), so there is no Interval case to render here.
+function formatEvaluationResult(value: Quantity): string {
   return `${value.magnitude}`;
 }
 

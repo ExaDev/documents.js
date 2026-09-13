@@ -1,7 +1,10 @@
 import { packageStrykerConfig } from "../../stryker.shared.ts";
 
-export default packageStrykerConfig({
-  vitestConfigFile: "vitest.unit.config.ts",
-  // First CI-measured baseline: 23.03% of 3822 valid mutants, timeout share 0.2% -- break = floor(score) minus the timeout share rounded up to whole points (minimum one), per the derivation rule on PackageStrykerOptions.breakThreshold.
-  breakThreshold: 22,
-});
+export default {
+  ...packageStrykerConfig({
+    vitestConfigFile: "vitest.unit.config.ts",
+    breakThreshold: 100,
+  }),
+  // This package is almost entirely Zod schema declarations and hand-authored JSON-schema object literals -- module-load-time (static) constructs by construction. @stryker-mutator/vitest-runner's own activation mechanism (stryker-setup.js) sets its `activeMutant` switch inside a `beforeAll()` hook for any mutant NOT given the (synchronous) "static" activation mode -- but a "hybrid" mutant (Stryker's own term: static AND also covered by a specific test's per-test coverage instrumentation, which happens whenever a test reads the resulting value, e.g. `CONTENT_DEFS.Color` or `ColorSchema`) gets ignoreStatic's "runtime" activation instead of "static" activation, per MutantTestPlanner#planMutant's own branching. `beforeAll()` runs strictly after a test file's top-level imports have already evaluated, so for a mutation inside a top-level `z.object({...})` or object-literal declaration, the switch is never active yet when that declaration actually runs -- the mutant can NEVER be observed, no matter what the covering test asserts. Confirmed directly against this package (2026-09): CONTENT_DEFS.Color's `r` field mutated to `{}` reproducibly survives Stryker's own sandbox while the identical edit, applied by hand and run through plain `vitest run`, fails the exact test Stryker says covers it (content-json-schema-defs.test.ts's "Color: hand-authored fragment matches...") -- proving the test is sound and the miss is the activation-timing bug above, not a test gap. `ignoreStatic: false` routes every static (and hybrid-static) mutant through the OTHER branch of the same function instead, which activates via the synchronous "static" mode (set before any test file's imports run at all), so module-load-time code is finally mutated when it's supposed to be. The performance cost this trades away (this package's own dry run measured 57% of mutants as static, ~92% of a full run's time) is exactly why every OTHER package in this workspace keeps ignoreStatic enabled -- this package is the deliberate, evidenced exception, not a precedent to copy elsewhere without the same measurement.
+  ignoreStatic: false,
+};

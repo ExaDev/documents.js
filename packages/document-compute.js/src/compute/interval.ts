@@ -85,8 +85,14 @@ export function negateInterval(a: Interval): Interval {
   return interval(-a.max, -a.min, a.dimension);
 }
 
+// |[min, max]| stated as a closed form rather than the textbook three sign cases (wholly non-negative -> unchanged, wholly non-positive -> negated, straddling -> [0, max(|min|, |max|)]). The two are the same function:
+// - The upper bound is max(|min|, |max|) in all three cases, and since min <= max, max(-min, max) already IS max(|min|, |max|) -- whichever of the two endpoints is further from zero is the one that survives, whatever the signs.
+// - The lower bound is the distance from zero to the nearest point of the interval, which is min when the interval sits above zero, -max when it sits below, and 0 when it contains zero. max(0, min, -max) picks exactly that: at most one of min and -max can be positive at a time (both positive would need max < 0 < min, impossible for min <= max), so the clamp at 0 selects that one when it exists and 0 -- the containing-zero answer -- when neither does.
+// Writing it this way keeps the boundary cases (min === 0, max === 0) from depending on a comparison operator whose two spellings pick different branches that then compute the same answer anyway.
 export function absInterval(a: Interval): Interval {
-  if (a.min >= 0) return a;
-  if (a.max <= 0) return negateInterval(a);
-  return interval(0, Math.max(-a.min, a.max), a.dimension);
+  return interval(
+    Math.max(0, a.min, -a.max),
+    Math.max(-a.min, a.max),
+    a.dimension,
+  );
 }
