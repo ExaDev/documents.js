@@ -53,7 +53,9 @@ describe("decryptDocStreams (RC4)", () => {
   it("throws when no password is given", () => {
     expect(() =>
       decryptDocStreams(buildWordDocument(), buildTable(), undefined, false),
-    ).toThrow(DocUnsupportedError);
+    ).toThrow(
+      /this document is RC4-encrypted \(\[MS-DOC\] 2\.2\.6\.2\); call readDocContent with a password to decrypt it/,
+    );
   });
 
   it("throws given the wrong password", () => {
@@ -64,6 +66,13 @@ describe("decryptDocStreams (RC4)", () => {
         "the wrong password",
         false,
       ),
+    ).toThrow(/incorrect password for RC4-encrypted document/);
+  });
+
+  it("throws given a wrong password whose own computed hash happens to share one byte with the real verifier hash", () => {
+    // "the wrong password" above produces a computed hash with zero bytes in common with the real one at any position, which cannot tell a byte-by-byte comparison (.every) apart from an any-byte-matches one (.some) -- "wrong1656" does share exactly one byte position, found by brute-force search over candidate wrong passwords against this fixed salt/verifier/hash.
+    expect(() =>
+      decryptDocStreams(buildWordDocument(), buildTable(), "wrong1656", false),
     ).toThrow(DocUnsupportedError);
   });
 
@@ -114,7 +123,9 @@ describe("decryptDocStreams (RC4)", () => {
         PASSWORD,
         false,
       ),
-    ).toThrow(/runs past the end/);
+    ).toThrow(
+      /EncryptionHeader read of \d+ bytes at offset 0 runs past the end/,
+    );
   });
 });
 
@@ -155,7 +166,9 @@ describe("decryptDocStreams (XOR obfuscation)", () => {
         undefined,
         true,
       ),
-    ).toThrow(DocUnsupportedError);
+    ).toThrow(
+      /this document is XOR-obfuscated \(\[MS-DOC\] 2\.2\.6\.1\); call readDocContent with a password to decrypt it/,
+    );
   });
 
   it("throws given the wrong password", () => {
@@ -166,7 +179,42 @@ describe("decryptDocStreams (XOR obfuscation)", () => {
         "the wrong password",
         true,
       ),
-    ).toThrow(DocUnsupportedError);
+    ).toThrow(/incorrect password for XOR-obfuscated document/);
+  });
+
+  it("throws given a wrong password whose own verifier happens to match the header's, but whose XOR key does not", () => {
+    // "pw111103" was found by the same brute-force search, this time for the opposite split: its own createXorObfuscationPasswordVerifier output equals the real header verifier, while its createXorObfuscationKey output does not equal the real header key.
+    expect(() =>
+      decryptDocStreams(
+        buildXorWordDocument(),
+        buildXorTable(),
+        "pw111103",
+        true,
+      ),
+    ).toThrow(/incorrect password for XOR-obfuscated document/);
+  });
+
+  it("throws given a wrong password whose own XOR key happens to match the header's, but whose verifier does not", () => {
+    // "cand124835" was found by brute-force search over candidate passwords against XOR_KEY/XOR_VERIFIER1: its own createXorObfuscationKey output equals the real header key, while its createXorObfuscationPasswordVerifier output does not equal the real header verifier -- key-matches-but-verifier-doesn't is exactly the case an && in place of || would wrongly accept.
+    expect(() =>
+      decryptDocStreams(
+        buildXorWordDocument(),
+        buildXorTable(),
+        "cand124835",
+        true,
+      ),
+    ).toThrow(/incorrect password for XOR-obfuscated document/);
+  });
+
+  it("throws given a password carrying a character outside single-byte Latin-1, naming it an incorrect password rather than propagating the underlying RangeError", () => {
+    expect(() =>
+      decryptDocStreams(
+        buildXorWordDocument(),
+        buildXorTable(),
+        "café€", // U+20AC (8364) is past charCodeAt's own 0xff bound createXorObfuscationKey enforces.
+        true,
+      ),
+    ).toThrow(/incorrect password for XOR-obfuscated document/);
   });
 
   it("decrypts WordDocument from byte 68 and Table from byte 0, given the correct password", () => {

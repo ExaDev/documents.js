@@ -75,24 +75,19 @@ function readRc4Header(table: Uint8Array<ArrayBuffer>): DocRc4Header {
       `this document uses RC4 CryptoAPI encryption (EncryptionVersionInfo ${versionMajor}.${versionMinor}, [MS-DOC] 2.2.6.3), which this reader does not decrypt`,
     );
   }
+  // Sliced directly rather than through checkedSubarray's own bounds check: `header` is already exactly RC4_HEADER_SIZE bytes (checkedSubarray's own call above guarantees it), and HEADER_OFFSET.salt/encryptedVerifier/encryptedVerifierHash back-to-back at OFFICE_RC4_VERIFIER_LENGTH apiece add up to exactly that same RC4_HEADER_SIZE with no slack -- there is no header this function ever sees for which one of these three could run past its own end.
   return {
-    salt: checkedSubarray(
-      header,
+    salt: header.subarray(
       HEADER_OFFSET.salt,
-      OFFICE_RC4_VERIFIER_LENGTH,
-      "EncryptionHeader.Salt",
+      HEADER_OFFSET.salt + OFFICE_RC4_VERIFIER_LENGTH,
     ),
-    encryptedVerifier: checkedSubarray(
-      header,
+    encryptedVerifier: header.subarray(
       HEADER_OFFSET.encryptedVerifier,
-      OFFICE_RC4_VERIFIER_LENGTH,
-      "EncryptionHeader.EncryptedVerifier",
+      HEADER_OFFSET.encryptedVerifier + OFFICE_RC4_VERIFIER_LENGTH,
     ),
-    encryptedVerifierHash: checkedSubarray(
-      header,
+    encryptedVerifierHash: header.subarray(
       HEADER_OFFSET.encryptedVerifierHash,
-      OFFICE_RC4_VERIFIER_LENGTH,
-      "EncryptionHeader.EncryptedVerifierHash",
+      HEADER_OFFSET.encryptedVerifierHash + OFFICE_RC4_VERIFIER_LENGTH,
     ),
   };
 }
