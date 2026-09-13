@@ -197,10 +197,8 @@ export function isoTimeToSerial(iso: string): number | undefined {
 }
 
 export function isoDateTimeToSerial(iso: string): number | undefined {
+  // No explicit "no separator" guard: when indexOf returns -1, the date half slices to iso.slice(0, -1) (length iso.length - 1) and the time half to iso.slice(0) (length iso.length). ISO_DATE_PATTERN and ISO_TIME_PATTERN are anchored to exactly 10 and 8 characters respectively, so matching both at once would require iso.length - 1 === 10 (length 11) and iso.length === 8 at the same time, which no string satisfies -- so with no separator, at least one half always fails to parse, and the undefined fallthrough below already covers that case with no separate check needed.
   const separatorIndex = iso.indexOf(ISO_DATE_TIME_SEPARATOR);
-  if (separatorIndex === -1) {
-    return undefined;
-  }
   const days = isoDateToSerial(iso.slice(0, separatorIndex));
   const fractionOfDay = isoTimeToSerial(iso.slice(separatorIndex + 1));
   return days === undefined || fractionOfDay === undefined
