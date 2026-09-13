@@ -138,6 +138,12 @@ describe("compoundFile directory-entry byte layout", () => {
     expect(view.getUint8((directoryStart + 1) * 512 + 1 * 128 + 0x43)).toBe(1);
   });
 
+  it("writes the header's own minor version field as 0x003E", () => {
+    // [MS-CFB] 2.2 names this value for both major version 3 and 4, but real readers (including ../cfb/read.ts) never inspect it -- direct byte inspection is the only way to notice it going unwritten.
+    const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
+    expect(new DataView(bytes.buffer).getUint16(0x18, true)).toBe(0x3e);
+  });
+
   it("writes the high 32 bits of a stream's size as zero", () => {
     const bytes = compoundFile([{ path: "A", bytes: enc("x".repeat(5000)) }]);
     const view = new DataView(bytes.buffer);
@@ -196,6 +202,33 @@ describe("compoundFile header DIFAT array padding", () => {
     for (let i = fatSectorCount; i < 109; i++) {
       expect(view.getUint32(0x4c + i * 4, true)).toBe(0xffffffff);
     }
+  });
+});
+
+describe("compoundFile stream size partitioning", () => {
+  it("allocates no FAT-resident data sector at all for a file holding only one mini-resident stream", () => {
+    // A stream this small being also (wrongly) counted among the "big" (FAT-resident) partition would allocate an extra, entirely unused data sector for it -- unobservable through read-back (the entry's own startSector still correctly points into the mini stream), but it inflates the file's own total size. 1 FAT sector + 1 directory sector + 1 mini-stream sector + 1 mini-FAT sector is the true minimum for this fixture.
+    const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
+    expect(bytes.length).toBe(512 * (1 + 1 + 1 + 1 + 1)); // header + 4 sectors
+  });
+});
+
+describe("compoundFile mini-FAT sector boundary", () => {
+  it("keeps a single stream's chain intact even when it straddles the 128-entry mini-FAT-sector boundary", () => {
+    // 126 one-mini-sector filler streams occupy mini sectors 0-125; a 4-mini-sector stream right after them occupies 126-129, so its own chain entries at local indices 126, 127 sit in the first mini-FAT sector and 128, 129 in the second. Every filler stream's own chain entry is ENDOFCHAIN, so a bug that copies the wrong 512-byte chunk into the second mini-FAT sector (duplicating the first, or reading from the wrong offset within the combined buffer) would still read back as ENDOFCHAIN there too if this stream's own real values did not differ from mini sector to mini sector -- filling each of its own four mini sectors with a distinct byte value makes that corruption visible as wrong (truncated or shuffled) content instead.
+    const fillerCount = 126;
+    const filler = Array.from({ length: fillerCount }, (_unused, i) => ({
+      path: `Filler${i}`,
+      bytes: new Uint8Array(64).fill(1),
+    }));
+    const bigBytes = new Uint8Array(64 * 4);
+    for (let miniSector = 0; miniSector < 4; miniSector++) {
+      bigBytes.fill(miniSector + 10, miniSector * 64, (miniSector + 1) * 64);
+    }
+    const bytes = compoundFile([...filler, { path: "Big", bytes: bigBytes }]);
+    expect(new DataView(bytes.buffer).getUint32(0x40, true)).toBe(2); // sanity: needs two mini-FAT sectors
+    const streams = readCompoundFile(bytes);
+    expect(streams.find((s) => s.path === "Big")?.bytes).toEqual(bigBytes);
   });
 });
 
