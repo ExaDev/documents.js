@@ -303,6 +303,20 @@ describe("readPropertySetStream", () => {
     );
   });
 
+  it("names its own error class PropertySetFormatError, not merely an instance of it", () => {
+    const bytes = propertySetStream(FMTID_SUMMARY_INFORMATION, [
+      { pid: 2, value: { type: "VT_LPWSTR", value: "x" } },
+    ]);
+    bytes.set([0x34, 0x12], 0);
+    let caught: unknown;
+    try {
+      readPropertySetStream(bytes);
+    } catch (error) {
+      caught = error;
+    }
+    expect((caught as Error).name).toBe("PropertySetFormatError");
+  });
+
   it("throws naming the exact declared count for NumPropertySets other than 1", () => {
     const bytes = propertySetStream(FMTID_SUMMARY_INFORMATION, [
       { pid: 2, value: { type: "VT_LPWSTR", value: "x" } },
