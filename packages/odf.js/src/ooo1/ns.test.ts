@@ -140,6 +140,21 @@ describe("isOoo1Package", () => {
     expect(isOoo1Package(pkg)).toBe(true);
   });
 
+  it("recognises a bare, default (non-prefixed) xmlns declaration too", () => {
+    const pkg = packageOf({
+      "content.xml": `<office:document-content xmlns="http://openoffice.org/2000/office"><office:body/></office:document-content>`,
+    });
+    expect(isOoo1Package(pkg)).toBe(true);
+  });
+
+  it("does not treat an ordinary attribute whose value happens to equal an OOo1 URI as a namespace declaration", () => {
+    // office:version here is neither "xmlns" nor "xmlns:"-prefixed -- only its VALUE coincides with a real OOo1 namespace URI, which must not be enough on its own.
+    const pkg = packageOf({
+      "content.xml": `<office:document-content office:version="http://openoffice.org/2000/office"><office:body/></office:document-content>`,
+    });
+    expect(isOoo1Package(pkg)).toBe(false);
+  });
+
   it("rejects a real ODF package", () => {
     const pkg = packageOf({
       "content.xml": `<office:document-content xmlns:office="${ODF_NAMESPACES.office}" xmlns:text="${ODF_NAMESPACES.text}" office:version="1.3"><office:body><office:text><text:p>hi</text:p></office:text></office:body></office:document-content>`,
