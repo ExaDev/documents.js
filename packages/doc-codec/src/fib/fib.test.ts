@@ -110,7 +110,7 @@ describe("parseFib", () => {
 
   it("rejects a cbRgFcLcb whose blob ends exactly at the highest value index this reader needs, one 4-byte value short", () => {
     expect(() => parseFib(buildFib({ cbRgFcLcb: 74 }))).toThrow(
-      /does not reach value index 149/,
+      /a FibRgFcLcb blob of 148 4-byte values, which does not reach value index 149/,
     );
   });
 
