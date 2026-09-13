@@ -108,8 +108,7 @@ export function applyCharacterSprms(
         break;
       }
       default:
-        // Every other character sprm is a property this reader does not convert. Left alone rather than recorded: the package's scope is stated once, in its README, not restated as a per-property diagnostic on every run of every document.
-        break;
+      // Every other character sprm is a property this reader does not convert. Left alone rather than recorded: the package's scope is stated once, in its README, not restated as a per-property diagnostic on every run of every document. No `break` follows: `default` is this switch's own last clause, so control already falls through to the closing brace with or without one.
     }
   }
   return into;
