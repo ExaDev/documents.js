@@ -2342,6 +2342,51 @@ describe("body constructs", () => {
       "{\\*\\shppict{\\pict\\pngblip\\picwgoal1440\\pichgoal720",
     );
     expect(out).toContain("89504e470d0a1a0a");
+    // A top-level image (inTable defaults to false, via writeImageParagraph) writes no \intbl and closes with its own trailing \par -- the sibling table-cell test above proves the opposite for inTable: true.
+    expect(out).not.toContain("\\intbl");
+    expect(out).toContain("}}\\par");
+  });
+
+  it("writes \\jpegblip rather than \\pngblip for a jpeg image", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "image",
+          format: "jpeg",
+          base64: "/9j/",
+          widthPt: 72,
+          heightPt: 36,
+        },
+      ]),
+    );
+    expect(out).toContain("{\\*\\shppict{\\pict\\jpegblip");
+    expect(out).not.toContain("pngblip");
+  });
+
+  it("wraps a hex payload at exactly HEX_LINE_LENGTH (128) with no trailing empty line at the boundary", () => {
+    // A 64-byte payload is exactly 128 hex characters -- the loop's own final index (128) must NOT run another iteration, or wrapHex would push a spurious empty final "line" (128 <= 128 true, hex.slice(128, 256) === "") and join in an extra line ending nothing else produced.
+    const base64 =
+      "q6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urqw==";
+    const out = write(
+      wordprocessing([
+        { kind: "image", format: "png", base64, widthPt: 72, heightPt: 36 },
+      ]),
+    );
+    expect(out).toContain(`${"ab".repeat(64)}}}`);
+  });
+
+  it("wraps a hex payload longer than HEX_LINE_LENGTH into real chunks, not the whole payload repeated per line", () => {
+    // A 100-byte payload is 200 hex characters -- two lines, the first exactly 128 characters and the second the remaining 72, not the full 200-character hex string pushed twice.
+    const base64 =
+      "zc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3NzQ==";
+    const out = write(
+      wordprocessing([
+        { kind: "image", format: "png", base64, widthPt: 72, heightPt: 36 },
+      ]),
+    );
+    const firstLine = "cd".repeat(64);
+    const secondLine = "cd".repeat(36);
+    expect(out).toContain(`${firstLine}\n${secondLine}}}`);
   });
 
   it("reports rather than mislabelling an svg or gif image, RTF's \\pict destination having no picture-type keyword for either", () => {
@@ -2425,7 +2470,12 @@ describe("body constructs", () => {
     expect(out).toContain("{\\*\\objdata");
     // The [MS-CFB] magic bytes (D0 CF 11 E0 A1 B1 1A E1) -- proof the \objdata payload is a genuine compound file, not a placeholder or an opaque blob.
     expect(out).toContain("d0cf11e0a1b11ae1");
-    expect(out).toContain("{\\result{\\pard\\plain");
+    expect(out).toContain(
+      "{\\result{\\pard\\plain [embedded spreadsheet object]\\par}}}",
+    );
+    // A top-level embedded object (inTable defaults to false) writes no \intbl and closes with its own trailing \par -- the sibling table-cell test proves the opposite for inTable: true.
+    expect(out).not.toContain("\\intbl");
+    expect(out).toMatch(/\\par\n\}$/);
   });
 
   it("reports rather than silently dropping a construct boundary marker RTF cannot spell", () => {
