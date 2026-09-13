@@ -53,6 +53,48 @@ describe("font table", () => {
     expect(fonts.get(0)?.family).toBe("roman");
     expect(fonts.get(2)?.family).toBe("swiss");
   });
+
+  it("decodes a \\'hh hex byte inside a font name through the entry's own code page", () => {
+    // 0x41 is 'A' in every single-byte code page this decodes through, so the assertion holds regardless of which one \fcharset0 resolves to.
+    const { fonts } = headerOf(
+      "{\\rtf1{\\fonttbl{\\f0\\froman\\fcharset0 C\\'41B;}}}",
+    );
+    expect(fonts.get(0)?.name).toBe("CAB");
+  });
+
+  it("flushes pending bytes before skipping a nested group, not after, so a DBCS lead byte never spans across it", () => {
+    // \cpg932's lead/trail byte scheme means combining a byte from before {\*\falt ...} with one from after it (rather than flushing each side separately) decodes the two together as one Shift-JIS character instead of the lone lead byte's own U+FFFD fallback followed by the plain ASCII byte after it.
+    const { fonts } = headerOf(
+      "{\\rtf1{\\fonttbl{\\f0\\froman\\cpg932 \\'81{\\*\\falt X}\\'40;}}}",
+    );
+    expect(fonts.get(0)?.name).toBe(`${String.fromCodePoint(0xfffd)}@`);
+  });
+
+  it("does not flush an empty pending run into a diagnostic-worthy decode", () => {
+    // \cpg99999 is deliberately unsupported, so decoding through it emits one UNSUPPORTED_CODEPAGE warning per real, non-empty flush -- {\*\falt X} is skipped as a nested group before any name text has accumulated, so an unguarded flush right there would decode zero bytes through the same unsupported page and emit a second, spurious warning nothing in the actual name justifies.
+    const diagnostics: unknown[] = [];
+    const tokens = tokenizeRtf(
+      bytes("{\\rtf1{\\fonttbl{\\f0\\froman\\cpg99999{\\*\\falt X}Y;}}}"),
+    );
+    readRtfHeader(tokens, (diagnostic) => diagnostics.push(diagnostic));
+    expect(diagnostics).toHaveLength(1);
+  });
+
+  it("trims leading whitespace from a font name, not just the trailing semicolon", () => {
+    // The <fontinfo> delimiter space after each control word is already consumed by the tokenizer, so these extra leading/trailing spaces are genuinely part of the name's own text run, not delimiter artifacts -- only .trim() removes the leading pair; the trailing-semicolon regex only ever touches what comes after the last real character.
+    const { fonts } = headerOf("{\\rtf1{\\fonttbl{\\f0\\froman  Arial ;}}}");
+    expect(fonts.get(0)?.name).toBe("Arial");
+  });
+
+  it("decodes a \\uN unicode escape inside a font name, for both a positive and a negative-encoded code point", () => {
+    const { fonts } = headerOf(
+      "{\\rtf1{\\fonttbl{\\f0\\froman A\\u233 B\\u-1C;}}}",
+    );
+    // \u233 is U+00E9 (233); \u-1 is RTF's signed-16-bit spelling of U+FFFF (-1 + 0x10000).
+    expect(fonts.get(0)?.name).toBe(
+      `A${String.fromCodePoint(233)}B${String.fromCodePoint(0xffff)}C`,
+    );
+  });
 });
 
 describe("color table", () => {
