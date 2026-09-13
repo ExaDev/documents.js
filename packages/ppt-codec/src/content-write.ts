@@ -161,14 +161,22 @@ export function buildTextBody(
   return { text, style: { paragraphRuns, characterRuns } };
 }
 
-// Every distinct fontFamily a block's runs name, in first-seen order -- the order buildTextBody's fontIndexOf callback (built once per document, over every slide's every shape) must resolve against, matching the order the document's own FontCollectionContainer is written in.
+// Every distinct fontFamily a block's runs name, in first-seen order -- the order buildTextBody's fontIndexOf callback (built once per document, over every slide's every shape) must resolve against, matching the order the document's own FontCollectionContainer is written in. Descends into a table block's own cells too: a table shape's own top-level blocks list carries one "table" block, never the paragraphs nested inside its rows/cells, and writeTableGroup calls the identical buildTextBody/fontIndexOf path on each cell's own blocks that every other shape's text goes through.
 export function collectFontFamilies(
   blocksList: readonly (readonly ContentBlock[])[],
 ): string[] {
   const seen = new Set<string>();
   const names: string[] = [];
-  for (const blocks of blocksList) {
+  const visit = (blocks: readonly ContentBlock[]): void => {
     for (const block of blocks) {
+      if (block.kind === "table") {
+        for (const row of block.rows) {
+          for (const cell of row.cells) {
+            visit(cell.blocks);
+          }
+        }
+        continue;
+      }
       if (block.kind !== "paragraph") {
         continue;
       }
@@ -179,6 +187,9 @@ export function collectFontFamilies(
         }
       }
     }
+  };
+  for (const blocks of blocksList) {
+    visit(blocks);
   }
   return names;
 }

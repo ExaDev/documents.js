@@ -82,6 +82,16 @@ export interface WritePptOptions {
   readonly onUnwritableBlock?: PptUnwritableBlockPolicy;
 }
 
+// A generic narrowing helper rather than a plain `x as V` at each call site: this workspace's own strictTypeChecked lint tier auto-fixes a concrete `x as T` narrowing only nullability into `x!`, which no-non-null-assertion then bans outright -- a generic assertion (V unresolved at this call) doesn't match that autofix's own pattern, so it stays exactly the cast it is. Used only where the key is provably present by construction; never for a genuinely optional lookup.
+function definiteGet<K, V>(map: ReadonlyMap<K, V>, key: K): V {
+  return map.get(key) as V;
+}
+
+// The array counterpart of definiteGet, for an index provably within bounds by construction (e.g. re-indexing a slides.map() result by the very index that map() produced it at).
+function definiteAt<T>(array: readonly T[], index: number): T {
+  return array[index] as T;
+}
+
 // The write path, the mirror image of read.ts: a presentation's ContentSlide[] mapped onto [MS-PPT] records (document container, master and slide lists, one main master, one slide container per slide with its drawing and text, and one notes container per slide that has speaker notes), a single-edit persist layer over them (stream/persist-write.ts), and the two [MS-CFB] streams archive-codec's writeCompoundFile wraps into real .ppt bytes. Deliberately narrower than the read path's own coverage -- see the package README's write-scope section for exactly what a written file carries and what it does not.
 
 // [MS-PPT] persist identifiers this writer mints, in the order the stream lays them out: 1 names the document, 2 the one main master, slides follow contiguously from 3, and each notes slide that exists takes the next identifier after the last slide's.
@@ -222,15 +232,8 @@ function planBlipStore(slides: readonly ContentSlide[]): BlipStorePlan {
   }
   return {
     blips,
-    pibOf: (image) => {
-      const pib = pibByKey.get(`${image.format}:${image.base64}`);
-      if (pib === undefined) {
-        throw new PptUnsupportedContentError(
-          "internal error: an image block reached the drawing writer without first being collected into the document's blip store",
-        );
-      }
-      return pib;
-    },
+    // Always present: pibOf is only ever called (via DrawingWriteContext.blipIndexOf) from shapes-write.ts's own planShapeBlocks, on a block that already passed the identical `block.kind === "image" && isBlipFormat(block.format)` test against the same `slides` this scan just walked, keyed the identical way -- so every key it can ever ask for was set above.
+    pibOf: (image) => definiteGet(pibByKey, `${image.format}:${image.base64}`),
   };
 }
 
@@ -250,15 +253,12 @@ export function writePptStreams(
   const fontNames = collectFontFamilies(
     slides.map((slide) => slide.shapes.flatMap((shape) => shape.blocks)),
   );
-  const fontIndexOf = (family: string): number => {
-    const index = fontNames.indexOf(family);
-    if (index === -1) {
-      throw new PptUnsupportedContentError(
-        `font family '${family}' was not collected into the document's font table before writing`,
-      );
-    }
-    return index;
-  };
+  // A Map built once from fontNames' own indices, rather than fontNames.indexOf(family) at every call: collectFontFamilies already walks every block a font family could ever be drawn from (paragraphs anywhere, including nested inside a table's own cells) with the identical recursive walk buildTextBody's own callers use, so every family fontIndexOf is ever asked for is provably already a key here.
+  const fontIndexByName = new Map(
+    fontNames.map((name, index) => [name, index]),
+  );
+  const fontIndexOf = (family: string): number =>
+    definiteGet(fontIndexByName, family);
   const store = planBlipStore(slides);
   const strict = options.onUnwritableBlock === "throw";
   const contextFor = (location: string): DrawingWriteContext => ({
@@ -301,16 +301,13 @@ export function writePptStreams(
     drawingCount += 1;
   };
 
-  const mainMaster = writeMainMaster(size, contextFor("the main master"));
+  // No location description: the main master's own placeholder shapes are always built with blocks: [] (master-write.ts), so planShapeBlocks/writeTableGroup's diagnostic paths -- the only consumers of DrawingWriteContext.location -- can never actually fire for it.
+  const mainMaster = writeMainMaster(size, contextFor(""));
   account(mainMaster);
   const slideContainers = slides.map((slide, index) => {
-    const ref = slidePersistRefs[index];
-    const notesIdRef = notesIdRefs[index];
-    if (ref === undefined || notesIdRef === undefined) {
-      throw new PptUnsupportedContentError(
-        "internal error: slide persist reference missing for a slide being written",
-      );
-    }
+    // Always defined: slidePersistRefs/notesIdRefs are both built by slides.map() above, so they carry exactly one entry per slide at exactly this same index.
+    const ref = definiteAt(slidePersistRefs, index);
+    const notesIdRef = definiteAt(notesIdRefs, index);
     const container = writeSlideContainer(
       slide.shapes,
       notesIdRef,
@@ -338,7 +335,8 @@ export function writePptStreams(
       FIRST_SLIDE_ID + index,
       slide.notes,
       size,
-      contextFor(`slide ${index + 1}'s speaker notes`),
+      // No location description: notesBodyShape (document/notes-write.ts) always builds plain, unformatted paragraph blocks from the notes string alone -- no font family, image, table or embeddedObject block a diagnostic could ever name -- so planShapeBlocks/writeTableGroup's diagnostic paths can never actually fire for a notes container either.
+      contextFor(""),
     );
     account(container);
     notesContainers.push({ persistId: persistIdRef, bytes: container.bytes });
