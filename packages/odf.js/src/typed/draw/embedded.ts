@@ -194,8 +194,8 @@ function subDocumentKind(
   return findMathRoot(nodes) === undefined ? undefined : "formula";
 }
 
-// The normalised directory prefix a draw:object's own xlink:href names, or undefined when the href is absent, empty, or points outside the package (a LINKED object: an absolute URL, or a path escaping the package root).
-function normaliseObjectHref(raw: string): string | undefined {
+// The normalised directory prefix a draw:object's own xlink:href names, or undefined when the href is absent, empty, or points outside the package (a LINKED object: an absolute URL, or a path escaping the package root). Exported so each of the four rejection clauses can be pinned directly: every one of them, if silently skipped, still leaves subDocumentPackage's own lookup failing for a different reason (a mismatched or empty re-keyed part set) against any package a black-box readDrawObjectReference test could build, which would make a mutation here unobservable through that entry point alone.
+export function normaliseObjectHref(raw: string): string | undefined {
   const withoutPrefix = raw.startsWith("./") ? raw.slice(2) : raw;
   const trimmed = withoutPrefix.endsWith("/")
     ? withoutPrefix.slice(0, -1)
