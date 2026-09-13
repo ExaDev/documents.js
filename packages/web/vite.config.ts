@@ -121,12 +121,18 @@ export default defineConfig(({ command, mode }) => ({
     __APP_COMMIT_TIMESTAMP__: JSON.stringify(commitTimestampMs),
   },
   plugins: [
-    // Must precede react(): the router plugin's route-tree codegen needs to run before plugin-react's JSX transform sees the generated imports. routeFileIgnorePattern excludes a route file's own unit tests from the generated route tree -- without it, the first test added directly under src/routes/ (e.g. index.test.ts) warns "does not export a Route" on every build and test run, and the existing dash-prefix convention (this directory's own -Sidebar.tsx, a genuine non-route support file) is the wrong fix for a test file: dash-prefixing every *.test.ts(x) here would read oddly next to every other test file in the package, which carries no such prefix. autoCodeSplitting is a production bundle-size optimisation, irrelevant to correctness -- worse than irrelevant under vitest, since it rewrites a route file's own component behind a real dynamic import, and a test mounting that route's Route.options.component directly (bypassing routeTree.gen.ts, which is what a route-level unit test necessarily does) genuinely suspends on first render waiting for a chunk vitest has no reason to ever finish resolving quickly. Gated off under mode "test" (vitest's own default mode, unless a run overrides it) for the identical reason `base` above is gated on `command`: a build-time concern must not leak into how tests execute.
-    tanstackRouter({
-      target: "react",
-      autoCodeSplitting: mode !== "test",
-      routeFileIgnorePattern: "\\.test\\.tsx?$",
-    }),
+    // Must precede react(): the router plugin's route-tree codegen needs to run before plugin-react's JSX transform sees the generated imports. routeFileIgnorePattern excludes a route file's own unit tests from the generated route tree -- without it, the first test added directly under src/routes/ (e.g. index.test.ts) warns "does not export a Route" on every build and test run, and the existing dash-prefix convention (this directory's own -Sidebar.tsx, a genuine non-route support file) is the wrong fix for a test file: dash-prefixing every *.test.ts(x) here would read oddly next to every other test file in the package, which carries no such prefix.
+    //
+    // The whole plugin is omitted outright under mode "test" (vitest's own default mode, unless a run overrides it), not merely tuned via autoCodeSplitting as it was before -- a build-time concern must not leak into how tests execute, the identical reasoning `base` above is gated on `command`, just carried further once a second symptom of the same leak turned up. Neither a normal unit-test run nor Stryker's mutation run needs the plugin's codegen at all: no test file imports routeTree.gen.ts (which router.tsx alone consumes, and which is committed to the repo already, not regenerated per run) or mounts a route through the real router; every route test mounts Route.options.component directly, calling the runtime createFileRoute()/routeFile-object factories that ship in @tanstack/react-router itself, which need no Vite plugin to work. Confirmed as more than a latent risk, not merely a hygiene tidy-up: Stryker's instrumentation rewrites every mutable literal in a matched file into a stryMutAct-guarded conditional, including each route file's own `createFileRoute("/id")` argument -- and the plugin's own route-tree generator statically requires that argument to already be a plain string or template literal so it can rewrite it, so instrumenting any route file under the previous per-flag gating crashed route-tree generation outright ("expected route id to be a string literal or plain template literal") the moment a full mutation run touched more than one route file at once, taking the whole Stryker child process down with it rather than just marking one mutant erroneous.
+    ...(mode === "test"
+      ? []
+      : [
+          tanstackRouter({
+            target: "react",
+            autoCodeSplitting: true,
+            routeFileIgnorePattern: "\\.test\\.tsx?$",
+          }),
+        ]),
     react(),
     vanillaExtractPlugin(),
     pwa,
