@@ -319,9 +319,10 @@ export function writeDocContent(
   assertDefined(lastSepx, EMPTY_SECTION_LIST_MESSAGE);
   const wordDocument = new Uint8Array(lastFcSepx + lastSepx.length);
   const wordView = new DataView(wordDocument.buffer);
-  for (let index = 0; index < text.length; index += 1) {
-    wordView.setUint16(characterFc(index), text.charCodeAt(index), true);
-  }
+  // text.split("") rather than a bounded C-style loop or a for-of over `text` directly: split("") walks UTF-16 code UNITS, the identical granularity charCodeAt already assumed and characterFc's own BYTES_PER_CHARACTER=2 requires (a surrogate pair is two code units, each written as its own 16-bit slot) -- a for-of over a string instead walks Unicode code POINTS, silently collapsing a surrogate pair into one iteration and one write, corrupting exactly the astral-character case this writer round-trips.
+  text.split("").forEach((character, index) => {
+    wordView.setUint16(characterFc(index), character.charCodeAt(0), true);
+  });
   chpxPages.forEach((page, index) => {
     wordDocument.set(page, (chpxPageStart + index) * FKP_PAGE_SIZE);
   });
@@ -463,7 +464,7 @@ export function writeDocContent(
   return writeCompoundFile(streams);
 }
 
-// Ensures `paragraphs` ends in a genuine ordinary-paragraph-mark-terminated entry -- appending an empty one when the last entry's own terminator is anything else (a table's own cell/row mark) -- then, when `terminator` differs from PARAGRAPH_MARK, replaces that entry's terminator with it. The one shared guarantee writeDocContent's own per-section loop and its final Main-Document-ending call both need: neither an end-of-section character nor the Main Document's own final character may land on a table's row-ending mark instead of a real paragraph mark (see this function's own call site for the [MS-DOC] citations).
+// Ensures `paragraphs` ends in a genuine ordinary-paragraph-mark-terminated entry -- appending an empty one when the last entry's own terminator is anything else (a table's own cell/row mark) -- then replaces that entry's own terminator with `terminator`. The one shared guarantee writeDocContent's own per-section loop and its final Main-Document-ending call both need: neither an end-of-section character nor the Main Document's own final character may land on a table's row-ending mark instead of a real paragraph mark (see this function's own call site for the [MS-DOC] citations). No early return for `terminator === PARAGRAPH_MARK`: the replace below is then rewriting the identical value the push above already just wrote, a genuine no-op rather than a behavioural difference, so skipping it would only be a micro-optimisation, not a correctness requirement.
 function closeSection(paragraphs: WriteParagraph[], terminator: number): void {
   const last = paragraphs[paragraphs.length - 1];
   if (last?.terminator !== PARAGRAPH_MARK) {
@@ -474,7 +475,6 @@ function closeSection(paragraphs: WriteParagraph[], terminator: number): void {
       terminator: PARAGRAPH_MARK,
     });
   }
-  if (terminator === PARAGRAPH_MARK) return;
   const index = paragraphs.length - 1;
   const target = paragraphs[index];
   assertDefined(target, CLOSE_SECTION_TRAILING_PARAGRAPH_LOST_MESSAGE);
