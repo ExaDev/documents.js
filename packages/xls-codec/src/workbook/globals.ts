@@ -14,7 +14,7 @@ import {
   RECORD_XF,
 } from "../biff/record-types";
 import { readFontRecord, type XfFontFields } from "../biff/font";
-import { BiffFormatError } from "../biff/records";
+import { BiffFormatError, recoverFromFormatError } from "../biff/records";
 import {
   readRichExtendedString,
   readShortXLUnicodeString,
@@ -256,10 +256,10 @@ function readSupBookSafely(record: RecordGroup): SupBookInfo {
   try {
     return readSupBook(record);
   } catch (error) {
-    if (!(error instanceof BiffFormatError)) {
-      throw error;
-    }
-    return { kind: "unresolvable", diagnostic: "malformed supporting link" };
+    return recoverFromFormatError(error, {
+      kind: "unresolvable" as const,
+      diagnostic: "malformed supporting link",
+    });
   }
 }
 

@@ -6,7 +6,7 @@ import { BlockCursor } from "../biff/cursor";
 import { parseFormulaText, type FormulaSheetContext } from "../biff/ptg";
 import { RECORD_LBL } from "../biff/record-types";
 import { writeRecord } from "../biff/record-writer";
-import { BiffFormatError } from "../biff/records";
+import { recoverFromFormatError } from "../biff/records";
 import { readXLUnicodeStringNoCch } from "../biff/strings";
 import { writeXLUnicodeStringNoCch } from "../biff/string-writer";
 import { BiffWriteError } from "../biff/write-errors";
@@ -122,9 +122,7 @@ function readLblRecord(
           sheetIndex: itab === 0 ? undefined : itab - 1,
         };
   } catch (error) {
-    if (!(error instanceof BiffFormatError)) {
-      throw error;
-    }
+    recoverFromFormatError(error, undefined);
     return undefined;
   }
 }

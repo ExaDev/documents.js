@@ -7,7 +7,7 @@ import type {
 import { BlockCursor } from "../biff/cursor";
 import type { FormulaSheetContext } from "../biff/ptg";
 import { extractFirstStringLiteral, parseFormulaText } from "../biff/ptg";
-import { BiffFormatError } from "../biff/records";
+import { recoverFromFormatError } from "../biff/records";
 import type { RecordGroup } from "../biff/substreams";
 import { RECORD_CF12 } from "../biff/record-types";
 import {
@@ -526,9 +526,7 @@ function readCf12(
     }
     return undefined; // ct 0x01, or a ct 0x02 rule with no closed-form structure to promote
   } catch (err) {
-    if (!(err instanceof BiffFormatError)) {
-      throw err;
-    }
+    recoverFromFormatError(err, undefined);
     return undefined;
   }
 }
@@ -578,9 +576,6 @@ export function readCondFmt12Group(
     }
     return { formats, recordsConsumed: 1 + ccf };
   } catch (err) {
-    if (!(err instanceof BiffFormatError)) {
-      throw err;
-    }
-    return { formats: [], recordsConsumed: 1 };
+    return recoverFromFormatError(err, { formats: [], recordsConsumed: 1 });
   }
 }
