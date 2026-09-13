@@ -7,7 +7,7 @@ import type {
   ContentTableCell,
   ContentTableRow,
 } from "document-schema.js";
-import { DocFormatError } from "../errors";
+import { assertDefined, DocFormatError } from "../errors";
 import type { ParagraphEntry } from "../text/paragraphs";
 import {
   HORZ_MERGE_CONTINUATION,
@@ -30,6 +30,20 @@ import { CELL_MARK, PARAGRAPH_MARK } from "../text/special";
 
 const TWIPS_PER_POINT = 20;
 
+// Every message below names an invariant this module already maintains elsewhere in the same function, never one a caller's own input could violate -- exported for this package's own tests only, so a change to the actual wording stays directly testable even though nothing in the public read path can trigger any of them (the same discipline prop/fkp-write.ts's own internal-defect messages follow).
+export function cellMergeEntryMissingMessage(cellIndex: number): string {
+  return `internal defect: table row cell ${cellIndex} has no TAP merge entry despite the length check above`;
+}
+export function rowDefinitionMissingMessage(rowIndex: number): string {
+  return `internal defect: table row ${rowIndex} has no TAP definition despite the earlier length check`;
+}
+export function gridBoundaryNotFoundMessage(boundary: number): string {
+  return `internal defect: a table row's column boundary ${String(boundary)} matches no boundary on the table's own reconstructed grid, which was built from that boundary among others`;
+}
+/** A row's own columnBoundariesTwips always has exactly one more entry than its own physical cells (tap.ts's readTdefTableOperand builds it that way), so neither caller below -- indexing it by a cell's own physical position, always within that range -- can ever find it too short; the message itself still names a real malformed-input shape (an indirect TAP this reader does not reconstruct that way), should this invariant ever change. */
+export const COLUMN_BOUNDARY_ARRAY_TOO_SHORT_MESSAGE =
+  "a table row's own column-boundary array has fewer entries than its physical cell count requires";
+
 // Whether two column boundaries, stated independently by two of a table's own rows, name the same boundary of its shared grid rather than two distinct columns, within toleranceTwips -- effectiveColumnBoundaryTolerance's own result, never the bare TWIPS_PER_POINT constant, since a table that itself states a narrower real column needs a narrower fuzz (see that function's own note).
 //
 // A real, independent [MS-DOC] implementation applies an analogous fuzz to an analogous computation: LibreOffice's own table model is per-row too (SwTableLine -> SwTableBox, each box carrying its own width), so its own ODF export -- the point at which it projects that per-row model onto one shared grid, sw/source/filter/xml/xmltble.cxx's SwXMLTableColumn_Impl -- faces the same reconstruct-one-shared-grid-from-N-per-row-arrays problem this function exists for, and sw/source/filter/inc/wrtswtbl.hxx answers it with `#define COLFUZZY 20` twips: SwWriteTableCol::operator== compares two column positions as equal when they differ by at most that. Round-tripping a single patched int16 through LibreOffice 26.2.5.2 (.doc import, then its own ODF export) confirms the threshold empirically and exactly: a second row's boundary drifting 1 to 20 twips from the first's reads back as one shared 3-column grid, 21 and beyond as 4 columns with a real table:covered-table-cell. See ExaDev/documents.js#898.
@@ -45,25 +59,18 @@ function isSameColumnBoundary(
 function effectiveColumnBoundaryTolerance(
   definitions: readonly TableRowDefinition[],
 ): number {
-  let narrowestRealGapTwips: number | undefined;
+  // Every row's own boundaries are non-decreasing but never empty (tap.ts's readTdefTableOperand always pushes at least one), so reduce with no initial value never throws here: it calls its own callback once per adjacent pair, needing no separate index bound or possibly-undefined element the way a manual indexed loop would.
+  const positiveGaps: number[] = [];
   for (const definition of definitions) {
-    const boundaries = definition.columnBoundariesTwips;
-    for (let index = 1; index < boundaries.length; index += 1) {
-      const left = boundaries[index - 1];
-      const right = boundaries[index];
-      if (left === undefined || right === undefined) continue;
+    definition.columnBoundariesTwips.reduce((left, right) => {
       const gap = right - left;
-      if (
-        gap > 0 &&
-        (narrowestRealGapTwips === undefined || gap < narrowestRealGapTwips)
-      ) {
-        narrowestRealGapTwips = gap;
-      }
-    }
+      if (gap > 0) positiveGaps.push(gap);
+      return right;
+    });
   }
-  return narrowestRealGapTwips === undefined
+  return positiveGaps.length === 0
     ? TWIPS_PER_POINT
-    : Math.min(TWIPS_PER_POINT, narrowestRealGapTwips - 1);
+    : Math.min(TWIPS_PER_POINT, Math.min(...positiveGaps) - 1);
 }
 
 interface RawCell {
@@ -89,12 +96,10 @@ function effectiveTableDepth(properties: ParagraphEntry["properties"]): number {
   return properties.inTable === true ? 1 : 0;
 }
 
-// Whether `entry` is an ordinary cell-ending mark AT `tableDepth` -- the boundary that closes one physical cell's own accumulated content, per [MS-DOC] 2.4.3's own Overview of Tables: at depth 1, any cell-mark (0x0007) terminator with sprmPFInTable applied; deeper, a paragraph mark (0x000D) with sprmPFInnerTableCell applied instead, since "If the table depth is greater than 1, the cell mark MUST be a paragraph mark ... with sprmPFInnerTableCell applied". The row's own terminating mark (isRowBoundary below) is deliberately excluded here even though it is also, technically, one more mark in the stream: [MS-DOC]'s own ABNF (RowN = 1*63 CellN TTPN) states the TTP mark as a SEPARATE element following the row's cells, not one of the cells itself, so its own (ordinarily empty) content is discarded rather than becoming a phantom extra cell -- exactly what the pre-existing depth-1 code already did by checking tableRowEnd first and `continue`-ing before this check could fire.
+// Whether `entry` is an ordinary cell-ending mark AT `tableDepth` -- the boundary that closes one physical cell's own accumulated content, per [MS-DOC] 2.4.3's own Overview of Tables: at depth 1, any cell-mark (0x0007) terminator; deeper, a paragraph mark (0x000D) with sprmPFInnerTableCell applied instead, since "If the table depth is greater than 1, the cell mark MUST be a paragraph mark ... with sprmPFInnerTableCell applied". The row's own terminating mark (isRowBoundary below) needs no exclusion of its own at depth 1 despite being, technically, one more cell-mark character in the stream: tryAssembleTable's own loop checks isRowBoundary first and `continue`s before ever calling this function, so a depth-1 entry reaching here never has tableRowEnd set -- restating that as its own `&& tableRowEnd !== true` clause here would only ever repeat a fact this function's one caller already guarantees.
 function isCellBoundary(entry: ParagraphEntry, tableDepth: number): boolean {
   if (tableDepth === 1) {
-    return (
-      entry.terminator === CELL_MARK && entry.properties.tableRowEnd !== true
-    );
+    return entry.terminator === CELL_MARK;
   }
   return (
     entry.terminator === PARAGRAPH_MARK &&
@@ -118,8 +123,9 @@ function walkBlocksAtDepth(
   documentStreamEnds: boolean,
 ): ContentBlock[] {
   const blocks: ContentBlock[] = [];
+  // Runs until entries[index] is undefined -- entries has no holes, so that is exactly when index reaches entries.length, with no separate bound of its own to state.
   let index = 0;
-  while (index < entries.length) {
+  for (;;) {
     const entry = entries[index];
     if (entry === undefined) break;
     if (effectiveTableDepth(entry.properties) <= depth) {
@@ -155,8 +161,9 @@ function collectTableRun(
   tableDepth: number,
 ): { runEntries: ParagraphEntry[]; nextIndex: number } {
   const runEntries: ParagraphEntry[] = [];
+  // Runs until entries[index] is undefined (entries.length reached, no separate bound needed to say so) or a shallower entry ends the run.
   let index = start;
-  while (index < entries.length) {
+  for (;;) {
     const entry = entries[index];
     if (
       entry === undefined ||
@@ -195,9 +202,7 @@ function tryAssembleTable(
         rowCells.map((cell, cellIndex): RawCell => {
           const merge = definition.cells[cellIndex];
           if (merge === undefined) {
-            throw new DocFormatError(
-              `internal defect: table row cell ${cellIndex} has no TAP merge entry despite the length check above`,
-            );
+            throw new DocFormatError(cellMergeEntryMissingMessage(cellIndex));
           }
           return {
             horzMerge: merge.horzMerge,
@@ -277,9 +282,7 @@ function applyRowLevelBorderCascade(
   const logicalRows = rows.map((row, rowIndex): LogicalCell[] => {
     const definition = definitions[rowIndex];
     if (definition === undefined) {
-      throw new DocFormatError(
-        `internal defect: table row ${rowIndex} has no TAP definition despite the earlier length check`,
-      );
+      throw new DocFormatError(rowDefinitionMissingMessage(rowIndex));
     }
     return logicalCellsForRow(
       row,
@@ -298,7 +301,6 @@ function applyRowLevelBorderCascade(
       lastRowBorders,
       rowIndex === 0,
       rowIndex,
-      lastRowIndex,
       rowBoundariesTwips,
       canonicalBoundariesTwips,
       toleranceTwips,
@@ -314,7 +316,6 @@ function cascadeRowBorders(
   lastRowBorders: TableBordersSet | undefined,
   isFirstRow: boolean,
   rowIndex: number,
-  lastRowIndex: number,
   rowBoundariesTwips: readonly number[] | undefined,
   canonicalBoundariesTwips: readonly number[],
   toleranceTwips: number,
@@ -324,10 +325,8 @@ function cascadeRowBorders(
     const isFirstCell = cellIndex === 0;
     const isLastCell = isRightmostPhysicalCell(cells, cellIndex);
     const isLastRow = cellReachesTableBottom(
-      cell,
       cellIndex,
       rowIndex,
-      lastRowIndex,
       rowBoundariesTwips,
       canonicalBoundariesTwips,
       toleranceTwips,
@@ -359,24 +358,18 @@ function cascadeRowBorders(
   });
 }
 
-// Whether one row's own physical cell's visual bottom edge is the table's real bottom edge: true directly when this IS the table's own last row; and true, for ANY non-continuation cell -- a plain cell or a vertically-merged anchor alike -- whenever its own merge chain's last row (vertMergeChainLastRow, walked on the table's shared grid, the identical matching buildRows' own rowSpan computation performs; a plain cell's own chain has length one, its own last row being the cell's own row) is not covered by any row below it at all (columnCoveredByALaterRow) -- a later row can simply be narrower and never state a cell reaching this far, in which case nothing physically sits beneath the chain's own last row, and its own bottom edge genuinely IS what a reader sees as the table's bottom in that column even though neither this row nor the chain's own last row is the table's last physical row (ExaDev/documents.js#945's own follow-up fix). A horzMerge-continuation or vertMerge-continuation physical cell's own answer is never actually observed downstream (logicalCellsForRow folds a horzMerge continuation into its anchor's span without consulting this cell's own borders at all, and buildRows drops a vertMerge continuation's own borders unconditionally -- see cascadeRowBorders' own note), so grid-index resolution for either is never asked to be more than merely non-throwing. The ragged-table check itself only ever tests a cell's own START grid index (startGridIndex, from its left boundary alone) against columnCoveredByALaterRow, never every grid index the cell's own colSpan covers, so a cell spanning multiple grid columns where only its later columns are actually exposed in a ragged table still reports the ordinary interior border rather than the table's real bottom one -- a deliberate scope limit rather than an oversight: ContentBorder holds exactly one value per side, so a cell whose own span straddles both a covered column and an exposed one has no way to report two different bottom borders for that one side, and testing the cell's own leftmost column is the one choice that at least agrees with what a plain, single-column cell always resolves to.
+// Whether one row's own physical cell's visual bottom edge is the table's real bottom edge: true for ANY cell -- a plain cell, a vertically-merged anchor, or a continuation alike -- whenever its own merge chain's last row (vertMergeChainLastRow, walked on the table's shared grid, the identical matching buildRows' own rowSpan computation performs; a plain cell's own chain has length one, its own last row being the cell's own row) is not covered by any row below it at all (columnCoveredByALaterRow) -- a later row can simply be narrower and never state a cell reaching this far, in which case nothing physically sits beneath the chain's own last row, and its own bottom edge genuinely IS what a reader sees as the table's bottom in that column even though neither this row nor the chain's own last row is the table's last physical row (ExaDev/documents.js#945's own follow-up fix). This never needs its own separate "is this the table's last row" or "is this cell a vertMerge continuation" fast path: a cell physically in the table's own last row always has a chain whose own last row IS lastRowIndex (its chain never walks past a row that does not exist), so the general chain-walk below already answers true for it with no shortcut needed; and a continuation cell's own answer is never actually observed downstream regardless of what this computes (logicalCellsForRow folds a horzMerge continuation into its anchor's span without consulting this cell's own borders at all, and buildRows drops a vertMerge continuation's own borders unconditionally -- see cascadeRowBorders' own note), so grid-index resolution for one is never asked to be more than merely non-throwing, which the general path already is. The ragged-table check itself only ever tests a cell's own START grid index (startGridIndex, from its left boundary alone) against columnCoveredByALaterRow, never every grid index the cell's own colSpan covers, so a cell spanning multiple grid columns where only its later columns are actually exposed in a ragged table still reports the ordinary interior border rather than the table's real bottom one -- a deliberate scope limit rather than an oversight: ContentBorder holds exactly one value per side, so a cell whose own span straddles both a covered column and an exposed one has no way to report two different bottom borders for that one side, and testing the cell's own leftmost column is the one choice that at least agrees with what a plain, single-column cell always resolves to.
 function cellReachesTableBottom(
-  cell: RawCell,
   cellIndex: number,
   rowIndex: number,
-  lastRowIndex: number,
   rowBoundariesTwips: readonly number[] | undefined,
   canonicalBoundariesTwips: readonly number[],
   toleranceTwips: number,
   logicalRows: readonly (readonly LogicalCell[])[],
 ): boolean {
-  if (rowIndex === lastRowIndex) return true;
-  if (cell.vertMerge === VERT_MERGE_CONTINUATION) return false;
   const left = rowBoundariesTwips?.[cellIndex];
   if (left === undefined) {
-    throw new DocFormatError(
-      "a table row's own column-boundary array has fewer entries than its physical cell count requires",
-    );
+    throw new DocFormatError(COLUMN_BOUNDARY_ARRAY_TOO_SHORT_MESSAGE);
   }
   const startGridIndex = gridIndexFor(
     canonicalBoundariesTwips,
@@ -388,7 +381,7 @@ function cellReachesTableBottom(
     rowIndex,
     startGridIndex,
   );
-  if (chainLastRow === lastRowIndex) return true;
+  // No separate "did the chain reach the table's own last row" shortcut: when it did, logicalRows has no row past chainLastRow at all, so columnCoveredByALaterRow already answers false (nothing to check) and this already returns true through the general path below.
   return !columnCoveredByALaterRow(logicalRows, chainLastRow, startGridIndex);
 }
 
@@ -398,19 +391,15 @@ function columnCoveredByALaterRow(
   rowIndex: number,
   gridIndex: number,
 ): boolean {
-  for (
-    let laterRow = rowIndex + 1;
-    laterRow < logicalRows.length;
-    laterRow += 1
-  ) {
-    const covers = logicalRows[laterRow]?.some(
-      (candidate) =>
-        gridIndex >= candidate.startGridIndex &&
-        gridIndex < candidate.startGridIndex + candidate.colSpan,
+  return logicalRows
+    .slice(rowIndex + 1)
+    .some((row) =>
+      row.some(
+        (candidate) =>
+          gridIndex >= candidate.startGridIndex &&
+          gridIndex < candidate.startGridIndex + candidate.colSpan,
+      ),
     );
-    if (covers) return true;
-  }
-  return false;
 }
 
 function isRightmostPhysicalCell(
@@ -453,22 +442,18 @@ function gridIndexFor(
   const index = canonicalBoundariesTwips.findIndex((candidate) =>
     isSameColumnBoundary(candidate, boundary, toleranceTwips),
   );
-  if (index === -1) {
-    throw new DocFormatError(
-      `internal defect: a table row's column boundary ${String(boundary)} matches no boundary on the table's own reconstructed grid, which was built from that boundary among others`,
-    );
-  }
-  return index;
+  const found = index === -1 ? undefined : index;
+  assertDefined(found, gridBoundaryNotFoundMessage(boundary));
+  return found;
 }
 
 function columnWidthsFromBoundaries(boundaries: readonly number[]): number[] {
+  // Every boundary array here has at least one entry (canonicalColumnBoundariesTwips never returns empty for a table with at least one row), so reduce with no initial value never throws: it calls its own callback once per adjacent pair, needing no separate index bound or possibly-undefined element the way a manual indexed loop would.
   const widths: number[] = [];
-  for (let index = 0; index < boundaries.length - 1; index += 1) {
-    const left = boundaries[index];
-    const right = boundaries[index + 1];
-    if (left === undefined || right === undefined) continue;
+  boundaries.reduce((left, right) => {
     widths.push((right - left) / TWIPS_PER_POINT);
-  }
+    return right;
+  });
   return widths;
 }
 
@@ -490,8 +475,9 @@ function logicalCellsForRow(
   toleranceTwips: number,
 ): LogicalCell[] {
   const logical: LogicalCell[] = [];
+  // Runs until cells[physicalIndex] is undefined -- cells has no holes, so that is exactly when physicalIndex reaches cells.length, with no separate bound of its own to state.
   let physicalIndex = 0;
-  while (physicalIndex < cells.length) {
+  for (;;) {
     const cell = cells[physicalIndex];
     if (cell === undefined) break;
     if (cell.horzMerge === HORZ_MERGE_CONTINUATION) {
@@ -507,9 +493,7 @@ function logicalCellsForRow(
     const left = rowBoundariesTwips[physicalIndex];
     const right = rowBoundariesTwips[physicalIndex + consumed];
     if (left === undefined || right === undefined) {
-      throw new DocFormatError(
-        "a table row's own column-boundary array has fewer entries than its physical cell count requires",
-      );
+      throw new DocFormatError(COLUMN_BOUNDARY_ARRAY_TOO_SHORT_MESSAGE);
     }
     const startGridIndex = gridIndexFor(
       canonicalBoundariesTwips,
@@ -544,12 +528,12 @@ function vertMergeChainLastRow(
   startGridIndex: number,
 ): number {
   let lastRow = rowIndex;
-  for (let r = rowIndex + 1; r < logicalRows.length; r += 1) {
-    const below = logicalRows[r]?.find(
+  for (const row of logicalRows.slice(rowIndex + 1)) {
+    const below = row.find(
       (candidate) => candidate.startGridIndex === startGridIndex,
     );
     if (below?.vertMerge !== VERT_MERGE_CONTINUATION) break;
-    lastRow = r;
+    lastRow += 1;
   }
   return lastRow;
 }
@@ -565,9 +549,7 @@ function buildRows(
   const logicalRows = rawRows.map((row, rowIndex): LogicalCell[] => {
     const definition = rowDefinitions[rowIndex];
     if (definition === undefined) {
-      throw new DocFormatError(
-        `internal defect: table row ${rowIndex} has no TAP definition despite the earlier length check`,
-      );
+      throw new DocFormatError(rowDefinitionMissingMessage(rowIndex));
     }
     return logicalCellsForRow(
       row,
