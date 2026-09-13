@@ -41,6 +41,8 @@ describe("buildNoteSubdocument", () => {
     // One content paragraph (empty) + one guard paragraph = 2 terminators.
     expect(subdoc.ccp).toBe(2 + 1); // + the subdocument's own trailing guard mark.
     expect(subdoc.paragraphs).toHaveLength(3);
+    // Genuinely no runs at all, not a single run carrying an empty-string text -- the two are equal in character count but not in shape.
+    expect(subdoc.paragraphs[0]?.runs).toEqual([]);
   });
 
   it("splits a note's own text at newlines into separate paragraphs", () => {
@@ -130,6 +132,12 @@ describe("buildHeaderSubdocument", () => {
     expect(subdoc.paragraphs).toHaveLength(1);
   });
 
+  it("writes exactly one section's own worth of slot keys, not one section too many", () => {
+    const subdoc = buildHeaderSubdocument([], 1, new DataStreamBuilder());
+    // 6 fixed separator stories + 1 section's own 6 slots + the subdocument's own trailing ccpText/ccp pair = 14 keys, each 4 bytes -- a loop that ran one section past sectionCount would append 6 more.
+    expect(subdoc.plex.byteLength / 4).toBe(6 + 6 + 2);
+  });
+
   it("writes real block content for a story that carries some", () => {
     const subdoc = buildHeaderSubdocument(
       [
@@ -177,6 +185,30 @@ describe("buildStorySubdocuments", () => {
       new DataStreamBuilder(),
     );
     expect(result.footnote).toBeUndefined();
+  });
+
+  it("leaves comment undefined for a genuinely empty (zero-length) comments array", () => {
+    const result = buildStorySubdocuments(
+      { ...withSections(), comments: [] },
+      new DataStreamBuilder(),
+    );
+    expect(result.comment).toBeUndefined();
+  });
+
+  it("leaves endnote undefined for a genuinely empty (zero-length) endnotes array", () => {
+    const result = buildStorySubdocuments(
+      { ...withSections(), endnotes: [] },
+      new DataStreamBuilder(),
+    );
+    expect(result.endnote).toBeUndefined();
+  });
+
+  it("leaves header undefined for a genuinely empty (zero-length) headerFooterStories array", () => {
+    const result = buildStorySubdocuments(
+      { ...withSections(), headerFooterStories: [] },
+      new DataStreamBuilder(),
+    );
+    expect(result.header).toBeUndefined();
   });
 
   it("builds a footnote subdocument when footnotes is non-empty", () => {
