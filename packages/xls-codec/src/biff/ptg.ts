@@ -3,7 +3,7 @@ import { columnIndexToLetters } from "document-schema.js";
 import { BlockCursor } from "./cursor";
 import { errorTextOf } from "./errors";
 import { FTAB_FIXED_ARITY, FTAB_NAMES } from "./ptg-functions";
-import { BiffFormatError } from "./records";
+import { recoverFromFormatError } from "./records";
 import { readShortXLUnicodeString, readXLUnicodeString } from "./strings";
 
 // A BIFF8 compiled formula (Ptg token stream, [MS-XLS] 2.5.198.25 -- https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/94229a89-a5b6-4f2b-834f-bd28cdc57c6b) walked left to right and rebuilt into the infix text a spreadsheet application would show.
@@ -590,7 +590,7 @@ export function parseFormulaText(
           text = readArrayLiteralText(rgcbCursor);
         } catch (error) {
           // A malformed rgcb -- a PtgExtraArray whose row/column counts or SerStr length overrun the trailer's own bytes -- degrades this one array literal (and with it the whole formula) exactly like any other unresolved token, rather than aborting every other cell's read; see the module comment for why this cursor, unlike the cce-bounded one walking rgce, is not trusted to stay in bounds.
-          if (!(error instanceof BiffFormatError)) throw error;
+          recoverFromFormatError(error, undefined);
           text = undefined;
         }
         if (text === undefined) return undefined;

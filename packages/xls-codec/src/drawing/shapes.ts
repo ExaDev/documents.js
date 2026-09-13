@@ -1,5 +1,5 @@
 import { BlockCursor } from "../biff/cursor";
-import { BiffFormatError } from "../biff/records";
+import { recoverFromFormatError } from "../biff/records";
 import {
   ESCHER_CLIENT_ANCHOR,
   ESCHER_DG_CONTAINER,
@@ -117,9 +117,7 @@ function readShapeContainer(
     try {
       blipIndex = readPibProperty(opt.data);
     } catch (error) {
-      if (!(error instanceof BiffFormatError)) {
-        throw error;
-      }
+      recoverFromFormatError(error, undefined);
     }
   }
   return { shapeType: sp.recInstance, spid, blipIndex, anchor };
