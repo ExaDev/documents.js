@@ -1,16 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { readRecords } from "../biff/records";
-import { groupRecords } from "../biff/substreams";
+import { BiffFormatError, readRecords } from "../biff/records";
+import { groupRecords, type RecordGroup } from "../biff/substreams";
+import { RECORD_OBJ, RECORD_TXO } from "../biff/record-types";
 import {
   concat,
+  ftCmo,
   noteObjRecord,
   noteRecord,
   noteTxoRecords,
   otherObjRecord,
   record,
+  u16,
+  u32,
 } from "../test-support/biff";
-import { readSheetComments } from "./comments";
+import { readObjPictFmlaStorageId, readSheetComments } from "./comments";
 
 function readComments(...records: readonly Uint8Array<ArrayBuffer>[]) {
   return readSheetComments(groupRecords(readRecords(concat(...records))));
@@ -106,5 +110,87 @@ describe("readSheetComments", () => {
     const ROW_RECORD_TYPE = 0x0208; // [MS-XLS] 2.4.221 -- an unrelated record type, never a Note/Obj/TxO
     const comments = readComments(record(ROW_RECORD_TYPE, []));
     expect(comments.size).toBe(0);
+  });
+
+  it("throws rather than silently absorbing a TxO whose own cbFmla overruns the record data", () => {
+    // cchText 0 so the function returns right after skipping cbFmla -- isolating that one skip from cbRuns' own, tested separately below. cbFmla names 50 bytes to skip but none follow.
+    const txoData = [
+      ...u16(0), // grbit
+      ...u16(0), // rot
+      ...new Array<number>(6).fill(0), // reserved4 + reserved5
+      ...u16(0), // cchText
+      ...u16(0), // cbRuns
+      ...u16(0), // ifntEmpty
+      ...u16(50), // cbFmla -- claims 50 bytes that are never written
+    ];
+    expect(() =>
+      readComments(noteObjRecord(1), record(RECORD_TXO, txoData)),
+    ).toThrow(BiffFormatError);
+  });
+
+  it("throws rather than silently absorbing a TxO whose own cbRuns overruns the record data", () => {
+    const text = "hi";
+    const txoData = [
+      ...u16(0), // grbit
+      ...u16(0), // rot
+      ...new Array<number>(6).fill(0), // reserved4 + reserved5
+      ...u16(text.length), // cchText
+      ...u16(50), // cbRuns -- claims 50 bytes that are never written
+      ...u16(0), // ifntEmpty
+      ...u16(0), // cbFmla
+      0x00, // XLUnicodeStringNoCch's own flags byte -- compressed (fHighByte clear)
+      ...Array.from(text, (char) => char.codePointAt(0) ?? 0),
+    ];
+    expect(() =>
+      readComments(noteObjRecord(1), record(RECORD_TXO, txoData)),
+    ).toThrow(BiffFormatError);
+  });
+});
+
+describe("readObjPictFmlaStorageId", () => {
+  function objGroup(...ftRecords: readonly number[][]): RecordGroup {
+    const bytes = record(RECORD_OBJ, [
+      ...ftCmo(0x0008, 1),
+      ...ftRecords.flat(),
+    ]);
+    const group = groupRecords(readRecords(bytes))[0];
+    if (group === undefined) throw new Error("expected an Obj record group");
+    return group;
+  }
+
+  /** A minimal FtPictFmla sub-record naming `storageId`, with `cbFmla` bytes of arbitrary formula payload before it (0 unless the test needs to prove that payload is actually skipped). */
+  function ftPictFmla(
+    storageId: number,
+    fmlaBytes: readonly number[] = [],
+  ): number[] {
+    const data = [...u16(fmlaBytes.length), ...fmlaBytes, ...u32(storageId)];
+    return [...u16(0x0009), ...u16(data.length), ...data];
+  }
+
+  it("finds FtPictFmla's own storage id, walking past FtCmo and an unrelated sub-record first", () => {
+    const unrelated = [...u16(0x1234), ...u16(4), 0xaa, 0xaa, 0xaa, 0xaa];
+    const group = objGroup(unrelated, ftPictFmla(42));
+
+    expect(readObjPictFmlaStorageId(group)).toBe(42);
+  });
+
+  it("skips a nonzero cbFmla's own formula bytes before reading the storage id that follows", () => {
+    const group = objGroup(ftPictFmla(42, [1, 2, 3, 4]));
+
+    expect(readObjPictFmlaStorageId(group)).toBe(42);
+  });
+
+  it("stops at the reserved trailing zero ft marker rather than reading past it as a sub-record", () => {
+    // A zero ft, cb 0, then a fully well-formed FtPictFmla right after: a reader that treated the zero as a genuine sub-record (walking past it via its own cb) would reach this real FtPictFmla and wrongly return its storage id, instead of stopping at the marker.
+    const reservedThenPictFmla = [...u16(0), ...u16(0), ...ftPictFmla(42)];
+    const group = objGroup(reservedThenPictFmla);
+
+    expect(readObjPictFmlaStorageId(group)).toBeUndefined();
+  });
+
+  it("returns undefined for an Obj record carrying no FtPictFmla at all", () => {
+    const group = objGroup();
+
+    expect(readObjPictFmlaStorageId(group)).toBeUndefined();
   });
 });
