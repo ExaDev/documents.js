@@ -54,6 +54,19 @@ describe("readFontNames", () => {
     expect(readFontNames(readRecordAt(bytes, 0))).toEqual(["Arial"]);
   });
 
+  it("skips a sibling of some other type even when its own data would otherwise parse as a face name", () => {
+    // Unlike the previous case, this sibling's data is a full 64-byte lfFaceName-shaped field -- so only the record-type check, not readFaceName's own length guard, is what keeps it out.
+    const impostorField = new Uint8Array(64);
+    impostorField.set(utf16le("Impostor").subarray(0, 64));
+    const bytes = container(RT_Environment, [
+      container(RT_FontCollection, [
+        atom(RT_SlideAtom, impostorField),
+        fontEntityAtom("Arial"),
+      ]),
+    ]);
+    expect(readFontNames(readRecordAt(bytes, 0))).toEqual(["Arial"]);
+  });
+
   it("skips a FontEntityAtom shorter than the mandated 64-byte lfFaceName field", () => {
     const bytes = container(RT_Environment, [
       container(RT_FontCollection, [
