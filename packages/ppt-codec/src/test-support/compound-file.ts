@@ -55,9 +55,8 @@ export function compoundFile(
   const fat = new Uint32Array(fatSectors * FAT_ENTRIES_PER_SECTOR).fill(
     FREESECT,
   );
-  for (let i = 0; i < fatSectors; i++) {
-    fat[i] = FATSECT;
-  }
+  // The first fatSectors entries mark the FAT sectors themselves; chain() always immediately follows with a real link starting at index fatSectors (firstDirectorySector), so a loop bound one too wide here would only ever write a value the very next statement overwrites.
+  fat.fill(FATSECT, 0, fatSectors);
   const chain = (firstSector: number, count: number): void => {
     for (let i = 0; i < count; i++) {
       fat[firstSector + i] = i === count - 1 ? ENDOFCHAIN : firstSector + i + 1;
@@ -85,10 +84,8 @@ export function compoundFile(
   view.setUint32(0x30, firstDirectorySector, true);
   view.setUint32(0x38, MINI_STREAM_CUTOFF, true);
   view.setUint32(0x3c, ENDOFCHAIN, true); // firstMiniFatSector
-  // miniFatSectorCount and difatSectorCount: every byte of a 0x00000000 word is identical under either byte order, so the littleEndian argument DataView.setUint32 otherwise requires has no real choice to state here -- byte-filling the four bytes directly says so, rather than a call whose own third argument is inert.
-  file.fill(0, 0x40, 0x44);
+  // miniFatSectorCount (0x40) and difatSectorCount (0x48) both want 0, which `file` already holds from its own zero-initialization above -- there is nothing left for either field to write.
   view.setUint32(0x44, ENDOFCHAIN, true); // firstDifatSector
-  file.fill(0, 0x48, 0x4c); // difatSectorCount
   for (const [i, sector] of Array.from(
     { length: HEADER_DIFAT_ENTRIES },
     (_unused, index) => (index < fatSectors ? index : FREESECT),
@@ -119,13 +116,13 @@ export function compoundFile(
     view.setUint16(at + 0x40, name.length * 2 + 2, true);
     view.setUint8(at + 0x42, objectType);
     view.setUint8(at + 0x43, 1); // colour flag, meaningless to a structural reader
-    // Left sibling (always NOSTREAM, every byte 0xff) and the stream size's high dword (always 0): each is byte-symmetric under either byte order for the identical reason miniFatSectorCount/difatSectorCount are above.
-    file.fill(0xff, at + 0x44, at + 0x48); // left sibling
+    // Left sibling: always NOSTREAM, every byte 0xff, byte-symmetric under either byte order.
+    file.fill(0xff, at + 0x44, at + 0x48);
     view.setUint32(at + 0x48, rightId, true);
     view.setUint32(at + 0x4c, childId, true);
     view.setUint32(at + 0x74, startSector, true);
     view.setUint32(at + 0x78, size, true);
-    file.fill(0, at + 0x7c, at + 0x80); // the stream size's high dword
+    // The stream size's high dword (at + 0x7c) wants 0, which `file` already holds -- no write needed.
   };
 
   writeDirectoryEntry(
