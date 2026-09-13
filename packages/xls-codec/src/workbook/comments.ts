@@ -52,9 +52,6 @@ export function readObjTypeAndId(group: RecordGroup): {
   return { ot, id };
 }
 
-/** [MS-XLS] 2.5.92 FtCmo's own fixed 22-byte length (ft/cb, ot, id, grbit, three unused dwords -- workbook/drawing-writer.ts's own writeFtCmo names the identical fields, in the identical order). */
-const FT_CMO_SIZE = 22;
-
 /** [MS-XLS] 2.5.150 FtPictFmla's own ft value: the one sub-record naming the Embedding Storage an OLE-embedded picture's data actually lives in, as opposed to the workbook-wide Blip Store a plain image references through its Escher shape's own pib property instead. */
 const FT_PICT_FMLA = 0x0009;
 
@@ -67,7 +64,7 @@ export function readObjPictFmlaStorageId(
   group: RecordGroup,
 ): number | undefined {
   const cursor = new BlockCursor(group.blocks);
-  cursor.skip(FT_CMO_SIZE);
+  // FtCmo's own header is itself shaped as an ft/cb sub-record (ft 0x0015, cb 0x0012 naming its own 18-byte payload, [MS-XLS] 2.5.92), so the walk below already skips past it correctly as the loop's first unrelated sub-record -- a separate `cursor.skip(FT_CMO_SIZE)` ahead of the loop would only restate a skip this same ft/cb walk performs on its own first iteration.
   while (cursor.hasMore()) {
     const ft = cursor.u16();
     if (ft === 0) {
