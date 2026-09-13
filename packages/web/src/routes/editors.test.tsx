@@ -32,13 +32,16 @@ vi.mock("../ui/notify", () => ({
 // Stands in for the real FileUpload (already covered by its own dedicated test suite): EditorsPage's own logic -- inferring the format, opening/editing/saving through the editor session mutations -- is what this file exercises.
 let latestOnFile: ((file: OpenedFile) => void) | undefined;
 let latestFile: OpenedFile | undefined;
+let latestAccept: Record<string, string[]> | undefined;
 vi.mock("../ui/FileUpload", () => ({
   FileUpload: (props: {
     onFile: (file: OpenedFile) => void;
     file?: OpenedFile;
+    accept: Record<string, string[]>;
   }) => {
     latestOnFile = props.onFile;
     latestFile = props.file;
+    latestAccept = props.accept;
     return <div data-testid="file-upload" />;
   },
 }));
@@ -101,6 +104,7 @@ function click(element: HTMLElement) {
 afterEach(() => {
   latestOnFile = undefined;
   latestFile = undefined;
+  latestAccept = undefined;
   notifyError.mockReset();
   notifySuccess.mockReset();
   saveFile.mockReset();
@@ -108,7 +112,7 @@ afterEach(() => {
 });
 
 describe("EditorsPage", () => {
-  it("renders only the FileUpload before anything is picked", () => {
+  it("renders only the FileUpload before anything is picked, restricted to docx/odt/doc/markdown", () => {
     const client = createMockRpcClient();
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountEditorsPage();
@@ -120,10 +124,17 @@ describe("EditorsPage", () => {
       "Could not open document",
     );
     expect(latestFile).toBeUndefined();
+    expect(latestAccept).toEqual({
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        [".docx"],
+      "application/vnd.oasis.opendocument.text": [".odt"],
+      "application/msword": [".doc"],
+      "text/markdown": [".md", ".markdown"],
+    });
     mounted.unmount();
   });
 
-  it("notifies and never opens the editor for an unsupported extension", () => {
+  it("notifies with a message naming the supported formats, and never opens the editor, for an unsupported extension", () => {
     const client = createMockRpcClient();
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountEditorsPage();
@@ -134,7 +145,7 @@ describe("EditorsPage", () => {
 
     expect(notifyError).toHaveBeenCalledWith(
       "Unsupported format",
-      expect.any(Error),
+      new Error("the editors tool opens docx, odt, doc, or markdown files"),
     );
     expect(client.editor.open).not.toHaveBeenCalled();
     expect(latestFile).toBeUndefined();
@@ -249,15 +260,15 @@ describe("EditorsPage", () => {
     mounted.unmount();
   });
 
-  it("edits a paragraph optimistically on change and commits it on blur", async () => {
+  it("edits only the changed paragraph optimistically, leaving the others untouched, and applies the committed server snapshot on blur", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.editor.open).mockResolvedValue({
       id: 7,
-      paragraphs: ["Original"],
+      paragraphs: ["First", "Second"],
     });
     vi.mocked(client.editor.setParagraphText).mockResolvedValue({
       id: 7,
-      paragraphs: ["Edited"],
+      paragraphs: ["First (normalised)", "Second"],
     });
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountEditorsPage();
@@ -266,22 +277,42 @@ describe("EditorsPage", () => {
       latestOnFile?.(openedFile("report.docx"));
     });
     await vi.waitFor(() => {
-      expect(paragraphTextareas(mounted.container)).toHaveLength(1);
+      expect(paragraphTextareas(mounted.container)).toHaveLength(2);
     });
 
-    const textarea = paragraphTextareas(mounted.container)[0]!;
-    typeInto(textarea, "Edited");
+    const [first, second] = paragraphTextareas(mounted.container);
+    expect(
+      first!.closest<HTMLElement>(".mantine-Textarea-root")!.style.flex,
+    ).toBe("1 1 0%");
+    expect(
+      second!.closest<HTMLElement>(".mantine-Textarea-root")!.style.flex,
+    ).toBe("1 1 0%");
+    typeInto(first!, "First (edited)");
     expect(client.editor.setParagraphText).not.toHaveBeenCalled();
-    expect(paragraphTextareas(mounted.container)[0]!.value).toBe("Edited");
+    expect(paragraphTextareas(mounted.container)[0]!.value).toBe(
+      "First (edited)",
+    );
+    expect(paragraphTextareas(mounted.container)[1]!.value).toBe("Second");
 
     act(() => {
-      textarea.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+      second!.focus();
+    });
+    act(() => {
+      first!.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
     });
     await vi.waitFor(() => {
       expect(client.editor.setParagraphText).toHaveBeenCalled();
     });
     const [input] = vi.mocked(client.editor.setParagraphText).mock.calls[0]!;
-    expect(input).toEqual({ id: 7, index: 0, text: "Edited" });
+    expect(input).toEqual({ id: 7, index: 0, text: "First (edited)" });
+
+    // The committed response's own text, distinct from what was typed, proves the resolved snapshot -- not just the optimistic edit already on screen -- is what ends up rendered.
+    await vi.waitFor(() => {
+      expect(paragraphTextareas(mounted.container)[0]!.value).toBe(
+        "First (normalised)",
+      );
+    });
+    expect(paragraphTextareas(mounted.container)[1]!.value).toBe("Second");
     mounted.unmount();
   });
 
@@ -338,6 +369,11 @@ describe("EditorsPage", () => {
     });
 
     expect(addButton(mounted.container).disabled).toBe(true);
+    expect(
+      newParagraphTextarea(mounted.container).closest<HTMLElement>(
+        ".mantine-Textarea-root",
+      )!.style.flex,
+    ).toBe("1 1 0%");
     typeInto(newParagraphTextarea(mounted.container), "two");
     expect(addButton(mounted.container).disabled).toBe(false);
 
