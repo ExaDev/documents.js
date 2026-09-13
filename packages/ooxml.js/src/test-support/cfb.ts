@@ -58,10 +58,10 @@ function writeEntry(
   size: number,
 ): void {
   const encoded = enc(name);
-  for (let i = 0; i < encoded.length; i++) {
-    entry.setUint8(i * 2, encoded[i] ?? 0);
+  encoded.forEach((byte, i) => {
+    entry.setUint8(i * 2, byte);
     entry.setUint8(i * 2 + 1, 0);
-  }
+  });
   put16(entry, 0x40, encoded.length * 2 + 2);
   entry.setUint8(0x42, objectType);
   put32(entry, 0x44, NOSTREAM);
@@ -69,7 +69,7 @@ function writeEntry(
   put32(entry, 0x4c, childId);
   put32(entry, 0x74, startSector);
   put32(entry, 0x78, size);
-  put32(entry, 0x7c, 0);
+  // No high-32-bits-of-size write at 0x7c: entry is always a fresh 128-byte slice of a zero-initialised directory buffer, so it is already 0 there -- every size this test-support builder ever writes fits in 32 bits regardless.
 }
 
 // Builds the .bin bytes: a version-3 compound file whose root storage carries the packaged file as its stream -- 'Package' by default, overridable for fixtures that need the no-Package-stream shape a native legacy embed produces. The stream is placed by the mini-stream cutoff exactly as a real producer would place it (below the cutoff in the mini stream, at or above it in its own FAT-chained sectors).
@@ -92,9 +92,9 @@ export function oleObjectBin(
 
   // Header: the same field run every version-3 compound file carries (see archive-codec's reader).
   const magic = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
-  for (let i = 0; i < magic.length; i++) {
-    file[i] = magic[i] ?? 0;
-  }
+  magic.forEach((byte, i) => {
+    file[i] = byte;
+  });
   put16(view, 0x18, 0x3e);
   put16(view, 0x1a, 3);
   put16(view, 0x1c, 0xfffe);
