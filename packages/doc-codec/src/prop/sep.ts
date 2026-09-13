@@ -67,8 +67,7 @@ export function applySectionSprms(
         into.marginBottomPt = marginFromYas(readInt16LE(prl.operand, 0));
         break;
       default:
-        // Every other section sprm is a property this reader does not convert; see this module's own top comment.
-        break;
+      // Every other section sprm is a property this reader does not convert; see this module's own top comment. No `break` follows: `default` is this switch's own last clause, so control already falls through to the closing brace with or without one.
     }
   }
   return into;
