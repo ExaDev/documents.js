@@ -81,6 +81,20 @@ export function writeBitLength(
   view.setUint32(offset + 4, bitLength >>> 0);
 }
 
+// Bounds-checked in place of a bare `w[i] = value`: Uint32Array silently drops an out-of-range write and returns `undefined` (not a throw) for an out-of-range read, so a loop bound weakened by one (i <= 64 instead of i < 64) would otherwise write to index 64 -- one past `w`'s own 64-element length -- with no observable effect at all, since nothing ever reads that index back. Throwing here is what turns that boundary into a genuine, catchable failure instead of a silently-absorbed no-op. Split out from sha256 below, the same reason writeBitLength above is: no legitimate call through sha256's own correctly-bounded loop can ever reach the throw, so it needs a direct unit test calling this function itself with an out-of-range index. Exported for exactly that test.
+export function writeScheduleWord(
+  w: Uint32Array,
+  i: number,
+  value: number,
+): void {
+  if (i >= w.length) {
+    throw new Error(
+      `sha256: message schedule index ${String(i)} out of bounds (0..${String(w.length - 1)})`,
+    );
+  }
+  w[i] = value;
+}
+
 export function sha256(bytes: Uint8Array): Uint8Array {
   const bitLength = bytes.length * 8;
   // Pad to a multiple of 512 bits: append 0x80, zeros, then the original bit length as a big-endian 64-bit integer. Every practical input is far below 2^53 bits, so the high 32 bits are Math.floor(bitLength / 2^32) and the low 32 are bitLength >>> 0.
@@ -106,13 +120,7 @@ export function sha256(bytes: Uint8Array): Uint8Array {
       const w2 = w[i - 2]!;
       const s0 = rotr(w15, 7) ^ rotr(w15, 18) ^ (w15 >>> 3);
       const s1 = rotr(w2, 17) ^ rotr(w2, 19) ^ (w2 >>> 10);
-      // Bounds-checked rather than a bare `w[i] = ...`: Uint32Array silently drops an out-of-range write and returns `undefined` (not a throw) for an out-of-range read, so a loop bound weakened by one (i <= 64 instead of i < 64) would otherwise write to index 64 -- one past the array's own 64-element length -- with no observable effect at all, since nothing ever reads that index back. Throwing here is what turns that boundary into a genuine, catchable failure instead of a silently-absorbed no-op.
-      if (i >= w.length) {
-        throw new Error(
-          `sha256: message schedule index ${String(i)} out of bounds (0..${String(w.length - 1)})`,
-        );
-      }
-      w[i] = (w[i - 16]! + s0 + w[i - 7]! + s1) >>> 0;
+      writeScheduleWord(w, i, (w[i - 16]! + s0 + w[i - 7]! + s1) >>> 0);
     }
     let a = h0;
     let b = h1;
