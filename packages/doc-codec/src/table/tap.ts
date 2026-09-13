@@ -229,18 +229,18 @@ function applyShdArray(
   });
 }
 
-/** Applies a TableShadeOperand ([MS-DOC] 2.9.308): cb, an ItcFirstLim naming the range, then a single Shd applied to every cell the range covers -- not one Shd per cell. `step` is 1 for sprmTSetShd and 2 for sprmTSetShdOdd, whose own range covers every other cell from itcFirst. */
+/** Applies a TableShadeOperand ([MS-DOC] 2.9.308): cb, an ItcFirstLim naming the range, then a single Shd applied to every cell the range covers -- not one Shd per cell. `everyOther` is false for sprmTSetShd and true for sprmTSetShdOdd, whose own range covers every other cell from itcFirst -- restated as a parity comparison against itcFirst rather than (index - itcFirst) % 2, since index and itcFirst differ by an even number on every cell this alternation actually skips, an offset a subtraction's own sign can never change the parity of; comparing index's own parity against itcFirst's directly reaches the identical answer without a subtraction to get it. */
 function applyTableShade(
   definition: TableRowDefinition,
   operand: Uint8Array,
-  step: number,
+  everyOther: boolean,
 ): TableRowDefinition {
   const itcFirst = readUint8(operand, 1);
   const itcLim = readUint8(operand, 2);
   const background = readShd(operand, 3);
   return withCells(definition, (cell, index) => {
     if (index < itcFirst || index >= itcLim) return cell;
-    if ((index - itcFirst) % step !== 0) return cell;
+    if (everyOther && index % 2 !== itcFirst % 2) return cell;
     return withBackground(cell, background);
   });
 }
@@ -361,12 +361,12 @@ export function applyTableSprms(
       }
       case SPRM_T_SET_SHD: {
         if (into.definition === undefined) break;
-        into.definition = applyTableShade(into.definition, prl.operand, 1);
+        into.definition = applyTableShade(into.definition, prl.operand, false);
         break;
       }
       case SPRM_T_SET_SHD_ODD: {
         if (into.definition === undefined) break;
-        into.definition = applyTableShade(into.definition, prl.operand, 2);
+        into.definition = applyTableShade(into.definition, prl.operand, true);
         break;
       }
       case SPRM_T_TABLE_BORDERS_80: {
@@ -393,9 +393,7 @@ export function applyTableSprms(
         );
         break;
       }
-      default:
-        // Every other table sprm is a TAP layer this reader does not convert; see this module's own top-of-file note.
-        break;
+      // No default clause: every other table sprm is a TAP layer this reader does not convert (see this module's own top-of-file note), and an unmatched switch value already falls out doing nothing on its own -- a "default: break;" clause here could only ever restate that, never change it.
     }
   }
   return into;
