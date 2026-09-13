@@ -17,7 +17,8 @@ function readStoryPlexKeys(
   subdocLength: number,
   what: string,
 ): readonly number[] {
-  if (bytes.length < 4 || !Number.isInteger((bytes.length - 4) / 4)) {
+  // No separate bytes.length < 4 clause: this function's own caller already returns early for boundaryLcb <= 0, so bytes.length here is always at least 1 -- and every whole number from 1 to 3 already makes (bytes.length - 4) / 4 non-integer on its own (-0.75, -0.5, -0.25), so the whole-number check below already refuses anything under 4 bytes without a separate bound to say so.
+  if (!Number.isInteger((bytes.length - 4) / 4)) {
     throw new DocFormatError(
       `${what} is ${bytes.length} bytes, which does not yield a whole number of 4-byte keys`,
     );
@@ -72,7 +73,7 @@ export function readSubdocumentStories(
 
 // Whether a story's own final entry is a bare paragraph mark and nothing else -- the guard spelling: one paragraph, no runs. Resolved through the entry's whole `blocks` rather than its text so an inline picture split out of the last paragraph (whose blocks end in the image, not a paragraph) is never mistaken for one.
 function endsWithGuardParagraph(last: ParagraphEntry): boolean {
-  if (last.blocks.length !== 1) return false;
+  // No separate blocks.length !== 1 guard: buildParagraphBlocks (text/paragraphs.ts) only ever pushes its own empty-paragraph fallback when nothing else was pushed for that paragraph at all, so blocks[0] can be a bare {kind: "paragraph", runs: []} only when it is the story's whole blocks array -- checking blocks[0] alone already implies the length.
   const only = last.blocks[0];
   return only?.kind === "paragraph" && only.runs.length === 0;
 }

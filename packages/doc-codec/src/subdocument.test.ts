@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { FC_LCB_VALUE_INDEX, FIB_FC_LCB_BLOB_OFFSET } from "./fib/offsets";
+import {
+  FC_LCB_VALUE_INDEX,
+  FIB_FC_LCB_BLOB_OFFSET,
+  FIB_RG_LW_OFFSET,
+  LW_OFFSET,
+} from "./fib/offsets";
 import { PARAGRAPH_MARK } from "./text/special";
 import { readDocContent, readDocStreams } from "./read";
 import { compoundFile } from "./test-support/cfb";
@@ -21,6 +26,28 @@ function footnoteDocWithAdjustedLcb(delta: number): Uint8Array<ArrayBuffer> {
   const view = new DataView(patchedWordDocument.buffer);
   const offset = FIB_FC_LCB_BLOB_OFFSET + FC_LCB_VALUE_INDEX.lcbPlcffndTxt * 4;
   view.setUint32(offset, view.getUint32(offset, true) + delta, true);
+  return compoundFile([
+    { path: "WordDocument", bytes: patchedWordDocument },
+    { path: "1Table", bytes: new Uint8Array(table) },
+  ]);
+}
+
+// Builds the same well-formed two-footnote document, but zeroes exactly one of ccpFtn (subdocLength) or lcbPlcffndTxt (boundaryLcb) directly in the FIB while leaving the other at its real, non-zero value -- a real document's own footnote count and its boundary plex size always agree (both zero, or both real), so only patching one independently of the other can isolate readSubdocumentStories' own `subdocLength <= 0 || boundaryLcb <= 0` guard down to a single disjunct.
+function footnoteDocWithOneFieldZeroed(
+  field: "ccpFtn" | "lcbPlcffndTxt",
+): Uint8Array<ArrayBuffer> {
+  const bytes = buildDoc({
+    paragraphs: [{ runs: [{ text: "Main" }] }],
+    footnotes: [[{ runs: [{ text: "First" }] }]],
+  });
+  const { wordDocument, table } = readDocStreams(bytes);
+  const patchedWordDocument = new Uint8Array(wordDocument);
+  const view = new DataView(patchedWordDocument.buffer);
+  const offset =
+    field === "ccpFtn"
+      ? FIB_RG_LW_OFFSET + LW_OFFSET.ccpFtn
+      : FIB_FC_LCB_BLOB_OFFSET + FC_LCB_VALUE_INDEX.lcbPlcffndTxt * 4;
+  view.setUint32(offset, 0, true);
   return compoundFile([
     { path: "WordDocument", bytes: patchedWordDocument },
     { path: "1Table", bytes: new Uint8Array(table) },
@@ -89,6 +116,20 @@ describe("readSubdocumentStories leniency for malformed plex keys", () => {
       view.setInt32(fcPlcffndTxt + 4, Math.max(first - 1, 0), true);
     });
     expect(() => readDocContent(bytes)).not.toThrow();
+  });
+});
+
+describe("readSubdocumentStories' own empty-subdocument guard", () => {
+  it("reports no footnotes when boundaryLcb is 0 even though ccpFtn (subdocLength) is genuinely non-zero", () => {
+    const bytes = footnoteDocWithOneFieldZeroed("lcbPlcffndTxt");
+    const doc = readDocContent(bytes);
+    expect(doc.footnotes).toEqual([]);
+  });
+
+  it("reports no footnotes when ccpFtn (subdocLength) is 0 even though boundaryLcb is genuinely non-zero", () => {
+    const bytes = footnoteDocWithOneFieldZeroed("ccpFtn");
+    const doc = readDocContent(bytes);
+    expect(doc.footnotes).toEqual([]);
   });
 });
 
