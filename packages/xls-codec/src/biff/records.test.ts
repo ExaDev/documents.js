@@ -7,7 +7,11 @@ import {
   RECORD_EOF,
   RECORD_SST,
 } from "./record-types";
-import { BiffFormatError, readRecords } from "./records";
+import {
+  BiffFormatError,
+  readRecords,
+  recoverFromFormatError,
+} from "./records";
 
 // Byte sequences here are hand-built from [MS-XLS] 2.1.4's own three-component framing -- a two-byte little-endian record type, a two-byte little-endian record size, then exactly that many bytes of record data (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/170e90ce-87d7-4758-9331-dcf14cd72388) -- rather than captured from a real file, so a test failure points at this package's reading of the spec rather than at some producer's quirk.
 
@@ -102,5 +106,31 @@ describe("readRecords", () => {
     view.setUint16(2, size, true);
 
     expect(() => readRecords(stream)).toThrow(BiffFormatError);
+  });
+});
+
+describe("recoverFromFormatError", () => {
+  it("absorbs a genuine BiffFormatError rather than letting it propagate", () => {
+    expect(() => {
+      recoverFromFormatError(new BiffFormatError("malformed"), undefined);
+    }).not.toThrow();
+  });
+
+  it("returns the fallback given, exactly as given, for a genuine BiffFormatError", () => {
+    const result = recoverFromFormatError(new BiffFormatError("malformed"), []);
+    expect(result).toStrictEqual([]);
+  });
+
+  it("rethrows anything that is not a BiffFormatError, rather than absorbing it", () => {
+    const bug = new TypeError("a genuine bug, not a malformed record");
+    expect(() => {
+      recoverFromFormatError(bug, undefined);
+    }).toThrow(bug);
+  });
+
+  it("rethrows a plain thrown value that is not even an Error", () => {
+    expect(() => {
+      recoverFromFormatError("not an error at all", undefined);
+    }).toThrow("not an error at all");
   });
 });
