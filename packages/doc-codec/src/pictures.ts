@@ -26,9 +26,11 @@ const RECORD_HEADER_SIZE = 8;
 const BLIP_JPEG = 0xf01d;
 /** OfficeArtBlipPNG, [MS-ODRAW] 2.2.28. */
 const BLIP_PNG = 0xf01e;
-/** rh.recInstance values naming a single rgbUid (16 bytes) rather than two (32 bytes) -- [MS-ODRAW] 2.2.27's own table for JPEG (RGB and CMYK) and 2.2.28's for PNG. */
+/** rh.recInstance values naming a single rgbUid rather than two -- [MS-ODRAW] 2.2.27's own table for JPEG (RGB and CMYK) and 2.2.28's for PNG. */
 const ONE_UID_INSTANCES = new Set([0x046a, 0x06e2, 0x06e0]);
 const TWO_UID_INSTANCES = new Set([0x046b, 0x06e3, 0x06e1]);
+const ONE_UID_BYTES = 16;
+const TWO_UID_BYTES = 32;
 /** The one byte following rgbUid(1|2) in every OfficeArtBlip variant this module reads, before the raw file bytes themselves. */
 const BLIP_TAG_SIZE = 1;
 
@@ -91,9 +93,9 @@ export function readInlinePicture(
   if (format === undefined) return undefined;
 
   const uidBytes = ONE_UID_INSTANCES.has(blipHeader.recInstance)
-    ? 16
+    ? ONE_UID_BYTES
     : TWO_UID_INSTANCES.has(blipHeader.recInstance)
-      ? 32
+      ? TWO_UID_BYTES
       : undefined;
   if (uidBytes === undefined) return undefined;
 
@@ -150,18 +152,28 @@ interface FoundBlip {
   readonly offset: number;
 }
 
+/** The least a real find can ever need past a record header: the smaller rgbUid (ONE_UID_BYTES) + the tag byte + the shorter of the two file signatures this reader validates (JPEG's, 2 bytes). A candidate header that does not even leave this much room behind it can never validate, so the scan below never bothers reading one. */
+const MIN_BLIP_TAIL_BYTES =
+  ONE_UID_BYTES +
+  BLIP_TAG_SIZE +
+  Math.min(PNG_SIGNATURE.length, JPEG_SIGNATURE.length);
+
 /** Scans forward from `from` for a validated blip record (see readInlinePicture's own locating note) -- every candidate header of a blip type must also carry a known rgbUid instance count, a length inside the stream, and payload bytes starting with its format's own file signature. */
 function findBlipRecord(data: Uint8Array, from: number): FoundBlip | undefined {
-  for (let at = from; at + RECORD_HEADER_SIZE <= data.length; at++) {
+  for (
+    let at = from;
+    at + RECORD_HEADER_SIZE + MIN_BLIP_TAIL_BYTES <= data.length;
+    at++
+  ) {
     const header = readRecordHeader(data, at);
     const format = blipFormat(header.recType);
     if (format === undefined) {
       continue;
     }
     const uidBytes = ONE_UID_INSTANCES.has(header.recInstance)
-      ? 16
+      ? ONE_UID_BYTES
       : TWO_UID_INSTANCES.has(header.recInstance)
-        ? 32
+        ? TWO_UID_BYTES
         : undefined;
     if (uidBytes === undefined) {
       continue;
