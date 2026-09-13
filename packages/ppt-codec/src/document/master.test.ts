@@ -63,6 +63,24 @@ describe("readSlideAtom", () => {
       "SlideAtom at offset 0 carries 19 bytes, too few for its masterIdRef/notesIdRef fields",
     );
   });
+
+  it("accepts a SlideAtom carrying exactly the 20 bytes its notesIdRef field ends at, with none to spare", () => {
+    // The boundary itself: notesIdRef occupies bytes [16, 20), so 20 bytes is the minimum valid length, not the minimum rejected one.
+    const bytes = atom(
+      RT_SlideAtom,
+      concatBytes(
+        u32le(0), // geom
+        new Uint8Array(8), // placeholderTypes
+        u32le(0x80000000), // masterIdRef
+        u32le(512), // notesIdRef
+      ),
+      { recVer: 0x2 },
+    );
+    expect(readSlideAtom(readRecordAt(bytes, 0))).toEqual({
+      masterIdRef: 0x80000000,
+      notesIdRef: 512,
+    });
+  });
 });
 
 const EMPTY_PARAGRAPH: ParagraphProperties = {

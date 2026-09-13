@@ -67,7 +67,8 @@ function orderedMasterLevels(
 ): readonly MasterStyleLevel[] {
   const levelsFor = (type: number): readonly MasterStyleLevel[] => {
     const levels = table.byType.get(type);
-    if (levels === undefined || levels.length === 0) {
+    // No `|| levels.length === 0` fast path: an empty (but defined) levels array already produces the identical [] result through the general take-count arithmetic below (Math.min(_, 0) is 0, and slice(0, 0) is []), so a defined-but-empty check here would be a genuinely equivalent mutation target rather than a real branch.
+    if (levels === undefined) {
       return [];
     }
     // How many of the atom's own levels (from level 0) fall within the run's stated indentLevel -- indentLevel + 1 of them, unless the atom itself carries fewer, in which case every level it has is in range. Stated this way (clamping the take-count itself, not indentLevel against an off-by-one bound) rather than the mirror-image `Math.min(indentLevel, levels.length - 1) + 1`: that phrasing carries a genuinely equivalent mutant here, since Array.prototype.slice silently clips an end index past the array's own length, so swapping its "- 1" for "+ 1" produces byte-identical output for every indentLevel a real caller can supply -- no test could ever tell the two apart. This phrasing puts the arithmetic on indentLevel itself, where a "+ 1"/"- 1" swap changes a genuinely reachable take-count instead.
