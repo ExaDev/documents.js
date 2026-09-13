@@ -9,7 +9,6 @@ import type {
   SourceResidue,
   TextDirection,
 } from "document-schema.js";
-import { clampHeadingLevel } from "document-schema.js";
 import { EpubDiagnosticCodes } from "../diagnostics";
 import {
   detectImageFormat,
@@ -370,9 +369,7 @@ function readContainerChildren(
   const blocks: ContentBlock[] = [];
   let segment: XmlNode[] = [];
   const flush = (): void => {
-    if (segment.length === 0) {
-      return;
-    }
+    // No separate empty-segment early return is needed here: buildInlineRuns([], ...) is a genuine no-op (its own for loop never executes, so it returns {runs: [], constructs: []} with no side effect), and the whitespace-and-construct check immediately below already drops that empty result exactly like it drops a genuinely whitespace-only segment -- an explicit `if (segment.length === 0) return;` guard ahead of it would only ever short-circuit to a state this check reaches anyway.
     const inline = buildInlineRuns(segment, baseStyle, state.context);
     segment = [];
     // A segment whose only content, once built, is whitespace produces no visible paragraph -- the common real-world case being pretty-printed XHTML's own indentation landing as a bare text node between two block-level siblings (e.g. the newline-plus-indent between <body> and its first real child), which every browser's own block-formatting context already collapses to nothing rather than an empty line. The identical rule also covers a producer's own literal `<p> </p>`/`<p></p>` (used for CSS spacing): both read as "no content here" rather than a bogus empty ContentParagraph, matching this package's own documented choice to drop an empty paragraph entirely on read. The construct check alongside it exists for the identical reason readTable's own caption guard needs one: a segment carrying only a footnote-reference anchor with empty text (`<a epub:type="noteref" href="#fn1"></a>` sitting bare between two block siblings) produces zero text runs but one real RunConstructExtent, and text-emptiness alone would drop that construct along with the whitespace it is vacuously indistinguishable from.
@@ -403,11 +400,18 @@ function readContainerChildren(
   return blocks;
 }
 
+// A literal tag->level lookup rather than a /^h([1-6])$/ regex: BLOCK_LEVEL_TAGS is the only source of tags this ever sees (readBlockElementInner calls it once per block-level element), and every member of that fixed set other than h1-h6 itself (p, ul, ol, dl, table, blockquote, pre, hr, figure, figcaption, div, section, article, aside, nav, img) already fails to match a heading tag by construction -- there is no producer-supplied tag this function is ever actually asked to classify that a regex's own anchoring subtleties could get wrong. clampHeadingLevel is unneeded here for the identical reason: every value in this table is already a valid heading depth (document-schema.js's own clamp exists for a source format that can carry a level outside 1-6, which a fixed tag literal can never do).
+const HEADING_TAG_LEVELS: Readonly<Record<string, number>> = {
+  h1: 1,
+  h2: 2,
+  h3: 3,
+  h4: 4,
+  h5: 5,
+  h6: 6,
+};
+
 function headingLevelOf(tag: string): number | undefined {
-  const match = /^h([1-6])$/u.exec(tag);
-  return match?.[1] === undefined
-    ? undefined
-    : clampHeadingLevel(Number(match[1]));
+  return HEADING_TAG_LEVELS[tag];
 }
 
 // Wraps readBlockElementInner's own result in an anchor construct pair (footnote or bookmark) when this element's own id is a recognised anchor target -- src/xhtml/read.ts's own whole-document (and, via ReadXhtmlBodyOptions.extraAnchorTargets, whole-spine, ExaDev/documents.js#963) anchor-target registry, run over every <a> once by readXhtmlBody -- the target-side half of the EPUB 2 linked-anchor idiom and of an ordinary internal link, symmetric with an EPUB 3 <aside epub:type="footnote"> (readAside below), which instead recognises itself directly rather than needing this reverse lookup. An element already handled as such an aside is excluded here to avoid double-wrapping.
@@ -456,9 +460,6 @@ function readBlockElementInner(
   }
 
   switch (element.tag) {
-    case "p":
-      // A <p> containing a direct <img> (some producers/editors wrap every floating image in a paragraph tag rather than a <figure>) cannot become one ContentParagraph -- an image is its own top-level ContentBlock kind, not a run a paragraph can carry inline. readContainerChildren's own phrasing/block split handles this identically to any other container: the text before and after the image becomes its own paragraph (dropped entirely when empty, so a bare `<p><img/></p>` degrades to just the image block), and the image becomes its own block in between, in source order.
-      return readContainerChildren(element.children, state);
     case "hr": {
       const paragraph: ContentParagraph = {
         kind: "paragraph",
@@ -478,11 +479,6 @@ function readBlockElementInner(
       return readDefinitionList(element, state);
     case "table":
       return readTable(element, state);
-    case "figure":
-      return readContainerChildren(element.children, state);
-    case "figcaption":
-      // <figcaption> is Flow content per the HTML Standard: a <pre>, a nested list, or more than one paragraph is real, conformant markup, not something this reader can flatten to one buildInlineRuns call without losing block shape and fusing sibling paragraphs together with no break between them (ExaDev/documents.js#1023).
-      return readContainerChildren(element.children, state);
     case "img": {
       const block = readImage(element, state);
       return block === undefined ? [] : [block];
@@ -490,7 +486,7 @@ function readBlockElementInner(
     case "aside":
       return readAside(element, state);
     default:
-      // Every other block-level container (div, section, article, nav that isn't the toc/landmarks/page-list nav src/nav.ts already reads separately, body itself never reaches here) carries no content of its own in document-schema.js's vocabulary -- it is read transparently, descending into its own children at the same nesting level. This is a deliberate, documented simplification: a div's own CSS class/id is residue this package does not interpret (the schema is content, not styling).
+      // Every other block-level container reaches this same transparent passthrough: div, section, article, nav that isn't the toc/landmarks/page-list nav src/nav.ts already reads separately, and body itself never reaches here carry no content of their own in document-schema.js's vocabulary, so each is read transparently, descending into its own children at the same nesting level -- a div's own CSS class/id is residue this package does not interpret (the schema is content, not styling). <p>, <figure>, and <figcaption> deliberately fall to this identical passthrough rather than each getting its own case that would just repeat it: a <p> containing a direct <img> (some producers/editors wrap every floating image in a paragraph tag rather than a <figure>) cannot become one ContentParagraph -- an image is its own top-level ContentBlock kind, not a run a paragraph can carry inline -- and readContainerChildren's own phrasing/block split already handles this identically to any other container (the text before and after the image becomes its own paragraph, dropped entirely when empty, so a bare `<p><img/></p>` degrades to just the image block, with the image becoming its own block in between, in source order); <figure>'s own content is exactly this same image-plus-caption mix; and <figcaption> is Flow content per the HTML Standard, where a <pre>, a nested list, or more than one paragraph is real, conformant markup this generic descent already preserves rather than flattening to one buildInlineRuns call and fusing sibling paragraphs together with no break between them (ExaDev/documents.js#1023).
       return readContainerChildren(element.children, state);
   }
 }
@@ -599,10 +595,8 @@ function readPreRuns(
     }
     const footnoteName =
       node.tag === "a" ? preFootnoteReferenceName(node, context) : undefined;
-    if (
-      footnoteName === undefined &&
-      !containsFootnoteReference([node], context)
-    ) {
+    // No separate `footnoteName === undefined &&` guard is needed ahead of this: whenever footnoteName IS defined, node is by construction a footnote-reference <a> (the ternary above requires node.tag === "a" and a resolved name), which is exactly containsFootnoteReference's own first check on this same single-element array -- so footnoteName defined always implies containsFootnoteReference([node]) is true, meaning "footnoteName undefined" is already entailed by "containsFootnoteReference([node]) is false" and adds no information of its own.
+    if (!containsFootnoteReference([node], context)) {
       buffer += readPreText(node.children, context);
       continue;
     }
@@ -749,16 +743,13 @@ function readList(element: XmlElement, state: BuildState): ContentBlock[] {
   return blocks;
 }
 
-// A <ul>/<ol> content model admits only <li> and script-supporting (<script>/<template>) children -- so any *other* content sitting directly inside one is not valid HTML5, most commonly a <ul>/<ol> nested as a sibling rather than wrapped in its own <li> (a shape real-world producers and converters emit even though it is not conformant), but any other stray content (a bare <img>, a run of text) shares the identical malformed shape and the identical most-likely producer intent. Content sitting between or after real <li> siblings is recovered by feeding it through the exact same readContainerChildren dispatch that <li>'s own real children already go through, under that preceding item's own list membership -- so a stray <ul>/<ol> becomes a properly nested list one level deeper sharing the enclosing numId (readBlockElementInner's own "ul"/"ol" case calls back into this function with that membership already on the state, incrementing level exactly as genuine nesting would), a stray <img> becomes its own real image block, and stray text becomes its own paragraph, rather than each needing its own hand-rolled special case. Content sitting BEFORE the very first <li> has no preceding item to attach to, but that is not a reason to drop it: it is recovered through the identical readContainerChildren dispatch, inheriting whatever list membership its own enclosing context already carries (none, unless the <ul>/<ol> it sits directly inside is itself nested inside another list's <li>), and lands in the returned block sequence immediately before the list's own real items -- matching a browser's rendering ORDER for this malformed shape, but not necessarily its nesting DEPTH: when the enclosing <ul>/<ol> is itself nested inside an outer list's own <li>, a browser indents this recovered content at the enclosing (inner) list's own depth, one level deeper than the outer item's own text (inside that inner list's own content box), while this recovery always emits it at that outer item's own depth instead -- a top-level sibling of the enclosing list only in the un-nested case, where the enclosing <ul>/<ol> itself carries no list membership at all. Silently dropping this case (this function's own prior behaviour) lost real content with no diagnostic at all: ExaDev/documents.js#994's own headline repro, `<ul><ul><li>b</li></ul><li>a</li></ul>`, discarded the entire nested list. A stray <script>/<template>/<style>/<noscript> sitting as a DIRECT child of the <ul>/<ol> itself never reaches this function at all -- readList's own loop above filters it out (isInertElement) before it is ever collected as a stray node in the first place. One nested a level or more deeper, though -- e.g. a <script> inside a stray <div> -- still reaches this function's own readContainerChildren call above, which resolves it to zero blocks via src/xhtml/inline.ts's own appendElement guard, the identical narrower claim flushDefinitionListStrayContent's own comment below already states for the <dl> case. Inter-element whitespace, by contrast, DOES reach here: the HTML Standard's own "must be ignored when establishing whether an element's contents match the content model" rule (section 3.2.5 "Content models") governs conformance-checking alone, not deletion of the character data itself, so real whitespace sitting between two stray inline siblings (the single space that keeps two words apart) is still live text that must survive a round trip. What decides whether the diagnostic-and-recovery step below fires is the actual readContainerChildren result, not a speculative text-only probe: a bare block-level construct with no text projection at all (a stray <img>, an <hr>, a table or figure whose only content is an image) still produces a real, non-empty block list and must still be recovered and reported, exactly like the common pretty-printed-list shape of a bare newline-plus-indent text node, which readContainerChildren's own segment-flush already reduces to an empty block list on its own (see its whitespace-only-segment comment) -- so nodes.length === 0 is the only cheap short-circuit worth taking before paying for the real read, whether or not a preceding item exists to attach the result to. The read always runs exactly once, and this function's OWN diagnostic (LIST_CONTENT_OUTSIDE_ITEM) fires only when the recovered block list is non-empty -- but an empty block list does not mean the read underneath it was a no-op: a nested list nested directly in the stray content (e.g. an empty `<ul>` with no `<li>` of its own) still mints a real numId via readList's own eager `mintNumId` call before discovering it has nothing to attach to, and any diagnostic fired by content reached deeper in the recovered subtree (most commonly `epub/image-unresolved`, when a stray `<img>` fails to resolve) still reaches the sink regardless of whether the surrounding recovery is ultimately reported or discarded. Both are harmless in practice -- a numId is an opaque per-list key with no significance beyond uniqueness (src/xhtml/list-id.ts), so a skipped integer costs nothing, and the deeper diagnostic already names its own loss on its own terms -- but they mean the minter and the sink are not, in fact, insulated from a discarded read's side effects the way LIST_CONTENT_OUTSIDE_ITEM's own absence might suggest.
+// A <ul>/<ol> content model admits only <li> and script-supporting (<script>/<template>) children -- so any *other* content sitting directly inside one is not valid HTML5, most commonly a <ul>/<ol> nested as a sibling rather than wrapped in its own <li> (a shape real-world producers and converters emit even though it is not conformant), but any other stray content (a bare <img>, a run of text) shares the identical malformed shape and the identical most-likely producer intent. Content sitting between or after real <li> siblings is recovered by feeding it through the exact same readContainerChildren dispatch that <li>'s own real children already go through, under that preceding item's own list membership -- so a stray <ul>/<ol> becomes a properly nested list one level deeper sharing the enclosing numId (readBlockElementInner's own "ul"/"ol" case calls back into this function with that membership already on the state, incrementing level exactly as genuine nesting would), a stray <img> becomes its own real image block, and stray text becomes its own paragraph, rather than each needing its own hand-rolled special case. Content sitting BEFORE the very first <li> has no preceding item to attach to, but that is not a reason to drop it: it is recovered through the identical readContainerChildren dispatch, inheriting whatever list membership its own enclosing context already carries (none, unless the <ul>/<ol> it sits directly inside is itself nested inside another list's <li>), and lands in the returned block sequence immediately before the list's own real items -- matching a browser's rendering ORDER for this malformed shape, but not necessarily its nesting DEPTH: when the enclosing <ul>/<ol> is itself nested inside an outer list's own <li>, a browser indents this recovered content at the enclosing (inner) list's own depth, one level deeper than the outer item's own text (inside that inner list's own content box), while this recovery always emits it at that outer item's own depth instead -- a top-level sibling of the enclosing list only in the un-nested case, where the enclosing <ul>/<ol> itself carries no list membership at all. Silently dropping this case (this function's own prior behaviour) lost real content with no diagnostic at all: ExaDev/documents.js#994's own headline repro, `<ul><ul><li>b</li></ul><li>a</li></ul>`, discarded the entire nested list. A stray <script>/<template>/<style>/<noscript> sitting as a DIRECT child of the <ul>/<ol> itself never reaches this function at all -- readList's own loop above filters it out (isInertElement) before it is ever collected as a stray node in the first place. One nested a level or more deeper, though -- e.g. a <script> inside a stray <div> -- still reaches this function's own readContainerChildren call above, which resolves it to zero blocks via src/xhtml/inline.ts's own appendElement guard, the identical narrower claim flushDefinitionListStrayContent's own comment below already states for the <dl> case. Inter-element whitespace, by contrast, DOES reach here: the HTML Standard's own "must be ignored when establishing whether an element's contents match the content model" rule (section 3.2.5 "Content models") governs conformance-checking alone, not deletion of the character data itself, so real whitespace sitting between two stray inline siblings (the single space that keeps two words apart) is still live text that must survive a round trip. What decides whether the diagnostic-and-recovery step below fires is the actual readContainerChildren result, not a speculative text-only probe: a bare block-level construct with no text projection at all (a stray <img>, an <hr>, a table or figure whose only content is an image) still produces a real, non-empty block list and must still be recovered and reported, exactly like the common pretty-printed-list shape of a bare newline-plus-indent text node, which readContainerChildren's own segment-flush already reduces to an empty block list on its own (see its whitespace-only-segment comment) -- so there is no separate `nodes.length === 0` short-circuit worth taking here either: readContainerChildren([], ...) is itself already a genuine no-op for the identical reason (an empty for loop, then one flush() call over an empty segment), so calling it unconditionally costs nothing a guard could meaningfully save. The read always runs exactly once, and this function's OWN diagnostic (LIST_CONTENT_OUTSIDE_ITEM) fires only when the recovered block list is non-empty -- but an empty block list does not mean the read underneath it was a no-op: a nested list nested directly in the stray content (e.g. an empty `<ul>` with no `<li>` of its own) still mints a real numId via readList's own eager `mintNumId` call before discovering it has nothing to attach to, and any diagnostic fired by content reached deeper in the recovered subtree (most commonly `epub/image-unresolved`, when a stray `<img>` fails to resolve) still reaches the sink regardless of whether the surrounding recovery is ultimately reported or discarded. Both are harmless in practice -- a numId is an opaque per-list key with no significance beyond uniqueness (src/xhtml/list-id.ts), so a skipped integer costs nothing, and the deeper diagnostic already names its own loss on its own terms -- but they mean the minter and the sink are not, in fact, insulated from a discarded read's side effects the way LIST_CONTENT_OUTSIDE_ITEM's own absence might suggest.
 function flushListStrayContent(
   nodes: readonly XmlNode[],
   previousItem: ListItemContext | undefined,
   tag: string,
   state: BuildState,
 ): ContentBlock[] {
-  if (nodes.length === 0) {
-    return [];
-  }
   const blocks = readContainerChildren(
     nodes,
     previousItem === undefined ? state : withListItem(state, previousItem),
@@ -845,9 +836,7 @@ function flushDefinitionListStrayContent(
   nodes: readonly XmlNode[],
   state: BuildState,
 ): ContentBlock[] {
-  if (nodes.length === 0) {
-    return [];
-  }
+  // No separate `nodes.length === 0` short-circuit is needed ahead of this: readContainerChildren([], ...) is itself already a genuine no-op (an empty for loop, then one flush() call over an empty segment producing no blocks), so the block-count check immediately below already returns [] for a genuinely empty `nodes` on its own.
   const blocks = readContainerChildren(nodes, state);
   if (blocks.length === 0) {
     return [];
@@ -904,9 +893,7 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
       const cells: ContentTableCell[] = [];
       let strayCellNodes: XmlNode[] = [];
       const flushStrayCell = (): void => {
-        if (strayCellNodes.length === 0) {
-          return;
-        }
+        // No `strayCellNodes.length === 0` short-circuit is needed ahead of this: readContainerChildren([], ...) is itself already a genuine no-op, so the recovered-length check immediately below already returns for a genuinely empty strayCellNodes the same either way.
         const recovered = readContainerChildren(strayCellNodes, state);
         strayCellNodes = [];
         if (recovered.length === 0) {
@@ -957,8 +944,8 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
       rows.push({ cells });
     }
   }
-  const strayBlocks =
-    strayNodes.length === 0 ? [] : readContainerChildren(strayNodes, state);
+  // No `strayNodes.length === 0` short-circuit is needed ahead of this call: readContainerChildren([], ...) is itself already a genuine no-op, so the length check immediately below already treats a genuinely empty strayNodes the same either way.
+  const strayBlocks = readContainerChildren(strayNodes, state);
   if (strayBlocks.length > 0) {
     state.context.sink({
       code: EpubDiagnosticCodes.TABLE_CONTENT_UNRECOGNIZED,
