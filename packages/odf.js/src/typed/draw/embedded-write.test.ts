@@ -11,6 +11,7 @@ import {
 } from "./embedded-write";
 
 const MARGINS = { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 };
+const FRAME = { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 };
 
 function mediaTypeOf(pkg: Package): string | undefined {
   return readMimetype(pkg);
@@ -28,6 +29,7 @@ describe("writeEmbeddedObjectPackage", () => {
   it("dispatches a wordprocessing document to writeOdtContent", () => {
     const pkg = writeEmbeddedObjectPackage({
       objectKind: "wordprocessing",
+      frame: FRAME,
       document: wordprocessingDocument(),
     });
     expect(mediaTypeOf(pkg)).toBe("application/vnd.oasis.opendocument.text");
@@ -41,6 +43,7 @@ describe("writeEmbeddedObjectPackage", () => {
     };
     const pkg = writeEmbeddedObjectPackage({
       objectKind: "presentation",
+      frame: FRAME,
       document,
     });
     expect(mediaTypeOf(pkg)).toBe(
@@ -56,6 +59,7 @@ describe("writeEmbeddedObjectPackage", () => {
     };
     const pkg = writeEmbeddedObjectPackage({
       objectKind: "spreadsheet",
+      frame: FRAME,
       document,
     });
     expect(mediaTypeOf(pkg)).toBe(
@@ -71,6 +75,7 @@ describe("writeEmbeddedObjectPackage", () => {
     };
     const pkg = writeEmbeddedObjectPackage({
       objectKind: "drawing",
+      frame: FRAME,
       document,
     });
     expect(mediaTypeOf(pkg)).toBe(
@@ -86,6 +91,7 @@ describe("writeEmbeddedObjectPackage", () => {
     };
     const pkg = writeEmbeddedObjectPackage({
       objectKind: "formula",
+      frame: FRAME,
       document,
     });
     expect(mediaTypeOf(pkg)).toBe("application/vnd.oasis.opendocument.formula");
@@ -95,6 +101,7 @@ describe("writeEmbeddedObjectPackage", () => {
     expect(() =>
       writeEmbeddedObjectPackage({
         objectKind: "chart",
+        frame: FRAME,
         document: { kind: "spreadsheet", metadata: {}, sheets: [] },
       }),
     ).toThrow(/no write-side serialiser/);
@@ -116,7 +123,11 @@ describe("writeEmbeddedObject", () => {
     const pkg: Package = { parts: {} };
     writeMimetype(pkg, "application/vnd.oasis.opendocument.text");
     writeEmbeddedObject(
-      { objectKind: "wordprocessing", document: wordprocessingDocument() },
+      {
+        objectKind: "wordprocessing",
+        frame: FRAME,
+        document: wordprocessingDocument(),
+      },
       "Object 1",
       pkg,
     );
