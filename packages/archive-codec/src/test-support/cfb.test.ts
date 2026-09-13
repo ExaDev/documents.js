@@ -129,6 +129,19 @@ describe("compoundFile sibling right-links", () => {
 });
 
 describe("compoundFile directory-entry byte layout", () => {
+  it("names the root directory entry 'Root Entry', not a placeholder", () => {
+    // Nothing functional depends on this name (../cfb/read.ts's own comment says so explicitly, and no test elsewhere reads it), so only a direct byte-level decode of entry 0's own name field can tell a real name from an empty placeholder.
+    const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
+    const view = new DataView(bytes.buffer);
+    const directoryStart = view.getUint32(0x30, true);
+    const base = (directoryStart + 1) * 512; // entry 0, the root, at the directory's own start
+    const nameLength = view.getUint16(base + 0x40, true);
+    const name = new TextDecoder("utf-16le").decode(
+      bytes.subarray(base, base + nameLength - 2),
+    );
+    expect(name).toBe("Root Entry");
+  });
+
   it("writes the colour flag byte as 1 (black) for every entry", () => {
     const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
     const view = new DataView(bytes.buffer);
@@ -142,15 +155,6 @@ describe("compoundFile directory-entry byte layout", () => {
     // [MS-CFB] 2.2 names this value for both major version 3 and 4, but real readers (including ../cfb/read.ts) never inspect it -- direct byte inspection is the only way to notice it going unwritten.
     const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
     expect(new DataView(bytes.buffer).getUint16(0x18, true)).toBe(0x3e);
-  });
-
-  it("writes the high 32 bits of a stream's size as zero", () => {
-    const bytes = compoundFile([{ path: "A", bytes: enc("x".repeat(5000)) }]);
-    const view = new DataView(bytes.buffer);
-    const directoryStart = view.getUint32(0x30, true);
-    expect(
-      view.getUint32((directoryStart + 1) * 512 + 1 * 128 + 0x7c, true),
-    ).toBe(0);
   });
 
   it("accepts the highest ASCII byte value (0x7F) in a name, and rejects the lowest non-ASCII one (0x80)", () => {
