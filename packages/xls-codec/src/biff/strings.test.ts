@@ -6,7 +6,9 @@ import {
   readRichExtendedString,
   readShortXLUnicodeString,
   readXLUnicodeString,
+  readXLUnicodeStringNoCch,
 } from "./strings";
+import { u16 } from "../test-support/biff";
 
 function bytes(...values: readonly number[]): Uint8Array<ArrayBuffer> {
   return new Uint8Array(values);
@@ -75,6 +77,32 @@ describe("readXLUnicodeString", () => {
 
     expect(readXLUnicodeString(cursor)).toBe("é");
   });
+
+  it("assembles a string past the chunk size readCharacters batches its own String.fromCharCode calls by", () => {
+    // readCharacters builds the text 4096 units at a time (to stay under the engine's own argument-count ceiling on a single fromCharCode call), slicing the collected units per chunk. A string shorter than that never proves the slicing is real: feeding every chunk the WHOLE units array instead of its own slice reads identically for a one-chunk string, and only repeats the first 4096 characters once a second, genuinely distinct chunk exists to be dropped.
+    const length = 4096 + 904;
+    const codes = Array.from({ length }, (_unused, index) => 33 + (index % 94));
+    const expected = String.fromCharCode(...codes);
+    const cursor = new BlockCursor([bytes(...u16(length), 0x00, ...codes)]);
+
+    expect(readXLUnicodeString(cursor)).toBe(expected);
+  });
+});
+
+describe("readXLUnicodeStringNoCch", () => {
+  // [MS-XLS] 2.5.296: a flags byte then the characters, with the character count supplied by the caller rather than read from a cch field of its own -- SupBook's own virtPath is this shape.
+
+  it("reads a compressed string given its own count, with no cch field to read first", () => {
+    const cursor = new BlockCursor([bytes(0x00, ...compressed("C:\\"))]);
+
+    expect(readXLUnicodeStringNoCch(cursor, 3)).toBe("C:\\");
+  });
+
+  it("reads an uncompressed string given its own count", () => {
+    const cursor = new BlockCursor([bytes(0x01, ...uncompressed("日本"))]);
+
+    expect(readXLUnicodeStringNoCch(cursor, 2)).toBe("日本");
+  });
 });
 
 describe("readShortXLUnicodeString", () => {
@@ -104,8 +132,8 @@ describe("readRichExtendedString", () => {
     expect(readRichExtendedString(cursor)).toBe("Alpha");
   });
 
-  it("skips the formatting runs a rich string carries", () => {
-    // fRichSt (bit 3) set means cRun follows the flags byte and cRun FormatRun structures ([MS-XLS] 2.5.132, four bytes each) follow rgb. The text is the same either way; this package reads the characters, not the run formatting.
+  it("skips exactly the formatting runs a rich string carries, leaving the cursor correctly positioned on whatever follows", () => {
+    // fRichSt (bit 3) set means cRun follows the flags byte and cRun FormatRun structures ([MS-XLS] 2.5.132, four bytes each) follow rgb. The text is the same either way; this package reads the characters, not the run formatting -- but a wrong (or entirely dropped) skip would only ever show up in what a LATER read off the same cursor sees, never in this string's own returned text, so a sentinel byte read right after the runs is what actually proves the skip consumed exactly cRun*4 bytes rather than none, or the wrong count.
     const cursor = new BlockCursor([
       bytes(
         0x05,
@@ -122,14 +150,16 @@ describe("readRichExtendedString", () => {
         0x00,
         0x02,
         0x00,
+        0x99,
       ),
     ]);
 
     expect(readRichExtendedString(cursor)).toBe("Alpha");
+    expect(cursor.u8()).toBe(0x99);
   });
 
-  it("skips the phonetic data an extended string carries", () => {
-    // fExtSt (bit 2) set means a four-byte cbExtRst follows the flags byte and cbExtRst bytes of ExtRst follow rgb.
+  it("skips exactly the phonetic data an extended string carries, leaving the cursor correctly positioned on whatever follows", () => {
+    // fExtSt (bit 2) set means a four-byte cbExtRst follows the flags byte and cbExtRst bytes of ExtRst follow rgb. As above, only a read past the ExtRst bytes can prove the skip consumed exactly cbExtRst bytes.
     const cursor = new BlockCursor([
       bytes(
         0x05,
@@ -143,10 +173,22 @@ describe("readRichExtendedString", () => {
         0xaa,
         0xbb,
         0xcc,
+        0x99,
       ),
     ]);
 
     expect(readRichExtendedString(cursor)).toBe("Alpha");
+    expect(cursor.u8()).toBe(0x99);
+  });
+
+  it("skips neither runs nor phonetic data when the string states neither, leaving the cursor immediately on whatever follows", () => {
+    // The (runCount > 0)/(extendedSize > 0) guards must genuinely gate the skip rather than always (or never) firing -- a plain string with both flags clear is the case that proves the "false" side of both conditions.
+    const cursor = new BlockCursor([
+      bytes(0x05, 0x00, 0x00, ...compressed("Alpha"), 0x99),
+    ]);
+
+    expect(readRichExtendedString(cursor)).toBe("Alpha");
+    expect(cursor.u8()).toBe(0x99);
   });
 
   it("consumes the re-stated flag byte when a compressed string continues into the next block", () => {

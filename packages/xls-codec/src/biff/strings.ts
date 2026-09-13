@@ -117,11 +117,8 @@ export function readRichExtendedString(cursor: BlockCursor): string {
     (flags & FLAG_HIGH_BYTE) !== 0,
     startBlock,
   );
-  if (runCount > 0) {
-    cursor.skip(runCount * FORMAT_RUN_SIZE);
-  }
-  if (extendedSize > 0) {
-    cursor.skip(extendedSize);
-  }
+  // Unconditional: skip(0) is already a no-op, so gating either call behind its own "> 0" guard first would only ever produce the identical zero-byte skip a bare cursor.skip(0) already gives for the no-run/no-phonetic case -- both runCount and extendedSize come from a u16/i32 read and can never be negative, so there is no third case (a genuinely negative count) that guard could still be catching.
+  cursor.skip(runCount * FORMAT_RUN_SIZE);
+  cursor.skip(extendedSize);
   return text;
 }
