@@ -205,9 +205,8 @@ function placeCell(
   }
   const span = cell.colSpan ?? 1;
   const rowSpan = cell.rowSpan ?? 1;
-  if (rowSpan > 1) {
-    active.set(column, { span, remaining: rowSpan - 1 });
-  }
+  // No rowSpan > 1 guard: for rowSpan === 1 this sets remaining to exactly 0, which a later placeCell at this column can never treat as a continuation regardless (isContinuation's own remaining > 0 check), so recording it unconditionally is never observably different from skipping it.
+  active.set(column, { span, remaining: rowSpan - 1 });
   return { span, isContinuation: false };
 }
 
@@ -252,12 +251,16 @@ function splitAtLostBoundaries(
 ): number[] {
   const subSpans: number[] = [];
   let start = column;
-  for (let position = column + 1; position < column + span; position += 1) {
+  // Every position strictly between the cell's own two outer edges, by construction rather than by a loop condition a mutant could push one step past either edge: column and column + span are always this row's own stated boundaries (every cell's own left/right edge is trivially "recoverable" from its own row), so they can never themselves be members of lostBoundaries -- an off-by-one here would check a position .has() already always answers false for.
+  Array.from(
+    { length: span - 1 },
+    (_ignored, index) => column + 1 + index,
+  ).forEach((position) => {
     if (lostBoundaries.has(position)) {
       subSpans.push(position - start);
       start = position;
     }
-  }
+  });
   subSpans.push(column + span - start);
   return subSpans;
 }
@@ -381,10 +384,11 @@ function flattenTable(
   }
   const boundaries = columnBoundariesTwips(table.columnWidthsPt);
   const stated = recoverableBoundaries(table.rows);
-  const lostBoundaries: number[] = [];
-  for (let index = 1; index < columnCount; index += 1) {
-    if (!stated.has(index)) lostBoundaries.push(index);
-  }
+  // Every internal boundary (1..columnCount - 1), by construction rather than by a loop condition a mutant could push one step past columnCount: `stated` always contains columnCount itself (every row's own last cell necessarily reaches it, the identical invariant flattenRow's own column !== columnCount check enforces below for every row that write ever reaches), so an off-by-one here would check `stated.has(columnCount)`, already always true.
+  const lostBoundaries = Array.from(
+    { length: columnCount - 1 },
+    (_ignored, index) => index + 1,
+  ).filter((index) => !stated.has(index));
   const lostBoundariesByRow = distributeLostBoundaries(
     lostBoundaries,
     table.rows.length,
