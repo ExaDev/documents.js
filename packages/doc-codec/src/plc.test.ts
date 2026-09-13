@@ -100,8 +100,12 @@ describe("parsePlc", () => {
       8,
       "PlcPcd",
     );
-    expect(() => plc.element(1)).toThrow(DocFormatError);
-    expect(() => plc.element(-1)).toThrow(DocFormatError);
+    expect(() => plc.element(1)).toThrow(
+      /PlcPcd has 1 data elements; element 1 was requested/,
+    );
+    expect(() => plc.element(-1)).toThrow(
+      /PlcPcd has 1 data elements; element -1 was requested/,
+    );
   });
 
   it("rejects element(count) even with a zero-byte element size, where slice's own bounds check alone could never catch it", () => {
@@ -155,5 +159,15 @@ describe("findLargestAtMost", () => {
   it("returns undefined at or past the last key, which every algorithm treats as out of range", () => {
     expect(findLargestAtMost(keys, 30)).toBeUndefined();
     expect(findLargestAtMost(keys, 31)).toBeUndefined();
+  });
+
+  it("throws naming the actual absent index and array length when a key the search visits is missing", () => {
+    // No real Plc/ChpxFkp/PapxFkp caller ever hands findLargestAtMost a sparse array (every key comes from a dense, fully-populated push loop), so this deliberately holed array -- built with a genuine gap at index 1 rather than a dense array a `delete` would punch a hole into -- is the only way to exercise the guard at all.
+    const sparseKeys: number[] = [];
+    sparseKeys[0] = 0;
+    sparseKeys[2] = 20;
+    expect(() => findLargestAtMost(sparseKeys, 15)).toThrow(
+      /PLC key 1 is absent from a 3-key array/,
+    );
   });
 });
