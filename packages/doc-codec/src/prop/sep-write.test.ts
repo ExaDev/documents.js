@@ -90,7 +90,7 @@ describe("encodeSectionGrpprl", () => {
         ...SECTION,
         margins: { ...SECTION.margins, rightPt: tooLarge },
       }),
-    ).toThrow(DocFormatError);
+    ).toThrow(/section margins\.rightPt is 65555 twips/);
   });
 
   it("accepts a top/bottom margin of exactly 0", () => {
@@ -159,6 +159,13 @@ describe("buildPlcfSed", () => {
     expect(view.getUint16(14, true)).toBe(0); // sed.fnMpr.
     expect(view.getUint32(16, true)).toBe(0xffffffff); // sed.fcMpr.
     expect(bytes.length).toBe(20);
+  });
+
+  it("writes sed.fnMpr at base + 6, not somewhere that clobbers the preceding aCp key", () => {
+    // aCp[0] is deliberately non-zero and byte-asymmetric (0x01020304): fnMpr's own written value (0) is indistinguishable from its neighbours by content alone, so only a wrong offset landing on a genuinely non-zero byte elsewhere in the buffer can prove this arithmetic, not fnMpr's own value.
+    const bytes = buildPlcfSed([0x01020304], 100, [40]);
+    const view = new DataView(bytes.buffer);
+    expect(view.getUint32(0, true)).toBe(0x01020304); // aCp[0], untouched by the Sed writes that follow it.
   });
 
   it("builds a multi-section PlcfSed with one Sed per section, each naming its own Sepx offset", () => {

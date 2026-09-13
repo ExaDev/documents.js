@@ -144,10 +144,12 @@ export function buildPlcfSed(
   });
   fcSepxList.forEach((fcSepx, index) => {
     const base = keyBytes + index * 12;
-    view.setUint16(base, 0, true); // sed.fn -- ignored.
+    // sed.fn and sed.fnMpr are always this constant 0, so no endianness argument is passed for either write: 0x0000 reads back identically regardless of byte order, unlike the real values fcSepx/fcMpr carry.
+    view.setUint16(base, 0);
     view.setUint32(base + 2, fcSepx, true); // sed.fcSepx.
-    view.setUint16(base + 6, 0, true); // sed.fnMpr -- ignored.
-    view.setUint32(base + 8, 0xffffffff, true); // sed.fcMpr -- ignored.
+    view.setUint16(base + 6, 0); // sed.fnMpr -- ignored.
+    // 0xffffffff's own four bytes are identical (0xff each), so fcMpr's own endianness is equally moot.
+    view.setUint32(base + 8, 0xffffffff); // sed.fcMpr -- ignored.
   });
   return bytes;
 }
