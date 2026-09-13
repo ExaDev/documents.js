@@ -56,8 +56,8 @@ function int16(value: number, what: string): number[] {
       `${what} is ${rounded} twips, outside the ${MIN_INT16}..${MAX_INT16} range a signed 2-byte sprm operand can hold`,
     );
   }
-  const unsigned = rounded < 0 ? rounded + 0x10000 : rounded;
-  return [unsigned & 0xff, (unsigned >> 8) & 0xff];
+  // No separate "add 0x10000 for a negative value" conversion: & and >> operate on the 32-bit two's complement form already, which for any value in MIN_INT16..MAX_INT16 has exactly the same low 16 bits as its unsigned 16-bit equivalent -- rounded & 0xff and (rounded >> 8) & 0xff already read the right two bytes whether rounded is negative or not.
+  return [rounded & 0xff, (rounded >> 8) & 0xff];
 }
 
 function uint16(value: number, what: string): number[] {
@@ -147,8 +147,10 @@ export function encodeParagraphGrpprl(
         `paragraph lineSpacing ${paragraph.lineSpacing} produces an LSPD.dyaLine of ${dyaLine}, outside the 0..${LSPD_MAX_MULTIPLE_DYA_LINE} range the multiplier form permits`,
       );
     }
+    // Written directly rather than through int16: the range check just above already guarantees dyaLine is 0..LSPD_MAX_MULTIPLE_DYA_LINE (0x7bc0), comfortably inside int16's own -32768..32767, so int16's own error path -- and the label it would report -- could never actually fire for this call.
     pushSprm(bytes, SPRM_P_DYA_LINE, [
-      ...int16(dyaLine, "paragraph lineSpacing"),
+      dyaLine & 0xff,
+      (dyaLine >> 8) & 0xff,
       0x01,
       0x00, // fMultLinespace = 1: the multiplier form.
     ]);

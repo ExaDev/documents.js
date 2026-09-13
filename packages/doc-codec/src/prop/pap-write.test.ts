@@ -42,7 +42,23 @@ describe("encodeParagraphGrpprl", () => {
     ).toThrow(DocFormatError);
     expect(() =>
       encodeParagraphGrpprl({ indentLeftPt: maxPt + 1 }, () => 1),
-    ).toThrow(/outside the -32768\.\.32767 range/);
+    ).toThrow(
+      /paragraph indentLeftPt is \d+ twips, outside the -32768\.\.32767 range/,
+    );
+  });
+
+  it("names indentRightPt when its own twips value overflows", () => {
+    const maxPt = 0x7fff / 20;
+    expect(() =>
+      encodeParagraphGrpprl({ indentRightPt: maxPt + 1 }, () => 1),
+    ).toThrow(/paragraph indentRightPt is \d+ twips/);
+  });
+
+  it("names indentFirstLinePt when its own twips value overflows", () => {
+    const maxPt = 0x7fff / 20;
+    expect(() =>
+      encodeParagraphGrpprl({ indentFirstLinePt: maxPt + 1 }, () => 1),
+    ).toThrow(/paragraph indentFirstLinePt is \d+ twips/);
   });
 
   it("accepts an indent at exactly the signed 2-byte operand's own bounds", () => {
@@ -58,6 +74,13 @@ describe("encodeParagraphGrpprl", () => {
     );
   });
 
+  it("rejects an indent one twip past the signed 2-byte operand's own negative bound", () => {
+    const minPt = -0x8000 / 20;
+    expect(() =>
+      encodeParagraphGrpprl({ indentLeftPt: minPt - 1 / 20 }, () => 1),
+    ).toThrow(/-32769 twips, outside the -32768\.\.32767 range/);
+  });
+
   it("round-trips spacingBeforePt and spacingAfterPt", () => {
     expect(roundTrip({ spacingBeforePt: 10 }).spacingBeforePt).toBe(10);
     expect(roundTrip({ spacingAfterPt: 5 }).spacingAfterPt).toBe(5);
@@ -69,14 +92,20 @@ describe("encodeParagraphGrpprl", () => {
     ).toThrow(DocFormatError);
     expect(() =>
       encodeParagraphGrpprl({ spacingBeforePt: -1 }, () => 1),
-    ).toThrow(/outside the 0\.\.65535 range/);
+    ).toThrow(
+      /paragraph spacingBeforePt is -20 twips, outside the 0\.\.65535 range/,
+    );
   });
 
   it("rejects a spacing value past the unsigned 2-byte operand's own maximum", () => {
     const tooLarge = (0xffff + 20) / 20;
     expect(() =>
       encodeParagraphGrpprl({ spacingAfterPt: tooLarge }, () => 1),
-    ).toThrow(DocFormatError);
+    ).toThrow(/paragraph spacingAfterPt is \d+ twips/);
+  });
+
+  it("accepts a spacing value of exactly 0, the unsigned operand's own lower bound", () => {
+    expect(roundTrip({ spacingBeforePt: 0 }).spacingBeforePt).toBe(0);
   });
 
   it("accepts a spacing value at exactly the unsigned operand's own maximum", () => {
@@ -105,6 +134,11 @@ describe("encodeParagraphGrpprl", () => {
     ).toThrow(DocFormatError);
   });
 
+  it("accepts a lineSpacing whose dyaLine lands exactly on the multiplier form's own maximum", () => {
+    const atMax = 0x7bc0 / 240;
+    expect(roundTrip({ lineSpacing: atMax }).lineSpacing).toBeCloseTo(atMax, 5);
+  });
+
   it("accepts a lineSpacing of exactly 0", () => {
     expect(roundTrip({ lineSpacing: 0 }).lineSpacing).toBeUndefined(); // dyaLine 0 resolves to a non-positive multiple on read, matching pap.ts's own rule.
   });
@@ -129,6 +163,15 @@ describe("encodeParagraphGrpprl", () => {
     );
     expect(result.listId).toBe(7);
     expect(result.listLevel).toBe(2);
+  });
+
+  it("names paragraph list ilfo when the caller's own resolver returns an out-of-range index", () => {
+    expect(() =>
+      encodeParagraphGrpprl(
+        { list: { numId: "3", level: 0 } },
+        () => 0x7fff + 1,
+      ),
+    ).toThrow(/paragraph list ilfo is 32768 twips/);
   });
 
   it("writes no list sprm at all when the paragraph names a level but no numId", () => {
