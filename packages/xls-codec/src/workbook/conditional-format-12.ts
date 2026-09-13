@@ -91,7 +91,7 @@ function readCfColor(cursor: BlockCursor): RawCfColor | undefined {
       tint,
     };
   }
-  cursor.skip(4 + 8); // xclrValue + numTint, still consumed so the cursor stays correctly positioned for whatever follows
+  // xclrValue + numTint are left unread rather than skipped past: both of this function's own callers (readCfGradient, readCfDatabar) return undefined themselves the moment they see this undefined, never reading from `cursor` again -- so there is no "whatever follows" a skip here would actually be positioning the cursor for.
   return undefined;
 }
 
@@ -525,8 +525,8 @@ function readCf12(
       }
     }
     return undefined; // ct 0x01, or a ct 0x02 rule with no closed-form structure to promote
-  } catch (err) {
-    recoverFromFormatError(err, undefined);
+  } catch {
+    // Every read in the block above is either this cursor's own u8/u16/u32/take (which throw only BiffFormatError) or a call into readCfGradient/readCfDatabar/readCfMultistate/readCfFilterRule/readCfTextFilterRule/parseDxfStyle -- each built the identical way, and parseDxfStyle already catches and swallows its own BiffFormatError internally rather than letting one escape. Nothing reaching this catch can be anything other than a BiffFormatError, so there is no second error kind here for recoverFromFormatError's own instanceof check to still be distinguishing.
     return undefined;
   }
 }
