@@ -47,13 +47,11 @@ function readCharacters(
     // A two-byte character is never split across a boundary: [MS-XLS] 2.5.293 requires that "if fHighByte is 0x1 and rgb is extended with a Continue record the break MUST occur at the double-byte character boundary".
     units.push(highByte ? cursor.u16() : cursor.u8());
   }
-  // Assembled in chunks rather than one spread call, so a very long string cannot exceed the argument-count limit String.fromCharCode(...units) would hit.
+  // Assembled in chunks rather than one spread call, so a very long string cannot exceed the argument-count limit String.fromCharCode(...units) would hit. Chunk count comes from Math.ceil rather than a manually bounds-checked loop, so there is no off-by-one boundary at which a comparison mutant would produce an unobservable extra no-op iteration.
   const CHUNK = 4096;
-  let text = "";
-  for (let start = 0; start < units.length; start += CHUNK) {
-    text += String.fromCharCode(...units.slice(start, start + CHUNK));
-  }
-  return text;
+  return Array.from({ length: Math.ceil(units.length / CHUNK) }, (_, index) =>
+    String.fromCharCode(...units.slice(index * CHUNK, (index + 1) * CHUNK)),
+  ).join("");
 }
 
 /** An XLUnicodeString ([MS-XLS] 2.5.294): a two-byte character count, a flags byte, then the characters. Continuable, since the String record ([MS-XLS] 2.4.268) carrying a formula's string result is one of these and its own production admits trailing Continues. */
