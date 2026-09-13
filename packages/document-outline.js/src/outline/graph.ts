@@ -786,14 +786,16 @@ function reconcileChildren(
   });
 
   // A missing position's anchor: the `originalSiblings` index of the nearest LATER requested position already matched, or `originalSiblings.length` (past the end) when nothing later matched. Precomputed once, back to front, over `[...children.entries()].reverse()` rather than scanned per call with an explicit "later > position" comparison: `position` is never itself a key in `matchedIndex` (this map's only two writers, the LCS backtrack and the anti-inflation pass above, both write exclusively at positions that end up matched, and this array is only ever read for a position the caller has already confirmed is NOT in `matchedIndex`), so any comparison boundary drawn at "later === position" is unobservable by construction -- not a gap in this function's tests, a fact about what `matchedIndex` can ever contain. Anchoring the traversal to `children`'s own reversed entries, rather than a separately-mutable length/index pair, means there is no boundary comparison left for a mutation to weaken at all.
-  const anchorAt = new Array<number>(children.length);
+  //
+  // Keyed by position rather than a pre-sized array: every position this precompute writes is read back exactly once via anchorFor, never by `.length` or as a whole, so a Map's own get() already says everything a fixed-length array's initial size would -- there is no separate "was this ever populated" fact that size could add, the same reasoning matchedIndex/matchedByOriginal above already follow.
+  const anchorAt = new Map<number, number>();
   let runningAnchor = originalSiblings.length;
   for (const [position] of [...children.entries()].reverse()) {
-    anchorAt[position] = runningAnchor;
+    anchorAt.set(position, runningAnchor);
     const matchedHere = matchedIndex.get(position);
     if (matchedHere !== undefined) runningAnchor = matchedHere;
   }
-  const anchorFor = (position: number): number => anchorAt[position]!;
+  const anchorFor = (position: number): number => anchorAt.get(position)!;
 
   // Every anchor index this loop has already inserted an occurrence at or before, in insertion order -- what lets each new insertion compute its own CURRENT position (its fixed anchor index, shifted right by however many earlier insertions in this same reconcile landed at or before that same index) without ever re-deriving a position from the live sibling list by value.
   const insertedAtOrBefore: number[] = [];
