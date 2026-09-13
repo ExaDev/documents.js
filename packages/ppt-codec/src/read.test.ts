@@ -7,7 +7,7 @@ import {
 } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { bytesToBase64 } from "./base64";
-import { PptEncryptedError, PptFormatError } from "./errors";
+import { PptEncryptedError } from "./errors";
 import {
   CURRENT_USER_STREAM,
   POWERPOINT_DOCUMENT_STREAM,
@@ -98,6 +98,42 @@ describe("readPptStreams", () => {
       widthPt: 600,
       heightPt: 90,
     });
+  });
+
+  it("produces exactly the title and body shapes when no picture or table is added", () => {
+    const { currentUserStream, powerPointDocumentStream } =
+      syntheticPresentation();
+    const [slide] = readPptStreams(
+      currentUserStream,
+      powerPointDocumentStream,
+    ).slides;
+    expect(slide?.shapes).toHaveLength(2);
+  });
+
+  it("splits the default body text's own carriage return into two paragraphs", () => {
+    // No bodyText option given at all, unlike every other test in this file that exercises paragraph-splitting behaviour -- this is the one test pinning the fixture's own default value, "First point\rSecond point", rather than a value a test supplied explicitly.
+    const { currentUserStream, powerPointDocumentStream } =
+      syntheticPresentation();
+    const [slide] = readPptStreams(
+      currentUserStream,
+      powerPointDocumentStream,
+    ).slides;
+    expect(slide?.shapes[1]?.blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "First point" }] },
+      { kind: "paragraph", runs: [{ text: "Second point" }] },
+    ]);
+  });
+
+  it("states no rotationDeg at all for an unrotated plain shape, rather than an explicit undefined", () => {
+    // toEqual treats an explicit rotationDeg: undefined as equal to the key being absent, so an object-shape comparison alone can't tell the two apart -- only checking the key's own presence can.
+    const { currentUserStream, powerPointDocumentStream } =
+      syntheticPresentation();
+    const [slide] = readPptStreams(
+      currentUserStream,
+      powerPointDocumentStream,
+    ).slides;
+    const shape = slide?.shapes[0];
+    expect(shape === undefined ? false : "rotationDeg" in shape).toBe(false);
   });
 
   it("resolves a title run's bold and colour from the master's own style cascade and colour scheme, when the run itself states neither", () => {
@@ -269,6 +305,46 @@ describe("readPptStreams", () => {
       ]);
     });
 
+    it("derives the grid from each cell's own rectangle, not from the document order the cells arrive in, and ignores gridline shapes among them", () => {
+      // The cells are emitted in reverse document order (row 2 before row 1, and within each row, its second column before its first) -- if the grid were read off document order rather than sorted by each cell's own top/left, this would come back transposed or reversed. Two degenerate gridline shapes (the real spelling a genuine PowerPoint-authored table carries) sit among them; a reader that treated them as cells would plant a phantom row or column.
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({
+          table: {
+            rows: [
+              ["A1", "B1"],
+              ["A2", "B2"],
+            ],
+            reverseCellOrder: true,
+            includeGridlineShapes: true,
+          },
+        });
+      const [slide] = readPptStreams(
+        currentUserStream,
+        powerPointDocumentStream,
+      ).slides;
+      const table = slide?.shapes[2]?.blocks[0];
+      expect(table).toEqual({
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              { blocks: [{ kind: "paragraph", runs: [{ text: "A1" }] }] },
+              { blocks: [{ kind: "paragraph", runs: [{ text: "B1" }] }] },
+            ],
+            heightPt: 60,
+          },
+          {
+            cells: [
+              { blocks: [{ kind: "paragraph", runs: [{ text: "A2" }] }] },
+              { blocks: [{ kind: "paragraph", runs: [{ text: "B2" }] }] },
+            ],
+            heightPt: 60,
+          },
+        ],
+        columnWidthsPt: [216, 216],
+      });
+    });
+
     it("reads a ragged table's missing grid positions as empty cells", () => {
       const { currentUserStream, powerPointDocumentStream } =
         syntheticPresentation({
@@ -293,6 +369,20 @@ describe("readPptStreams", () => {
       });
     });
 
+    it("states no rotationDeg at all for an unrotated table, rather than an explicit undefined", () => {
+      // toEqual treats an explicit rotationDeg: undefined as equal to the key being absent, so an object-shape comparison alone can't tell the two apart -- only checking the key's own presence can.
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({
+          table: { rows: [["x"]] },
+        });
+      const [slide] = readPptStreams(
+        currentUserStream,
+        powerPointDocumentStream,
+      ).slides;
+      const table = slide?.shapes[2];
+      expect(table === undefined ? false : "rotationDeg" in table).toBe(false);
+    });
+
     it("reads a rotated table group's rotation onto the table shape", () => {
       const { currentUserStream, powerPointDocumentStream } =
         syntheticPresentation({
@@ -311,7 +401,151 @@ describe("readPptStreams", () => {
       syntheticPresentation({ encrypted: true });
     expect(() =>
       readPptStreams(currentUserStream, powerPointDocumentStream),
-    ).toThrow(PptEncryptedError);
+    ).toThrow(/marks this document as RC4 CryptoAPI-encrypted/);
+  });
+
+  it("rejects a document whose CurrentUserAtom claims encryption but whose current UserEditAtom carries no encryptSessionPersistIdRef", () => {
+    // `encrypted: true` alone flips only the headerToken, never adding the trailing UserEditAtom field a genuine RC4 CryptoAPI session needs -- supplying a password here reaches past the missing-password check into this one instead.
+    const { currentUserStream, powerPointDocumentStream } =
+      syntheticPresentation({ encrypted: true });
+    expect(() =>
+      readPptStreams(currentUserStream, powerPointDocumentStream, "anything"),
+    ).toThrow(/carries no encryptSessionPersistIdRef/);
+  });
+
+  describe("malformed input", () => {
+    it("rejects a client textbox with neither an OutlineTextRefAtom nor a TextHeaderAtom", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({ bodyTextboxMissingHeader: true });
+      expect(() =>
+        readPptStreams(currentUserStream, powerPointDocumentStream),
+      ).toThrow(/carry no TextHeaderAtom/);
+    });
+
+    it("rejects an OutlineTextRefAtom too short to carry its own index field", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({ titleOutlineRefTooShort: true });
+      expect(() =>
+        readPptStreams(currentUserStream, powerPointDocumentStream),
+      ).toThrow(/fewer than the 4 its index field needs/);
+    });
+
+    it("rejects an OutlineTextRefAtom index beyond the slide's own text list", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({ titleOutlineRefOutOfRange: true });
+      expect(() =>
+        readPptStreams(currentUserStream, powerPointDocumentStream),
+      ).toThrow(/which has only 1 texts in the slide list/);
+    });
+
+    it("resolves the outline text at a non-zero index, not just the first", () => {
+      // The one scenario that can tell a little-endian index read apart from a big-endian one: at index 0 the two agree, so only a genuinely non-zero index proves the byte order this reader assumes.
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({ secondSlideListText: "Forward-looking" });
+      const [slide] = readPptStreams(
+        currentUserStream,
+        powerPointDocumentStream,
+      ).slides;
+      expect(slide?.shapes[0]?.blocks).toEqual([
+        { kind: "paragraph", runs: [{ text: "Forward-looking" }] },
+      ]);
+    });
+
+    it("rejects a document persist object that is not RT_Document", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({ documentRecordTypeMismatch: true });
+      expect(() =>
+        readPptStreams(currentUserStream, powerPointDocumentStream),
+      ).toThrow(/not RT_Document/);
+    });
+
+    it("rejects a document container with no DocumentAtom", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({ documentMissingDocumentAtom: true });
+      expect(() =>
+        readPptStreams(currentUserStream, powerPointDocumentStream),
+      ).toThrow(/has no DocumentAtom/);
+    });
+
+    it("rejects a master persist object that is not RT_MainMaster", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({ masterRecordTypeMismatch: true });
+      expect(() =>
+        readPptStreams(currentUserStream, powerPointDocumentStream),
+      ).toThrow(/not the RT_MainMaster/);
+    });
+
+    it("rejects a MainMasterContainer with no SlideSchemeColorSchemeAtom", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({ masterMissingColorScheme: true });
+      expect(() =>
+        readPptStreams(currentUserStream, powerPointDocumentStream),
+      ).toThrow(/has no SlideSchemeColorSchemeAtom/);
+    });
+
+    it("rejects a slide persist object that is not RT_Slide", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({ slideRecordTypeMismatch: true });
+      expect(() =>
+        readPptStreams(currentUserStream, powerPointDocumentStream),
+      ).toThrow(/not the RT_Slide/);
+    });
+
+    it("rejects a SlideContainer with no SlideAtom", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({ slideMissingSlideAtom: true });
+      expect(() =>
+        readPptStreams(currentUserStream, powerPointDocumentStream),
+      ).toThrow(/has no SlideAtom/);
+    });
+
+    it("rejects a slide whose SlideAtom names a masterIdRef the master list does not contain", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({ slideMasterIdRefMismatch: true });
+      // Pins the exact stated value, not just that some rejection fires: the fixture's own masterIdRef is the real master ID (0x80000000, [MS-PPT] 2.2.13's own MasterId minimum) plus one, 2147483649 -- a regex matching only the surrounding words would pass identically for any other wrong value, including the real master ID minus one.
+      expect(() =>
+        readPptStreams(currentUserStream, powerPointDocumentStream),
+      ).toThrow(
+        /names masterIdRef 2147483649, which the master list does not contain/,
+      );
+    });
+
+    it("names the UserEditAtom's own docPersistIdRef when it references no persist object", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({ omitPersistObject: "document" });
+      expect(() =>
+        readPptStreams(currentUserStream, powerPointDocumentStream),
+      ).toThrow(/UserEditAtom\.docPersistIdRef references persist object/);
+    });
+
+    it("names the master's own persist ID when it references no persist object", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({ omitPersistObject: "master" });
+      expect(() =>
+        readPptStreams(currentUserStream, powerPointDocumentStream),
+      ).toThrow(/MasterPersistAtom for master \d+ references persist object/);
+    });
+
+    it("names the slide's own persist ID when it references no persist object", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({ omitPersistObject: "slide" });
+      expect(() =>
+        readPptStreams(currentUserStream, powerPointDocumentStream),
+      ).toThrow(/SlidePersistAtom for slide \d+ references persist object/);
+    });
+
+    it("names the notes slide's own persist ID when it references no persist object", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({
+          omitPersistObject: "notes",
+          notesText: "Mention the budget revision.",
+        });
+      expect(() =>
+        readPptStreams(currentUserStream, powerPointDocumentStream),
+      ).toThrow(
+        /NotesPersistAtom for notes slide \d+ references persist object/,
+      );
+    });
   });
 
   describe("RC4 CryptoAPI-encrypted presentations", () => {
@@ -375,7 +609,9 @@ describe("readPptContent", () => {
     const bytes = compoundFile([
       { name: CURRENT_USER_STREAM, bytes: currentUserStream },
     ]);
-    expect(() => readPptContent(bytes)).toThrow(PptFormatError);
+    expect(() => readPptContent(bytes)).toThrow(
+      `compound file has no "${POWERPOINT_DOCUMENT_STREAM}" stream, which [MS-PPT] requires of every PowerPoint binary document`,
+    );
   });
 
   describe("speaker notes", () => {

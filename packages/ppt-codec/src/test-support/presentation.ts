@@ -37,7 +37,6 @@ import {
   RT_UserEditAtom,
   SLIDE_LIST_INSTANCE_MASTERS,
   SLIDE_LIST_INSTANCE_NOTES,
-  SLIDE_LIST_INSTANCE_SLIDES,
 } from "../record/types";
 import {
   asciiBytes,
@@ -177,11 +176,8 @@ function titleMasterStyleAtomWithBoldAccent1(): Uint8Array<ArrayBuffer> {
     u16le(STYLE_BOLD), // fontStyle
     new Uint8Array([0, 0, 0, 0x05]), // ColorIndexStruct: rgb bytes unused for a scheme reference, index 0x05 = Accent 1
   );
-  return atom(
-    RT_TextMasterStyleAtom,
-    concatBytes(u16le(1), pfLevel, cfLevel), // cLevels = 1
-    { recInstance: TEXT_TYPE_TITLE },
-  );
+  // No explicit recInstance: TEXT_TYPE_TITLE is 0x0, the same value atom() already defaults an unstated recInstance to, so stating it would be a redundant assignment rather than a real choice between two different bytes.
+  return atom(RT_TextMasterStyleAtom, concatBytes(u16le(1), pfLevel, cfLevel));
 }
 
 function clientAnchor(
@@ -228,7 +224,37 @@ export interface SyntheticPresentationOptions {
     readonly rows: readonly (readonly string[])[];
     // Written onto the table group's own primary property table as the rotation property, so a fixture can state the whole-table rotation a real file carries.
     readonly rotationDeg?: number;
+    // Emits the cell shapes in reverse document order (last row/column first) instead of top-to-bottom, left-to-right -- the only way to prove the grid is derived by sorting each cell's own anchor rather than merely reflecting whatever order the cells already arrived in.
+    readonly reverseCellOrder?: boolean;
+    // Adds two zero-area "gridline" shapes among the cells -- one zero-width, one zero-height -- the real spelling a genuine PowerPoint-authored table carries alongside its actual cells (see tableBlockFor's own top comment), which the reader must filter out rather than treat as cells of the grid.
+    readonly includeGridlineShapes?: boolean;
   };
+  // Every field below deliberately breaks one structural invariant read.ts enforces, for the malformed-input tests that prove each check actually fires rather than merely existing. None of these combine meaningfully with each other or with `password`/`encrypted` -- each is exercised in isolation.
+
+  // Writes the document persist object as RT_Notes rather than RT_Document, so readPptStreams' own record-type check on the resolved persist object has something genuinely wrong to reject.
+  readonly documentRecordTypeMismatch?: boolean;
+  // Omits the DocumentAtom from the document container's children, so the slide size this package's own writer always includes cannot be found.
+  readonly documentMissingDocumentAtom?: boolean;
+  // Writes the master persist object as RT_Slide rather than RT_MainMaster.
+  readonly masterRecordTypeMismatch?: boolean;
+  // Omits the master's own SlideSchemeColorSchemeAtom, which [MS-PPT] 2.5.3 requires of every MainMasterContainer.
+  readonly masterMissingColorScheme?: boolean;
+  // Writes the slide persist object as RT_MainMaster rather than RT_Slide.
+  readonly slideRecordTypeMismatch?: boolean;
+  // Omits the slide's own SlideAtom, which [MS-PPT] 2.5.1 requires as its first child.
+  readonly slideMissingSlideAtom?: boolean;
+  // States a masterIdRef on the slide's own SlideAtom that names no master the master list actually carries.
+  readonly slideMasterIdRefMismatch?: boolean;
+  // Writes the title placeholder's OutlineTextRefAtom with fewer than the 4 bytes its index field needs.
+  readonly titleOutlineRefTooShort?: boolean;
+  // Writes the title placeholder's OutlineTextRefAtom index past the end of the slide's own text list.
+  readonly titleOutlineRefOutOfRange?: boolean;
+  // Omits the ordinary text box's own TextHeaderAtom, which [MS-PPT] 2.9.1 requires to precede its TextCharsAtom/TextBytesAtom.
+  readonly bodyTextboxMissingHeader?: boolean;
+  // Adds a second text to the slide list entry (after the title's) and points the title's own OutlineTextRefAtom at it (index 1) instead of the first (index 0) -- the one scenario that can tell a little-endian index read apart from a big-endian one, since index 0 reads identically either way.
+  readonly secondSlideListText?: string;
+  // Leaves the named persist object out of the persist directory entirely, while every list/atom that references its persist ID stays exactly as it would for a valid file -- the one way to reach resolvePersistObject's own missing-persist-object branch for that object's caller, rather than merely computing its own description string on every successful resolution the way an ordinary fixture always does. "notes" requires `notesText` to also be set.
+  readonly omitPersistObject?: "document" | "master" | "slide" | "notes";
 }
 
 // [MS-OFFCRYPTO] 2.3.5.1's own RC4 CryptoAPI EncryptionInfo/EncryptionHeader/EncryptionVerifier layout, built independently of encryption.ts's own reader (readDocumentEncryptionAtom) rather than by calling it in reverse -- the two are cross-checked against each other only by the read.test.ts round trip that decrypts what this function encrypts, not by sharing this byte-layout logic. keySizeBits is fixed at 128 here: this package's own decryptor supports any RC4 key size the header states, so a fixture testing the 40-bit special case belongs in encryption.test.ts, which exercises deriveRc4CryptoApiBlockKey directly rather than through a whole synthetic presentation.
@@ -244,11 +270,10 @@ function encryptionAtomBytes(
     0,
     CRYPTOAPI_KEY_SIZE_BITS,
   );
-  // An arbitrary 16-byte "random" verifier -- [MS-OFFCRYPTO] 2.3.4.9 never constrains its value, only that SHA-1 of it must match what decrypting encryptedVerifierHash recovers.
-  const verifier = new Uint8Array(16);
-  for (let i = 0; i < 16; i += 1) {
-    verifier[i] = i * 7 + 3;
-  }
+  // An arbitrary 16-byte "random" verifier -- [MS-OFFCRYPTO] 2.3.4.9 never constrains its value, only that SHA-1 of it must match what decrypting encryptedVerifierHash recovers. Fixed as a literal rather than derived from a formula: no computation makes an arbitrary value more "correct", and a literal removes the arithmetic as a thing to get wrong.
+  const verifier = new Uint8Array([
+    3, 10, 17, 24, 31, 38, 45, 52, 59, 66, 73, 80, 87, 94, 101, 108,
+  ]);
   const verifierHash = sha1(verifier);
   const encryptedCombined = rc4(
     blockZeroKey,
@@ -366,16 +391,14 @@ function drawingGroupContainer(
       u32le(6), // cspidCur
     ),
   );
-  const dggChildren: Uint8Array<ArrayBuffer>[] = [fdggBlock];
-  if (fbseRecords.length > 0) {
-    dggChildren.push(
+  // This function's only caller (below) never passes an empty array -- a picture is always exactly one FBSE -- so an empty-store guard here would be dead code with no test that could ever reach its branch; a genuinely empty OfficeArtBStoreContainer (recInstance 0) is itself spec-conformant should a future caller ever pass one.
+  return container(RT_DrawingGroup, [
+    container(OfficeArtDggContainer, [
+      fdggBlock,
       container(OfficeArtBStoreContainer, fbseRecords, {
         recInstance: fbseRecords.length,
       }),
-    );
-  }
-  return container(RT_DrawingGroup, [
-    container(OfficeArtDggContainer, dggChildren),
+    ]),
   ]);
 }
 
@@ -397,11 +420,27 @@ function pictureShape(
   ]);
 }
 
-// The table's own rectangle and per-row height, in master units -- fixed here so every table fixture's geometry is derivable by hand.
+// The table's own rectangle and per-row height, in master units -- fixed here so every table fixture's geometry is derivable by hand. TABLE_ROW_HEIGHT is exported for the byte-level fidelity tests, which decode the fixture's own tableRowProperties IMsoArray and need the same value to compare against.
 const TABLE_TOP = 2000;
 const TABLE_LEFT = 1440;
 const TABLE_RIGHT = 4896;
-const TABLE_ROW_HEIGHT = 480;
+export const TABLE_ROW_HEIGHT = 480;
+
+// PowerPoint's own default light scheme -- an arbitrary but fixed and realistic 8-entry colour scheme, independently chosen from color-scheme-write.ts's own defaults (see slideSchemeColorSchemeAtom's own comment). Module scope and exported, like TABLE_ROW_HEIGHT above, because the byte-level fidelity tests parse the master's own SlideSchemeColorSchemeAtom bytes directly and need the same values to compare against -- read.ts itself only ever resolves one slot of this scheme (whichever a run's own ColorIndexStruct names), so nothing but a direct byte comparison exercises the other seven.
+export const MASTER_COLOR_SCHEME: readonly (readonly [
+  number,
+  number,
+  number,
+])[] = [
+  [0xff, 0xff, 0xff], // background
+  [0x00, 0x00, 0x00], // text
+  [0x80, 0x80, 0x80], // shadow
+  [0x00, 0x00, 0x00], // title text
+  [0xe6, 0xf2, 0xff], // fill
+  [0x1a, 0x4b, 0x8c], // Accent 1
+  [0x8c, 0x1a, 0x4b], // Accent 2
+  [0x4b, 0x8c, 0x1a], // Accent 3
+];
 
 // A native table group: the group shape opens with the FSPGR child coordinate system ([MS-ODRAW] 2.2.14 puts shapeGroup first), carries fGroup, states tableProperties fIsTable and tableRowProperties as a complex IMsoArray of row minimum heights in the tertiary property table where a real producer puts them, and anchors the whole table with a client anchor; then one plain text-box shape per cell, each carrying its own client anchor -- the grid itself lives nowhere but in those anchors.
 function tableShape(
@@ -409,6 +448,8 @@ function tableShape(
   table: {
     readonly rows: readonly (readonly string[])[];
     readonly rotationDeg?: number;
+    readonly reverseCellOrder?: boolean;
+    readonly includeGridlineShapes?: boolean;
   },
 ): Uint8Array<ArrayBuffer> {
   const columnCount = Math.max(...table.rows.map((row) => row.length), 1);
@@ -470,7 +511,25 @@ function tableShape(
       ]);
     }),
   );
-  return container(OfficeArtSpgrContainer, [groupShape, ...cells]);
+  // Two degenerate shapes sharing the group's own coordinate system -- one zero-width (left equals right), one zero-height (top equals bottom) -- placed well clear of every real cell's own anchor, spelling the gridline shapes a genuine PowerPoint-authored table carries alongside its actual cells.
+  const gridlineShapes = table.includeGridlineShapes
+    ? [
+        container(OfficeArtSpContainer, [
+          fsp(spid + 900, 0),
+          clientAnchor(TABLE_TOP, TABLE_RIGHT, TABLE_RIGHT, bottom),
+        ]),
+        container(OfficeArtSpContainer, [
+          fsp(spid + 901, 0),
+          clientAnchor(bottom, TABLE_LEFT, TABLE_RIGHT, bottom),
+        ]),
+      ]
+    : [];
+  const orderedCells = table.reverseCellOrder ? [...cells].reverse() : cells;
+  return container(OfficeArtSpgrContainer, [
+    groupShape,
+    ...gridlineShapes,
+    ...orderedCells,
+  ]);
 }
 
 export function syntheticPresentation(
@@ -489,6 +548,18 @@ export function syntheticPresentation(
     picture,
     pictureInPicturesStream = false,
     table,
+    documentRecordTypeMismatch = false,
+    documentMissingDocumentAtom = false,
+    masterRecordTypeMismatch = false,
+    masterMissingColorScheme = false,
+    slideRecordTypeMismatch = false,
+    slideMissingSlideAtom = false,
+    slideMasterIdRefMismatch = false,
+    titleOutlineRefTooShort = false,
+    titleOutlineRefOutOfRange = false,
+    bodyTextboxMissingHeader = false,
+    secondSlideListText,
+    omitPersistObject,
   } = options;
 
   const USER_NAME = "Ada";
@@ -497,31 +568,17 @@ export function syntheticPresentation(
   const MASTER_PERSIST_ID = 2;
   const SLIDE_PERSIST_ID = 3;
   const NOTES_PERSIST_ID = 4;
-  // Minted after whatever objects precede it, so an OLE storage persist object and an encryption session can coexist in one fixture.
-  // [MS-PPT] 2.2.13: a MasterId MUST be at or above 0x80000000, which is also what keeps it out of the SlideId range -- matching master-write.ts's own MASTER_SLIDE_ID.
+  // Minted after whatever objects precede it, so an OLE storage persist object and an encryption session can coexist in one fixture. [MS-PPT] 2.2.13: a MasterId MUST be at or above 0x80000000, which is also what keeps it out of the SlideId range -- matching master-write.ts's own MASTER_SLIDE_ID.
   const MASTER_ID = 0x80000000;
   const SLIDE_ID = 256;
   const NOTES_ID = 512;
-  // Fixed rather than random: a reproducible fixture is easier to debug than one that only fails intermittently, and RC4 CryptoAPI's own security properties are not what this fixture is testing.
-  const ENCRYPTION_SALT = new Uint8Array(16);
-  for (let i = 0; i < 16; i += 1) {
-    ENCRYPTION_SALT[i] = i * 11 + 5;
-  }
-  // PowerPoint's own default light scheme -- an arbitrary but fixed and realistic 8-entry colour scheme, independently chosen from color-scheme-write.ts's own defaults (see slideSchemeColorSchemeAtom's own comment).
-  const MASTER_COLOR_SCHEME: readonly (readonly [number, number, number])[] = [
-    [0xff, 0xff, 0xff], // background
-    [0x00, 0x00, 0x00], // text
-    [0x80, 0x80, 0x80], // shadow
-    [0x00, 0x00, 0x00], // title text
-    [0xe6, 0xf2, 0xff], // fill
-    [0x1a, 0x4b, 0x8c], // Accent 1
-    [0x8c, 0x1a, 0x4b], // Accent 2
-    [0x4b, 0x8c, 0x1a], // Accent 3
-  ];
+  // Fixed rather than random: a reproducible fixture is easier to debug than one that only fails intermittently, and RC4 CryptoAPI's own security properties are not what this fixture is testing. A literal, not a formula: no computation makes an arbitrary salt more "correct" than another.
+  const ENCRYPTION_SALT = new Uint8Array([
+    5, 16, 27, 38, 49, 60, 71, 82, 93, 104, 115, 126, 137, 148, 159, 170,
+  ]);
 
-  const documentChildren: Uint8Array<ArrayBuffer>[] = [
-    documentAtom(slideWidth, slideHeight),
-  ];
+  const documentChildren: Uint8Array<ArrayBuffer>[] =
+    documentMissingDocumentAtom ? [] : [documentAtom(slideWidth, slideHeight)];
   documentChildren.push(
     container(RT_Environment, [
       container(RT_FontCollection, [fontEntityAtom(fontName)]),
@@ -546,11 +603,21 @@ export function syntheticPresentation(
     container(
       RT_SlideListWithText,
       [
-        slidePersistAtom(SLIDE_PERSIST_ID, 1, SLIDE_ID),
+        slidePersistAtom(
+          SLIDE_PERSIST_ID,
+          secondSlideListText === undefined ? 1 : 2,
+          SLIDE_ID,
+        ),
         atom(RT_TextHeaderAtom, u32le(TEXT_TYPE_TITLE)),
         textBytesAtom(titleText),
+        ...(secondSlideListText === undefined
+          ? []
+          : [
+              atom(RT_TextHeaderAtom, u32le(TEXT_TYPE_TITLE)),
+              textBytesAtom(secondSlideListText),
+            ]),
       ],
-      { recInstance: SLIDE_LIST_INSTANCE_SLIDES },
+      // No explicit recInstance: SLIDE_LIST_INSTANCE_SLIDES is 0x000, container()'s own default for an unstated recInstance.
     ),
   );
   if (notesText !== undefined) {
@@ -574,43 +641,67 @@ export function syntheticPresentation(
       ),
     );
   }
-  const documentContainer = container(RT_Document, documentChildren);
+  const documentContainer = container(
+    documentRecordTypeMismatch ? RT_Notes : RT_Document,
+    documentChildren,
+  );
 
-  const slideContainer = container(RT_Slide, [
-    slideAtom(MASTER_ID, notesText === undefined ? 0 : NOTES_ID),
-    container(RT_Drawing, [
-      container(OfficeArtDgContainer, [
-        container(OfficeArtSpgrContainer, [
-          container(OfficeArtSpContainer, [
-            atom(OfficeArtFSPGR, new Uint8Array(16), { recVer: 0x1 }),
-            // fGroup | fPatriarch, the outermost group every drawing carries.
-            fsp(1, (1 << 0) | (1 << 2)),
+  const outlineRefBytes = titleOutlineRefTooShort
+    ? new Uint8Array(2)
+    : i32le(
+        titleOutlineRefOutOfRange
+          ? 99
+          : secondSlideListText === undefined
+            ? 0
+            : 1,
+      );
+  const slideContainer = container(
+    slideRecordTypeMismatch ? RT_MainMaster : RT_Slide,
+    [
+      ...(slideMissingSlideAtom
+        ? []
+        : [
+            slideAtom(
+              slideMasterIdRefMismatch ? MASTER_ID + 1 : MASTER_ID,
+              notesText === undefined ? 0 : NOTES_ID,
+            ),
           ]),
-          // The title placeholder: its text is not here, only a reference to the first text of this slide's entry in the document's slide list.
-          container(OfficeArtSpContainer, [
-            fsp(2, 0),
-            clientAnchor(360, 480, 5280, 1080),
-            container(OfficeArtClientTextbox, [
-              atom(RT_OutlineTextRefAtom, i32le(0)),
+      container(RT_Drawing, [
+        container(OfficeArtDgContainer, [
+          container(OfficeArtSpgrContainer, [
+            container(OfficeArtSpContainer, [
+              atom(OfficeArtFSPGR, new Uint8Array(16), { recVer: 0x1 }),
+              // fGroup | fPatriarch, the outermost group every drawing carries.
+              fsp(1, (1 << 0) | (1 << 2)),
             ]),
-          ]),
-          // An ordinary text box, whose text is stored on the shape itself.
-          container(OfficeArtSpContainer, [
-            fsp(3, 0),
-            clientAnchor(1440, 480, 5280, 3960),
-            container(OfficeArtClientTextbox, [
-              atom(RT_TextHeaderAtom, u32le(TEXT_TYPE_BODY)),
-              textBytesAtom(bodyText),
+            // The title placeholder: its text is not here, only a reference to the first text of this slide's entry in the document's slide list.
+            container(OfficeArtSpContainer, [
+              fsp(2, 0),
+              clientAnchor(360, 480, 5280, 1080),
+              container(OfficeArtClientTextbox, [
+                atom(RT_OutlineTextRefAtom, outlineRefBytes),
+              ]),
             ]),
+            // An ordinary text box, whose text is stored on the shape itself.
+            container(OfficeArtSpContainer, [
+              fsp(3, 0),
+              clientAnchor(1440, 480, 5280, 3960),
+              container(OfficeArtClientTextbox, [
+                ...(bodyTextboxMissingHeader
+                  ? []
+                  : [atom(RT_TextHeaderAtom, u32le(TEXT_TYPE_BODY))]),
+                textBytesAtom(bodyText),
+              ]),
+            ]),
+            ...(picture !== undefined
+              ? [pictureShape(8, 1, 360, 1440, 2240, 1080)]
+              : []),
+            ...(table !== undefined ? [tableShape(9, table)] : []),
           ]),
-          ...(picture !== undefined
-            ? [pictureShape(8, 1, 360, 1440, 2240, 1080)]
-            : []),
-          ...(table !== undefined ? [tableShape(9, table)] : []),
         ]),
       ]),
-    ]),
-  ]);
+    ],
+  );
 
   // [MS-PPT] 2.5.6 NotesContainer: a NotesAtom naming the presentation slide these notes belong to, then a DrawingContainer holding the notes text on a plain text box's own client textbox -- the spelling a real producer writes (verified against LibreOffice's own `--convert-to ppt` output), rather than a placeholder reached through the notes list, which [MS-PPT] 2.4.14.6 gives no texts to reach into.
   const notesContainer =
@@ -641,20 +732,34 @@ export function syntheticPresentation(
         ]);
 
   // [MS-PPT] 2.5.3 MainMasterContainer: this master's own SlideAtom (masterIdRef/notesIdRef both 0, since a master follows no master and has no notes of its own), one TextMasterStyleAtom per placeholder type it carries -- each stating no levels of its own (cLevels 0x0000), matching this package's own writer (master-write.ts) exactly, so a fixture whose runs never state formatting either resolves to the identical "everything absent" every existing test already asserts -- a run of extra colour schemes ahead of the real one (a real producer's own spelling), and this master's own colour scheme.
-  const masterContainer = container(RT_MainMaster, [
-    slideAtom(0, 0),
-    extraColorSchemeAtom(),
-    extraColorSchemeAtom(),
-    masterTitleBold
-      ? titleMasterStyleAtomWithBoldAccent1()
-      : atom(RT_TextMasterStyleAtom, u16le(0), {
-          recInstance: TEXT_TYPE_TITLE,
-        }),
-    atom(RT_TextMasterStyleAtom, u16le(0), { recInstance: TEXT_TYPE_BODY }),
-    atom(RT_TextMasterStyleAtom, u16le(0), { recInstance: TEXT_TYPE_NOTES }),
-    slideSchemeColorSchemeAtom(MASTER_COLOR_SCHEME),
-  ]);
+  const masterContainer = container(
+    masterRecordTypeMismatch ? RT_Slide : RT_MainMaster,
+    [
+      slideAtom(0, 0),
+      extraColorSchemeAtom(),
+      extraColorSchemeAtom(),
+      // No explicit recInstance here either, for the identical reason titleMasterStyleAtomWithBoldAccent1 states above: TEXT_TYPE_TITLE is atom()'s own default.
+      masterTitleBold
+        ? titleMasterStyleAtomWithBoldAccent1()
+        : atom(RT_TextMasterStyleAtom, u16le(0)),
+      atom(RT_TextMasterStyleAtom, u16le(0), { recInstance: TEXT_TYPE_BODY }),
+      atom(RT_TextMasterStyleAtom, u16le(0), { recInstance: TEXT_TYPE_NOTES }),
+      ...(masterMissingColorScheme
+        ? []
+        : [slideSchemeColorSchemeAtom(MASTER_COLOR_SCHEME)]),
+    ],
+  );
 
+  const omittedPersistId =
+    omitPersistObject === "document"
+      ? DOCUMENT_PERSIST_ID
+      : omitPersistObject === "master"
+        ? MASTER_PERSIST_ID
+        : omitPersistObject === "slide"
+          ? SLIDE_PERSIST_ID
+          : omitPersistObject === "notes"
+            ? NOTES_PERSIST_ID
+            : undefined;
   const persistObjects: {
     persistId: number;
     bytes: Uint8Array<ArrayBuffer>;
@@ -662,8 +767,8 @@ export function syntheticPresentation(
     { persistId: DOCUMENT_PERSIST_ID, bytes: documentContainer },
     { persistId: MASTER_PERSIST_ID, bytes: masterContainer },
     { persistId: SLIDE_PERSIST_ID, bytes: slideContainer },
-  ];
-  if (notesContainer !== undefined) {
+  ].filter((object) => object.persistId !== omittedPersistId);
+  if (notesContainer !== undefined && NOTES_PERSIST_ID !== omittedPersistId) {
     persistObjects.push({
       persistId: NOTES_PERSIST_ID,
       bytes: notesContainer,

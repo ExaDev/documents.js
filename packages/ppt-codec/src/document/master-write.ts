@@ -45,19 +45,11 @@ const SL_TITLE_BODY = 0x00000001;
 const SL_BLANK = 0x00000010;
 
 // [MS-PPT] 2.13.21 PlaceholderEnum, the members SL_TitleBody's MasterVariant rule names in its own order: "PT_MasterTitle PT_MasterBody PT_MasterDate PT_MasterFooter PT_MasterSlideNumber 3PT_None".
-const PT_NONE = 0x00;
 const PT_MASTER_TITLE = 0x01;
 const PT_MASTER_BODY = 0x02;
 const PT_MASTER_DATE = 0x07;
 const PT_MASTER_SLIDE_NUMBER = 0x08;
 const PT_MASTER_FOOTER = 0x09;
-const MASTER_PLACEHOLDER_TYPES = [
-  PT_MASTER_TITLE,
-  PT_MASTER_BODY,
-  PT_MASTER_DATE,
-  PT_MASTER_FOOTER,
-  PT_MASTER_SLIDE_NUMBER,
-];
 
 // [MS-PPT] 2.5.2: rgPlaceholderTypes is always eight bytes, whatever the layout names fewer.
 const PLACEHOLDER_TYPE_COUNT = 8;
@@ -81,41 +73,50 @@ const FOOTER_HEIGHT = 0.05;
 const SIDE_MARGIN = 0.05;
 const FOOTER_COLUMN_WIDTH = 0.28;
 
-function placeholderFrames(size: PageSize): readonly ContentShape["frame"][] {
+interface MasterPlaceholder {
+  readonly placementId: number;
+  readonly frame: ContentShape["frame"];
+}
+
+// Each of the five placeholders SL_TitleBody's own MasterVariant rule requires, paired directly with its own rectangle rather than built as two separately-indexed arrays (a placementId list and a frame list) that would have to be kept in step by position -- pairing them at the point each is defined removes the possibility of the two ever disagreeing on length or order, which a later index-based lookup could otherwise get wrong with nothing to catch it.
+function masterPlaceholders(size: PageSize): readonly MasterPlaceholder[] {
   const { widthPt: w, heightPt: h } = size;
   const margin = w * SIDE_MARGIN;
   const contentWidth = w - margin * 2;
   const footerColumn = w * FOOTER_COLUMN_WIDTH;
+  const footerFrame = (xPt: number): ContentShape["frame"] => ({
+    xPt,
+    yPt: h * FOOTER_TOP,
+    widthPt: footerColumn,
+    heightPt: h * FOOTER_HEIGHT,
+  });
   return [
     {
-      xPt: margin,
-      yPt: h * TITLE_TOP,
-      widthPt: contentWidth,
-      heightPt: h * TITLE_HEIGHT,
+      placementId: PT_MASTER_TITLE,
+      frame: {
+        xPt: margin,
+        yPt: h * TITLE_TOP,
+        widthPt: contentWidth,
+        heightPt: h * TITLE_HEIGHT,
+      },
     },
     {
-      xPt: margin,
-      yPt: h * BODY_TOP,
-      widthPt: contentWidth,
-      heightPt: h * BODY_HEIGHT,
+      placementId: PT_MASTER_BODY,
+      frame: {
+        xPt: margin,
+        yPt: h * BODY_TOP,
+        widthPt: contentWidth,
+        heightPt: h * BODY_HEIGHT,
+      },
+    },
+    { placementId: PT_MASTER_DATE, frame: footerFrame(margin) },
+    {
+      placementId: PT_MASTER_FOOTER,
+      frame: footerFrame((w - footerColumn) / 2),
     },
     {
-      xPt: margin,
-      yPt: h * FOOTER_TOP,
-      widthPt: footerColumn,
-      heightPt: h * FOOTER_HEIGHT,
-    },
-    {
-      xPt: (w - footerColumn) / 2,
-      yPt: h * FOOTER_TOP,
-      widthPt: footerColumn,
-      heightPt: h * FOOTER_HEIGHT,
-    },
-    {
-      xPt: w - margin - footerColumn,
-      yPt: h * FOOTER_TOP,
-      widthPt: footerColumn,
-      heightPt: h * FOOTER_HEIGHT,
+      placementId: PT_MASTER_SLIDE_NUMBER,
+      frame: footerFrame(w - margin - footerColumn),
     },
   ];
 }
@@ -163,7 +164,8 @@ export function writeSlideAtomForSlide(
 ): Uint8Array<ArrayBuffer> {
   return writeSlideAtom({
     geom: SL_BLANK,
-    placeholderTypes: [PT_NONE],
+    // No placeholder shapes of its own -- an empty list here writes the same all-zero 8-byte field a list of [PT_NONE] would (writeSlideAtom's own Uint8Array field already defaults every unstated byte to 0x00, PT_NONE's own value), so PT_NONE is never actually stated.
+    placeholderTypes: [],
     masterIdRef: MASTER_SLIDE_ID,
     notesIdRef,
     slideFlags: SLIDE_FOLLOWS_MASTER,
@@ -182,14 +184,9 @@ export function writeMainMaster(
   size: PageSize,
   context: DrawingWriteContext,
 ): DrawingWritten {
-  const placeholders = MASTER_PLACEHOLDER_TYPES.map((placementId, index) => {
-    const frame = placeholderFrames(size)[index];
-    if (frame === undefined) {
-      throw new Error(
-        "internal error: the main master states more placeholder types than it has rectangles for",
-      );
-    }
-    return {
+  const masterPlaceholderList = masterPlaceholders(size);
+  const placeholders = masterPlaceholderList.map(
+    ({ placementId, frame }, index) => ({
       shape: {
         frame,
         // The insets a read of this shape would report; a master placeholder holds no text of its own, so nothing depends on them beyond ContentShape requiring all four.
@@ -200,14 +197,14 @@ export function writeMainMaster(
         blocks: [],
       } satisfies ContentShape,
       clientData: placeholderClientData(index, placementId),
-    };
-  });
+    }),
+  );
   const drawing = writeSlideDrawing(placeholders, context);
   return {
     bytes: writeContainer(RT_MainMaster, [
       writeSlideAtom({
         geom: SL_TITLE_BODY,
-        placeholderTypes: MASTER_PLACEHOLDER_TYPES,
+        placeholderTypes: masterPlaceholderList.map((p) => p.placementId),
         // [MS-PPT] 2.5.2: both MUST be 0x00000000 when the SlideAtom's container is a MainMasterContainer -- a master follows no master, and has no notes slide.
         masterIdRef: 0,
         notesIdRef: 0,

@@ -6,6 +6,8 @@ import {
   ALIGN_CENTER,
   ALIGN_DISTRIBUTED,
   ALIGN_JUSTIFY,
+  ALIGN_LEFT,
+  ALIGN_RIGHT,
   type RgbColor,
   type StyleTextProps,
 } from "./text/style";
@@ -14,6 +16,17 @@ const NO_STYLE: StyleTextProps = { paragraphRuns: [], characterRuns: [] };
 // An empty table resolves nothing for any type/level -- these tests are about the paragraph/run-splitting logic buildParagraphs itself owns, not the master cascade (covered separately in document/master.test.ts and read.test.ts's own end-to-end fixture).
 const NO_MASTER_STYLES: MasterStyleTable = { byType: new Map() };
 const NO_COLOR_SCHEME: readonly RgbColor[] = [];
+// Every CharacterProperties field left absent, for a test that only cares about overriding one or two of them.
+const NO_RUN_FORMATTING = {
+  bold: undefined,
+  italic: undefined,
+  underline: undefined,
+  shadow: undefined,
+  emboss: undefined,
+  fontRef: undefined,
+  sizePt: undefined,
+  color: undefined,
+};
 
 function build(
   text: string,
@@ -125,6 +138,22 @@ describe("buildParagraphs", () => {
     ]);
   });
 
+  it("slices a non-first paragraph's own run at the run's real end, not past it", () => {
+    // A second character run boundary landing inside a later paragraph: the first run's slice must stop at its own extent, not run on to the end of the paragraph's text -- a run of 9 chars into a 13-char paragraph must yield only its own 5 covered characters.
+    const style = styleOf(
+      [{ count: 17, properties: pfProps(0, undefined) }],
+      [
+        { count: 4, properties: { ...NO_RUN_FORMATTING } },
+        { count: 5, properties: { ...NO_RUN_FORMATTING, bold: true } },
+        { count: 8, properties: { ...NO_RUN_FORMATTING, italic: true } },
+      ],
+    );
+    expect(build("abc\rdefghijklmnop", style, [])[1]?.runs).toEqual([
+      { text: "defgh", bold: true },
+      { text: "ijklmnop", italic: true },
+    ]);
+  });
+
   it("takes each paragraph's alignment and indent level from the paragraph run covering it", () => {
     const style = styleOf(
       [
@@ -144,6 +173,14 @@ describe("buildParagraphs", () => {
     expect(paragraphs[0]?.list).toBeUndefined();
     expect(paragraphs[1]?.alignment).toBe("justify");
     expect(paragraphs[1]?.list).toEqual({ level: 2 });
+  });
+
+  it.each([
+    [ALIGN_LEFT, "left"],
+    [ALIGN_RIGHT, "right"],
+  ])("maps %i to the schema's %s alignment", (raw, expected) => {
+    const style = styleOf([{ count: 3, properties: pfProps(0, raw) }], []);
+    expect(build("abc", style, [])[0]?.alignment).toBe(expected);
   });
 
   it("leaves alignment undefined for a value the shared schema has no name for", () => {
@@ -183,6 +220,19 @@ describe("buildParagraphs", () => {
       [],
     );
     expect(build("abc", style, [])[0]?.lineSpacing).toBeUndefined();
+  });
+
+  it("converts a ParaSpacing of exactly 0 -- the percentage form's own boundary -- to a line-height multiplier of 0, not undefined", () => {
+    const style = styleOf(
+      [
+        {
+          count: 3,
+          properties: { ...pfProps(0, undefined), lineSpacing: 0 },
+        },
+      ],
+      [],
+    );
+    expect(build("abc", style, [])[0]?.lineSpacing).toBe(0);
   });
 
   it("converts an absolute-master-units ParaSpacing into spacingBeforePt/spacingAfterPt", () => {

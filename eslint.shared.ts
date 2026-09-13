@@ -126,6 +126,9 @@ const alwaysIgnored: readonly string[] = [
   "coverage",
   "node_modules",
   "test",
+  // Stryker's own output: a mutation HTML report, and (for a package with `incremental: true` in its stryker.config.ts) an incremental result cache that can run to several megabytes of generated JSON -- large enough on its own to slow a lint pass, and its escaped byte content has produced real lone-surrogate reports from json/no-unsafe-values with nothing for a contributor to fix. `.stryker-tmp` is Stryker's own sandbox working directory (tempDirName in stryker.shared.ts), left behind by an interrupted run rather than cleaned up.
+  "reports",
+  ".stryker-tmp",
   // AGENTS.md and CLAUDE.md are symlinks to README.md in every package, so linting all three lints one file three times.
   "AGENTS.md",
   "CLAUDE.md",

@@ -13,6 +13,7 @@ import {
   buildPersistDirectory,
   readPersistDirectoryAtom,
   readUserEditAtom,
+  resolvePersistObject,
 } from "./persist";
 
 // Built from [MS-PPT] 2.3.3's own field table: lastSlideIdRef, version, minorVersion, majorVersion, offsetLastEdit, offsetPersistDirectory, docPersistIdRef, persistIdSeed, lastView, unused -- 28 bytes (0x1C) -- plus an optional 4-byte encryptSessionPersistIdRef that makes recLen 0x20 instead. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/3ffb3fab-95de-4873-98aa-d508fbbac981
@@ -93,6 +94,11 @@ describe("readUserEditAtom", () => {
     expect(() =>
       readUserEditAtom(readRecordAt(atom(0x03e8, new Uint8Array(28)), 0)),
     ).toThrow(PptFormatError);
+    expect(() =>
+      readUserEditAtom(readRecordAt(atom(0x03e8, new Uint8Array(28)), 0)),
+    ).toThrow(
+      `expected RT_UserEditAtom (0x${RT_UserEditAtom.toString(16)}) at offset 0, found record type 0x3e8`,
+    );
   });
 
   it("rejects a recLen the spec does not allow", () => {
@@ -101,6 +107,13 @@ describe("readUserEditAtom", () => {
         readRecordAt(atom(RT_UserEditAtom, new Uint8Array(24)), 0),
       ),
     ).toThrow(PptFormatError);
+    expect(() =>
+      readUserEditAtom(
+        readRecordAt(atom(RT_UserEditAtom, new Uint8Array(24)), 0),
+      ),
+    ).toThrow(
+      "UserEditAtom at offset 0 declares recLen 0x18, neither 0x1c nor 0x20",
+    );
   });
 });
 
@@ -142,6 +155,20 @@ describe("readPersistDirectoryAtom", () => {
     expect(() => readPersistDirectoryAtom(readRecordAt(bytes, 0))).toThrow(
       PptFormatError,
     );
+    expect(() => readPersistDirectoryAtom(readRecordAt(bytes, 0))).toThrow(
+      "PersistDirectoryEntry at offset 8 declares cPersist 0x000, but the spec requires at least 0x001",
+    );
+  });
+
+  it("names a second entry's own real byte offset in the cPersist-0 rejection, not the first entry's", () => {
+    // The first entry consumes 8 bytes (4-byte header word plus one offset) before the second, invalid entry is even reached -- at 0 for a first-entry violation (the existing test above) cannot tell dataOffset + at apart from dataOffset - at, since adding or subtracting 0 is identical either way.
+    const bytes = persistDirectoryAtom(
+      persistDirectoryEntry(5, [0x1000]),
+      persistDirectoryEntry(9, []),
+    );
+    expect(() => readPersistDirectoryAtom(readRecordAt(bytes, 0))).toThrow(
+      "PersistDirectoryEntry at offset 16 declares cPersist 0x000, but the spec requires at least 0x001",
+    );
   });
 
   it("rejects an entry whose offset array runs past the record", () => {
@@ -151,6 +178,59 @@ describe("readPersistDirectoryAtom", () => {
     );
     expect(() => readPersistDirectoryAtom(readRecordAt(truncated, 0))).toThrow(
       PptFormatError,
+    );
+    expect(() => readPersistDirectoryAtom(readRecordAt(truncated, 0))).toThrow(
+      "PersistDirectoryEntry at offset 8 declares 3 offsets, which run past the atom's 8 bytes",
+    );
+  });
+
+  it("rejects a record whose type is not RT_PersistDirectoryAtom", () => {
+    expect(() =>
+      readPersistDirectoryAtom(
+        readRecordAt(atom(RT_UserEditAtom, new Uint8Array(0)), 0),
+      ),
+    ).toThrow(PptFormatError);
+    expect(() =>
+      readPersistDirectoryAtom(
+        readRecordAt(atom(RT_UserEditAtom, new Uint8Array(0)), 0),
+      ),
+    ).toThrow(
+      `expected RT_PersistDirectoryAtom (0x${RT_PersistDirectoryAtom.toString(16)}) at offset 0, found record type 0x${RT_UserEditAtom.toString(16)}`,
+    );
+  });
+
+  it("rejects a trailing fragment too short for a PersistDirectoryEntry header word", () => {
+    const bytes = atom(
+      RT_PersistDirectoryAtom,
+      concatBytes(persistDirectoryEntry(1, [0x1000]), new Uint8Array(3)),
+    );
+    expect(() => readPersistDirectoryAtom(readRecordAt(bytes, 0))).toThrow(
+      PptFormatError,
+    );
+    expect(() => readPersistDirectoryAtom(readRecordAt(bytes, 0))).toThrow(
+      "PersistDirectoryAtom at offset 0 has a 3-byte trailing fragment, too short for a PersistDirectoryEntry header word",
+    );
+  });
+});
+
+describe("resolvePersistObject", () => {
+  it("reads the record a persist identifier's directory entry offset names", () => {
+    const target = atom(RT_UserEditAtom, new Uint8Array(0));
+    const directory = new Map([[1, 0]]);
+    expect(
+      resolvePersistObject(target, directory, 1, "test caller").header.recType,
+    ).toBe(RT_UserEditAtom);
+  });
+
+  it("rejects a persist identifier the directory does not contain", () => {
+    const directory = new Map([[1, 0]]);
+    expect(() =>
+      resolvePersistObject(new Uint8Array(0), directory, 2, "the caller"),
+    ).toThrow(PptFormatError);
+    expect(() =>
+      resolvePersistObject(new Uint8Array(0), directory, 2, "the caller"),
+    ).toThrow(
+      "the caller references persist object 2, which the persist directory does not contain",
     );
   });
 });
@@ -219,10 +299,28 @@ describe("buildPersistDirectory", () => {
     expect(() =>
       buildPersistDirectory(concatBytes(directory, edit), offsetEdit),
     ).toThrow(PptFormatError);
+    expect(() =>
+      buildPersistDirectory(concatBytes(directory, edit), offsetEdit),
+    ).toThrow(
+      `UserEditAtom at offset ${offsetEdit} points at a previous edit at offset ${offsetEdit}, which is not earlier in the stream; the edit chain would cycle`,
+    );
   });
 
   it("rejects an offsetToCurrentEdit pointing at something other than a UserEditAtom", () => {
     const directory = persistDirectoryAtom(persistDirectoryEntry(1, [0x40]));
     expect(() => buildPersistDirectory(directory, 0)).toThrow(PptFormatError);
+  });
+
+  it("captures the current edit's own offsetPersistDirectory even when the edit chain has just one edit", () => {
+    const directory = persistDirectoryAtom(persistDirectoryEntry(1, [0x40]));
+    const edit = userEditAtom({
+      offsetPersistDirectory: 0,
+      docPersistIdRef: 5,
+    });
+    const built = buildPersistDirectory(
+      concatBytes(directory, edit),
+      directory.length,
+    );
+    expect(built.currentEdit.docPersistIdRef).toBe(5);
   });
 });

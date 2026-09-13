@@ -26,8 +26,11 @@ function readFaceName(record: PptRecord): string | undefined {
   return name;
 }
 
-// Every typeface name in the document's environment, in collection order -- the order a FontIndexRef indexes. A document with no font collection yields an empty list rather than a failure: the collection is an optional field of the environment, and text can name no font at all.
-export function readFontNames(environment: PptRecord): string[] {
+// Every typeface name in the document's environment, in collection order -- the order a FontIndexRef indexes. A document carrying no Environment record at all, or one with no font collection, yields an empty list rather than a failure: both are optional, and text can name no font at all.
+export function readFontNames(environment: PptRecord | undefined): string[] {
+  if (environment === undefined) {
+    return [];
+  }
   const collection = findChild(childRecords(environment), RT_FontCollection);
   if (collection === undefined) {
     return [];

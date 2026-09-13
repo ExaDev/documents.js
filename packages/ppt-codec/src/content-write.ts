@@ -113,16 +113,19 @@ export function buildTextBody(
   const paragraphs = blocks.filter(
     (block): block is ContentParagraph => block.kind === "paragraph",
   );
-  const bodies = paragraphs.map((paragraph) =>
-    paragraph.runs.map((run) => storedRunText(run.text)).join(""),
-  );
-  const text = bodies.join(PARAGRAPH_SEPARATOR);
+  // Each paragraph paired with its own already-joined body text, rather than two same-length arrays indexed separately: the pairing is what a plain positional lookup back into a second array would only reconstruct by assuming the two stay in step, and TypeScript's own noUncheckedIndexedAccess would then need a fallback for an index that is, in fact, never out of range.
+  const paragraphBodies = paragraphs.map((paragraph) => ({
+    paragraph,
+    bodyText: paragraph.runs.map((run) => storedRunText(run.text)).join(""),
+  }));
+  const text = paragraphBodies
+    .map(({ bodyText }) => bodyText)
+    .join(PARAGRAPH_SEPARATOR);
 
   const paragraphRuns: StyleRun<ParagraphProperties>[] = [];
   const characterRuns: StyleRun<CharacterProperties>[] = [];
 
-  paragraphs.forEach((paragraph, index) => {
-    const bodyText = bodies[index] ?? "";
+  paragraphBodies.forEach(({ paragraph, bodyText }) => {
     paragraphRuns.push({
       count: bodyText.length + 1,
       properties: {
@@ -158,14 +161,22 @@ export function buildTextBody(
   return { text, style: { paragraphRuns, characterRuns } };
 }
 
-// Every distinct fontFamily a block's runs name, in first-seen order -- the order buildTextBody's fontIndexOf callback (built once per document, over every slide's every shape) must resolve against, matching the order the document's own FontCollectionContainer is written in.
+// Every distinct fontFamily a block's runs name, in first-seen order -- the order buildTextBody's fontIndexOf callback (built once per document, over every slide's every shape) must resolve against, matching the order the document's own FontCollectionContainer is written in. Descends into a table block's own cells too: a table shape's own top-level blocks list carries one "table" block, never the paragraphs nested inside its rows/cells, and writeTableGroup calls the identical buildTextBody/fontIndexOf path on each cell's own blocks that every other shape's text goes through.
 export function collectFontFamilies(
   blocksList: readonly (readonly ContentBlock[])[],
 ): string[] {
   const seen = new Set<string>();
   const names: string[] = [];
-  for (const blocks of blocksList) {
+  const visit = (blocks: readonly ContentBlock[]): void => {
     for (const block of blocks) {
+      if (block.kind === "table") {
+        for (const row of block.rows) {
+          for (const cell of row.cells) {
+            visit(cell.blocks);
+          }
+        }
+        continue;
+      }
       if (block.kind !== "paragraph") {
         continue;
       }
@@ -176,6 +187,9 @@ export function collectFontFamilies(
         }
       }
     }
+  };
+  for (const blocks of blocksList) {
+    visit(blocks);
   }
   return names;
 }
