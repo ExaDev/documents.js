@@ -6,6 +6,7 @@ import {
   WordProcessingPreview,
   type WordProcessingPreviewProps,
 } from "./WordProcessingPreview";
+import { previewFrame } from "./previewPanel.css";
 
 let unmount: (() => void) | undefined;
 
@@ -89,5 +90,10 @@ describe("WordProcessingPreview", () => {
     });
     expect(html).toContain("hello docx");
     expect(html).not.toContain("No preview yet.");
+  });
+
+  it("gives the preview frame the scrollable, padded variant", () => {
+    const html = renderPreview({ label: "L", format: "docx" });
+    expect(html).toContain(previewFrame({ scroll: true, padded: true }));
   });
 });

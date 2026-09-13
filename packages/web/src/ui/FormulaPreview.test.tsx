@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { mountWithMantine } from "../test/mountComponent";
 import { FormulaPreview, type FormulaPreviewProps } from "./FormulaPreview";
+import { previewFrame } from "./previewPanel.css";
 
 let unmount: (() => void) | undefined;
 
@@ -80,5 +81,10 @@ describe("FormulaPreview", () => {
     expect(html).toContain("<math");
     expect(html).not.toContain("No preview yet.");
     expect(html).not.toContain("Preview unavailable");
+  });
+
+  it("gives the preview frame the scrollable variant, not the default non-scrolling one", () => {
+    const html = renderPreview({ label: "L", format: "odf" });
+    expect(html).toContain(previewFrame({ scroll: true }));
   });
 });
