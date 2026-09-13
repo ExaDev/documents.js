@@ -58,4 +58,21 @@ describe("formats command", () => {
     ]);
     expect(stdout.calls().join("")).not.toContain("not covered by this list");
   });
+
+  it("documents itself and its --json flag in its own --help text", () => {
+    const command = createProgram().commands.find(
+      (candidate) => candidate.name() === "formats",
+    );
+    if (command === undefined) {
+      throw new Error("the program registers no 'formats' command");
+    }
+    // Commander wraps long option/command descriptions onto multiple lines at its own detected terminal width, so a verbatim multi-word substring check would be at the mercy of wherever that wrap lands -- collapsing all whitespace first checks the actual wording regardless of how commander happened to lay it out.
+    const help = command.helpInformation().replace(/\s+/gu, " ");
+    expect(help).toContain(
+      "list every source -> target conversion this CLI supports via a <source>-to-<target> command",
+    );
+    expect(help).toContain(
+      "emit the conversion list as a JSON array instead of a human-readable table",
+    );
+  });
 });
