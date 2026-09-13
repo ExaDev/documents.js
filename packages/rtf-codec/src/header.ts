@@ -145,6 +145,11 @@ interface MutablePageGeometry {
   marginBottomTwips: number;
 }
 
+// Shared by every group-skipping loop below: caps a jump target (typically matchingGroupEnd's result, possibly itself already capped to some enclosing boundary for a sub-parser's own use) at boundary - 1, so the loop's own +1 step afterwards always lands at exactly `boundary`, never past it, even for a malformed or unclosed nested group whose real close would otherwise land at or beyond it. This is what lets each of those loops compare its index against the boundary with !== instead of <: an off-by-one mutation of !== (=== in place of it) stops the loop from running at all instead of surviving unobserved, whereas < has an off-by-one variant (<=) that only ever reprocesses the boundary's own already-inert groupEnd token -- see readFontInfo's own loop for that fuller reasoning.
+function capBeforeBoundary(jumpTarget: number, boundary: number): number {
+  return Math.min(jumpTarget, boundary - 1);
+}
+
 // Collects a destination's own plain text -- the shape every leaf text production in the header shares (a font's <fontname>, a style's <stylename>, an \info field's value). Control words inside are skipped rather than interpreted, and a nested group is skipped whole: the {\*\falt ...} alternate-name subgroup inside a <fontinfo> is exactly why, since its text is a different font's name and folding it into the face name would corrupt every entry carrying one.
 function collectPlainText(
   tokens: readonly RtfToken[],
@@ -160,12 +165,13 @@ function collectPlainText(
     out += decodeCodepageBytes(Uint8Array.from(pending), codepage, sink);
     pending.length = 0;
   };
-  for (let index = start; index < end; index += 1) {
+  // A nested group's own jump is clamped to (at most) end - 1: index then always lands at end exactly, whether by the ordinary +1 step or by this jump, and never skips past it even for an unclosed nested group -- so !== is exactly equivalent to < here, and unlike <, an off-by-one mutation of it (=== in place of !==) stops the loop from running at all instead of surviving unobserved. See readFontInfo's own identical loop for the full reasoning.
+  for (let index = start; index !== end; index += 1) {
     const token = tokens[index];
     if (token === undefined) break;
     if (token.kind === "groupStart") {
       flush();
-      index = matchingGroupEnd(tokens, index);
+      index = capBeforeBoundary(matchingGroupEnd(tokens, index), end);
       continue;
     }
     if (token.kind === "text") {
@@ -200,7 +206,8 @@ function parseFontTable(
   // The grammar admits a <fontinfo> either braced or bare: '{' \fonttbl (<fontinfo> | ('{' <fontinfo> '}'))+ '}'. Both are handled by treating each brace-delimited child as one entry and, when there is no brace at all, the remaining span as a single entry.
   let index = contentStart;
   let sawBracedEntry = false;
-  while (index < end) {
+  // index either advances by exactly 1 or jumps past one entry's own close, clamped to end - 1 so the advance always lands at index === end at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  while (index !== end) {
     const token = tokens[index];
     if (token?.kind !== "groupStart") {
       index += 1;
@@ -209,7 +216,7 @@ function parseFontTable(
     sawBracedEntry = true;
     const entryEnd = Math.min(matchingGroupEnd(tokens, index), end);
     readFontInfo(tokens, index + 1, entryEnd, documentCodepage, fonts, sink);
-    index = entryEnd + 1;
+    index = capBeforeBoundary(entryEnd, end) + 1;
   }
   if (!sawBracedEntry) {
     readFontInfo(tokens, contentStart, end, documentCodepage, fonts, sink);
@@ -317,14 +324,15 @@ function parseStyleSheet(
   styles: Map<number, RtfStyleEntry>,
   sink: RtfDiagnosticSink,
 ): void {
-  for (let index = contentStart; index < end; index += 1) {
+  // index either advances by exactly 1 or jumps to one entry's own close, clamped to end - 1 so the +1 above always lands at index === end at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  for (let index = contentStart; index !== end; index += 1) {
     const token = tokens[index];
     if (token?.kind !== "groupStart") {
       continue;
     }
     const entryEnd = Math.min(matchingGroupEnd(tokens, index), end);
     readStyle(tokens, index, entryEnd, documentCodepage, styles, sink);
-    index = entryEnd;
+    index = capBeforeBoundary(entryEnd, end);
   }
 }
 
@@ -345,11 +353,12 @@ function readStyle(
   let handle = 0;
   let outlineLevel: number | undefined;
   // The loop below still needs its own groupStart skip, scoping \sN/\outlinelevelN to this style entry's own top level rather than misreading one from inside a nested destination -- but no nameStart tracking alongside it: collectPlainText below already silently skips every controlWord token it doesn't specifically handle, and fully skips a nested group on its own the same way this loop does, so scanning the whole [head.contentStart, end) range for the name ignores \sN/\outlinelevelN and any nested group without a separate start-of-name offset to compute.
-  for (let index = start + 1; index < end; index += 1) {
+  // A nested group's own jump is clamped to end - 1, so the +1 below always lands at index === end at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  for (let index = start + 1; index !== end; index += 1) {
     const token = tokens[index];
     if (token === undefined) break;
     if (token.kind === "groupStart") {
-      index = Math.min(matchingGroupEnd(tokens, index), end);
+      index = capBeforeBoundary(matchingGroupEnd(tokens, index), end);
       continue;
     }
     if (token.kind !== "controlWord") {
@@ -386,7 +395,8 @@ function parseListTable(
   end: number,
   listsById: Map<number, RtfListEntry>,
 ): void {
-  for (let index = contentStart; index < end; index += 1) {
+  // index either advances by exactly 1 or jumps to one entry's own close, clamped to end - 1 so the +1 above always lands at index === end at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  for (let index = contentStart; index !== end; index += 1) {
     const token = tokens[index];
     if (token?.kind !== "groupStart") {
       continue;
@@ -397,7 +407,7 @@ function parseListTable(
     if (head.destination === "list") {
       readListDefinition(tokens, index, entryEnd, listsById);
     }
-    index = entryEnd;
+    index = capBeforeBoundary(entryEnd, end);
   }
 }
 
@@ -409,7 +419,8 @@ function readListDefinition(
 ): number | undefined {
   const levels: RtfListLevel[] = [];
   let listId: number | undefined;
-  for (let index = start + 1; index < end; index += 1) {
+  // A nested group's own jump is clamped to end - 1, so the +1 below always lands at index === end at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  for (let index = start + 1; index !== end; index += 1) {
     const token = tokens[index];
     if (token === undefined) break;
     if (token.kind === "groupStart") {
@@ -417,7 +428,7 @@ function readListDefinition(
       if (groupHead(tokens, index).destination === "listlevel") {
         levels.push(readListLevel(tokens, index, inner));
       }
-      index = inner;
+      index = capBeforeBoundary(inner, end);
       continue;
     }
     if (
@@ -442,11 +453,12 @@ function readListLevel(
 ): RtfListLevel {
   let numberFormat = 0;
   let startAt = 1;
-  for (let index = start + 1; index < end; index += 1) {
+  // A nested group's own jump is clamped to end - 1, so the +1 below always lands at index === end at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  for (let index = start + 1; index !== end; index += 1) {
     const token = tokens[index];
     if (token === undefined) break;
     if (token.kind === "groupStart") {
-      index = Math.min(matchingGroupEnd(tokens, index), end);
+      index = capBeforeBoundary(matchingGroupEnd(tokens, index), end);
       continue;
     }
     if (token.kind !== "controlWord") {
@@ -470,7 +482,8 @@ function parseListOverrideTable(
   end: number,
   overrides: Map<number, RtfListOverride>,
 ): void {
-  for (let index = contentStart; index < end; index += 1) {
+  // index either advances by exactly 1 or jumps to one entry's own close, clamped to end - 1 so the +1 above always lands at index === end at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  for (let index = contentStart; index !== end; index += 1) {
     const token = tokens[index];
     if (token?.kind !== "groupStart") {
       continue;
@@ -479,14 +492,15 @@ function parseListOverrideTable(
     let listId: number | undefined;
     let overrideIndex: number | undefined;
     const levelOverrides: RtfListLevelOverride[] = [];
-    for (let inner = index + 1; inner < entryEnd; inner += 1) {
+    // Same reasoning as the outer loop, scoped to entryEnd rather than end.
+    for (let inner = index + 1; inner !== entryEnd; inner += 1) {
       const child = tokens[inner];
       if (child?.kind === "groupStart") {
         const childEnd = Math.min(matchingGroupEnd(tokens, inner), entryEnd);
         if (groupHead(tokens, inner).destination === "lfolevel") {
           levelOverrides.push(readLevelOverride(tokens, inner, childEnd));
         }
-        inner = childEnd;
+        inner = capBeforeBoundary(childEnd, entryEnd);
         continue;
       }
       if (child?.kind !== "controlWord" || child.param === undefined) {
@@ -498,7 +512,7 @@ function parseListOverrideTable(
     if (listId !== undefined && overrideIndex !== undefined) {
       overrides.set(overrideIndex, { listId, levelOverrides });
     }
-    index = entryEnd;
+    index = capBeforeBoundary(entryEnd, end);
   }
 }
 
@@ -514,7 +528,8 @@ function readLevelOverride(
 ): RtfListLevelOverride {
   let level: RtfListLevel | undefined;
   let startAt: number | undefined;
-  for (let index = start + 1; index < end; index += 1) {
+  // A nested group's own jump is clamped to end - 1, so the +1 below always lands at index === end at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  for (let index = start + 1; index !== end; index += 1) {
     const token = tokens[index];
     if (token === undefined) break;
     if (token.kind === "groupStart") {
@@ -522,7 +537,7 @@ function readLevelOverride(
       if (groupHead(tokens, index).destination === "listlevel") {
         level = readListLevel(tokens, index, inner);
       }
-      index = inner;
+      index = capBeforeBoundary(inner, end);
       continue;
     }
     if (
@@ -533,10 +548,8 @@ function readLevelOverride(
       startAt = token.param;
     }
   }
-  return {
-    ...(level === undefined ? {} : { level }),
-    ...(startAt === undefined ? {} : { startAt }),
-  };
+  // Every consumer (applyListOverride below) reads .level/.startAt by value, never by key presence, so an object that always carries both keys (one or both possibly undefined) is exactly as usable as one that omits an absent field -- and, unlike the conditional-spread it replaces, has no AST node for a boundary mutation to hide behind unobserved.
+  return { level, startAt };
 }
 
 // Applies one override's own <lfolevel> groups onto the levels of the \list it names, producing the entry a paragraph's \lsN resolves to.
@@ -546,9 +559,7 @@ function applyListOverride(
   list: RtfListEntry,
   levelOverrides: readonly RtfListLevelOverride[],
 ): RtfListEntry {
-  if (levelOverrides.length === 0) {
-    return list;
-  }
+  // No early return for an empty levelOverrides: the loop below already does nothing in that case, producing a value-identical (if not reference-identical) result, so a dedicated guard would only be an equivalent-mutant magnet with no consumer that can tell the difference.
   const levels: RtfListLevel[] = [...list.levels];
   for (const [index, override] of levelOverrides.entries()) {
     const base = override.level ?? levels[index] ?? DEFAULT_LIST_LEVEL;
@@ -573,15 +584,18 @@ function parseRevisionTable(
   authors: string[],
   sink: RtfDiagnosticSink,
 ): void {
-  for (let index = contentStart; index < end; index += 1) {
+  // index either advances by exactly 1 or jumps to one entry's own close, clamped to end - 1 so the +1 above always lands at index === end at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  for (let index = contentStart; index !== end; index += 1) {
     if (tokens[index]?.kind !== "groupStart") {
       continue;
     }
     const entryEnd = Math.min(matchingGroupEnd(tokens, index), end);
     const value = collectPlainText(tokens, index + 1, entryEnd, codepage, sink);
-    // The conflict form separates its parts with a literal NUL byte (\'00), never whitespace: an author name contains spaces routinely, so splitting on anything else would truncate "A. Reviewer" to "A.".
-    authors.push(value.split("\u0000")[0]?.trim() ?? "");
-    index = entryEnd;
+    // The conflict form separates its parts with a literal NUL byte (\'00), never whitespace: an author name contains spaces routinely, so splitting on anything else would truncate "A. Reviewer" to "A.". indexOf + slice, rather than split()[0], because a split's result is guaranteed non-empty (there is always at least one part), a guarantee noUncheckedIndexedAccess's blanket string[0] -> string|undefined typing can't see -- indexOf/slice give back a definite string with no dead fallback needed to satisfy the type checker.
+    const nulIndex = value.indexOf("\u0000");
+    const currentAuthor = nulIndex === -1 ? value : value.slice(0, nulIndex);
+    authors.push(currentAuthor.trim());
+    index = capBeforeBoundary(entryEnd, end);
   }
 }
 
@@ -599,7 +613,8 @@ function parseInfoGroup(
     keywords?: string[];
     creator?: string;
   } = {};
-  for (let index = contentStart; index < end; index += 1) {
+  // index either advances by exactly 1 or jumps to one field's own close, clamped to end - 1 so the +1 above always lands at index === end at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  for (let index = contentStart; index !== end; index += 1) {
     const token = tokens[index];
     if (token?.kind !== "groupStart") {
       continue;
@@ -621,7 +636,7 @@ function parseInfoGroup(
         metadata.keywords = value.split(/[;,]\s*/).filter((k) => k.length > 0);
       else if (head.destination === "operator") metadata.creator = value;
     }
-    index = fieldEnd;
+    index = capBeforeBoundary(fieldEnd, end);
   }
   return metadata;
 }
@@ -653,10 +668,11 @@ export function readRtfHeader(
 
   // Document properties first, in their own sweep of the file group's top level: the character set keyword and \ansicpgN both precede the tables, and the font table's own entries decode through whichever page they name. The tables are then read in a second sweep, so a header that violates the stated ordering still reads.
   const fileGroupEnd = matchingGroupEnd(tokens, 0);
-  for (let index = 0; index < fileGroupEnd; index += 1) {
+  // A nested group's own jump is clamped to fileGroupEnd - 1, so the +1 below always lands at index === fileGroupEnd at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  for (let index = 0; index !== fileGroupEnd; index += 1) {
     const token = tokens[index];
     if (token?.kind === "groupStart" && index > 0) {
-      index = Math.min(matchingGroupEnd(tokens, index), fileGroupEnd);
+      index = capBeforeBoundary(matchingGroupEnd(tokens, index), fileGroupEnd);
       continue;
     }
     if (token?.kind !== "controlWord") {
@@ -704,12 +720,12 @@ export function readRtfHeader(
       case "margb":
         page.marginBottomTwips = token.param;
         break;
-      default:
-        break;
+      // No default case: an unrecognized control word's own param is simply not one this reader tracks, which a switch with no matching case and no default already does on its own -- a terminal `default: break;` here would be dead code, since nothing follows the switch to fall through to.
     }
   }
 
-  for (let index = 1; index < fileGroupEnd; index += 1) {
+  // index either advances by exactly 1 or jumps to one group's own close, clamped to fileGroupEnd - 1 so the +1 above always lands at index === fileGroupEnd at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  for (let index = 1; index !== fileGroupEnd; index += 1) {
     const token = tokens[index];
     if (token?.kind !== "groupStart") {
       continue;
@@ -765,8 +781,7 @@ export function readRtfHeader(
           sink,
         );
         break;
-      default:
-        break;
+      // No default case: a destination this module doesn't recognise is simply left for the body reader, which a switch with no matching case and no default already does on its own.
     }
     if (
       head.destination !== undefined &&
@@ -774,7 +789,7 @@ export function readRtfHeader(
     ) {
       bodyStartIndex = Math.max(bodyStartIndex, groupEnd + 1);
     }
-    index = groupEnd;
+    index = capBeforeBoundary(groupEnd, fileGroupEnd);
   }
 
   const lists = new Map<number, RtfListEntry>();
@@ -797,10 +812,8 @@ export function readRtfHeader(
     lists,
     revisionAuthors,
     page,
-    metadata: {
-      ...metadata,
-      ...(direction === undefined ? {} : { direction }),
-    },
+    // A LayoutMetadata consumer reads .direction by value, never by key presence, so always carrying the key (possibly undefined) is exactly as usable as omitting it when absent -- and has no boundary-comparison AST node left to survive unobserved.
+    metadata: { ...metadata, direction },
     bodyStartIndex,
   };
 }
