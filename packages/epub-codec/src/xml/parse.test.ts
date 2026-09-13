@@ -44,6 +44,26 @@ describe("parseXml", () => {
     });
   });
 
+  it("parses a comment node", () => {
+    const nodes = parseXml("<!--a comment--><p/>");
+    expect(nodes[0]).toEqual({ type: "comment", value: "a comment" });
+  });
+
+  it("parses a cdata node", () => {
+    const nodes = parseXml("<p><![CDATA[raw <data>]]></p>");
+    const root = rootElement(nodes);
+    expect(root?.children).toEqual([{ type: "cdata", value: "raw <data>" }]);
+  });
+
+  it("parses a processing instruction node, keyed by its own target", () => {
+    const nodes = parseXml('<?xml-stylesheet href="x.xsl"?><p/>');
+    expect(nodes[0]).toEqual({
+      type: "pi",
+      target: "xml-stylesheet",
+      content: "",
+    });
+  });
+
   it("parses namespaced tag and attribute names verbatim", () => {
     const nodes = parseXml(
       '<html xmlns:epub="http://www.idpf.org/2007/ops"><body epub:type="bodymatter"/></html>',
