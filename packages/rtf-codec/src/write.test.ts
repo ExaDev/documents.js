@@ -132,6 +132,26 @@ describe("header tables", () => {
     expect(out).toContain("\\cf1");
   });
 
+  it("re-uses an already-recorded colour's own index rather than minting a duplicate table entry", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [
+            { text: "r1", color: { r: 1, g: 0, b: 0 } },
+            { text: "b", color: { r: 0, g: 0, b: 1 } },
+            { text: "r2", color: { r: 1, g: 0, b: 0 } },
+          ],
+        },
+      ]),
+    );
+    // Exactly two colours -- red first (\cf1), blue second (\cf2) -- not three, which a re-recorded 'red' bumped to a fresh, too-high index would produce.
+    expect(out).toContain(
+      "{\\colortbl;\\red255\\green0\\blue0;\\red0\\green0\\blue255;}",
+    );
+    expect(out).not.toContain("\\cf3");
+  });
+
   it("mints a style sheet entry per heading level, with the 0-based \\outlinelevelN the spec states", () => {
     const out = write(
       wordprocessing([
@@ -140,6 +160,17 @@ describe("header tables", () => {
     );
     expect(out).toContain("\\outlinelevel0 heading 1;");
     expect(out).toContain("\\s1\\outlinelevel0");
+  });
+
+  it("writes heading-level style entries in ascending level order, not first-encountered order", () => {
+    // headingStyles is keyed by level itself (unlike fonts/colors/lists, whose Map key order already tracks index order by construction), so a document that meets level 3 before level 1 needs a real sort to write them back out in level order.
+    const out = write(
+      wordprocessing([
+        { kind: "paragraph", runs: [{ text: "Three" }], headingLevel: 3 },
+        { kind: "paragraph", runs: [{ text: "One" }], headingLevel: 1 },
+      ]),
+    );
+    expect(out.indexOf("heading 1;")).toBeLessThan(out.indexOf("heading 3;"));
   });
 
   it("writes an {\\info ...} group from the document's own metadata", () => {
@@ -1756,6 +1787,86 @@ describe("body constructs", () => {
     ]);
   });
 
+  // Exercises selectNestableFormFields' own sort, stack-popping boundary, and crossing check together: A(0,3) and B(0,2) share a startRun, so only the tie-break (wider first) puts A ahead of B; C(2,4) starts exactly where B ends (the pop boundary is inclusive: B must be popped, not merely still-open) and then genuinely crosses A, since C ends past A's own close. Fed in shuffled order (C, B, A) -- neither the sort's own reordering nor its tie-break is a no-op against this input, unlike an already-startRun-sorted fixture.
+  it("sorts a shuffled run of extents by startRun (tie-broken widest-first) before its stack-based crossing check, popping a closed extent exactly at its own endRun boundary", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }, { text: "b" }, { text: "c" }, { text: "d" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "C",
+              },
+              startRun: 2,
+              endRun: 4,
+            },
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "B",
+              },
+              startRun: 0,
+              endRun: 2,
+            },
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "A",
+              },
+              startRun: 0,
+              endRun: 3,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("{\\*\\ffname A}");
+    expect(out).toContain("{\\*\\ffname B}");
+    expect(out).not.toContain("{\\*\\ffname C}");
+    expectBalancedBraces(out);
+  });
+
+  // The exact endRun boundary at the other end of the crossing check: an extent that ends at precisely the same run as an already-open one is nested (sharing a closing boundary), not crossing it -- extent.endRun > top.endRun must stay strict.
+  it("does not treat an extent ending exactly where its enclosing one does as crossing it", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }, { text: "b" }, { text: "c" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Outer",
+              },
+              startRun: 0,
+              endRun: 3,
+            },
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Inner",
+              },
+              startRun: 1,
+              endRun: 3,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("{\\*\\ffname Outer}");
+    expect(out).toContain("{\\*\\ffname Inner}");
+    expectBalancedBraces(out);
+  });
+
   // The non-crossing counterpart to the two tests above: one contentControl extent properly NESTED inside another (not merely overlapping) is a shape RTF's own bracket structure handles natively, so both must still be written -- this pins that selectNestableFormFields's crossing check does not also reject legitimate nesting.
   it("keeps both contentControl extents when one is properly nested inside the other, not merely overlapping", () => {
     const out = write(
@@ -1813,6 +1924,33 @@ describe("body constructs", () => {
     expect(out).toContain("\\cell");
     expect(out).toContain("\\row");
     expectBalancedBraces(out);
+  });
+
+  it("mints a font table entry for a run's own font family inside a table cell, not only at the top block level", () => {
+    // The table-collecting pass's own cell-block loop (noteBlock recursing into cell.blocks) must reach a cell's runs, distinct from the body-writing pass that clearly already does (writeCellBlocks below has its own coverage) -- a table with no font this survey pass ever saw would still write \fN references the font table itself never minted.
+    const out = write(
+      wordprocessing([
+        {
+          kind: "table",
+          columnWidthsPt: [72],
+          rows: [
+            {
+              cells: [
+                {
+                  blocks: [
+                    {
+                      kind: "paragraph",
+                      runs: [{ text: "A", fontFamily: "Consolas" }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("Consolas;");
   });
 
   it("writes a row's direction as the \\rtlrow/\\ltrrow <rowwrite> member inside its own \\trowd", () => {
@@ -1979,7 +2117,7 @@ describe("body constructs", () => {
   });
 
   it("reports rather than silently dropping a construct boundary marker RTF cannot spell", () => {
-    const codes: string[] = [];
+    const diagnostics: { code: string; message: string }[] = [];
     writeRtfContent(
       // A footnote anchor rather than a bookmark: a bookmark now has a real {\*\bkmkstart ...} spelling, while a footnote's body would need the note destination this package does not place.
       wordprocessing([
@@ -1990,9 +2128,136 @@ describe("body constructs", () => {
         { kind: "paragraph", runs: [{ text: "x" }] },
         { kind: "constructEnd" },
       ]),
-      { sink: (diagnostic) => codes.push(diagnostic.code) },
+      {
+        sink: (diagnostic) =>
+          diagnostics.push({
+            code: diagnostic.code,
+            message: diagnostic.message,
+          }),
+      },
     );
-    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a anchor construct is dropped: RTF has no spelling for a 'footnote' anchor, whose body would need the note or annotation destination this reader does not place",
+      },
+    ]);
+  });
+
+  it("reports why a block-scoped provenance marker has no spelling, distinct from the run-level <chrev> path", () => {
+    const diagnostics: { code: string; message: string }[] = [];
+    writeRtfContent(
+      wordprocessing([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "provenance", change: "insertion" },
+        },
+        { kind: "paragraph", runs: [{ text: "x" }] },
+        { kind: "constructEnd" },
+      ]),
+      {
+        sink: (diagnostic) =>
+          diagnostics.push({
+            code: diagnostic.code,
+            message: diagnostic.message,
+          }),
+      },
+    );
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a provenance construct is dropped: RTF has no block-scoped revision mark: its <chrev> production is a character property, so a tracked change reaches RTF only as a run-level extent",
+      },
+    ]);
+  });
+
+  it("reports why a block-scoped field marker has no spelling", () => {
+    const diagnostics: { code: string; message: string }[] = [];
+    writeRtfContent(
+      wordprocessing([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "field", instruction: "PAGE" },
+        },
+        { kind: "paragraph", runs: [{ text: "x" }] },
+        { kind: "constructEnd" },
+      ]),
+      {
+        sink: (diagnostic) =>
+          diagnostics.push({
+            code: diagnostic.code,
+            message: diagnostic.message,
+          }),
+      },
+    );
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a field construct is dropped: RTF has no block-scoped field: a field is a character-stream construct, written from a run's own hyperlink rather than from a block marker",
+      },
+    ]);
+  });
+
+  it("reports why a block-scoped link marker has no spelling", () => {
+    const diagnostics: { code: string; message: string }[] = [];
+    writeRtfContent(
+      wordprocessing([
+        {
+          kind: "constructStart",
+          descriptor: {
+            kind: "link",
+            target: { kind: "external", uri: "https://example.com" },
+          },
+        },
+        { kind: "paragraph", runs: [{ text: "x" }] },
+        { kind: "constructEnd" },
+      ]),
+      {
+        sink: (diagnostic) =>
+          diagnostics.push({
+            code: diagnostic.code,
+            message: diagnostic.message,
+          }),
+      },
+    );
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a link construct is dropped: RTF has no block-scoped link; an external target rides ContentRun.hyperlink instead",
+      },
+    ]);
+  });
+
+  it("falls back to a generic gap description for a construct kind describeConstructGap has no specific case for", () => {
+    const diagnostics: { code: string; message: string }[] = [];
+    writeRtfContent(
+      wordprocessing([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division" },
+        },
+        { kind: "paragraph", runs: [{ text: "x" }] },
+        { kind: "constructEnd" },
+      ]),
+      {
+        sink: (diagnostic) =>
+          diagnostics.push({
+            code: diagnostic.code,
+            message: diagnostic.message,
+          }),
+      },
+    );
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a division construct is dropped: RTF has no equivalent construct",
+      },
+    ]);
   });
 });
 
@@ -2427,7 +2692,7 @@ describe("round trip through this package's own reader", () => {
   });
 
   it("reports a construct kind RTF has no spelling for rather than writing a bookmark for it", () => {
-    const codes: string[] = [];
+    const diagnostics: { code: string; message: string }[] = [];
     writeRtfContent(
       wordprocessing([
         {
@@ -2441,9 +2706,21 @@ describe("round trip through this package's own reader", () => {
         { kind: "paragraph", runs: [{ text: "x" }] },
         { kind: "constructEnd" },
       ]),
-      { sink: (diagnostic) => codes.push(diagnostic.code) },
+      {
+        sink: (diagnostic) =>
+          diagnostics.push({
+            code: diagnostic.code,
+            message: diagnostic.message,
+          }),
+      },
     );
-    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a contentControl construct is dropped: RTF has no block-scoped structured-document-tag equivalent -- a run-scoped plainText/checkbox/dropDown form field mints its own \\*\\formfield instead; any other controlType (richText, comboBox, date, and the rest) has no \\*\\formfield spelling at all",
+      },
+    ]);
   });
 
   it("round-trips a checkbox contentControl's checked state and tag back onto the same point extent", () => {
@@ -2761,6 +3038,26 @@ describe("round trip through this package's own reader", () => {
     // 30 | (9 << 6) | (1 << 11) | (1 << 16) | (124 << 20) -- the DTTM bit field the spec tabulates.
     const dttm = 30 | (9 << 6) | (1 << 11) | (1 << 16) | (124 << 20);
     expect(out).toContain(`\\revdttm${String(dttm)}`);
+  });
+
+  it("mints a \\*\\revtbl entry for a block-scoped provenance marker's own author too, not only a run-level extent's", () => {
+    // noteBlock's own constructStart case (a block-level marker, distinct from a paragraph's run-level constructs array) must reach noteDescriptor on its own path.
+    const out = write(
+      wordprocessing([
+        {
+          kind: "constructStart",
+          descriptor: {
+            kind: "provenance",
+            change: "insertion",
+            author: "Block Author",
+          },
+        },
+        { kind: "paragraph", runs: [{ text: "x" }] },
+        { kind: "constructEnd" },
+      ]),
+    );
+    expect(out).toContain("{\\*\\revtbl");
+    expect(out).toContain("Block Author;");
   });
 
   it("round-trips every provenance change kind back onto the same runs", () => {
