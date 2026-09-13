@@ -97,6 +97,28 @@ describe("readExternalOleEmbeds", () => {
     expect(readExternalOleEmbeds(documentChildren).size).toBe(0);
   });
 
+  it("rejects an ExOleObjAtom shorter than its mandated 24 bytes", () => {
+    const shortObjAtom = atom(RT_ExternalOleObjectAtom, new Uint8Array(23), {
+      recVer: 0x1,
+    });
+    const documentChildren = childRecords(
+      readRecordAt(
+        container(RT_Document, [
+          container(RT_ExternalObjectList, [
+            container(RT_ExternalOleEmbed, [shortObjAtom]),
+          ]),
+        ]),
+        0,
+      ),
+    );
+    expect(() => readExternalOleEmbeds(documentChildren)).toThrow(
+      "ExOleObjAtom at offset",
+    );
+    expect(() => readExternalOleEmbeds(documentChildren)).toThrow(
+      "carries 23 bytes, fewer than the 24 its fields need",
+    );
+  });
+
   it("omits a real container whose own ExOleObjAtom is missing, rather than throwing", () => {
     const documentChildren = childRecords(
       readRecordAt(
@@ -121,18 +143,24 @@ describe("readExternalOleEmbeds", () => {
     if (written === undefined) {
       throw new Error("expected a written ExObjListContainer");
     }
-    // Splice an unrelated sibling record between the seed atom and the real embed container.
+    // Splice an unrelated sibling record between the seed atom and the real embed container. The sibling itself wraps a fully valid ExOleObjAtom (exObjId 99) -- a sibling with nothing parseable inside it would converge on the same result whether or not the skip actually ran, since there would be nothing there to spuriously pick up either way; wrapping something genuinely embed-shaped proves the record-type check, not merely the sibling's own shape, is what keeps it out.
     const record = readRecordAt(written, 0);
     const [seedAtom, embedContainer] = childRecords(record);
     if (seedAtom === undefined || embedContainer === undefined) {
       throw new Error("expected the seed atom and one embed container");
     }
+    const impostorObjAtom = atom(
+      RT_ExternalOleObjectAtom,
+      concatBytes(u32le(0), u32le(0), u32le(99), u32le(0), u32le(55), u32le(0)),
+      { recVer: 0x1 },
+    );
+    const impostorSibling = container(RT_Document, [impostorObjAtom]); // an unrelated sibling record type, never RT_ExternalOleEmbed, despite carrying a real ExOleObjAtom of its own
     const withSibling = container(RT_ExternalObjectList, [
       seedAtom.stream.subarray(
         seedAtom.offset,
         seedAtom.dataOffset + seedAtom.header.recLen,
       ),
-      atom(RT_Document, u32le(0)), // an unrelated sibling record type, never RT_ExternalOleEmbed
+      impostorSibling,
       embedContainer.stream.subarray(
         embedContainer.offset,
         embedContainer.dataOffset + embedContainer.header.recLen,
@@ -141,9 +169,10 @@ describe("readExternalOleEmbeds", () => {
     const documentChildren = childRecords(
       readRecordAt(container(RT_Document, [withSibling]), 0),
     );
-    expect(readExternalOleEmbeds(documentChildren).get(1)?.persistIdRef).toBe(
-      10,
-    );
+    const embeds = readExternalOleEmbeds(documentChildren);
+    expect(embeds.get(1)?.persistIdRef).toBe(10);
+    expect(embeds.has(99)).toBe(false);
+    expect(embeds.size).toBe(1);
   });
 
   it("finds the ProgIDAtom by its own recInstance among an embed's CString siblings, not merely by record type", () => {
@@ -162,6 +191,37 @@ describe("readExternalOleEmbeds", () => {
     const embedContainer = container(RT_ExternalOleEmbed, [
       objAtom,
       menuNameAtom,
+      progIdAtom,
+    ]);
+    const documentChildren = childRecords(
+      readRecordAt(
+        container(RT_Document, [
+          container(RT_ExternalObjectList, [embedContainer]),
+        ]),
+        0,
+      ),
+    );
+    expect(readExternalOleEmbeds(documentChildren).get(1)?.progId).toBe(
+      "Word.Document.8",
+    );
+  });
+
+  it("requires both RT_CString and recInstance 0x002, not recInstance alone", () => {
+    // An impostor sibling of some other record type that happens to share the real ProgIDAtom's own recInstance, placed ahead of it: a lookup keyed on recInstance alone would match this impostor first and never reach the real one.
+    const objAtom = atom(
+      RT_ExternalOleObjectAtom,
+      concatBytes(u32le(1), u32le(0), u32le(1), u32le(0), u32le(10), u32le(0)),
+      { recVer: 0x1 },
+    );
+    const impostor = atom(RT_ExternalOleObjectAtom, utf16le("Impostor"), {
+      recInstance: 0x002,
+    });
+    const progIdAtom = atom(RT_CString, utf16le("Word.Document.8"), {
+      recInstance: 0x002,
+    });
+    const embedContainer = container(RT_ExternalOleEmbed, [
+      objAtom,
+      impostor,
       progIdAtom,
     ]);
     const documentChildren = childRecords(
