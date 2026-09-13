@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { XmlElement } from "../model/node";
 import { el, txt } from "../xml/fragment";
-import { ensureSpan } from "./span";
+import { ensureSpan, splitNode } from "./span";
 
 function paragraphOf(...children: XmlElement["children"]): XmlElement {
   return el("text:p", {}, children);
@@ -64,6 +64,21 @@ describe("ensureSpan: plain text wrapping", () => {
     expect(reused).toBe(bareSpan);
     expect(reused.attributes).toEqual([
       { name: "text:style-name", value: "T1" },
+    ]);
+  });
+
+  it("finds the existing text:style-name attribute by its own name, not merely the first attribute on the span, leaving an unrelated earlier attribute untouched", () => {
+    const existingSpan = el("text:span", {}, [txt("Hello")]);
+    existingSpan.attributes = [
+      { name: "xml:id", value: "keep-me" },
+      { name: "text:style-name", value: "Old" },
+    ];
+    const paragraph = paragraphOf(existingSpan);
+    const reused = ensureSpan(paragraph, 0, 5, "New");
+    expect(reused).toBe(existingSpan);
+    expect(reused.attributes).toEqual([
+      { name: "xml:id", value: "keep-me" },
+      { name: "text:style-name", value: "New" },
     ]);
   });
 
@@ -202,6 +217,35 @@ describe("ensureSpan: text:s straddling a split boundary", () => {
     const paragraph = paragraphOf(el("text:s", { "text:c": "not-a-number" }));
     expect(() => ensureSpan(paragraph, 0, 1, "T1")).toThrow(/malformed/);
   });
+
+  it("splits a text:s into two count=1 halves that each omit the text:c attribute entirely, rather than writing it out explicitly for the implicit default", () => {
+    const paragraph = paragraphOf(
+      txt("a"),
+      el("text:s", { "text:c": "2" }),
+      txt("b"),
+    ); // "a" (0), text:s count=2 (1-2), "b" (3)
+    const span = ensureSpan(paragraph, 1, 2, "T1"); // splits the count=2 run into count=1 (inside the span) + count=1 (leftover after)
+
+    expect(span.children).toEqual([
+      { type: "element", tag: "text:s", attributes: [], children: [] },
+    ]);
+    const leftover = paragraph.children[2]!;
+    if (leftover.type !== "element" || leftover.tag !== "text:s") {
+      throw new Error("expected a text:s element");
+    }
+    expect(leftover.attributes).toEqual([]);
+  });
+});
+
+describe("splitNode: unreachable fractional-offset branch", () => {
+  it("throws for text:tab (and, symmetrically, text:line-break) given an offset that isn't exactly 0 or its own length -- a shape ensureSpan's own integer-offset validation prevents any real caller from ever producing, exercised here by calling the split primitive directly", () => {
+    expect(() => splitNode(el("text:tab"), 0.5)).toThrow(
+      /cannot split "text:tab" at a fractional offset/,
+    );
+    expect(() => splitNode(el("text:line-break"), 0.5)).toThrow(
+      /cannot split "text:line-break" at a fractional offset/,
+    );
+  });
 });
 
 describe("ensureSpan: text:tab and text:line-break", () => {
@@ -246,6 +290,13 @@ describe("ensureSpan: splitting a pre-existing text:span", () => {
     expect(styleName(newSpan)).toBe("T2");
     expect(paragraph.children).toHaveLength(3);
     expect(paragraph.children[2]).toBe(newSpan);
+    // newSpan must wrap BOTH of the two nodes that made up "middle" (the split-off EFGH span, still styled T1, and the IJ text node) -- not merely reuse/rename the first of those two nodes in place and silently drop the second, which is exactly what a broken "is there exactly one middle node" check would do.
+    expect(newSpan.children).toHaveLength(2);
+    const innerSpan = newSpan.children[0]!;
+    if (innerSpan.type !== "element") throw new Error("expected an element");
+    expect(styleName(innerSpan)).toBe("T1");
+    expect(textOf(innerSpan.children[0]!)).toBe("EFGH");
+    expect(textOf(newSpan.children[1]!)).toBe("IJ");
   });
 
   it("reuses (renames) an existing span in place when the requested range exactly matches it, and does not disturb a sibling split off the same original span", () => {

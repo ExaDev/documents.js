@@ -74,7 +74,8 @@ function buildSpaceRun(count: number): XmlElement {
 }
 
 // Splits a single node at a character offset strictly inside it (0 < offset < measureOdfNodeLength(node), guaranteed by splitChildrenAt's caller). A text node splits by string slicing; a text:s splits into two text:s elements whose counts sum to the original (a text:c="5" run split at offset 2 becomes text:c="2" and text:c="3", never silently merged or corrupted); a text:span splits recursively into two sibling spans carrying the same style-name, each holding its half of the original content. text:tab/text:line-break have length exactly 1, so an offset strictly between 0 and 1 can never be an integer -- that branch is unreachable given ensureSpan's own integer-offset validation, and throws rather than silently doing something wrong if it is ever somehow reached.
-function splitNode(
+// Exported so a direct unit test can reach the defensive throw at this function's own tail below, which no call reachable through ensureSpan's public entry point can ever trigger (see that throw's own comment) -- the only way to observe it is to call this function directly with an offset ensureSpan's own integer validation would have already rejected.
+export function splitNode(
   node: XmlNode,
   offset: number,
 ): { left?: XmlNode; right?: XmlNode } {
@@ -93,23 +94,17 @@ function splitNode(
   }
   if (node.type === "element" && node.tag === "text:span") {
     const inner = splitChildrenAt(node.children, offset);
-    // Each half gets its OWN deep copy of `attributes` -- both the array AND each individual { name, value } object within it -- not a shared reference to the original. A shallow `[...node.attributes]` copy would still share the same Attribute *objects* between both halves, so setStyleName's `existing.value = ...` mutation (reusing a split-off span on a subsequent ensureSpan call) would silently corrupt the other half's style-name too, even though the two halves' attribute arrays were themselves already distinct.
-    const left: XmlElement | undefined =
-      inner.before.length === 0
-        ? undefined
-        : {
-            ...node,
-            attributes: cloneAttributes(node.attributes),
-            children: inner.before,
-          };
-    const right: XmlElement | undefined =
-      inner.after.length === 0
-        ? undefined
-        : {
-            ...node,
-            attributes: cloneAttributes(node.attributes),
-            children: inner.after,
-          };
+    // Each half gets its OWN deep copy of `attributes` -- both the array AND each individual { name, value } object within it -- not a shared reference to the original. A shallow `[...node.attributes]` copy would still share the same Attribute *objects* between both halves, so setStyleName's `existing.value = ...` mutation (reusing a split-off span on a subsequent ensureSpan call) would silently corrupt the other half's style-name too, even though the two halves' attribute arrays were themselves already distinct. No `inner.before.length === 0` / `inner.after.length === 0` check guarding either half: this function is only ever invoked (from splitChildrenAt's own loop below) with an offset strictly between 0 and this node's own measureOdfNodeLength, and at that invariant, the recursive splitChildrenAt(node.children, offset) above can never come back with an empty `before` or `after` -- an offset > 0 means its loop either pushes at least one whole/zero-width child into `before` before reaching the split point, or lands inside a child whose own split contributes a defined, non-empty half (text and text:s always return one; a nested text:span does too, by this same argument applied recursively); and offset strictly less than this node's own total length guarantees genuine content remains for `after` too. Both halves are therefore always real, non-empty node arrays here, never the empty array an `undefined` branch would exist to represent.
+    const left: XmlElement = {
+      ...node,
+      attributes: cloneAttributes(node.attributes),
+      children: inner.before,
+    };
+    const right: XmlElement = {
+      ...node,
+      attributes: cloneAttributes(node.attributes),
+      children: inner.after,
+    };
     return { left, right };
   }
   const label = node.type === "element" ? node.tag : node.type;
@@ -123,17 +118,14 @@ function splitChildrenAt(
   children: readonly XmlNode[],
   offset: number,
 ): { before: XmlNode[]; after: XmlNode[] } {
-  if (offset <= 0) {
-    return { before: [], after: [...children] };
-  }
-
+  // No separate `offset <= 0` fast path: every caller in this module only ever passes an offset in [0, this children array's own total measureOdfNodeLength] -- ensureSpan's own upfront validation guarantees start >= 0 and end <= total, and splitNode's own recursive call into this function is only ever reached with an offset strictly between 0 and the node's own length. offset is therefore never negative, and offset === 0 is already handled identically by the loop's own `remaining === 0` check on its very first iteration below (before stays empty, after becomes the full children array via children.slice(0)) -- a dedicated early return would only ever produce a result that check already produces on its own.
   const before: XmlNode[] = [];
   let remaining = offset;
-  for (let index = 0; index < children.length; index += 1) {
+  // A `for...of` over `.entries()`, not an indexed `for` loop bounded by `index < children.length`: every valid offset this function is ever called with (see the comment above) makes `remaining` reach exactly 0 at or before the final entry, so the loop below always returns from inside its own body -- an indexed bound never needs comparing against `children.length` at all, so there is no such comparison here to get wrong.
+  for (const [index, node] of children.entries()) {
     if (remaining === 0) {
       return { before, after: children.slice(index) };
     }
-    const node = children[index]!;
     const length = measureOdfNodeLength(node);
     if (remaining >= length) {
       before.push(node);
