@@ -347,7 +347,8 @@ export function writeCompoundFile(
       0,
       Math.ceil((neededFat - HEADER_DIFAT_ENTRIES) / difatEntriesPerSector),
     );
-    if (neededFat === fatSectorCount && neededDifat === difatSectorCount) {
+    // No `&& neededDifat === difatSectorCount` half to this check: difatSectorCount only ever gets set, a few lines below, to neededDifat computed from that same round's neededFat -- so difatSectorCount === g(fatSectorCount) is an invariant this loop maintains from its very first iteration (0 === g(1) initially, and every subsequent round re-establishes it by construction). The moment neededFat matches fatSectorCount, neededDifat = g(neededFat) = g(fatSectorCount), which by the invariant already equals difatSectorCount -- so the second comparison could never once observe a mismatch the first didn't already rule out.
+    if (neededFat === fatSectorCount) {
       break;
     }
     fatSectorCount = neededFat;
