@@ -2,8 +2,6 @@
 //
 // Only the fields this writer's own reader needs to get back to the streams it wrote are populated: the subdocument-boundary fields this package's reader itself reads (cbMac, ccpText, and the footnote/header/comment/endnote ccps when the document carries those stories) plus the fc/lcb pairs locating the Clx, the two property bin tables, the style sheet, (when used) the font table and numbering tables, and (when the document carries them) the four story plexes. Every other fc/lcb pair -- SttbfAssoc, Dop, the printer-driver structures, and the ~140 others [MS-DOC] defines -- is left zero, which is exactly the "undefined, MUST be ignored" contract most of them carry (see FibRgFcLcb97's own field table). A small number of those unpopulated fields carry a genuine "MUST NOT be zero" clause of their own (SttbfAssoc's lcb among them) that this writer does not satisfy: the resulting bytes are conformant for every structure this package's own reader consults, not a certification that Microsoft Word or another third-party reader would accept the file's every field. See the README's own scope note.
 
-import { readUint16LE } from "../bytes";
-import { DocFormatError } from "../errors";
 import {
   FC_LCB_VALUE_INDEX,
   FIB_BASE_FLAG,
@@ -119,10 +117,6 @@ export function buildFib(spec: FibWriteSpec): Uint8Array<ArrayBuffer> {
   pair(FC_LCB_VALUE_INDEX.fcPlcfendTxt, spec.fcPlcfendTxt, spec.lcbPlcfendTxt);
   // cswNew (the 2 bytes at FIB_FC_LCB_BLOB_OFFSET + blobBytes) stays 0, which [MS-DOC] mandates for nFib 0x00C1 and which correctly leaves fibRgCswNew absent.
 
-  if (readUint16LE(bytes, 0) !== FIB_W_IDENT) {
-    throw new DocFormatError(
-      "buildFib produced a Fib whose own wIdent does not read back as 0xA5EC; this is an internal defect, not an input error",
-    );
-  }
+  // bytes[0..1] is set unconditionally to FIB_W_IDENT at the very top of this function and nothing after that point ever touches it again, so reading it back here could never disagree -- there is no spec field this function derives wIdent's own bytes from.
   return bytes;
 }
