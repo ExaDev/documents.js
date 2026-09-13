@@ -4,9 +4,11 @@ import { useAppDispatch, useAppState } from "../state/context.js";
 import type { StatusMessage } from "../state/types.js";
 
 // An info or warning message clears itself after this long; an error stays until something replaces it, because an error the user missed is worse than a bar that has stopped being current. Expiry runs on a timer rather than by comparing `Date.now()` during render: reading the clock while rendering is impure, and a comparison alone would leave a message on screen past its own TTL until some unrelated state change forced a repaint.
-const TRANSIENT_STATUS_TTL_MS = 4000;
+// Exported so a test can derive its own wait/assert timing from the real constant rather than duplicating the number.
+export const TRANSIENT_STATUS_TTL_MS = 4000;
 
-function statusColour(severity: StatusMessage["severity"]): string {
+// Exported purely so a unit test can assert each severity's exact colour directly -- ink strips ANSI colour codes from a non-TTY render, so a rendered frame's text alone can never distinguish one colour from another.
+export function statusColour(severity: StatusMessage["severity"]): string {
   switch (severity) {
     case "info":
       return "cyan";
