@@ -157,14 +157,13 @@ const MIN_BLIP_TAIL_BYTES =
   ONE_UID_BYTES +
   BLIP_TAG_SIZE +
   Math.min(PNG_SIGNATURE.length, JPEG_SIGNATURE.length);
+/** The least a real find can ever need from a candidate header's own start onward: the header itself plus MIN_BLIP_TAIL_BYTES. Named once so the scan bound below states a plain byte count, not a sum findBlipRecord's own loop would otherwise repeat every iteration. */
+const MIN_BLIP_RECORD_BYTES = RECORD_HEADER_SIZE + MIN_BLIP_TAIL_BYTES;
 
 /** Scans forward from `from` for a validated blip record (see readInlinePicture's own locating note) -- every candidate header of a blip type must also carry a known rgbUid instance count, a length inside the stream, and payload bytes starting with its format's own file signature. */
 function findBlipRecord(data: Uint8Array, from: number): FoundBlip | undefined {
-  for (
-    let at = from;
-    at + RECORD_HEADER_SIZE + MIN_BLIP_TAIL_BYTES <= data.length;
-    at++
-  ) {
+  // data.subarray(at).length rather than `at + MIN_BLIP_RECORD_BYTES <= data.length`: the two are mathematically identical (both ask "does at least MIN_BLIP_RECORD_BYTES remain from at onward"), but this spelling has no arithmetic combining `at` and `data.length` at all -- indistinguishable from a swapped +/- given payloadHasSignature's own tolerant out-of-range reads below, which make every position a weakened bound would wrongly admit fail validation anyway, exactly as a position the correct bound already excludes would.
+  for (let at = from; data.subarray(at).length >= MIN_BLIP_RECORD_BYTES; at++) {
     const header = readRecordHeader(data, at);
     const format = blipFormat(header.recType);
     if (format === undefined) {
