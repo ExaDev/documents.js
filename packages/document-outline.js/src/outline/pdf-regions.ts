@@ -90,6 +90,14 @@ export interface BoundedItem {
   readonly bounds: Bounds;
 }
 
+// Reading-order comparator for the final regions list: top to bottom (descending yPt, since PDF's y-axis increases upward), then left to right on a genuine vertical tie. Exported and taking a bare `{ bounds }` shape purely for the direct unit test below pinning the tie-break's own subtraction against two hand-ordered inputs: recursiveXYCut's own internal per-axis sort already normalises which region a page's items land in as `a` versus `b` by the time segmentPdfRegions calls this comparator, so a test driving segmentPdfRegions end to end cannot itself control which argument the tie-break clause receives -- only a direct call can.
+export function regionReadingOrderComparator(
+  a: { readonly bounds: PdfRegionBounds },
+  b: { readonly bounds: PdfRegionBounds },
+): number {
+  return b.bounds.yPt - a.bounds.yPt || a.bounds.xPt - b.bounds.xPt;
+}
+
 // Segments a PDF page's own items into regions via recursive X-Y cut, then classifies each leaf. Link/internalLink annotations are excluded up front (see layoutItemBounds) -- they carry no painted geometry to segment by, and a caller wanting a page's link rectangles already has them at `page.items` unfiltered.
 export function segmentPdfRegions(page: LayoutPage): PdfRegion[] {
   const bounded: BoundedItem[] = [];
@@ -111,7 +119,7 @@ export function segmentPdfRegions(page: LayoutPage): PdfRegion[] {
         confidence,
       };
     })
-    .sort((a, b) => b.bounds.yPt - a.bounds.yPt || a.bounds.xPt - b.bounds.xPt);
+    .sort(regionReadingOrderComparator);
 
   return attachCaptions(regions);
 }
