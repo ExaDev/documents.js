@@ -423,7 +423,36 @@ describe("writeDocContent", () => {
   it("refuses a block kind it does not yet write, such as a construct-end marker", () => {
     // A pageBreak used to be this test's refused kind and now writes (see the page-break describe below), so the generic non-paragraph-block refusal is exercised through a construct-boundary marker, which stays refused until ExaDev/documents.js#1122 lands. A close marker carries only its kind -- no descriptor, which is the open half's payload.
     const input = document([{ kind: "constructEnd" }]);
-    expect(() => writeDocContent(input)).toThrow(DocUnsupportedError);
+    expect(() => writeDocContent(input)).toThrow(
+      /doc-codec's writer does not yet support 'constructEnd' blocks/,
+    );
+  });
+
+  it("refuses a non-paragraph block inside a table cell, such as a nested table", () => {
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [50],
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [
+                  {
+                    kind: "table",
+                    columnWidthsPt: [10],
+                    rows: [{ cells: [{ blocks: [] }] }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(() => writeDocContent(input)).toThrow(
+      /doc-codec's writer does not support a 'table' block inside a table cell/,
+    );
   });
 
   it("refuses an embedded-object block, a genuinely separate undertaking this reader does not implement either (ExaDev/documents.js#971)", () => {
@@ -1559,7 +1588,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("writes an ordinary, fully unmerged 20-column table without the lost-boundary fallback touching it", () => {
-    // No cell here ever merges, so recoverableBoundaries states every internal boundary itself and the fallback assigns nothing to any row -- an ordinary wide table stays exactly as costly as it always was, unaffected by the boundary-distribution logic that exists only for merged tables.
+    // No cell here ever merges, so recoverableBoundaries states every internal boundary itself and the fallback assigns nothing to any row -- an ordinary wide table stays exactly as costly as it always was, unaffected by the boundary-distribution logic that exists only for merged tables. Every one of the table's own 19 internal boundaries must come back stated: a recoverableBoundaries or column-tracking defect that silently treated some of them as unrecoverable would surface here as a spurious onWarning, not as wrong content, since flattenTable's own fallback machinery would otherwise engage for a table that never needed it at all.
     const columnCount = 20;
     const input = document([
       {
@@ -1574,7 +1603,12 @@ describe("writeDocContent tables", () => {
         ],
       },
     ]);
-    const result = roundTrip(input);
+    const warnings: string[] = [];
+    const bytes = writeDocContent(input, {
+      onWarning: (message) => warnings.push(message),
+    });
+    const result = readDocContent(bytes);
+    expect(warnings).toEqual([]);
     const block = tableAt(result, 0);
     expect(block.columnWidthsPt).toHaveLength(columnCount);
     expect(block.rows[0]?.cells).toHaveLength(columnCount);
@@ -1662,6 +1696,7 @@ describe("writeDocContent tables", () => {
     expect(warnings[0]).toMatch(
       /without exceeding a PapxInFkp record's own byte budget or the format's own 63-cell-per-row ceiling/,
     );
+    expect(warnings[0]).toMatch(/dropping the other 1 \(narrowing/);
     const recoveredColumnCount = columnCount - 1;
     expect(block.columnWidthsPt).toHaveLength(recoveredColumnCount);
     expect(block.rows[0]?.cells[0]?.colSpan).toBe(recoveredColumnCount);
@@ -1837,6 +1872,206 @@ describe("writeDocContent tables", () => {
     expect(cellText(block.rows[0]?.cells[0])).toBe("tall");
     expect(block.rows[1]?.cells[0]?.blocks).toEqual([]);
     expect(cellText(block.rows[1]?.cells[1])).toBe("bottom-right");
+  });
+
+  it("ends a vertical merge exactly after its own rowSpan, treating the very next row's cell as ordinary even when it is also blank", () => {
+    // The anchor's rowSpan of 3 covers itself plus 2 continuation rows (remaining decrements 2 -> 1 -> 0 across them); a 4th row's own cell at the identical column, though also blank, sits one row past where the merge already ended and must read back as its own independent, ordinary cell -- not a third continuation -- pinning placeCell's own remaining > 0 boundary rather than remaining >= 0.
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [80, 80],
+        rows: [
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "anchor" }])], rowSpan: 3 },
+              { blocks: [paragraph([{ text: "R0" }])] },
+            ],
+          },
+          {
+            cells: [{ blocks: [] }, { blocks: [paragraph([{ text: "R1" }])] }],
+          },
+          {
+            cells: [{ blocks: [] }, { blocks: [paragraph([{ text: "R2" }])] }],
+          },
+          {
+            cells: [{ blocks: [] }, { blocks: [paragraph([{ text: "R3" }])] }],
+          },
+          // A second blank cell at the identical column, immediately after row 3's own: if row 3 were ever wrongly written as the START of its own new merge (flattenRow's own vertMerge, independent of placeCell's remaining tracking) rather than as an ordinary cell, this row would be folded into it as a continuation, giving row 3 a spurious rowSpan of 2 instead of none at all.
+          {
+            cells: [{ blocks: [] }, { blocks: [paragraph([{ text: "R4" }])] }],
+          },
+        ],
+      },
+    ]);
+    const result = roundTrip(input);
+    const block = tableAt(result, 0);
+    expect(block.rows[0]?.cells[0]?.rowSpan).toBe(3);
+    expect(cellText(block.rows[0]?.cells[0])).toBe("anchor");
+    // Rows 1 and 2 are genuine continuations, carrying no rowSpan or colSpan of their own.
+    expect(block.rows[1]?.cells[0]?.blocks).toEqual([]);
+    expect(block.rows[2]?.cells[0]?.blocks).toEqual([]);
+    // Row 3's own cell is blank too, but it is NOT part of the anchor's merge: it must read back as its own ordinary cell, with no rowSpan carried over from the anchor, and must not itself anchor a further merge into row 4.
+    expect(block.rows[3]?.cells[0]?.rowSpan).toBeUndefined();
+    expect(block.rows[3]?.cells[0]?.blocks).toEqual([
+      { kind: "paragraph", runs: [] },
+    ]);
+    expect(block.rows[4]?.cells[0]?.rowSpan).toBeUndefined();
+    expect(block.rows[4]?.cells[0]?.blocks).toEqual([
+      { kind: "paragraph", runs: [] },
+    ]);
+  });
+
+  it("treats a non-blank cell under an active vertical merge as ending it, never as a continuation", () => {
+    // The anchor's rowSpan of 2 would ordinarily cover row 1 too, but row 1's own cell at that column carries real content of its own -- placeCell's own continuation test requires the cell to be genuinely blank, not merely sitting where a merge is still active, so row 1 must read back as its own independent cell rather than the merge's silently-discarded continuation.
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [80, 80],
+        rows: [
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "anchor" }])], rowSpan: 2 },
+              { blocks: [paragraph([{ text: "R0" }])] },
+            ],
+          },
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "own content" }])] },
+              { blocks: [paragraph([{ text: "R1" }])] },
+            ],
+          },
+        ],
+      },
+    ]);
+    const result = roundTrip(input);
+    const block = tableAt(result, 0);
+    expect(cellText(block.rows[0]?.cells[0])).toBe("anchor");
+    // The core claim: row 1's own real content must survive, never silently discarded as a vertical-merge continuation's contents would be.
+    expect(cellText(block.rows[1]?.cells[0])).toBe("own content");
+  });
+
+  it("does not track a merge at all for an explicit rowSpan of 1, treating the next row's identical-column cell as wholly independent", () => {
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [80, 80],
+        rows: [
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "A1" }])], rowSpan: 1 },
+              { blocks: [paragraph([{ text: "B1" }])] },
+            ],
+          },
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "A2" }])] },
+              { blocks: [paragraph([{ text: "B2" }])] },
+            ],
+          },
+        ],
+      },
+    ]);
+    const result = roundTrip(input);
+    const block = tableAt(result, 0);
+    expect(block.rows[0]?.cells[0]?.rowSpan).toBeUndefined();
+    expect(cellText(block.rows[0]?.cells[0])).toBe("A1");
+    expect(block.rows[1]?.cells[0]?.rowSpan).toBeUndefined();
+    expect(cellText(block.rows[1]?.cells[0])).toBe("A2");
+  });
+
+  it("throws when a row's own cells cover more columns than the table declares", () => {
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [50, 50],
+        rows: [
+          {
+            cells: [{ blocks: [paragraph([{ text: "wide" }])], colSpan: 3 }],
+          },
+        ],
+      },
+    ]);
+    expect(() => writeDocContent(input)).toThrow(
+      /a table cell's own colSpan runs past the table's 2-column grid/,
+    );
+  });
+
+  it("throws when a row's own cells cover fewer columns than the table declares", () => {
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [50, 50, 50],
+        rows: [
+          {
+            cells: [{ blocks: [paragraph([{ text: "narrow" }])] }],
+          },
+        ],
+      },
+    ]);
+    expect(() => writeDocContent(input)).toThrow(
+      /a table row's own cells cover 1 columns \(via colSpan\), but the table declares 3 in columnWidthsPt/,
+    );
+  });
+
+  it("throws naming the exact requirement when a table declares no columns at all", () => {
+    const input = document([
+      { kind: "table", columnWidthsPt: [], rows: [{ cells: [] }] },
+    ]);
+    expect(() => writeDocContent(input)).toThrow(
+      /a table must have at least one column and one row to write/,
+    );
+  });
+
+  it("throws naming the exact requirement when a table declares no rows at all", () => {
+    const input = document([{ kind: "table", columnWidthsPt: [50], rows: [] }]);
+    expect(() => writeDocContent(input)).toThrow(
+      /a table must have at least one column and one row to write/,
+    );
+  });
+
+  it("falls all the way back to writing a row wholly unsplit when even its single most valuable assigned boundary cannot fit, warning with the singular wording (ExaDev/documents.js#1013)", () => {
+    // 20 ordinary, undecorated single-column cells plus one further 2-wide merged cell (21 columns, 1 row): the 20 plain cells' own boundaries are all recoverable on their own, leaving exactly the merge's own single internal boundary lost -- and, being a single row, assigned entirely to this one row. Splitting it would raise the row from 21 to 22 physical cells, which -- entirely from the 20 plain cells' own fixed 22-bytes-per-cell cost plus the row's own fixed 15-byte overhead -- already sits close enough to the 487-byte PapxInFkp ceiling that the extra cell tips it over, while the unsplit 21-cell form still fits. rowSplitFits therefore rejects the only candidate this row could ever try (kept.length reaches 0), which is the "could not state ... at all" wording this describe block's other trimming tests never reach, since each of them still keeps at least one boundary.
+    const plainColumnCount = 20;
+    const columnWidthsPt = [
+      ...Array.from({ length: plainColumnCount }, () => 20),
+      20,
+      20,
+    ];
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt,
+        rows: [
+          {
+            cells: [
+              ...Array.from({ length: plainColumnCount }, (_unused, index) => ({
+                blocks: [paragraph([{ text: `c${index}` }])],
+              })),
+              {
+                blocks: [paragraph([{ text: "merged" }])],
+                colSpan: 2,
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    const warnings: string[] = [];
+    const bytes = writeDocContent(input, {
+      onWarning: (message) => warnings.push(message),
+    });
+    expect(isDocBytes(bytes)).toBe(true);
+    const block = tableAt(readDocContent(bytes), 0);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("table at block 0, row 0");
+    expect(warnings[0]).toMatch(
+      /could not state its assigned lost column boundary/,
+    );
+    expect(warnings[0]).toMatch(/attempting to write it unsplit instead/);
+    // Unsplit: the merged cell's own internal boundary never made it into rgdxaCenter, so it reads back as one ordinary column, narrowing the table by exactly one.
+    expect(block.columnWidthsPt).toHaveLength(plainColumnCount + 1);
+    expect(block.rows[0]?.cells[plainColumnCount].colSpan).toBeUndefined();
+    expect(cellText(block.rows[0]?.cells[plainColumnCount])).toBe("merged");
   });
 
   it("writes a genuinely blank cell as blank, not as a vertical-merge continuation of the cell above it", () => {
