@@ -377,6 +377,13 @@ describe("compileFormulaText", () => {
       );
     });
 
+    it("refuses a word ending in letters but containing a digit earlier, rather than the plain-column check matching just its own trailing letters", () => {
+      // The bare-column check is anchored at both ends too: without the LEADING anchor, `[A-Za-z]{1,3}$` would still match the final "B" of "A1B" as a satisfying suffix, ignoring the "A1" before it entirely, rather than rejecting the whole word for containing a digit at all.
+      expect(() => compileFormulaText("A1B")).toThrow(
+        /carries "A1B", which is not a valid cell reference/,
+      );
+    });
+
     it("accepts a two-letter column with no row digits of its own, split from its row by an explicit dollar sign", () => {
       // The bare-column check accepts 1 TO 3 letters, not exactly one -- a single-letter column ("A$1", already covered above) cannot tell an exact-one-letter check apart from a 1-3 range; a genuinely multi-letter column here is what needs the wider range to still be accepted at all.
       expect(() => compileFormulaText("AB$1")).not.toThrow();
