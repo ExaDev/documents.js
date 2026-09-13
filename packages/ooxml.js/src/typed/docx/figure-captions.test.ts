@@ -79,6 +79,15 @@ describe("associateFigureCaptions", () => {
     ]);
   });
 
+  it("joins a caption's multiple runs directly with no separator between them", () => {
+    const caption: ContentBlock = {
+      kind: "paragraph",
+      runs: [{ text: "Figure " }, { text: "1" }, { text: ": Split runs" }],
+      styleId: "Caption",
+    };
+    expect(captionsOf([image(), caption])).toEqual(["Figure 1: Split runs"]);
+  });
+
   it("matches the style id case-insensitively", () => {
     // w:pStyle/@w:val is a producer's own spelling, and ContentParagraph.styleId documents it as such.
     expect(
@@ -92,6 +101,19 @@ describe("associateFigureCaptions", () => {
       undefined,
       undefined,
     ]);
+  });
+
+  it("never attaches a caption to a non-image block, even one sitting directly beside a genuine Caption-styled paragraph", () => {
+    // A plain paragraph is never a figure -- it must be returned exactly as given, without ever entering the candidate-claiming logic a caption-styled neighbour would otherwise feed it.
+    const blocks = [
+      paragraph("Body text"),
+      paragraph("Figure 1: X", "Caption"),
+    ];
+
+    const result = associateFigureCaptions(blocks);
+
+    expect(result[0]).toEqual(paragraph("Body text"));
+    expect(result[0]).not.toHaveProperty("caption");
   });
 
   it("preserves the block count and order, which the extent indices depend on", () => {
