@@ -143,6 +143,23 @@ describe("emphasis, strong emphasis, and the flanking rules", () => {
     ]);
   });
 
+  it("resolves two independent, non-overlapping emphasis pairs, not letting the first pair's exhausted closer be reused as the second pair's opener", () => {
+    // Once *a* is resolved, its own closing "*" is fully consumed (count reaches 0) and must come off the delimiter stack -- otherwise it can still open (both-flanking, like any `*` between word-ish characters here) and the second closer wrongly matches THAT leftover delimiter instead of the real "*" opener before "c", swallowing the second pair's own emphasis into nothing.
+    expect(parse("*a*b*c*")).toEqual([
+      {
+        type: "emphasis",
+        marker: "*",
+        children: [{ type: "text", value: "a" }],
+      },
+      { type: "text", value: "b" },
+      {
+        type: "emphasis",
+        marker: "*",
+        children: [{ type: "text", value: "c" }],
+      },
+    ]);
+  });
+
   it("nests strong inside emphasis for a three-delimiter run", () => {
     expect(parse("***foo***")).toEqual([
       {

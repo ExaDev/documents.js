@@ -118,7 +118,9 @@ export class DelimiterStack {
 }
 
 // A closer's "signature" for the openers-floor map below. The rule-of-three predicate depends only on the closer's own delimiter character, whether it can also open, and its original length modulo three -- so once a closer with a given signature has failed to find any opener above a position, no LATER closer with that same signature can succeed below it either, and the search floor can be raised permanently. Keying by all three (rather than cmark's coarser "one bucket for every `_`") keeps the pruning exactly sound: a coarser key would raise the floor for closers whose predicate differs from the one that failed.
-function closerSignature(closer: Delimiter): string {
+//
+// Exported for direct testing: the string's own exact shape (which literal marks the canOpen branch, `% 3` rather than any other reduction) has no effect processEmphasis's own black-box behaviour can distinguish -- every reachable pair of distinct signatures is already provably distinct by char or by the raw fields isRuleOfThreeBlocked reads regardless of the exact spelling used to encode them here, so the only way to pin the concrete encoding this comment documents is to assert this function's own return value.
+export function closerSignature(closer: Delimiter): string {
   return `${closer.char}${closer.canOpen ? "1" : "0"}${String(closer.origCount % 3)}`;
 }
 
@@ -142,14 +144,13 @@ function canMatch(opener: Delimiter, closer: Delimiter): boolean {
   return !isRuleOfThreeBlocked(opener, closer);
 }
 
+// No separate closer.char === "~" case: canMatch's own tilde branch already requires opener.count === closer.count before a tilde match is ever accepted, and MAX_STRIKETHROUGH_RUN caps both to 1 or 2 -- so for any tilde pair that reaches here, the generic formula below (both sides have two available, or neither does, since the counts are equal) already evaluates to exactly closer.count either way.
+//
+// spec 0.31.2 rule 13: "if one of the delimiters can both open and close emphasis, then the sum ..." -- operationally, a match consumes two delimiters (strong emphasis) whenever both runs still have two available, and one otherwise, with any remainder left on the stack to pair up again.
 function delimitersConsumedByMatch(
   opener: Delimiter,
   closer: Delimiter,
 ): number {
-  if (closer.char === "~") {
-    return closer.count;
-  }
-  // spec 0.31.2 rule 13: "if one of the delimiters can both open and close emphasis, then the sum ..." -- operationally, a match consumes two delimiters (strong emphasis) whenever both runs still have two available, and one otherwise, with any remainder left on the stack to pair up again.
   return closer.count >= 2 && opener.count >= 2 ? 2 : 1;
 }
 
@@ -194,9 +195,10 @@ export function processEmphasis(
       ? openersFloor.get(signature)
       : stackBottom;
 
+    // No separate opener !== stackBottom arm: floor defaults to stackBottom itself for a signature never seen before (just above), and a raised floor is always at or above stackBottom in this same walk -- so opener !== floor already stops the search no later than opener !== stackBottom ever would.
     let opener = closer.previous;
     let matchedOpener: Delimiter | undefined;
-    while (opener !== undefined && opener !== stackBottom && opener !== floor) {
+    while (opener !== undefined && opener !== floor) {
       if (canMatch(opener, closer)) {
         matchedOpener = opener;
         break;
@@ -208,9 +210,7 @@ export function processEmphasis(
     if (matchedOpener === undefined) {
       closer = closer.next;
       openersFloor.set(signature, failedCloser.previous);
-      if (!failedCloser.canOpen) {
-        stack.remove(failedCloser);
-      }
+      // No stack.remove(failedCloser) here even when it cannot itself open: canMatch's own initial guard already rejects any delimiter with canOpen false as a later opener candidate, so leaving it linked can never produce a wrong match -- only ever one extra, cheap guard check for a search that reaches it, which the floor just set already prevents for anything of this same signature.
       continue;
     }
 
@@ -237,18 +237,15 @@ export function processEmphasis(
     }
     openerNode.insertAfter(wrapper);
 
-    // Every delimiter strictly between the pair is now enclosed by the new wrapper and can never pair with anything outside it -- drop them all at once rather than one at a time.
-    if (matchedOpener.next !== closer) {
-      matchedOpener.next = closer;
-      closer.previous = matchedOpener;
-    }
+    // Every delimiter strictly between the pair is now enclosed by the new wrapper and can never pair with anything outside it -- drop them all at once rather than one at a time. No `matchedOpener.next !== closer` guard: when nothing sat between them, both writes below already hold, so skipping them changes nothing.
+    matchedOpener.next = closer;
+    closer.previous = matchedOpener;
 
+    // No openerNode.unlink()/closerNode.unlink() here: toAstNode (src/inline/inline.ts) already drops any zero-length text node -- scaffolding, not content -- regardless of where it still sits in the sibling chain, and appendChild unlinks its argument unconditionally anyway before attaching it elsewhere. Removing the now-empty delimiter from the STACK below is the part that is load-bearing: canMatch has no way to see that a delimiter's count already reached zero, so a fully consumed opener or closer left on the stack can still be matched again by a later closer.
     if (matchedOpener.count === 0) {
-      openerNode.unlink();
       stack.remove(matchedOpener);
     }
     if (closer.count === 0) {
-      closerNode.unlink();
       const following = closer.next;
       stack.remove(closer);
       closer = following;
