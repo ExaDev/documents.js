@@ -201,10 +201,12 @@ function expectRedBlackTree(
 }
 
 describe("writeCompoundFile header and sector layout", () => {
-  // One 5-byte stream: small enough for the mini stream, so the file is the minimal shape that still exercises every structure -- header, one FAT sector, one directory sector, the mini stream, and the mini FAT. Every expectation below is derived from the spec's field tables, then checked against the layout this writer commits to: sector 0 FAT, sector 1 directory, sector 2 mini stream, sector 3 mini FAT.
-  const minimal = writeCompoundFile([stream("Foo", enc("hello"))]);
+  // One 5-byte stream: small enough for the mini stream, so the file is the minimal shape that still exercises every structure -- header, one FAT sector, one directory sector, the mini stream, and the mini FAT. Every expectation below is derived from the spec's field tables, then checked against the layout this writer commits to: sector 0 FAT, sector 1 directory, sector 2 mini stream, sector 3 mini FAT. Built fresh inside each it() rather than shared at describe-top-level: a shared const built once at module/describe setup time runs before any specific test, so Stryker's per-test coverage tracker cannot attribute a mutation in writeCompoundFile's own body to whichever assertion below would actually catch it, and every mutant it introduces there is misreported as surviving regardless of whether a real test kills it.
+  const minimalFixture = (): Uint8Array<ArrayBuffer> =>
+    writeCompoundFile([stream("Foo", enc("hello"))]);
 
   it("writes the header signature, CLSID, versions, and byte order [MS-CFB] 2.2", () => {
+    const minimal = minimalFixture();
     expect([...minimal.subarray(0, 8)]).toEqual([
       0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1,
     ]);
@@ -222,6 +224,7 @@ describe("writeCompoundFile header and sector layout", () => {
   });
 
   it("writes the sector-count and location fields the minimal file's layout implies", () => {
+    const minimal = minimalFixture();
     expect(u32(minimal, 0x28)).toBe(0); // number of directory sectors MUST be zero for major version 3
     expect(u32(minimal, 0x2c)).toBe(1); // one FAT sector maps all four sectors of this file
     expect(u32(minimal, 0x30)).toBe(1); // first directory sector
@@ -234,6 +237,7 @@ describe("writeCompoundFile header and sector layout", () => {
   });
 
   it("writes the header DIFAT array: the FAT sector locations in order, then FREESECT padding", () => {
+    const minimal = minimalFixture();
     expect(u32(minimal, 0x4c)).toBe(0);
     for (let i = 1; i < 109; i++) {
       expect(u32(minimal, 0x4c + i * 4)).toBe(FREESECT);
@@ -242,10 +246,11 @@ describe("writeCompoundFile header and sector layout", () => {
 
   it("sizes the file at one header sector plus its sectors, and lays the sectors out contiguously", () => {
     // Sector N occupies bytes [(N + 1) * sectorSize, (N + 2) * sectorSize) ([MS-CFB] 2.3), so a four-sector version 3 file is 5 * 512 bytes.
-    expect(minimal.length).toBe(512 * 5);
+    expect(minimalFixture().length).toBe(512 * 5);
   });
 
   it("marks the FAT sector as FATSECT and terminates every one-sector chain [MS-CFB] 2.3", () => {
+    const minimal = minimalFixture();
     const fat = 512;
     expect(u32(minimal, fat + 0 * 4)).toBe(FATSECT); // sector 0 holds the FAT itself
     expect(u32(minimal, fat + 1 * 4)).toBe(ENDOFCHAIN); // directory
@@ -258,6 +263,7 @@ describe("writeCompoundFile header and sector layout", () => {
   });
 
   it("writes the root directory entry per [MS-CFB] 2.6.1/2.6.2", () => {
+    const minimal = minimalFixture();
     const root = 512 * 2;
     expect(
       new TextDecoder("utf-16le").decode(minimal.subarray(root, root + 20)),
@@ -281,6 +287,7 @@ describe("writeCompoundFile header and sector layout", () => {
   });
 
   it("writes the stream directory entry, mini-resident because it is under the cutoff", () => {
+    const minimal = minimalFixture();
     const entry = 512 * 2 + 128;
     expect(
       new TextDecoder("utf-16le").decode(minimal.subarray(entry, entry + 6)),
@@ -296,6 +303,7 @@ describe("writeCompoundFile header and sector layout", () => {
   });
 
   it("writes the unallocated directory entries padding the sector as object type 0 with NOSTREAM links", () => {
+    const minimal = minimalFixture();
     for (const slot of [2, 3]) {
       const base = 512 * 2 + slot * 128;
       expect(u16(minimal, base + 0x40)).toBe(0);
@@ -307,6 +315,7 @@ describe("writeCompoundFile header and sector layout", () => {
   });
 
   it("stores the small stream in the mini stream, zero-padded to a whole mini sector, chained by the mini FAT", () => {
+    const minimal = minimalFixture();
     const miniStream = 512 * 3;
     expect([...minimal.subarray(miniStream, miniStream + 5)]).toEqual([
       ...enc("hello"),
