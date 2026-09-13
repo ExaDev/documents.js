@@ -88,6 +88,33 @@ describe("readOdm: scope boundaries and error paths (synthetic packages)", () =>
     expect(readOdm(pkg).sections).toEqual([]);
   });
 
+  it("ignores a non-element child and a differently-tagged element among office:text's children, rather than trying to read them as sections", () => {
+    const realSection = el("text:section", { "text:name": "ChapterOne" }, [
+      el("text:section-source", { "xlink:href": "chapter1.odt" }),
+    ]);
+    const pkg: Package = {
+      parts: {
+        "content.xml": {
+          kind: "xml",
+          nodes: [
+            el("office:document-content", {}, [
+              el("office:body", {}, [
+                el("office:text", {}, [
+                  txt("\n  "),
+                  el("text:p", {}, [txt("stray paragraph")]),
+                  realSection,
+                ]),
+              ]),
+            ]),
+          ],
+        },
+      },
+    };
+    expect(readOdm(pkg).sections).toEqual([
+      { name: "ChapterOne", href: "chapter1.odt" },
+    ]);
+  });
+
   it("skips a top-level text:section with no text:section-source child -- ODF's generic, non-master-document section (e.g. multi-column layout), not a chapter reference", () => {
     const plainSection = el(
       "text:section",
