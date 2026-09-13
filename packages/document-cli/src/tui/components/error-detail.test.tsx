@@ -8,7 +8,7 @@ import {
   useAppState,
 } from "../state/context.js";
 import { settle, waitForFrame } from "../test-support.js";
-import { ErrorDetail } from "./error-detail.js";
+import { detailNode, ErrorDetail } from "./error-detail.js";
 
 // Seeds a real errorDetail through OPEN_FILE_ERROR -- the same action a genuinely failed :open/export dispatches -- exactly once, guarded by a ref.
 function Harness(): ReactElement {
@@ -103,6 +103,24 @@ describe("ErrorDetail", () => {
     );
     expect(frame).toContain("Could not open report.docx");
     expect(frame).not.toContain("ENOENT");
+  });
+
+  it("ignores every other key, leaving the error detail showing", async () => {
+    const { lastFrame, stdin } = renderHarness();
+    await waitForFrame(lastFrame, (candidate) =>
+      candidate.includes("hasErrorDetail:true"),
+    );
+    await settle();
+
+    stdin.write("x");
+    await settle();
+    expect(lastFrame()).toContain("hasErrorDetail:true");
+  });
+
+  it("detailNode omits the node entirely for undefined, not just an empty one", () => {
+    // ink renders an empty <Text>{undefined}</Text> identically to omitting the node outright (see this function's own doc comment), so this checks the returned value directly rather than through a rendered frame.
+    expect(detailNode(undefined)).toBeUndefined();
+    expect(detailNode("ENOENT")).not.toBeUndefined();
   });
 
   it("dismisses the error detail on Escape", async () => {
