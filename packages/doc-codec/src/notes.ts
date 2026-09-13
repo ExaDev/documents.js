@@ -26,7 +26,20 @@ export function readNoteBodies(
   table: Uint8Array,
   pieceTable: PieceTable,
   context: ReadContext,
-  fib: Fib,
+  fib: Pick<
+    Fib,
+    | "ccpText"
+    | "ccpFtn"
+    | "ccpHdd"
+    | "ccpAtn"
+    | "ccpEdn"
+    | "fcPlcffndTxt"
+    | "lcbPlcffndTxt"
+    | "fcPlcfandTxt"
+    | "lcbPlcfandTxt"
+    | "fcPlcfendTxt"
+    | "lcbPlcfendTxt"
+  >,
 ): NoteBodies {
   // Subdocument order, [MS-DOC] 2.4.1: main, footnote, header, comment (annotation), endnote, textbox, header-textbox -- each subdocument's own starting CP is the running total of every one before it.
   const footnoteStartCp = fib.ccpText;
