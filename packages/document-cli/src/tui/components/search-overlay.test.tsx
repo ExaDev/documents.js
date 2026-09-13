@@ -60,6 +60,24 @@ describe("SearchOverlay", () => {
     expect(frame).toContain('query:"bud"');
   });
 
+  it("also echoes every keystroke back into its own visible text field, not only into dispatched state", async () => {
+    const { lastFrame, stdin } = renderHarness();
+    await waitForFrame(lastFrame, (candidate) =>
+      candidate.includes("searchOpen:true"),
+    );
+    await settle();
+
+    stdin.write("bud");
+    await waitForFrame(lastFrame, (candidate) =>
+      candidate.includes('query:"bud"'),
+    );
+    // The overlay's own '/ ...' prompt line renders from its own local `query` state, entirely independent of the debug 'query:' line above (which reads dispatched state instead) -- so it would stay blank if the local setQuery call were ever dropped, even though the dispatched state (and the debug line) still updated. Isolate that line specifically, not just the frame as a whole, so this assertion cannot pass on the debug line's own text alone.
+    const promptLine = lastFrame()
+      ?.split("\n")
+      .find((line) => line.includes("/"));
+    expect(promptLine).toContain("bud");
+  });
+
   it("keeps the query and closes on Enter", async () => {
     const { lastFrame, stdin } = renderHarness();
     await waitForFrame(lastFrame, (candidate) =>
