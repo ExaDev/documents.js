@@ -126,6 +126,27 @@ describe("readDiagramText", () => {
     expect(readDiagramText(model)).toEqual([]);
   });
 
+  it("contributes nothing for a paragraph child that is neither a:r/a:fld nor a:br", () => {
+    const model = dataModel(
+      [
+        pt(
+          "n1",
+          "node",
+          txBody(el("a:p", {}, [run("real"), el("a:endParaRPr"), run("text")])),
+        ),
+        pt("doc", "doc"),
+      ],
+      [cxn("doc", "n1")],
+    );
+    expect(readDiagramText(model)).toEqual([
+      {
+        kind: "paragraph",
+        origin: "diagram",
+        runs: [{ text: "real" }, { text: "text" }],
+      },
+    ]);
+  });
+
   it("reads an a:br as a literal newline run", () => {
     const model = dataModel(
       [
