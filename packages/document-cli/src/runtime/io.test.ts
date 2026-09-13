@@ -61,6 +61,17 @@ describe("readInput", () => {
     );
   });
 
+  it("rejects instead of reading a real file once the given signal is already aborted", async () => {
+    const path = join(workspace, "aborted.bin");
+    await writeFile(path, new Uint8Array([1, 2, 3]));
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      readInput(path, { signal: controller.signal }),
+    ).rejects.toThrow(/abort/i);
+  });
+
   it("reads and concatenates every chunk from stdin when the path is '-'", async () => {
     installFakeStdin([Buffer.from([1, 2]), Buffer.from([3, 4, 5])]);
     const bytes = await readInput("-");
