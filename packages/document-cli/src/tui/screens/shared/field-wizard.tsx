@@ -30,18 +30,15 @@ export function FieldWizard(props: {
   readonly onComplete: (values: Readonly<Record<string, string>>) => void;
 }): ReactElement {
   const [stepIndex, setStepIndex] = useState(0);
-  const [collected, setCollected] = useState<Record<string, string>>({});
-  const initialField = props.fields[0];
-  const [draft, setDraft] = useState(
-    initialField === undefined ? "" : initialField.defaultValue,
-  );
-
   const field = props.fields[stepIndex];
   if (field === undefined) {
     throw new Error(
       `FieldWizard stepIndex ${stepIndex} is out of range for ${props.fields.length} fields -- onComplete always fires before stepIndex can advance past the last field, so this indicates a bug in that advance.`,
     );
   }
+  // Checked above, before this state is even declared, so `field` is already known defined here on every render that reaches this line -- stepIndex starts at 0, matching the index `field` itself is read at on this same first render, so there is no separate "initial field" to fall back from.
+  const [collected, setCollected] = useState<Record<string, string>>({});
+  const [draft, setDraft] = useState(field.defaultValue);
 
   return (
     <Box flexDirection="column" borderStyle="round" paddingX={1}>
