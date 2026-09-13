@@ -2282,7 +2282,7 @@ describe("body constructs", () => {
 
   // writeCellBlocks writes a cell's own content as \intbl <pict>/<obj>/paragraph groups -- image and embeddedObject blocks borrow the identical \pard\plain\intbl shell a paragraph gets (see the "round trip" describe block below for both), since read.ts's own reader already proves that shape round-trips. A table or pageBreak block placed directly in a cell has no such shell to borrow -- a nested table needs its own \itapN row grammar this writer does not build, and a mid-row \page would \pard-reset the row's own \intbl state -- so those two kinds are still dropped rather than embedded, reported through CONSTRUCT_UNREPRESENTED rather than filtered out with no diagnostic at all.
   it("reports rather than silently dropping a page break placed directly in a table cell", () => {
-    const codes: string[] = [];
+    const diagnostics: { code: string; message: string }[] = [];
     const out = text(
       writeRtfContent(
         wordprocessing([
@@ -2300,10 +2300,22 @@ describe("body constructs", () => {
             ],
           },
         ]),
-        { sink: (diagnostic) => codes.push(diagnostic.code) },
+        {
+          sink: (diagnostic) =>
+            diagnostics.push({
+              code: diagnostic.code,
+              message: diagnostic.message,
+            }),
+        },
       ),
     );
-    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a pageBreak block inside a table cell is dropped: this writer cannot yet splice a pageBreak's own destination grammar into a table row's own \\intbl flow",
+      },
+    ]);
     expect(out).not.toContain("\\page");
   });
 
@@ -2330,6 +2342,71 @@ describe("body constructs", () => {
       "{\\*\\shppict{\\pict\\pngblip\\picwgoal1440\\pichgoal720",
     );
     expect(out).toContain("89504e470d0a1a0a");
+  });
+
+  it("reports rather than mislabelling an svg or gif image, RTF's \\pict destination having no picture-type keyword for either", () => {
+    for (const format of ["svg", "gif"] as const) {
+      const diagnostics: { code: string; message: string }[] = [];
+      const out = text(
+        writeRtfContent(
+          wordprocessing([
+            {
+              kind: "image",
+              format,
+              base64: "AA==",
+              widthPt: 72,
+              heightPt: 36,
+            },
+          ]),
+          {
+            sink: (diagnostic) =>
+              diagnostics.push({
+                code: diagnostic.code,
+                message: diagnostic.message,
+              }),
+          },
+        ),
+      );
+      expect(diagnostics).toEqual([
+        {
+          code: RtfDiagnosticCodes.UNSUPPORTED_PICTURE_FORMAT,
+          message: `an image block in ${format} format cannot be written: RTF's \\pict destination has no picture-type keyword for it, so the image is dropped rather than mislabelled as a format it is not`,
+        },
+      ]);
+      expect(out).not.toContain("\\pict");
+    }
+  });
+
+  it("reports rather than writing an empty \\pict destination for an image whose base64 payload does not decode to anything", () => {
+    const diagnostics: { code: string; message: string }[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "image",
+            format: "png",
+            base64: "not valid base64!!",
+            widthPt: 72,
+            heightPt: 36,
+          },
+        ]),
+        {
+          sink: (diagnostic) =>
+            diagnostics.push({
+              code: diagnostic.code,
+              message: diagnostic.message,
+            }),
+        },
+      ),
+    );
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.UNSUPPORTED_PICTURE_FORMAT,
+        message:
+          "an image block's base64 payload could not be decoded, so no \\pict destination is written for it",
+      },
+    ]);
+    expect(out).not.toContain("\\pict");
   });
 
   it("writes an embedded object as a real [MS-CFB] compound file inside \\object's \\objdata", () => {
@@ -4004,6 +4081,41 @@ describe("round trip through this package's own reader", () => {
       .filter((block): block is ContentParagraph => block.kind === "paragraph")
       .flatMap((paragraph) => paragraph.runs.map((run) => run.text));
     expect(cellText).toEqual(["before", "after"]);
+  });
+
+  it("writes an image alone in a cell with no leading \\par and no fallback shell, blockPending and wroteBlock both starting false", () => {
+    // With nothing before the image, blockPending is still false when it is reached -- a mutant always flushing \par here would insert one with no preceding paragraph to close. With nothing after it either, this image's own wroteBlock = true is the ONLY assignment in the whole cell -- unlike the surrounding-text test above, where a later paragraph's own wroteBlock = true would mask a mutant resetting it to false right after the image.
+    const base64 =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const out = write(
+      wordprocessing([
+        {
+          kind: "table",
+          columnWidthsPt: [72],
+          rows: [
+            {
+              cells: [
+                {
+                  blocks: [
+                    {
+                      kind: "image",
+                      format: "png",
+                      base64,
+                      widthPt: 72,
+                      heightPt: 36,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\pard\\plain\\intbl {\\*\\shppict");
+    expect(out).not.toContain("\\par{\\*\\shppict");
+    // Exactly one \pard\plain\intbl -- the image's own, not a second one from the !wroteBlock fallback shell.
+    expect(out.match(/\\pard\\plain\\intbl/g)).toHaveLength(1);
   });
 
   // The identical regression as the image case above, for the PR's own headline construct: writeCellBlocks once dropped an \object placed directly in a table cell too, discarding a decoded embedded object entirely on write. writeEmbeddedObjectBlock's own \intbl variant fixes it the same way.
