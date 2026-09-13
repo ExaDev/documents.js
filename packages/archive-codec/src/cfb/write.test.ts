@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { type CompoundFileStream, readCompoundFile } from "./read";
 import {
   CompoundFileWriteError,
@@ -776,32 +776,38 @@ describe("writeCompoundFile mini-stream sector allocation", () => {
 describe("writeCompoundFile FAT, mini-FAT, and DIFAT region padding", () => {
   // 24 MiB forces three chained DIFAT sectors past the header's own 109-entry array ([MS-CFB] 2.5), not just one or two: the DIFAT-chaining loop's own next-sector arithmetic (difatStart + sector + 1) needs a NON-LAST sector at an index past 0 to distinguish from a subtly wrong variant, since at sector 0 every candidate formula agrees (any term multiplied, divided, or negated by 0 is 0), and a fixture with only two DIFAT sectors has no non-last sector other than 0.
   //
-  // Built in beforeAll, not at this describe block's own top level: code here runs once when the file is collected, before any test executes, which Stryker's coverage analysis treats as module-load-time ("static") rather than attributable to a specific test -- and the DIFAT-chaining arithmetic this fixture exists to exercise is reachable nowhere else in this suite, so a mutant only reachable through it would get no per-test coverage at all. A beforeAll hook runs within this describe block's own test-execution phase instead, which coverage analysis does attribute correctly.
-  let bytes: Uint8Array<ArrayBuffer>;
-  let fatSectorCount: number;
-  let difatSectorCount: number;
-  let difatStart: number;
-  let miniFatSectorCount: number;
+  // Built fresh inside each test, not shared via a describe-level beforeAll: Stryker's per-test coverage analysis only attributes code executed inside an it() body to that test -- a beforeAll hook runs outside every individual test's own tracked window, so a mutant reachable only through it (as this fixture's own DIFAT-chaining arithmetic is, nowhere else in this suite) gets no usable per-test coverage at all, confirmed directly against a live mutation run. Recomputing the same 24 MiB write per test costs a fraction of a second and buys correct attribution.
   const sectorSize = 512;
   const sectorOffset = (sector: number): number => (sector + 1) * sectorSize;
-
-  beforeAll(() => {
+  function bigDifatFixture(): {
+    bytes: Uint8Array<ArrayBuffer>;
+    fatSectorCount: number;
+    difatSectorCount: number;
+    difatStart: number;
+    miniFatSectorCount: number;
+  } {
     const payload = new Uint8Array(24 * 1024 * 1024);
-    bytes = writeCompoundFile([stream("WordDocument", payload)]);
-    fatSectorCount = u32(bytes, 0x2c);
-    difatSectorCount = u32(bytes, 0x48);
-    difatStart = u32(bytes, 0x44);
-    miniFatSectorCount = u32(bytes, 0x40);
-  });
+    const bytes = writeCompoundFile([stream("WordDocument", payload)]);
+    return {
+      bytes,
+      fatSectorCount: u32(bytes, 0x2c),
+      difatSectorCount: u32(bytes, 0x48),
+      difatStart: u32(bytes, 0x44),
+      miniFatSectorCount: u32(bytes, 0x40),
+    };
+  }
 
   it("needs more than one FAT sector and at least three chained DIFAT sectors for this fixture", () => {
     // Sanity check on the fixture itself before trusting the boundary assertions below against it: at least three DIFAT sectors are what makes the DIFAT-chaining loop's own per-sector index and next-pointer arithmetic observable at all (see the fixture's own comment above).
+    const { fatSectorCount, difatSectorCount } = bigDifatFixture();
     expect(fatSectorCount).toBeGreaterThan(1);
     expect(difatSectorCount).toBeGreaterThanOrEqual(3);
   });
 
   it("marks every FAT sector as FATSECT and every DIFAT sector as DIFSECT in the FAT table itself", () => {
     // The FAT's own entry for each of its own sectors and each DIFAT sector is a role marker, never a chain continuation -- read directly from the FAT table (not merely inferred from the file round-tripping), since no reader ever follows a chain onto one of these sectors to notice a wrong marker there.
+    const { bytes, fatSectorCount, difatSectorCount, difatStart } =
+      bigDifatFixture();
     const entriesPerFatSector = sectorSize / 4;
     const fatEntry = (sector: number): number => {
       const holder = Math.floor(sector / entriesPerFatSector);
@@ -824,6 +830,7 @@ describe("writeCompoundFile FAT, mini-FAT, and DIFAT region padding", () => {
 
   it("fills the FAT's own unused tail entries with FREESECT, past the file's real total sector count", () => {
     // The FAT addresses fatSectorCount * 128 sectors total (128 entries per 512-byte FAT sector); the file itself occupies exactly (bytes.length / sectorSize) - 1 real sectors (the header takes the first sectorSize bytes, uncounted). Every FAT entry beyond that real count is unused padding, and must read FREESECT. This writer lays FAT sectors out as physical sectors 0..fatSectorCount-1 (an identity mapping the header DIFAT array and any chained DIFAT sectors both merely restate), so the FAT sector holding a given sector's own entry is that sector's ordinal FAT-sector index directly, with no indirection needed.
+    const { bytes, fatSectorCount } = bigDifatFixture();
     const entriesPerFatSector = sectorSize / 4;
     const totalRealSectors = bytes.length / sectorSize - 1;
     const totalAddressableSectors = fatSectorCount * entriesPerFatSector;
@@ -841,6 +848,8 @@ describe("writeCompoundFile FAT, mini-FAT, and DIFAT region padding", () => {
   });
 
   it("chains every DIFAT sector correctly: each names a run of FAT sector indices then the next DIFAT sector or ENDOFCHAIN", () => {
+    const { bytes, fatSectorCount, difatSectorCount, difatStart } =
+      bigDifatFixture();
     const entriesPerFatSector = sectorSize / 4;
     const difatEntriesPerSector = entriesPerFatSector - 1;
     for (let sector = 0; sector < difatSectorCount; sector++) {
@@ -862,11 +871,13 @@ describe("writeCompoundFile FAT, mini-FAT, and DIFAT region padding", () => {
 
   it("needs no mini FAT sector at all when nothing is mini-resident", () => {
     // This fixture's one stream is well past the mini-stream cutoff, so miniSectorCount is 0 and miniFatSectorCount (ceil(0 / 128)) must be 0 too -- a division-to-multiplication mutant on that same ceil would instead compute a large, clearly-wrong sector count from a genuinely zero numerator.
+    const { bytes, miniFatSectorCount } = bigDifatFixture();
     expect(miniFatSectorCount).toBe(0);
     expect(u32(bytes, 0x3c)).toBe(ENDOFCHAIN); // first mini FAT sector: none needed
   });
 
   it("fills the DIFAT region's own reserved header array slots with FREESECT past the real FAT sector count", () => {
+    const { bytes, fatSectorCount } = bigDifatFixture();
     for (let i = fatSectorCount; i < 109; i++) {
       expect(u32(bytes, 0x4c + i * 4)).toBe(FREESECT);
     }
