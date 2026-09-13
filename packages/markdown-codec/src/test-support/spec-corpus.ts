@@ -13,16 +13,13 @@ export interface SpecExample {
   readonly section: string;
 }
 
-function isSpecExample(value: unknown): value is SpecExample {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-  if (
-    !("markdown" in value) ||
-    !("html" in value) ||
-    !("example" in value) ||
-    !("section" in value)
-  ) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// No separate "does every key exist" guard ahead of the type checks below: a genuinely absent key reads as undefined, whose typeof is never "string" or "number", so the four checks already reject a missing field exactly as they reject a present-but-wrongly-typed one.
+export function isSpecExample(value: unknown): value is SpecExample {
+  if (!isRecord(value)) {
     return false;
   }
   return (
@@ -33,7 +30,7 @@ function isSpecExample(value: unknown): value is SpecExample {
   );
 }
 
-function isSpecExampleArray(value: unknown): value is SpecExample[] {
+export function isSpecExampleArray(value: unknown): value is SpecExample[] {
   return Array.isArray(value) && value.every(isSpecExample);
 }
 
@@ -72,10 +69,12 @@ export function loadGfmExtensionExamples(extension: string): SpecExample[] {
   let exampleNumber = 0;
 
   while (index < lines.length) {
-    const line = lines[index] ?? "";
+    // index < lines.length just above already guarantees this index is in range.
+    const line = lines[index]!;
     const heading = GFM_SECTION_PATTERN.exec(line);
     if (heading !== null) {
-      section = heading[1] ?? "";
+      // GFM_SECTION_PATTERN's own capturing group is not inside an alternation, so a successful match always populates it -- only TypeScript's own RegExpExecArray typing needs told.
+      section = heading[1]!;
       index += 1;
       continue;
     }
@@ -89,16 +88,18 @@ export function loadGfmExtensionExamples(extension: string): SpecExample[] {
     index += 1;
     const markdown: string[] = [];
     while (index < lines.length && lines[index] !== ".") {
-      markdown.push(lines[index] ?? "");
+      // index < lines.length in the while condition just above already guarantees this index is in range.
+      markdown.push(lines[index]!);
       index += 1;
     }
     index += 1;
     const html: string[] = [];
+    // Both reads below are guarded by the identical index < lines.length check, evaluated first in the while condition's own left-to-right && chain -- in range whenever reached.
     while (
       index < lines.length &&
-      !GFM_EXAMPLE_END_PATTERN.test(lines[index] ?? "")
+      !GFM_EXAMPLE_END_PATTERN.test(lines[index]!)
     ) {
-      html.push(lines[index] ?? "");
+      html.push(lines[index]!);
       index += 1;
     }
     index += 1;
