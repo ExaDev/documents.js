@@ -18,6 +18,12 @@ describe("columnLettersToIndex", () => {
     expect(columnLettersToIndex("A1")).toBeUndefined();
     expect(columnLettersToIndex("")).toBeUndefined();
   });
+
+  it("returns undefined for mixed-case input even though every character is a letter", () => {
+    // document-schema.js's own columnLettersToIndex uppercases its input before validating, so it alone can't distinguish "aA" or "Aa" from "AA" -- these two cases exist specifically to pin the ^ and $ anchors in this module's own uppercase-only guard, each anchor's removal otherwise lets exactly one of these two strings reach (and be silently accepted by) the schema helper.
+    expect(columnLettersToIndex("aA")).toBeUndefined();
+    expect(columnLettersToIndex("Aa")).toBeUndefined();
+  });
 });
 
 describe("columnIndexToLetters", () => {
