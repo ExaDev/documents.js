@@ -64,6 +64,11 @@ describe("inferFormatFromFilename", () => {
     expect(inferFormatFromFilename(".gitignore")).toBeUndefined();
   });
 
+  it("returns undefined for a leading-dot filename even when the text after the dot is itself a recognised extension", () => {
+    // Distinguishes the leading-dot case from "no dot at all": both dotIndex === 0 and dotIndex === -1 must return undefined, so a filename whose only dot is a leading one, but whose suffix would otherwise resolve, proves the check rejects index 0 specifically rather than merely rejecting -1.
+    expect(inferFormatFromFilename(".docx")).toBeUndefined();
+  });
+
   it("resolves the extension from the final path segment, ignoring directory names that themselves contain a dot", () => {
     expect(inferFormatFromFilename("a.b.dir/report.pdf")).toBe("pdf");
   });
