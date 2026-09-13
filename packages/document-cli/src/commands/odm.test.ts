@@ -1,0 +1,166 @@
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createOdt } from "documents.js";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import { createProgram } from "../program";
+import { EXIT_SUCCESS, EXIT_USAGE_ERROR } from "../runtime/exit-codes";
+import { singleChapterOdmBytes } from "../test-support/odm-fixture";
+
+let workspace: string;
+let savedExitCode: typeof process.exitCode;
+
+interface CapturedRun {
+  readonly exitCode: typeof process.exitCode;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+async function runCli(args: readonly string[]): Promise<CapturedRun> {
+  const stdoutChunks: string[] = [];
+  const stderrChunks: string[] = [];
+  const stdoutSpy = vi
+    .spyOn(process.stdout, "write")
+    .mockImplementation((chunk) => {
+      stdoutChunks.push(
+        typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk),
+      );
+      return true;
+    });
+  const stderrSpy = vi
+    .spyOn(process.stderr, "write")
+    .mockImplementation((chunk) => {
+      stderrChunks.push(
+        typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk),
+      );
+      return true;
+    });
+  try {
+    // program.ts's own exitOverride sets process.exitCode BEFORE rethrowing a commander-level parse failure (an unknown option, or -- as here -- a custom coerce function's own InvalidArgumentError), so the rejection itself carries nothing this suite needs beyond the exit code already recorded on process.exitCode; every other command action already resolves normally with process.exitCode set the identical way.
+    await createProgram().parseAsync(["node", "document-cli", ...args]);
+  } catch {
+    // Swallowed deliberately -- see the comment above.
+  } finally {
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+  }
+  return {
+    exitCode: process.exitCode,
+    stdout: stdoutChunks.join(""),
+    stderr: stderrChunks.join(""),
+  };
+}
+
+beforeAll(async () => {
+  savedExitCode = process.exitCode;
+  workspace = await mkdtemp(join(tmpdir(), "document-cli-odm-"));
+  await writeFile(
+    join(workspace, "book.odm"),
+    singleChapterOdmBytes("chapter1.odt"),
+  );
+  const chapter = createOdt();
+  chapter.body.appendParagraph().appendRun({ text: "Chapter content" });
+  await writeFile(join(workspace, "chapter1.odt"), chapter.toBytes());
+});
+
+afterAll(async () => {
+  await rm(workspace, { recursive: true, force: true });
+});
+
+afterEach(() => {
+  process.exitCode = savedExitCode;
+});
+
+describe("odm-to-pdf", () => {
+  it("resolves a chapter via --chapters-dir, matched by basename", async () => {
+    const output = join(workspace, "via-dir.pdf");
+    const { exitCode } = await runCli([
+      "odm-to-pdf",
+      join(workspace, "book.odm"),
+      output,
+      "--chapters-dir",
+      workspace,
+    ]);
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    const bytes = await readFile(output);
+    expect(new TextDecoder("latin1").decode(bytes.subarray(0, 5))).toBe(
+      "%PDF-",
+    );
+  });
+
+  it("resolves a chapter via an explicit --chapter href=file override", async () => {
+    const output = join(workspace, "via-override.pdf");
+    const { exitCode } = await runCli([
+      "odm-to-pdf",
+      join(workspace, "book.odm"),
+      output,
+      "--chapter",
+      `chapter1.odt=${join(workspace, "chapter1.odt")}`,
+    ]);
+    expect(exitCode).toBe(EXIT_SUCCESS);
+  });
+
+  it("fails, naming both --chapters-dir and --chapter, when a chapter cannot be resolved", async () => {
+    const output = join(workspace, "unresolved.pdf");
+    const { exitCode, stderr } = await runCli([
+      "odm-to-pdf",
+      join(workspace, "book.odm"),
+      output,
+    ]);
+    expect(exitCode).not.toBe(EXIT_SUCCESS);
+    expect(stderr).toContain("--chapters-dir");
+    expect(stderr).toContain("--chapter");
+  });
+
+  it("rejects a malformed --chapter flag missing the '=' separator", async () => {
+    const { exitCode, stderr } = await runCli([
+      "odm-to-pdf",
+      join(workspace, "book.odm"),
+      join(workspace, "never.pdf"),
+      "--chapter",
+      "no-equals-sign",
+    ]);
+    expect(exitCode).toBe(EXIT_USAGE_ERROR);
+    expect(stderr).toContain("--chapter must be formatted as <href>=<file>");
+  });
+
+  it("rejects conflicting positional and --out destinations", async () => {
+    const { exitCode, stderr } = await runCli([
+      "odm-to-pdf",
+      join(workspace, "book.odm"),
+      join(workspace, "positional.pdf"),
+      "--out",
+      join(workspace, "flag.pdf"),
+      "--chapters-dir",
+      workspace,
+    ]);
+    expect(exitCode).toBe(EXIT_USAGE_ERROR);
+    expect(stderr).toContain("conflicting output destinations");
+  });
+
+  it("emits a JSON result summary on stderr under --json, naming the real output path", async () => {
+    const output = join(workspace, "via-json.pdf");
+    const { exitCode, stderr } = await runCli([
+      "odm-to-pdf",
+      join(workspace, "book.odm"),
+      output,
+      "--chapters-dir",
+      workspace,
+      "--json",
+    ]);
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    const lastLine = stderr.trim().split("\n").at(-1) ?? "";
+    expect(JSON.parse(lastLine)).toMatchObject({
+      type: "result",
+      output,
+    });
+  });
+});
