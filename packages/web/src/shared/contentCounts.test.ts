@@ -25,6 +25,52 @@ function wordprocessing(
   };
 }
 
+const SHAPE_INSETS = {
+  insetLeftPt: 0,
+  insetTopPt: 0,
+  insetRightPt: 0,
+  insetBottomPt: 0,
+};
+
+function presentation(slides: number, shapesPerSlide: number): ContentDocument {
+  return {
+    kind: "presentation",
+    metadata: {},
+    slides: Array.from({ length: slides }, () => ({
+      size: PAGE_SIZE,
+      notes: "",
+      shapes: Array.from({ length: shapesPerSlide }, () => ({
+        frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+        ...SHAPE_INSETS,
+        blocks: [],
+      })),
+    })),
+  };
+}
+
+function drawing(
+  pages: number,
+  shapesPerPage: number,
+  vectorsPerPage: number,
+): ContentDocument {
+  return {
+    kind: "drawing",
+    metadata: {},
+    pages: Array.from({ length: pages }, () => ({
+      size: PAGE_SIZE,
+      shapes: Array.from({ length: shapesPerPage }, () => ({
+        frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+        ...SHAPE_INSETS,
+        blocks: [],
+      })),
+      vectors: Array.from({ length: vectorsPerPage }, () => ({
+        kind: "rect" as const,
+        frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      })),
+    })),
+  };
+}
+
 function spreadsheet(sheets: number, cellsPerSheet: number): ContentDocument {
   return {
     kind: "spreadsheet",
@@ -105,6 +151,37 @@ describe("contentSummary", () => {
     expect(contentSummary(spreadsheet(2, 50))).toEqual([
       "2 sheets",
       "100 cells",
+    ]);
+  });
+
+  it("uses the singular form for a spreadsheet with exactly one sheet and one cell", () => {
+    expect(contentSummary(spreadsheet(1, 1))).toEqual(["1 sheet", "1 cell"]);
+  });
+
+  it("summarises a presentation with slide and shape counts", () => {
+    expect(contentSummary(presentation(4, 3))).toEqual([
+      "4 slides",
+      "12 shapes",
+    ]);
+  });
+
+  it("uses the singular form for a presentation with exactly one slide and one shape", () => {
+    expect(contentSummary(presentation(1, 1))).toEqual(["1 slide", "1 shape"]);
+  });
+
+  it("summarises a drawing with page, shape, and vector counts", () => {
+    expect(contentSummary(drawing(2, 3, 5))).toEqual([
+      "2 pages",
+      "6 shapes",
+      "10 vectors",
+    ]);
+  });
+
+  it("uses the singular form for a drawing with exactly one page, one shape, and one vector", () => {
+    expect(contentSummary(drawing(1, 1, 1))).toEqual([
+      "1 page",
+      "1 shape",
+      "1 vector",
     ]);
   });
 
