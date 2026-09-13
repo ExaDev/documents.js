@@ -16,7 +16,20 @@ import { readGrpprl } from "./prop/sprm";
 import { readDocContent, readDocStreams } from "./read";
 import { readTextRange } from "./text/characters";
 import { parseClx } from "./text/piece-table";
-import { writeDocContent } from "./write";
+import { PARAGRAPH_MARK, SECTION_MARK } from "./text/special";
+import {
+  CLOSE_SECTION_TRAILING_PARAGRAPH_LOST_MESSAGE,
+  EMPTY_SECTION_LIST_MESSAGE,
+  layoutParagraphText,
+  mergeChpxRuns,
+  NO_ILFO_MINTED_MESSAGE,
+  PARAGRAPH_ISTD_LOST_MESSAGE,
+  PARAGRAPH_START_LOST_MESSAGE,
+  sameGrpprl,
+  SECTION_START_CP_LOST_MESSAGE,
+  SEPX_PLACEMENT_LOST_MESSAGE,
+  writeDocContent,
+} from "./write";
 
 // Verifies writeDocContent by reading its own output back through this package's own reader (readDocContent) -- the round trip this session's own writer packages (archive-codec's CFB writer, odf.js's typed writer) are all verified the same way, and the standing convention this task itself names. This round trip alone cannot prove third-party conformance, though: ExaDev/documents.js#892 is the confirmed counterexample -- a table passed this exact suite for the whole time LibreOffice's own .doc import filter rejected it outright, because readDocContent tolerated a document whose Main Document text did not end in the ordinary paragraph mark [MS-DOC] requires. Byte-level and real-reader verification for the table writer specifically lives in the README's own "Third-party verification" paragraph and its accompanying LibreOffice checks, not here.
 
@@ -92,6 +105,13 @@ function onlyCell(result: ContentDocument): ContentTableCell {
   const cell = tableAt(result, 0).rows[0]?.cells[0];
   if (cell === undefined) throw new Error("expected one cell");
   return cell;
+}
+
+/** The whole Main Document text stream, control characters included -- the only way to observe which exact terminator character (a section mark vs. an ordinary paragraph mark) writeDocContent chose at a given position, since readDocContent's own section split relies on PlcfSed's cp boundaries rather than on this specific character value. */
+function rawText(bytes: Uint8Array<ArrayBuffer>): string {
+  const { wordDocument, table, fib } = readDocStreams(bytes);
+  const pieceTable = parseClx(slice(table, fib.fcClx, fib.lcbClx, "Clx"));
+  return readTextRange(wordDocument, pieceTable, 0, fib.ccpText).text;
 }
 
 /** Whether any paragraph in a written document carries a Prl with this sprm opcode. Walked through this package's own grpprl primitives rather than scanned for the two opcode bytes anywhere in the stream, which would match the identical pair occurring inside some other sprm's operand and report an opcode that is not there. */
@@ -218,6 +238,8 @@ describe("writeDocContent", () => {
     const bytes = writeDocContent(document([paragraph([{ text: "plain" }])]));
     const result = readDocContent(bytes);
     expect(paragraphAt(result, 0).runs[0]?.fontFamily).toBeUndefined();
+    const { fib } = readDocStreams(bytes);
+    expect(fib.lcbSttbfFfn).toBe(0);
   });
 
   it("round-trips every direct paragraph property this writer supports", () => {
@@ -362,6 +384,18 @@ describe("writeDocContent", () => {
     });
   });
 
+  it("does not write past the text stream's own end when its length lands exactly on the next page boundary", () => {
+    // TEXT_FC (0x400) plus a 256-character text stream (512 bytes of 16-bit units) lands exactly on the next 512-byte FKP page boundary, leaving zero padding before the first ChpxFkp page begins -- if the text-writing loop's own bound wrote one character too many, the spurious extra code unit would land in that page's own first two bytes rather than in harmless padding.
+    const text = "A".repeat(255); // + the paragraph's own terminator makes 256 characters.
+    const input = document([paragraph([{ text }])]);
+    const result = roundTrip(input);
+    expect(
+      paragraphAt(result, 0)
+        .runs.map((run) => run.text)
+        .join(""),
+    ).toBe(text);
+  });
+
   it("refuses a non-wordprocessing document", () => {
     const spreadsheet: ContentDocument = {
       kind: "spreadsheet",
@@ -369,6 +403,21 @@ describe("writeDocContent", () => {
       sheets: [],
     };
     expect(() => writeDocContent(spreadsheet)).toThrow(DocUnsupportedError);
+    expect(() => writeDocContent(spreadsheet)).toThrow(
+      "doc-codec writes wordprocessing documents only; got a 'spreadsheet' document",
+    );
+  });
+
+  it("refuses a wordprocessing document with no sections at all", () => {
+    const empty: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [],
+    };
+    expect(() => writeDocContent(empty)).toThrow(DocFormatError);
+    expect(() => writeDocContent(empty)).toThrow(
+      "a wordprocessing document must carry at least one section",
+    );
   });
 
   it("refuses a block kind it does not yet write, such as a construct-end marker", () => {
@@ -530,6 +579,15 @@ describe("writeDocContent multiple sections", () => {
       ],
     };
   }
+
+  it("terminates every section but the last on a real end-of-section character, and the last on an ordinary paragraph mark", () => {
+    const bytes = writeDocContent(twoSectionDocument());
+    const text = rawText(bytes);
+    // "section one" (11 chars) ends the first, non-final section; its own terminator must be SECTION_MARK, never PARAGRAPH_MARK.
+    expect(text.codePointAt(11)).toBe(SECTION_MARK);
+    // The Main Document's own final character, closing the last section, must be an ordinary paragraph mark.
+    expect(text.codePointAt(text.length - 1)).toBe(PARAGRAPH_MARK);
+  });
 
   it("round-trips each section's own page size, margins and blocks independently", () => {
     const result = roundTrip(twoSectionDocument());
@@ -2266,5 +2324,178 @@ describe("writeDocContent: hyperlinks (#1187)", () => {
         { text: "three", hyperlink: "https://b.example/" },
       ],
     });
+  });
+});
+
+// Every one of these names an invariant writeDocContent's own logic maintains, never one a caller's input could violate -- no real call through writeDocContent's own public surface can ever reach the assertDefined each one guards (see write.ts's own top comment for why). Asserted against a hardcoded duplicate rather than by importing and comparing a constant to itself, the same discipline errors.test.ts's own assertDefined tests follow -- otherwise a mutant emptying the constant's own declaration would still pass, since both sides of the comparison would be the identical mutated value.
+describe("writeDocContent's own internal-defect messages", () => {
+  it("names the numId NO_ILFO_MINTED_MESSAGE reports, JSON-quoted", () => {
+    expect(NO_ILFO_MINTED_MESSAGE("3")).toBe(
+      'internal defect: writeDocContent\'s own list-usage map has no ilfo minted for numId "3"',
+    );
+  });
+
+  it("carries PARAGRAPH_START_LOST_MESSAGE's own exact text", () => {
+    expect(PARAGRAPH_START_LOST_MESSAGE).toBe(
+      "internal defect: writeDocContent lost a paragraph's own start position",
+    );
+  });
+
+  it("carries PARAGRAPH_ISTD_LOST_MESSAGE's own exact text", () => {
+    expect(PARAGRAPH_ISTD_LOST_MESSAGE).toBe(
+      "internal defect: writeDocContent lost a paragraph's own minted istd",
+    );
+  });
+
+  it("carries EMPTY_SECTION_LIST_MESSAGE's own exact text", () => {
+    expect(EMPTY_SECTION_LIST_MESSAGE).toBe(
+      "internal defect: writeDocContent built an empty section list despite the earlier at-least-one-section guard",
+    );
+  });
+
+  it("names the section index SEPX_PLACEMENT_LOST_MESSAGE reports", () => {
+    expect(SEPX_PLACEMENT_LOST_MESSAGE(2)).toBe(
+      "internal defect: writeDocContent lost section 2's own Sepx placement",
+    );
+  });
+
+  it("names the section index SECTION_START_CP_LOST_MESSAGE reports", () => {
+    expect(SECTION_START_CP_LOST_MESSAGE(1)).toBe(
+      "internal defect: writeDocContent lost section 1's own start CP",
+    );
+  });
+
+  it("carries CLOSE_SECTION_TRAILING_PARAGRAPH_LOST_MESSAGE's own exact text", () => {
+    expect(CLOSE_SECTION_TRAILING_PARAGRAPH_LOST_MESSAGE).toBe(
+      "internal defect: closeSection lost its own just-ensured trailing paragraph",
+    );
+  });
+});
+
+describe("layoutParagraphText", () => {
+  it("lays out a single plain-text paragraph, its own last run's exception extended over its terminator", () => {
+    const { text, paragraphStarts, chpxRuns } = layoutParagraphText([
+      { runs: [{ text: "Hi", grpprl: [] }], terminator: PARAGRAPH_MARK },
+    ]);
+    expect(text).toBe("Hi\r");
+    expect(paragraphStarts).toEqual([0]);
+    expect(chpxRuns).toEqual([{ start: 0, end: 3, grpprl: undefined }]);
+  });
+
+  it("extends a formatted run's own exception over its paragraph's terminator, rather than adding a second one", () => {
+    const boldGrpprl = [1, 2, 3];
+    const { chpxRuns } = layoutParagraphText([
+      {
+        runs: [{ text: "Hi", grpprl: boldGrpprl }],
+        terminator: PARAGRAPH_MARK,
+      },
+    ]);
+    expect(chpxRuns).toEqual([{ start: 0, end: 3, grpprl: boldGrpprl }]);
+  });
+
+  it("gives a paragraph with no runs of its own a fresh, plain exception for its terminator alone", () => {
+    // No run at all means chpxRuns is still empty when the mark is reached -- lastRun is undefined, so the extension check can never match, and the mark gets pushed as its own one-character exception rather than extending nothing.
+    const { chpxRuns } = layoutParagraphText([
+      { runs: [], terminator: PARAGRAPH_MARK },
+    ]);
+    expect(chpxRuns).toEqual([{ start: 0, end: 1, grpprl: undefined }]);
+  });
+
+  it("skips a run whose own text is empty, adding no Chpx exception for it at all", () => {
+    const { text, chpxRuns } = layoutParagraphText([
+      {
+        runs: [
+          { text: "", grpprl: [9] },
+          { text: "Body", grpprl: [] },
+        ],
+        terminator: PARAGRAPH_MARK,
+      },
+    ]);
+    expect(text).toBe("Body\r");
+    expect(chpxRuns).toEqual([{ start: 0, end: 5, grpprl: undefined }]);
+  });
+
+  it("records each paragraph's own start position, across more than one paragraph", () => {
+    const { paragraphStarts } = layoutParagraphText([
+      { runs: [{ text: "AB", grpprl: [] }], terminator: PARAGRAPH_MARK },
+      { runs: [{ text: "C", grpprl: [] }], terminator: PARAGRAPH_MARK },
+    ]);
+    expect(paragraphStarts).toEqual([0, 3]);
+  });
+
+  it("uses each paragraph's own terminator character, not always the ordinary paragraph mark", () => {
+    const { text } = layoutParagraphText([
+      { runs: [{ text: "Row", grpprl: [] }], terminator: 0x07 },
+    ]);
+    expect(text).toBe("Row");
+  });
+});
+
+describe("sameGrpprl", () => {
+  it("treats two absent grpprls as the same formatting", () => {
+    expect(sameGrpprl(undefined, undefined)).toBe(true);
+  });
+
+  it("treats an absent grpprl and a present one as different, in either direction", () => {
+    expect(sameGrpprl(undefined, [1])).toBe(false);
+    expect(sameGrpprl([1], undefined)).toBe(false);
+  });
+
+  it("treats two byte-identical grpprls as the same formatting", () => {
+    expect(sameGrpprl([1, 2, 3], [1, 2, 3])).toBe(true);
+  });
+
+  it("treats grpprls of equal length but differing bytes as different", () => {
+    expect(sameGrpprl([1, 2], [1, 3])).toBe(false);
+  });
+
+  it("treats grpprls of differing length as different, regardless of which is longer", () => {
+    expect(sameGrpprl([1, 2], [1, 2, 3])).toBe(false);
+    expect(sameGrpprl([1, 2, 3], [1, 2])).toBe(false);
+  });
+});
+
+describe("mergeChpxRuns", () => {
+  it("merges two contiguous runs carrying byte-identical grpprl into one", () => {
+    const merged = mergeChpxRuns([
+      { start: 0, end: 2, grpprl: [1, 2] },
+      { start: 2, end: 5, grpprl: [1, 2] },
+    ]);
+    expect(merged).toEqual([{ start: 0, end: 5, grpprl: [1, 2] }]);
+  });
+
+  it("does not merge two contiguous runs whose grpprl differs", () => {
+    const merged = mergeChpxRuns([
+      { start: 0, end: 2, grpprl: [1, 2] },
+      { start: 2, end: 5, grpprl: [3, 4] },
+    ]);
+    expect(merged).toEqual([
+      { start: 0, end: 2, grpprl: [1, 2] },
+      { start: 2, end: 5, grpprl: [3, 4] },
+    ]);
+  });
+
+  it("does not merge two runs with identical grpprl that are not actually contiguous", () => {
+    const merged = mergeChpxRuns([
+      { start: 0, end: 2, grpprl: [1] },
+      { start: 3, end: 5, grpprl: [1] },
+    ]);
+    expect(merged).toEqual([
+      { start: 0, end: 2, grpprl: [1] },
+      { start: 3, end: 5, grpprl: [1] },
+    ]);
+  });
+
+  it("merges a whole chain of contiguous, identically formatted runs into one", () => {
+    const merged = mergeChpxRuns([
+      { start: 0, end: 2, grpprl: [1] },
+      { start: 2, end: 4, grpprl: [1] },
+      { start: 4, end: 6, grpprl: [1] },
+    ]);
+    expect(merged).toEqual([{ start: 0, end: 6, grpprl: [1] }]);
+  });
+
+  it("returns an empty list for an empty input", () => {
+    expect(mergeChpxRuns([])).toEqual([]);
   });
 });
