@@ -1,5 +1,4 @@
 import { readInt16LE, readUint16LE, readUint32LE, slice } from "../bytes";
-import { DocFormatError } from "../errors";
 import type { Fib } from "../fib/fib";
 import { parsePlc } from "../plc";
 import { SGC, readGrpprl, type Prl } from "./sprm";
@@ -99,12 +98,7 @@ export function readAllSectionProperties(
   }
   const sections: DocSectionProperties[] = [];
   for (let index = 0; index < plc.count; index += 1) {
-    const startCp = plc.keys[index];
-    if (startCp === undefined) {
-      throw new DocFormatError(
-        `internal defect: PlcfSed key ${index} is absent from a PLC of ${plc.count} elements`,
-      );
-    }
+    const startCp = plc.keyAt(index);
     const sed = plc.element(index);
     const fcSepx = readUint32LE(sed, SED_FC_SEPX_OFFSET);
     const cb = readUint16LE(wordDocument, fcSepx);
