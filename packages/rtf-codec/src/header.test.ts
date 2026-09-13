@@ -41,6 +41,18 @@ describe("font table", () => {
     expect(fonts.get(0)?.codepage).toBe(1251);
   });
 
+  it("does not let a bare \\cpg with no digits clobber an already-recorded \\cpgN", () => {
+    const { fonts } = headerOf(
+      "{\\rtf1{\\fonttbl{\\f0\\fswiss\\fcharset0\\cpg1251\\cpg Arial Cyr;}}}",
+    );
+    expect(fonts.get(0)?.codepage).toBe(1251);
+  });
+
+  it("does not let a bare \\f with no digits clobber an already-recorded font number", () => {
+    const { fonts } = headerOf("{\\rtf1{\\fonttbl{\\f0\\froman\\f Arial;}}}");
+    expect(fonts.get(0)?.name).toBe("Arial");
+  });
+
   it("ignores the {\\*\\falt ...} alternate-name subgroup rather than folding it into the face name", () => {
     const { fonts } = headerOf(
       "{\\rtf1{\\fonttbl{\\f0\\froman\\fcharset0 Cambria{\\*\\falt Times New Roman};}}}",
@@ -124,6 +136,33 @@ describe("color table", () => {
     // Only \red is present here -- green and blue are genuinely absent from the entry, not merely zero -- so this must still resolve to a real (defaulted-to-0) colour rather than being mistaken for the auto entry, which requires all three to be absent.
     const { colors } = headerOf("{\\rtf1{\\colortbl;\\red200;}}");
     expect(colors[1]).toEqual({ r: 200 / 255, g: 0, b: 0 });
+  });
+
+  it("is a real colour when only \\green is stated, not the auto entry", () => {
+    const { colors } = headerOf("{\\rtf1{\\colortbl;\\green100;}}");
+    expect(colors[1]).toEqual({ r: 0, g: 100 / 255, b: 0 });
+  });
+
+  it("is a real colour when only \\blue is stated, not the auto entry", () => {
+    const { colors } = headerOf("{\\rtf1{\\colortbl;\\blue50;}}");
+    expect(colors[1]).toEqual({ r: 0, g: 0, b: 50 / 255 });
+  });
+
+  it("does not treat an unrelated control word as \\blue just because it isn't \\red or \\green", () => {
+    // \wgrffmtfilter99 names no field this table reads at all -- it must be ignored, not mistaken for \blue99 merely for falling into the same else-if chain's final branch.
+    const { colors } = headerOf(
+      "{\\rtf1{\\colortbl;\\red10\\green20\\wgrffmtfilter99;}}",
+    );
+    expect(colors[1]).toEqual({ r: 10 / 255, g: 20 / 255, b: 0 });
+  });
+
+  it("only finishes the current entry on a real semicolon byte, not on every byte of trailing text", () => {
+    // "xy;" after \blue30 is 3 plain text bytes -- only the last one is the entry terminator; treating every byte as one would finish (and reset) the entry twice more, in each case with nothing left to record.
+    const { colors } = headerOf(
+      "{\\rtf1{\\colortbl;\\red10\\green20\\blue30xy;}}",
+    );
+    expect(colors).toHaveLength(2);
+    expect(colors[1]).toEqual({ r: 10 / 255, g: 20 / 255, b: 30 / 255 });
   });
 });
 
