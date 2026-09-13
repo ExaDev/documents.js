@@ -337,9 +337,8 @@ function tableBlockFor(table: PptTable, context: DrawingContext): ContentTable {
     return masterUnitsToPoints(right - left);
   });
   const rows = rowTops.map((top) => {
-    const inRow = placed
-      .filter((entry) => entry.anchor.top === top)
-      .sort((a, b) => a.anchor.left - b.anchor.left);
+    // Unsorted: every consumer below finds or reduces over `inRow` by its own anchor property (`.find` by exact left, `Math.max` over bottom), neither of which depends on array order, so sorting it first has no observable effect on `cells` or `bottom`.
+    const inRow = placed.filter((entry) => entry.anchor.top === top);
     const bottom = Math.max(...inRow.map((entry) => entry.anchor.bottom), top);
     const cells: ContentTableCell[] = columnLefts.map((left) => {
       const at = inRow.find((entry) => entry.anchor.left === left);
@@ -347,8 +346,9 @@ function tableBlockFor(table: PptTable, context: DrawingContext): ContentTable {
         ? { blocks: [] }
         : { blocks: blocksFor(at.cell.clientTextbox, context) };
     });
+    // Every entry in `inRow` came from `placed` above, which already filters out any anchor with bottom <= top -- so `bottom` (the max over at least one such anchor's own bottom, seeded no lower than `top`) is always strictly greater than `top`, and heightPt is therefore always positive. No fallback branch is reachable, so none is written.
     const heightPt = masterUnitsToPoints(bottom - top);
-    return heightPt > 0 ? { cells, heightPt } : { cells };
+    return { cells, heightPt };
   });
   return { kind: "table", rows, columnWidthsPt };
 }
