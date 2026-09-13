@@ -20,6 +20,18 @@ export class BiffFormatError extends Error {
   }
 }
 
+/**
+ * The one classification every per-record recovery boundary in this package draws around its own try/catch: a BiffFormatError is a malformed-input degrade (this one record, name, or rule resolves to nothing rather than aborting every other one in the same substream), while anything else is a genuine bug this package's own code produced and must not be silently absorbed alongside real malformed-input cases.
+ *
+ * Centralising the classification here -- rather than every call site restating `if (!(err instanceof BiffFormatError)) throw err` in its own catch block -- means the "is this recoverable" question is tested once, in this module's own test file, instead of being duplicated (and therefore separately mutation-tested) at every one of the dozens of sites across workbook/ and biff/ that degrade a malformed record the identical way.
+ */
+export function recoverFromFormatError<T>(err: unknown, fallback: T): T {
+  if (err instanceof BiffFormatError) {
+    return fallback;
+  }
+  throw err;
+}
+
 /** The four-byte record header: a two-byte type followed by a two-byte size. Exported for workbook/encryption.ts, which needs a record's own data start offset (the byte position right after this header) to derive the correct RC4 keystream position -- [MS-XLS] 2.2.10 counts a record's own header bytes toward the encryption stream's position even though the header itself is never encrypted. */
 export const HEADER_SIZE = 4;
 
