@@ -73,6 +73,11 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.worker } },
   },
   {
+    // setup.ts's own window.matchMedia stub implements MediaQueryList's legacy addListener/removeListener members because the real interface still declares them as required -- deprecated does not mean absent, and a stub that only satisfies the non-deprecated half of the type would be an incomplete implementation of what it stands in for. Testing that those two members are genuinely present and callable (setup.test.ts) means calling them by name, which is exactly what this rule exists to flag in ordinary application code; scoped to the one test file that has a legitimate reason to.
+    files: ["src/test/setup.test.ts"],
+    rules: { "@typescript-eslint/no-deprecated": "off" },
+  },
+  {
     files: [
       "vite.config.ts",
       "vitest.config.ts",
