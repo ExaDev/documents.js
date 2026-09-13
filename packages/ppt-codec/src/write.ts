@@ -261,13 +261,22 @@ export function writePptStreams(
     definiteGet(fontIndexByName, family);
   const store = planBlipStore(slides);
   const strict = options.onUnwritableBlock === "throw";
+  // describeMessage prefixes the location onto reportDrop's own message before it is either sunk or thrown -- not a wrapper around the sink itself, since reportDrop throws using the diagnostic's own message directly, never round-tripping it back out through the sink first.
   const contextFor = (location: string): DrawingWriteContext => ({
     fontIndexOf,
     blipIndexOf: store.pibOf,
+    describeMessage: (reason) => `${location}: ${reason}`,
     sink,
     strict,
-    location,
   });
+  // For a drawing whose own shapes can never carry a block planShapeBlocks/writeTableGroup's diagnostic paths would name at all -- the main master's own placeholders (always built with blocks: [], master-write.ts) and every notes container's own body (notesBodyShape, document/notes-write.ts, always plain unformatted paragraphs with no font family, image, table or embeddedObject block) -- the identity function needs no location value whatsoever, unobservable or otherwise, to state one.
+  const nonDiagnosableContext: DrawingWriteContext = {
+    fontIndexOf,
+    blipIndexOf: store.pibOf,
+    describeMessage: (reason) => reason,
+    sink,
+    strict,
+  };
 
   const slidePersistRefs: SlidePersistRef[] = slides.map((_slide, index) => ({
     persistIdRef: FIRST_SLIDE_PERSIST_ID + index,
@@ -301,8 +310,7 @@ export function writePptStreams(
     drawingCount += 1;
   };
 
-  // No location description: the main master's own placeholder shapes are always built with blocks: [] (master-write.ts), so planShapeBlocks/writeTableGroup's diagnostic paths -- the only consumers of DrawingWriteContext.location -- can never actually fire for it.
-  const mainMaster = writeMainMaster(size, contextFor(""));
+  const mainMaster = writeMainMaster(size, nonDiagnosableContext);
   account(mainMaster);
   const slideContainers = slides.map((slide, index) => {
     // Always defined: slidePersistRefs/notesIdRefs are both built by slides.map() above, so they carry exactly one entry per slide at exactly this same index.
@@ -335,8 +343,7 @@ export function writePptStreams(
       FIRST_SLIDE_ID + index,
       slide.notes,
       size,
-      // No location description: notesBodyShape (document/notes-write.ts) always builds plain, unformatted paragraph blocks from the notes string alone -- no font family, image, table or embeddedObject block a diagnostic could ever name -- so planShapeBlocks/writeTableGroup's diagnostic paths can never actually fire for a notes container either.
-      contextFor(""),
+      nonDiagnosableContext,
     );
     account(container);
     notesContainers.push({ persistId: persistIdRef, bytes: container.bytes });

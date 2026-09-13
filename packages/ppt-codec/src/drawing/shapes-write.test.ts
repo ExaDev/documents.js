@@ -10,6 +10,7 @@ import { NOOP_PPT_DIAGNOSTIC_SINK, PptDiagnosticCodes } from "../diagnostics";
 import { readDrawingShapes } from "./shapes";
 import { childRecords, findChild, readRecordAt } from "../record/tree";
 import {
+  OfficeArtClientTextbox,
   OfficeArtDgContainer,
   OfficeArtFOPT,
   OfficeArtFSP,
@@ -38,9 +39,9 @@ import {
 const CONTEXT: DrawingWriteContext = {
   fontIndexOf: () => 0,
   blipIndexOf: () => 1,
+  describeMessage: (reason) => reason,
   sink: NOOP_PPT_DIAGNOSTIC_SINK,
   strict: false,
-  location: "test",
 };
 
 const DEFAULT_TEXT_INSETS = {
@@ -637,6 +638,27 @@ describe("writeSlideDrawing: block planning", () => {
           ),
       ),
     ).toBe(true);
+  });
+
+  it("does not silently skip a paragraph block merely because the shape carries OLE client data", () => {
+    // hasOleClientData only ever silently skips an embeddedObject block specifically -- a shape that also carries real text must keep it regardless.
+    const written = writeSlideDrawing(
+      [
+        {
+          shape: textShape({
+            blocks: [{ kind: "paragraph", runs: [{ text: "kept" }] }],
+          }),
+          clientData: new Uint8Array(0),
+        },
+      ],
+      CONTEXT,
+    );
+    const shapeRecord = firstContentShapeRecord(written);
+    const clientTextbox = findChild(
+      childRecords(shapeRecord),
+      OfficeArtClientTextbox,
+    );
+    expect(clientTextbox).toBeDefined();
   });
 
   it("keeps an embeddedObject block silently when the shape does carry OLE client data", () => {
