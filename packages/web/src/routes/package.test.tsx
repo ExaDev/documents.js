@@ -1,9 +1,22 @@
+import { assembleTree } from "document-schema.js";
+import type { ContentDocument } from "documents.js";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { OpenedFile } from "../ports/fileAccess";
 import { createMockRpcClient } from "../test/mockRpcClient";
 import { mountWithProviders } from "../test/mountComponent";
+
+// A minimal but genuinely schema-valid wordprocessing document, and the tree-form dump PackagePage actually renders for it -- assembleTree is the same structural transform the real content.read handler applies (src/rpc/router.ts), so this fixture's package shape matches what the route really receives rather than an ad hoc stand-in.
+const sampleContent: ContentDocument = {
+  kind: "wordprocessing",
+  metadata: {},
+  sections: [],
+};
+const samplePackage = {
+  ...assembleTree(sampleContent),
+  $schema: "test-schema",
+};
 
 vi.mock("../rpc/client", () => ({ getRpcClient: vi.fn() }));
 
@@ -127,10 +140,7 @@ describe("PackagePage", () => {
       );
     });
 
-    resolveRead({
-      content: { kind: "wordprocessing", metadata: {}, blocks: [] },
-      package: { $schema: "https://example.com/schema.json", kind: "tree" },
-    });
+    resolveRead({ content: sampleContent, package: samplePackage });
     await vi.waitFor(() => {
       expect(jsonTextarea(mounted.container)).toBeDefined();
     });
@@ -141,7 +151,9 @@ describe("PackagePage", () => {
     expect(mounted.container.textContent).not.toContain(
       "Loading document structure…",
     );
-    expect(jsonTextarea(mounted.container)?.value).toContain('"kind": "tree"');
+    expect(jsonTextarea(mounted.container)?.value).toContain(
+      '"$schema": "test-schema"',
+    );
     expect(mounted.container.textContent).toContain("real docx document");
     expect(mounted.container.textContent).not.toContain(
       "does not identify a known document format",
@@ -159,8 +171,8 @@ describe("PackagePage", () => {
   it("clears the previous read's JSON panel when the next pick's extension is unrecognised", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.content.read).mockResolvedValue({
-      content: { kind: "wordprocessing", metadata: {}, blocks: [] },
-      package: { kind: "tree" },
+      content: sampleContent,
+      package: samplePackage,
     });
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountPackagePage();
@@ -186,8 +198,8 @@ describe("PackagePage", () => {
   it("does not carry a previous file's in-flight restore state into the next file's Restore button", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.content.read).mockResolvedValue({
-      content: { kind: "wordprocessing", metadata: {}, blocks: [] },
-      package: { kind: "tree" },
+      content: sampleContent,
+      package: samplePackage,
     });
     let resolveRestore!: (
       value: Awaited<ReturnType<typeof client.content.restore>>,
@@ -253,8 +265,8 @@ describe("PackagePage", () => {
   it("edits the JSON via the textarea", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.content.read).mockResolvedValue({
-      content: { kind: "wordprocessing", metadata: {}, blocks: [] },
-      package: { kind: "tree" },
+      content: sampleContent,
+      package: samplePackage,
     });
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountPackagePage();
@@ -274,8 +286,8 @@ describe("PackagePage", () => {
   it("restores the edited JSON, notifies success, and downloads the written bytes", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.content.read).mockResolvedValue({
-      content: { kind: "wordprocessing", metadata: {}, blocks: [] },
-      package: { kind: "tree" },
+      content: sampleContent,
+      package: samplePackage,
     });
     const writtenBytes = new Uint8Array([9, 9, 9]);
     vi.mocked(client.content.restore).mockResolvedValue({
@@ -318,8 +330,8 @@ describe("PackagePage", () => {
   it("notifies a JSON parse failure and never calls restore when the edited text does not parse", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.content.read).mockResolvedValue({
-      content: { kind: "wordprocessing", metadata: {}, blocks: [] },
-      package: { kind: "tree" },
+      content: sampleContent,
+      package: samplePackage,
     });
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountPackagePage();
@@ -351,8 +363,8 @@ describe("PackagePage", () => {
   it("calls notifyError and skips downloading when restore rejects", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.content.read).mockResolvedValue({
-      content: { kind: "wordprocessing", metadata: {}, blocks: [] },
-      package: { kind: "tree" },
+      content: sampleContent,
+      package: samplePackage,
     });
     vi.mocked(client.content.restore).mockRejectedValue(new Error("bad tree"));
     vi.mocked(getRpcClient).mockReturnValue(client);
