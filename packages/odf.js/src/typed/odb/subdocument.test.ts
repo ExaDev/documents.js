@@ -66,6 +66,19 @@ describe("subDocumentPackage", () => {
     ).toEqual(["Pictures/logo.png", "content.xml"]);
   });
 
+  it("excludes a part whose path is exactly the prefix itself, with nothing left over to key it by", () => {
+    // A bare directory-marker entry at the prefix's own path (rather than nested beneath it) slices down to an empty relative path, which cannot become a part key.
+    const pkg: Package = {
+      parts: {
+        "forms/Obj1/": { kind: "binary", base64: "" },
+        "forms/Obj1/content.xml": { kind: "xml", nodes: [] },
+      },
+    };
+    expect(Object.keys(subDocumentPackage(pkg, "forms/Obj1").parts)).toEqual([
+      "content.xml",
+    ]);
+  });
+
   it("shares the same Part values rather than deep-copying them", () => {
     const part = { kind: "binary" as const, base64: "AA==" };
     const pkg: Package = {
