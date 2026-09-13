@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { mountWithMantine } from "../test/mountComponent";
 import {
   activeColorSchemeOption,
+  colorSchemeTooltipLabel,
+  navbarConfig,
   nextColorSchemeOption,
   optionAt,
   Route,
@@ -72,6 +74,32 @@ describe("nextColorSchemeOption", () => {
 
   it("treats an unrecognised current value as if it were the first option, stepping to the second", () => {
     expect(nextColorSchemeOption("not-a-real-scheme").value).toBe("dark");
+  });
+});
+
+describe("colorSchemeTooltipLabel", () => {
+  it("names the active option and offers the next one", () => {
+    expect(colorSchemeTooltipLabel(optionAt(0), optionAt(1))).toBe(
+      "Color scheme: Light (click for Dark)",
+    );
+  });
+});
+
+describe("navbarConfig", () => {
+  it("collapses the mobile navbar when the drawer is not open", () => {
+    expect(navbarConfig(false)).toEqual({
+      width: 240,
+      breakpoint: "sm",
+      collapsed: { mobile: true },
+    });
+  });
+
+  it("leaves the mobile navbar expanded once the drawer is open", () => {
+    expect(navbarConfig(true)).toEqual({
+      width: 240,
+      breakpoint: "sm",
+      collapsed: { mobile: false },
+    });
   });
 });
 
