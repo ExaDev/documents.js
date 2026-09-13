@@ -23,12 +23,11 @@ const FUNCTION_PATTERN = /([a-zA-Z]+)\s*\(\s*([^)]*?)\s*\)/g;
 export function parseOdfTransform(value: string): OdfTransformFunction[] {
   const functions: OdfTransformFunction[] = [];
   for (const match of value.matchAll(FUNCTION_PATTERN)) {
-    const name = match[1];
-    const argsRaw = match[2];
-    if (name === undefined || argsRaw === undefined) {
-      continue;
-    }
-    const args = argsRaw.split(/\s+/).filter((arg) => arg.length > 0);
+    // FUNCTION_PATTERN's two capture groups are both plain, non-optional captures with no alternation that could skip them, so a successful match always populates both -- never undefined at runtime, only in the indexed-access type.
+    const name = match[1]!;
+    const argsRaw = match[2]!;
+    // Not argsRaw.split(/\s+/).filter(...): FUNCTION_PATTERN's own surrounding \s* already trims argsRaw of leading/trailing whitespace, so the only way split would otherwise misbehave is the classic "".split(...) === [""] case for a function called with no arguments at all (e.g. "rotate()") -- handled explicitly here instead of by filtering every split result.
+    const args = argsRaw.length === 0 ? [] : argsRaw.split(/\s+/);
     if (name === "rotate") {
       const angleArg = args[0];
       if (angleArg === undefined) {

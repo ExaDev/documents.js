@@ -60,6 +60,21 @@ describe("parseOdfTransform", () => {
     expect(parseOdfTransform("")).toEqual([]);
     expect(parseOdfTransform("matrix(1 0 0 1 0 0)")).toEqual([]);
   });
+
+  it("skips rotate() called with no argument at all, rather than treating it as angle zero", () => {
+    expect(parseOdfTransform("rotate()")).toEqual([]);
+  });
+
+  it("does not parse an unmodelled function's own args as translate's, even when they'd otherwise look like valid lengths", () => {
+    // scale's own two arguments ("10pt 10pt") are deliberately unit-bearing here, unlike the other "skips a function this module does not model" case above (whose "2 2" scale args fail to parse as lengths either way) — this is the case that actually distinguishes "genuinely skipped because it isn't translate" from "accidentally parsed as translate and happened to succeed".
+    expect(parseOdfTransform("scale(10pt 10pt)")).toEqual([]);
+  });
+
+  it("collapses a run of several spaces between translate's own two arguments into one separator", () => {
+    expect(parseOdfTransform("translate(10pt   20pt)")).toEqual([
+      { kind: "translate", xPt: 10, yPt: 20 },
+    ]);
+  });
 });
 
 describe("applyOdfTransform: matches the real LibreOffice-rendered bounding box", () => {
