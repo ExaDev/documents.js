@@ -585,24 +585,27 @@ describe("classifyRegion", () => {
     expect(result.confidence).toBeCloseTo(1 - 0.1 / 0.15, 10);
   });
 
-  it("does not call it mixed when the two top scores' gap is exactly the mixed margin", () => {
+  it("does not call it mixed when the top score sits exactly at the second score plus the mixed margin", () => {
+    // Constructed so the comparison's two sides are BIT-IDENTICAL, not merely numerically close: proseScore is set directly via textFraction (multiplying by clamp01(40/40) = 1 introduces no rounding), and tableScore is built as (proseScore + 0.15) * 2 halved back by its own 0.5 weight -- doubling then halving a normal-range double is exact, so tableScore ends up EXACTLY equal to `proseScore + 0.15`, the identical expression classifyRegion's own comparison evaluates. A gap-based `top - second < MIXED_MARGIN` formulation can never be pinned this precisely: with both scores held to [SIGNAL_THRESHOLD, 1], their difference always lands on a coarser float grid than 0.15's own stored value needs, so no achievable pair of scores can make that subtraction hit 0.15 bit-for-bit -- see classifyRegion's own comment on why it compares `top < second + MIXED_MARGIN` instead. rowSpan/colSpan are set enormous purely so density's own 0.2 contribution underflows to nothing when added to the dominant term, keeping tableScore's construction exact.
+    const second = 0.4;
+    const MIXED_MARGIN = 0.15;
+    const rowRegularity = (second + MIXED_MARGIN) * 2;
     const signals: RegionSignals = {
       cellCount: 2,
-      rowSpan: 2,
-      colSpan: 2,
+      rowSpan: 1e8,
+      colSpan: 1e8,
       distinctRows: 2,
       distinctColumns: 2,
       formulaFraction: 0,
       numericFraction: 0,
-      textFraction: 1,
-      averageTextLength: 14, // prose = 0.35
-      rowRegularity: 0.8,
+      textFraction: second,
+      averageTextLength: 40,
+      rowRegularity,
       hasHeaderLikeRow: false,
     };
-    // table = 0.5*0.8 + 0.2*(2/4) = 0.5; gap = 0.5 - 0.35 = 0.15, exactly MIXED_MARGIN
     const result = classifyRegion(signals);
     expect(result.classification).toBe("table");
-    expect(result.confidence).toBeCloseTo(0.5, 10);
+    expect(result.confidence).toBeCloseTo(second + MIXED_MARGIN, 10);
   });
 });
 
