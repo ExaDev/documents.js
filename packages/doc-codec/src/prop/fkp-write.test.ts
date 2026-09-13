@@ -4,8 +4,10 @@ import {
   buildChpxPages,
   buildPapxPages,
   buildPropertyBinTable,
+  CHPX_BATCH_REFIT_FAILED_MESSAGE,
   firstFcOfPage,
   fitsAloneOnPapxPage,
+  PAPX_BATCH_REFIT_FAILED_MESSAGE,
   type ChpxRunToWrite,
   type PapxParagraphToWrite,
 } from "./fkp-write";
@@ -261,5 +263,20 @@ describe("buildPropertyBinTable", () => {
     expect(view.getUint32(8, true)).toBe(200);
     expect(view.getUint32(12, true)).toBe(1);
     expect(view.getUint32(16, true)).toBe(2);
+  });
+});
+
+// Both messages name an invariant buildChpxPages/buildPapxPages already maintain, never one a caller's input could violate, so nothing in the public build path can ever trigger either -- asserted against a hardcoded duplicate rather than by importing and comparing a constant to itself, the same discipline errors.test.ts's own assertDefined tests follow.
+describe("buildChpxPages/buildPapxPages' own internal-defect messages", () => {
+  it("carries CHPX_BATCH_REFIT_FAILED_MESSAGE's own exact text", () => {
+    expect(CHPX_BATCH_REFIT_FAILED_MESSAGE).toBe(
+      "a ChpxFkp batch that fit during splitting no longer fits when finalised; this is an internal defect",
+    );
+  });
+
+  it("carries PAPX_BATCH_REFIT_FAILED_MESSAGE's own exact text", () => {
+    expect(PAPX_BATCH_REFIT_FAILED_MESSAGE).toBe(
+      "a PapxFkp batch that fit during splitting no longer fits when finalised; this is an internal defect",
+    );
   });
 });
