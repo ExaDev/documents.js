@@ -43,7 +43,7 @@ import {
   RECORD_VERTICALPAGEBREAKS,
   RECORD_WSBOOL,
 } from "../biff/record-types";
-import { BiffFormatError } from "../biff/records";
+import { BiffFormatError, recoverFromFormatError } from "../biff/records";
 import { decodeRkNumber } from "../biff/rk";
 import { readXLUnicodeString } from "../biff/strings";
 import { recordByteLength, type RecordGroup } from "../biff/substreams";
@@ -244,9 +244,7 @@ function collectFormulaGroup(
     const header = readCellHeader(new BlockCursor(record.blocks));
     groups.set(groupKey(header.row, header.column), readGroup(next));
   } catch (error) {
-    if (!(error instanceof BiffFormatError)) {
-      throw error;
-    }
+    recoverFromFormatError(error, undefined);
   }
 }
 
@@ -276,10 +274,11 @@ function readArrayGroup(record: RecordGroup): ArrayFormulaGroup {
   try {
     return { kind: "array", rgce, rgcb: cursor.take(rgcbLength) };
   } catch (error) {
-    if (!(error instanceof BiffFormatError)) {
-      throw error;
-    }
-    return { kind: "array", rgce, rgcb: undefined };
+    return recoverFromFormatError(error, {
+      kind: "array" as const,
+      rgce,
+      rgcb: undefined,
+    });
   }
 }
 
@@ -801,9 +800,7 @@ function readFormula(
     const rgcbLength = recordByteLength(record) - (FORMULA_HEADER_BYTES + cce);
     rgcb = rgcbLength > 0 ? cursor.take(rgcbLength) : undefined;
   } catch (error) {
-    if (!(error instanceof BiffFormatError)) {
-      throw error;
-    }
+    recoverFromFormatError(error, undefined);
     rgce = undefined;
     rgcb = undefined;
   }
@@ -841,9 +838,7 @@ function resolveFormulaText(
       ? parseFormulaText(group.rgce, formulaSheets, { relativeTo: header })
       : parseFormulaText(group.rgce, formulaSheets, { rgcb: group.rgcb });
   } catch (error) {
-    if (!(error instanceof BiffFormatError)) {
-      throw error;
-    }
+    recoverFromFormatError(error, undefined);
     return undefined;
   }
 }
