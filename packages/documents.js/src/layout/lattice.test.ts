@@ -206,5 +206,6 @@ describe("findCellRegions: a merged region far larger than the JS engine's argum
       { rowStart: 0, rowEnd: rowCount, colStart: 0, colEnd: 1 },
       { rowStart: 0, rowEnd: rowCount, colStart: 1, colEnd: 2 },
     ]);
-  });
+    // Builds and reconciles 200,000 synthetic row dividers, which is genuine work even though it completes in well under a second uncontended -- under Stryker's per-statement instrumentation plus heavy concurrent host load it has measured a 5000ms-plus wall clock, the same "wall-clock dominated by scheduling, not this test's own CPU work" shape documented for read-graph.test.ts's docxToPdf timeout (ExaDev/documents.js#1039) and its sibling ODS mergeCells test (ExaDev/documents.js#1037).
+  }, 60_000);
 });
