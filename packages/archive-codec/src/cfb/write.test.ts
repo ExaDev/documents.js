@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { type CompoundFileStream, readCompoundFile } from "./read";
 import {
   CompoundFileWriteError,
@@ -775,14 +775,24 @@ describe("writeCompoundFile mini-stream sector allocation", () => {
 
 describe("writeCompoundFile FAT, mini-FAT, and DIFAT region padding", () => {
   // 24 MiB forces three chained DIFAT sectors past the header's own 109-entry array ([MS-CFB] 2.5), not just one or two: the DIFAT-chaining loop's own next-sector arithmetic (difatStart + sector + 1) needs a NON-LAST sector at an index past 0 to distinguish from a subtly wrong variant, since at sector 0 every candidate formula agrees (any term multiplied, divided, or negated by 0 is 0), and a fixture with only two DIFAT sectors has no non-last sector other than 0.
-  const payload = new Uint8Array(24 * 1024 * 1024);
-  const bytes = writeCompoundFile([stream("WordDocument", payload)]);
-  const fatSectorCount = u32(bytes, 0x2c);
-  const difatSectorCount = u32(bytes, 0x48);
-  const difatStart = u32(bytes, 0x44);
-  const miniFatSectorCount = u32(bytes, 0x40);
+  //
+  // Built in beforeAll, not at this describe block's own top level: code here runs once when the file is collected, before any test executes, which Stryker's coverage analysis treats as module-load-time ("static") rather than attributable to a specific test -- and the DIFAT-chaining arithmetic this fixture exists to exercise is reachable nowhere else in this suite, so a mutant only reachable through it would get no per-test coverage at all. A beforeAll hook runs within this describe block's own test-execution phase instead, which coverage analysis does attribute correctly.
+  let bytes: Uint8Array<ArrayBuffer>;
+  let fatSectorCount: number;
+  let difatSectorCount: number;
+  let difatStart: number;
+  let miniFatSectorCount: number;
   const sectorSize = 512;
   const sectorOffset = (sector: number): number => (sector + 1) * sectorSize;
+
+  beforeAll(() => {
+    const payload = new Uint8Array(24 * 1024 * 1024);
+    bytes = writeCompoundFile([stream("WordDocument", payload)]);
+    fatSectorCount = u32(bytes, 0x2c);
+    difatSectorCount = u32(bytes, 0x48);
+    difatStart = u32(bytes, 0x44);
+    miniFatSectorCount = u32(bytes, 0x40);
+  });
 
   it("needs more than one FAT sector and at least three chained DIFAT sectors for this fixture", () => {
     // Sanity check on the fixture itself before trusting the boundary assertions below against it: at least three DIFAT sectors are what makes the DIFAT-chaining loop's own per-sector index and next-pointer arithmetic observable at all (see the fixture's own comment above).
