@@ -160,6 +160,17 @@ describe("readPersistDirectoryAtom", () => {
     );
   });
 
+  it("names a second entry's own real byte offset in the cPersist-0 rejection, not the first entry's", () => {
+    // The first entry consumes 8 bytes (4-byte header word plus one offset) before the second, invalid entry is even reached -- at 0 for a first-entry violation (the existing test above) cannot tell dataOffset + at apart from dataOffset - at, since adding or subtracting 0 is identical either way.
+    const bytes = persistDirectoryAtom(
+      persistDirectoryEntry(5, [0x1000]),
+      persistDirectoryEntry(9, []),
+    );
+    expect(() => readPersistDirectoryAtom(readRecordAt(bytes, 0))).toThrow(
+      "PersistDirectoryEntry at offset 16 declares cPersist 0x000, but the spec requires at least 0x001",
+    );
+  });
+
   it("rejects an entry whose offset array runs past the record", () => {
     const truncated = atom(
       RT_PersistDirectoryAtom,
@@ -195,6 +206,9 @@ describe("readPersistDirectoryAtom", () => {
     );
     expect(() => readPersistDirectoryAtom(readRecordAt(bytes, 0))).toThrow(
       PptFormatError,
+    );
+    expect(() => readPersistDirectoryAtom(readRecordAt(bytes, 0))).toThrow(
+      "PersistDirectoryAtom at offset 0 has a 3-byte trailing fragment, too short for a PersistDirectoryEntry header word",
     );
   });
 });
