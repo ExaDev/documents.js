@@ -288,7 +288,8 @@ export function mintStyleIstds(
 export function buildStshForStyles(
   names: ReadonlyMap<number, string>,
 ): Uint8Array {
-  const cstd = names.size === 0 ? 0 : Math.max(...names.keys()) + 1;
+  // Math.max's own no-argument case (-1 supplied here, so an empty map's spread contributes nothing) already returns -1 for an empty map without any size check of our own -- every real key is >= 0, so -1 never wins once the map holds one -- which makes a `names.size === 0 ? 0 : ...` guard here provably redundant: both branches produce the identical byte-level result (0) for an empty map (Math.max()+1 alone would coerce to the same 0 through push16's own bitwise truncation of -Infinity, but -1 makes that agreement explicit rather than accidental) and the same result as each other for a non-empty one, so the ternary was never observably distinguishing anything.
+  const cstd = Math.max(-1, ...names.keys()) + 1;
   const stshi: number[] = [];
   const push16 = (target: number[], value: number): void => {
     target.push(value & 0xff, (value >> 8) & 0xff);
@@ -311,11 +312,10 @@ export function buildStshForStyles(
     ...stshi,
   ];
 
-  // One LPUpxPapx/LPUpxChpx entry: a 2-byte cbUpx (the payload's own length, excluding padding) followed by the payload, then one zero pad byte if that length is odd -- [MS-DOC] 2.9.140/2.9.138's own "padded to an even length, but the length in cbUpx MUST NOT include this padding".
+  // One LPUpxPapx/LPUpxChpx entry: a 2-byte cbUpx (the payload's own length) followed by the payload. [MS-DOC] 2.9.140/2.9.138 pads an odd-length payload to an even boundary, but both call sites below pass a payload whose own length is fixed -- 2 bytes (an istd) or 0 bytes (an empty UpxPapx/UpxChpx, since mintStyleIstds mints style IDENTITY only, never real formatting, per this function's own doc comment) -- always even, so that padding byte can never actually apply to anything this writer mints.
   const pushLpUpx = (target: number[], payload: readonly number[]): void => {
     push16(target, payload.length);
     target.push(...payload);
-    if (payload.length % 2 === 1) target.push(0);
   };
 
   for (let istd = 0; istd < cstd; istd += 1) {
@@ -344,8 +344,7 @@ export function buildStshForStyles(
     pushLpUpx(std, []);
     push16(out, std.length);
     out.push(...std);
-    // "LPStd structures are stored on even-byte boundaries, but this length MUST NOT include this padding."
-    if (std.length % 2 === 1) out.push(0);
+    // "LPStd structures are stored on even-byte boundaries, but this length MUST NOT include this padding." -- but std.length here is always 20 + 2 * name.length (10 bytes of StdfBase, an Xstz that is 4 + 2 * name.length since name.length counts UTF-16 code units, a 4-byte empty UpxPapx, and a 2-byte empty UpxChpx), which is even for any name, so this entry never actually needs the pad byte the format's own rule allows for.
   }
   return new Uint8Array(out);
 }
