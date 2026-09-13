@@ -38,9 +38,15 @@ afterEach(() => {
   capturedUpgradeOptions = undefined;
 });
 
+// A statically-written `import("./documents.worker")` pulls the real module into TypeScript's type-checking program for every tsconfig that reaches this test file -- including tsconfig.node.json, whose own lib set has no WebWorker (its test files run under jsdom, not a real worker), so it type-checks this file's `self.postMessage` call against DOM's Window overload instead and fails. tsconfig.worker.json already exists specifically to check documents.worker.ts correctly; this test only needs the module's side effect (constructing the handler), never its exported type, so a non-literal specifier is enough to keep TypeScript from resolving the target module's types at all while Vite still loads the real file at runtime exactly as a literal specifier would.
+const workerModulePath = "./documents.worker";
+async function importWorkerModule(): Promise<void> {
+  await import(/* @vite-ignore */ workerModulePath);
+}
+
 describe("documents.worker entry point", () => {
   it("constructs the RPCHandler with the real router and upgrades self with a context factory resolving to an empty object", async () => {
-    await import("./documents.worker");
+    await importWorkerModule();
     expect(capturedUpgradeTarget).toBe(self);
     expect(capturedUpgradeOptions?.context()).toEqual({});
   });
@@ -51,7 +57,7 @@ describe("documents.worker entry point", () => {
     const buffer = new ArrayBuffer(1);
     vi.mocked(collectTransferableBuffers).mockReturnValue([buffer]);
 
-    await import("./documents.worker");
+    await importWorkerModule();
     const message = { some: "message" };
     const result = capturedOptions?.experimental_transfer(message);
 
@@ -64,7 +70,7 @@ describe("documents.worker entry point", () => {
       await import("../shared/transferables");
     vi.mocked(collectTransferableBuffers).mockReturnValue([]);
 
-    await import("./documents.worker");
+    await importWorkerModule();
     const result = capturedOptions?.experimental_transfer({});
 
     expect(result).toBeNull();
