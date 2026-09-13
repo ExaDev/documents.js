@@ -297,7 +297,7 @@ describe("fontSubstitutionToDiagnostic", () => {
       requestedBold: true,
       requestedItalic: true,
       resolvedFamily: "Calibri",
-      reason: "style-fallback",
+      reason: "missing-face",
     });
     expect(diagnostic.message).toBe(
       '"Calibri bold italic" is not available; substituted another face of "Calibri"',
