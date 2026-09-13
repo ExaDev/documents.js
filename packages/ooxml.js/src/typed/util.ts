@@ -99,7 +99,8 @@ export interface Relationship {
 export function relsPathFor(partPath: string): string {
   const lastSlash = partPath.lastIndexOf("/");
   const dir = lastSlash === -1 ? "" : partPath.slice(0, lastSlash);
-  const fileName = lastSlash === -1 ? partPath : partPath.slice(lastSlash + 1);
+  // No ternary needed here (unlike dir above): slice(-1 + 1) is slice(0), which returns the whole string unchanged -- exactly what a slash-free path needs -- so this one expression already covers both cases the dir computation above needs a real branch for.
+  const fileName = partPath.slice(lastSlash + 1);
   return `${dir}/_rels/${fileName}.rels`;
 }
 
