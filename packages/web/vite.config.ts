@@ -177,6 +177,8 @@ export default defineConfig(({ command, mode }) => ({
           environment: "jsdom",
           include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
           setupFiles: ["./src/test/setup.ts"],
+          // Vitest stubs out CSS imports by default (an empty module, no rules ever reach jsdom's document.styleSheets) since most suites never need a real cascade. This package's own *.css.ts modules (vanilla-extract) are mutated by Stryker like any other source file, and the only way to kill a mutated style value is to read it back from an actually-applied stylesheet -- see src/test/cssRule.ts's own module comment for the read-back mechanics.
+          css: true,
         },
       },
     ],
