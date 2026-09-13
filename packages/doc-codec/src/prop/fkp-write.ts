@@ -1,5 +1,11 @@
-import { DocFormatError } from "../errors";
+import { assertDefined, DocFormatError } from "../errors";
 import { FKP_PAGE_SIZE } from "./fkp";
+
+// Both messages below name an invariant buildChpxPages/buildPapxPages already maintain, never one a caller's input could violate: a batch's own fit depends only on its own record count and grpprl/GrpPrlAndIstd sizes, never on the trailing fcLim value written alongside them (always a fixed 4-byte uint32 slot, whatever fcLim itself is), so a batch splitIntoBatches already proved fits at fcLim 0 can never stop fitting once rebuilt with the real, final fcLim. Exported for this package's own tests only, so a change to the actual wording stays directly testable even though nothing in the public build path can trigger it.
+export const CHPX_BATCH_REFIT_FAILED_MESSAGE =
+  "a ChpxFkp batch that fit during splitting no longer fits when finalised; this is an internal defect";
+export const PAPX_BATCH_REFIT_FAILED_MESSAGE =
+  "a PapxFkp batch that fit during splitting no longer fits when finalised; this is an internal defect";
 
 // The inverse of fkp.ts's parseChpxFkp/parsePapxFkp: packs a document's character- and paragraph-formatting exceptions into formatted disk pages, splitting across as many 512-byte pages as the content needs rather than assuming it always fits one. [MS-DOC] 2.9.23/2.9.175 bound a single page at MAX_CRUN (0x65) runs or 0x1D paragraphs, and every page is a fixed 512 bytes regardless of how much grpprl content its records hold -- a document with enough distinct formatting exceptions overflows either limit before the file itself is large, so page-splitting is exercised in this module's own tests rather than left as a theoretical concern a small document would never hit. The paragraph bound is not checked directly: it is already exactly where BxPap's own front array (17 bytes per paragraph, 13 for its own BxPap plus 4 for its rgfc entry) alone exceeds the page's 512 bytes regardless of any record content, so the record-region overflow check below already refuses anything past it on its own -- unlike a run, every paragraph's own GrpPrlAndIstd is written unconditionally (istd alone is never omitted the way a run's whole Chpx can be), so that check is never skipped the way it can be for an all-default-formatting run. The run bound has no such equivalent and is still checked explicitly below, for exactly that reason: a run whose own grpprl is undefined skips the record-region write entirely (rgb 0, "no exception"), so a batch of enough such runs would never touch the very check that would otherwise catch it.
 //
@@ -143,11 +149,7 @@ export function buildChpxPages(
     const next = batches[index + 1];
     const pageFcLim = next === undefined ? fcLim : (next[0]?.fc ?? fcLim);
     const page = buildChpxPage(batch, pageFcLim);
-    if (page === undefined) {
-      throw new DocFormatError(
-        "a ChpxFkp batch that fit during splitting no longer fits when finalised; this is an internal defect",
-      );
-    }
+    assertDefined(page, CHPX_BATCH_REFIT_FAILED_MESSAGE);
     return page;
   });
 }
@@ -169,11 +171,7 @@ export function buildPapxPages(
     const next = batches[index + 1];
     const pageFcLim = next === undefined ? fcLim : (next[0]?.fc ?? fcLim);
     const page = buildPapxPage(batch, pageFcLim);
-    if (page === undefined) {
-      throw new DocFormatError(
-        "a PapxFkp batch that fit during splitting no longer fits when finalised; this is an internal defect",
-      );
-    }
+    assertDefined(page, PAPX_BATCH_REFIT_FAILED_MESSAGE);
     return page;
   });
 }
