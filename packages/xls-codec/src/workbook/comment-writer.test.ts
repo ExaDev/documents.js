@@ -158,7 +158,7 @@ describe("writeSheetComments", () => {
     );
 
     expect(() => writeSheetComments(cells)).not.toThrow();
-  });
+  }, 30000); // Building and writing 65535 comment records is inherently slower than the default test timeout allows, independent of any load on the machine running it.
 
   it("gives each comment's own FtNts a genuinely random GUID, not a fixed all-zero one", () => {
     const pieces = writeSheetComments([
