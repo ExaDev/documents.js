@@ -51,6 +51,17 @@ function readRecordHeader(data: Uint8Array, offset: number): RecordHeader {
   };
 }
 
+/** The one byte past PICF's own fixed 68 bytes, skipping past MFPF.mm's MM_SHAPEFILE-only cchPicName/stPicName pair (the source file's own name, [MS-DOC] 2.9.181) when present. Exported so its own contract -- how far past PICF the OfficeArt container chain actually begins -- is directly testable: findBlipRecord's own forward scan for a validated blip is robust enough to find the real blip even starting from the wrong offset (scanning straight through a skipped filename's bytes finds nothing signature-shaped there and simply continues), which means asserting only on readInlinePicture's own final result can never tell a correct skip from a wrong one apart. */
+export function skipPicName(
+  dataStream: Uint8Array,
+  mm: number,
+  afterPicf: number,
+): number {
+  if (mm !== MM_SHAPEFILE) return afterPicf;
+  const cchPicName = readUint8(dataStream, afterPicf);
+  return afterPicf + 1 + cchPicName;
+}
+
 /** Resolves one inline picture character's own sprmCPicLocation offset into a ContentImageBlock, or undefined when the picture's own blip is a format this package does not decode (see this module's own top comment) -- never thrown, since an unsupported picture format is exactly the kind of absence the rest of this reader already treats as "read with fewer properties than it states" rather than a document-level failure. */
 export function readInlinePicture(
   dataStream: Uint8Array,
@@ -68,11 +79,7 @@ export function readInlinePicture(
   const mx = readUint16LE(picf, PICF_MX_OFFSET);
   const my = readUint16LE(picf, PICF_MY_OFFSET);
 
-  let cursor = picLocation + PICF_SIZE;
-  if (mm === MM_SHAPEFILE) {
-    const cchPicName = readUint8(dataStream, cursor);
-    cursor += 1 + cchPicName;
-  }
+  const cursor = skipPicName(dataStream, mm, picLocation + PICF_SIZE);
 
   // Locating the blip: the containers between PICF and the blip are wrapper shapes this reader has no need to look inside, and producers disagree on the nesting -- Word writes InlineSpContainer > SpContainer > blip, while LibreOffice (confirmed against a real LibreOffice-produced .doc corpus file, 2026-09-10) emits a chain whose container lengths do not walk to the blip (its property-table record's recLen spans past the blip entirely), so header-walking mis-parses it. The robust spelling-independent locator: scan forward from PICF's end for a record header whose type is a known blip, whose instance names a known rgbUid count, whose length stays inside the Data stream, and whose payload actually begins with that format's own file signature -- a validated blip, not merely a well-formed header. The signature check is what makes a false positive on wrapper bytes effectively impossible: no container prefix preceding a real blip starts with a PNG or JPEG signature at exactly the uid-and-tag-derived offset.
   const found = findBlipRecord(dataStream, cursor);
@@ -161,9 +168,9 @@ function findBlipRecord(data: Uint8Array, from: number): FoundBlip | undefined {
     }
     const payloadStart = at + RECORD_HEADER_SIZE + uidBytes + BLIP_TAG_SIZE;
     const signature = format === "png" ? PNG_SIGNATURE : JPEG_SIGNATURE;
+    // No separate payloadStart + signature.length <= data.length bounds check is needed: payloadHasSignature indexes past data's own end via a plain data[start + i] read, which is undefined for any out-of-range i, and undefined !== a real signature byte is already false -- so a signature that runs off the end of data is already rejected by payloadHasSignature itself, on its own.
     if (
       header.recLen > uidBytes + BLIP_TAG_SIZE &&
-      payloadStart + signature.length <= data.length &&
       payloadHasSignature(data, payloadStart, signature)
     ) {
       return { header, offset: at };
