@@ -98,8 +98,11 @@ export interface ListUsage {
 export function gatherListUsage(
   memberships: readonly (ContentListMembership | undefined)[],
 ): ListUsage {
-  const ilfoByNumId = new Map<string, number>();
-  const usedLevelsByIlfo = new Map<number, Map<number, NumberingLevel>>();
+  // One entry per distinct numId, holding both the ilfo minted for it and the levels used under it together -- a single map, rather than two kept in step by hand, so there is no separate "does the second map agree with the first" question a defensive check would otherwise need to answer at every lookup.
+  const usageByNumId = new Map<
+    string,
+    { readonly ilfo: number; readonly used: Map<number, NumberingLevel> }
+  >();
 
   for (const membership of memberships) {
     if (membership?.numId === undefined) continue;
@@ -108,28 +111,23 @@ export function gatherListUsage(
         `paragraph list numId ${JSON.stringify(membership.numId)} names level ${membership.level}, outside the 0..${MAX_LIST_LEVEL} range a non-simple LSTF's fixed nine LVLs ([MS-DOC] 2.9.191) can address`,
       );
     }
-    let ilfo = ilfoByNumId.get(membership.numId);
-    if (ilfo === undefined) {
-      ilfo = ilfoByNumId.size + 1;
-      ilfoByNumId.set(membership.numId, ilfo);
-      usedLevelsByIlfo.set(ilfo, new Map());
+    let entry = usageByNumId.get(membership.numId);
+    if (entry === undefined) {
+      entry = { ilfo: usageByNumId.size + 1, used: new Map() };
+      usageByNumId.set(membership.numId, entry);
     }
-    const used = usedLevelsByIlfo.get(ilfo);
-    if (used === undefined) {
-      throw new DocFormatError(
-        "internal defect: gatherListUsage minted an ilfo with no levels map of its own",
-      );
-    }
-    if (!used.has(membership.level)) {
-      used.set(
+    if (!entry.used.has(membership.level)) {
+      entry.used.set(
         membership.level,
         defaultLevel(membership.level, membership.format ?? DEFAULT_FORMAT),
       );
     }
   }
 
+  const ilfoByNumId = new Map<string, number>();
   const definitions: Record<string, NumberingDefinition> = {};
-  for (const [ilfo, used] of usedLevelsByIlfo) {
+  for (const [numId, { ilfo, used }] of usageByNumId) {
+    ilfoByNumId.set(numId, ilfo);
     // A real PlfLst never states a partial LSTF: [MS-DOC]'s own fSimpleList flag means "exactly one LVL, for level 0" and its absence means "exactly nine, levels 0-8" -- there is no third shape, so every level in that dense range needs a definition, used or not (an unused one is never read back into a context that renders it).
     const maxLevelUsed = Math.max(...used.keys());
     const levelCount = maxLevelUsed === 0 ? 1 : LEVELS_PER_MULTI_LEVEL_LIST;
@@ -171,9 +169,11 @@ function buildLvlBytes(
     lvlf[5] = LVLF_FLAG_NO_RESTART;
     lvlf[26] = numberingLevel.restart; // ilvlRestartLim, meaningful only alongside the flag above.
   }
-  positions.forEach((position, index) => {
-    lvlf[6 + index] = position;
-  });
+  // buildLevelXst above only ever returns zero positions (bullet) or exactly one (a numbered format's own single placeholder), so the one position that exists is always at rgbxchNums' own first slot -- there is no second entry an index-based offset would ever need to place.
+  const firstPosition = positions[0];
+  if (firstPosition !== undefined) {
+    lvlf[6] = firstPosition;
+  }
   // Offsets 15-23 (9 bytes) and 27 (1 byte) are fields numbering.ts's own reader never consults -- left 0, matching this package's own "populate only what this package's reader needs back" convention (fib/write.ts's own top comment states the identical choice for the FIB). Offsets 24/25 (cbGrpprlChpx/cbGrpprlPapx) stay 0 too: a real, valid, minimal LVL with no per-level direct formatting -- see this module's own top comment for why there is nothing to encode there.
   return [...lvlf, ...encodeXst(xstText)];
 }
@@ -215,9 +215,8 @@ export function buildNumberingTables(
         "internal defect: buildNumberingTables lost a definition for an ilfo its own key list just named",
       );
     }
-    const levelKeys = Object.keys(definition.levels)
-      .map(Number)
-      .sort((a, b) => a - b);
+    // Every level key that round-trips through the lookup below is a canonical small-integer string ("0".."8"), and JS itself always enumerates an object's own canonical integer-index keys in ascending numeric order regardless of insertion order -- so an explicit sort here would only ever re-confirm an order Object.keys already guarantees.
+    const levelKeys = Object.keys(definition.levels).map(Number);
     const fSimpleList = levelKeys.length === 1 && levelKeys[0] === 0;
     const isDenseMultiLevel =
       levelKeys.length === LEVELS_PER_MULTI_LEVEL_LIST &&
