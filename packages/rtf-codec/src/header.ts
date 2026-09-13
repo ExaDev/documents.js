@@ -228,8 +228,8 @@ function readFontInfo(
   let family: string | undefined;
   let charsetPage: number | undefined;
   let explicitPage: number | undefined;
-  // No nameStart tracking to skip past these descriptor control words before collecting the font's own name: collectPlainText already silently skips every controlWord token it doesn't specifically handle (only "u" and a nested group get real treatment), so scanning the whole [start, end) range for the name below already ignores \f, \froman/\fswiss/etc, \fcharsetN, \cpgN, \fprqN, and \fbias on its own, with nothing left for a separate start-of-name offset to add. \fprq/\fbias carry no field this reader records at all, so that branch is gone entirely rather than kept only to compute an offset nothing needs.
-  for (let index = start; index < end; index += 1) {
+  // No nameStart tracking to skip past these descriptor control words before collecting the font's own name: collectPlainText already silently skips every controlWord token it doesn't specifically handle (only "u" and a nested group get real treatment), so scanning the whole [start, end) range for the name below already ignores \f, \froman/\fswiss/etc, \fcharsetN, \cpgN, \fprqN, and \fbias on its own, with nothing left for a separate start-of-name offset to add. \fprq/\fbias carry no field this reader records at all, so that branch is gone entirely rather than kept only to compute an offset nothing needs. index increments by exactly 1 every iteration and never jumps (unlike parseFontTable's own loop, which lands on matchingGroupEnd's result), so !== is exactly equivalent to < here, and unlike <, an off-by-one mutation of it (=== in place of !==) stops the loop from running at all instead of surviving unobserved -- group.ts's own matchingGroupEnd loop states the identical reasoning.
+  for (let index = start; index !== end; index += 1) {
     const token = tokens[index];
     if (token === undefined) break;
     if (token.kind !== "controlWord") {
@@ -289,7 +289,8 @@ function parseColorTable(
     green = undefined;
     blue = undefined;
   };
-  for (let index = contentStart; index < end; index += 1) {
+  // index increments by exactly 1 every iteration with no jump, so !== is exactly equivalent to < here -- see readFontInfo's own identical loop for the full reasoning.
+  for (let index = contentStart; index !== end; index += 1) {
     const token = tokens[index];
     if (token === undefined) break;
     if (token.kind === "controlWord") {
