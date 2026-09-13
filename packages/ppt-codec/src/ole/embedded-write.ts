@@ -138,7 +138,6 @@ export function writeOleClientData(exObjId: number): Uint8Array<ArrayBuffer> {
 export function writeExOleObjStg(
   storageBytes: Uint8Array<ArrayBuffer>,
 ): Uint8Array<ArrayBuffer> {
-  return writeAtom(RT_ExternalOleObjectStg, storageBytes, {
-    recInstance: 0x000,
-  });
+  // recInstance 0x000 (the uncompressed spelling) is writeAtom's own default, so it is left unstated here rather than passed as an options object indistinguishable from omitting it entirely.
+  return writeAtom(RT_ExternalOleObjectStg, storageBytes);
 }
