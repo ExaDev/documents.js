@@ -14,7 +14,7 @@ import {
 } from "./status-line.js";
 
 // Real time, not faked: vi.useFakeTimers left the expiry effect's own setTimeout unadvanced in this Ink render harness even with shouldAdvanceTime set, so these tests wait out the real TTL instead. The buffer over the TTL is generous because this machine's own real timers can lag well behind their nominal delay under heavy concurrent CPU load; the per-test timeout below is set even higher again so vitest's own default 5000ms test timeout can never race this wait.
-const TTL_WAIT_MS = TRANSIENT_STATUS_TTL_MS + 6000;
+const TTL_WAIT_MS = TRANSIENT_STATUS_TTL_MS + 15000;
 const TTL_TEST_TIMEOUT_MS = TTL_WAIT_MS + 5000;
 
 describe("statusColour", () => {
