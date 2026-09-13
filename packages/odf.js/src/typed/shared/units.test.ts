@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { parseOdfLength, formatOdfLength } from "./units";
+import {
+  parseOdfLength,
+  formatOdfLength,
+  isLengthUnit,
+  parseOdfAngleDeg,
+  expandExponential,
+} from "./units";
 
 // The cm-based fixtures below ("real LibreOffice output") are copied verbatim from a real style:paragraph-properties element produced by `soffice --headless --convert-to odt` (LibreOffice 26.2.5.2), the same fixture referenced by src/styles/properties.test.ts -- see that file's own top-of-file note.
 
@@ -33,6 +39,86 @@ describe("parseOdfLength", () => {
     expect(parseOdfLength("auto")).toBeUndefined();
     expect(parseOdfLength("")).toBeUndefined();
     expect(parseOdfLength("12 pt")).toBeUndefined();
+  });
+});
+
+describe("isLengthUnit", () => {
+  it("accepts every one of the six real ODF length units", () => {
+    for (const unit of ["cm", "mm", "in", "pt", "pc", "px"]) {
+      expect(isLengthUnit(unit)).toBe(true);
+    }
+  });
+
+  it("rejects a unit outside the ODF length grammar", () => {
+    expect(isLengthUnit("em")).toBe(false);
+    expect(isLengthUnit("")).toBe(false);
+    expect(isLengthUnit("PT")).toBe(false);
+  });
+});
+
+describe("expandExponential", () => {
+  it("passes non-exponent text through unchanged", () => {
+    expect(expandExponential("12")).toBe("12");
+    expect(expandExponential("abc")).toBe("abc");
+  });
+
+  it("pointIndex exactly 0 (the <= 0 boundary): a leading zero with no extra padding digits", () => {
+    expect(expandExponential("1e-1")).toBe("0.1");
+  });
+
+  it("pointIndex strictly negative: leading zero padding beyond the single digit", () => {
+    expect(expandExponential("1e-2")).toBe("0.01");
+  });
+
+  it("pointIndex exactly equal to digits.length (the >= boundary): no trailing zero padding needed", () => {
+    expect(expandExponential("1e0")).toBe("1");
+  });
+
+  it("pointIndex strictly greater than digits.length: trailing zero padding", () => {
+    expect(expandExponential("1e1")).toBe("10");
+  });
+
+  it("pointIndex strictly between 0 and digits.length: a real decimal point insertion", () => {
+    expect(expandExponential("1.5e0")).toBe("1.5");
+  });
+
+  it("carries a negative sign through every branch", () => {
+    expect(expandExponential("-1.5e2")).toBe("-150");
+    expect(expandExponential("-1e-1")).toBe("-0.1");
+  });
+
+  it("accepts an uppercase E", () => {
+    expect(expandExponential("1E1")).toBe("10");
+  });
+});
+
+describe("parseOdfAngleDeg", () => {
+  it("a bare number with no unit suffix is already degrees", () => {
+    expect(parseOdfAngleDeg("90")).toBe(90);
+    expect(parseOdfAngleDeg("-45")).toBe(-45);
+    expect(parseOdfAngleDeg("0.5")).toBe(0.5);
+    expect(parseOdfAngleDeg(".5")).toBe(0.5);
+  });
+
+  it('an explicit "deg" suffix is a no-op conversion', () => {
+    expect(parseOdfAngleDeg("90deg")).toBe(90);
+  });
+
+  it("converts grad to degrees: 400 grad is a full turn, matching 360 degrees", () => {
+    expect(parseOdfAngleDeg("400grad")).toBe(360);
+    expect(parseOdfAngleDeg("200grad")).toBe(180);
+    expect(parseOdfAngleDeg("100grad")).toBe(90);
+  });
+
+  it("converts rad to degrees: pi radians is a half turn, matching 180 degrees", () => {
+    expect(parseOdfAngleDeg(`${Math.PI}rad`)).toBeCloseTo(180, 9);
+    expect(parseOdfAngleDeg(`${Math.PI / 2}rad`)).toBeCloseTo(90, 9);
+  });
+
+  it("returns undefined for a malformed angle", () => {
+    expect(parseOdfAngleDeg("auto")).toBeUndefined();
+    expect(parseOdfAngleDeg("90degrees")).toBeUndefined();
+    expect(parseOdfAngleDeg("")).toBeUndefined();
   });
 });
 
