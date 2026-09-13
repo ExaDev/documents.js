@@ -17,12 +17,14 @@ import {
   mean,
   median,
   recursiveXYCut,
+  regionReadingOrderComparator,
   regularity,
   segmentPdfRegions,
   verticalGap,
   type BoundedItem,
   type LeafSignals,
   type PdfRegion,
+  type PdfRegionBounds,
   type TextLine,
 } from "./pdf-regions";
 
@@ -248,13 +250,29 @@ describe("segmentPdfRegions", () => {
     expect(regions).toHaveLength(2);
     expect(regions.map((region) => region.bounds.xPt)).toEqual([50, 400]);
   });
+});
 
-  it("leaves a genuine vertical tie already listed left-to-right still left-to-right", () => {
-    // The mirror image of the tie-break test above, with the two items already given in the CORRECT (ascending-x) order: a comparator that sums the two x values instead of subtracting (both xPt here being positive, the sum is always positive) would force a SWAP on this exact pair regardless of which one is "a" and which is "b" in the comparison -- flipping this already-sorted pair into descending order, unlike the reversed-input test above, where that same wrong comparator happens to force the correct swap by coincidence.
-    const items = [line(50, 700, "A"), line(400, 700, "B")]; // already left-to-right
-    const regions = segmentPdfRegions(page(items));
-    expect(regions).toHaveLength(2);
-    expect(regions.map((region) => region.bounds.xPt)).toEqual([50, 400]);
+describe("regionReadingOrderComparator", () => {
+  const boundsAt = (xPt: number, yPt: number): PdfRegionBounds => ({
+    xPt,
+    yPt,
+    widthPt: 0,
+    heightPt: 0,
+  });
+
+  it("sorts top to bottom (descending yPt)", () => {
+    const top = { bounds: boundsAt(0, 700) };
+    const bottom = { bounds: boundsAt(0, 100) };
+    expect(regionReadingOrderComparator(top, bottom)).toBeLessThan(0);
+    expect(regionReadingOrderComparator(bottom, top)).toBeGreaterThan(0);
+  });
+
+  it("breaks a genuine vertical tie by sorting left to right, as a subtraction rather than a sum", () => {
+    // recursiveXYCut's own internal per-axis sort already fixes which region lands as `a` versus `b` by the time segmentPdfRegions reaches this comparator, so an end-to-end test can never itself control the argument order the tie-break clause receives -- only calling the comparator directly, in BOTH argument orders, can prove it is a genuine subtraction. A sum-based tie-break (both xPt values here being positive, the sum is always positive) would report "a sorts after b" for EVERY ordering of this exact pair, which would still happen to look correct for one specific argument order and wrong for the other -- checking both orders is what makes that distinguishable from a real subtraction, which correctly reverses sign when the arguments swap.
+    const left = { bounds: boundsAt(50, 700) };
+    const right = { bounds: boundsAt(400, 700) };
+    expect(regionReadingOrderComparator(left, right)).toBeLessThan(0);
+    expect(regionReadingOrderComparator(right, left)).toBeGreaterThan(0);
   });
 });
 
