@@ -183,7 +183,7 @@ const META_NAMESPACE_URI_FOR_PREFIX: Readonly<Record<string, string>> = {
 };
 
 // Ensures `root` (office:document-meta) declares the xmlns binding a newly appended element's prefix needs -- the ODF-side mirror of ooxml.js's own ensureNamespaceDeclared. A legally-minimal meta.xml declaring only office:+dc: (a producer that has only ever written dc:title) would otherwise gain an unbound meta:initial-creator/meta:keyword child on its first author/keywords patch -- a fatal XML namespace well-formedness error real consumers (LibreOffice) reject outright.
-function ensureNamespaceDeclared(root: XmlElement, tag: string): void {
+export function ensureNamespaceDeclared(root: XmlElement, tag: string): void {
   const colonIndex = tag.indexOf(":");
   if (colonIndex === -1) {
     return;

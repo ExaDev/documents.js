@@ -33,7 +33,7 @@ function unitToPtFactor(unit: LengthUnit): number {
   }
 }
 
-function isLengthUnit(value: string): value is LengthUnit {
+export function isLengthUnit(value: string): value is LengthUnit {
   return (
     value === "cm" ||
     value === "mm" ||
@@ -61,19 +61,16 @@ export function parseOdfLength(value: string): number | undefined {
 // JavaScript's own Number-to-string switches to EXPONENT notation outside a fixed magnitude window (below 1e-6, or at/above 1e21) -- `${-7.1e-15}` is "-7.1e-15", not "-0.0000000000000071". The ODF `length` datatype has NO exponent form at all (see LENGTH_PATTERN above, and the OASIS grammar it encodes), so a bare template-literal stringification silently emits spec-invalid ODF for any small-magnitude length. That is not a theoretical range: a rotated shape's own draw:transform translate() components are trig-derived (typed/draw/write-shapes.ts's frameGeometryAttrs), so a shape rotated about a point near the page origin routinely lands a component at 1e-15-ish rounding dust rather than a clean 0. The consequence on the way back in is silent and total: parseOdfTransform drops a translate() whose components don't parse (so the shape moves to the pivot), and parseBox returns undefined for an unrotated frame whose svg:x/svg:y don't parse (so readDrawFrame drops the shape entirely).
 //
 // The fix belongs here, on the write side, not in LENGTH_PATTERN: widening the reader to accept an exponent would make this package read its own invalid output back correctly while every other ODF consumer still saw a length outside the datatype. expandExponential below re-positions the decimal point in the digits Number-to-string ALREADY chose (the shortest round-tripping representation), so it is an exact re-spelling rather than a rounding step -- and since those digits never carry a trailing fractional zero, neither does the result, matching the plain-stringification style of every ordinary value.
-function expandExponential(text: string): string {
+export function expandExponential(text: string): string {
   const match = /^(-?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/.exec(text);
   if (match === null) {
     return text;
   }
-  const [, sign, integerDigits, fractionDigits, exponent] = match;
-  if (
-    sign === undefined ||
-    integerDigits === undefined ||
-    exponent === undefined
-  ) {
-    return text;
-  }
+  // Every group but the third (the optional fractional digits) is a MANDATORY alternative in this pattern -- (-?) always matches (possibly empty), (\d+) and ([+-]?\d+) are plain quantifiers with no `?` of their own -- so sign/integerDigits/exponent can never actually be undefined once `match` itself is non-null; only TypeScript's own RegExpExecArray typing can't express that. Asserting rather than re-checking a condition the regex has already made unreachable keeps this a real branch (the fractional-digits one below) rather than a dead one no input can ever exercise.
+  const sign = match[1]!;
+  const integerDigits = match[2]!;
+  const fractionDigits = match[3];
+  const exponent = match[4]!;
   const digits = `${integerDigits}${fractionDigits ?? ""}`;
   // Where the decimal point lands within `digits` once the exponent is applied: left of every digit (a pure fraction needing leading zeros), right of every digit (an integer needing trailing zeros), or between two of them.
   const pointIndex = integerDigits.length + Number(exponent);
@@ -106,11 +103,8 @@ export function parseOdfAngleDeg(value: string): number | undefined {
   if (match === null) {
     return undefined;
   }
-  const numeric = match[1];
-  if (numeric === undefined) {
-    return undefined;
-  }
-  const raw = Number(numeric);
+  // match[1]'s own group has no `?` quantifier of its own (only the alternation inside it does), so it always matches once `match` itself is non-null -- the same mandatory-group guarantee expandExponential's own sign/integerDigits/exponent rely on above.
+  const raw = Number(match[1]!);
   switch (match[2]) {
     case "grad":
       return raw * DEGREES_PER_GRAD;
