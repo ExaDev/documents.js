@@ -11,6 +11,8 @@ export interface Plc {
   readonly count: number;
   /** The bytes of data element i, a view into the PLC's own bytes rather than a copy. */
   element(index: number): Uint8Array;
+  /** `keys[index]`, without the `noUncheckedIndexedAccess` `| undefined` a plain index read would carry -- every caller already only asks for an index bounded by its own bracketing arithmetic (0..count for a key, 0..count - 1 for an element), so this is the one place that bound is actually checked and reported, rather than each caller repeating an unreachable defensive guard of its own. */
+  keyAt(index: number): number;
 }
 
 export function parsePlc(
@@ -64,6 +66,15 @@ export function parsePlc(
         elementSize,
         `${what} element ${index}`,
       );
+    },
+    keyAt(index: number): number {
+      const key = keys[index];
+      if (key === undefined) {
+        throw new DocFormatError(
+          `${what} has ${keys.length} keys; key ${index} was requested`,
+        );
+      }
+      return key;
     },
   };
 }
