@@ -43,6 +43,14 @@ describe("output shape", () => {
     expectBalancedBraces(out);
   });
 
+  it("separates a paragraph's own properties from its first run's text with a literal space", () => {
+    // A default paragraph (no heading/alignment/direction/list) has empty paragraphProperties output, so \pard\plain is followed directly by the mandatory separating space and then the run text -- with nothing between \plain and the space to obscure whether the space survived.
+    const out = write(
+      wordprocessing([{ kind: "paragraph", runs: [{ text: "hi" }] }]),
+    );
+    expect(out).toContain("\\pard\\plain {hi}");
+  });
+
   it("writes no \\colortbl/\\stylesheet/\\*\\listtable/\\*\\revtbl/\\info at all for a document using none of them", () => {
     // Each of these five destinations is genuinely optional -- unlike \fonttbl, which always carries at least the default font -- and each has its own guard against writing an empty destination for nothing. \info's own guard (fields.length > 0) is the only one gating a group built from four independently-optional sub-fields rather than a single table, so an empty document with no metadata at all is the fixture that proves the whole group, not just one field, is skipped.
     const out = write(
@@ -2355,6 +2363,30 @@ describe("body constructs", () => {
           "a division construct is dropped: RTF has no equivalent construct",
       },
     ]);
+  });
+
+  it("keeps an outer bookmark's own close matched to its own open, across a nested dropped construct's open/close pair", () => {
+    // openConstruct pushes a placeholder (undefined) for a dropped, non-bookmark construct precisely so closeConstruct's later pop() still finds the RIGHT entry -- the enclosing bookmark's own name, not the placeholder's construct's -- when the two are nested rather than siblings. Without that placeholder, the footnote's own close would pop the outer bookmark's name early (writing its {\*\bkmkend} right after "A"), and the outer bookmark's real close would then find the stack already empty and write nothing at all.
+    const out = write(
+      wordprocessing([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "anchor", anchorType: "bookmark", name: "outer" },
+        },
+        {
+          kind: "constructStart",
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "1" },
+        },
+        { kind: "paragraph", runs: [{ text: "A" }] },
+        { kind: "constructEnd" },
+        { kind: "paragraph", runs: [{ text: "B" }] },
+        { kind: "constructEnd" },
+      ]),
+    );
+    expect(out).toContain("{\\*\\bkmkend outer}");
+    expect(out.indexOf("{\\*\\bkmkend outer}")).toBeGreaterThan(
+      out.indexOf("B"),
+    );
   });
 });
 
