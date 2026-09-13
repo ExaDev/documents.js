@@ -29,6 +29,22 @@ describe("getOdfSpaceCount", () => {
       getOdfSpaceCount(el("text:s", { "text:c": "not-a-number" })),
     ).toThrow(/malformed/);
   });
+
+  it("throws for a negative text:c", () => {
+    expect(() => getOdfSpaceCount(el("text:s", { "text:c": "-1" }))).toThrow(
+      /malformed/,
+    );
+  });
+
+  it("throws for a text:c that isn't parseInt's own canonical spelling of its value, e.g. a leading zero", () => {
+    expect(() => getOdfSpaceCount(el("text:s", { "text:c": "05" }))).toThrow(
+      /malformed/,
+    );
+  });
+
+  it("accepts a text:c of exactly zero, a valid (if degenerate) space count", () => {
+    expect(getOdfSpaceCount(el("text:s", { "text:c": "0" }))).toBe(0);
+  });
 });
 
 describe("measureOdfNodeLength / sumOdfNodeLength", () => {
@@ -57,6 +73,13 @@ describe("measureOdfNodeLength / sumOdfNodeLength", () => {
     expect(measureOdfNodeLength({ type: "cdata", value: "x" })).toBe(0);
     expect(measureOdfNodeLength(el("text:bookmark"))).toBe(0);
     expect(measureOdfNodeLength(el("text:title"))).toBe(0);
+  });
+
+  it("ignores a zero-width marker's own children rather than recursing into them", () => {
+    // A bookmark carries no length of its own, but it's still an element that could, in principle, carry children — this pins that measureOdfNodeLength genuinely returns 0 for the whole node rather than merely happening to see an empty children array (el("text:bookmark") above has none, so that case alone can't tell "recurses into an empty list" apart from "never recurses at all").
+    expect(measureOdfNodeLength(el("text:bookmark", {}, [txt("hidden")]))).toBe(
+      0,
+    );
   });
 
   it("sums a flat node list", () => {
@@ -146,6 +169,16 @@ describe("decodeOdfText", () => {
     const paragraph = paragraphOf(
       txt("a"),
       el("text:bookmark", { "text:name": "mark" }),
+      txt("b"),
+    );
+    expect(decodeOdfText(paragraph)).toBe("ab");
+  });
+
+  it("ignores a zero-width marker's own children rather than recursing into them", () => {
+    // As with measureOdfNodeLength above, an empty-children marker can't tell "recursed into nothing" apart from "never recursed" — this one carries real text so a wrongly-recursing implementation would leak it into the decoded output.
+    const paragraph = paragraphOf(
+      txt("a"),
+      el("text:bookmark-start", { "text:name": "mark" }, [txt("hidden")]),
       txt("b"),
     );
     expect(decodeOdfText(paragraph)).toBe("ab");
