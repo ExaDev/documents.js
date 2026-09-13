@@ -426,6 +426,22 @@ const TABLE_LEFT = 1440;
 const TABLE_RIGHT = 4896;
 export const TABLE_ROW_HEIGHT = 480;
 
+// PowerPoint's own default light scheme -- an arbitrary but fixed and realistic 8-entry colour scheme, independently chosen from color-scheme-write.ts's own defaults (see slideSchemeColorSchemeAtom's own comment). Module scope and exported, like TABLE_ROW_HEIGHT above, because the byte-level fidelity tests parse the master's own SlideSchemeColorSchemeAtom bytes directly and need the same values to compare against -- read.ts itself only ever resolves one slot of this scheme (whichever a run's own ColorIndexStruct names), so nothing but a direct byte comparison exercises the other seven.
+export const MASTER_COLOR_SCHEME: readonly (readonly [
+  number,
+  number,
+  number,
+])[] = [
+  [0xff, 0xff, 0xff], // background
+  [0x00, 0x00, 0x00], // text
+  [0x80, 0x80, 0x80], // shadow
+  [0x00, 0x00, 0x00], // title text
+  [0xe6, 0xf2, 0xff], // fill
+  [0x1a, 0x4b, 0x8c], // Accent 1
+  [0x8c, 0x1a, 0x4b], // Accent 2
+  [0x4b, 0x8c, 0x1a], // Accent 3
+];
+
 // A native table group: the group shape opens with the FSPGR child coordinate system ([MS-ODRAW] 2.2.14 puts shapeGroup first), carries fGroup, states tableProperties fIsTable and tableRowProperties as a complex IMsoArray of row minimum heights in the tertiary property table where a real producer puts them, and anchors the whole table with a client anchor; then one plain text-box shape per cell, each carrying its own client anchor -- the grid itself lives nowhere but in those anchors.
 function tableShape(
   spid: number,
@@ -552,8 +568,7 @@ export function syntheticPresentation(
   const MASTER_PERSIST_ID = 2;
   const SLIDE_PERSIST_ID = 3;
   const NOTES_PERSIST_ID = 4;
-  // Minted after whatever objects precede it, so an OLE storage persist object and an encryption session can coexist in one fixture.
-  // [MS-PPT] 2.2.13: a MasterId MUST be at or above 0x80000000, which is also what keeps it out of the SlideId range -- matching master-write.ts's own MASTER_SLIDE_ID.
+  // Minted after whatever objects precede it, so an OLE storage persist object and an encryption session can coexist in one fixture. [MS-PPT] 2.2.13: a MasterId MUST be at or above 0x80000000, which is also what keeps it out of the SlideId range -- matching master-write.ts's own MASTER_SLIDE_ID.
   const MASTER_ID = 0x80000000;
   const SLIDE_ID = 256;
   const NOTES_ID = 512;
@@ -561,17 +576,6 @@ export function syntheticPresentation(
   const ENCRYPTION_SALT = new Uint8Array([
     5, 16, 27, 38, 49, 60, 71, 82, 93, 104, 115, 126, 137, 148, 159, 170,
   ]);
-  // PowerPoint's own default light scheme -- an arbitrary but fixed and realistic 8-entry colour scheme, independently chosen from color-scheme-write.ts's own defaults (see slideSchemeColorSchemeAtom's own comment).
-  const MASTER_COLOR_SCHEME: readonly (readonly [number, number, number])[] = [
-    [0xff, 0xff, 0xff], // background
-    [0x00, 0x00, 0x00], // text
-    [0x80, 0x80, 0x80], // shadow
-    [0x00, 0x00, 0x00], // title text
-    [0xe6, 0xf2, 0xff], // fill
-    [0x1a, 0x4b, 0x8c], // Accent 1
-    [0x8c, 0x1a, 0x4b], // Accent 2
-    [0x4b, 0x8c, 0x1a], // Accent 3
-  ];
 
   const documentChildren: Uint8Array<ArrayBuffer>[] =
     documentMissingDocumentAtom ? [] : [documentAtom(slideWidth, slideHeight)];
