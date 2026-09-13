@@ -100,6 +100,18 @@ describe("readPptStreams", () => {
     });
   });
 
+  it("states no rotationDeg at all for an unrotated plain shape, rather than an explicit undefined", () => {
+    // toEqual treats an explicit rotationDeg: undefined as equal to the key being absent, so an object-shape comparison alone can't tell the two apart -- only checking the key's own presence can.
+    const { currentUserStream, powerPointDocumentStream } =
+      syntheticPresentation();
+    const [slide] = readPptStreams(
+      currentUserStream,
+      powerPointDocumentStream,
+    ).slides;
+    const shape = slide?.shapes[0];
+    expect(shape === undefined ? false : "rotationDeg" in shape).toBe(false);
+  });
+
   it("resolves a title run's bold and colour from the master's own style cascade and colour scheme, when the run itself states neither", () => {
     const { currentUserStream, powerPointDocumentStream } =
       syntheticPresentation({ masterTitleBold: true });
@@ -291,6 +303,20 @@ describe("readPptStreams", () => {
           },
         ],
       });
+    });
+
+    it("states no rotationDeg at all for an unrotated table, rather than an explicit undefined", () => {
+      // toEqual treats an explicit rotationDeg: undefined as equal to the key being absent, so an object-shape comparison alone can't tell the two apart -- only checking the key's own presence can.
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({
+          table: { rows: [["x"]] },
+        });
+      const [slide] = readPptStreams(
+        currentUserStream,
+        powerPointDocumentStream,
+      ).slides;
+      const table = slide?.shapes[2];
+      expect(table === undefined ? false : "rotationDeg" in table).toBe(false);
     });
 
     it("reads a rotated table group's rotation onto the table shape", () => {
