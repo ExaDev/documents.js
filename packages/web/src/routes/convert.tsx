@@ -132,7 +132,8 @@ function ConvertLayout() {
   // Prefetches the original's content as soon as a file and its (auto-detected or manual) source are both known, rather than waiting for the user to click Convert -- so the "Original" preview panel is already populated the moment the "Done" panel appears. `mutate`'s identity is stable across renders (TanStack Query), so depending on it here doesn't retrigger this effect on every render. Skipped for PDF -- its bytes are already what PdfPreview needs.
   const { mutate: mutateOriginalContent } = originalContent;
   useEffect(() => {
-    if (file === undefined || source === null || source === "pdf") return;
+    if (file === undefined || source === "pdf") return;
+    // A null (nothing picked yet) or otherwise-invalid source fails this parse exactly the same way an explicit `source === null` check would have short-circuited above -- a separate null check would only re-reject a case safeParse already rejects, never a distinct one.
     const parsedSource = DocumentFormatSchema.safeParse(source);
     if (!parsedSource.success) return;
     mutateOriginalContent({ format: parsedSource.data, bytes: file.bytes });
