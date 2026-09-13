@@ -90,6 +90,18 @@ describe("expandExponential", () => {
   it("accepts an uppercase E", () => {
     expect(expandExponential("1E1")).toBe("10");
   });
+
+  it("does not match a valid exponential form buried inside a larger, non-exponential string (the leading ^ anchor)", () => {
+    expect(expandExponential("garbage1e5")).toBe("garbage1e5");
+  });
+
+  it("does not match a valid exponential prefix followed by trailing garbage (the trailing $ anchor)", () => {
+    expect(expandExponential("1e5xxx")).toBe("1e5xxx");
+  });
+
+  it("requires the integer part to be entirely digits up to the exponent marker, not just its first digit", () => {
+    expect(expandExponential("12e5")).toBe("1200000");
+  });
 });
 
 describe("parseOdfAngleDeg", () => {

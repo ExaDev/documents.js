@@ -50,11 +50,9 @@ export function parseOdfLength(value: string): number | undefined {
   if (match === null) {
     return undefined;
   }
-  const numeric = match[1];
-  const unit = match[2];
-  if (numeric === undefined || unit === undefined || !isLengthUnit(unit)) {
-    return undefined;
-  }
+  // Both groups are MANDATORY alternatives in LENGTH_PATTERN (neither carries its own `?`), and group 2 is itself restricted to exactly the six LengthUnit spellings -- so numeric/unit can never be undefined, and unit can never fail isLengthUnit, once match is non-null; only TypeScript's own RegExpExecArray typing can't express that. Asserting rather than re-checking a condition the regex has already made unreachable, exactly like expandExponential below.
+  const numeric = match[1]!;
+  const unit = match[2] as LengthUnit;
   return Number(numeric) * unitToPtFactor(unit);
 }
 
