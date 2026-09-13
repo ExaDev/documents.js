@@ -1159,7 +1159,8 @@ describe("body constructs", () => {
 
   // A dropDown with no options recorded at all is a distinct shape from one whose options exist but don't contain `value`: `options` itself is undefined here, so `value` names none of a list that does not exist either. This should degrade identically to the unmatched-value case above -- the sink still fires, since a recorded value with nowhere to write it is data loss regardless of whether the option list is empty, absent, or merely missing the one entry that was picked.
   it("reports a dropDown's value through the diagnostic sink when no options list exists at all to match it against", () => {
-    const codes: string[] = [];
+    // allOptions is undefined here, so truncatedAway (allOptions?.includes(...) ?? false) can only ever be false -- this is the one shape that pins the ?? fallback's own value, distinct from every other dropDown test, where allOptions is always defined.
+    const diagnostics: { code: string; message: string }[] = [];
     const out = text(
       writeRtfContent(
         wordprocessing([
@@ -1179,10 +1180,22 @@ describe("body constructs", () => {
             ],
           },
         ]),
-        { sink: (diagnostic) => codes.push(diagnostic.code) },
+        {
+          sink: (diagnostic) =>
+            diagnostics.push({
+              code: diagnostic.code,
+              message: diagnostic.message,
+            }),
+        },
       ),
     );
-    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a dropDown contentControl's selected value 'Bonjour' is dropped: it does not match any of the field's own options, and \\ffres/\\ffdefres can only name a real index into that list",
+      },
+    ]);
     expect(out).not.toContain("\\ffdefres");
     expect(out).not.toContain("\\ffres");
     expectBalancedBraces(out);
@@ -2191,6 +2204,46 @@ describe("body constructs", () => {
     );
     expect(out).toContain("{\\*\\ffname Outer}");
     expect(out).toContain("{\\*\\ffname Inner}");
+    expectBalancedBraces(out);
+  });
+
+  it("closes two nested extents sharing the same endRun in the same pass, not just the innermost one", () => {
+    // Outer(0,2) and Inner(1,2) both close at position 2 -- writeFormFieldBoundaries' own close loop must pop Inner, then RE-PEEK the stack and find Outer still due at the identical position, closing it too in the same call. A run following position 2 is what actually distinguishes this from the sibling "ending exactly where its enclosing one does" test above, whose own shared endRun (3) is the paragraph's last position -- there the paragraph-end drain would close both regardless of whether the re-peek ever ran.
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }, { text: "b" }, { text: "after" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Outer",
+              },
+              startRun: 0,
+              endRun: 2,
+            },
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Inner",
+              },
+              startRun: 1,
+              endRun: 2,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("{after}");
+    expect(out).not.toContain("{after}}}");
+    expect(out).not.toContain("{after}}}}}");
+    // Both fields' own close sequences land back to back, immediately before "after" -- not with "after" swallowed inside either.
+    expect(out.indexOf("{after}")).toBeGreaterThan(
+      out.indexOf("{\\*\\ffname Inner}"),
+    );
     expectBalancedBraces(out);
   });
 
