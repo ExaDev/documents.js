@@ -216,7 +216,8 @@ function parseFontTable(
     sawBracedEntry = true;
     const entryEnd = Math.min(matchingGroupEnd(tokens, index), end);
     readFontInfo(tokens, index + 1, entryEnd, documentCodepage, fonts, sink);
-    index = capBeforeBoundary(entryEnd, end) + 1;
+    // Landing exactly on the entry's own close (never past it, via the same end - 1 clamp every other loop here uses) rather than one past it: the closing brace itself is not a groupStart, so the loop's own top-of-body advance handles stepping past it on the very next iteration -- no separate +1 needed or safe to mutate away.
+    index = capBeforeBoundary(entryEnd, end);
   }
   if (!sawBracedEntry) {
     readFontInfo(tokens, contentStart, end, documentCodepage, fonts, sink);
