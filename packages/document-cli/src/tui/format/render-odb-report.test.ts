@@ -1,8 +1,9 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDocx, openOdt } from "documents.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { fixtureCalibriFontBytes } from "../../test-support/font-fixture.js";
 import { FORM_AND_REPORT_ODB_PATH } from "../../test-support/odb-fixture.js";
 import type { OdbOpenDocument } from "../state/types.js";
 import { renderOdbReportTo } from "./render-odb-report.js";
@@ -109,5 +110,22 @@ describe("renderOdbReportTo", () => {
         onDiagnostic: () => undefined,
       }),
     ).rejects.toThrow(/SalesByRegion/);
+  });
+
+  it("rejects instead of reading a fontFiles entry once the given signal is already aborted", async () => {
+    const fontPath = join(workspace, "aborted-font.ttf");
+    await writeFile(fontPath, fixtureCalibriFontBytes());
+    const output = join(workspace, "never-written-3.pdf");
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      renderOdbReportTo(doc, output, {
+        reportName: "SalesByRegion",
+        onDiagnostic: () => undefined,
+        fontFiles: [fontPath],
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow(/abort/i);
   });
 });
