@@ -160,10 +160,7 @@ export function tokenizeRtf(input: Uint8Array): RtfToken[] {
       flushText();
       tokens.push({ kind: "controlWord", name: "par" });
       cursor += 2;
-      // A backslash-CR followed by an LF is one line break, not two, so the LF is consumed with it rather than being seen again as an ignorable byte.
-      if (after === CARRIAGE_RETURN && input[cursor] === LINE_FEED) {
-        cursor += 1;
-      }
+      // No separate consume-the-following-LF step is needed for a backslash-CR: a raw CR or LF byte reaching the top of this loop on its own is already unconditionally ignorable (the byte === CARRIAGE_RETURN || byte === LINE_FEED branch above), so whether the LF here is folded into this \par or left for that branch to skip next, the token stream and the cursor's own final position come out identical either way.
       continue;
     }
 
