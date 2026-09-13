@@ -214,10 +214,8 @@ export function compoundFile(
     records.length / entriesPerDirectorySector,
   );
   const miniStreamSectorCount = Math.ceil(miniStream.length / sectorSize);
-  const miniFatSectorCount =
-    miniSectorCount === 0
-      ? 0
-      : Math.ceil(miniSectorCount / fatEntriesPerSector);
+  // No miniSectorCount === 0 guard: Math.ceil(0 / fatEntriesPerSector) is already 0, byte-identical to the explicit zero case this ternary special-cased.
+  const miniFatSectorCount = Math.ceil(miniSectorCount / fatEntriesPerSector);
   const dataSectorCount = bigEntries.reduce(
     (total, { sectorCount }) => total + sectorCount,
     0,
