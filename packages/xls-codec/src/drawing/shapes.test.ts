@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import { ESCHER_CLIENT_ANCHOR, ESCHER_OPT } from "./escher-constants";
 import { readSheetShapes } from "./shapes";
 import {
   clientAnchorSheet,
+  escherAtom,
   escherContainer,
   foptEntry,
   optAtom,
@@ -42,6 +44,20 @@ describe("readSheetShapes", () => {
   it("returns no shapes when the stream carries no DgContainer", () => {
     const bytes = new Uint8Array(escherContainer(0xf003, 0, []));
     expect(readSheetShapes(bytes)).toStrictEqual([]);
+  });
+
+  it("selects the DgContainer among several top-level records by its own recType, not merely the first container found", () => {
+    // Both this container's own kind ("container") and its lack of any real content give the same [] result whether it's wrongly picked or correctly skipped -- what actually tells the two apart is that the REAL DgContainer, found second, carries a genuine shape the wrong one never does.
+    const anchor = clientAnchorSheet(0, 0, 0, 0, 1, 0, 1, 0);
+    const unrelatedContainer = escherContainer(0xf999, 0, []);
+    const bytes = new Uint8Array([
+      ...unrelatedContainer,
+      ...drawingBytes([rectangleShape(50, anchor)]),
+    ]);
+
+    expect(readSheetShapes(bytes).map((shape) => shape.spid)).toStrictEqual([
+      50,
+    ]);
   });
 
   it("skips the patriarch and reads one real top-level shape", () => {
@@ -106,6 +122,65 @@ describe("readSheetShapes", () => {
     const shapes = readSheetShapes(bytes);
 
     expect(shapes.map((shape) => shape.spid)).toStrictEqual([31]);
+  });
+
+  it("excludes a group child of an unrelated recType, even though it is itself a container", () => {
+    // A container's own kind check alone can't rule this one out -- it genuinely IS a container, just not one of the two recTypes a shape tree ever nests. Giving it a real, well-formed Sp/anchor pair of its own (rather than leaving it empty) is what makes wrongly including it produce an EXTRA shape, rather than an empty one indistinguishable from correctly excluding it.
+    const interloperAnchor = clientAnchorSheet(0, 0, 0, 0, 1, 0, 1, 0);
+    const interloper = escherContainer(0xf999, 0, [
+      spAtom(SHAPE_TYPE_RECTANGLE, 999, 0),
+      interloperAnchor,
+    ]);
+    const realAnchor = clientAnchorSheet(2, 0, 2, 0, 3, 0, 3, 0);
+    const bytes = drawingBytes([interloper, rectangleShape(60, realAnchor)]);
+
+    expect(readSheetShapes(bytes).map((shape) => shape.spid)).toStrictEqual([
+      60,
+    ]);
+  });
+
+  it("excludes a group child that merely shares an SpContainer's own recType while not being a container at all", () => {
+    // The recType half of the filter alone can't rule this one out either -- 0xf004 is genuinely SpContainer's own recType, carried here on a plain ATOM instead. Only requiring BOTH halves of the check together excludes it.
+    const bogusAtom = escherAtom(0xf004, 0, []);
+    const realAnchor = clientAnchorSheet(0, 0, 0, 0, 1, 0, 1, 0);
+    const bytes = drawingBytes([bogusAtom, rectangleShape(61, realAnchor)]);
+
+    expect(readSheetShapes(bytes).map((shape) => shape.spid)).toStrictEqual([
+      61,
+    ]);
+  });
+
+  it("skips a shape whose ClientAnchor atom is present but too short to hold every field, rather than reading past its own data", () => {
+    const tooShort = escherAtom(ESCHER_CLIENT_ANCHOR, 0, [0, 0, 1, 0]); // OfficeArtClientAnchorSheet needs 18 bytes; this carries 4
+    const shapeWithShortAnchor = escherContainer(0xf004, 0, [
+      spAtom(SHAPE_TYPE_RECTANGLE, 70, 0),
+      tooShort,
+    ]);
+    const validAnchor = clientAnchorSheet(0, 0, 0, 0, 1, 0, 1, 0);
+    const bytes = drawingBytes([
+      shapeWithShortAnchor,
+      rectangleShape(71, validAnchor),
+    ]);
+
+    expect(readSheetShapes(bytes).map((shape) => shape.spid)).toStrictEqual([
+      71,
+    ]);
+  });
+
+  it("recovers from an Opt table whose own byte count is not a whole multiple of one FOPTE entry's size, rather than reading a torn entry off its own end", () => {
+    const malformedOpt = escherAtom(ESCHER_OPT, 0, [0x04, 0x01, 0x00]); // 3 bytes: not a multiple of one entry's 6
+    const anchor = clientAnchorSheet(0, 0, 0, 0, 1, 0, 1, 0);
+    const shape = escherContainer(0xf004, 0, [
+      spAtom(SHAPE_TYPE_PICTURE_FRAME, 80, 0),
+      malformedOpt,
+      anchor,
+    ]);
+    const bytes = drawingBytes([shape]);
+
+    const shapes = readSheetShapes(bytes);
+
+    expect(shapes).toHaveLength(1);
+    expect(shapes[0]?.blipIndex).toBeUndefined();
   });
 
   it("recurses into a nested shape group, skipping the group's own shape record", () => {
