@@ -29,6 +29,7 @@ interface DirectoryRecord {
   readonly node: StorageNode;
   readonly id: number;
   rightId: number;
+  childId: number;
 }
 
 /** A directory record whose node genuinely carries a stream, so reads of it need no absent case. */
@@ -92,7 +93,7 @@ function writeDirectoryEntry(
   put32(entry, 0x4c, childId);
   put32(entry, 0x74, startSector);
   put32(entry, 0x78, size);
-  put32(entry, 0x7c, 0);
+  // No write of the high 32 bits at 0x7c: every size this test-support builder ever writes (a real stream's own byte length, or the mini stream's total) fits comfortably under 2^32, so that word is always 0 -- already true from entry's own allocation, and this builder's own streams never need anything else.
 }
 
 function padToMultiple(
@@ -149,20 +150,20 @@ export function compoundFile(
 
   // Directory entry IDs: the root is 0, then depth-first in insertion order.
   const records: DirectoryRecord[] = [];
-  const recordOf = new Map<StorageNode, DirectoryRecord>();
   const record = (node: StorageNode): DirectoryRecord => {
     const created: DirectoryRecord = {
       node,
       id: records.length,
       rightId: NOSTREAM,
+      childId: NOSTREAM,
     };
     records.push(created);
-    recordOf.set(node, created);
-    // Sibling chains, linked directly off this recursive call's own return values rather than a later pass through recordOf: node.children.map(record) always returns one real DirectoryRecord per child (record() never returns anything else), so iterating it directly never meets its own out-of-range undefined -- only childRecords[i + 1], at the true last sibling, ever is, and that is the genuine "no next sibling" case NOSTREAM already means.
+    // Sibling chains, linked directly off this recursive call's own return values rather than a later Map lookup: node.children.map(record) always returns one real DirectoryRecord per child (record() never returns anything else), so iterating it directly never meets its own out-of-range undefined -- only childRecords[i + 1], at the true last sibling, ever is, and that is the genuine "no next sibling" case NOSTREAM already means. created's own child link is set the same way, directly from childRecords[0], rather than left for a later pass to re-derive by looking node.children[0] up in a separate node -> record map that could only ever find what this same call already has in hand.
     const childRecords = node.children.map(record);
     childRecords.forEach((childRecord, i) => {
       childRecord.rightId = childRecords[i + 1]?.id ?? NOSTREAM;
     });
+    created.childId = childRecords[0]?.id ?? NOSTREAM;
     return created;
   };
   record(root);
@@ -272,12 +273,8 @@ export function compoundFile(
 
   // Directory sectors: entry n sits at byte n * 128 of the concatenated chain.
   const directory = new Uint8Array(directorySectorCount * sectorSize);
-  for (const { node, id, rightId } of records) {
+  for (const { node, id, rightId, childId } of records) {
     const entry = new DataView(directory.buffer, id * 128, 128);
-    // Narrowed through the destructure itself, not a `?? node` fallback: node.children[0] can only be read here once firstChild has already proven the array non-empty, so a fallback for the array's own out-of-range undefined is never actually reachable.
-    const [firstChild] = node.children;
-    // firstChild && ... short-circuits to undefined (never evaluating recordOf.get) when there is no first child, narrowing firstChild to StorageNode on the right for TypeScript's benefit -- a plain `firstChild === undefined ? NOSTREAM : ...` ternary would produce the identical NOSTREAM for that case regardless, since recordOf.get's own fallback already produces NOSTREAM for a lookup that finds nothing, so the ternary's own two branches carry no genuine difference for Stryker to distinguish, but this one does: replacing && with || is a wrong value the moment firstChild is truthy.
-    const childId = (firstChild && recordOf.get(firstChild)?.id) ?? NOSTREAM;
     if (node === root) {
       const start = miniStream.length === 0 ? ENDOFCHAIN : miniStreamStart;
       writeDirectoryEntry(
