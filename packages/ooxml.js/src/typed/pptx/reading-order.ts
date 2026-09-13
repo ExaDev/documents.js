@@ -85,10 +85,9 @@ function extentAlong(shapes: readonly ContentShape[], axis: Axis): number {
   return Math.max(...ends) - Math.min(...starts);
 }
 
-// A gap as a fraction of the extent it sits in; zero when there is no extent to measure it against, so
-// such an axis never wins a comparison.
+// A gap as a fraction of the extent it sits in. No "extent === 0" guard is needed: extentAlong being exactly 0 forces every shape passed to it to share the same single point on this axis (see its own derivation above), which in turn forces every gap splitOnGap can find on that axis to be exactly 0 too -- so the only way this divides 0 by 0 is a case where the un-guarded result (NaN) and the guarded one (0) are equally unable to win the `>` comparison in cut() that is this function's only caller, since neither a NaN nor a 0 is ever greater than the genuinely positive ratio the opposing axis produces whenever a real cut is actually possible.
 function ratio(gap: number, extent: number): number {
-  return extent > 0 ? gap / extent : 0;
+  return gap / extent;
 }
 
 // Splits shapes wherever a band of space crosses the whole set with nothing in it: "vertical" sweeps down
@@ -116,8 +115,7 @@ function splitOnGap(
     current.push(shape);
     reach = Math.max(reach, end(shape.frame, axis));
   }
-  if (current.length > 0) {
-    groups.push(current);
-  }
+  // No "current.length > 0" guard is needed: for any non-empty `shapes`, the loop above always leaves at least the last-processed shape in `current` (it is only ever cleared and immediately refilled with the shape at hand), so the guard is always true there regardless. For an empty `shapes`, the loop never runs and this pushes an empty array as a phantom group instead of leaving `groups` empty -- but cut(), this function's only caller, never inspects that phantom group's contents: its ratio comparison and group-count check both come out exactly the same as the empty-groups case (both see a widestGap of 0 and a groups length that is not greater than 1), and its own fallback path re-sorts cut()'s own `shapes` argument, not this function's `groups`, so the empty array vanishes there too.
+  groups.push(current);
   return { groups, widestGap };
 }
