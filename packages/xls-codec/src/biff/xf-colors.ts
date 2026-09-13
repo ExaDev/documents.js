@@ -266,17 +266,12 @@ export function resolveIcvColor(
   icv: number,
   palette: readonly Color[] | undefined,
 ): Color | undefined {
-  // Neither range check below needs its own lower bound: a negative icv already reads as undefined through plain array indexing (JS never wraps a negative index to the array's tail the way some languages do), so `icv >= 0` never changes the FIXED_COLOR_TABLE branch's own result -- and PALETTE_BASE_ICV is exactly FIXED_COLOR_TABLE.length, so reaching this second check at all already proves icv is at least that value, making its own `icv >= PALETTE_BASE_ICV` a restatement of a fact the first check's own failure already established.
+  // No range check here needs its own lower bound (a negative icv already reads as undefined through plain array indexing, never wrapping to the array's tail the way some languages do), and PALETTE_BASE_ICV is exactly FIXED_COLOR_TABLE.length, so reaching this line at all already proves icv is at least that value. The remaining upper bound is redundant the identical way: both DEFAULT_PALETTE_TABLE and a real Palette record ([MS-XLS] 2.4.188: "The value MUST be 56") are always exactly PALETTE_ENTRY_COUNT entries long, so an icv past that range already reads back undefined from the plain index lookup below, the same undefined this function's own contract documents for it -- there is no icv value an explicit upper-bound check would refuse that the lookup itself doesn't already refuse on its own.
   if (icv < FIXED_COLOR_TABLE.length) {
     return FIXED_COLOR_TABLE[icv];
   }
-  if (icv < PALETTE_BASE_ICV + PALETTE_ENTRY_COUNT) {
-    const index = icv - PALETTE_BASE_ICV;
-    return palette === undefined
-      ? DEFAULT_PALETTE_TABLE[index]
-      : palette[index];
-  }
-  return undefined;
+  const index = icv - PALETTE_BASE_ICV;
+  return palette === undefined ? DEFAULT_PALETTE_TABLE[index] : palette[index];
 }
 
 interface Hsl {
