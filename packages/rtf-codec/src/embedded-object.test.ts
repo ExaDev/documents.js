@@ -8,6 +8,9 @@ import {
 import type { ContentEmbeddedObject } from "document-schema.js";
 import {
   readEmbeddedObjectData,
+  skipClipboardFormatHeader,
+  skipPresentationObject,
+  skipPresentationObjectHeader,
   writeEmbeddedObjectData,
 } from "./embedded-object";
 
@@ -116,13 +119,15 @@ describe("readEmbeddedObjectData", () => {
     // There must genuinely be bytes there -- a payload that ends exactly at NativeData (the pre-fix shape) would leave nothing here at all.
     expect(bytes.length).toBeGreaterThan(presentationStart);
     // Those bytes must themselves be a real, structurally valid Presentation field: a PresentationObjectHeader (OLEVersion, FormatID 0x00000005, an empty ClassName) then ClipboardFormat CF_DIB (0x00000008), matching what [MS-OLEDS] 2.2.3.1/2.2.3.2 require, not arbitrary filler of the right length.
+    const presentationOleVersion = view.getUint32(presentationStart, true);
+    expect(presentationOleVersion).toBe(0x00000501);
     const presentationFormatId = view.getUint32(presentationStart + 4, true);
     expect(presentationFormatId).toBe(0x00000005);
     const presentationClassNameLength = view.getUint32(
       presentationStart + 8,
       true,
     );
-    expect(presentationClassNameLength).toBe(0); // an empty ClassName -- see PRESENTATION_CLASS_NAME's own reasoning in embedded-object.ts
+    expect(presentationClassNameLength).toBe(0); // an empty ClassName -- see writePresentationObjectHeader's own reasoning in embedded-object.ts
     const clipboardFormat = view.getUint32(presentationStart + 12, true);
     expect(clipboardFormat).toBe(0x00000008); // CF_DIB
   });
@@ -194,6 +199,26 @@ describe("readEmbeddedObjectData", () => {
     const olePackage = readOlePackage(packageStream.bytes);
     expect(olePackage.sourcePath).toBe("");
     expect(olePackage.tempPath).toBe("");
+  });
+
+  it("finds the Package stream by name, not merely by being present in the compound file", () => {
+    // "Package" is deliberately the SECOND stream here -- picking whichever stream happens to come first, rather than the one actually named "Package", would hand readOlePackage bytes it cannot parse.
+    const packageBytes = writeOlePackage({
+      label: "test.json",
+      sourcePath: "",
+      tempPath: "",
+      fileBytes: new TextEncoder().encode(JSON.stringify(embedded)),
+    });
+    const nativeData = writeCompoundFile([
+      { path: "NotPackage", bytes: new TextEncoder().encode("not a package") },
+      { path: "Package", bytes: packageBytes },
+    ]);
+    const bytes = buildEmbeddedObjectBytes({
+      formatId: 0x00000002,
+      className: "Package",
+      nativeData,
+    });
+    expect(readEmbeddedObjectData(bytes)).toEqual(embedded);
   });
 
   it("rejects a compound file with no stream named Package at all", () => {
@@ -443,4 +468,92 @@ describe("readEmbeddedObjectData", () => {
       expect(readEmbeddedObjectData(bytes)).toBeUndefined();
     },
   );
+});
+
+// readEmbeddedObjectData's single shared catch discards whatever these three throw, along with skipPresentationObject's own return value (never read back by any caller) -- so their exact thrown text and return offset need direct coverage here, not another round trip through readEmbeddedObjectData, to be observed at all.
+describe("skipPresentationObjectHeader", () => {
+  it("throws the exact FormatID this module's own writer never produces, zero-padded to 8 hex digits", () => {
+    const bytes = Uint8Array.from([
+      ...uint32Le(0x00000501), // OLEVersion
+      ...uint32Le(0x00000000), // FormatID -- wrong
+      ...lengthPrefixedAnsiString(""),
+    ]);
+    expect(() => skipPresentationObjectHeader(bytes, 0)).toThrow(
+      "PresentationObjectHeader.FormatID is 0x00000000, not the 0x00000005 this module's own Presentation field always writes",
+    );
+  });
+
+  it("returns the offset immediately past a well-formed header's own ClassName", () => {
+    const bytes = Uint8Array.from([
+      ...uint32Le(0x00000501),
+      ...uint32Le(0x00000005),
+      ...lengthPrefixedAnsiString(""), // 4 bytes: an empty ClassName's own zero length prefix
+    ]);
+    expect(skipPresentationObjectHeader(bytes, 0)).toBe(12);
+  });
+});
+
+describe("skipClipboardFormatHeader", () => {
+  function presentationHeaderBytes(): number[] {
+    return [
+      ...uint32Le(0x00000501),
+      ...uint32Le(0x00000005),
+      ...lengthPrefixedAnsiString(""),
+    ];
+  }
+
+  it("throws the exact ClipboardFormat this module's own writer never produces, zero-padded to 8 hex digits", () => {
+    const bytes = Uint8Array.from([
+      ...presentationHeaderBytes(),
+      ...uint32Le(0x00000002), // CF_BITMAP, not CF_DIB
+    ]);
+    expect(() => skipClipboardFormatHeader(bytes, 0)).toThrow(
+      "ClipboardFormatHeader.ClipboardFormat is 0x00000002, not the CF_DIB (0x00000008) this module's own Presentation field always writes",
+    );
+  });
+
+  it("returns the offset immediately past a well-formed header's own ClipboardFormat", () => {
+    const bytes = Uint8Array.from([
+      ...presentationHeaderBytes(),
+      ...uint32Le(0x00000008), // CF_DIB
+    ]);
+    expect(skipClipboardFormatHeader(bytes, 0)).toBe(16);
+  });
+});
+
+describe("skipPresentationObject", () => {
+  function clipboardFormatHeaderBytes(): number[] {
+    return [
+      ...uint32Le(0x00000501),
+      ...uint32Le(0x00000005),
+      ...lengthPrefixedAnsiString(""),
+      ...uint32Le(0x00000008), // CF_DIB
+    ];
+  }
+
+  it("throws the exact declared and actually-remaining byte counts when PresentationDataSize overruns", () => {
+    const bytes = Uint8Array.from([
+      ...clipboardFormatHeaderBytes(),
+      ...uint32Le(10), // PresentationDataSize claims 10 bytes
+      0,
+      0,
+      0, // but only 3 remain
+    ]);
+    expect(() => skipPresentationObject(bytes, 0)).toThrow(
+      "StandardClipboardFormatPresentationObject's PresentationDataSize declares 10 bytes but only 3 remain",
+    );
+  });
+
+  it("returns dataStart plus PresentationDataSize, not dataStart minus it, for a well-formed field", () => {
+    const bytes = Uint8Array.from([
+      ...clipboardFormatHeaderBytes(),
+      ...uint32Le(4),
+      0xaa,
+      0xbb,
+      0xcc,
+      0xdd,
+    ]);
+    // dataStart is 16 (clipboardFormatHeaderBytes' own length) + 4 (the PresentationDataSize field itself) = 20; +4 more of PresentationData = 24. A dataStart-minus-size mutant would return 12 instead.
+    expect(skipPresentationObject(bytes, 0)).toBe(24);
+  });
 });
