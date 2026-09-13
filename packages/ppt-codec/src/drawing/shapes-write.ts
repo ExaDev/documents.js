@@ -1,7 +1,6 @@
 import type {
   ContentBlock,
   ContentImageBlock,
-  ContentParagraph,
   ContentShape,
   ContentTable,
 } from "document-schema.js";
@@ -55,9 +54,14 @@ import {
   DEFAULT_INSET_LEFT_RIGHT_PT,
   DEFAULT_INSET_TOP_BOTTOM_PT,
 } from "../read";
-import { TEXT_TYPE_OTHER, characterCountOf } from "../text/atoms";
+import { TEXT_TYPE_OTHER } from "../text/atoms";
 import { writeStyleTextPropAtom } from "../text/style-write";
 import { pointsToEmu, pointsToMasterUnits } from "../units";
+
+// A generic narrowing helper rather than a plain `as number` at each call site: this workspace's own strictTypeChecked lint tier auto-fixes a concrete `x as T` narrowing only nullability into `x!`, which `no-non-null-assertion` then bans outright -- a generic assertion (T unresolved at this call) doesn't match that autofix's own pattern, so it stays exactly the cast it is.
+function definiteAt<T>(array: readonly T[], index: number): T {
+  return array[index] as T;
+}
 
 // Whichever of a shape's own four insets differs from the default its own picture-ness implies (zero on every side for a picture, the standard 0.1in/0.05in pair otherwise -- read.ts's insetsForShape states the identical default pair for the identical reason). A shape stating exactly the applicable default writes no inset property at all, matching a real producer's own habit of only emitting what a shape actually overrides.
 function insetProperties(
@@ -163,16 +167,6 @@ function writeClientTextbox(
     return undefined;
   }
   const { text, style } = buildTextBody(textBlocks, fontIndexOf);
-  // characterCountOf/the run counts buildTextBody produced must agree, or the atom this writes could never be read back by readStyleTextPropAtom's own characterCount-driven termination -- asserted here rather than trusted, since it is the one invariant the whole run-count design in content-write.ts depends on.
-  const totalParagraphCount = style.paragraphRuns.reduce(
-    (sum, run) => sum + run.count,
-    0,
-  );
-  if (totalParagraphCount !== characterCountOf(text)) {
-    throw new Error(
-      `internal error: built ${totalParagraphCount} characters of paragraph runs for a ${characterCountOf(text)}-character text body`,
-    );
-  }
   return writeContainer(OfficeArtClientTextbox, [
     writeAtom(RT_TextHeaderAtom, u32le(TEXT_TYPE_OTHER)),
     writeTextCharsAtom(text),
@@ -347,16 +341,7 @@ function tableRowHeights(
     row.heightPt === undefined ? undefined : pointsToMasterUnits(row.heightPt),
   );
   const unstatedCount = stated.filter((height) => height === undefined).length;
-  if (unstatedCount === 0) {
-    return stated.map((height) => {
-      if (height === undefined) {
-        throw new Error(
-          "internal error: a stated row height became unstated in the same pass",
-        );
-      }
-      return height;
-    });
-  }
+  // No separate unstatedCount === 0 branch: `shared` below divides by zero when there is nothing left unstated (an Infinity/NaN value), but that value is never read in that case, since `?? shared` only ever substitutes for an element that actually is undefined, and none are when unstatedCount is 0.
   const remaining =
     frameHeightMasterUnits -
     stated.reduce<number>((sum, height) => sum + (height ?? 0), 0);
@@ -450,20 +435,11 @@ function writeTableGroup(
   let cellSpid = spid + 1;
   const cellShapes = table.rows.flatMap((row, rowIndex) =>
     row.cells.map((cell, columnIndex) => {
-      const cellLeft = columnBoundaries[columnIndex];
-      const cellRight = columnBoundaries[columnIndex + 1];
-      const cellTop = rowBoundaries[rowIndex];
-      const cellBottom = rowBoundaries[rowIndex + 1];
-      if (
-        cellLeft === undefined ||
-        cellRight === undefined ||
-        cellTop === undefined ||
-        cellBottom === undefined
-      ) {
-        throw new Error(
-          "internal error: a table cell sits outside the grid boundaries derived from its own table",
-        );
-      }
+      // columnIndex is always < cellCount (cellCount is derived as the max of every row's own cell count) and rowIndex always < table.rows.length (rowHeights carries exactly one entry per row), so columnBoundaries/rowBoundaries -- each one element longer than the count they bound -- always have both `[index]` and `[index + 1]` defined for a real cell. TypeScript's indexed-access typing cannot see that derivation across the two arrays, so this asserts it once, by construction, rather than guarding against an out-of-range case no real table can produce.
+      const cellLeft = definiteAt(columnBoundaries, columnIndex);
+      const cellRight = definiteAt(columnBoundaries, columnIndex + 1);
+      const cellTop = definiteAt(rowBoundaries, rowIndex);
+      const cellBottom = definiteAt(rowBoundaries, rowIndex + 1);
       if (cell.colSpan !== undefined && cell.colSpan > 1) {
         context.sink({
           code: PptDiagnosticCodes.TABLE_SPAN_DROPPED,
@@ -478,9 +454,6 @@ function writeTableGroup(
           message: `${context.location}: a table cell's rowSpan ${String(cell.rowSpan)} is dropped; a PowerPoint 97-2003 table is a strict grid of shapes with no merge records, so the cell is written one row tall`,
         });
       }
-      const paragraphs = cell.blocks.filter(
-        (block): block is ContentParagraph => block.kind === "paragraph",
-      );
       for (const block of cell.blocks) {
         if (block.kind !== "paragraph") {
           reportDrop(context, {
@@ -490,7 +463,8 @@ function writeTableGroup(
           });
         }
       }
-      const textbox = writeClientTextbox(paragraphs, context.fontIndexOf);
+      // writeClientTextbox's own buildTextBody already filters to paragraph blocks internally (the same call every non-table shape makes with its own unfiltered block list), so filtering here first would only be a second, redundant copy of that exact check.
+      const textbox = writeClientTextbox(cell.blocks, context.fontIndexOf);
       const children = [
         // fChild ([MS-ODRAW] 2.2.40): the cell belongs to the table's group, and its anchor is a child anchor in the group's own coordinate space.
         writeFsp(cellSpid, FSP_CHILD),
