@@ -187,9 +187,9 @@ describe("writeOdgContent: page geometry", () => {
     expect(pages).toHaveLength(2);
     const firstName = attrValue(pages[0]!, "draw:master-page-name");
     const secondName = attrValue(pages[1]!, "draw:master-page-name");
-    expect(firstName).toBeDefined();
-    expect(secondName).toBeDefined();
-    expect(firstName).not.toBe(secondName);
+    // Exact 1-indexed names, not merely "defined and distinct": a page's own index counts up from 0, and MP{index+1} is the spelling, never MP{index-1} (which would coincidentally still differ page-to-page).
+    expect(firstName).toBe("MP1");
+    expect(secondName).toBe("MP2");
 
     const stylesRoot = partRoot(pkg, "styles.xml");
     const masterStyles = findChildElement(
@@ -206,6 +206,7 @@ describe("writeOdgContent: page geometry", () => {
       throw new Error("expected the referenced master page to exist");
     }
     const pageLayoutName = attrValue(masterPage, "style:page-layout-name");
+    expect(pageLayoutName).toBe("PM2"); // same 1-indexed spelling as the master-page name, for the second page
 
     const automaticStyles = findChildElement(
       stylesRoot.children,
@@ -232,6 +233,58 @@ describe("writeOdgContent: page geometry", () => {
       `${PAGE_SIZE_A4.heightPt}pt`,
     );
     expect(attrValue(properties, "style:print-orientation")).toBe("portrait");
+  });
+
+  it("writes style:print-orientation=landscape for a page wider than it is tall", () => {
+    const pkg = writeOdgContent(documentOf([page([rect()])])); // PAGE_SIZE_LANDSCAPE by default: 720x540, width > height
+    const stylesRoot = partRoot(pkg, "styles.xml");
+    const automaticStyles = findChildElement(
+      stylesRoot.children,
+      "office:automatic-styles",
+    );
+    if (automaticStyles === undefined) {
+      throw new Error("expected styles.xml office:automatic-styles");
+    }
+    const pageLayout = childrenWithTag(
+      automaticStyles,
+      "style:page-layout",
+    )[0]!;
+    const properties = childrenWithTag(
+      pageLayout,
+      "style:page-layout-properties",
+    )[0]!;
+    expect(attrValue(properties, "style:print-orientation")).toBe("landscape");
+  });
+
+  it("writes style:print-orientation=portrait, not landscape, for a perfectly square page", () => {
+    // A strict width > height comparison, not >=: a square page's width and height are equal, so a >= mutant would wrongly call this landscape.
+    const pkg = writeOdgContent(
+      documentOf([page([rect()], [], { widthPt: 400, heightPt: 400 })]),
+    );
+    const stylesRoot = partRoot(pkg, "styles.xml");
+    const automaticStyles = findChildElement(
+      stylesRoot.children,
+      "office:automatic-styles",
+    );
+    if (automaticStyles === undefined) {
+      throw new Error("expected styles.xml office:automatic-styles");
+    }
+    const pageLayout = childrenWithTag(
+      automaticStyles,
+      "style:page-layout",
+    )[0]!;
+    const properties = childrenWithTag(
+      pageLayout,
+      "style:page-layout-properties",
+    )[0]!;
+    expect(attrValue(properties, "style:print-orientation")).toBe("portrait");
+  });
+
+  it("stamps a custom version option directly onto the manifest from writeOdgContent alone", () => {
+    const pkg = writeOdgContent(documentOf([page([rect()])]), {
+      version: "1.4",
+    });
+    expect(readManifest(pkg).version).toBe("1.4");
   });
 });
 

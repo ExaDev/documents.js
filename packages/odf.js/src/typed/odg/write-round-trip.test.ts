@@ -314,6 +314,12 @@ describe("writeOdgContent: the round-trip law", () => {
     expectRoundTrip(document);
   });
 
+  it("refuses a document that is not a drawing, by kind, with an exact message naming both the expected and actual kind", () => {
+    expect(() =>
+      normaliseOdgContent({ kind: "presentation", metadata: {}, slides: [] }),
+    ).toThrow(/expected a 'drawing' document, got 'presentation'/);
+  });
+
   it("collapses an absent stroke style to the 'solid' ContentStrokeStyleSchema already documents absence to mean", () => {
     const written = roundTrip(
       documentOf([
@@ -363,6 +369,63 @@ describe("writeOdgContent: the round-trip law", () => {
 
     const readBack = readOdg(decodePackage(encodePackage(written)));
     expect(readBack.source).toEqual(source);
+  });
+
+  it("round-trips a footnote anchor in shape text with its definitions-table body through writeOdg", () => {
+    // Mirrors typed/odp/write-round-trip.test.ts's identical test: a footnote/comment construct only writes when the definitions table actually holds its body (typed/shared/constructs.ts's odfRunConstructWriteKind), so this also proves writeOdg's own definitions option genuinely reaches the shape writer.
+    const document = documentOf([
+      page(
+        [],
+        [
+          shape({}, [
+            {
+              kind: "paragraph",
+              runs: [{ text: "1" }],
+              constructs: [
+                {
+                  descriptor: {
+                    kind: "anchor",
+                    anchorType: "footnote",
+                    name: "note1",
+                    definition: "note:note1",
+                  },
+                  startRun: 0,
+                  endRun: 1,
+                },
+              ],
+            },
+          ]),
+        ],
+      ),
+    ]);
+    const tree = assembleTree(document);
+    tree.definitions = {
+      "note:note1": {
+        kind: "footnote",
+        citation: "1",
+        body: [{ kind: "paragraph", runs: [{ text: "the note body" }] }],
+      },
+    };
+    const rewritten = readOdgContent(writeOdg(tree));
+    const shapeText = rewritten.pages[0]!.shapes[0]!.blocks[0]!;
+    expect(shapeText).toMatchObject({
+      kind: "paragraph",
+      constructs: [
+        {
+          descriptor: {
+            kind: "anchor",
+            anchorType: "footnote",
+            name: "note1",
+          },
+        },
+      ],
+    });
+  });
+
+  it("stamps a custom version option onto the manifest via writeOdg's own final sync, distinct from the default DEFAULT_ODF_VERSION both share", () => {
+    const tree = assembleTree(documentOf([page([])]));
+    const written = writeOdg(tree, { version: "1.4" });
+    expect(readManifest(written).version).toBe("1.4");
   });
 });
 
