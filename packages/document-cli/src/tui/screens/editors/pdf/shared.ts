@@ -99,13 +99,9 @@ export function parseFontStyle(raw: string): "normal" | "italic" {
   return raw.trim().toLowerCase() === "italic" ? "italic" : "normal";
 }
 
-// Blank-to-clear parse for the optional numeric fields (text/image rotationDeg, text widthPt) -- distinct from parseNumberField's own "blank falls back to the pre-filled default" convention, since these fields are genuinely optional on the underlying LayoutItem and a caller needs a real way to clear them back to unset.
+// Blank-to-clear parse for the optional numeric fields (text/image rotationDeg, text widthPt) -- distinct from parseNumberField's own "blank falls back to the pre-filled default" convention, since these fields are genuinely optional on the underlying LayoutItem and a caller needs a real way to clear them back to unset. No separate blank/whitespace check: Number.parseFloat already skips leading whitespace per spec, and a blank or whitespace-only string parses to NaN either way, which Number.isFinite already rejects -- a prior trim-and-length-check branch was unobservable dead weight, never a behavioural difference.
 export function parseOptionalNumberField(raw: string): number | undefined {
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) {
-    return undefined;
-  }
-  const parsed = Number.parseFloat(trimmed);
+  const parsed = Number.parseFloat(raw);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
