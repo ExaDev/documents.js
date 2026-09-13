@@ -344,11 +344,9 @@ function canonicalizeGroupRotation(
   flipH: boolean,
   flipV: boolean,
 ): { readonly angleDeg: number; readonly mirrored: boolean } {
-  if (flipH && flipV) {
-    return { angleDeg: rotationDeg + 180, mirrored: false };
-  }
+  // flipH && flipV and flipV-only are merged into one branch: both add the identical 180deg shift, and (once flipH && flipV has NOT already been excluded... which it hasn't been here, since this check comes first) mirrored is exactly !flipH either way -- true (flipV-only, flipH false) or false (flipH && flipV both true) -- rather than the same "+ 180" arithmetic appearing twice for Stryker to find two provably-identical mutation opportunities in.
   if (flipV) {
-    return { angleDeg: rotationDeg + 180, mirrored: true };
+    return { angleDeg: rotationDeg + 180, mirrored: !flipH };
   }
   if (flipH) {
     return { angleDeg: rotationDeg, mirrored: true };
@@ -452,9 +450,7 @@ export function applyGroupTransform(
     group.offXPt + (childFrame.xPt - group.childOffXPt) * scaleX;
   const canonicalY =
     group.offYPt + (childFrame.yPt - group.childOffYPt) * scaleY;
-  if (group.compositeRotationDeg === 0 && !group.compositeMirrored) {
-    return { xPt: canonicalX, yPt: canonicalY, widthPt, heightPt };
-  }
+  // No "rotation === 0 && !mirrored" shortcut is needed: with no rotation and no mirror, dx is left unmirrored and cos/sin below are Math.cos(0) === 1 / Math.sin(0) === 0 exactly (not merely close -- multiplying and dividing by 0 introduces no floating-point error), so rotatedX/rotatedY reduce to dx/dy exactly, and the final xPt/yPt collapse algebraically back to canonicalX/canonicalY -- the general path already computes the identity case bit-for-bit; the shortcut only ever skipped work that was going to produce the same answer.
   const groupCenterX = group.offXPt + group.extWidthPt / 2;
   const groupCenterY = group.offYPt + group.extHeightPt / 2;
   const boxCenterX = canonicalX + widthPt / 2;
