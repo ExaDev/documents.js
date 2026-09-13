@@ -19,9 +19,6 @@ import {
   skipInlineWhitespace,
 } from "../inline/link";
 
-// A definition needs a label with at least one non-whitespace character between its brackets, so the shortest possible match is `[x]` -- three characters.
-const MIN_DEFINITION_LABEL_LENGTH = 3;
-
 interface ParsedDefinition {
   readonly label: string;
   readonly definition: LinkReferenceDefinition;
@@ -32,10 +29,8 @@ function parseDefinition(
   content: string,
   start: number,
 ): ParsedDefinition | undefined {
+  // No separate "is the label at least [x] long" length guard: matchLinkLabel returns 0 (no bracket at all) or a real bracket-pair length of 2 or more, and a length-2 match ("[]") slices to an empty inner label just as a length-0 match's own empty slice does -- both already fall out of the label.length === 0 check below, so a dedicated minimum-length rejection could never see a case the empty-label check doesn't already reject.
   const labelLength = matchLinkLabel(content, start);
-  if (labelLength < MIN_DEFINITION_LABEL_LENGTH) {
-    return undefined;
-  }
   const label = normalizeLinkLabel(content.slice(start, start + labelLength));
   if (label.length === 0) {
     return undefined;
@@ -109,11 +104,5 @@ export function extractDefinitions(
 }
 
 function countNewlines(content: string, upTo: number): number {
-  let count = 0;
-  for (let index = 0; index < upTo && index < content.length; index += 1) {
-    if (content.charAt(index) === "\n") {
-      count += 1;
-    }
-  }
-  return count;
+  return content.slice(0, upTo).split("\n").length - 1;
 }

@@ -444,6 +444,16 @@ describe("recover-tier diagnostics", () => {
     ).toBe(true);
   });
 
+  it("reports each duplicate definition's own line, counted from how many newlines precede it within the paragraph", () => {
+    const collector = createDiagnosticCollector();
+    parseMarkdown("[a]: /1\n[a]: /2\n[a]: /3", { sink: collector.sink });
+    const duplicates = collector.diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.code === MarkdownDiagnosticCodes.DUPLICATE_LINK_REFERENCE,
+    );
+    expect(duplicates.map((diagnostic) => diagnostic.line)).toEqual([2, 3]);
+  });
+
   it("reports a math block never closed by a matching $$ before end-of-input", () => {
     const collector = createDiagnosticCollector();
     parseMarkdown("$$\nx^2", { sink: collector.sink });
