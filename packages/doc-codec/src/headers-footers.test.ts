@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { readDocContent } from "./read";
+import { FC_LCB_VALUE_INDEX, FIB_FC_LCB_BLOB_OFFSET } from "./fib/offsets";
+import { readDocContent, readDocStreams } from "./read";
+import { compoundFile } from "./test-support/cfb";
 import { buildDoc } from "./test-support/doc";
 
 // Six fixed separator stories, then one entry per (section, slot) pair -- headers-footers.ts's own SLOT_ORDER -- built as a flat helper so each test only has to name the slots it actually cares about.
@@ -106,5 +108,43 @@ describe("readHeaderFooterStories", () => {
       buildDoc({ paragraphs: [{ runs: [{ text: "Plain" }] }] }),
     );
     expect(doc.headerFooterStories).toEqual([]);
+  });
+
+  it("stops at the document's own last section rather than reading a header story group beyond it", () => {
+    // The document declares one section (sectionGrpprl: []) but Plcfhdd carries a second section's worth of stories anyway -- section index 1 must never surface, even though its own story is genuinely non-empty.
+    const bytes = buildDoc({
+      paragraphs: [{ runs: [{ text: "Body" }] }],
+      sectionGrpprl: [],
+      headerFooterStories: headerFooterStories(2, {
+        "0:evenHeader": [{ runs: [{ text: "Section 0" }] }],
+        "1:evenHeader": [{ runs: [{ text: "Section 1, never reached" }] }],
+      }),
+    });
+    const doc = readDocContent(bytes);
+    expect(doc.headerFooterStories.map((story) => story.section)).toEqual([0]);
+  });
+
+  it("names 'Plcfhdd' when its own declared lcb runs past the Table stream", () => {
+    const bytes = buildDoc({
+      paragraphs: [{ runs: [{ text: "Body" }] }],
+      sectionGrpprl: [],
+      headerFooterStories: headerFooterStories(1, {
+        "0:evenHeader": [{ runs: [{ text: "Even header" }] }],
+      }),
+    });
+    const { wordDocument, table } = readDocStreams(bytes);
+    const patchedWordDocument = new Uint8Array(wordDocument);
+    new DataView(patchedWordDocument.buffer).setUint32(
+      FIB_FC_LCB_BLOB_OFFSET + FC_LCB_VALUE_INDEX.lcbPlcfHdd * 4,
+      0x7fffffff,
+      true,
+    );
+    const corrupted = compoundFile([
+      { path: "WordDocument", bytes: patchedWordDocument },
+      { path: "1Table", bytes: new Uint8Array(table) },
+    ]);
+    expect(() => readDocContent(corrupted)).toThrow(
+      /Plcfhdd in the Table stream/,
+    );
   });
 });
