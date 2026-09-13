@@ -31,6 +31,16 @@ describe("writeXLUnicodeString", () => {
     expect(bytes[2]).toBe(0x00);
   });
 
+  it("writes a character at exactly 0xFF compressed, the last code unit that still fits in one byte", () => {
+    const bytes = writeXLUnicodeString("ÿ");
+    expect(bytes[2]).toBe(0x00);
+  });
+
+  it("writes a character at 0x100 uncompressed, one past what a single byte can hold", () => {
+    const bytes = writeXLUnicodeString("Ā");
+    expect(bytes[2]).toBe(0x01);
+  });
+
   it("round-trips a string needing the uncompressed encoding, and writes the longer form", () => {
     const text = "café £€"; // accented + currency symbols above 0xFF... some below, some above
     const bytes = writeXLUnicodeString(text);
