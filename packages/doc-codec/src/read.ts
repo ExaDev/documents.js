@@ -243,17 +243,30 @@ function markManualPageBreaks(
   entries: readonly ParagraphEntry[],
   sections: readonly { readonly startCp: number }[],
 ): readonly ParagraphEntry[] {
-  const sectionEndCps = new Set<number>();
-  for (let index = 1; index < sections.length; index += 1) {
-    const startCp = sections[index]?.startCp;
-    if (startCp !== undefined) sectionEndCps.add(startCp);
-  }
+  // Every section but the first (its own startCp begins the document, not a manual-page-break boundary): sections.slice(1) rather than an indexed loop bounded by sections.length, since that bound had nothing left to disagree about once the section past it would already be undefined.
+  const sectionEndCps = new Set(
+    sections.slice(1).map((section) => section.startCp),
+  );
   return entries.map((entry) => {
     if (entry.terminator !== SECTION_MARK || sectionEndCps.has(entry.endCp)) {
       return entry;
     }
     return { ...entry, blocks: [...entry.blocks, PAGE_BREAK_BLOCK] };
   });
+}
+
+// The one `groups[index]` read splitIntoSections needs, isolated so its own out-of-bounds guard is directly testable: sectionIndex there can never actually exceed groups.length - 1 (the only way it advances is matching a real sections[sectionIndex + 1], which is undefined -- and so never equal to any entry's own numeric endCp -- from the moment sectionIndex reaches groups.length - 1), so no call from within this file can ever reach the throw below. Exported (only) so that fact stays a property of splitIntoSections' own real callers rather than one this helper's own contract has to assume.
+export function groupAt(
+  groups: readonly ParagraphEntry[][],
+  index: number,
+): ParagraphEntry[] {
+  const group = groups[index];
+  if (group === undefined) {
+    throw new DocFormatError(
+      `internal defect: section index ${index} has no group despite ${groups.length} sections`,
+    );
+  }
+  return group;
 }
 
 // Groups the main document's flat paragraph entries by which section (PlcfSed.aCp boundary) they fall in, per [MS-DOC] 2.8.26: section i covers entries up to and including the one whose own terminator sits at (or crosses) the next section's startCp -- exactly the entry carrying the end-of-section character (0x000C) itself, since that character IS the boundary [MS-DOC] states. `sections` always has at least one entry (readAllSectionProperties' own fallback for a file with no PlcfSed at all), so every entry lands somewhere; entries past the last real boundary all join the final section, matching "the last CP does not begin a new section."
@@ -264,13 +277,7 @@ function splitIntoSections(
   const groups: ParagraphEntry[][] = sections.map(() => []);
   let sectionIndex = 0;
   for (const entry of entries) {
-    const group = groups[sectionIndex];
-    if (group === undefined) {
-      throw new DocFormatError(
-        `internal defect: section index ${sectionIndex} has no group despite ${sections.length} sections`,
-      );
-    }
-    group.push(entry);
+    groupAt(groups, sectionIndex).push(entry);
     if (entry.endCp === sections[sectionIndex + 1]?.startCp) {
       sectionIndex += 1;
     }
