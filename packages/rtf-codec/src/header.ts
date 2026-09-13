@@ -228,7 +228,7 @@ function readFontInfo(
   let family: string | undefined;
   let charsetPage: number | undefined;
   let explicitPage: number | undefined;
-  let nameStart = start;
+  // No nameStart tracking to skip past these descriptor control words before collecting the font's own name: collectPlainText already silently skips every controlWord token it doesn't specifically handle (only "u" and a nested group get real treatment), so scanning the whole [start, end) range for the name below already ignores \f, \froman/\fswiss/etc, \fcharsetN, \cpgN, \fprqN, and \fbias on its own, with nothing left for a separate start-of-name offset to add. \fprq/\fbias carry no field this reader records at all, so that branch is gone entirely rather than kept only to compute an offset nothing needs.
   for (let index = start; index < end; index += 1) {
     const token = tokens[index];
     if (token === undefined) break;
@@ -237,26 +237,18 @@ function readFontInfo(
     }
     if (token.name === "f" && token.param !== undefined) {
       number = token.param;
-      nameStart = index + 1;
       continue;
     }
     if (FONT_FAMILIES.has(token.name)) {
       family = token.name.slice(1);
-      nameStart = index + 1;
       continue;
     }
     if (token.name === "fcharset" && token.param !== undefined) {
       charsetPage = codepageForFontCharset(token.param);
-      nameStart = index + 1;
       continue;
     }
     if (token.name === "cpg" && token.param !== undefined) {
       explicitPage = token.param;
-      nameStart = index + 1;
-      continue;
-    }
-    if (token.name === "fprq" || token.name === "fbias") {
-      nameStart = index + 1;
     }
   }
   if (number === undefined) {
@@ -264,7 +256,7 @@ function readFontInfo(
   }
   const name = collectPlainText(
     tokens,
-    nameStart,
+    start,
     end,
     explicitPage ?? charsetPage ?? documentCodepage,
     sink,
@@ -351,13 +343,12 @@ function readStyle(
   // "For <style>, both <styledef> and <stylename> are optional; the default is paragraph style 0."
   let handle = 0;
   let outlineLevel: number | undefined;
-  let nameStart = head.contentStart;
+  // The loop below still needs its own groupStart skip, scoping \sN/\outlinelevelN to this style entry's own top level rather than misreading one from inside a nested destination -- but no nameStart tracking alongside it: collectPlainText below already silently skips every controlWord token it doesn't specifically handle, and fully skips a nested group on its own the same way this loop does, so scanning the whole [head.contentStart, end) range for the name ignores \sN/\outlinelevelN and any nested group without a separate start-of-name offset to compute.
   for (let index = start + 1; index < end; index += 1) {
     const token = tokens[index];
     if (token === undefined) break;
     if (token.kind === "groupStart") {
       index = Math.min(matchingGroupEnd(tokens, index), end);
-      nameStart = index + 1;
       continue;
     }
     if (token.kind !== "controlWord") {
@@ -368,9 +359,14 @@ function readStyle(
     } else if (token.name === "outlinelevel" && token.param !== undefined) {
       outlineLevel = token.param;
     }
-    nameStart = index + 1;
   }
-  const name = collectPlainText(tokens, nameStart, end, documentCodepage, sink);
+  const name = collectPlainText(
+    tokens,
+    head.contentStart,
+    end,
+    documentCodepage,
+    sink,
+  );
   const byName = HEADING_STYLE_NAME.exec(name);
   const fromName = byName?.[1];
   const headingLevel =
