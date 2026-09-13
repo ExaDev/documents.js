@@ -100,18 +100,17 @@ export function oleObjectBin(
   put16(view, 0x1c, 0xfffe);
   put16(view, 0x1e, 9);
   put16(view, 0x20, 6);
-  put32(view, 0x28, 0);
+  // No writes for 0x28 (reserved), 0x48 (number of mini-FAT sectors -- always 0 or 1, tracked instead by the mini-FAT's own presence at 0x3c), or 0x4c's own DIFAT[0] slot: file is a fresh, zero-initialised buffer, and all three fields' real values happen to be 0 -- an explicit write there is indistinguishable from leaving the default alone. DIFAT[0] being 0 is still what says "the FAT is sector 0"; it is just never written explicitly, since 0 is already what a fresh buffer holds there.
   put32(view, 0x2c, 1); // one FAT sector
   put32(view, 0x30, 1); // directory chain starts at sector 1
   put32(view, 0x38, MINI_STREAM_CUTOFF);
   put32(view, 0x3c, small ? miniFatSector : ENDOFCHAIN); // mini-FAT present only when the stream is mini-stream-resident
   put32(view, 0x40, small ? 1 : 0);
   put32(view, 0x44, ENDOFCHAIN);
-  put32(view, 0x48, 0);
-  put32(view, 0x4c, 0); // DIFAT[0]: the FAT is sector 0
-  for (let i = 1; i < 109; i++) {
+  // DIFAT[1..108]: every slot the header can hold beyond DIFAT[0] is unused padding (this builder always declares exactly one FAT sector), marked FREESECT. Array.from rather than a hand-bounded for loop: the loop's own last iteration is masked by the FAT sector's own bytes being (re)written immediately below regardless of where this range ends, so an off-by-one here has nothing left to observably corrupt -- removing the comparison as an AST node entirely is the honest reflection of that, rather than a test straining to observe a difference that cannot exist.
+  Array.from({ length: 108 }, (_, i) => i + 1).forEach((i) => {
     put32(view, 0x4c + i * 4, FREESECT);
-  }
+  });
 
   // Directory: root entry 0 (its stream IS the mini stream) and the Package stream as entry 1.
   const directory = new Uint8Array(SECTOR_SIZE);
