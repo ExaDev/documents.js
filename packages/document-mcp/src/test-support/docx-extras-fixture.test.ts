@@ -1,9 +1,13 @@
-import type { Package } from "documents.js";
 import { decodePackage } from "documents.js";
-import { beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { el, txt, xmlDeclaration } from "./ooxml-fixture";
 import {
+  buildCommentsPart,
   buildDocxWithExtras,
+  buildFooterPart,
+  buildFootnotesPart,
+  buildHeaderPart,
+  buildNumberingPart,
   DOCX_EXTRAS_FIXTURE,
 } from "./docx-extras-fixture";
 
@@ -14,16 +18,10 @@ function paragraphWithText(text: string) {
   return el("w:p", {}, [el("w:r", {}, [el("w:t", {}, [txt(text)])])]);
 }
 
-// Pins the exact XML this fixture writes into each of its four hand-authored parts (comments/footnotes/headers-footers/numbering), decoded straight back from the real docx bytes it produces -- otherwise nothing ever asserts on this fixture's own structure beyond whatever documents.js's readDocxExtras happens to surface, which never touches internal plumbing like a comment/footnote's own w:id or a numbering level's w:ilvl/w:abstractNumId. buildDocxWithExtras() is called inside beforeAll, matching every other connection/fixture setup in this package's own test suites (e.g. src/tools/compute-formula.test.ts's own beforeEach connect()) -- computed directly at describe-body scope instead, Stryker's mutation testing never observed a single mutant's effect on this fixture at all (every mutant here reported Survived against the unmutated baseline counts, regardless of the mutation), since describe-body code runs once at collection time rather than per test run.
-describe("buildDocxWithExtras", () => {
-  let pkg: Package;
-
-  beforeAll(() => {
-    pkg = decodePackage(buildDocxWithExtras());
-  });
-
-  it("writes word/comments.xml with one authored and one unauthored comment", () => {
-    expect(pkg.parts["word/comments.xml"]).toEqual({
+// Pins the exact XML each of the five extra-part builders produces, called directly with no editor/package/encode-decode round trip involved -- otherwise nothing ever asserts on this fixture's own structure beyond whatever documents.js's readDocxExtras happens to surface, which never touches internal plumbing like a comment/footnote's own w:id or a numbering level's w:ilvl/w:abstractNumId.
+describe("buildCommentsPart", () => {
+  it("declares one authored and one unauthored comment", () => {
+    expect(buildCommentsPart()).toEqual({
       kind: "xml",
       nodes: [
         xmlDeclaration(),
@@ -40,9 +38,11 @@ describe("buildDocxWithExtras", () => {
       ],
     });
   });
+});
 
-  it("writes word/footnotes.xml with a skippable separator footnote alongside the real one", () => {
-    expect(pkg.parts["word/footnotes.xml"]).toEqual({
+describe("buildFootnotesPart", () => {
+  it("declares a skippable separator footnote alongside the real one", () => {
+    expect(buildFootnotesPart()).toEqual({
       kind: "xml",
       nodes: [
         xmlDeclaration(),
@@ -57,9 +57,11 @@ describe("buildDocxWithExtras", () => {
       ],
     });
   });
+});
 
-  it("writes word/header1.xml with the fixture's own header text", () => {
-    expect(pkg.parts["word/header1.xml"]).toEqual({
+describe("buildHeaderPart", () => {
+  it("declares the fixture's own header text", () => {
+    expect(buildHeaderPart()).toEqual({
       kind: "xml",
       nodes: [
         xmlDeclaration(),
@@ -69,9 +71,11 @@ describe("buildDocxWithExtras", () => {
       ],
     });
   });
+});
 
-  it("writes word/footer1.xml with the fixture's own footer text", () => {
-    expect(pkg.parts["word/footer1.xml"]).toEqual({
+describe("buildFooterPart", () => {
+  it("declares the fixture's own footer text", () => {
+    expect(buildFooterPart()).toEqual({
       kind: "xml",
       nodes: [
         xmlDeclaration(),
@@ -81,9 +85,11 @@ describe("buildDocxWithExtras", () => {
       ],
     });
   });
+});
 
-  it("writes word/numbering.xml with one abstract numbering definition bound to numId", () => {
-    expect(pkg.parts["word/numbering.xml"]).toEqual({
+describe("buildNumberingPart", () => {
+  it("declares one abstract numbering definition bound to numId", () => {
+    expect(buildNumberingPart()).toEqual({
       kind: "xml",
       nodes: [
         xmlDeclaration(),
@@ -106,13 +112,24 @@ describe("buildDocxWithExtras", () => {
       ],
     });
   });
+});
 
-  it("also carries the ordinary body paragraph written before the extra parts", () => {
+describe("buildDocxWithExtras", () => {
+  it("wires all five extra parts into a real docx alongside the ordinary body paragraph", () => {
+    const pkg = decodePackage(buildDocxWithExtras());
+
+    expect(pkg.parts["word/comments.xml"]).toEqual(buildCommentsPart());
+    expect(pkg.parts["word/footnotes.xml"]).toEqual(buildFootnotesPart());
+    expect(pkg.parts["word/header1.xml"]).toEqual(buildHeaderPart());
+    expect(pkg.parts["word/footer1.xml"]).toEqual(buildFooterPart());
+    expect(pkg.parts["word/numbering.xml"]).toEqual(buildNumberingPart());
+
     const document = pkg.parts["word/document.xml"];
     if (document?.kind !== "xml") {
       throw new Error("expected word/document.xml to be an xml part");
     }
-    const serialized = JSON.stringify(document.nodes);
-    expect(serialized).toContain("An ordinary body paragraph.");
+    expect(JSON.stringify(document.nodes)).toContain(
+      "An ordinary body paragraph.",
+    );
   });
 });
