@@ -104,6 +104,15 @@ describe("applyCharacterSprms", () => {
     expect(props.fontFamily).toBeUndefined();
   });
 
+  it("leaves an already-resolved fontFamily untouched when a later sprmCRgFtc0 index has no font-table entry", () => {
+    const props = applyCharacterSprms(
+      [prl(0x4a4f, [0, 0]), prl(0x4a4f, [9, 0])],
+      {},
+      ["Calibri"],
+    );
+    expect(props.fontFamily).toBe("Calibri");
+  });
+
   it("ignores a paragraph-family sprm even if its opcode happened to collide", () => {
     const into: CharacterProperties = {};
     const result = applyCharacterSprms(
@@ -118,8 +127,14 @@ describe("applyCharacterSprms", () => {
     expect(result.bold).toBeUndefined();
   });
 
-  it("ignores an unrecognised character sprm without touching any property", () => {
+  it("ignores a paragraph-family sprm that never reaches the character switch at all", () => {
     const result = applyCharacterSprms([prl(0x0000, [0x00])], { bold: true });
+    expect(result.bold).toBe(true);
+  });
+
+  it("falls through the switch's own default case for a character-family sprm this reader does not convert", () => {
+    // sgc bits 10-12 of 0x0800 decode to SGC.character (2), but the full value matches none of the SPRM_C_* opcodes this reader handles -- the one way to actually reach the switch's default case rather than the sgc guard above it.
+    const result = applyCharacterSprms([prl(0x0800, [0x00])], { bold: true });
     expect(result.bold).toBe(true);
   });
 
