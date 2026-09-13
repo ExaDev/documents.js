@@ -62,6 +62,21 @@ describe("operandSize", () => {
     expect(sized(0xe000)).toBe(3); // spra 7
   });
 
+  it("rejects a spra outside the 0..7 range a 3-bit field can ever hold", () => {
+    // decodeSprm's own bitmask (spra: (value >> 13) & 0x0007) can never produce this -- only a hand-built Sprm can, which is exactly what a caller working from a different decoding is free to pass operandSize directly.
+    const sprm = { ...decodeSprm(0), spra: 8 };
+    expect(() => operandSize(sprm, new Uint8Array(0), 0)).toThrow(
+      /has spra 8, which is outside the 0\.\.7 range a 3-bit field can hold/,
+    );
+  });
+
+  it("does not treat an unrelated sprm's own leading byte of 255 as sprmPChgTabs' own computed-size sentinel", () => {
+    // sprmPShd (0xC64D) is spra 6 but not sprmPChgTabs -- its own leading byte happening to equal 255 must size as an ordinary variable-length operand (1 + 255), never trigger the sentinel refusal that opcode alone gates.
+    expect(
+      operandSize(decodeSprm(0xc64d), new Uint8Array([0xff, 0, 0, 0]), 0),
+    ).toBe(256);
+  });
+
   it("sizes an ordinary variable-length sprm from its own leading length byte", () => {
     // sprmPShd (0xC64D), spra 6: the first operand byte gives the size of the rest.
     expect(
@@ -90,6 +105,12 @@ describe("operandSize", () => {
     expect(() => operandSize(decodeSprm(0xd608), operand, 0)).toThrow(
       /sprmTDefTable declares cb 0/,
     );
+  });
+
+  it("accepts sprmTDefTable's own cb of exactly 1, the smallest valid remainder length", () => {
+    const operand = new Uint8Array(4);
+    new DataView(operand.buffer).setUint16(0, 1, true);
+    expect(operandSize(decodeSprm(0xd608), operand, 0)).toBe(2);
   });
 
   it("sizes sprmPChgTabs from its length byte when that byte is not the sentinel", () => {
