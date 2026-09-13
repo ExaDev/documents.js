@@ -282,6 +282,26 @@ describe("readInlinePicture's own bounds labels", () => {
     ).toEqual(Array.from(jpegBytes));
   });
 
+  it("finds nothing at all one byte short of that same zero-bytes-to-spare minimum, rather than scanning into a header it has no room left to validate", () => {
+    // The identical minimal one-uid JPEG blip as the previous test, missing its very last byte -- the scan's own bound has no candidate position left to try at all, so this distinguishes the bound's own addition (RECORD_HEADER_SIZE + MIN_BLIP_TAIL_BYTES past `at`) from a subtraction, which would instead admit `at` here and read a record header this data no longer has room for.
+    const mm = 0x0064; // MM_SHAPE.
+    const picf = new Uint8Array(68);
+    new DataView(picf.buffer).setUint16(6, mm, true);
+    const jpegBytes = new Uint8Array([0xff, 0xd8]);
+    const header = recordHeader(0xf01d, 0x046a, 16 + 1 + jpegBytes.length);
+    const uid = new Uint8Array(16);
+    const tag = new Uint8Array(1);
+    const data = new Uint8Array([
+      ...picf,
+      ...header,
+      ...uid,
+      ...tag,
+      ...jpegBytes,
+    ]);
+    const truncated = data.subarray(0, data.length - 1);
+    expect(readInlinePicture(truncated, 0)).toBeUndefined();
+  });
+
   it("skips a candidate whose recInstance names a real uid count but whose recType is not a blip, continuing on to the genuine one behind it", () => {
     // A shape-record-shaped header (not 0xf01d/0xf01e) that nonetheless carries a recognised one-uid recInstance and happens to have JPEG's own 2-byte signature sitting where its payload would start -- format is undefined for this header, so findBlipRecord's own format guard, not the recLen/signature check, is what has to skip it. Without that skip this bogus header would be returned as "found", and readInlinePicture's own format check on its bogus recType would then return undefined without ever reaching the real PNG right behind it.
     const mm = 0x0064; // MM_SHAPE.
