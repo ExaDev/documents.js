@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { XmlNode } from "./node";
-import { decodedTextContent, textContent } from "./query";
+import { decodedTextContent, elementsWithTag, textContent } from "./query";
 
 function text(value: string): XmlNode {
   return { type: "text", value };
@@ -28,6 +28,24 @@ describe("textContent", () => {
     expect(textContent([el("p", [text("a"), el("b", [text("c")])])])).toBe(
       "ac",
     );
+  });
+});
+
+describe("elementsWithTag", () => {
+  it("finds every element with the given tag anywhere in the forest, skipping other tags and non-element nodes", () => {
+    const forest: XmlNode[] = [
+      text("intro"),
+      el("div", [el("p", [text("a")]), el("span", [text("b")])]),
+      el("p", [cdata("c")]),
+    ];
+    expect(elementsWithTag(forest, "p")).toEqual([
+      el("p", [text("a")]),
+      el("p", [cdata("c")]),
+    ]);
+  });
+
+  it("returns an empty array when no element matches", () => {
+    expect(elementsWithTag([el("div", [text("x")])], "p")).toEqual([]);
   });
 });
 
