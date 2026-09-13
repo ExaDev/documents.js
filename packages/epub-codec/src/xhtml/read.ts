@@ -392,9 +392,8 @@ function readContainerChildren(
       blocks.push(...readBlockElement(node, state));
       continue;
     }
-    if (node.type === "element" || isTextLikeNode(node)) {
-      segment.push(node);
-    }
+    // No element/text-like filter is needed here: buildInlineRuns (called from flush() above) already skips any node that is neither text-like nor an element (a comment, declaration, or processing instruction), so collecting every remaining node into segment unconditionally costs nothing a guard here could meaningfully save.
+    segment.push(node);
   }
   flush();
   return blocks;
@@ -728,14 +727,8 @@ function readList(element: XmlElement, state: BuildState): ContentBlock[] {
       );
       continue;
     }
-    // The HTML Standard's own content model for <ul>/<ol> is "Zero or more li and script-supporting elements", explicitly naming <script>/<template> as legal direct children alongside <li> -- so those two are ignored entirely here: no stray collection, no LIST_CONTENT_OUTSIDE_ITEM diagnostic, and never routed through readContainerChildren (which has no case for either tag, and readList's own document-content mapping has no use for embedded script/template content regardless). This uses the shared isInertElement predicate (context.ts) rather than a narrower spec-accurate script/template-only check, deliberately extending the identical exemption to <style>/<noscript> too -- neither is actually legal here per the content model above, but both are just as unrepresentable and just as safe to skip silently as the two that are, and a single shared definition is worth more than a spec-perfect distinction no diagnostic here would ever need to draw. reportInertElementSkip still fires its own dedicated diagnostic for <noscript> specifically (the one member of the set whose subtree can be genuine document content) -- this filter only suppresses the unrelated stray-content diagnostic that would otherwise misrepresent a spec-legal position as malformed.
-    if (child.type === "element" && isInertElement(child.tag)) {
-      reportInertElementSkip(child.tag, state.context);
-      continue;
-    }
-    if (child.type === "element" || isTextLikeNode(child)) {
-      strayNodes.push(child);
-    }
+    // The HTML Standard's own content model for <ul>/<ol> is "Zero or more li and script-supporting elements", explicitly naming <script>/<template> as legal direct children alongside <li> -- but no separate isInertElement pre-filter is needed here to keep them out of recovered content: buildInlineRuns' own appendElement (called via flushListStrayContent's readContainerChildren below) already carries the identical isInertElement check and skips <script>/<template>/<style>/<noscript> at that point instead, contributing zero runs and zero blocks regardless of which layer catches it. reportInertElementSkip's own dedicated diagnostic for <noscript> specifically (the one member of the set whose subtree can be genuine document content) still fires from that deeper call, at exactly the same single occurrence a pre-filter here would have produced, since a stray collection whose only content resolves to zero blocks never reaches flushListStrayContent's own LIST_CONTENT_OUTSIDE_ITEM diagnostic either way.
+    strayNodes.push(child);
   }
   blocks.push(
     ...flushListStrayContent(strayNodes, previousItem, element.tag, state),
@@ -743,7 +736,7 @@ function readList(element: XmlElement, state: BuildState): ContentBlock[] {
   return blocks;
 }
 
-// A <ul>/<ol> content model admits only <li> and script-supporting (<script>/<template>) children -- so any *other* content sitting directly inside one is not valid HTML5, most commonly a <ul>/<ol> nested as a sibling rather than wrapped in its own <li> (a shape real-world producers and converters emit even though it is not conformant), but any other stray content (a bare <img>, a run of text) shares the identical malformed shape and the identical most-likely producer intent. Content sitting between or after real <li> siblings is recovered by feeding it through the exact same readContainerChildren dispatch that <li>'s own real children already go through, under that preceding item's own list membership -- so a stray <ul>/<ol> becomes a properly nested list one level deeper sharing the enclosing numId (readBlockElementInner's own "ul"/"ol" case calls back into this function with that membership already on the state, incrementing level exactly as genuine nesting would), a stray <img> becomes its own real image block, and stray text becomes its own paragraph, rather than each needing its own hand-rolled special case. Content sitting BEFORE the very first <li> has no preceding item to attach to, but that is not a reason to drop it: it is recovered through the identical readContainerChildren dispatch, inheriting whatever list membership its own enclosing context already carries (none, unless the <ul>/<ol> it sits directly inside is itself nested inside another list's <li>), and lands in the returned block sequence immediately before the list's own real items -- matching a browser's rendering ORDER for this malformed shape, but not necessarily its nesting DEPTH: when the enclosing <ul>/<ol> is itself nested inside an outer list's own <li>, a browser indents this recovered content at the enclosing (inner) list's own depth, one level deeper than the outer item's own text (inside that inner list's own content box), while this recovery always emits it at that outer item's own depth instead -- a top-level sibling of the enclosing list only in the un-nested case, where the enclosing <ul>/<ol> itself carries no list membership at all. Silently dropping this case (this function's own prior behaviour) lost real content with no diagnostic at all: ExaDev/documents.js#994's own headline repro, `<ul><ul><li>b</li></ul><li>a</li></ul>`, discarded the entire nested list. A stray <script>/<template>/<style>/<noscript> sitting as a DIRECT child of the <ul>/<ol> itself never reaches this function at all -- readList's own loop above filters it out (isInertElement) before it is ever collected as a stray node in the first place. One nested a level or more deeper, though -- e.g. a <script> inside a stray <div> -- still reaches this function's own readContainerChildren call above, which resolves it to zero blocks via src/xhtml/inline.ts's own appendElement guard, the identical narrower claim flushDefinitionListStrayContent's own comment below already states for the <dl> case. Inter-element whitespace, by contrast, DOES reach here: the HTML Standard's own "must be ignored when establishing whether an element's contents match the content model" rule (section 3.2.5 "Content models") governs conformance-checking alone, not deletion of the character data itself, so real whitespace sitting between two stray inline siblings (the single space that keeps two words apart) is still live text that must survive a round trip. What decides whether the diagnostic-and-recovery step below fires is the actual readContainerChildren result, not a speculative text-only probe: a bare block-level construct with no text projection at all (a stray <img>, an <hr>, a table or figure whose only content is an image) still produces a real, non-empty block list and must still be recovered and reported, exactly like the common pretty-printed-list shape of a bare newline-plus-indent text node, which readContainerChildren's own segment-flush already reduces to an empty block list on its own (see its whitespace-only-segment comment) -- so there is no separate `nodes.length === 0` short-circuit worth taking here either: readContainerChildren([], ...) is itself already a genuine no-op for the identical reason (an empty for loop, then one flush() call over an empty segment), so calling it unconditionally costs nothing a guard could meaningfully save. The read always runs exactly once, and this function's OWN diagnostic (LIST_CONTENT_OUTSIDE_ITEM) fires only when the recovered block list is non-empty -- but an empty block list does not mean the read underneath it was a no-op: a nested list nested directly in the stray content (e.g. an empty `<ul>` with no `<li>` of its own) still mints a real numId via readList's own eager `mintNumId` call before discovering it has nothing to attach to, and any diagnostic fired by content reached deeper in the recovered subtree (most commonly `epub/image-unresolved`, when a stray `<img>` fails to resolve) still reaches the sink regardless of whether the surrounding recovery is ultimately reported or discarded. Both are harmless in practice -- a numId is an opaque per-list key with no significance beyond uniqueness (src/xhtml/list-id.ts), so a skipped integer costs nothing, and the deeper diagnostic already names its own loss on its own terms -- but they mean the minter and the sink are not, in fact, insulated from a discarded read's side effects the way LIST_CONTENT_OUTSIDE_ITEM's own absence might suggest.
+// A <ul>/<ol> content model admits only <li> and script-supporting (<script>/<template>) children -- so any *other* content sitting directly inside one is not valid HTML5, most commonly a <ul>/<ol> nested as a sibling rather than wrapped in its own <li> (a shape real-world producers and converters emit even though it is not conformant), but any other stray content (a bare <img>, a run of text) shares the identical malformed shape and the identical most-likely producer intent. Content sitting between or after real <li> siblings is recovered by feeding it through the exact same readContainerChildren dispatch that <li>'s own real children already go through, under that preceding item's own list membership -- so a stray <ul>/<ol> becomes a properly nested list one level deeper sharing the enclosing numId (readBlockElementInner's own "ul"/"ol" case calls back into this function with that membership already on the state, incrementing level exactly as genuine nesting would), a stray <img> becomes its own real image block, and stray text becomes its own paragraph, rather than each needing its own hand-rolled special case. Content sitting BEFORE the very first <li> has no preceding item to attach to, but that is not a reason to drop it: it is recovered through the identical readContainerChildren dispatch, inheriting whatever list membership its own enclosing context already carries (none, unless the <ul>/<ol> it sits directly inside is itself nested inside another list's <li>), and lands in the returned block sequence immediately before the list's own real items -- matching a browser's rendering ORDER for this malformed shape, but not necessarily its nesting DEPTH: when the enclosing <ul>/<ol> is itself nested inside an outer list's own <li>, a browser indents this recovered content at the enclosing (inner) list's own depth, one level deeper than the outer item's own text (inside that inner list's own content box), while this recovery always emits it at that outer item's own depth instead -- a top-level sibling of the enclosing list only in the un-nested case, where the enclosing <ul>/<ol> itself carries no list membership at all. Silently dropping this case (this function's own prior behaviour) lost real content with no diagnostic at all: ExaDev/documents.js#994's own headline repro, `<ul><ul><li>b</li></ul><li>a</li></ul>`, discarded the entire nested list. A stray <script>/<template>/<style>/<noscript> sitting as a DIRECT child of the <ul>/<ol> itself is collected into strayNodes exactly like any other stray node -- readList's own loop above has no separate isInertElement pre-filter for it -- but it still contributes zero blocks once it reaches this function's own readContainerChildren call, which resolves it to nothing via src/xhtml/inline.ts's own appendElement guard, the identical mechanism a nested one (e.g. a <script> inside a stray <div>) already goes through, and the identical narrower claim flushDefinitionListStrayContent's own comment below already states for the <dl> case. Inter-element whitespace, by contrast, DOES reach here: the HTML Standard's own "must be ignored when establishing whether an element's contents match the content model" rule (section 3.2.5 "Content models") governs conformance-checking alone, not deletion of the character data itself, so real whitespace sitting between two stray inline siblings (the single space that keeps two words apart) is still live text that must survive a round trip. What decides whether the diagnostic-and-recovery step below fires is the actual readContainerChildren result, not a speculative text-only probe: a bare block-level construct with no text projection at all (a stray <img>, an <hr>, a table or figure whose only content is an image) still produces a real, non-empty block list and must still be recovered and reported, exactly like the common pretty-printed-list shape of a bare newline-plus-indent text node, which readContainerChildren's own segment-flush already reduces to an empty block list on its own (see its whitespace-only-segment comment) -- so there is no separate `nodes.length === 0` short-circuit worth taking here either: readContainerChildren([], ...) is itself already a genuine no-op for the identical reason (an empty for loop, then one flush() call over an empty segment), so calling it unconditionally costs nothing a guard could meaningfully save. The read always runs exactly once, and this function's OWN diagnostic (LIST_CONTENT_OUTSIDE_ITEM) fires only when the recovered block list is non-empty -- but an empty block list does not mean the read underneath it was a no-op: a nested list nested directly in the stray content (e.g. an empty `<ul>` with no `<li>` of its own) still mints a real numId via readList's own eager `mintNumId` call before discovering it has nothing to attach to, and any diagnostic fired by content reached deeper in the recovered subtree (most commonly `epub/image-unresolved`, when a stray `<img>` fails to resolve) still reaches the sink regardless of whether the surrounding recovery is ultimately reported or discarded. Both are harmless in practice -- a numId is an opaque per-list key with no significance beyond uniqueness (src/xhtml/list-id.ts), so a skipped integer costs nothing, and the deeper diagnostic already names its own loss on its own terms -- but they mean the minter and the sink are not, in fact, insulated from a discarded read's side effects the way LIST_CONTENT_OUTSIDE_ITEM's own absence might suggest.
 function flushListStrayContent(
   nodes: readonly XmlNode[],
   previousItem: ListItemContext | undefined,
@@ -819,19 +812,14 @@ function readDefinitionListEntries(
       blocks.push(...readDefinitionListEntries(child.children, state));
       continue;
     }
-    if (child.type === "element" && isInertElement(child.tag)) {
-      reportInertElementSkip(child.tag, state.context);
-      continue;
-    }
-    if (child.type === "element" || isTextLikeNode(child)) {
-      strayNodes.push(child);
-    }
+    // No isInertElement pre-filter is needed here either: flushDefinitionListStrayContent's own readContainerChildren call already carries the identical check (via buildInlineRuns' appendElement), skipping a <script>/<template>/<style>/<noscript> child at that deeper point instead, with reportInertElementSkip's own <noscript> diagnostic still firing from there at exactly the same single occurrence.
+    strayNodes.push(child);
   }
   flushStray();
   return blocks;
 }
 
-// The <dl> twin of flushListStrayContent above: content that is not dt/dd/div (nor an inert element) sitting directly inside a <dl> or one of its <div> wrappers is not valid HTML5, but silently dropping it loses real content with no diagnostic at all -- exactly the defect class ExaDev/documents.js#994 was filed about, reachable here one tag away from the shape that issue's own fix already covers. Recovered through the same readContainerChildren dispatch dt/dd's own real children go through, under the plain `state` (a <dl> entry carries no numId/level membership the way a list item does for stray content to inherit, so there is no withListItem-equivalent to apply here). Reported only when the recovery actually produces content, matching flushListStrayContent's own rule: genuine inter-element whitespace (the common pretty-printed-<dl> shape) and a stray <script>/<template>/<style>/<noscript> collected here (isInertElement's own check above already filters most of these before they are ever collected, but a nested one -- e.g. a <script> inside a stray <section> -- still reaches this function's own readContainerChildren call, which resolves it to zero blocks via src/xhtml/inline.ts's own appendElement guard) both produce an empty recovered block list and fire nothing.
+// The <dl> twin of flushListStrayContent above: content that is not dt/dd/div sitting directly inside a <dl> or one of its <div> wrappers is not valid HTML5, but silently dropping it loses real content with no diagnostic at all -- exactly the defect class ExaDev/documents.js#994 was filed about, reachable here one tag away from the shape that issue's own fix already covers. Recovered through the same readContainerChildren dispatch dt/dd's own real children go through, under the plain `state` (a <dl> entry carries no numId/level membership the way a list item does for stray content to inherit, so there is no withListItem-equivalent to apply here). Reported only when the recovery actually produces content, matching flushListStrayContent's own rule: genuine inter-element whitespace (the common pretty-printed-<dl> shape) and a stray <script>/<template>/<style>/<noscript> collected here -- whether sitting directly in the <dl> or nested a level or more deeper, e.g. inside a stray <section> -- both resolve to zero blocks via src/xhtml/inline.ts's own appendElement guard, so both produce an empty recovered block list and fire nothing.
 function flushDefinitionListStrayContent(
   nodes: readonly XmlNode[],
   state: BuildState,
@@ -864,26 +852,22 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
       continue; // every <caption>, first or duplicate, is handled in full by readTableCaption below regardless of where in source order it sits
     }
     if (section.type !== "element") {
-      if (isTextLikeNode(section)) {
-        strayNodes.push(section);
-      }
+      // No isTextLikeNode filter is needed here: readContainerChildren's own strayBlocks call below already skips any node that is neither text-like nor an element (a comment, declaration, or processing instruction), so collecting every remaining non-element section into strayNodes unconditionally costs nothing a guard here could meaningfully save.
+      strayNodes.push(section);
       continue;
     }
     if (section.tag === "colgroup") {
-      collectColgroupStrayContent(section, strayNodes, state.context);
+      collectColgroupStrayContent(section, strayNodes);
       continue;
     }
-    if (isInertElement(section.tag)) {
-      reportInertElementSkip(section.tag, state.context);
-      continue;
-    }
+    // No isInertElement pre-filter is needed here: an inert <script>/<template>/<style>/<noscript> direct child falls through to the rowContainers===undefined branch below just like any other non-row-group section, and readContainerChildren's own buildInlineRuns call (invoked over strayNodes further down) already carries the identical check, contributing zero runs and firing reportInertElementSkip's own <noscript> diagnostic from that deeper point instead.
     const rowContainers =
       section.tag === "tr"
         ? [section]
         : section.tag === "thead" ||
             section.tag === "tbody" ||
             section.tag === "tfoot"
-          ? collectRowGroupRows(section, strayNodes, state.context)
+          ? collectRowGroupRows(section, strayNodes)
           : undefined;
     if (rowContainers === undefined) {
       strayNodes.push(section);
@@ -935,9 +919,8 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
           reportInertElementSkip(cellNode.tag, state.context);
           continue;
         }
-        if (cellNode.type === "element" || isTextLikeNode(cellNode)) {
-          strayCellNodes.push(cellNode);
-        }
+        // No element/text-like filter is needed here: flushStrayCell's own readContainerChildren call already skips any node that is neither text-like nor an element, so collecting every remaining cellNode into strayCellNodes unconditionally costs nothing a guard here could meaningfully save.
+        strayCellNodes.push(cellNode);
       }
       flushStrayCell();
       columnCount = Math.max(columnCount, cells.length);
@@ -976,7 +959,6 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
 function collectRowGroupRows(
   section: XmlElement,
   strayNodes: XmlNode[],
-  context: XhtmlReadContext,
 ): XmlElement[] {
   const trs: XmlElement[] = [];
   for (const child of section.children) {
@@ -984,13 +966,8 @@ function collectRowGroupRows(
       trs.push(child);
       continue;
     }
-    if (child.type === "element" && isInertElement(child.tag)) {
-      reportInertElementSkip(child.tag, context);
-      continue;
-    }
-    if (child.type === "element" || isTextLikeNode(child)) {
-      strayNodes.push(child);
-    }
+    // No isInertElement pre-filter is needed here: readTable's own strayBlocks call over this same accumulator already carries the identical check (via buildInlineRuns' appendElement), skipping a <script>/<template>/<style>/<noscript> child at that deeper point instead, with reportInertElementSkip's own <noscript> diagnostic still firing from there at exactly the same single occurrence.
+    strayNodes.push(child);
   }
   return trs;
 }
@@ -999,19 +976,13 @@ function collectRowGroupRows(
 function collectColgroupStrayContent(
   section: XmlElement,
   strayNodes: XmlNode[],
-  context: XhtmlReadContext,
 ): void {
   for (const child of section.children) {
     if (child.type === "element" && child.tag === "col") {
       continue;
     }
-    if (child.type === "element" && isInertElement(child.tag)) {
-      reportInertElementSkip(child.tag, context);
-      continue;
-    }
-    if (child.type === "element" || isTextLikeNode(child)) {
-      strayNodes.push(child);
-    }
+    // No isInertElement pre-filter is needed here either: readTable's own strayBlocks call over this same accumulator already carries the identical check (via buildInlineRuns' appendElement), skipping a <script>/<template>/<style>/<noscript> child at that deeper point instead, with reportInertElementSkip's own <noscript> diagnostic still firing from there at exactly the same single occurrence.
+    strayNodes.push(child);
   }
 }
 
