@@ -317,15 +317,72 @@ describe("body constructs", () => {
           runs: [{ text: "x" }],
           alignment: "center",
           indentLeftPt: 36,
+          indentFirstLinePt: 18,
           spacingBeforePt: 12,
+          spacingAfterPt: 6,
           lineSpacing: 1.5,
+          pageBreakBefore: true,
         },
       ]),
     );
     expect(out).toContain("\\qc");
     expect(out).toContain("\\li720");
+    expect(out).toContain("\\fi360");
     expect(out).toContain("\\sb240");
+    expect(out).toContain("\\sa120");
     expect(out).toContain("\\sl360\\slmult1");
+    expect(out).toContain("\\pagebb");
+  });
+
+  it("writes no \\pagebb for an explicit pageBreakBefore: false, distinct from omitting the field", () => {
+    const out = write(
+      wordprocessing([
+        { kind: "paragraph", runs: [{ text: "x" }], pageBreakBefore: false },
+      ]),
+    );
+    expect(out).not.toContain("\\pagebb");
+  });
+
+  it("indents a list item's own marker one step per level (LIST_LEVEL_INDENT_TWIPS * (level + 1)), not a fixed or divided amount", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "item" }],
+          list: { numId: "rtf1:bullet", level: 2 },
+        },
+      ]),
+    );
+    expect(out).toContain(`\\ls1\\ilvl2\\fi-360\\li${String(720 * 3)}`);
+  });
+
+  it("reports rather than silently dropping a depth-only list membership with no numId at all", () => {
+    // numId is itself optional -- absent when the source format states only a depth, not a shared numbering identity (the OOXML drawing-paragraph a:pPr/@lvl case ContentParagraph.list.numId's own comment describes). Every numId a paragraph DOES carry is minted into this.tables.lists by collectTables before any paragraph is written, so entry === undefined can only happen when numId itself was never given in the first place, not from an unrecognised numId string.
+    const diagnostics: { code: string; message: string }[] = [];
+    const out = writeRtfContent(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          list: { level: 0 },
+        },
+      ]),
+      {
+        sink: (diagnostic) =>
+          diagnostics.push({
+            code: diagnostic.code,
+            message: diagnostic.message,
+          }),
+      },
+    );
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a list membership carries no numId this writer minted a list for; the paragraph keeps its indentation but no list marker",
+      },
+    ]);
+    expect(text(out)).not.toContain("\\ls");
   });
 
   it("writes verticalAlign as the \\super/\\sub on-spellings", () => {
