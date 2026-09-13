@@ -33,7 +33,7 @@ export function matchLinkLabel(text: string, start: number): number {
     return 0;
   }
   let index = start + 1;
-  // text.charAt(index) !== "", not index < text.length: the two are equivalent for every real index, but charAt already returns "" one past the end, which none of this loop's own character comparisons below can ever match either -- so this is the one boundary spelling whose own mutation (flipping the operator, or the empty-string literal) is actually reachable by a real test, rather than always landing on the identical fallthrough either way.
+  // text.charAt(index) !== "", not index < text.length: the two are equivalent for every real index, but charAt already returns "" one past the end, which none of this loop's own character comparisons below can ever match either. Unlike skipInlineWhitespace's own loop below, nothing inside this body breaks on an ordinary character, so this guard is the only thing that stops the loop once text runs out before a closing bracket is found -- an unterminated label (no "[" or "]" anywhere in the rest of text) is what actually exercises it.
   while (text.charAt(index) !== "") {
     const char = text.charAt(index);
     if (char === "\\") {
@@ -161,8 +161,8 @@ export function parseLinkTitle(
 export function skipInlineWhitespace(text: string, start: number): number {
   let index = start;
   let seenLineEnding = false;
-  // See matchLinkLabel's own note (src/inline/link.ts) on why this is charAt(index) !== "" rather than index < text.length.
-  while (text.charAt(index) !== "") {
+  // No separate "in range" guard: running off the end of text makes charAt(index) "", which is neither " " nor "\t" nor "\n", so the character-kind check below already breaks the loop on that same condition -- a guard here would only ever fire at a point this loop already stops at.
+  for (;;) {
     const char = text.charAt(index);
     if (char === "\n") {
       if (seenLineEnding) {

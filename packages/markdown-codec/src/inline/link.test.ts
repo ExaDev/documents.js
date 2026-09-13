@@ -42,6 +42,10 @@ describe("matchLinkLabel", () => {
   it("returns 0 for text that does not open with '[' at all, even when a ']' appears later", () => {
     expect(matchLinkLabel("abc]", 0)).toBe(0);
   });
+
+  it("returns 0 for an unterminated label that runs off the end of text with no closing ']'", () => {
+    expect(matchLinkLabel("[abc", 0)).toBe(0);
+  });
 });
 
 describe("parseLinkDestination", () => {
