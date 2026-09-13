@@ -1,3 +1,54 @@
+## [1.11.3](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.2...archive-codec%401.11.3) (2026-09-13)
+
+### Bug Fixes
+
+* **archive-codec:** build the DIFAT fixture inside each test, not a shared beforeAll ([745c43e](https://github.com/ExaDev/documents.js/commit/745c43e79252ce8aad5e8d55b994aba54ed1d009))
+* **archive-codec:** stop asciiZeroTerminated's loop bound hiding an equivalent mutant ([e8cf240](https://github.com/ExaDev/documents.js/commit/e8cf240e0d69787ab63f53b752c47afd76ccabed))
+* **archive-codec:** stop writeGuid's Data4 byte extraction discarding wrong slices ([f62d0d1](https://github.com/ExaDev/documents.js/commit/f62d0d1de5277778ccc0251516bd46f496bae8d2))
+
+### Code Refactoring
+
+* **archive-codec:** detect FAT and mini-FAT cycles by visited-set membership ([496a34c](https://github.com/ExaDev/documents.js/commit/496a34c3c1df71c92a4ae2797e2d472d694e8da7))
+* **archive-codec:** drop bytesEqual's dead length check in RC4 CryptoAPI verifier ([7d83619](https://github.com/ExaDev/documents.js/commit/7d836190bf404e41905f11808f0356da855c3053))
+* **archive-codec:** drop equivalent zero-padding writes in the OLEPS writer ([20ada32](https://github.com/ExaDev/documents.js/commit/20ada3220dd22fb7c681948749a404c6ebee9b96))
+* **archive-codec:** drop remaining equivalent zero-padding write in test-support/oleps.ts ([c538529](https://github.com/ExaDev/documents.js/commit/c53852982b58cce817445f4fd57145c666dfeacc))
+* **archive-codec:** drop startsWithMagic's redundant length pre-check ([b307766](https://github.com/ExaDev/documents.js/commit/b3077663fc963e62e88786df3d80fcf98839a648))
+* **archive-codec:** drop the writer's redundant DIFAT-count convergence check ([528386b](https://github.com/ExaDev/documents.js/commit/528386b12f53abfcfa2af9bb59e4265419610e5c))
+* **archive-codec:** iterate a DIFAT sector's own entries by bounded index list ([aae8832](https://github.com/ExaDev/documents.js/commit/aae88325a8c6a0adc4e52566daafb54c12977cdb))
+* **archive-codec:** link compoundFile's directory siblings from record()'s own return values ([b21c433](https://github.com/ExaDev/documents.js/commit/b21c433c093fb58251082db740f41f2a75d1b2c0))
+* **archive-codec:** remove compoundFile's redundant mini-FAT zero-sector guard ([02edfe5](https://github.com/ExaDev/documents.js/commit/02edfe551ccb136d1280fbb2e7a56e2119dbd455))
+* **archive-codec:** remove fatEntry's dead negative-offset guard ([8622dc6](https://github.com/ExaDev/documents.js/commit/8622dc6055fb9b55b20b9f29e83bfb964b458c75))
+* **archive-codec:** remove requireBytes' dead negative-offset guard and redundant default case ([003ca90](https://github.com/ExaDev/documents.js/commit/003ca907d497186b6e0f185f9bfec56952820371))
+* **archive-codec:** remove test-support/cfb.ts's redundant array-index fallbacks ([a0d4220](https://github.com/ExaDev/documents.js/commit/a0d4220719e04b6c4176eaf687745dd0f777d80c))
+* **archive-codec:** remove write.ts's dead surrogate case-mapping guard ([47ef426](https://github.com/ExaDev/documents.js/commit/47ef42602a4e6fae19d6093f3b7a650ca848b30a))
+* **archive-codec:** simplify the OLEPS property-set writer's byte writes ([62b711a](https://github.com/ExaDev/documents.js/commit/62b711a1366574e0d1ae52877eb7aeb243fdde13))
+* **archive-codec:** store each directory record's own child link directly ([3655470](https://github.com/ExaDev/documents.js/commit/36554701b92820c2d3d6983825eb8b962861bdae))
+* **archive-codec:** use indexOf and DataView writes in the OLE Package codec ([f493e6e](https://github.com/ExaDev/documents.js/commit/f493e6e398e2c7ebc865c051111ec7a4d785d3ed))
+* **archive-codec:** write RC4 password bytes through a DataView ([b8e929a](https://github.com/ExaDev/documents.js/commit/b8e929a106138395cf958b2f36f18ff950af1dc3))
+* **archive-codec:** write XOR obfuscation bytes through DataViews ([f6435f2](https://github.com/ExaDev/documents.js/commit/f6435f2bc356acbec061a66357bf3c13e69840c2))
+
+### Tests
+
+* **archive-codec:** add direct coverage for the compoundFile test-fixture builder ([611f33f](https://github.com/ExaDev/documents.js/commit/611f33f3de1a8a7b85e407ba9e1dddbd5b11bc27))
+* **archive-codec:** add multi-sector and validation coverage for readCompoundFile ([7a26724](https://github.com/ExaDev/documents.js/commit/7a26724960e90bafeb6304c773b6869e478ad259))
+* **archive-codec:** assert DIFAT tail padding and unallocated size fields stay untouched ([35fc3f6](https://github.com/ExaDev/documents.js/commit/35fc3f68b95f6a7429cb045055c2e7efa5ebbcd7))
+* **archive-codec:** assert exact messages across readCompoundFile's structural checks ([b435796](https://github.com/ExaDev/documents.js/commit/b4357969fb1455ea9b65849f8ac3653dc4684b15))
+* **archive-codec:** assert exact requireBytes boundary messages throughout the OLEPS reader ([c1faca7](https://github.com/ExaDev/documents.js/commit/c1faca7be4e631204b6b328e728473bd93cff8a9))
+* **archive-codec:** assert exact SummaryInformation error messages and add gap coverage ([3d0a597](https://github.com/ExaDev/documents.js/commit/3d0a5970603e22216f8f7150557c55f0765e0289))
+* **archive-codec:** assert exact writeCompoundFile error messages and DIFAT/size boundaries ([147cc31](https://github.com/ExaDev/documents.js/commit/147cc31124b71f97f2993b19fdc656193fea97a9))
+* **archive-codec:** build the header/sector-layout fixture per test, not once per describe block ([9491015](https://github.com/ExaDev/documents.js/commit/9491015c3173f09fc524c3d528f989b66de91f05))
+* **archive-codec:** cover writeCompoundFile's sector-arithmetic and case-mapping boundaries ([a7d5876](https://github.com/ExaDev/documents.js/commit/a7d58766c120b274c4434f81d906b4901b8f6836))
+* **archive-codec:** drop endian-invariant writes and add direct OLEPS wire tests ([0db9aa2](https://github.com/ExaDev/documents.js/commit/0db9aa2d5d15149b3045468bb82339f979c2b088))
+* **archive-codec:** expose md5's 64-bit bit-length split for direct boundary coverage ([b5aa382](https://github.com/ExaDev/documents.js/commit/b5aa382f17ce7f896f03e43ae8441a9dcc4a2c1f))
+* **archive-codec:** fix walkArchive's ancestor-chain order assertion ([5897e8d](https://github.com/ExaDev/documents.js/commit/5897e8d61be7c5cd528f0fa11e63b2d7dba0585c))
+* **archive-codec:** give sha1's million-repetition vector a generous timeout ([8c463a9](https://github.com/ExaDev/documents.js/commit/8c463a96869b5e259e57562221e4ea4322ddc6d5))
+* **archive-codec:** give the multi-FAT-sector fixture a generous timeout ([51c1acc](https://github.com/ExaDev/documents.js/commit/51c1acc2bfbf92ecddfb7c48858d8e2d73ce166e))
+* **archive-codec:** make md5's 64-bit length write's high half directly testable ([d47199a](https://github.com/ExaDev/documents.js/commit/d47199a8d596dfbf52427505ffdede3c33b9a3f3))
+* **archive-codec:** move the DIFAT fixture into beforeAll for correct mutant coverage ([d55690a](https://github.com/ExaDev/documents.js/commit/d55690a7153d6dcff5f130c4898604334f390c82))
+* **archive-codec:** prove localHeaderCompressionMethod stops at a signature mismatch ([3c6fa18](https://github.com/ExaDev/documents.js/commit/3c6fa18dfb8e78d4d296b680d987be853b92618e))
+* **archive-codec:** raise the mutation break threshold to 100 ([903f376](https://github.com/ExaDev/documents.js/commit/903f376c62b5828f27d6a56da83ef1182b3386d5))
+* **archive-codec:** read zip test-support integers through DataView ([2f96544](https://github.com/ExaDev/documents.js/commit/2f96544db476ec7842a28e2917b49dc52f111b6c))
+
 ## [1.11.2](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.1...archive-codec%401.11.2) (2026-09-13)
 
 

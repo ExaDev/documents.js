@@ -1,3 +1,82 @@
+## [1.7.5](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.7.4...ppt-codec%401.7.5) (2026-09-13)
+
+### Bug Fixes
+
+* **ppt-codec:** move writeFbse's cbName byte to its own real position ([6702568](https://github.com/ExaDev/documents.js/commit/6702568e54dc759fe836213e91e1dd40019224ab))
+* **ppt-codec:** resolve a font family used only inside a table cell ([bedf4d3](https://github.com/ExaDev/documents.js/commit/bedf4d39557fcb4d5e37fe154606ebe7487f555c))
+* **ppt-codec:** supply widthPt/heightPt on the picture-inset test's image block ([558cb46](https://github.com/ExaDev/documents.js/commit/558cb46d0948b4f033a02bc467f8b0e140d67aad))
+
+### Code Refactoring
+
+* **ppt-codec:** build asciiBytes via Uint8Array.from instead of a bounds-checked loop ([ec4c823](https://github.com/ExaDev/documents.js/commit/ec4c823762672d14cac04b241996526ff19bdd49))
+* **ppt-codec:** capture buildPersistDirectory's current edit directly, not via edits[0] ([79d4386](https://github.com/ExaDev/documents.js/commit/79d4386a83f8d9d33aa2a53f9d20135269e37449))
+* **ppt-codec:** clamp the master-style level take-count on indentLevel, not levels.length ([797bc41](https://github.com/ExaDev/documents.js/commit/797bc4190f9d64fe5f9e688f6657b61abd519973))
+* **ppt-codec:** drop blipForPib's redundant non-positive-pib guard ([7295a1d](https://github.com/ExaDev/documents.js/commit/7295a1dfeea4e08348cfb1b9ce1b64cbd0d96640))
+* **ppt-codec:** drop bytesToBase64's redundant length-gated fallbacks ([b2cac9d](https://github.com/ExaDev/documents.js/commit/b2cac9dc1c1842804f94814eacb257227213d4a3))
+* **ppt-codec:** drop orderedMasterLevels' redundant empty check ([b509f7a](https://github.com/ExaDev/documents.js/commit/b509f7aae5fc0e33ee031e7ffbc9bcefa0a90ae4))
+* **ppt-codec:** drop table row sort and heightPt fallback that no consumer can observe ([b88f6f7](https://github.com/ExaDev/documents.js/commit/b88f6f7ef5b4056e1b3998316ff5836e13a7cd95))
+* **ppt-codec:** drop the redundant explicit recInstance in writeSlideListWithText ([f3a9369](https://github.com/ExaDev/documents.js/commit/f3a9369b34677faaec5682c02def222bbe0c40d7))
+* **ppt-codec:** drop the redundant lenUserName guard on the Unicode username read ([7605f49](https://github.com/ExaDev/documents.js/commit/7605f491637492c66a202427669a507bd120fad0))
+* **ppt-codec:** drop three cross-checked invariants in shapes-write ([a11ae49](https://github.com/ExaDev/documents.js/commit/a11ae490e2bf7f31380c8498ce4c2343e7ec6a1b))
+* **ppt-codec:** export the master's own colour scheme for direct byte comparison ([07deb2c](https://github.com/ExaDev/documents.js/commit/07deb2c70fd2ba2d84b9eb3f452fb68eb798896a))
+* **ppt-codec:** let readFontNames accept a possibly-absent Environment record ([b5d9ed9](https://github.com/ExaDev/documents.js/commit/b5d9ed967ce4ed8bf64035b95dcc8f9c180e271e))
+* **ppt-codec:** move drop-message location prefixing off the context ([5901a79](https://github.com/ExaDev/documents.js/commit/5901a798cbb10f02f56f36f5aaf3e884c12736ff))
+* **ppt-codec:** pair each master placeholder with its own frame ([6880dfc](https://github.com/ExaDev/documents.js/commit/6880dfc6c64bd9abef46368dca841bebab0c76d6))
+* **ppt-codec:** pair each paragraph with its own body text in buildTextBody ([b616774](https://github.com/ExaDev/documents.js/commit/b616774048624697495b9d203d53aef0b175de0e))
+* **ppt-codec:** read colour-scheme slot bytes via DataView, not indexed access ([49f00df](https://github.com/ExaDev/documents.js/commit/49f00df6b89277cb4bc7bf673c551b81b4d44345))
+* **ppt-codec:** remove three no-op zero-fills from compoundFile ([6cbc0e3](https://github.com/ExaDev/documents.js/commit/6cbc0e3aad38809cb760d25028899b916096fb8a))
+
+### Tests
+
+* **ppt-codec:** add a base64 test suite covering every padding remainder ([a5fa126](https://github.com/ExaDev/documents.js/commit/a5fa126e9c76b3f5a72ecce6e77d3e19612b3f87))
+* **ppt-codec:** add coverage for readExternalOleEmbeds and the OLE embed writer ([076f346](https://github.com/ExaDev/documents.js/commit/076f346fe4657b7b438237717352fdbd65fcdd4b))
+* **ppt-codec:** add direct byte-level coverage for compoundFile ([187c414](https://github.com/ExaDev/documents.js/commit/187c4140491b2be79ea645c694a36185a4d1402b))
+* **ppt-codec:** add direct unit tests for the byte-primitive writers ([8c25d03](https://github.com/ExaDev/documents.js/commit/8c25d03b4d47c8609c0310895d5c60349dccae20))
+* **ppt-codec:** add master-write.ts test coverage for placeholder geometry ([ff96b91](https://github.com/ExaDev/documents.js/commit/ff96b91f8e9efce79699de34ff19310210081ec9))
+* **ppt-codec:** add readDocumentAtom and readFontNames test coverage ([3d0cb92](https://github.com/ExaDev/documents.js/commit/3d0cb92c138771335ed4fa8b9951b6d773ce5d1e))
+* **ppt-codec:** add readSlideListWithText, readTextHeaderAtom, and writeEnvironment coverage ([e8aba81](https://github.com/ExaDev/documents.js/commit/e8aba81e4ffb3c6cfb5b6a7dc6ab2ff6f2408e92))
+* **ppt-codec:** add writeNotesAtom/writeNotesContainer test coverage ([f2fd4e6](https://github.com/ExaDev/documents.js/commit/f2fd4e6b442a9010fd16e228a6126851005860bc))
+* **ppt-codec:** add writeSlideDrawing test coverage for insets, rotation, pib and patriarch framing ([c721edb](https://github.com/ExaDev/documents.js/commit/c721edb5f7cfba9c5faee72ae712c10909c35c3d))
+* **ppt-codec:** assert exact remaining-byte counts in readRecordHeader errors ([9277b4b](https://github.com/ExaDev/documents.js/commit/9277b4bd26cc6302906dc8c98edacdfaabc5aac3))
+* **ppt-codec:** cover each error class's own name and inherited Error shape ([3f68659](https://github.com/ExaDev/documents.js/commit/3f68659c1a187435db7979bad8e52166f2dd0551))
+* **ppt-codec:** cover every readDocumentEncryptionAtom/decryptPptDocumentStream rejection path ([99d1567](https://github.com/ExaDev/documents.js/commit/99d15674e516502dd9fd39551a58ecc30e349a64))
+* **ppt-codec:** cover IMsoArray under-supply and fBid's raw bit ([6b900a4](https://github.com/ExaDev/documents.js/commit/6b900a4a9fc89824c50c5e262984367e1ec77e10))
+* **ppt-codec:** cover mapAlignment's left/right cases and the lineSpacing-0 boundary ([ef82007](https://github.com/ExaDev/documents.js/commit/ef82007eb3b4c6824f08ef5185550fc99447db69))
+* **ppt-codec:** cover readDrawingShapes' rejection paths and rotation boundary ([91d6e1a](https://github.com/ExaDev/documents.js/commit/91d6e1ac36d86b1dfacf4263b699aa86a7780135))
+* **ppt-codec:** cover readPptStreams' malformed-input rejection paths ([f81dba2](https://github.com/ExaDev/documents.js/commit/f81dba22e2e5f07e487f6b30f494a7e3598d860b))
+* **ppt-codec:** cover readTextPFException/readTextCFException's unprojected skip fields ([f419cfa](https://github.com/ExaDev/documents.js/commit/f419cfa54a7a6584559e2f1fdf11606102c29471))
+* **ppt-codec:** cover shapes.ts' own record-type and identity guards ([6976f3c](https://github.com/ExaDev/documents.js/commit/6976f3c15828e40888fa5c6d0e22c4cc9d0f3e82))
+* **ppt-codec:** cover writeDocumentAtom's recVer stamp and mirrored notes size ([8ddff43](https://github.com/ExaDev/documents.js/commit/8ddff4357ac9cd376ef37d05e4ae6fbfbccc308b))
+* **ppt-codec:** cover writeTableGroup's row-height distribution and span diagnostics ([1ad027d](https://github.com/ExaDev/documents.js/commit/1ad027de37645587d3e6905ff541f87dbb996128))
+* **ppt-codec:** exercise cRefIsZero's four bytes through the delay-stream path ([4dac428](https://github.com/ExaDev/documents.js/commit/4dac4289f9c89ed680a8e2e102eefbd4278c59c9))
+* **ppt-codec:** extend the synthetic presentation fixture with malformed-input options ([c95ccda](https://github.com/ExaDev/documents.js/commit/c95ccda35cdf67e5cadbfc1d49f533a33bd4518f))
+* **ppt-codec:** pin buildParagraphs' cross-paragraph run slicing ([3c37839](https://github.com/ExaDev/documents.js/commit/3c378396b7d6a67b679a8d8ad3f992f3bac997aa))
+* **ppt-codec:** pin CF_POSITION's skip and the explicit-level boundary ([9082948](https://github.com/ExaDev/documents.js/commit/908294867a318cb52465ee17aa5bf233edb7febb))
+* **ppt-codec:** pin DocumentEncryptionAtom's own length boundaries ([cf23692](https://github.com/ExaDev/documents.js/commit/cf23692793bb6eda55807f2a757f1d59c976f2ce))
+* **ppt-codec:** pin every default value and empty-branch fallback the fixture states ([3bbb855](https://github.com/ExaDev/documents.js/commit/3bbb855e231bdef844114e003c53d907ab57c8f4))
+* **ppt-codec:** pin persist directory error messages and offsets ([b294e7c](https://github.com/ExaDev/documents.js/commit/b294e7ca2d069265a19e64e1c8f2e20022a587ed))
+* **ppt-codec:** pin PptUnsupportedContentError messages for malformed dates ([82c0cb0](https://github.com/ExaDev/documents.js/commit/82c0cb034e81ba7acf399e39895ea675433b9aa9))
+* **ppt-codec:** pin readNotesAtom/readNotesContainerAtom error messages ([f96cf00](https://github.com/ExaDev/documents.js/commit/f96cf00d2ee5742bfebf84a9b10fb1ea1f18ad6c))
+* **ppt-codec:** pin readNotesListWithText's error messages and sibling-skip ([d15ab2d](https://github.com/ExaDev/documents.js/commit/d15ab2d7fdbd14613129fa4b7b18be4231bafd00))
+* **ppt-codec:** pin readRecordAt/readRecordSequence error message text ([767fd96](https://github.com/ExaDev/documents.js/commit/767fd96c6d3be1af0d6ea42c814f20f8d9cca817))
+* **ppt-codec:** pin readShapeProperties/readIMsoArray error text and byte order ([7f24e3b](https://github.com/ExaDev/documents.js/commit/7f24e3bc6670622b69c6d3d269299285e6f2e500))
+* **ppt-codec:** pin syntheticPresentation's own byte-level fidelity ([2ccf566](https://github.com/ExaDev/documents.js/commit/2ccf56696396ab7251a2bdb70e52a38b0c09e69f))
+* **ppt-codec:** pin the absence of rotationDeg, not just its presence ([c9bf6ad](https://github.com/ExaDev/documents.js/commit/c9bf6ad11bd58a9b74425794585fc06c54d190a9))
+* **ppt-codec:** pin the exact masterIdRef a mismatched slide rejects on ([ecf0497](https://github.com/ExaDev/documents.js/commit/ecf0497676afa80cdf588689f882de7b0ce4745c))
+* **ppt-codec:** prove an empty notes body contributes no separator ([6a798de](https://github.com/ExaDev/documents.js/commit/6a798de211e9842eb75d6ab1b1009718af7ecedb))
+* **ppt-codec:** prove OLE embed lookups filter by record identity ([fb99668](https://github.com/ExaDev/documents.js/commit/fb99668c8c9603d48ab6a6506c1a7c656133b45a))
+* **ppt-codec:** prove readFontNames skips by record type, not length ([34078e9](https://github.com/ExaDev/documents.js/commit/34078e986ade2704109ff8660f1d0a771da1761e))
+* **ppt-codec:** round-trip explicit-false character flags and scheme colour ([7751b54](https://github.com/ExaDev/documents.js/commit/7751b5430999a7d9e747aec8e5b3bf33057602d5))
+
+### Miscellaneous Chores
+
+* **ppt-codec:** raise the mutation break threshold to 100 ([889fb9d](https://github.com/ExaDev/documents.js/commit/889fb9d714674213b0993f2e76c91d29f59cb29b))
+
+
+### Dependencies
+
+- Updated archive-codec to 1.11.3
+
 ## [1.7.4](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.7.3...ppt-codec%401.7.4) (2026-09-13)
 
 
