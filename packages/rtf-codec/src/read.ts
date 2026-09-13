@@ -2172,22 +2172,24 @@ function applyFormFieldControlWord(
   param: number | undefined,
   formField: FormFieldState,
 ): boolean {
+  // Each case falls through to the single return true below rather than returning true itself: the return value's own truth is never independently observable per case (nothing downstream distinguishes "ffres handled this" from "ffdefres handled this", only "some case here did"), so one shared return after the switch is both simpler and leaves no per-case boolean literal for a mutation to hide behind unobserved.
   switch (name) {
     case "ffres":
       formField.resultIndex = formFieldValueNumber(param);
-      return true;
+      break;
     case "ffdefres":
       formField.defaultResultIndex = formFieldValueNumber(param);
-      return true;
+      break;
     case "ffprot":
       formField.protectedField = formFieldValueBit(param);
-      return true;
+      break;
     case "ffownhelp":
       formField.ownHelp = toggleValue(param);
-      return true;
+      break;
     default:
       return false;
   }
+  return true;
 }
 
 function applyCharacterControlWord(
@@ -2196,44 +2198,45 @@ function applyCharacterControlWord(
   state: GroupState,
   header: RtfHeader,
 ): boolean {
+  // Each case falls through to the single return true below (see applyFormFieldControlWord's own identical comment for why): the return value's own truth is never independently observable per case, only "some case here matched".
   switch (name) {
     case "plain":
       state.char = defaultCharacterState();
-      return true;
+      break;
     case "b":
       state.char.bold = toggleValue(param);
-      return true;
+      break;
     case "i":
       state.char.italic = toggleValue(param);
-      return true;
+      break;
     case "strike":
       state.char.strike = toggleValue(param);
-      return true;
+      break;
     case "v":
       state.char.hidden = toggleValue(param);
-      return true;
+      break;
     case "ulnone":
       state.char.underline = false;
-      return true;
+      break;
     case "f":
       state.char.fontIndex = param ?? header.defaultFontIndex;
-      return true;
+      break;
     case "fs":
       state.char.sizeHalfPoints = param ?? DEFAULT_FONT_SIZE_HALF_POINTS;
-      return true;
+      break;
     case "cf":
       state.char.colorIndex = param;
-      return true;
+      break;
     case "uc":
       if (param !== undefined && param >= 0) state.uc = param;
-      return true;
+      break;
     // RTF 1.9.1, "Font (Character) Formatting Properties": "\super Superscripts text and shrinks point size according to font information." / "\sub Subscripts text ...". Both are bare on-words -- neither carries the asterisk that section's own preamble gives the words that "can be turned off by appending 0" (\b*, \ul*, ...), so a parameter is not consulted here: the off-spelling the spec itself names is \nosupersub below, and a group's closing brace or \plain turns the property off the same way every other character property here does.
     case "super":
       state.char.verticalAlign = "superscript";
-      return true;
+      break;
     case "sub":
       state.char.verticalAlign = "subscript";
-      return true;
+      break;
     // "\upN Move up N half-points (default is 6)." / "\dnN Move down N half-points (default is 6)." -- the offset spellings, where the sign decides the family and zero restores the baseline (a move of no half-points is no move at all, so \up0/\dn0 state baseline as explicitly as their absence does). A negative \upN genuinely moves text down and a negative \dnN up, so each crosses onto the other's member rather than being clamped to its own; the "default is 6" makes a bare occurrence a real raise/lower, matching the way applyFormFieldControlWord's own Value-word defaults work.
     case "up":
       state.char.verticalAlign =
@@ -2242,7 +2245,7 @@ function applyCharacterControlWord(
           : param < 0
             ? "subscript"
             : undefined;
-      return true;
+      break;
     case "dn":
       state.char.verticalAlign =
         param === undefined || param > 0
@@ -2250,75 +2253,75 @@ function applyCharacterControlWord(
           : param < 0
             ? "superscript"
             : undefined;
-      return true;
+      break;
     // "\nosupersub Turns off superscripting or subscripting." -- the one off-spelling the spec names for the property, spanning both the \super/\sub and \upN/\dnN families.
     case "nosupersub":
       state.char.verticalAlign = undefined;
-      return true;
+      break;
     // The run-level bidirectional pair (RTF 1.9.1, "Font (Character) Formatting Properties"): "\rtlch Character data following this control word is treated as a right-to-left run" / "\ltrch ... treated as a left-to-right run (the default)". Bare on-words with no off-spelling of their own -- the state they leave is simply whichever of the two was stated last, so a later word replaces an earlier one rather than toggling against it, and a group's close or \plain restores the enclosing state like every other character property here.
     case "rtlch":
       state.char.direction = "rtl";
-      return true;
+      break;
     case "ltrch":
       state.char.direction = "ltr";
-      return true;
+      break;
     // The <chrev> production. Each writes the revision half of the character state, which rides the group stack with the rest of it.
     case "revised":
       state.char.revision = {
         ...state.char.revision,
         revised: toggleValue(param),
       };
-      return true;
+      break;
     case "revauth":
       state.char.revision = { ...state.char.revision, revisedAuthor: param };
-      return true;
+      break;
     case "revdttm":
       state.char.revision = { ...state.char.revision, revisedDateTime: param };
-      return true;
+      break;
     case "deleted":
       state.char.revision = {
         ...state.char.revision,
         deleted: toggleValue(param),
       };
-      return true;
+      break;
     case "revauthdel":
       state.char.revision = { ...state.char.revision, deletedAuthor: param };
-      return true;
+      break;
     case "revdttmdel":
       state.char.revision = { ...state.char.revision, deletedDateTime: param };
-      return true;
+      break;
     case "mvf":
       state.char.revision = {
         ...state.char.revision,
         moved: toggleValue(param) ? "moveFrom" : undefined,
       };
-      return true;
+      break;
     case "mvt":
       state.char.revision = {
         ...state.char.revision,
         moved: toggleValue(param) ? "moveTo" : undefined,
       };
-      return true;
+      break;
     case "mvauth":
       state.char.revision = { ...state.char.revision, movedAuthor: param };
-      return true;
+      break;
     case "mvdate":
       state.char.revision = { ...state.char.revision, movedDateTime: param };
-      return true;
+      break;
     case "crauth":
       state.char.revision = { ...state.char.revision, formatAuthor: param };
-      return true;
+      break;
     case "crdate":
       state.char.revision = { ...state.char.revision, formatDateTime: param };
-      return true;
+      break;
     default:
       // Underline is a family of control words rather than one: "\ul* Continuous underline. \ul0 turns off all underlining" plus a dozen styled variants (\uld, \uldash, \ulth, \ulwave, ...), all of which ContentRun expresses as the one boolean it carries. \ulc (underline colour) is deliberately not one of them.
-      if (name.startsWith("ul") && name !== "ulc") {
-        state.char.underline = toggleValue(param);
-        return true;
+      if (!name.startsWith("ul") || name === "ulc") {
+        return false;
       }
-      return false;
+      state.char.underline = toggleValue(param);
   }
+  return true;
 }
 
 function applyParagraphControlWord(
@@ -2331,59 +2334,61 @@ function applyParagraphControlWord(
     state.para.alignment = alignment;
     return true;
   }
+  // Each case falls through to the single return true below (see applyFormFieldControlWord's own identical comment for why).
   switch (name) {
     case "pard":
       state.para = defaultParagraphState();
-      return true;
+      break;
     case "s":
       state.para.styleIndex = param;
-      return true;
+      break;
     // The paragraph-level bidirectional pair (RTF 1.9.1, "Bidirectional Controls" under "Paragraph Formatting Properties"): "\rtlpar Text in this paragraph will display with right-to-left precedence" / "\ltrpar ... left-to-right precedence (the default)". Bare on-words like \rtlch/\ltrch above -- last stated wins, \pard restores the default.
     case "rtlpar":
       state.para.direction = "rtl";
-      return true;
+      break;
     case "ltrpar":
       state.para.direction = "ltr";
-      return true;
+      break;
     case "outlinelevel":
       // "\outlinelevelN ... a value from 0 to 8 ... In the default case, no outline level is specified (same as body text)." A value above 8 is a producer's own spelling of body text, so it clears the level rather than becoming a tenth heading depth.
       state.para.outlineLevel =
         param === undefined || param > 8 ? undefined : param;
-      return true;
+      break;
     case "li":
     case "lin":
       state.para.indentLeftTwips = param ?? 0;
-      return true;
+      break;
     case "fi":
       state.para.indentFirstLineTwips = param ?? 0;
-      return true;
+      break;
     case "sb":
       state.para.spaceBeforeTwips = param ?? 0;
-      return true;
+      break;
     case "sa":
       state.para.spaceAfterTwips = param ?? 0;
-      return true;
+      break;
     case "sl":
       state.para.lineSpacingTwips = param;
-      return true;
+      break;
     case "slmult":
       state.para.lineSpacingIsMultiple = toggleValue(param);
-      return true;
+      break;
     case "pagebb":
       state.para.pageBreakBefore = true;
-      return true;
+      break;
     case "ls":
       state.para.listOverrideIndex = param;
-      return true;
+      break;
     case "ilvl":
       state.para.listLevel = param ?? 0;
-      return true;
+      break;
     case "intbl":
       state.para.inTable = true;
-      return true;
+      break;
     default:
       return false;
   }
+  return true;
 }
 
 // The <secfmt> production's own properties (RTF 1.9.1, "Section Formatting Properties"). Every one of them is a section-scoped twin of a document-level control word the header parser already reads -- \pgwsxnN beside \paperwN, \marglsxnN beside \marglN -- because RTF states page geometry twice: once for the document and once per section that departs from it.
@@ -2415,28 +2420,30 @@ function applySectionControlWord(
   if (param === undefined) {
     return false;
   }
+  // Each case falls through to the single return true below (see applyFormFieldControlWord's own identical comment for why).
   switch (name) {
     case "pgwsxn":
       section.paperWidthTwips = param;
-      return true;
+      break;
     case "pghsxn":
       section.paperHeightTwips = param;
-      return true;
+      break;
     case "marglsxn":
       section.marginLeftTwips = param;
-      return true;
+      break;
     case "margrsxn":
       section.marginRightTwips = param;
-      return true;
+      break;
     case "margtsxn":
       section.marginTopTwips = param;
-      return true;
+      break;
     case "margbsxn":
       section.marginBottomTwips = param;
-      return true;
+      break;
     default:
       return false;
   }
+  return true;
 }
 
 function applyStructureControlWord(
@@ -2447,34 +2454,35 @@ function applyStructureControlWord(
   section: SectionState,
   sink: RtfDiagnosticSink,
 ): boolean {
+  // Each case falls through to the single return true below (see applyFormFieldControlWord's own identical comment for why).
   switch (name) {
     case "par":
       builder.endParagraph(state.para, true);
-      return true;
+      break;
     case "trowd":
       state.para.inTable = true;
       builder.startRowDefinition();
-      return true;
+      break;
     case "trleft":
       builder.setRowLeft(param ?? 0);
-      return true;
+      break;
     // The row-level bidirectional pair, a <rowwrite> member of the <tbldef> this row's own definition builds (RTF 1.9.1, "Table Row Formatting"): "\rtlrow Cells in this table row will have right-to-left precedence" / "\ltrrow ... left-to-right precedence (the default)". Bare on-words; last stated wins, and \trowd's own startRowDefinition resets the pending row's direction with the rest of its state.
     case "rtlrow":
       builder.setRowDirection("rtl");
-      return true;
+      break;
     case "ltrrow":
       builder.setRowDirection("ltr");
-      return true;
+      break;
     case "cellx":
       if (param !== undefined) builder.addCellBoundary(param);
-      return true;
+      break;
     case "cell":
       builder.endCell(state.para);
-      return true;
+      break;
     case "row":
       builder.endRow(state.para);
       state.para.inTable = false;
-      return true;
+      break;
     case "nestcell":
     case "nestrow":
       // A nested table is read as ordinary cell content rather than a table inside a cell: \nestcell/\nestrow describe the inner row through a {\*\nesttableprops ...} group whose own <tbldef> this reader does not track separately, so promoting it would need a second row builder keyed by \itapN nesting depth.
@@ -2484,19 +2492,20 @@ function applyStructureControlWord(
         message:
           "a nested table's cell/row marks are read as ordinary cell content; the inner table's own structure is not reconstructed",
       });
-      return true;
+      break;
     case "page":
       builder.endParagraph(state.para, false);
       builder.addBlocks([{ kind: "pageBreak" }], state.para.inTable);
-      return true;
+      break;
     case "sect":
       // "\sect End of section and paragraph" -- both, in that order: the paragraph closes into the section that is ending, not into the one about to begin.
       builder.endParagraph(state.para, true);
       builder.endSection(section, state.para);
-      return true;
+      break;
     default:
       return false;
   }
+  return true;
 }
 
 function applyControlWord(
