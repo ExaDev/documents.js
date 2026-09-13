@@ -13,3 +13,13 @@ export class DocUnsupportedError extends Error {
     this.name = "DocUnsupportedError";
   }
 }
+
+// Narrows a value a caller has already proven cannot genuinely be undefined at its own call site, throwing loudly rather than silently substituting a sentinel if that proof is ever wrong -- the writer-side counterpart to this package's read-side malformed-input checks, for an invariant the writer's own logic maintains rather than one the input bytes could violate. Exported for this package's own tests only: a real caller reaches it only where its own invariant already holds, never through input a caller could make fail.
+export function assertDefined<T>(
+  value: T | undefined,
+  message: string,
+): asserts value is T {
+  if (value === undefined) {
+    throw new DocFormatError(message);
+  }
+}
