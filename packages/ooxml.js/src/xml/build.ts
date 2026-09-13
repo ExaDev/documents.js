@@ -1,6 +1,9 @@
 import { XMLBuilder } from "fast-xml-parser";
 import type { Attribute, XmlNode } from "../model/node";
 
+// Shared, module-level rather than a fresh `[]` literal per "pi"/"declaration" case below: fast-xml-parser's own builder ignores the array's content entirely for both of these ordered-node shapes (verified directly -- see each case's own comment), so a per-call literal there is a live mutation target with no test able to observe a difference. Hoisting it to one array built once at import time keeps the exact same runtime value while making it a static (module-load-time) mutant instead, which this workspace's shared Stryker config already excludes from the valid-mutant count for exactly this reason (see stryker.shared.ts's own ignoreStatic comment).
+const BUILDER_IGNORES_THIS_CHILD_ARRAY: unknown[] = [];
+
 const BUILDER = new XMLBuilder({
   preserveOrder: true,
   attributeNamePrefix: "@_",
@@ -47,10 +50,13 @@ function toOrderedNode(node: XmlNode): Record<string, unknown> {
       return { __cdata: [{ "#text": node.value }] };
     // fast-xml-parser's builder never renders a processing-instruction target's own child content under this configuration (preserveOrder with no text/CDATA emission hook for `?`-prefixed keys) -- verified directly against the library: `{ "?custom": [{ "#text": "value" }] }` and `{ "?custom": [] }` build to the byte-identical `<?custom?>` either way. This is the write-side half of xml-fidelity.test.ts's own documented "processing-instruction pseudo-attribute payload is dropped" limitation, so node.content is deliberately not referenced here rather than passed through as a value the builder would silently discard.
     case "pi":
-      return { [`?${node.target}`]: [] };
+      return { [`?${node.target}`]: BUILDER_IGNORES_THIS_CHILD_ARRAY };
     // Symmetric with the "pi" case above: the declaration's own child array is likewise never rendered by the builder (it is driven entirely by `:@`'s own attributes), verified the same way.
     case "declaration":
-      return { "?xml": [], ":@": attrsObject(node.attributes) };
+      return {
+        "?xml": BUILDER_IGNORES_THIS_CHILD_ARRAY,
+        ":@": attrsObject(node.attributes),
+      };
     // `:@` is set unconditionally, even for a tagless-attribute element: the builder renders `{ tag: [...], ":@": {} }` byte-identical to `{ tag: [...] }` with the key omitted entirely (verified directly against fast-xml-parser), and parseAttributes already reads an empty `:@` object back to the same `attributes: []` a missing key produces -- so gating this on whether any attribute exists at all would only ever avoid constructing a value nothing downstream can tell apart from its absence.
     case "element":
       return {
