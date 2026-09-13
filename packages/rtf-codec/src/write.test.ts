@@ -43,6 +43,17 @@ describe("output shape", () => {
     expectBalancedBraces(out);
   });
 
+  it("writes no \\colortbl/\\stylesheet/\\*\\listtable/\\*\\revtbl at all for a document using none of them", () => {
+    // Each of these four tables is genuinely optional -- unlike \fonttbl, which always carries at least the default font -- and each has its own guard against writing an empty destination for nothing.
+    const out = write(
+      wordprocessing([{ kind: "paragraph", runs: [{ text: "x" }] }]),
+    );
+    expect(out).not.toContain("\\colortbl");
+    expect(out).not.toContain("\\stylesheet");
+    expect(out).not.toContain("\\listtable");
+    expect(out).not.toContain("\\revtbl");
+  });
+
   it("emits pure 7-bit ASCII whatever the input contained", () => {
     const out = writeRtfContent(
       wordprocessing([
@@ -116,6 +127,16 @@ describe("escaping", () => {
     expect(out).toContain("a b~c");
     expect(out).not.toContain("\\u32");
     expect(out).not.toContain("\\u126");
+  });
+
+  it("escapes a control character below the printable-ASCII range's own lower bound as \\uN", () => {
+    // 0x01 is not one of the specially-cased \t/\n/\r control characters, so it reaches the >= 0x20 check directly -- it must not pass through raw.
+    const out = write(
+      wordprocessing([
+        { kind: "paragraph", runs: [{ text: `a${String.fromCharCode(1)}b` }] },
+      ]),
+    );
+    expect(out).toContain("\\u1 ?");
   });
 
   it("escapes 0x7F (DEL), one past the printable-ASCII range's own upper bound, as \\uN", () => {
@@ -241,6 +262,10 @@ describe("header tables", () => {
     expect(out).toContain("\\levelnfc23");
     expect(out).toContain("{\\*\\listoverridetable");
     expect(out).toContain("\\ls1\\ilvl0");
+    // \listhybrid requires exactly nine levels, each indented one step further than the last (LIST_LEVEL_INDENT_TWIPS * (level + 1)) -- the first at one step, the ninth at nine.
+    expect(out.match(/\\listlevel/g)).toHaveLength(9);
+    expect(out).toContain(`\\li${String(720 * 1)}\\lin${String(720 * 1)}`);
+    expect(out).toContain(`\\li${String(720 * 9)}\\lin${String(720 * 9)}`);
   });
 
   it("mints an arabic level for an ordered numId", () => {
@@ -3148,6 +3173,28 @@ describe("round trip through this package's own reader", () => {
     );
     expect(out).not.toContain("\\revised");
     expect(out).not.toContain("\\deleted");
+  });
+
+  it("still writes a real {\\*\\bkmkstart ...} for a bookmark alongside an unrelated construct, rather than misreading the bookmark as a contentControl extent", () => {
+    // isContentControlExtent gates selectNestableFormFields' own input -- a bookmark wrongly let through would be handed to formFieldOpenGroup, which has no controlType field to read on an AnchorDescriptor at all.
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }, { text: "b" }],
+          constructs: [
+            {
+              descriptor: { kind: "anchor", anchorType: "bookmark", name: "x" },
+              startRun: 0,
+              endRun: 2,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("{\\*\\bkmkstart x}");
+    expect(out).not.toContain("\\field");
+    expectBalancedBraces(out);
   });
 
   it("mints a \\*\\revtbl entry for a block-scoped provenance marker's own author too, not only a run-level extent's", () => {
