@@ -51,14 +51,25 @@ describe("parseChpxFkp", () => {
     expect(fkp.grpprl(0)).toBeUndefined();
   });
 
+  it("names 'Chpx for ChpxFkp run 0' when a run's own declared cb runs past the page", () => {
+    const page = buildChpxFkp([{ fc: 0x400, grpprl: [9] }], 0x402);
+    // The record this fixture actually wrote is [cb=1, 0x09] at page[508..509] (the very end of the page, once padded to an even byte); declaring a cb far too large for the room actually left forces the slice past FKP_PAGE_SIZE.
+    expect(page[FKP_PAGE_SIZE - 4]).toBe(1);
+    page[FKP_PAGE_SIZE - 4] = 200;
+    const fkp = parseChpxFkp(page);
+    expect(() => fkp.grpprl(0)).toThrow(/Chpx for ChpxFkp run 0/);
+  });
+
   it("rejects a negative run index", () => {
     const fkp = parseChpxFkp(buildChpxFkp([{ fc: 0x400 }], 0x410));
-    expect(() => fkp.grpprl(-1)).toThrow(DocFormatError);
+    expect(() => fkp.grpprl(-1)).toThrow(/covers 1 runs; run -1 was requested/);
   });
 
   it("rejects a non-integer run index", () => {
     const fkp = parseChpxFkp(buildChpxFkp([{ fc: 0x400 }], 0x410));
-    expect(() => fkp.grpprl(0.5)).toThrow(DocFormatError);
+    expect(() => fkp.grpprl(0.5)).toThrow(
+      /covers 1 runs; run 0.5 was requested/,
+    );
   });
 
   it("rejects a run index equal to crun", () => {
@@ -122,6 +133,18 @@ describe("parsePapxFkp", () => {
     const record = fkp.papx(0);
     expect(record?.istd).toBe(7);
     expect(record?.grpprl).toEqual(new Uint8Array([0x2a, 0x24, 0x01]));
+  });
+
+  it("names 'grpprl of PapxInFkp for paragraph 0' when the declared cb runs past the page", () => {
+    const page = buildPapxFkp(
+      [{ fc: 0x400, istd: 7, grpprl: [0x2a, 0x24, 0x01] }],
+      0x410,
+    );
+    // This fixture actually wrote cb=3 (the one-byte spelling) at page[504]; declaring a cb far too large for the room actually left forces the grpprl slice past FKP_PAGE_SIZE.
+    expect(page[FKP_PAGE_SIZE - 8]).toBe(3);
+    page[FKP_PAGE_SIZE - 8] = 200;
+    const fkp = parsePapxFkp(page);
+    expect(() => fkp.papx(0)).toThrow(/grpprl of PapxInFkp for paragraph 0/);
   });
 
   it("reads a paragraph's own istd and grpprl through the even-length (cb') spelling", () => {
@@ -193,12 +216,16 @@ describe("parsePapxFkp", () => {
 
   it("rejects a negative paragraph index", () => {
     const fkp = parsePapxFkp(buildPapxFkp([{ fc: 0x400, istd: 0 }], 0x410));
-    expect(() => fkp.papx(-1)).toThrow(DocFormatError);
+    expect(() => fkp.papx(-1)).toThrow(
+      /covers 1 paragraphs; paragraph -1 was requested/,
+    );
   });
 
   it("rejects a non-integer paragraph index", () => {
     const fkp = parsePapxFkp(buildPapxFkp([{ fc: 0x400, istd: 0 }], 0x410));
-    expect(() => fkp.papx(0.5)).toThrow(DocFormatError);
+    expect(() => fkp.papx(0.5)).toThrow(
+      /covers 1 paragraphs; paragraph 0.5 was requested/,
+    );
   });
 
   it("rejects a paragraph index equal to cpara", () => {
@@ -262,6 +289,17 @@ describe("PropertyBinTable", () => {
       "PlcBteChpx",
     );
     expect(bin.chpxGrpprl(0x410)).toBeUndefined();
+  });
+
+  it("names 'formatted disk page 5' when the bin table names a page number the WordDocument stream is too short to hold", () => {
+    // A one-page WordDocument (page 0 only), but the bin table's own entry names page 5 -- resolving it slices FKP_PAGE_SIZE bytes at an offset the stream does not reach.
+    const wordDocument = new Uint8Array(FKP_PAGE_SIZE);
+    const bin = new PropertyBinTable(
+      wordDocument,
+      buildBinTable([0x400, 0x410], [5]),
+      "PlcBteChpx",
+    );
+    expect(() => bin.chpxGrpprl(0x408)).toThrow(/formatted disk page 5/);
   });
 
   it("resolves chpxGrpprl for an fc inside the bin table's own range", () => {
