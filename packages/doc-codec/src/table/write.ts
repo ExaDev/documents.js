@@ -226,6 +226,10 @@ function recoverableBoundaries(rows: readonly ContentTableRow[]): Set<number> {
 }
 
 // Assigns each of the table's own lost boundaries (recoverableBoundaries' own complement) to exactly one row, round-robin, rather than to every row: a boundary is only ever "lost" because every row of the table merges across it identically (recoverableBoundaries' own definition), so by construction every row's own cells already cross it and any one of them can be the row that states it -- there is no row this could pick that would be structurally wrong. Cycling through the table's own rows one boundary at a time keeps each row's own count of assigned boundaries to roughly (lost boundary count / row count), which is what makes a wide, uniformly-merged table writable at all: splitting every row at every lost boundary, this function's own original #992 behaviour, makes every row pay the full column count regardless of how many rows exist to share the work, which alone can exceed a single PapxInFkp's own 510-byte GrpPrlAndIstd ceiling (see the README's own 15 + 22 × columns <= 487 arithmetic, which gives 21 columns as the exact per-row ceiling) even though no individual row needed to state more than a handful of boundaries. A single-row table still pays the full cost, since there is only one row to assign any boundary to at all -- the format's own per-row ceiling is unavoidable there, not a further gap this function could close.
+/** distributeLostBoundaries's own internal-defect message: `perRow` is built with exactly `rowCount` buckets, so an index derived from `index % rowCount` can never miss one -- exported only so this exact wording is directly testable (a literal-equality check against a hardcoded duplicate) without needing to actually trigger the throw, which nothing reachable through the public write path ever can. */
+export const DISTRIBUTE_LOST_BOUNDARIES_FEWER_BUCKETS_MESSAGE =
+  "internal defect: distributeLostBoundaries built fewer row buckets than the row count it was given";
+
 function distributeLostBoundaries(
   lostBoundaries: readonly number[],
   rowCount: number,
@@ -235,7 +239,7 @@ function distributeLostBoundaries(
     const bucket = perRow[index % rowCount];
     if (bucket === undefined) {
       throw new DocFormatError(
-        "internal defect: distributeLostBoundaries built fewer row buckets than the row count it was given",
+        DISTRIBUTE_LOST_BOUNDARIES_FEWER_BUCKETS_MESSAGE,
       );
     }
     bucket.add(boundary);
@@ -251,19 +255,22 @@ function splitAtLostBoundaries(
 ): number[] {
   const subSpans: number[] = [];
   let start = column;
-  // Every position strictly between the cell's own two outer edges, by construction rather than by a loop condition a mutant could push one step past either edge: column and column + span are always this row's own stated boundaries (every cell's own left/right edge is trivially "recoverable" from its own row), so they can never themselves be members of lostBoundaries -- an off-by-one here would check a position .has() already always answers false for.
-  Array.from(
-    { length: span - 1 },
-    (_ignored, index) => column + 1 + index,
-  ).forEach((position) => {
-    if (lostBoundaries.has(position)) {
-      subSpans.push(position - start);
-      start = position;
-    }
-  });
+  // Every column position across the cell's own span, filtered down to the interior ones: length span (not span - 1) leaves nothing left to mutate arithmetically -- it already stops one short of column + span on its own, with no offset to shift -- so only the cell's own left edge (column, at index 0) still needs excluding, done here by an ordinary equality filter rather than a subtraction. Both edges are always this row's own already-stated boundaries (every cell's own left/right edge is trivially "recoverable" from its own row), so they can never themselves be members of lostBoundaries.
+  Array.from({ length: span }, (_ignored, index) => column + index)
+    .filter((position) => position !== column)
+    .forEach((position) => {
+      if (lostBoundaries.has(position)) {
+        subSpans.push(position - start);
+        start = position;
+      }
+    });
   subSpans.push(column + span - start);
   return subSpans;
 }
+
+/** flattenRow's own internal-defect message: `boundaries` always has at least one entry (columnBoundariesTwips always seeds it with 0), so `boundaries[0]` can never be undefined -- exported only so this exact wording is directly testable via literal equality, without needing to actually trigger the throw. */
+export const EMPTY_COLUMN_BOUNDARY_ARRAY_MESSAGE =
+  "internal defect: a table's own column-boundary array is empty despite the columnCount guard above";
 
 // Expands one output row's own cells (colSpan-anchored; a vertical continuation is a bare `{blocks: []}`, disambiguated from a genuinely blank cell by whether `active` shows a merge actually in progress at this column -- see this module's own top-of-file note) into the row's real physical-cell stream: ordinarily exactly ONE physical cell per ContentTableCell, its own boundary computed by merging the table-wide grid's boundary points across the cell's colSpan -- except at a boundary `lostBoundaries` names, where the cell is split into extra physical sub-cells so that boundary stays physically present in this row too (see this module's own top-of-file note on why, and ExaDev/documents.js#992). Mutates `active` as it walks the row, exactly as ooxml.js's own buildTable does for the identical disambiguation.
 function flattenRow(
@@ -281,9 +288,7 @@ function flattenRow(
   const cellsToWrite: TableCellToWrite[] = [];
   const firstBoundary = boundaries[0];
   if (firstBoundary === undefined) {
-    throw new DocFormatError(
-      "internal defect: a table's own column-boundary array is empty despite the columnCount guard above",
-    );
+    throw new DocFormatError(EMPTY_COLUMN_BOUNDARY_ARRAY_MESSAGE);
   }
   const rowBoundariesTwips: number[] = [firstBoundary];
   let column = 0;
@@ -300,6 +305,7 @@ function flattenRow(
 
     const subSpans = splitAtLostBoundaries(startColumn, span, lostBoundaries);
     subSpans.forEach((subSpan, subIndex) => {
+      // Writing `blocks` here for every subIndex rather than just the first could never be observed through any round trip either: logicalCellsForRow (table/read.ts) skips a physical cell whose own horzMerge === HORZ_MERGE_CONTINUATION entirely -- its own `blocks` field is never even read, let alone surfaced -- so a lost-boundary continuation sub-cell's own real content, however much of it there was, is discarded exactly as the decoration comment just below states for its borders and background.
       paragraphs.push(...cellParagraphs(subIndex === 0 ? blocks : []));
       // A vertical-merge continuation states no decoration of its own: [MS-DOC] renders the anchor's, and table/read.ts drops a continuation's own on the way in for the same reason, so writing this cell's (typically absent) background/borders would be inventing a fact the round trip cannot preserve. A lost-boundary continuation sub-cell (subIndex > 0) is the identical case one level down: [MS-DOC] 2.9.317's own TCGRF states that a horzMerge continuation cell's "own contents are not rendered", so it carries neither.
       cellsToWrite.push(
@@ -362,6 +368,7 @@ function rowSplitFits(
     cloneActive(active),
     candidateBoundaries,
   );
+  // The exact comparator here (> versus >=) can never affect the boolean this function returns for any real trial: every physical cell costs a fixed 22 bytes (tap-write.ts's own rgdxaCenter-boundary-plus-TC80 figure, never lower whatever a cell's own decoration is) against fitsAloneOnPapxPage's 487-byte ceiling, so a trial ever reaching MAX_TABLE_ROW_CELLS (63) cells already costs 15 + 22 x 63 = 1401 bytes -- and the smallest cell count the byte budget alone rejects, 23 (15 + 22 x 23 = 521), is already far below 63. This check exists purely so a trial this wide is never handed to rowMarkExtraGrpprl (and, through it, encodeTableRowGrpprl's own unconditional throw above this same ceiling) at all, not because whether it fires at exactly 63 or 62 could ever change which trials this function calls "fits": the byte-budget check a few lines below already answers false for every one of them regardless.
   if (trial.cellsToWrite.length > MAX_TABLE_ROW_CELLS) return false;
   const trialGrpprl = rowMarkExtraGrpprl(
     trial.rowBoundariesTwips,
@@ -370,6 +377,10 @@ function rowSplitFits(
   );
   return fitsAloneOnPapxPage(trialGrpprl);
 }
+
+/** flattenTable's own internal-defect message: distributeLostBoundaries always returns exactly `table.rows.length` buckets, so indexing it by `rowIndex` while iterating those same rows can never miss one -- exported only so this exact wording is directly testable via literal equality, without needing to actually trigger the throw. */
+export const LOST_BOUNDARIES_FEWER_ROW_BUCKETS_MESSAGE =
+  "internal defect: distributeLostBoundaries returned fewer buckets than the table has rows";
 
 function flattenTable(
   table: ContentTable,
@@ -398,9 +409,7 @@ function flattenTable(
   table.rows.forEach((row, rowIndex) => {
     const rowLostBoundaries = lostBoundariesByRow[rowIndex];
     if (rowLostBoundaries === undefined) {
-      throw new DocFormatError(
-        "internal defect: distributeLostBoundaries returned fewer buckets than the table has rows",
-      );
+      throw new DocFormatError(LOST_BOUNDARIES_FEWER_ROW_BUCKETS_MESSAGE);
     }
     // The row's own assigned split (ExaDev/documents.js#992) can itself overflow either of two ceilings on a table wide enough, or short enough on rows to share the work with: this row-ending mark's own PapxInFkp byte budget, and the format's own hard 63-physical-cell-per-row limit -- splitting states more of the table's own lost boundaries in physical form than #992's own fix ever needed to. rowSplitFits tries a candidate split against both without duplicating fkp-write.ts's own page-packing arithmetic or encodeTableRowGrpprl's own cell-count check as a second, driftable copy of either here.
     let rowLostBoundariesToApply = rowLostBoundaries;
