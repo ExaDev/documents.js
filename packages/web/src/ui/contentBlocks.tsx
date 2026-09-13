@@ -114,17 +114,17 @@ export function buildListForest(
   items: readonly ContentParagraph[],
 ): ListItemNode[] {
   const root: ListItemNode[] = [];
-  const stack: { level: number; children: ListItemNode[] }[] = [
-    { level: -1, children: root },
-  ];
+  // No sentinel frame for the root: every real frame's own level is genuinely compared against incoming items, so an empty stack (rather than a stack seeded with a synthetic below-every-real-level entry) means "attach to root" -- the frame that IS on top, when there is one, is always a real item.
+  const stack: { level: number; children: ListItemNode[] }[] = [];
   for (const item of items) {
     const level = item.list?.level ?? 0;
     const ordered = item.list?.numId?.startsWith("ordered:") ?? false;
     const node: ListItemNode = { runs: item.runs, ordered, children: [] };
-    while (stack.length > 1 && stack[stack.length - 1]!.level >= level) {
+    while (stack.length > 0 && stack[stack.length - 1]!.level >= level) {
       stack.pop();
     }
-    stack[stack.length - 1]!.children.push(node);
+    const parent = stack[stack.length - 1];
+    (parent?.children ?? root).push(node);
     stack.push({ level, children: node.children });
   }
   return root;
@@ -164,9 +164,10 @@ export function collectBlockGroups(
 // --- Complete neutral block renderer (shared by WordProcessingPreview and SlidesPreview) ---
 
 // A page break rendered as a layout event, not document content -- distinct from the horizontal-rule styling above. Shared by the standalone "pageBreak" block kind (docx's own w:pageBreakBefore, spliced in as a preceding block by ooxml.js's reader) and by a paragraph's own pageBreakBefore/pageBreakAfter flags (ODF's fo:break-before/fo:break-after, which odf.js surfaces onto the paragraph itself rather than as a separate block -- see ContentParagraphSchema's own doc comment on why the two formats encode the identical concept two different ways).
-function renderPageBreak(key?: string): ReactNode {
+// Takes no key: both call sites below place this directly as a named JSX child (never inside an array/.map()), and React only requires a key to identify same-type siblings produced from an iterable -- a directly-written conditional child needs none.
+function renderPageBreak(): ReactNode {
   return (
-    <div key={key} className={pageBreakStyle} role="separator">
+    <div className={pageBreakStyle} role="separator">
       Page break
     </div>
   );
@@ -184,7 +185,10 @@ const EMBEDDED_OBJECT_LABELS: Record<ContentEmbeddedObjectKind, string> = {
 
 // The styleId-dispatch half of a paragraph's rendering, factored out of renderBlockNeutral so the pageBreakBefore/pageBreakAfter wrapping below applies uniformly regardless of which shape the paragraph's own content takes.
 function renderParagraphContent(block: ContentParagraph): ReactNode {
-  const match = HEADING_STYLE_PATTERN.exec(block.styleId ?? "");
+  const match =
+    block.styleId === undefined
+      ? null
+      : HEADING_STYLE_PATTERN.exec(block.styleId);
   if (match !== null) {
     const Tag = HEADING_TAGS[Number(match[1])];
     if (Tag !== undefined)
@@ -211,13 +215,12 @@ function renderParagraphContent(block: ContentParagraph): ReactNode {
 function renderBlockNeutral(block: ContentBlock): ReactNode {
   if (block.kind === "paragraph") {
     const content = renderParagraphContent(block);
-    if (block.pageBreakBefore !== true && block.pageBreakAfter !== true)
-      return content;
+    // No early return for "neither flag set": rendering the Fragment unconditionally is already a no-op in that case (each `=== true &&` guard below renders nothing), so a separate short-circuiting branch would only ever produce byte-identical output to this one -- never a genuinely different one to test for.
     return (
       <>
-        {block.pageBreakBefore === true && renderPageBreak("before")}
+        {block.pageBreakBefore === true && renderPageBreak()}
         {content}
-        {block.pageBreakAfter === true && renderPageBreak("after")}
+        {block.pageBreakAfter === true && renderPageBreak()}
       </>
     );
   }
@@ -260,7 +263,8 @@ function renderListNodesNeutral(nodes: readonly ListItemNode[]): ReactNode {
         className={group.ordered ? undefined : neutralListItem}
       >
         {renderRuns(node.runs)}
-        {node.children.length > 0 && renderListNodesNeutral(node.children)}
+        {/* No length guard: mapping an empty children array already renders nothing, so gating the call on length > 0 first is a no-op check around an already-no-op call. */}
+        {renderListNodesNeutral(node.children)}
       </li>
     ));
     return group.ordered ? (

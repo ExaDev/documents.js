@@ -87,6 +87,7 @@ describe("renderBlocksNeutral", () => {
     const textIndex = html.indexOf("after the break");
     expect(breakIndex).toBeGreaterThanOrEqual(0);
     expect(breakIndex).toBeLessThan(textIndex);
+    expect(html.match(/Page break/g)).toHaveLength(1);
   });
 
   it("renders a paragraph's pageBreakAfter flag as a break marker following its own content", () => {
@@ -100,6 +101,7 @@ describe("renderBlocksNeutral", () => {
     const textIndex = html.indexOf("before the break");
     expect(textIndex).toBeGreaterThanOrEqual(0);
     expect(breakIndex).toBeGreaterThan(textIndex);
+    expect(html.match(/Page break/g)).toHaveLength(1);
   });
 
   it("renders both pageBreakBefore and pageBreakAfter on the same paragraph", () => {
@@ -216,6 +218,22 @@ describe("renderBlocksNeutral", () => {
     expect(html).not.toContain("<math");
   });
 
+  it("renders the objectKind's own placeholder, not MathML, when the document happens to be a formula document but objectKind says otherwise", () => {
+    const block: ContentEmbeddedObjectBlock = {
+      kind: "embeddedObject",
+      objectKind: "wordprocessing",
+      frame: FRAME,
+      document: {
+        kind: "formula",
+        metadata: {},
+        formula: { mathml: [] },
+      },
+    };
+    const html = renderBlocks([block]);
+    expect(html).toContain("Embedded document");
+    expect(html).not.toContain("<math");
+  });
+
   it("renders a heading styleId as its own heading tag, for every level 1-6", () => {
     for (const level of [1, 2, 3, 4, 5, 6] as const) {
       const html = renderBlocks([
@@ -327,7 +345,10 @@ describe("renderBlocksNeutral", () => {
         list: { numId: "ordered:1", level: 0 },
       }),
     ]);
-    expect(html).toContain("<ol");
+    expect(html.match(/<ol/g)).toHaveLength(1);
+    expect(html.match(/<li/g)).toHaveLength(2);
+    expect(html).toContain(">one<");
+    expect(html).toContain(">two<");
     expect(html).not.toContain("<ul");
     expect(html).not.toContain("neutralListItem");
   });
