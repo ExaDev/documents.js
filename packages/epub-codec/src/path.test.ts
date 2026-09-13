@@ -41,4 +41,27 @@ describe("resolvePackagePath", () => {
       "https://example.com/x.png",
     );
   });
+
+  it("recognises a scheme carrying every character class the scheme regex allows (letters, digits, +, ., -)", () => {
+    expect(resolvePackagePath("OEBPS", "epub+zip.v2-1://x")).toBe(
+      "epub+zip.v2-1://x",
+    );
+  });
+
+  it("does not treat a leading digit as a scheme, and resolves it as a relative reference instead", () => {
+    // A URI scheme must start with a letter -- a leading digit makes this a relative segment named "1http", not a scheme.
+    expect(resolvePackagePath("OEBPS", "1http://x")).toBe("OEBPS/1http:/x");
+  });
+
+  it('drops an explicit current-directory (".") segment', () => {
+    expect(resolvePackagePath("OEBPS", "./chapter1.xhtml")).toBe(
+      "OEBPS/chapter1.xhtml",
+    );
+  });
+
+  it("drops an empty segment produced by a doubled slash", () => {
+    expect(resolvePackagePath("OEBPS", "images//cover.png")).toBe(
+      "OEBPS/images/cover.png",
+    );
+  });
 });
