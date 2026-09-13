@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { Package } from "../../model/package";
 import type { XmlElement } from "../../model/node";
 import { el, txt } from "../../xml/fragment";
-import { readDrawObjectReference } from "./embedded";
+import {
+  normaliseObjectHref,
+  readDrawObjectReference,
+  readEmbeddedObjectDocument,
+  type EmbeddedDrawObject,
+} from "./embedded";
 
 // The real shape this reader targets is proven end to end against genuine LibreOffice output in typed/ods/read.test.ts (src/typed/ods/fixtures/sheet-anchors.ods, a real Calc sheet with a real embedded Draw document anchored to a cell, and src/typed/ods/fixtures/sheet-formula.ods, the same with a real Math object). This suite covers the reference-resolution edges those files cannot: a linked (not embedded) object, a broken href, and each representable/unrepresentable body kind.
 
@@ -190,5 +195,153 @@ describe("readDrawObjectReference", () => {
     );
     expect(reference?.href).toBe("Object 1");
     expect(reference?.objectKind).toBe("wordprocessing");
+  });
+});
+
+describe("normaliseObjectHref", () => {
+  it("accepts a plain relative directory name unchanged", () => {
+    expect(normaliseObjectHref("Object 1")).toBe("Object 1");
+  });
+
+  it("strips a leading './' and a trailing '/'", () => {
+    expect(normaliseObjectHref("./Object 1/")).toBe("Object 1");
+  });
+
+  it("rejects an empty href, once the './' prefix and trailing '/' are stripped away", () => {
+    expect(normaliseObjectHref("./")).toBeUndefined();
+    expect(normaliseObjectHref("")).toBeUndefined();
+  });
+
+  it('rejects a href starting with ".." after stripping, even when it is not otherwise empty, absolute, or a URL', () => {
+    expect(normaliseObjectHref("../sibling")).toBeUndefined();
+    expect(normaliseObjectHref("..")).toBeUndefined();
+  });
+
+  it("rejects an absolute path (leading '/'), even when it is not otherwise empty, '..'-prefixed, or a URL", () => {
+    expect(normaliseObjectHref("/Object 1")).toBeUndefined();
+  });
+
+  it('rejects any href containing "://", even a relative-looking one with no leading "..", "/", or emptiness', () => {
+    expect(normaliseObjectHref("weird://Object 1")).toBeUndefined();
+  });
+
+  it("checks the START of the string for '..' and '/', not the end, so a name merely ending with either is accepted unchanged", () => {
+    expect(normaliseObjectHref("Object 1/..")).toBe("Object 1/.."); // ends with ".." but does not START with it
+    expect(normaliseObjectHref("folder..")).toBe("folder.."); // ditto
+    // "a//" has only ONE trailing slash stripped by the earlier, separate trailing-slash removal above, leaving "a/" -- which still itself ends with "/" without starting with it, isolating startsWith("/") from a wrongly-substituted endsWith("/") the way the first two cases isolate startsWith("..") from endsWith("..").
+    expect(normaliseObjectHref("a//")).toBe("a/");
+  });
+});
+
+const EMBED_FRAME = { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 };
+
+function embeddedReferenceOf(
+  objectKind: EmbeddedDrawObject["objectKind"],
+  bodyChild: XmlElement,
+): EmbeddedDrawObject {
+  return {
+    objectKind,
+    href: "Object 1",
+    package: { parts: { "content.xml": subDocumentPart(bodyChild) } },
+  };
+}
+
+describe("readEmbeddedObjectDocument", () => {
+  it('dispatches "wordprocessing" to readOdtContent', () => {
+    const reference = embeddedReferenceOf("wordprocessing", el("office:text"));
+    const { document, residue } = readEmbeddedObjectDocument(
+      reference,
+      EMBED_FRAME,
+      "odt",
+    );
+    expect(document.kind).toBe("wordprocessing");
+    expect(residue).toBeUndefined();
+  });
+
+  it('dispatches "presentation" to readOdpContent', () => {
+    const reference = embeddedReferenceOf(
+      "presentation",
+      el("office:presentation"),
+    );
+    const { document, residue } = readEmbeddedObjectDocument(
+      reference,
+      EMBED_FRAME,
+      "odt",
+    );
+    expect(document.kind).toBe("presentation");
+    expect(residue).toBeUndefined();
+  });
+
+  it('dispatches "drawing" to readOdgContent', () => {
+    const reference = embeddedReferenceOf("drawing", el("office:drawing"));
+    const { document, residue } = readEmbeddedObjectDocument(
+      reference,
+      EMBED_FRAME,
+      "odt",
+    );
+    expect(document.kind).toBe("drawing");
+    expect(residue).toBeUndefined();
+  });
+
+  it('dispatches "spreadsheet" to readOdsContent', () => {
+    const reference = embeddedReferenceOf(
+      "spreadsheet",
+      el("office:spreadsheet"),
+    );
+    const { document, residue } = readEmbeddedObjectDocument(
+      reference,
+      EMBED_FRAME,
+      "odt",
+    );
+    expect(document.kind).toBe("spreadsheet");
+    expect(residue).toBeUndefined();
+  });
+
+  it('dispatches "formula" to readOdfFormulaContent, whose own reader already returns a finished ContentDocument', () => {
+    const reference: EmbeddedDrawObject = {
+      objectKind: "formula",
+      href: "Object 1",
+      package: {
+        parts: {
+          "content.xml": { kind: "xml", nodes: [realEmbeddedFormulaRoot()] },
+        },
+      },
+    };
+    const { document, residue } = readEmbeddedObjectDocument(
+      reference,
+      EMBED_FRAME,
+      "odt",
+    );
+    expect(document.kind).toBe("formula");
+    expect(residue).toBeUndefined();
+  });
+
+  it('dispatches "chart" to readOdfChartContent, which alone of every kind carries residue', () => {
+    const chartElement = el("chart:chart", {}, [
+      el("table:table", {}, [el("table:table-row")]),
+    ]);
+    const reference: EmbeddedDrawObject = {
+      objectKind: "chart",
+      href: "Object 1",
+      package: {
+        parts: {
+          "content.xml": {
+            kind: "xml",
+            nodes: [
+              el("office:document-content", {}, [
+                el("office:body", {}, [chartElement]),
+              ]),
+            ],
+          },
+        },
+      },
+    };
+    const { document, residue } = readEmbeddedObjectDocument(
+      reference,
+      EMBED_FRAME,
+      "odt",
+    );
+    expect(document.kind).toBe("drawing");
+    expect(residue).not.toBeUndefined();
   });
 });
