@@ -345,6 +345,8 @@ function canonicalizeGroupRotation(
   flipV: boolean,
 ): { readonly angleDeg: number; readonly mirrored: boolean } {
   // flipH && flipV and flipV-only are merged into one branch: both add the identical 180deg shift, and (once flipH && flipV has NOT already been excluded... which it hasn't been here, since this check comes first) mirrored is exactly !flipH either way -- true (flipV-only, flipH false) or false (flipH && flipV both true) -- rather than the same "+ 180" arithmetic appearing twice for Stryker to find two provably-identical mutation opportunities in.
+  //
+  // "+ 180" here is a genuinely irreducible equivalent mutation opportunity, not merely an untested one: every caller of this function eventually normalises the returned angleDeg modulo 360 (directly, via normalizeDeg in composeGroupTransform's own top-level branch, or as an operand composeAngleDeg feeds through normalizeDeg when composing with a parent), and (x + 180) mod 360 === (x - 180) mod 360 for every x, since the two differ by exactly 360. No test built on this function's own observable contract (an angle consumed only through that eventual mod-360 normalisation) can ever tell "+ 180" and "- 180" apart here -- the difference genuinely does not exist for any input, not just the ones a test happens to try.
   if (flipV) {
     return { angleDeg: rotationDeg + 180, mirrored: !flipH };
   }
