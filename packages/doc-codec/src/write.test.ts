@@ -1987,8 +1987,8 @@ describe("writeDocContent tables", () => {
     expect(cellText(block.rows[1]?.cells[0])).toBe("A2");
   });
 
-  it("writes a vertical-merge anchor's own TCGRF as VERT_MERGE_RESTART, decoded straight from the row mark's own grpprl rather than through the schema round trip", () => {
-    // table/read.ts's own rowSpan computation (vertMergeChainLastRow) only ever inspects a FOLLOWING row's own vertMerge value when deciding how far a chain reaches -- never the anchor's own -- so this specific byte cannot be pinned by asserting anything about the round-tripped ContentTableCell (see flattenRow's own vertMerge comment for the full reasoning). It is still a real, load-bearing byte a genuine MS-DOC consumer other than this package's own reader depends on (LibreOffice's own import, and [MS-DOC] 2.9.317 itself), so it is verified here by decoding the row mark's own grpprl directly with the identical readGrpprl/applyTableSprms pair table/read.ts itself uses, rather than round-tripping through readDocContent.
+  it("writes a vertical-merge anchor's own TCGRF as VERT_MERGE_RESTART, an ordinary cell's as plain 0, decoded straight from each row mark's own grpprl rather than through the schema round trip", () => {
+    // table/read.ts's own rowSpan computation (vertMergeChainLastRow) only ever inspects a FOLLOWING row's own vertMerge value when deciding how far a chain reaches -- never the anchor's own -- so this specific byte cannot be pinned by asserting anything about the round-tripped ContentTableCell (see flattenRow's own vertMerge comment for the full reasoning). It is still a real, load-bearing byte a genuine MS-DOC consumer other than this package's own reader depends on (LibreOffice's own import, and [MS-DOC] 2.9.317 itself), so it is verified here by decoding each row mark's own grpprl directly with the identical readGrpprl/applyTableSprms pair table/read.ts itself uses, rather than round-tripping through readDocContent. A third, wholly ordinary row is included alongside the anchor and its continuation specifically so a mutant collapsing the ternary to always 3 has something to disagree with: the anchor alone cannot tell "always 3" apart from the real rowSpan > 1 test.
     const input: readonly ContentBlock[] = [
       {
         kind: "table",
@@ -1998,22 +1998,29 @@ describe("writeDocContent tables", () => {
             cells: [{ blocks: [paragraph([{ text: "anchor" }])], rowSpan: 2 }],
           },
           { cells: [{ blocks: [] }] },
+          { cells: [{ blocks: [paragraph([{ text: "ordinary" }])] }] },
         ],
       },
     ];
     const paragraphs = flattenSectionBlocks(input, new DataStreamBuilder());
-    // Row 0's single cell is its own one WriteParagraph (index 0), followed by row 0's own row mark (index 1); row 1 (the continuation) follows the identical shape at indices 2 and 3.
+    // Row 0's single cell is its own one WriteParagraph (index 0), followed by row 0's own row mark (index 1); rows 1 (the continuation) and 2 (ordinary) each follow the identical shape at indices 2-3 and 4-5.
     const anchorRowMark = paragraphs[1];
-    if (anchorRowMark === undefined) {
+    const ordinaryRowMark = paragraphs[5];
+    if (anchorRowMark === undefined || ordinaryRowMark === undefined) {
       throw new Error(
-        "expected the anchor row's own row-mark paragraph at index 1",
+        "expected the anchor and ordinary rows' own row-mark paragraphs at indices 1 and 5",
       );
     }
-    const definition = applyTableSprms(
+    const anchorDefinition = applyTableSprms(
       readGrpprl(new Uint8Array(anchorRowMark.extraGrpprl)),
       {},
     ).definition;
-    expect(definition?.cells[0]?.vertMerge).toBe(VERT_MERGE_RESTART);
+    const ordinaryDefinition = applyTableSprms(
+      readGrpprl(new Uint8Array(ordinaryRowMark.extraGrpprl)),
+      {},
+    ).definition;
+    expect(anchorDefinition?.cells[0]?.vertMerge).toBe(VERT_MERGE_RESTART);
+    expect(ordinaryDefinition?.cells[0]?.vertMerge).toBe(0);
   });
 
   it("writes TCGRF.horzMerge 2 on a lost-boundary split's own first sub-cell, whether or not that cell is also a vertical-merge continuation", () => {
@@ -2055,6 +2062,36 @@ describe("writeDocContent tables", () => {
     ).definition;
     expect(anchorDefinition?.cells[0]?.horzMerge).toBe(2);
     expect(continuationDefinition?.cells[0]?.horzMerge).toBe(2);
+  });
+
+  it("writes TCGRF.horzMerge plain 0 on an ordinary cell that never needed a lost-boundary split at all", () => {
+    // The mirror image of the split test just above: a mutant collapsing subSpans.length > 1's own ternary to always 2 has nothing in that test to disagree with, since every cell asserted on there genuinely is split. A wholly unmerged two-cell row leaves recoverableBoundaries stating its own one internal boundary on its own, so lostBoundaries is empty and neither of flattenRow's own two subSpans.length > 1 sites ever produces anything but subSpans.length === 1 here.
+    const input: readonly ContentBlock[] = [
+      {
+        kind: "table",
+        columnWidthsPt: [40, 40],
+        rows: [
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "left" }])] },
+              { blocks: [paragraph([{ text: "right" }])] },
+            ],
+          },
+        ],
+      },
+    ];
+    const paragraphs = flattenSectionBlocks(input, new DataStreamBuilder());
+    // Two plain, single-paragraph cells (indices 0-1), then the row's own row mark (index 2).
+    const rowMark = paragraphs[2];
+    if (rowMark === undefined) {
+      throw new Error("expected the row's own row-mark paragraph at index 2");
+    }
+    const definition = applyTableSprms(
+      readGrpprl(new Uint8Array(rowMark.extraGrpprl)),
+      {},
+    ).definition;
+    expect(definition?.cells[0]?.horzMerge).toBe(0);
+    expect(definition?.cells[1]?.horzMerge).toBe(0);
   });
 
   it("throws when a row's own cells cover more columns than the table declares", () => {
