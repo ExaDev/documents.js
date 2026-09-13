@@ -63,6 +63,21 @@ describe("readShapeProperties", () => {
     expect(properties.get(PROPERTY_ROTATION)?.complex).toBeUndefined();
   });
 
+  it("skips a sibling record of some other type, however property-table-shaped its own data happens to be", () => {
+    // recInstance 5 would demand 30 bytes (5 entries * 6) if this sibling were mistaken for a property table's own entry count, but it carries only 2 -- proving it is skipped by record type rather than merely tolerated by size.
+    const shape = container(OfficeArtSpContainer, [
+      atom(RT_TextHeaderAtom, new Uint8Array(2), { recInstance: 5 }),
+      atom(
+        OfficeArtFOPT,
+        concatBytes(opid(PROPERTY_ROTATION), u32le(90 * 0x10000)),
+        { recVer: 0x3, recInstance: 1 },
+      ),
+    ]);
+    const properties = readShapeProperties(readRecordAt(shape, 0));
+    expect(properties.get(PROPERTY_ROTATION)?.value).toBe(90 * 0x10000);
+    expect(properties.size).toBe(1);
+  });
+
   it("reads a complex property's payload from the pooled bytes after the entry run", () => {
     // tableRowProperties (0x03A0): the entry's value is the payload's length; the payload follows both entries.
     const complex = writeIMsoArray([2880, 1440], 4);
@@ -229,6 +244,9 @@ describe("writeShapePropertyTable / readShapeProperties round trip", () => {
     const table = writeShapePropertyTable(OfficeArtFOPT, [
       { opid: 0x0104, op: 1, fBid: true },
     ]);
+    // Bit 15 of the raw entry word (OPID_FBID), asserted directly: readShapeProperties strips every flag bit on the way out, so reading the value back through it proves nothing about whether fBid was ever actually written.
+    const view = new DataView(table.buffer, table.byteOffset);
+    expect(view.getUint16(8, true) & (1 << 15)).not.toBe(0);
     const shapeBytes = container(OfficeArtSpContainer, [table]);
     // The flag bits are stripped on read; the fBid bit must not corrupt the identifier.
     expect(
@@ -292,6 +310,20 @@ describe("readIMsoArray / writeIMsoArray", () => {
     expect(() => readIMsoArray(withWrongCount)).toThrow(PptFormatError);
     expect(() => readIMsoArray(withWrongCount)).toThrow(
       "a complex property's IMsoArray declares 3 elements of 4 bytes but only 0 remain",
+    );
+  });
+
+  it("rejects an under-supplied payload even where elementCount is smaller than elementSize", () => {
+    // nElems=10, cbElem=4 (40 bytes needed) but only 5 remain: comparing data.length against elementCount * elementSize (40) catches this; comparing against elementCount / elementSize (2.5) would not, since 5 is not less than 2.5, and this element size/count combination is exactly where the two comparisons disagree.
+    const underSupplied = concatBytes(
+      u16le(10),
+      u16le(10),
+      u16le(4),
+      new Uint8Array(5),
+    );
+    expect(() => readIMsoArray(underSupplied)).toThrow(PptFormatError);
+    expect(() => readIMsoArray(underSupplied)).toThrow(
+      "a complex property's IMsoArray declares 10 elements of 4 bytes but only 5 remain",
     );
   });
 });
