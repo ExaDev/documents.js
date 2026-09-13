@@ -118,4 +118,61 @@ describe("readXlsxWorkbook", () => {
     expect(sheet?.mergedRanges).toEqual([]);
     expect(readXlsxWorkbook(pkg).definedNames).toEqual([]);
   });
+
+  // Every fixture above targets a rels Target with no leading slash and a sheet literally named "Sheet1" -- indistinguishable from the filename-derived Sheet<N> fallback name a broken correlation would produce instead, so a bug here would still read back the "right" name by coincidence. These two use a display name that differs from the fallback, so a broken correlation is forced to show up as the wrong name rather than an accidentally-matching one.
+  it("resolves the sheet's display name via a workbook rels Target with no leading slash", () => {
+    const workbookXml = enc(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Data" sheetId="1" r:id="rId1"/></sheets></workbook>',
+    );
+    const pkg = decodePackage(
+      zipPackage({
+        "[Content_Types].xml": CONTENT_TYPES,
+        "_rels/.rels": ROOT_RELS,
+        "xl/workbook.xml": workbookXml,
+        "xl/_rels/workbook.xml.rels": WORKBOOK_RELS,
+        "xl/worksheets/sheet1.xml": SHEET1,
+      }),
+    );
+    expect(readXlsxWorkbook(pkg).sheets[0]?.name).toBe("Data");
+  });
+
+  it("resolves the sheet's display name via a workbook rels Target carrying a leading slash", () => {
+    const workbookXml = enc(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Report" sheetId="1" r:id="rId1"/></sheets></workbook>',
+    );
+    const workbookRelsXml = enc(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="/xl/worksheets/sheet1.xml"/></Relationships>',
+    );
+    const pkg = decodePackage(
+      zipPackage({
+        "[Content_Types].xml": CONTENT_TYPES,
+        "_rels/.rels": ROOT_RELS,
+        "xl/workbook.xml": workbookXml,
+        "xl/_rels/workbook.xml.rels": workbookRelsXml,
+        "xl/worksheets/sheet1.xml": SHEET1,
+      }),
+    );
+    expect(readXlsxWorkbook(pkg).sheets[0]?.name).toBe("Report");
+  });
+
+  it("orders sheets by their numeric suffix, not by the package's own part insertion order", () => {
+    const sheetXml = (marker: string) =>
+      enc(
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="str"><v>${marker}</v></c></row></sheetData></worksheet>`,
+      );
+    const pkg = decodePackage(
+      zipPackage({
+        "[Content_Types].xml": CONTENT_TYPES,
+        "_rels/.rels": ROOT_RELS,
+        // Inserted out of numeric order: 3, then 1, then 2.
+        "xl/worksheets/sheet3.xml": sheetXml("third"),
+        "xl/worksheets/sheet1.xml": sheetXml("first"),
+        "xl/worksheets/sheet2.xml": sheetXml("second"),
+      }),
+    );
+    const markers = readXlsxWorkbook(pkg).sheets.map(
+      (sheet) => sheet.cells[0]?.value,
+    );
+    expect(markers).toEqual(["first", "second", "third"]);
+  });
 });
