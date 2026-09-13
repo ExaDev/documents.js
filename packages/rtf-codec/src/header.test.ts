@@ -360,6 +360,16 @@ describe("list and list override tables", () => {
     ).lists;
     expect(lists.get(1)?.levels[0]?.startAt).toBe(9);
   });
+
+  it("does not let a control word named something other than \\levelnfc or \\levelstartat set a \\listlevel's own fields", () => {
+    // \leveljc carries a numeric param too, but only the exact name \levelstartat may set startAt -- placed AFTER the real \levelstartat9 so a wrongly-matched value would visibly stick rather than just get overwritten again by coincidence.
+    const lists = headerOf(
+      "{\\rtf1{\\*\\listtable{\\list\\listtemplateid1\\listsimple" +
+        "{\\listlevel\\levelnfc0\\levelstartat9\\leveljc0{\\leveltext \\'02\\'00.;}{\\levelnumbers\\'01;}}" +
+        "\\listid404}}{\\*\\listoverridetable{\\listoverride\\listid404\\listoverridecount0\\ls1}}}",
+    ).lists;
+    expect(lists.get(1)?.levels[0]?.startAt).toBe(9);
+  });
 });
 
 // <lfolevel> is `'{' \lfolevel \listoverrideformatN? \listoverridestartat? <listlevel> '}'`, and the spec states exactly which of the two flags puts what where: "If the format flag (\listoverrideformatN) is given, the \lfolevel should also contain a list level (<listlevel>). If the start-at flag (\listoverridestartat) is given, a start-at value must be provided. If the start-at is overridden but the format is not, then a \levelstartatN should be provided in the <lfolevel> itself. If both the start-at and the format are overridden, put the \levelstartatN inside the <listlevel> contained in the <lfolevel>." (RTF 1.9.1, "List Override Table")
@@ -473,10 +483,12 @@ describe("list override levels", () => {
   });
 
   it("does not treat an unrelated group inside a \\lfolevel as if it were its own <listlevel>", () => {
+    // The real <listlevel> comes FIRST here, and the unrelated group after it -- so a wrongly-matched second read would visibly overwrite the correct value, rather than just get overwritten again by coincidence.
     const lists = listsFor(
       "{\\listoverride\\listid101\\listoverridecount1" +
-        "{\\lfolevel\\listoverrideformat1{\\unknowndest\\levelnfc99}" +
-        "{\\listlevel\\levelnfc23\\leveljc0\\levelstartat1{\\leveltext \\'01\\u183 ?;}{\\levelnumbers;}}}\\ls1}",
+        "{\\lfolevel\\listoverrideformat1" +
+        "{\\listlevel\\levelnfc23\\leveljc0\\levelstartat1{\\leveltext \\'01\\u183 ?;}{\\levelnumbers;}}" +
+        "{\\unknowndest\\levelnfc99}}\\ls1}",
     );
     expect(lists.get(1)?.levels[0]?.numberFormat).toBe(23);
   });
@@ -575,8 +587,9 @@ describe("document properties", () => {
   });
 
   it("does not treat an unrecognized {\\info ...} field as \\operator just for reaching the end of the else-if chain", () => {
+    // The real \operator comes FIRST here, and the unrecognized field after it -- so a wrongly-matched second write would visibly overwrite the correct value, rather than just get overwritten again by coincidence.
     const header = headerOf(
-      "{\\rtf1\\ansi{\\info{\\manager Someone Else}{\\operator Jane Roe}}}",
+      "{\\rtf1\\ansi{\\info{\\operator Jane Roe}{\\manager Someone Else}}}",
     );
     expect(header.metadata.creator).toBe("Jane Roe");
   });
@@ -612,6 +625,14 @@ describe("revision table", () => {
       "{\\rtf1{\\*\\revtbl{Unknown;}{ Spacey Author ;}}}",
     );
     expect(header.revisionAuthors).toEqual(["Unknown", "Spacey Author"]);
+  });
+
+  it("trims whitespace immediately before the conflict form's own NUL separator, which collectPlainText's own overall trim never reaches", () => {
+    // collectPlainText already trims the WHOLE group's own leading/trailing whitespace before parseRevisionTable ever sees it, so a plain leading/trailing-space fixture alone cannot tell the two .trim() calls apart -- this one puts the whitespace immediately before an internal \'00 (NUL) byte, a position the outer trim never touches at all.
+    const header = headerOf(
+      "{\\rtf1{\\*\\revtbl{Current Author  \\'00\\'05Prev A;}}}",
+    );
+    expect(header.revisionAuthors).toEqual(["Current Author"]);
   });
 
   it("skips a stray text byte between two revision-author groups rather than misreading it as the next one's own opening brace", () => {
