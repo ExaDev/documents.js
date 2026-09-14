@@ -115,7 +115,49 @@ describe("convert", () => {
       join(workspace, "input.docx"),
     ]);
     expect(exitCode).toBe(EXIT_USAGE_ERROR);
-    expect(stderr).toContain("convert:");
+    expect(stderr).toBe(
+      "convert: cannot infer a target format -- pass an output path with a recognised extension, --out with one, or --to <format>\n",
+    );
+  });
+
+  it("fails clearly when the output path's own extension is not a recognised format", async () => {
+    const { exitCode, stderr } = await runCli([
+      "convert",
+      join(workspace, "input.docx"),
+      join(workspace, "out.mystery"),
+    ]);
+    expect(exitCode).toBe(EXIT_USAGE_ERROR);
+    expect(stderr).toBe(
+      `convert: cannot infer a target format from '${join(workspace, "out.mystery")}'; pass --to <format> instead\n`,
+    );
+  });
+
+  it("rejects an unrecognised --to format, naming it and every known format", async () => {
+    const { exitCode, stderr } = await runCli([
+      "convert",
+      join(workspace, "input.docx"),
+      join(workspace, "out.pdf"),
+      "--to",
+      "not-a-format",
+    ]);
+    expect(exitCode).toBe(EXIT_USAGE_ERROR);
+    expect(stderr).toBe(
+      "convert: unknown --to format 'not-a-format'; expected one of docx, pptx, xlsx, odt, odp, ods, odg, svg, odf, csv, markdown, rtf, wpd, doc, xls, ppt, epub, pdf\n",
+    );
+  });
+
+  it("rejects a positional output and a conflicting --out, naming both", async () => {
+    const { exitCode, stderr } = await runCli([
+      "convert",
+      join(workspace, "input.docx"),
+      "positional.pdf",
+      "--out",
+      "different.pdf",
+    ]);
+    expect(exitCode).toBe(EXIT_USAGE_ERROR);
+    expect(stderr).toBe(
+      "[docx-to-pdf] conflicting output destinations: positional 'positional.pdf' and --out 'different.pdf'\n",
+    );
   });
 
   it("prefers --to over the output path's own extension for the target format", async () => {
