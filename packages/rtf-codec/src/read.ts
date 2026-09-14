@@ -1183,10 +1183,8 @@ class ContentBuilder {
             for (let next = rowIndex + 1; next < rows.length; next += 1) {
               // Genuinely unreachable, not a real defensive fallback: columnIndices is built by rows.map(...) two lines above, so columnIndices.length === rows.length always, and the loop's own bound (next < rows.length) already guarantees columnIndices[next] is defined for every next this line ever sees. The `?.` and `?? -1` exist only because noUncheckedIndexedAccess types the access as number[] | undefined regardless -- the fallback keeps TypeScript satisfied for a branch that can never actually execute.
               const matchIndex = columnIndices[next]?.indexOf(column) ?? -1;
-              const match =
-                matchIndex === -1
-                  ? undefined
-                  : rows[next]?.definitions[matchIndex];
+              // No `matchIndex === -1 ? undefined : ...` guard: a plain array's own -1 index is never a real property on it, so `definitions[-1]` already evaluates to undefined on its own -- indexOf's own "not found" sentinel needs no special-casing here, since indexing by it produces the identical result the special case would.
+              const match = rows[next]?.definitions[matchIndex];
               if (match?.verticalMergeContinuation !== true) {
                 break;
               }
