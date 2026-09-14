@@ -47,8 +47,8 @@ jobs:
     needs: plan
     if: needs.plan.outputs.has-packages == 'true'
     runs-on: ubuntu-latest
-    # Generous, deliberately: a shard's incremental cache can only ever help (see the caching step below), never hurt, so a cold run -- no prior cache to restore, e.g. this workflow's first ever run, or a shard whose package assignment shifted since the last one that covered it -- pays the full mutation-test cost for whichever packages landed in it. documents.js alone (the single largest package, ~44k mutatable source lines) is sharded onto its own shard for exactly this reason; the timeout has to fit its cold-run cost, not a warm one.
-    timeout-minutes: 180
+    # Generous, deliberately: a shard's incremental cache can only ever help (see the caching step below), never hurt, so a cold run -- no prior cache to restore, e.g. this workflow's first ever run, or a shard whose package assignment shifted since the last one that covered it -- pays the full mutation-test cost for whichever packages landed in it. documents.js alone (the single largest package, ~44k mutatable source lines) is sharded onto its own shard for exactly this reason; the timeout has to fit its cold-run cost, not a warm one. The shared "mutation-incremental-" cache prefix is pooled across every package's every shard (see the restore-keys comment above), so a package's own incremental history can be evicted by unrelated packages' cache churn well before that package's own next run -- any shard can therefore land a fully cold run at any time, not only on a genuine first-ever run, and the budget has to cover that for every package sharded here, not just documents.js's own worst case.
+    timeout-minutes: 300
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
