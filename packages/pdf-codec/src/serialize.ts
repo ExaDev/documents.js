@@ -11,11 +11,8 @@ export function formatNumber(n: number): string {
   if (Math.abs(n) < NUMBER_EPSILON) {
     return "0";
   }
-  let formatted = n.toFixed(NUMBER_DECIMAL_PLACES);
-  if (formatted.includes(".")) {
-    formatted = formatted.replace(/0+$/, "").replace(/\.$/, "");
-  }
-  return formatted;
+  // toFixed(NUMBER_DECIMAL_PLACES) always emits a decimal point (NUMBER_DECIMAL_PLACES is a fixed 4, never 0), so this string always has trailing zeros or a bare "." to strip -- there is no toFixed output an `if (formatted.includes("."))` guard would ever need to skip.
+  return n.toFixed(NUMBER_DECIMAL_PLACES).replace(/0+$/, "").replace(/\.$/, "");
 }
 
 const NAME_ESCAPE_PATTERN = /[^!-~]|[#()<>[\]{}/%]/;
