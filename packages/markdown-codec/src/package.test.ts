@@ -237,6 +237,7 @@ describe("writeMarkdown: DocumentTree -> markdown text", () => {
     }
     expect(thrown).toBeInstanceOf(MarkdownUnsupportedDocumentKindError);
     const typed = thrown as MarkdownUnsupportedDocumentKindError;
+    expect(typed.name).toBe("MarkdownUnsupportedDocumentKindError");
     expect(typed.kind).toBe("spreadsheet");
     expect(typed.code).toBe("md/write-side-not-wordprocessing");
     expect(typed.message).toBe(
@@ -286,6 +287,7 @@ describe("writeMarkdown: DocumentTree -> markdown text", () => {
     }
     expect(thrown).toBeInstanceOf(MarkdownPackageFlattenError);
     const typed = thrown as MarkdownPackageFlattenError;
+    expect(typed.name).toBe("MarkdownPackageFlattenError");
     expect(typed.code).toBe("md/package-flatten-failed");
     expect(typed.message).toMatch(/style ref/);
   });
