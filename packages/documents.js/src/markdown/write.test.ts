@@ -122,4 +122,47 @@ describe("buildMarkdownText", () => {
     ]);
     expect(buildMarkdownText(document)).toContain("cell");
   });
+
+  it("recurses the pageBreak-to-marker transform into a table cell's own blocks", () => {
+    const document = markerDocument([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "pageBreak" }] }],
+          },
+        ],
+        columnWidthsPt: [80],
+      },
+    ]);
+    // If the table branch did not recurse markdownBlock into the cell, this cell's own pageBreak block would reach the writer unconverted -- a table cell backslash-escapes the marker's own punctuation (unlike the top-level HTMLPreformatted paragraph the same marker gets outside a table), but "page break" surviving into the cell text either way is still proof the marker text -- not the untransformed pageBreak block -- is what reached the writer.
+    expect(buildMarkdownText(document)).toContain("page break");
+  });
+
+  it("flattens an embedded formula with no presentation LaTeX to the literal [formula] placeholder", () => {
+    const document = markerDocument([
+      {
+        kind: "embeddedObject",
+        objectKind: "formula",
+        document: {
+          kind: "formula",
+          metadata: {},
+          // No `presentation` field and no `starMath` field, so formulaPlaceholderText falls all the way through to its own literal "[formula]" fallback.
+          formula: {
+            mathml: [
+              {
+                type: "element",
+                tag: "mi",
+                attributes: [],
+                children: [{ type: "text", value: "x" }],
+              },
+            ],
+          },
+        },
+        frame: { xPt: 0, yPt: 0, widthPt: 40, heightPt: 24 },
+      },
+    ]);
+    // The literal "[" and "]" are backslash-escaped by the plain-paragraph run writer, but the word "formula" itself carries no markdown-special characters and survives unescaped -- proof formulaPlaceholderText's own fallback text (and not an empty run list) reached the writer.
+    expect(buildMarkdownText(document)).toContain("formula");
+  });
 });
