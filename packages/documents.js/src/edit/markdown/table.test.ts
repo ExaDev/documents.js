@@ -1,5 +1,7 @@
+import type { ContentBlock, ContentTableCell } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { openMarkdown } from "./editor";
+import { buildTable, MarkdownTable, MarkdownTableCell } from "./table";
 
 describe("MarkdownTable appendTable / appendRow / cell.text", () => {
   it("produces a real GFM table, re-parseable back into the same cell texts", () => {
@@ -39,6 +41,29 @@ describe("MarkdownTable appendTable / appendRow / cell.text", () => {
     const paragraph = cell.appendParagraph({ text: "Second" });
     expect(cell.paragraphs()).toHaveLength(2);
     expect(paragraph.text).toBe("Second");
+    // Two paragraphs joined with a real newline, not concatenated bare -- the first is the cell's own untouched default (empty text), the second is "Second".
+    expect(cell.text).toBe("\nSecond");
+  });
+
+  it("paragraphs()/text ignore a non-paragraph block sharing the cell, filtering strictly by kind", () => {
+    const node: ContentTableCell = {
+      blocks: [
+        { kind: "paragraph", runs: [{ text: "First" }] },
+        { kind: "pageBreak" },
+        { kind: "paragraph", runs: [{ text: "Third" }] },
+      ],
+    };
+    const cell = new MarkdownTableCell(node);
+    expect(cell.paragraphs()).toHaveLength(2);
+    expect(cell.text).toBe("First\nThird");
+  });
+});
+
+describe("buildTable", () => {
+  it("divides the default table width evenly across the requested column count", () => {
+    const table = buildTable({ rows: 1, columns: 4 });
+    expect(table.columnWidthsPt).toEqual([117, 117, 117, 117]);
+    expect(table.columnWidthsPt.reduce((sum, w) => sum + w, 0)).toBe(468);
   });
 });
 
@@ -50,5 +75,18 @@ describe("MarkdownTable.remove", () => {
     table.remove();
     expect(editor.tables()).toHaveLength(0);
     expect(() => table.rows()).toThrow(/removed/);
+  });
+
+  it("does nothing to the container when its own node is no longer in it, rather than splicing the wrong element", () => {
+    // If the not-found guard were skipped, Array.prototype.splice(-1, 1) would silently remove the container's own LAST element instead of doing nothing.
+    const tableNode = buildTable({ rows: 1, columns: 1 });
+    const other: ContentBlock = { kind: "paragraph", runs: [] };
+    const container: ContentBlock[] = [other, tableNode];
+    const table = new MarkdownTable(container, tableNode);
+    // Remove the table's own node from the container by some other means first, so remove()'s own indexOf lookup genuinely fails to find it.
+    container.splice(container.indexOf(tableNode), 1);
+    expect(container).toEqual([other]);
+    table.remove();
+    expect(container).toEqual([other]);
   });
 });
