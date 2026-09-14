@@ -25,17 +25,20 @@ describe("OdtRun text", () => {
 });
 
 describe("OdtRun toggle properties", () => {
-  it("bold/italic/underline default to false and can be toggled on and off", () => {
+  it("bold/italic/underline/strike default to false and can be toggled on and off", () => {
     const run = freshRun();
     expect(run.bold).toBe(false);
     expect(run.italic).toBe(false);
     expect(run.underline).toBe(false);
+    expect(run.strike).toBe(false);
     run.bold = true;
     run.italic = true;
     run.underline = true;
+    run.strike = true;
     expect(run.bold).toBe(true);
     expect(run.italic).toBe(true);
     expect(run.underline).toBe(true);
+    expect(run.strike).toBe(true);
     run.bold = false;
     expect(run.bold).toBe(false);
     expect(run.italic).toBe(true); // unaffected by the other toggle
@@ -121,14 +124,20 @@ describe("buildRun", () => {
       text: "Hi",
       bold: true,
       italic: true,
+      underline: true,
+      strike: true,
       sizePt: 16,
       fontFamily: "Arial",
+      color: { r: 1, g: 0, b: 0 },
     });
     const run = new OdtRun([runElement], runElement, editor.toPackage());
     expect(run.bold).toBe(true);
     expect(run.italic).toBe(true);
+    expect(run.underline).toBe(true);
+    expect(run.strike).toBe(true);
     expect(run.sizePt).toBe(16);
     expect(run.fontFamily).toBe("Arial");
+    expect(run.color).toEqual({ r: 1, g: 0, b: 0 });
     expect(run.text).toBe("Hi");
   });
 });
