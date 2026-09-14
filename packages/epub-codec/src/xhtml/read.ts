@@ -915,11 +915,7 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
           });
           continue;
         }
-        if (cellNode.type === "element" && isInertElement(cellNode.tag)) {
-          reportInertElementSkip(cellNode.tag, state.context);
-          continue;
-        }
-        // No element/text-like filter is needed here: flushStrayCell's own readContainerChildren call already skips any node that is neither text-like nor an element, so collecting every remaining cellNode into strayCellNodes unconditionally costs nothing a guard here could meaningfully save.
+        // No isInertElement pre-filter is needed here either: flushStrayCell's own readContainerChildren call already carries the identical check (via buildInlineRuns' appendElement), skipping a <script>/<template>/<style>/<noscript> cellNode at that deeper point instead, with reportInertElementSkip's own <noscript> diagnostic still firing from there at exactly the same single occurrence. No element/text-like filter is needed either, for the identical reason: that same readContainerChildren call already skips any node that is neither text-like nor an element, so collecting every remaining cellNode into strayCellNodes unconditionally costs nothing either guard here could meaningfully save.
         strayCellNodes.push(cellNode);
       }
       flushStrayCell();
