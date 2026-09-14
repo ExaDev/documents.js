@@ -965,12 +965,12 @@ class ContentBuilder {
     this.closingBookmarks = [];
   }
 
-  // The run-scoped extents this paragraph carries, in document order by where each starts, dropping any whose range does not name runs this paragraph actually has -- the well-formedness bound document-schema.js's own findRunConstructFault states (0 <= startRun <= endRun <= runs.length) and deliberately does not enforce in the schema.
+  // The run-scoped extents this paragraph carries, in document order by where each starts. No filter against runs.length here for the well-formedness bound document-schema.js's own findRunConstructFault states (0 <= startRun <= endRun <= runs.length): every entry in pendingRunConstructs is pushed with endRun set to this.runs.length AT THAT EXACT MOMENT (endBookmark's own same-paragraph branch, endFormField), and runs.length only ever grows between then and this call (more text can still follow within the same paragraph, but nothing ever shortens it) -- so a stale, now-too-large endRun can never occur by construction. coalesceRunConstructs draws its own endRun values from indices into `this.runProvenance`, which is pushed in lockstep with `this.runs` (flushRun always pushes both together), so its own bound holds for the identical reason. A filter here would never remove anything a real call could produce.
   private takeRunConstructs(): RunConstructExtent[] {
     const extents = [
       ...this.pendingRunConstructs,
       ...coalesceRunConstructs(this.runProvenance),
-    ].filter((extent) => extent.endRun <= this.runs.length);
+    ];
     this.pendingRunConstructs = [];
     this.runProvenance = [];
     return extents.sort(
