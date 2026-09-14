@@ -3168,11 +3168,28 @@ describe("section finalisation", () => {
     expect(document.sections[0]?.blocks).toEqual([]);
   });
 
+  it("still pushes the document's only section through endSection itself when it is genuinely empty, not finish()'s own generic fallback -- observable via breakType surviving", () => {
+    // The "sections.length > 0" half of endSection's own drop condition matters specifically because it is FALSE for this, the very first section -- so an empty-but-first section is still pushed HERE, with its own real geometry and breakType, rather than silently skipped and left for finish()'s own fallback (which pushes only bare geometry and blocks: [], no breakType field at all) to paper over. A ">= 0" in place of "> 0" is always true regardless of section count, so it would wrongly skip this push too, and the sole difference an all-empty document can reveal is exactly the breakType finish()'s own fallback never carries.
+    const { document } = readRtfContent(bytes(`${HEADER}\\sectd\\sbknone}`));
+    if (document.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing document");
+    }
+    expect(document.sections).toHaveLength(1);
+    expect(document.sections[0]?.breakType).toBe("continuous");
+  });
+
   it("carries a stated \\sbk* break type onto the section that is ENDING, not silently dropping it when the type is a real, non-default one", () => {
     const sections = sectionsOf(
       `${HEADER}\\sectd\\sbkeven\\pard A\\par\\sect\\sectd\\pard B\\par}`,
     );
     expect(sections[0]?.breakType).toBe("evenPage");
+  });
+
+  it("omits the breakType key entirely from a section that stated no \\sbk* of its own, rather than an explicit key holding undefined", () => {
+    // A plain toEqual (or any check that only reads section.breakType) cannot tell "the key is absent" apart from "the key is present with value undefined" -- both compare equal. Object.hasOwn is what actually distinguishes an unconditionally-spread { breakType: section.breakType } (present, undefined) from the real conditional spread this line performs.
+    const sections = sectionsOf(`${HEADER}\\pard x\\par}`);
+    expect(sections[0]).toBeDefined();
+    expect(Object.hasOwn(sections[0] ?? {}, "breakType")).toBe(false);
   });
 
   it("reports the exact unpaired-bookmark-at-end-of-block-flow message text", () => {
