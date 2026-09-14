@@ -134,8 +134,9 @@ function padBigEndian(
   const padded = new Uint8Array(paddedLength);
   padded.set(bytes);
   padded[bytes.length] = 0x80;
+  // No early exit once bitLength reaches 0: `padded` is already zero-filled, so writing `0 % 256` into the remaining length-field bytes is a no-op, and a message's bit length only ever needs a handful of these `lengthBytes` slots (a JS number's own 2^53 precision ceiling needs at most 7 bytes to represent, well inside SHA-256's 8 and SHA-512's 16) -- realistically never enough real iterations for a `&& bitLength > 0` guard to be the thing that stops this loop, which is exactly the kind of unobservable boundary an equivalent mutant lives in.
   let bitLength = bytes.length * 8;
-  for (let i = 0; i < lengthBytes && bitLength > 0; i++) {
+  for (let i = 0; i < lengthBytes; i++) {
     padded[paddedLength - 1 - i] = bitLength % 256;
     bitLength = Math.floor(bitLength / 256);
   }
