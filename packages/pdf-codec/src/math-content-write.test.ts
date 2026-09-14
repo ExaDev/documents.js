@@ -8,6 +8,7 @@ import {
   collectUsedGlyphs,
   writeFormulaContentStream,
 } from "./math-content-write";
+import type { MathFont } from "./math-font";
 import { loadMathFont } from "./math-font";
 
 const BLACK = { r: 0, g: 0, b: 0 };
@@ -88,8 +89,30 @@ describe("writeFormulaContentStream, assembled stretchy glyphs", () => {
     // UTF-16BE with the byte-order mark that marks a PDF text string as Unicode: FEFF then U+0028.
     expect(content).toContain("/Span <</ActualText <feff0028> >> BDC\n");
     expect(content.endsWith("EMC\n")).toBe(true);
+    expect(content).toContain("ET\n"); // a hard containment check first: indexOf("ET") is -1 (still "less than" any real EMC index) if this string were ever blanked out
     expect(content.indexOf("BDC")).toBeLessThan(content.indexOf("BT"));
     expect(content.indexOf("ET")).toBeLessThan(content.indexOf("EMC"));
+  });
+
+  it("encodes a two-character operator's /ActualText with each character's own low byte, not just its high byte", () => {
+    // Two ordinary BMP characters, not a surrogate pair: proves utf16BeWithBom packs the SECOND code unit's own low byte at the right offset too, which a surrogate pair (whose low surrogate happens to end 0x00) can't distinguish from a dropped write.
+    const content = write(
+      positioned(
+        box(
+          [
+            {
+              kind: "assembled-glyphs",
+              text: "AB",
+              sizePt: 12,
+              color: BLACK,
+              placements: [{ glyphId: LOWER_HOOK, xPt: 0, yPt: 0 }],
+            },
+          ],
+          50,
+        ),
+      ),
+    );
+    expect(content).toContain("/Span <</ActualText <feff00410042> >> BDC\n");
   });
 
   it("encodes a supplementary-plane operator in /ActualText as a real surrogate pair", () => {
@@ -226,6 +249,39 @@ describe("collectUsedGlyphs", () => {
       ).get(hook!),
     ).toBe(0x239d);
   });
+
+  it("keeps the first code point a glyph resolved to, never overwriting it with a later one", () => {
+    // A synthetic font, not the real STIX Two Math one: the real font's cmap is injective (its own module comment states this explicitly, and it holds for every code point actually probed), so no pair of distinct real code points ever reaches this guard with an already-resolved glyph. A font is built here that deliberately violates that invariant, to prove the guard itself -- first write wins -- rather than relying on real font data that can never exercise it.
+    const COLLIDING_GLYPH = 999;
+    const realFont = loadMathFont().font; // for the members this test never exercises, so nothing here needs its own hand-stubbed values
+    const collidingFont: MathFont = {
+      ...realFont,
+      glyphId: (codePoint: number) =>
+        codePoint === 0x41 || codePoint === 0x42 ? COLLIDING_GLYPH : undefined,
+    };
+    const used = collectUsedGlyphs(
+      [
+        positioned(
+          box(
+            [
+              {
+                kind: "glyphs",
+                xPt: 0,
+                yPt: 0,
+                text: "AB",
+                sizePt: 12,
+                color: BLACK,
+              },
+            ],
+            50,
+          ),
+        ),
+      ],
+      collidingFont,
+    );
+    expect(used.size).toBe(1);
+    expect(used.get(COLLIDING_GLYPH)).toBe(0x41); // 'A' was seen first; 'B' resolves to the same glyph but must not overwrite it
+  });
 });
 
 const RED = { r: 0.25, g: 0.5, b: 0.75 };
@@ -236,9 +292,11 @@ describe("writeFormulaContentStream, an ordinary glyph run", () => {
   it("shows the run's own CIDs at its own computed size, color, and position", () => {
     const font = loadMathFont().font;
     const aId = font.glyphId(0x41)!;
-    const bId = font.glyphId(0x42)!;
+    // The integral sign, not a second Latin letter: its glyph ID (0x6a2) has a non-zero HIGH byte, which a plain ASCII pair (every Latin glyph ID here sits under 256) would never exercise -- proving encodeGlyphRunToCids packs (gid >> 8) at the right byte offset for the second CID, not just the first.
+    const bId = font.glyphId(0x222b)!;
     expect(aId).toBeDefined();
     expect(bId).toBeDefined();
+    expect(bId).toBeGreaterThan(0xff);
     const content = write(
       positioned(
         box(
@@ -247,7 +305,7 @@ describe("writeFormulaContentStream, an ordinary glyph run", () => {
               kind: "glyphs",
               xPt: 5,
               yPt: 20,
-              text: "AB",
+              text: "A∫",
               sizePt: 16,
               color: RED,
             },
@@ -367,6 +425,30 @@ describe("writeFormulaContentStream, a stroke", () => {
         "104 240 l\n" + // (4,10) -> page (104, 240)
         "108 250 l\n" + // (8,0) -> page (108, 250)
         "S\n",
+    );
+  });
+
+  it("draws a stroke at exactly the two-point minimum, the boundary a fewer-than-two check must not also exclude", () => {
+    const content = write(
+      positioned(
+        box(
+          [
+            {
+              kind: "stroke",
+              points: [
+                { xPt: 0, yPt: 0 },
+                { xPt: 6, yPt: 6 },
+              ],
+              widthPt: 1,
+              color: RED,
+            },
+          ],
+          50,
+        ),
+      ),
+    );
+    expect(content).toBe(
+      "0.25 0.5 0.75 RG\n" + "1 w\n" + "100 250 m\n" + "106 244 l\n" + "S\n",
     );
   });
 
