@@ -199,4 +199,16 @@ describe("aggregateCellValues", () => {
       "SUM requires numeric values, but found a string value",
     );
   });
+
+  it("keeps the first-seen value on a tie, for both MIN and MAX", () => {
+    // Two structurally different values (a plain number and a currency) that compare numerically equal -- distinguishable by .kind alone, so which one "won" the tie is directly observable.
+    const first: ContentCellValue = { kind: "number", value: 5 };
+    const second: ContentCellValue = {
+      kind: "currency",
+      value: 5,
+      currency: "GBP",
+    };
+    expect(aggregateCellValues("MIN", [first, second], fail)).toBe(first);
+    expect(aggregateCellValues("MAX", [first, second], fail)).toBe(first);
+  });
 });
