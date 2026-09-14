@@ -7,7 +7,7 @@ import { Box, Text, useInput, useWindowSize } from "ink";
 import { useState, type Dispatch, type ReactElement } from "react";
 import { describeError } from "../../../errors.js";
 import { readInput } from "../../../../runtime/io.js";
-import { ListView } from "../../../components/list-view.js";
+import { ListView, selectedColor } from "../../../components/list-view.js";
 import { TextField } from "../../../components/text-field.js";
 import { useNavigationInput } from "../../../keybindings/use-navigation-input.js";
 import type { Action } from "../../../state/actions.js";
@@ -423,7 +423,7 @@ export function OdsSpreadsheetGridScreen(): ReactElement {
           reservedRows={GRID_CHROME_ROWS}
           emptyMessage="No populated cells yet -- press 't' to go back to the grid and start typing."
           renderItem={(row, isSelected) => (
-            <Text color={isSelected ? "cyan" : undefined} inverse={isSelected}>
+            <Text color={selectedColor(isSelected)} inverse={isSelected}>
               {padCell(row.address, COMPACT_ADDRESS_WIDTH)}[{row.badge}]{" "}
               {row.displayText}
             </Text>

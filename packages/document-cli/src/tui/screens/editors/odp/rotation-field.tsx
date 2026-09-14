@@ -1,6 +1,7 @@
 import { Box, Text } from "ink";
 import type { ReactElement } from "react";
 import { TextField } from "../../../components/text-field.js";
+import { selectedColor } from "../../../components/list-view.js";
 
 export interface RotationFieldProps {
   readonly rotationDeg: number | undefined;
@@ -38,10 +39,7 @@ export function RotationField(props: RotationFieldProps): ReactElement {
   }
 
   return (
-    <Text
-      color={props.isSelected ? "cyan" : undefined}
-      inverse={props.isSelected}
-    >
+    <Text color={selectedColor(props.isSelected)} inverse={props.isSelected}>
       [R] Rotation: {formatRotationDeg(props.rotationDeg)}
     </Text>
   );

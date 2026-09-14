@@ -7,6 +7,7 @@ import {
   paragraphFamilyDocument,
 } from "../../shared/paragraph-family.js";
 import { truncatePreview } from "../../shared/text.js";
+import { selectedColor } from "../../../components/list-view.js";
 
 const CELL_WIDTH = 16;
 
@@ -168,10 +169,7 @@ export function TableViewScreen(): ReactElement {
                     isSelected ? "cyan" : isAnchor ? "yellow" : "gray"
                   }
                 >
-                  <Text
-                    color={isSelected ? "cyan" : undefined}
-                    inverse={isSelected}
-                  >
+                  <Text color={selectedColor(isSelected)} inverse={isSelected}>
                     {truncatePreview(cell.text, CELL_WIDTH - 2)}
                   </Text>
                 </Box>

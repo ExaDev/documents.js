@@ -1,7 +1,7 @@
 import type { LayoutItem, LayoutPage } from "documents.js";
 import { Box, Text } from "ink";
 import type { ReactElement } from "react";
-import { ListView } from "../../../components/list-view.js";
+import { ListView, selectedColor } from "../../../components/list-view.js";
 import { useNavigationInput } from "../../../keybindings/use-navigation-input.js";
 import { useAppDispatch, useAppState } from "../../../state/context.js";
 import { anyOverlayOpen } from "../../../state/types.js";
@@ -93,7 +93,7 @@ export function PdfPageListScreen(): ReactElement {
             : `No pages match "${state.searchQuery}".`
         }
         renderItem={({ page, pageIndex }, isSelected) => (
-          <Text color={isSelected ? "cyan" : undefined} inverse={isSelected}>
+          <Text color={selectedColor(isSelected)} inverse={isSelected}>
             Page {pageIndex + 1} -- {pageSummaryText(page)}
           </Text>
         )}

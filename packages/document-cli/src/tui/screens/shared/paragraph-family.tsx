@@ -21,7 +21,7 @@ import type {
   OdtTable,
   OdtTableCell,
 } from "documents.js";
-import { ListView } from "../../components/list-view.js";
+import { ListView, selectedColor } from "../../components/list-view.js";
 import { TextField } from "../../components/text-field.js";
 import {
   useNavigationInput,
@@ -572,26 +572,20 @@ export function ParagraphFamilyBodyList(props: {
           }
           if (row.kind === "paragraph") {
             return (
-              <Text
-                color={isSelected ? "cyan" : undefined}
-                inverse={isSelected}
-              >
+              <Text color={selectedColor(isSelected)} inverse={isSelected}>
                 {`  ¶ ${truncatePreview(row.paragraph.text, PREVIEW_WIDTH)}${paragraphBadges(row.paragraph)}`}
               </Text>
             );
           }
           if (row.kind === "table") {
             return (
-              <Text
-                color={isSelected ? "cyan" : undefined}
-                inverse={isSelected}
-              >
+              <Text color={selectedColor(isSelected)} inverse={isSelected}>
                 {`  ▦ ${tableSummary(row.table)}`}
               </Text>
             );
           }
           return (
-            <Text color={isSelected ? "cyan" : undefined} inverse={isSelected}>
+            <Text color={selectedColor(isSelected)} inverse={isSelected}>
               {`  ≡ ${listSummary(row.list, row.index)}`}
             </Text>
           );

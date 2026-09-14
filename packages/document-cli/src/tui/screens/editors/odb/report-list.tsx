@@ -1,7 +1,7 @@
 import { Box, Text } from "ink";
 import type { ReactElement } from "react";
 import { describeOdbReport } from "../../../../odb-structure.js";
-import { ListView } from "../../../components/list-view.js";
+import { ListView, selectedColor } from "../../../components/list-view.js";
 import { useNavigationInput } from "../../../keybindings/use-navigation-input.js";
 import { useAppDispatch, useAppState } from "../../../state/context.js";
 import { anyOverlayOpen } from "../../../state/types.js";
@@ -53,7 +53,7 @@ export function OdbReportListScreen(): ReactElement {
             : `No reports match "${state.searchQuery}".`
         }
         renderItem={(report, isSelected) => (
-          <Text color={isSelected ? "cyan" : undefined} inverse={isSelected}>
+          <Text color={selectedColor(isSelected)} inverse={isSelected}>
             {describeOdbReport(report)}
           </Text>
         )}

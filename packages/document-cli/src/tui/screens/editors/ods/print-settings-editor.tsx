@@ -1,7 +1,7 @@
 import type { ContentSheetPrintSettings } from "documents.js";
 import { Box, Text } from "ink";
 import { useState, type ReactElement } from "react";
-import { ListView } from "../../../components/list-view.js";
+import { ListView, selectedColor } from "../../../components/list-view.js";
 import { TextField } from "../../../components/text-field.js";
 import { useNavigationInput } from "../../../keybindings/use-navigation-input.js";
 import { useAppDispatch, useAppState } from "../../../state/context.js";
@@ -197,10 +197,7 @@ export function OdsPrintSettingsEditorScreen(): ReactElement {
         renderItem={(row, isSelected) => (
           <Box>
             <Box width={LABEL_COLUMN_WIDTH}>
-              <Text
-                color={isSelected ? "cyan" : undefined}
-                inverse={isSelected}
-              >
+              <Text color={selectedColor(isSelected)} inverse={isSelected}>
                 {row.label}
               </Text>
             </Box>

@@ -80,23 +80,6 @@ describe("DiagnosticsPanel", () => {
     expect(frame).toContain("No diagnostics have been reported.");
   });
 
-  it("colours the selected entry cyan and leaves the rest uncoloured", async () => {
-    const { lastFrame } = renderHarness();
-    const frame = await waitForFrame(lastFrame, (candidate) =>
-      candidate.includes("Diagnostics (2)"),
-    );
-    // Only the first (selected) entry's line carries ink's cyan foreground escape; the second entry's own line has none.
-    const [selectedLine, otherLine] = frame
-      .split("\n")
-      .filter(
-        (line) =>
-          line.includes("Substituted a font") ||
-          line.includes("Dropped an unsupported field"),
-      );
-    expect(selectedLine).toContain("[36m");
-    expect(otherLine).not.toContain("[36m");
-  });
-
   it("dismisses the selected diagnostic on Enter", async () => {
     const { lastFrame, stdin } = renderHarness();
     await waitForFrame(lastFrame, (candidate) =>

@@ -2,7 +2,7 @@ import type { LayoutItem, PdfTextInit } from "documents.js";
 import { Box, Text, useInput } from "ink";
 import { useState, type Dispatch, type ReactElement } from "react";
 import { readInput } from "../../../../runtime/io.js";
-import { ListView } from "../../../components/list-view.js";
+import { ListView, selectedColor } from "../../../components/list-view.js";
 import { describeError } from "../../../errors.js";
 import { useNavigationInput } from "../../../keybindings/use-navigation-input.js";
 import type { Action } from "../../../state/actions.js";
@@ -360,7 +360,7 @@ function AddItemFlow(props: {
           selectedIndex={selectedIndex}
           reservedRows={6}
           renderItem={(option, isSelected) => (
-            <Text color={isSelected ? "cyan" : undefined}>
+            <Text color={selectedColor(isSelected)}>
               {isSelected ? "> " : "  "}
               {option.label}
             </Text>
@@ -496,7 +496,7 @@ export function PdfPageItemsScreen(): ReactElement {
             : `No items match "${state.searchQuery}".`
         }
         renderItem={({ item, itemIndex }, isSelected) => (
-          <Text color={isSelected ? "cyan" : undefined} inverse={isSelected}>
+          <Text color={selectedColor(isSelected)} inverse={isSelected}>
             {itemIndex + 1}. {item.kind} -- {previewFor(item)}
           </Text>
         )}

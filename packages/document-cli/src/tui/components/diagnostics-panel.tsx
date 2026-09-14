@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { useNavigationInput } from "../keybindings/use-navigation-input.js";
 import { useAppDispatch, useAppState } from "../state/context.js";
 import type { Diagnostic } from "../state/types.js";
-import { ListView } from "./list-view.js";
+import { ListView, selectedColor } from "./list-view.js";
 
 // The panel's own chrome: a title line, a footer hint line, the box border's two rows, and the status line underneath it.
 const PANEL_RESERVED_ROWS = 7;
@@ -40,7 +40,7 @@ export function DiagnosticsPanel(): ReactElement {
         emptyMessage="No diagnostics have been reported."
         reservedRows={PANEL_RESERVED_ROWS}
         renderItem={(diagnostic, isSelected) => (
-          <Text color={isSelected ? "cyan" : undefined} inverse={isSelected}>
+          <Text color={selectedColor(isSelected)} inverse={isSelected}>
             {describe(diagnostic)}
           </Text>
         )}

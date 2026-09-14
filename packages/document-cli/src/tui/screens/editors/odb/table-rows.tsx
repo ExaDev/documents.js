@@ -5,7 +5,7 @@ import {
 } from "documents.js";
 import { Box, Text } from "ink";
 import type { ReactElement } from "react";
-import { ListView } from "../../../components/list-view.js";
+import { ListView, selectedColor } from "../../../components/list-view.js";
 import { useNavigationInput } from "../../../keybindings/use-navigation-input.js";
 import { useAppDispatch, useAppState } from "../../../state/context.js";
 import { anyOverlayOpen, currentScreen } from "../../../state/types.js";
@@ -82,7 +82,7 @@ export function OdbTableRowsScreen(): ReactElement {
             : `No rows match "${state.searchQuery}".`
         }
         renderItem={(row, isSelected) => (
-          <Text color={isSelected ? "cyan" : undefined} inverse={isSelected}>
+          <Text color={selectedColor(isSelected)} inverse={isSelected}>
             {rowText(row)}
           </Text>
         )}

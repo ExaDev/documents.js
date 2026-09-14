@@ -3,7 +3,7 @@ import { Box, Text, useInput } from "ink";
 import { useState, type ReactElement } from "react";
 import type { Box as GeometryBox, ContentStroke } from "documents.js";
 import { describeError } from "../../../errors.js";
-import { ListView } from "../../../components/list-view.js";
+import { ListView, selectedColor } from "../../../components/list-view.js";
 import { TextField } from "../../../components/text-field.js";
 import { useNavigationInput } from "../../../keybindings/use-navigation-input.js";
 import type { Action } from "../../../state/actions.js";
@@ -437,19 +437,13 @@ export function SlideDetailScreen(props: SlideDetailScreenProps): ReactElement {
             }
             if (row.kind === "table") {
               return (
-                <Text
-                  color={isSelected ? "cyan" : undefined}
-                  inverse={isSelected}
-                >
+                <Text color={selectedColor(isSelected)} inverse={isSelected}>
                   {"  "}Table {row.index + 1} ({row.rowCount}x{row.columnCount})
                 </Text>
               );
             }
             return (
-              <Text
-                color={isSelected ? "cyan" : undefined}
-                inverse={isSelected}
-              >
+              <Text color={selectedColor(isSelected)} inverse={isSelected}>
                 {row.index + 1}.{" "}
                 {describeSlideFamilyShape({ text: row.text, frame: row.frame })}
               </Text>

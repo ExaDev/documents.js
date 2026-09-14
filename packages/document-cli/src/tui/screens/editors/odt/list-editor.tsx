@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from "ink";
 import { useState, type ReactElement } from "react";
-import { ListView } from "../../../components/list-view.js";
+import { ListView, selectedColor } from "../../../components/list-view.js";
 import { TextField } from "../../../components/text-field.js";
 import { useNavigationInput } from "../../../keybindings/use-navigation-input.js";
 import { useAppDispatch, useAppState } from "../../../state/context.js";
@@ -132,7 +132,7 @@ export function ListEditorScreen(): ReactElement {
         renderItem={(row, isSelected) => {
           const trimmed = row.item.text.trim();
           return (
-            <Text color={isSelected ? "cyan" : undefined} inverse={isSelected}>
+            <Text color={selectedColor(isSelected)} inverse={isSelected}>
               {row.index + 1}.{" "}
               {trimmed.length === 0 ? "(empty)" : row.item.text}
             </Text>
