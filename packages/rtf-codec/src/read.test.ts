@@ -2559,12 +2559,14 @@ describe("block-scoped construct extent ordering", () => {
     const outerStart = blocks[0];
     const innerStart = blocks[1];
     expect(
-      outerStart?.kind === "constructStart"
+      outerStart?.kind === "constructStart" &&
+        outerStart.descriptor.kind === "anchor"
         ? outerStart.descriptor.name
         : undefined,
     ).toBe("outer");
     expect(
-      innerStart?.kind === "constructStart"
+      innerStart?.kind === "constructStart" &&
+        innerStart.descriptor.kind === "anchor"
         ? innerStart.descriptor.name
         : undefined,
     ).toBe("inner");
