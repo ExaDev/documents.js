@@ -16,8 +16,8 @@ const PDF_1_4 = "1.4";
 const HELVETICA_FONT_DICT =
   "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
 
-// Tracks byte offsets as objects are appended, purely by recording ByteWriter's own running length before each write -- the same mechanical idea src/pdf/write.ts uses, reimplemented independently here rather than shared with it.
-class FixtureBuilder {
+// Tracks byte offsets as objects are appended, purely by recording ByteWriter's own running length before each write -- the same mechanical idea src/pdf/write.ts uses, reimplemented independently here rather than shared with it. Exported solely so pdf.test.ts can exercise its own byte-level mechanics (the /Length-insertion regex, xref padding, offsetOf's misuse guard) directly -- the exported fixture functions below only ever feed it well-formed, non-adversarial input, so those specific mechanics have no other route to direct coverage.
+export class FixtureBuilder {
   private readonly writer = new ByteWriter();
   private readonly offsets = new Map<number, number>();
 
@@ -32,11 +32,6 @@ class FixtureBuilder {
 
   raw(text: string): this {
     this.writer.writeAscii(text);
-    return this;
-  }
-
-  rawBytes(bytes: Uint8Array<ArrayBuffer>): this {
-    this.writer.writeBytes(bytes);
     return this;
   }
 
