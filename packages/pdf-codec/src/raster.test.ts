@@ -1090,6 +1090,19 @@ describe("renderPdfPage: vector draw ops", () => {
     expect(squares[squares.length - 1]).toMatchObject({ xPx: 59, yPx: 39 });
   });
 
+  it("scales drawPath's own dotted dot size by the render scale, not divides by it", () => {
+    // At scale 1 (every test above), multiplying and dividing widthPt by pixelsPerPt are indistinguishable; only a non-1 scale pins the operator drawPath's own dotted branch uses, as the sibling drawLine test above already does for its own branch.
+    const rasteriser = new RecordingRasteriser();
+    drive(
+      onePagePdf("[0 4] 0 d 1 J 2 w 0 0 0 RG 20 20 m 60 20 l 60 60 l S"),
+      0,
+      { scale: 3 },
+      rasteriser,
+    );
+    const squares = rasteriser.ops.filter(isFillRect);
+    expect(squares[0]).toMatchObject({ widthPx: 6, heightPx: 6 });
+  });
+
   it("draws a dotted general path's own cubic segment as a dot train too, not only its line segments", () => {
     // A cubic whose control points are collinear with its endpoints flattens to just its own endpoint (the same fact flattenCubic's own suite pins directly), so the resulting dot train is exactly as predictable as the line-segment case above -- this isolates drawPath's cubic branch from its line branch, which the line-only test above never touches.
     const rasteriser = new RecordingRasteriser();
