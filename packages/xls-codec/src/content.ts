@@ -660,9 +660,7 @@ function applyCellComments(
   comments: ReadonlyMap<string, SheetCellComment>,
   cells: ContentSheetCell[],
 ): void {
-  if (comments.size === 0) {
-    return;
-  }
+  // No comments.size===0 early return: an empty comments map already makes the loop below a no-op on its own (nothing to iterate), so a dedicated guard here would only ever produce that identical no-op -- never a genuinely different result, just the same one reached by a shorter path.
   const byPosition = new Map<string, ContentSheetCell>();
   for (const cell of cells) {
     byPosition.set(`${cell.row}:${cell.column}`, cell);
@@ -673,15 +671,14 @@ function applyCellComments(
       existing.comment = comment;
       continue;
     }
-    const materialised: ContentSheetCell = {
+    // No byPosition.set(key, materialised) here: `comments` is a Map, so `key` can never recur across this same loop's own remaining iterations -- there is no later lookup this entry could ever be read back by.
+    cells.push({
       row,
       column,
       value: { kind: "empty" },
       displayText: "",
       comment,
-    };
-    cells.push(materialised);
-    byPosition.set(key, materialised);
+    });
   }
 }
 
@@ -916,8 +913,7 @@ function displayTextOf(value: ContentCellValue): string {
       return value.value;
     case "empty":
       return "";
-    default:
-      return "";
+    // No default: ContentCellValueSchema's discriminated union has exactly these ten kinds, so every one is already handled above -- a default clause here would only ever be reached by a value outside that union, which the parameter's own type already rules out, and a hand-added "return the identical empty string" branch for that unreachable case is not a smaller version of a real fallback, it is a second, redundant copy of the "empty" case's own return.
   }
 }
 

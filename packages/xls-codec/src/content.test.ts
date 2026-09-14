@@ -16,6 +16,7 @@ import { ContentDocumentSchema, DocumentTreeSchema } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 
 import {
+  BOF_TYPE_CHART,
   BOF_TYPE_WORKBOOK,
   BOF_TYPE_WORKSHEET,
   RECORD_BLANK,
@@ -521,6 +522,71 @@ describe("readXlsContent", () => {
     });
   });
 
+  it("never materialises a phantom anchor for a degenerate 1x1 MergeCells range", () => {
+    // A range whose start and end coincide on both axes is not a real merge at all (rowSpan and colSpan both resolve to exactly 1, ContentSheetCell's own "only when greater than one" contract), so applyMerges must skip it entirely -- including never even looking up or materialising an anchor cell at that position, which an undecorated, valueless position would otherwise gain purely as a side effect of the lookup.
+    const bytes = xlsFile(
+      workbookStream({
+        globals: xfTable(0),
+        sheets: [
+          {
+            name: "Sheet1",
+            records: [
+              record(RECORD_NUMBER, [...cell(0, 0), ...f64(1)]),
+              record(RECORD_MERGECELLS, [
+                ...u16(1),
+                ...u16(5), // rowFirst
+                ...u16(5), // rowLast -- same as rowFirst
+                ...u16(5), // colFirst
+                ...u16(5), // colLast -- same as colFirst
+              ]),
+            ],
+          },
+        ],
+      }),
+    );
+
+    const cells = readXlsContent(bytes).sheets[0]?.cells ?? [];
+
+    expect(cells).toHaveLength(1);
+    expect(cells.find((c) => c.row === 5 && c.column === 5)).toBeUndefined();
+  });
+
+  it("anchors a merge to the cell at its own start row AND column, not just a same-row or same-column neighbour", () => {
+    // Two other real cells sit at the same row and the same column as the merge's own start position, but neither one IS that position -- only the cell at exactly (2,2) may be treated as this merge's anchor.
+    const bytes = xlsFile(
+      workbookStream({
+        globals: xfTable(0),
+        sheets: [
+          {
+            name: "Sheet1",
+            records: [
+              record(RECORD_NUMBER, [...cell(2, 0), ...f64(10)]), // same row, different column
+              record(RECORD_NUMBER, [...cell(0, 2), ...f64(20)]), // same column, different row
+              record(RECORD_MERGECELLS, [
+                ...u16(1),
+                ...u16(2), // rowFirst
+                ...u16(3), // rowLast
+                ...u16(2), // colFirst
+                ...u16(3), // colLast
+              ]),
+            ],
+          },
+        ],
+      }),
+    );
+
+    const cells = readXlsContent(bytes).sheets[0]?.cells ?? [];
+    const rowNeighbour = cells.find((c) => c.row === 2 && c.column === 0);
+    const columnNeighbour = cells.find((c) => c.row === 0 && c.column === 2);
+    const anchor = cells.find((c) => c.row === 2 && c.column === 2);
+
+    expect(rowNeighbour?.rowSpan).toBeUndefined();
+    expect(rowNeighbour?.colSpan).toBeUndefined();
+    expect(columnNeighbour?.rowSpan).toBeUndefined();
+    expect(columnNeighbour?.colSpan).toBeUndefined();
+    expect(anchor).toMatchObject({ rowSpan: 2, colSpan: 2 });
+  });
+
   it("reads a Dv record into ContentSheet.dataValidations (ExaDev/documents.js#1098) -- workbook/data-validation.test.ts covers the [MS-XLS] field mapping in full; this is the end-to-end proof from real bytes to ContentSheet", () => {
     const bytes = xlsFile(
       workbookStream({
@@ -561,6 +627,48 @@ describe("readXlsContent", () => {
         ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
       },
     ]);
+  });
+
+  it("leaves formula1 entirely absent for a valType-0 Dv record, ECMA-376's own 'no criteria stated' shape", () => {
+    // valType 0 is unmapped by VALUE_TYPE_BY_VAL_TYPE, so this degrades to type 'custom' with a genuinely zero-length formula1 (cce 0) -- own-property check, not a value check, since a bug materialising the key with an explicit undefined value would pass a plain .toBeUndefined() assertion just as easily as a genuinely absent key would.
+    const bytes = xlsFile(
+      workbookStream({
+        globals: xfTable(0),
+        sheets: [
+          {
+            name: "Sheet1",
+            records: [
+              record(RECORD_DV, [
+                ...u32(0), // flags: valType 0, every other bit clear
+                ...xlUnicodeString(""),
+                ...xlUnicodeString(""),
+                ...xlUnicodeString(""),
+                ...xlUnicodeString(""),
+                ...u16(0), // formula1 cce: 0
+                ...u16(0), // formula1's own unused field
+                ...u16(0), // formula2 cce: 0
+                ...u16(0), // formula2's own unused field
+                ...u16(1),
+                ...u16(0),
+                ...u16(0),
+                ...u16(0),
+                ...u16(0),
+              ]),
+            ],
+          },
+        ],
+      }),
+    );
+
+    const validations = readXlsContent(bytes).sheets[0]?.dataValidations;
+
+    expect(validations).toStrictEqual([
+      {
+        type: "custom",
+        ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
+      },
+    ]);
+    expect(Object.hasOwn(validations?.[0] ?? {}, "formula1")).toBe(false);
   });
 
   it("reads a CondFmt/CF group into ContentSheet.conditionalFormats, resolving its own dxf font colour through the icv fixed table (ExaDev/documents.js#1102) -- workbook/conditional-format.test.ts covers the [MS-XLS] field mapping in full; this is the end-to-end proof from real bytes to ContentSheet", () => {
@@ -619,6 +727,53 @@ describe("readXlsContent", () => {
         style: { textColor: { r: 1, g: 0, b: 0 } },
       },
     ]);
+  });
+
+  it("resolves to no style at all when a dxf's own fill pattern is FLSNULL, rather than a style object with nothing in it", () => {
+    // DXFPat's own fls of 0 (FLSNULL) is a real, present fill block -- ibitAtrPat is set, so raw.fill is a genuine object, not undefined -- but resolveFillBackground has no pattern type for it and returns undefined, exactly like the "no font colour block at all" half of this style. Both halves resolving to undefined must still collapse the WHOLE style to undefined, not an empty {} object the schema has no field for.
+    const dxf = [
+      ...u32(1 << 29), // flags1: ibitAtrPat only
+      ...u16(0), // flags2
+      ...u32(0), // DXFPat: fls(FLSNULL)=0, both icvs irrelevant -- the pattern lookup fails before either is read
+    ];
+    const bytes = xlsFile(
+      workbookStream({
+        globals: xfTable(0),
+        sheets: [
+          {
+            name: "Sheet1",
+            records: [
+              record(RECORD_CONDFMT, [
+                ...u16(1),
+                ...u16(0),
+                ...u16(0),
+                ...u16(0),
+                ...u16(0),
+                ...u16(0),
+                ...u16(1),
+                ...u16(0),
+                ...u16(0),
+                ...u16(0),
+                ...u16(0),
+              ]),
+              record(RECORD_CF, [
+                0x01,
+                0x05,
+                ...u16(3),
+                ...u16(0),
+                ...dxf,
+                0x1e,
+                ...u16(10),
+              ]),
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(
+      readXlsContent(bytes).sheets[0]?.conditionalFormats?.[0]?.style,
+    ).toBeUndefined();
   });
 
   it("reads a CondFmt12/CF12 colour-scale rule into ContentSheet.conditionalFormats, resolving its own indexed colours through the icv fixed table (ExaDev/documents.js#1104) -- workbook/conditional-format-12.test.ts covers the [MS-XLS] field mapping in full; this is the end-to-end proof from real bytes to ContentSheet", () => {
@@ -1224,6 +1379,114 @@ describe("readXlsContent", () => {
     expect(() =>
       readXlsContent(new Uint8Array([0x50, 0x4b, 0x03, 0x04])),
     ).toThrow(BiffFormatError);
+  });
+
+  it("treats a BoundSheet8 lbPlyPos landing on a non-worksheet substream as no substream at all", () => {
+    // A worksheet-typed BoundSheet8 entry whose own lbPlyPos happens to name the byte offset of a CHART substream, not a genuine worksheet one -- a malformed/corrupt file this reader must not misread rather than one any real producer would write. Finding a substream at that offset is not enough on its own; its own BOF-declared documentType must agree with BOF_TYPE_WORKSHEET too, or the sheet degrades to the empty default (readSheet's own module comment) rather than parsing a chart substream's records as if they were a worksheet's.
+    const boundSheetPlaceholder = record(RECORD_BOUNDSHEET8, [
+      ...u32(0),
+      0x00,
+      0x00, // dt: worksheet
+      ...shortXlUnicodeString("Sheet1"),
+    ]);
+    const globals = concat(
+      record(RECORD_BOF, bofData(BOF_TYPE_WORKBOOK)),
+      ...xfTable(0),
+      boundSheetPlaceholder,
+      record(RECORD_EOF, []),
+    );
+    const chartSubstream = concat(
+      record(RECORD_BOF, bofData(BOF_TYPE_CHART)),
+      record(RECORD_NUMBER, [...cell(0, 0), ...f64(42)]),
+      record(RECORD_EOF, []),
+    );
+    const boundSheet = record(RECORD_BOUNDSHEET8, [
+      ...u32(globals.length), // lbPlyPos -- lands exactly on the chart substream's own BOF, not a worksheet's.
+      0x00,
+      0x00,
+      ...shortXlUnicodeString("Sheet1"),
+    ]);
+    const bytes = xlsFile(
+      concat(
+        record(RECORD_BOF, bofData(BOF_TYPE_WORKBOOK)),
+        ...xfTable(0),
+        boundSheet,
+        record(RECORD_EOF, []),
+        chartSubstream,
+      ),
+    );
+
+    const content = readXlsContent(bytes);
+
+    expect(content.sheets[0]?.cells).toStrictEqual([]);
+  });
+
+  it("refuses a Workbook stream that carries no records at all, so no globals substream exists", () => {
+    expect(() => readXlsContent(xlsFile(new Uint8Array(0)))).toThrow(
+      "workbook stream holds no substreams, so it carries no globals substream",
+    );
+  });
+
+  it("reads a hidden column with no width at all as hidden alone, not a spurious widthPt", () => {
+    // ColInfo's own coldx of 0 converts to a non-positive widthPt -- a column this reader never materialises a width for, only its hidden state -- unlike a real writeXlsContent round trip, which always states SOME width for every column it emits a ColInfo record for at all.
+    const globals = concat(
+      record(RECORD_BOF, bofData(BOF_TYPE_WORKBOOK)),
+      ...xfTable(0),
+      record(RECORD_BOUNDSHEET8, [
+        ...u32(0),
+        0x00,
+        0x00,
+        ...shortXlUnicodeString("Sheet1"),
+      ]),
+      record(RECORD_EOF, []),
+    );
+    const finalBytes = xlsFile(
+      concat(
+        record(RECORD_BOF, bofData(BOF_TYPE_WORKBOOK)),
+        ...xfTable(0),
+        record(RECORD_BOUNDSHEET8, [
+          ...u32(globals.length),
+          0x00,
+          0x00,
+          ...shortXlUnicodeString("Sheet1"),
+        ]),
+        record(RECORD_EOF, []),
+        record(RECORD_BOF, bofData(BOF_TYPE_WORKSHEET)),
+        record(RECORD_COLINFO, [
+          ...u16(3), // first
+          ...u16(3), // last
+          ...u16(0), // coldx: 0 -- no usable width
+          ...u16(15), // ixfe, unread
+          ...u16(0x0001), // grbit: hidden
+        ]),
+        record(RECORD_EOF, []),
+      ),
+    );
+
+    const content = readXlsContent(finalBytes);
+    const column3 = content.sheets[0]?.columns.find((col) => col.index === 3);
+
+    expect(column3).toStrictEqual({ index: 3, hidden: true });
+  });
+
+  it("leaves numberFormatCode entirely absent for a cell whose own ixfe resolves to no cell format at all", () => {
+    // An ixfe past the end of the workbook's own cell-format table -- a malformed record this reader must not crash on, and must not report a fabricated format for either. Own-property check, not a value check: a bug materialising the key with an explicit undefined value would pass a plain .toBeUndefined() assertion just as easily as a genuinely absent key would.
+    const bytes = xlsFile(
+      workbookStream({
+        globals: xfTable(0),
+        sheets: [
+          {
+            name: "Sheet1",
+            records: [record(RECORD_NUMBER, [...cell(0, 0, 9999), ...f64(1)])],
+          },
+        ],
+      }),
+    );
+
+    const readBack = readXlsContent(bytes).sheets[0]?.cells[0];
+
+    expect(readBack?.value).toStrictEqual({ kind: "number", value: 1 });
+    expect(Object.hasOwn(readBack ?? {}, "numberFormatCode")).toBe(false);
   });
 
   describe("cell decoration", () => {
@@ -2236,6 +2499,37 @@ describe("readXlsContent print settings", () => {
     ]);
 
     expect(settings?.fitToPages).toBeUndefined();
+    expect(settings?.scalePercent).toBeUndefined();
+  });
+
+  it("reports no fit-to-page at all when the WIDTH count alone is the spec's own auto value", () => {
+    // The mirror image of the fitHeight-is-auto case above: fitWidth 0 with a real, positive fitHeight -- both axes must be positive independently, neither one alone is enough.
+    const settings = printSettingsOf([
+      record(RECORD_WSBOOL, u16(0x0100)),
+      setupRecord({
+        paperCode: 1,
+        scalePercent: 100,
+        fitWidth: 0,
+        fitHeight: 3,
+        grbit: 0x0002,
+      }),
+    ]);
+
+    expect(settings?.fitToPages).toBeUndefined();
+  });
+
+  it("reports no scale when a non-fit-to-page sheet's own scalePercent is the spec's own auto value", () => {
+    // [MS-XLS] 2.4.257's own iScale: a real producer never writes 0, but a reader that treated 0 as a genuine 0% scale would report an unusable setting rather than degrading to no stated scale at all.
+    const settings = printSettingsOf([
+      setupRecord({
+        paperCode: 1,
+        scalePercent: 0,
+        fitWidth: 1,
+        fitHeight: 1,
+        grbit: 0x0002,
+      }),
+    ]);
+
     expect(settings?.scalePercent).toBeUndefined();
   });
 
