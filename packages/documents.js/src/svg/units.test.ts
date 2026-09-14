@@ -28,6 +28,15 @@ describe("parseSvgLengthPt", () => {
     expect(parseSvgLengthPt("")).toBeUndefined();
     expect(parseSvgLengthPt(undefined)).toBeUndefined();
   });
+
+  it("trims surrounding whitespace before matching, rather than rejecting it as malformed", () => {
+    expect(parseSvgLengthPt("  100px  ")).toBe(75);
+  });
+
+  it("returns undefined when the matched number is syntactically valid but not finite", () => {
+    // The pattern's own exponent grammar accepts a magnitude this large; Number() then overflows to Infinity, which the finiteness guard must still reject rather than propagate.
+    expect(parseSvgLengthPt("1e400")).toBeUndefined();
+  });
 });
 
 describe("parseSvgUserUnits", () => {
@@ -67,6 +76,7 @@ describe("parseSvgViewBox", () => {
     expect(parseSvgViewBox("0 0 100")).toBeUndefined();
     expect(parseSvgViewBox("0 0 100 60 5")).toBeUndefined();
     expect(parseSvgViewBox("0 0 -100 60")).toBeUndefined();
+    expect(parseSvgViewBox("0 0 100 -60")).toBeUndefined();
     expect(parseSvgViewBox("0 0 100 abc")).toBeUndefined();
     expect(parseSvgViewBox(undefined)).toBeUndefined();
   });
@@ -76,6 +86,21 @@ describe("parseSvgViewBox", () => {
       minX: 0,
       minY: 0,
       width: 0,
+      height: 60,
+    });
+    expect(parseSvgViewBox("0 0 100 0")).toEqual({
+      minX: 0,
+      minY: 0,
+      width: 100,
+      height: 0,
+    });
+  });
+
+  it("trims surrounding whitespace and collapses runs of internal whitespace between numbers", () => {
+    expect(parseSvgViewBox("  0  0   100 60  ")).toEqual({
+      minX: 0,
+      minY: 0,
+      width: 100,
       height: 60,
     });
   });
