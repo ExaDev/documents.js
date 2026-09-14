@@ -127,7 +127,7 @@ describe("useNavigationInput", () => {
   });
 
   it("calls onBack on Escape, left arrow, or 'h'", async () => {
-    const onBack = vi.fn();
+    const onBack = vi.fn<() => void>();
     const { stdin } = render(
       <Harness itemCount={5} onSelect={() => undefined} onBack={onBack} />,
     );
@@ -140,7 +140,7 @@ describe("useNavigationInput", () => {
   });
 
   it("calls onSelect with the current index on Enter, right arrow, or 'l'", async () => {
-    const onSelect = vi.fn();
+    const onSelect = vi.fn<() => void>();
     const { stdin } = render(
       <Harness itemCount={5} onSelect={onSelect} onBack={() => undefined} />,
     );
@@ -154,7 +154,7 @@ describe("useNavigationInput", () => {
   });
 
   it("never calls onSelect when the list is empty", async () => {
-    const onSelect = vi.fn();
+    const onSelect = vi.fn<() => void>();
     const { stdin } = render(
       <Harness itemCount={0} onSelect={onSelect} onBack={() => undefined} />,
     );
@@ -163,7 +163,7 @@ describe("useNavigationInput", () => {
   });
 
   it("calls onAppend on 'a' when provided", async () => {
-    const onAppend = vi.fn();
+    const onAppend = vi.fn<() => void>();
     const { stdin } = render(
       <Harness
         itemCount={5}
