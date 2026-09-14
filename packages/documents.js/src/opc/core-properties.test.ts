@@ -19,6 +19,23 @@ function emptyPackage(): Package {
 }
 
 describe("addCoreProperties", () => {
+  it("starts docProps/core.xml with the standard version/encoding/standalone declaration", () => {
+    const pkg = emptyPackage();
+    addCoreProperties(pkg, {});
+    const part = pkg.parts[CORE_PROPERTIES_PATH];
+    if (part?.kind !== "xml") {
+      throw new Error("expected an xml part");
+    }
+    expect(part.nodes[0]).toEqual({
+      type: "declaration",
+      attributes: [
+        { name: "version", value: "1.0" },
+        { name: "encoding", value: "UTF-8" },
+        { name: "standalone", value: "yes" },
+      ],
+    });
+  });
+
   it("writes every supplied field to its real OOXML core-properties element", () => {
     const pkg = emptyPackage();
     const metadata: LayoutMetadata = {
@@ -34,6 +51,18 @@ describe("addCoreProperties", () => {
     const root = rootElement(pkg.parts[CORE_PROPERTIES_PATH]);
     expect(root).toBeDefined();
     expect(root?.tag).toBe("cp:coreProperties");
+    expect(root === undefined ? undefined : attr(root, "xmlns:cp")).toBe(
+      "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
+    );
+    expect(root === undefined ? undefined : attr(root, "xmlns:dc")).toBe(
+      "http://purl.org/dc/elements/1.1/",
+    );
+    expect(root === undefined ? undefined : attr(root, "xmlns:dcterms")).toBe(
+      "http://purl.org/dc/terms/",
+    );
+    expect(root === undefined ? undefined : attr(root, "xmlns:xsi")).toBe(
+      "http://www.w3.org/2001/XMLSchema-instance",
+    );
 
     const title =
       root === undefined ? undefined : childrenWithTag(root, "dc:title")[0];
