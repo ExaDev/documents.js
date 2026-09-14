@@ -152,6 +152,18 @@ describe("parseFormulaText", () => {
     expect(parseFormulaText(rgce, NO_SHEETS)).toBe("(A1+B1)*C1");
   });
 
+  it("wraps a lower-precedence left child through precedence comparison alone, with no PtgParen token involved", () => {
+    // (A1+B1)*C1 again, but genuinely built from precedence -- no PtgParen this time, so only wrapBelow's own left-operand comparison decides whether the addition needs parentheses before the multiply combines it.
+    const rgce = bytes(
+      ...ptgRef(0, 0),
+      ...ptgRef(0, 1),
+      0x03, // PtgAdd (A1+B1)
+      ...ptgRef(0, 2),
+      0x05, // PtgMul, combining the addition as its own LEFT operand
+    );
+    expect(parseFormulaText(rgce, NO_SHEETS)).toBe("(A1+B1)*C1");
+  });
+
   it("wraps a same-precedence right child that division is not associative over", () => {
     // A1/(B1/C1) -- the postfix nesting itself (right child built before being combined) is what requires the parenthesis, independent of any PtgParen token.
     const rgce = bytes(
@@ -326,7 +338,24 @@ describe("parseFormulaText", () => {
   });
 
   it("aborts on a binary operator with too few operands rather than guessing", () => {
-    const rgce = bytes(...ptgRef(0, 0), 0x03); // PtgAdd with only one operand pushed
+    // A trailing PtgRef after the starved PtgAdd is what actually distinguishes this abort from merely falling through to the final stack-not-exactly-one-operand check: applyBinary already popped its own one available operand before discovering the second is missing, so a caller that failed to abort immediately would resume with an EMPTY stack and happily push the trailing B1 onto it, landing on the same "undefined" result via the unrelated fallthrough check instead of this guard -- appending B1 forces the two paths to diverge (undefined vs "B1").
+    const rgce = bytes(...ptgRef(0, 0), 0x03, ...ptgRef(0, 1)); // PtgAdd with only one operand pushed, then a trailing B1
+    expect(parseFormulaText(rgce, NO_SHEETS)).toBeUndefined();
+  });
+
+  it("aborts on a unary-minus operator with no operand pushed", () => {
+    // See the binary-operator test above for why a trailing token is what actually distinguishes this abort from the unrelated fallthrough check.
+    const rgce = bytes(0x13, ...ptgRef(0, 0)); // PtgUminus with nothing on the stack, then a trailing A1
+    expect(parseFormulaText(rgce, NO_SHEETS)).toBeUndefined();
+  });
+
+  it("aborts on a percent operator with no operand pushed", () => {
+    const rgce = bytes(0x14, ...ptgRef(0, 0)); // PtgPercent with nothing on the stack, then a trailing A1
+    expect(parseFormulaText(rgce, NO_SHEETS)).toBeUndefined();
+  });
+
+  it("aborts on a PtgParen with no operand pushed", () => {
+    const rgce = bytes(0x15, ...ptgRef(0, 0)); // PtgParen with nothing on the stack, then a trailing A1
     expect(parseFormulaText(rgce, NO_SHEETS)).toBeUndefined();
   });
 
@@ -397,6 +426,44 @@ describe("parseFormulaText shared-formula relative tokens (PtgRefN/PtgAreaN)", (
     expect(
       parseFormulaText(rgce, NO_SHEETS, { relativeTo: { row: 0, column: 0 } }),
     ).toBe("A65536");
+  });
+
+  it("wraps a relative reference's row around the sheet's own OTHER edge, past its own top", () => {
+    // One row below the sheet's own last row (index 0xffff) wraps back to row 1 -- the mirror of the "above row 1" wrap already covered above, and the only way to distinguish row>0xffff from row>=0xffff.
+    const rgce = bytes(...ptgRefN(1, 0));
+    expect(
+      parseFormulaText(rgce, NO_SHEETS, {
+        relativeTo: { row: 0xffff, column: 0 },
+      }),
+    ).toBe("A1");
+  });
+
+  it("does not wrap a relative row landing exactly on the sheet's own last row", () => {
+    const rgce = bytes(...ptgRefN(0, 0));
+    expect(
+      parseFormulaText(rgce, NO_SHEETS, {
+        relativeTo: { row: 0xffff, column: 0 },
+      }),
+    ).toBe("A65536");
+  });
+
+  it("wraps a relative reference's column around the sheet's own OTHER edge, past its own last column", () => {
+    // One column past the sheet's own last column (index 0xff) wraps back to column A -- the mirror of the "left of column A" wrap already covered above, and the only way to distinguish column>0xff from column>=0xff.
+    const rgce = bytes(...ptgRefN(0, 1));
+    expect(
+      parseFormulaText(rgce, NO_SHEETS, {
+        relativeTo: { row: 0, column: 0xff },
+      }),
+    ).toBe("A1");
+  });
+
+  it("does not wrap a relative column landing exactly on the sheet's own last column", () => {
+    const rgce = bytes(...ptgRefN(0, 0));
+    expect(
+      parseFormulaText(rgce, NO_SHEETS, {
+        relativeTo: { row: 0, column: 0xff },
+      }),
+    ).toBe("IV1");
   });
 
   it("still honours an absolute ($) reference packed inside a relative token, unaffected by the cell being evaluated", () => {
