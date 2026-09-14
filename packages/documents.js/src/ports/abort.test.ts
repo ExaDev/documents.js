@@ -21,5 +21,14 @@ describe("throwIfAborted", () => {
     expect(() => {
       throwIfAborted(controller.signal);
     }).toThrow(DOMException);
+    let caught: unknown;
+    try {
+      throwIfAborted(controller.signal);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(DOMException);
+    expect((caught as DOMException).name).toBe("AbortError");
+    expect((caught as DOMException).message).toBe("Aborted");
   });
 });
