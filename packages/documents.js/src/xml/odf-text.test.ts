@@ -1,5 +1,6 @@
 import type { XmlNode } from "ooxml.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import * as odfJs from "odf.js";
 import { decodeOdfText, encodeOdfText } from "./odf-text";
 
 // The wrong behaviour decodeOdfText exists specifically to avoid: a naive concatenation of ONLY XmlText nodes, exactly what ooxml.js's own textContent() helper does and exactly why this codebase's own top-of-file warning in odf-text.ts forbids using it on ODF content. Defined only for the one regression test below, never exported.
@@ -98,6 +99,15 @@ describe("encodeOdfText", () => {
 });
 
 describe("decodeOdfText", () => {
+  it("wraps the given nodes in a real, named synthetic container element", () => {
+    const spy = vi.spyOn(odfJs, "decodeOdfText");
+    decodeOdfText([{ type: "text", value: "x" }]);
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({ tag: "_odf-text-container" }),
+    );
+    spy.mockRestore();
+  });
+
   it("is the exact inverse of encodeOdfText for single spaces, space runs, tabs, newlines, and mixed sequences", () => {
     for (const value of [
       " ",
