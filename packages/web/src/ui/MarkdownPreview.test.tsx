@@ -60,6 +60,11 @@ describe("MarkdownPreview", () => {
     expect(html).toContain("mantine-LoadingOverlay-root");
   });
 
+  it("shows no loading overlay when not loading", () => {
+    const html = renderPreview({ label: "L", format: "markdown" });
+    expect(html).not.toContain("mantine-LoadingOverlay-root");
+  });
+
   it("shows the unavailable message when an error is present", () => {
     const html = renderPreview({
       label: "L",
@@ -221,24 +226,29 @@ describe("MarkdownPreview", () => {
   });
 
   it("renders a run of ordered list-membership paragraphs as one <ol>", () => {
-    const html = renderPreview({
-      label: "L",
-      format: "markdown",
-      content: wordprocessingDocument([
-        paragraph({
-          runs: [{ text: "first" }],
-          list: { numId: "ordered:md1", level: 0 },
-        }),
-        paragraph({
-          runs: [{ text: "second" }],
-          list: { numId: "ordered:md1", level: 0 },
-        }),
-      ]),
-    });
-    expect(html).toContain("<ol");
-    expect(html).not.toContain("<ul");
-    expect(html).toContain("first");
-    expect(html).toContain("second");
+    const mounted = mountWithMantine(
+      <MarkdownPreview
+        label="L"
+        format="markdown"
+        content={wordprocessingDocument([
+          paragraph({
+            runs: [{ text: "first" }],
+            list: { numId: "ordered:md1", level: 0 },
+          }),
+          paragraph({
+            runs: [{ text: "second" }],
+            list: { numId: "ordered:md1", level: 0 },
+          }),
+        ])}
+      />,
+    );
+    unmount = mounted.unmount;
+    const ols = mounted.container.querySelectorAll("ol");
+    expect(ols).toHaveLength(1);
+    expect(mounted.container.querySelectorAll("ul")).toHaveLength(0);
+    expect(ols[0]?.querySelectorAll("li")).toHaveLength(2);
+    expect(ols[0]?.textContent).toContain("first");
+    expect(ols[0]?.textContent).toContain("second");
   });
 
   it("renders a run of bullet list-membership paragraphs as one <ul>", () => {
