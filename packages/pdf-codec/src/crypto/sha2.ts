@@ -154,22 +154,28 @@ export function sha256(
   const state = Uint32Array.from(H256);
   const w = new Uint32Array(SHA256_ROUNDS);
   for (let offset = 0; offset < padded.length; offset += SHA256_BLOCK_BYTES) {
-    for (let t = 0; t < WORDS_PER_BLOCK; t++) {
-      const at = offset + t * 4;
-      w[t] =
-        ((padded[at]! << 24) |
-          (padded[at + 1]! << 16) |
-          (padded[at + 2]! << 8) |
-          padded[at + 3]!) >>>
-        0;
-    }
-    for (let t = WORDS_PER_BLOCK; t < SHA256_ROUNDS; t++) {
+    // Fills w's first WORDS_PER_BLOCK entries via Uint32Array.set + Array.from's own length argument rather than a counted for-loop: an off-by-one bound on a Uint32Array like `w` would write one entry past its own fixed length, which a typed array silently drops -- an equivalent mutant no test could ever observe.
+    w.set(
+      Array.from({ length: WORDS_PER_BLOCK }, (_, t) => {
+        const at = offset + t * 4;
+        return (
+          ((padded[at]! << 24) |
+            (padded[at + 1]! << 16) |
+            (padded[at + 2]! << 8) |
+            padded[at + 3]!) >>>
+          0
+        );
+      }),
+    );
+    // Array.from's own length argument (SHA256_ROUNDS - WORDS_PER_BLOCK, an arithmetic value with no equivalent-mutant boundary the way a bare loop comparison would have) drives this expansion instead of a counted for-loop's own `t < SHA256_ROUNDS` -- the recurrence itself still runs index-by-index in order (Array.from's mapfn is called sequentially), since w[t] depends on entries this same expansion already wrote.
+    Array.from({ length: SHA256_ROUNDS - WORDS_PER_BLOCK }, (_, index) => {
+      const t = WORDS_PER_BLOCK + index;
       const x = w[t - 15]!;
       const y = w[t - 2]!;
       const s0 = rotr32(x, 7) ^ rotr32(x, 18) ^ (x >>> 3);
       const s1 = rotr32(y, 17) ^ rotr32(y, 19) ^ (y >>> 10);
       w[t] = (w[t - 16]! + s0 + w[t - 7]! + s1) >>> 0;
-    }
+    });
     let a = state[0]!;
     let b = state[1]!;
     let c = state[2]!;
@@ -195,18 +201,16 @@ export function sha256(
       a = (t1 + t2) >>> 0;
     }
     const next = [a, b, c, d, e, f, g, h];
-    for (let i = 0; i < state.length; i++) {
-      state[i] = (state[i]! + next[i]!) >>> 0;
-    }
+    // Uint32Array.prototype.map's own iteration count (its length) replaces a counted `i < state.length` for-loop for the same reason as w's fill above: an off-by-one bound would read/write one entry past state's fixed length, invisibly dropped by the typed array.
+    state.set(state.map((value, i) => (value + next[i]!) >>> 0));
   }
   const digest = new Uint8Array(state.length * 4);
-  for (let i = 0; i < state.length; i++) {
-    const word = state[i]!;
+  state.forEach((word, i) => {
     digest[i * 4] = (word >>> 24) & 0xff;
     digest[i * 4 + 1] = (word >>> 16) & 0xff;
     digest[i * 4 + 2] = (word >>> 8) & 0xff;
     digest[i * 4 + 3] = word & 0xff;
-  }
+  });
   return digest;
 }
 
@@ -222,22 +226,26 @@ function sha512Core(
 ): Uint8Array<ArrayBuffer> {
   const padded = padBigEndian(bytes, SHA512_BLOCK_BYTES, 16);
   const state = Array.from(initialState);
-  const w = new Array<bigint>(SHA512_ROUNDS).fill(0n);
+  // A plain empty array, not a pre-sized, zero-filled one: every one of its SHA512_ROUNDS entries is explicitly assigned below (the fill loop covers 0..WORDS_PER_BLOCK-1, the expansion loop the rest) before any is ever read, so a pre-sized fill's own length argument would be one more equivalent-mutant boundary for no real behaviour.
+  const w: bigint[] = [];
   for (let offset = 0; offset < padded.length; offset += SHA512_BLOCK_BYTES) {
-    for (let t = 0; t < WORDS_PER_BLOCK; t++) {
+    // Array.from's own length argument replaces a counted `t < WORDS_PER_BLOCK` for-loop, for the same reason as sha256's own word-fill above -- though here w is a plain array rather than a fixed-length typed one, so an off-by-one bound would merely grow it by one entry nothing downstream ever reads, an equally unobservable difference.
+    Array.from({ length: WORDS_PER_BLOCK }, (_, t) => {
       let word = 0n;
       for (let i = 0; i < 8; i++) {
         word = (word << 8n) | BigInt(padded[offset + t * 8 + i]!);
       }
       w[t] = word;
-    }
-    for (let t = WORDS_PER_BLOCK; t < SHA512_ROUNDS; t++) {
+    });
+    // As sha256's own expansion above: Array.from's length argument (an arithmetic value, not a bare loop comparison) drives this instead of `t < SHA512_ROUNDS`, with the recurrence still running index-by-index in the mapfn's own call order.
+    Array.from({ length: SHA512_ROUNDS - WORDS_PER_BLOCK }, (_, index) => {
+      const t = WORDS_PER_BLOCK + index;
       const x = w[t - 15]!;
       const y = w[t - 2]!;
       const s0 = rotr64(x, 1n) ^ rotr64(x, 8n) ^ (x >> 7n);
       const s1 = rotr64(y, 19n) ^ rotr64(y, 61n) ^ (y >> 6n);
       w[t] = (w[t - 16]! + s0 + w[t - 7]! + s1) & MASK64;
-    }
+    });
     let a = state[0]!;
     let b = state[1]!;
     let c = state[2]!;
