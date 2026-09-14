@@ -559,6 +559,169 @@ describe("writeOdsContent XML shapes", () => {
     });
   });
 
+  describe("unsupportedConditionalFormatReason refusals", () => {
+    const rangeOnly = [
+      { startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 },
+    ];
+
+    it("refuses containsBlanks and notContainsBlanks by name", () => {
+      for (const type of ["containsBlanks", "notContainsBlanks"] as const) {
+        expect(() =>
+          writeOdsContent(
+            documentOf([
+              sheetOf([], {
+                conditionalFormats: [{ type, ranges: rangeOnly }],
+              }),
+            ]),
+          ),
+        ).toThrow(/no spelling for/);
+      }
+    });
+
+    it("refuses a rule carrying a priority", () => {
+      expect(() =>
+        writeOdsContent(
+          documentOf([
+            sheetOf([], {
+              conditionalFormats: [
+                {
+                  type: "containsErrors",
+                  ranges: rangeOnly,
+                  priority: 1,
+                },
+              ],
+            }),
+          ]),
+        ),
+      ).toThrow(/priority/);
+    });
+
+    it("refuses a rule carrying stopIfTrue", () => {
+      expect(() =>
+        writeOdsContent(
+          documentOf([
+            sheetOf([], {
+              conditionalFormats: [
+                {
+                  type: "containsErrors",
+                  ranges: rangeOnly,
+                  stopIfTrue: true,
+                },
+              ],
+            }),
+          ]),
+        ),
+      ).toThrow(/stopIfTrue/);
+    });
+
+    it("does NOT refuse a rule with priority/stopIfTrue left unset", () => {
+      expect(() =>
+        writeOdsContent(
+          documentOf([
+            sheetOf([], {
+              conditionalFormats: [
+                { type: "containsErrors", ranges: rangeOnly },
+              ],
+            }),
+          ]),
+        ),
+      ).not.toThrow();
+    });
+
+    it("refuses an aboveAverage rule carrying a stdDev count", () => {
+      expect(() =>
+        writeOdsContent(
+          documentOf([
+            sheetOf([], {
+              conditionalFormats: [
+                {
+                  type: "aboveAverage",
+                  ranges: rangeOnly,
+                  stdDev: 2,
+                },
+              ],
+            }),
+          ]),
+        ),
+      ).toThrow(/standard-deviation/);
+    });
+
+    it("does not refuse an aboveAverage rule with no stdDev", () => {
+      expect(() =>
+        writeOdsContent(
+          documentOf([
+            sheetOf([], {
+              conditionalFormats: [{ type: "aboveAverage", ranges: rangeOnly }],
+            }),
+          ]),
+        ),
+      ).not.toThrow();
+    });
+
+    it("refuses a reversed iconSet but not a non-reversed one", () => {
+      const iconSet = (reverse?: boolean) => ({
+        type: "iconSet" as const,
+        ranges: rangeOnly,
+        iconSetType: "3TrafficLights1",
+        thresholds: [
+          { type: "percent" as const, value: "33" },
+          { type: "percent" as const, value: "67" },
+        ],
+        reverse,
+      });
+      expect(() =>
+        writeOdsContent(
+          documentOf([sheetOf([], { conditionalFormats: [iconSet(true)] })]),
+        ),
+      ).toThrow(/reversed icon set/);
+      expect(() =>
+        writeOdsContent(
+          documentOf([sheetOf([], { conditionalFormats: [iconSet(false)] })]),
+        ),
+      ).not.toThrow();
+    });
+
+    it("refuses a threshold of the unsupported 'num' cfvo type", () => {
+      expect(() =>
+        writeOdsContent(
+          documentOf([
+            sheetOf([], {
+              conditionalFormats: [
+                {
+                  type: "dataBar",
+                  ranges: rangeOnly,
+                  min: { type: "num", value: "0" },
+                  max: { type: "max" },
+                  color: { r: 1, g: 0, b: 0 },
+                },
+              ],
+            }),
+          ]),
+        ),
+      ).toThrow(/'num' threshold/);
+    });
+
+    it("does not refuse a dataBar whose min/max are both supported cfvo types", () => {
+      expect(() =>
+        writeOdsContent(
+          documentOf([
+            sheetOf([], {
+              conditionalFormats: [
+                {
+                  type: "dataBar",
+                  ranges: rangeOnly,
+                  min: { type: "min" },
+                  max: { type: "max" },
+                  color: { r: 1, g: 0, b: 0 },
+                },
+              ],
+            }),
+          ]),
+        ),
+      ).not.toThrow();
+    });
+  });
+
   describe("the sheet's own master page", () => {
     it("writes style:master-page-name on the table's own style:style[family='table'], not on table:table itself", () => {
       const pkg = writeOdsContent(documentOf([sheetOf([])]));
