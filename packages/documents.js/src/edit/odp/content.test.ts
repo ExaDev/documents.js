@@ -325,6 +325,7 @@ describe("buildOdpPackage", () => {
     ) {
       throw new Error("expected a drawing-kind embeddedObject block");
     }
+    expect(drawingBlock.sourcePath).toBe("slides[0].shapes[1]");
     expect(
       withoutRotation(drawingBlock.document.pages[0]?.vectors ?? []),
     ).toEqual(withoutRotation(VECTOR_FIXTURE));

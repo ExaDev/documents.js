@@ -199,6 +199,7 @@ describe("buildOdpPackage: an embedded formula block", () => {
       throw new Error("expected a formula-kind embedded document");
     }
     expect(signature(block.document.formula.mathml)).toBe("mfrac(mi(a),mi(b))");
+    expect(block.sourcePath).toBe("slides[0].shapes[0]");
   });
 
   it("still writes the plain-text stand-in for a formula carrying no MathML at all", () => {
