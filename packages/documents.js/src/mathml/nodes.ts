@@ -31,9 +31,9 @@ function isMathMlText(node: MathMlNode): node is MathMlText {
 }
 
 // Real MathML producers (confirmed against LibreOffice's own content.xml output) write element tags with a "math:" namespace prefix when math is not the document's default namespace (<math:mfrac>, <math:mrow>, ...), and bare, unprefixed tags when it is (<mfrac>, <mrow>, ...) -- odf.js's own readOdfFormulaMathMl already handles exactly this ambiguity for the root element (MATH_ROOT_TAGS = ['math', 'math:math']). This module applies the same tolerance uniformly to every element, not just the root: strip a single leading "prefix:" segment before comparing against a canonical MathML tag name, so this layout engine works unmodified regardless of which form a given producer chose.
+// Deliberately branchless: slicing from `indexOf(":") + 1` already returns the whole string when there is no colon (indexOf yields -1, so the slice starts at 0), so a colonIndex === -1 guard would be redundant -- every input this function accepts is already correctly handled by the single slice below.
 export function localName(tag: string): string {
-  const colonIndex = tag.indexOf(":");
-  return colonIndex === -1 ? tag : tag.slice(colonIndex + 1);
+  return tag.slice(tag.indexOf(":") + 1);
 }
 
 export function elementLocalName(element: MathMlElement): string {
