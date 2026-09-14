@@ -150,6 +150,13 @@ describe("loadEmbeddedFace caching and refusal", () => {
     expect(loadEmbeddedFace(font!)).toBeUndefined();
   });
 
+  it("refuses a font whose hhea declares zero horizontal metrics, which hmtx has none of to bound", () => {
+    const patched = new Uint8Array(carlitoRegularBytes());
+    patchU16InTable(patched, "hhea", 34, 0); // numberOfHMetrics
+    const font = parseSfnt(patched);
+    expect(loadEmbeddedFace(font!)).toBeUndefined();
+  });
+
   it("measures a cap height off the H glyph when OS/2 does not declare one", () => {
     // Carlito's own 'OS/2' is version 3 and does declare sCapHeight; dropping the table entirely leaves the outline of 'H' as the only thing in the font that still states its cap height, which is exactly what that FontDescriptor field means.
     const patched = new Uint8Array(carlitoRegularBytes());
@@ -394,4 +401,16 @@ function truncateTable(
     tableRecordOffset(bytes, tag) + 12,
     length,
   );
+}
+
+// Overwrites one big-endian uint16 field inside a table's own body, at `tableOffset` bytes from where that table's data starts (not from the record itself) -- for patching a single declared field (a metric count, a flag) without disturbing the rest of a real vendored table.
+function patchU16InTable(
+  bytes: Uint8Array<ArrayBuffer>,
+  tag: string,
+  tableOffset: number,
+  value: number,
+): void {
+  const view = new DataView(bytes.buffer);
+  const tableStart = view.getUint32(tableRecordOffset(bytes, tag) + 8);
+  view.setUint16(tableStart + tableOffset, value);
 }
