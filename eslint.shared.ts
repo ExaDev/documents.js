@@ -206,6 +206,40 @@ export interface PackageLintOptions {
    * So a package carrying more than can be worked through carefully sets `'off'` here, in its own config where the debt is visible rather than buried in this file, and is tracked for burn-down. Every other package enforces it.
    */
   readonly nonNullAssertion?: "error" | "off";
+
+  /**
+   * Whether `exadev/prefer-readonly-array-param` and `exadev/prefer-readonly-object-param` are enforced. Defaults to `'error'`.
+   *
+   * Both rules mark every array/tuple or "flat" object parameter readonly unconditionally, by design (their own doc comments state this explicitly), with no check for whether the function body goes on to mutate that parameter in place -- a `.push`/`.pop`/`.splice` on an array parameter, or a property assignment on an object parameter, both compile cleanly today and both stop compiling the moment the parameter's own type gains a `readonly`. That is deliberate upstream: the rules exist to turn a silent in-place mutation of a caller's data into a visible, forced compile error at the one spot the mutation happens, not to detect and skip it.
+   *
+   * That trade only pays off where the flagged parameter is genuinely foreign to the function -- data a caller handed in that the function has no business mutating. It actively breaks a different, equally common shape this workspace's own binary/format-codec packages lean on constantly: a local accumulator (a bounds tracker, a glyph/operand stack, a byte cursor) built and owned entirely by the function that receives it, where in-place mutation via a parameter *is* the algorithm, not a bug the type system should be catching. Running the rules' own autofix against this workspace surfaced the difference empirically rather than theoretically: 443 real compile errors across 18 of this workspace's 22 published packages (`TS2540`/`TS2542`/`TS2551`/`TS2339` from array/object mutation methods and property assignments no longer existing on the now-readonly type, `TS4104`/`TS2345`/`TS2322` from the resulting readonly value then failing to satisfy a mutable field or parameter elsewhere) -- not a handful of stray exceptions, but the majority shape of how this workspace's lower-level packages are actually written.
+   *
+   * Telling the two shapes apart correctly, parameter by parameter, is a real design review across roughly eighteen packages -- deciding for each flagged site whether the array/object is foreign data to leave exactly as-is, or owned local state to thread through as a small wrapper object instead (object parameters are outside both rules' own scope, by their own design comments, which is what makes that the correct shape for owned mutable state rather than a workaround) -- not something a bump's own autofix pass can safely decide by itself. So a package carrying this debt sets `'off'` here, in its own config where it is visible, and is tracked for burn-down (ExaDev/documents.js#1275); every package clean of it enforces both rules.
+   */
+  readonly preferReadonlyParams?: "error" | "off";
+
+  /**
+   * Whether `@typescript-eslint/no-magic-numbers` is enforced. Defaults to `'off'` -- the one rule in this file whose default itself is `'off'` rather than `'error'`, because unlike every other deviation here it is not a per-package debt but a workspace-wide one: measured directly against a current build, 30,748 sites across 864 files in every one of this workspace's 22 published packages, from the two smallest (document-operations: 8, excel-number-format: 69) to the largest (documents.js: 4,247, pdf-codec: 6,040). The rule's own configuration (`ignore: [-1, 0, 1, 2]`, `ignoreArrayIndexes`, `ignoreEnums`, `ignoreReadonlyClassProperties`, `ignoreDefaultValues`) already exempts every case that can be exempted mechanically; every one of the 30,748 remaining sites is a literal that needs an actual name someone chose because they understood what it means -- a format code, a byte offset, a sector size, a boundary value in a test fixture -- which is exactly why it cannot be satisfied by an automated pass the way the two rules above sometimes can be. A plain top-level `const NAME = value` fully satisfies the rule (confirmed directly: only a literal used inline, e.g. inside an array literal or a call argument, is ever flagged), so the fix is mechanical *type*-wise but not mechanical *content*-wise -- there is no way to give 30,748 numbers correct names without reading what each one means.
+   *
+   * Enable it per-package once that package's own literals have real names (ExaDev/documents.js#1275 tracks the burn-down, alongside the two rules above).
+   */
+  readonly magicNumbers?: "error" | "off";
+
+  /**
+   * Whether ESLint core's `max-lines` (800, real lines of code, blank lines and comments both excluded from the count) is enforced. Defaults to `'off'`, for the same reason `magicNumbers` above defaults off rather than per-package: measured directly, 93 files across every packaged codec and the conversion engine itself exceed it today, from a handful of files in the smaller packages up to several files over 2,000 real lines each. Splitting a file properly -- extracting the genuinely separate concerns a file this size usually holds, rather than cutting it at an arbitrary line count -- is a real per-file design decision (which exports move where, which tests follow which module, whether a extracted piece needs its own barrel entry), not something an automated pass can decide safely at this scale either.
+   *
+   * Enable it per-package once that package's own oversized files are actually split (ExaDev/documents.js#1275 tracks the burn-down, alongside the two rules above).
+   */
+  readonly maxLines?: "error" | "off";
+
+  /**
+   * Rule names to disable outright for this package, defaulting to none.
+   *
+   * Exists for one reason: \@exadev/eslint-config was bumped straight from 2.1.2 to 2.12.1 (ExaDev/documents.js#1275), a roughly ten-minor-version gap this workspace had never linted against incrementally, and it enabled well over a dozen rules across that gap this workspace has real, pre-existing violations of -- 781 sites across every one of the 22 published packages at the time of the bump, measured directly: `@typescript-eslint/strict-void-return` (239), `method-signature-style` (133), `consistent-return` (119), `no-use-before-define` (60), `promise-function-async` (55), `no-shadow` (45), `tsdoc/syntax` (39), `strict-boolean-expressions` (38), `switch-exhaustiveness-check` (31), `consistent-type-exports` (5), `prefer-readonly` (4), `exadev/no-object-assign` (3), `exadev/no-mutable-union-array-param` (3), `require-array-sort-compare` (3), `jsdoc/escape-inline-tags` (2), `jsdoc/no-multi-asterisks` (1), `exadev/prefer-numeric-sort-compare` (1). None of these is the kind of debt `nonNullAssertion`/`preferReadonlyParams`/`magicNumbers`/`maxLines` above are: each is its own rule, with its own real fix at each site, and grouping them behind named booleans the way those four get would mean growing this interface by a dozen-plus fields for a one-time migration rather than a standing per-package axis of variation. A plain rule-name list says the same thing without that growth, and is exactly as visible: every package that needs one lists its own rule names here, in its own config, same as every other exception in this file.
+   *
+   * Not a general-purpose escape hatch -- add a name here only as part of documenting a specific measured violation count from this migration (ExaDev/documents.js#1275), the same evidentiary bar every other exception in this file meets, never to silence an ordinary new finding.
+   */
+  readonly newRuleDebt?: readonly string[];
 }
 
 export function packageLintConfig(
@@ -221,6 +255,10 @@ export function packageLintConfig(
     additionalRestrictedImportPatterns = [],
     isomorphicExemptions = [],
     nonNullAssertion = "error",
+    preferReadonlyParams = "error",
+    magicNumbers = "off",
+    maxLines = "off",
+    newRuleDebt = [],
   } = options;
 
   const typeScriptFiles = ["**/*.ts", "**/*.tsx"];
@@ -276,6 +314,11 @@ export function packageLintConfig(
           { allowNumber: true },
         ],
         "@typescript-eslint/no-non-null-assertion": nonNullAssertion,
+        "exadev/prefer-readonly-array-param": preferReadonlyParams,
+        "exadev/prefer-readonly-object-param": preferReadonlyParams,
+        "@typescript-eslint/no-magic-numbers": magicNumbers,
+        "max-lines": maxLines,
+        ...Object.fromEntries(newRuleDebt.map((rule) => [rule, "off"])),
         // Deviation from strictTypeChecked, which reports every string spread. Spreading a string is how you iterate it by code point -- `[...text]` splits on code points where `text.split('')` splits on UTF-16 code units and so tears every astral character in half. This workspace parses real-world documents full of them (emoji, CJK extensions, mathematical alphanumerics), and the sites reporting here are named `codePoints` precisely because that is what they are computing.
         //
         // Only `string` is allowed. Every other case the rule catches -- spreading a Map, a class instance, a Promise, an array into an object -- stays an error, and those are the ones that are actually bugs.
