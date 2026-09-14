@@ -179,6 +179,16 @@ describe("readFirebirdBackup: format guards, never a silent wrong result", () =>
     );
   });
 
+  it("names its errors FirebirdBackupFormatError, not the bare Error default", () => {
+    try {
+      readFirebirdBackup(minimalBurpStream(11));
+      throw new Error("expected readFirebirdBackup to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(FirebirdBackupFormatError);
+      expect((error as Error).name).toBe("FirebirdBackupFormatError");
+    }
+  });
+
   it("throws FirebirdBackupFormatError for a non-transportable (native binary) backup", () => {
     // No att_backup_transportable attribute present at all -- mvol.cpp only ever writes it when true, so its absence IS "false" (see reader.ts's own Encoding 1 note).
     expect(() =>
@@ -196,6 +206,26 @@ describe("readFirebirdBackup: format guards, never a silent wrong result", () =>
     expect(() => readFirebirdBackup(new Uint8Array([99]))).toThrow(
       /expected the stream to open with rec_burp/,
     );
+  });
+
+  it("throws FirebirdBackupFormatError when rec_burp has no att_backup_format attribute at all", () => {
+    // rec_burp(0) immediately followed by att_end(0) -- a leading record with an empty attribute list.
+    const bytes = new Uint8Array([0, 0]);
+    expect(() => readFirebirdBackup(bytes)).toThrow(FirebirdBackupFormatError);
+    expect(() => readFirebirdBackup(bytes)).toThrow(
+      /had no att_backup_format attribute/,
+    );
+  });
+
+  it("reports compressed:false when att_backup_compress is absent, not merely truthy-adjacent", () => {
+    // A fully valid, transportable, uncompressed rec_burp header -- no att_backup_compress attribute at all -- followed directly by rec_end, so nothing beyond the header is ever parsed.
+    const bytes = minimalBurpStream(
+      SUPPORTED_BACKUP_FORMAT_VERSION,
+      [5, 4, 1, 0, 0, 0],
+    );
+    const { summary } = readFirebirdBackup(bytes);
+    expect(summary.transportable).toBe(true);
+    expect(summary.compressed).toBe(false);
   });
 
   it("throws FirebirdCompositeRecordUnsupportedError, not a silent skip, for a genuinely unrecognised top-level record kind", () => {
@@ -216,6 +246,103 @@ describe("readFirebirdBackup: format guards, never a silent wrong result", () =>
     expect(() => readFirebirdBackup(bytes)).toThrow(
       FirebirdCompositeRecordUnsupportedError,
     );
+    expect(() => readFirebirdBackup(bytes)).toThrow(
+      /while walking the backup stream's own top-level record sequence/,
+    );
+  });
+
+  it("throws FirebirdCompositeRecordUnsupportedError for a relation carrying an unrecognised nested record (a rec_view child)", () => {
+    // rec_burp header, then rec_relation("T") whose own nested-record loop opens with an unrecognised record type (99) instead of a rec_field or rec_relation_end.
+    const transportableAttr = [5, 4, 1, 0, 0, 0];
+    const bytes = new Uint8Array([
+      0,
+      2,
+      4,
+      SUPPORTED_BACKUP_FORMAT_VERSION,
+      0,
+      0,
+      0,
+      ...transportableAttr,
+      0,
+      3, // REC_RELATION
+      1,
+      1,
+      84, // att_relation_name = "T"
+      0, // att_end
+      99, // unrecognised nested record type
+    ]);
+    expect(() => readFirebirdBackup(bytes)).toThrow(
+      FirebirdCompositeRecordUnsupportedError,
+    );
+    expect(() => readFirebirdBackup(bytes)).toThrow(
+      /while reading a relation's own schema \(a rec_view child, most likely\)/,
+    );
+  });
+
+  it("excludes a computed field from the reported columns, since gbak's own row writer never includes one either", () => {
+    // rec_burp header, then rec_relation("T") with two rec_field children -- "ID" (ordinary) and "CALC" (att_field_computed_flag=1) -- followed by rec_relation_end and rec_end.
+    const transportableAttr = [5, 4, 1, 0, 0, 0];
+    const BLR_LONG = 8;
+    const idField = [
+      4, // REC_FIELD
+      1,
+      2,
+      73,
+      68, // att_field_name = "ID"
+      8,
+      4,
+      BLR_LONG,
+      0,
+      0,
+      0, // att_field_type
+      0, // att_end
+    ];
+    const calcField = [
+      4, // REC_FIELD
+      1,
+      4,
+      67,
+      65,
+      76,
+      67, // att_field_name = "CALC"
+      8,
+      4,
+      BLR_LONG,
+      0,
+      0,
+      0, // att_field_type
+      23,
+      4,
+      1,
+      0,
+      0,
+      0, // att_field_computed_flag = true
+      0, // att_end
+    ];
+    const bytes = new Uint8Array([
+      0,
+      2,
+      4,
+      SUPPORTED_BACKUP_FORMAT_VERSION,
+      0,
+      0,
+      0,
+      ...transportableAttr,
+      0,
+      3, // REC_RELATION
+      1,
+      1,
+      84, // att_relation_name = "T"
+      0, // att_end
+      ...idField,
+      ...calcField,
+      9, // REC_RELATION_END
+      10, // REC_END
+    ]);
+    const { tables } = readFirebirdBackup(bytes);
+    expect(tables).toEqual([
+      { tableName: "T", columns: [{ name: "ID", type: "INTEGER" }], rows: [] },
+    ]);
   });
 });
 
