@@ -70,6 +70,15 @@ describe("DocxTable cell access and mutation", () => {
     expect(cell.colSpan).toBeUndefined();
   });
 
+  it("setting colSpan again while one already exists replaces it rather than leaving a stale gridSpan behind", () => {
+    const tableElement = buildTable({ rows: 1, columns: 3 });
+    const table = new DocxTable([tableElement], tableElement);
+    const cell = table.cell(0, 0);
+    cell.colSpan = 2;
+    cell.colSpan = 3;
+    expect(cell.colSpan).toBe(3);
+  });
+
   it("verticalMerge writes and reads w:tcPr/w:vMerge, distinguishing restart from continue", () => {
     const tableElement = buildTable({ rows: 1, columns: 1 });
     const table = new DocxTable([tableElement], tableElement);
@@ -208,6 +217,15 @@ describe("DocxTableCell background", () => {
     expect(cell.background).toBeUndefined();
   });
 
+  it("setting background again while one already exists replaces it rather than leaving a stale w:shd behind", () => {
+    const tableElement = buildTable({ rows: 1, columns: 1 });
+    const table = new DocxTable([tableElement], tableElement);
+    const cell = table.cell(0, 0);
+    cell.background = { r: 1, g: 0, b: 0 };
+    cell.background = { r: 0, g: 0, b: 1 };
+    expect(cell.background).toEqual({ r: 0, g: 0, b: 1 });
+  });
+
   it('resolves a w:val="solid" shading from w:color, not w:fill -- the real bug this getter once had, since it read w:fill unconditionally regardless of w:val', () => {
     const tableElement = buildTable({ rows: 1, columns: 1 });
     const table = new DocxTable([tableElement], tableElement);
@@ -271,6 +289,21 @@ describe("DocxTableCell.borders", () => {
       left: { color: { r: 0, g: 1, b: 0 }, widthPt: 1.5, style: "dotted" },
       bottom: { color: { r: 0, g: 0, b: 1 }, widthPt: 0.5, style: "double" },
       right: { color: { r: 0, g: 0, b: 0 }, widthPt: 1, style: "solid" },
+    });
+  });
+
+  it("setting borders again while one already exists replaces it rather than leaving a stale w:tcBorders behind", () => {
+    const tableElement = buildTable({ rows: 1, columns: 1 });
+    const table = new DocxTable([tableElement], tableElement);
+    const cell = table.cell(0, 0);
+    cell.borders = {
+      top: { color: { r: 1, g: 0, b: 0 }, widthPt: 2, style: "dashed" },
+    };
+    cell.borders = {
+      left: { color: { r: 0, g: 1, b: 0 }, widthPt: 1, style: "solid" },
+    };
+    expect(cell.borders).toEqual({
+      left: { color: { r: 0, g: 1, b: 0 }, widthPt: 1, style: "solid" },
     });
   });
 
