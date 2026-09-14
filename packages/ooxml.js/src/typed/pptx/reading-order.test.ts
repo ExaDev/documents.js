@@ -177,6 +177,23 @@ describe("assignReadingOrder", () => {
     expect(order(shapes)).toEqual(["a", "b"]);
   });
 
+  it("measures an axis's extent from its true earliest start, not its latest one", () => {
+    // extentAlong spans from the EARLIEST start to the latest end; substituting the latest start for the earliest one shrinks the denominator of whichever ratio it feeds. Here the two columns sit only 50pt apart -- a modest gap next to the genuine 240pt-tall extent real code measures -- so the real vertical ratio (from the tall lists) beats the real horizontal one and rows win, reading each heading immediately before its own list. Using the latest start instead collapses the vertical extent down to the last shape's own 150pt height, inflating that ratio past the horizontal one and flipping the cut to columns, which would instead read both headings before either list.
+    const shapes = [
+      shape("left-heading", 0, 0, 100, 40),
+      shape("right-heading", 150, 0, 100, 40),
+      shape("left-list", 0, 90, 100, 150),
+      shape("right-list", 150, 90, 100, 150),
+    ];
+
+    expect(order(shapes)).toEqual([
+      "left-heading",
+      "right-heading",
+      "left-list",
+      "right-list",
+    ]);
+  });
+
   it("returns the array in document order, ranking rather than reordering", () => {
     // The point of the whole design: sourcePath is assigned as slides[N].shapes[N], so the array must
     // keep naming the positions it names. Only the ranks describe the reading order.
