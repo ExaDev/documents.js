@@ -6,7 +6,7 @@ import { PdfParseError } from "./diagnostics";
 import { parseHead, parseMaxp } from "./font-tables";
 import { parseGlyf } from "./glyf";
 import { parseHmtx } from "./hmtx-table";
-import { applyMatrix } from "./matrix";
+import { applyMatrix, BEZIER_KAPPA } from "./matrix";
 import { flattenCubic, renderPdfPage } from "./raster";
 import type {
   PageRasteriser,
@@ -280,6 +280,18 @@ describe("renderPdfPage: geometry and clipPt", () => {
     ).toThrow(/does not intersect/);
   });
 
+  it("rejects a clipPt whose heightPt alone is zero, with a positive widthPt", () => {
+    // A widthPt/heightPt boundary check written as two independent `> 0` guards has two ways to go wrong; the sibling case above already pins widthPt, so this pins heightPt on its own -- a positive widthPt must not mask a degenerate heightPt.
+    expect(() =>
+      drive(
+        onePagePdf(content),
+        0,
+        { clipPt: { xPt: 10, yPt: 20, widthPt: 30, heightPt: 0 } },
+        new RecordingRasteriser(),
+      ),
+    ).toThrow(/positive widthPt and heightPt/);
+  });
+
   it("throws the reader's own typed errors for a non-PDF input and an out-of-range page", () => {
     expect(() =>
       renderPdfPage(enc("not a pdf"), 0, {}, new RecordingRasteriser()),
@@ -287,9 +299,55 @@ describe("renderPdfPage: geometry and clipPt", () => {
     expect(() =>
       renderPdfPage(enc("not a pdf"), 0, {}, new RecordingRasteriser()),
     ).toThrow(/no "%PDF-" header/);
+    try {
+      drive(enc("not a pdf"), 0, {}, new RecordingRasteriser());
+      throw new Error("expected renderPdfPage to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(PdfParseError);
+      expect((error as PdfParseError).code).toBe("pdf/no-header");
+    }
     expect(() =>
       renderPdfPage(onePagePdf(content), 7, {}, new RecordingRasteriser()),
     ).toThrow(/page index 7/);
+    try {
+      drive(onePagePdf(content), 7, {}, new RecordingRasteriser());
+      throw new Error("expected renderPdfPage to throw");
+    } catch (error) {
+      expect((error as PdfParseError).code).toBe("pdf/page-index-out-of-range");
+    }
+  });
+
+  it("checks for an already-aborted signal before any parsing begins", () => {
+    const controller = new AbortController();
+    controller.abort();
+    expect(() =>
+      renderPdfPage(
+        onePagePdf(content),
+        0,
+        { signal: controller.signal },
+        new RecordingRasteriser(),
+      ),
+    ).toThrow(/Aborted/);
+  });
+
+  it("checks the signal again on every item in the content-stream walk, not only once at entry", () => {
+    // Two rects in one content stream: the signal is aborted from inside the rasteriser's own first draw() call, so a per-item abort check (not just the one at entry) is the only thing that can catch it before the second item paints.
+    const controller = new AbortController();
+    class AbortingRasteriser extends RecordingRasteriser {
+      override draw(op: RasterDrawOp): void {
+        super.draw(op);
+        controller.abort();
+      }
+    }
+    const twoRects = "1 0 0 rg 10 10 20 20 re f 0 1 0 rg 50 10 20 20 re f";
+    expect(() =>
+      drive(
+        onePagePdf(twoRects),
+        0,
+        { signal: controller.signal },
+        new AbortingRasteriser(),
+      ),
+    ).toThrow(/Aborted/);
   });
 
   it("rejects a page index at exactly the page count (the first invalid index, not just far out of range), naming the count singular for one page", () => {
@@ -529,6 +587,28 @@ describe("flattenCubic", () => {
     );
     expect(points).toEqual([{ x: 5, y: 5 }]);
   });
+
+  it("subdivides on the LARGER of the two control points' chord distances, not the smaller", () => {
+    // c1 sits almost exactly on the chord (dist1 ~ 0.001, well under the flatness tolerance) while c2 sits far off it (dist2 = 5, far over) -- a curve constructed so the two distances disagree about whether this piece is flat enough to stop. Only checking the larger one is correct: a single wildly-off control point must still force a split even when its sibling is nearly collinear.
+    const points = flattenCubic(
+      { x: 0, y: 0 },
+      { x: 5, y: 0.001 },
+      { x: 5, y: 5 },
+      { x: 10, y: 0 },
+    );
+    expect(points.length).toBeGreaterThan(1);
+  });
+
+  it("treats the flatness check as <= at the tolerance boundary, not <", () => {
+    // Both control points sit exactly 0.05 page-space units off the chord -- the module's own STROKE_FLATTEN_TOLERANCE_PX. At exactly the boundary the piece must already count as flat enough (<=) and stop without subdividing; a strict < would subdivide once more here, doubling the point count.
+    const points = flattenCubic(
+      { x: 0, y: 0 },
+      { x: 3, y: 0.05 },
+      { x: 7, y: 0.05 },
+      { x: 10, y: 0 },
+    );
+    expect(points).toEqual([{ x: 10, y: 0 }]);
+  });
 });
 
 describe("renderPdfPage: vector draw ops", () => {
@@ -601,7 +681,8 @@ describe("renderPdfPage: vector draw ops", () => {
       rasteriser,
     );
     const squares = rasteriser.ops.filter(isFillRect);
-    expect(squares.length).toBeGreaterThan(10);
+    // The segment's own length (180pt) is an exact multiple of the spacing (4pt), so a dot lands exactly on the final point too -- this pins that boundary (`distance <= length`) as an exact count, not just "more than a few": 180/4 + 1 = 46 dots, one at every multiple of 4 from 0 through 180 inclusive.
+    expect(squares.length).toBe(46);
     // First dot at the segment's start: a 2x2 square centred on (10, 90) page points, i.e. device (10, 100 - 90) = (10, 10).
     expect(squares[0]).toEqual({
       kind: "fillRect",
@@ -611,8 +692,38 @@ describe("renderPdfPage: vector draw ops", () => {
       heightPx: 2,
       color: { r: 0, g: 0, b: 0 },
     });
+    // The final dot sits exactly at the segment's own endpoint (190, 90) -> device (190, 10).
+    expect(squares[45]).toEqual({
+      kind: "fillRect",
+      xPx: 189,
+      yPx: 9,
+      widthPx: 2,
+      heightPx: 2,
+      color: { r: 0, g: 0, b: 0 },
+    });
     // Spacing is the writer's own dotted off-length: 2 x stroke width.
     expect(squares[1]!.xPx - squares[0]!.xPx).toBeCloseTo(4, 6);
+  });
+
+  it("draws a dotted diagonal line's dots along both axes, not just x", () => {
+    // The sibling test above is purely horizontal (p1.y === p2.y throughout), which cannot distinguish `p1.y + (p2.y - p1.y) * t` from a sign-flipped or operand-swapped variant of the same expression -- every dot would land at the same y regardless. A diagonal segment where y genuinely varies with t is the only way to pin that arithmetic.
+    const rasteriser = new RecordingRasteriser();
+    drive(
+      onePagePdf("[0 4] 0 d 1 J 2 w 0 0 0 RG 10 10 m 50 50 l S"),
+      0,
+      {},
+      rasteriser,
+    );
+    const squares = rasteriser.ops.filter(isFillRect);
+    // length = hypot(40, 40), spacing = 4 -- not an exact multiple, so the dot count is governed by the loop's own `<=` boundary rather than pinned to a round number; what matters here is each dot's own position, not the count.
+    expect(squares.length).toBeGreaterThan(3);
+    // First dot at (10, 10) page -> device (10, 90).
+    expect(squares[0]).toMatchObject({ xPx: 9, yPx: 89 });
+    // Second dot has moved diagonally: both x AND y have advanced by the same page-space step (t moves equally along a 45-degree segment), and device y decreases as page y increases.
+    const dx = squares[1]!.xPx - squares[0]!.xPx;
+    const dy = squares[0]!.yPx - squares[1]!.yPx;
+    expect(dx).toBeGreaterThan(0);
+    expect(dy).toBeCloseTo(dx, 6);
   });
 
   it("rebuilds a recovered ellipse as four kappa cubics through the bounding box", () => {
@@ -654,6 +765,80 @@ describe("renderPdfPage: vector draw ops", () => {
     expect(first.c1yPx).toBeCloseTo(100 - (40 + 20 * k), 3);
     expect(first.xPx).toBeCloseTo(70, 3);
     expect(first.yPx).toBeCloseTo(40, 3);
+  });
+
+  it("places all four quarter cubics' own control points at the exact kappa-scaled offsets from every cardinal point, not just the first", () => {
+    // The sibling test above only pins the first cubic; every one of drawEllipse's eight control points is its own independent cx/cy +/- rx/dx/ry/dy term, so a sign flip on any one of the other seven survives unless each is checked. rx != ry and cx != cy here specifically so a swapped or wrong-signed term cannot coincidentally match a right-signed one.
+    const rasteriser = new RecordingRasteriser();
+    const cx = 70;
+    const cy = 35;
+    const rx = 30;
+    const ry = 15;
+    const dx = rx * BEZIER_KAPPA;
+    const dy = ry * BEZIER_KAPPA;
+    const content = [
+      "0 0 0 rg",
+      `${cx + rx} ${cy} m`,
+      `${cx + rx} ${cy + dy} ${cx + dx} ${cy + ry} ${cx} ${cy + ry} c`,
+      `${cx - dx} ${cy + ry} ${cx - rx} ${cy + dy} ${cx - rx} ${cy} c`,
+      `${cx - rx} ${cy - dy} ${cx - dx} ${cy - ry} ${cx} ${cy - ry} c`,
+      `${cx + dx} ${cy - ry} ${cx + rx} ${cy - dy} ${cx + rx} ${cy} c`,
+      "h f",
+    ].join("\n");
+    drive(onePagePdf(content), 0, {}, rasteriser);
+    const fill = rasteriser.ops.find(isPath);
+    if (fill?.fill === undefined || fill.subpaths[0] === undefined) {
+      throw new Error("no filled path op emitted for the ellipse");
+    }
+    const toDeviceY = (pageY: number) => 100 - pageY;
+    const segments = fill.subpaths[0].segments;
+    expect(segments).toHaveLength(4);
+    const expected = [
+      {
+        c1xPx: cx + rx,
+        c1yPx: toDeviceY(cy + dy),
+        c2xPx: cx + dx,
+        c2yPx: toDeviceY(cy + ry),
+        xPx: cx,
+        yPx: toDeviceY(cy + ry),
+      },
+      {
+        c1xPx: cx - dx,
+        c1yPx: toDeviceY(cy + ry),
+        c2xPx: cx - rx,
+        c2yPx: toDeviceY(cy + dy),
+        xPx: cx - rx,
+        yPx: toDeviceY(cy),
+      },
+      {
+        c1xPx: cx - rx,
+        c1yPx: toDeviceY(cy - dy),
+        c2xPx: cx - dx,
+        c2yPx: toDeviceY(cy - ry),
+        xPx: cx,
+        yPx: toDeviceY(cy - ry),
+      },
+      {
+        c1xPx: cx + dx,
+        c1yPx: toDeviceY(cy - ry),
+        c2xPx: cx + rx,
+        c2yPx: toDeviceY(cy - dy),
+        xPx: cx + rx,
+        yPx: toDeviceY(cy),
+      },
+    ];
+    for (const [i, segment] of segments.entries()) {
+      if (segment.kind !== "cubic") {
+        throw new Error(`ellipse segment ${i} is not a cubic`);
+      }
+      const want = expected[i]!;
+      expect(segment.c1xPx).toBeCloseTo(want.c1xPx, 6);
+      expect(segment.c1yPx).toBeCloseTo(want.c1yPx, 6);
+      expect(segment.c2xPx).toBeCloseTo(want.c2xPx, 6);
+      expect(segment.c2yPx).toBeCloseTo(want.c2yPx, 6);
+      expect(segment.xPx).toBeCloseTo(want.xPx, 6);
+      expect(segment.yPx).toBeCloseTo(want.yPx, 6);
+    }
   });
 });
 
