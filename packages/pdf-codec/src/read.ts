@@ -505,12 +505,9 @@ function readPage(
     cropBox = mediaBox;
   }
   const rotation = normalizeRotation(asNumber(dictGet(page, "Rotate")));
-  const rotationResult = pageRotationTransform(
-    rotation,
-    mediaBox.urx - mediaBox.llx,
-    mediaBox.ury - mediaBox.lly,
-  );
-  // The crop rect rotated into output space, then used as the origin: every item position is relative to the visible region's own lower-left corner, exactly as a viewer presents it. With no declared /CropBox this reproduces the media-box pipeline bit for bit -- the rotation matrix's translation already maps the media box to the first quadrant, so the rotated media rect's min corner is the origin the old shift-by-(-llx, -lly) produced.
+  // Only rotationResult.matrix is used below, never its own widthPt/heightPt fields -- and the matrix's rotation/reflection component (a, b, c, d) never depends on the w/h arguments at all, only its translation component (e, f) does. That translation is provably canceled by the origin renormalization two lines down (translationMatrix(-visibleRect.minX, -visibleRect.minY) subtracts out exactly the offset any w/h value would have introduced), so the real mediaBox width/height computed here would produce a byte-identical pageMatrix and visibleRect to passing 0 for both -- confirmed directly against an asymmetric MediaBox/CropBox pair under every rotation, not merely the aligned case. Passing 0 rather than the real (but unobservable) mediaBox dimensions removes an arithmetic expression whose result genuinely never reaches any output.
+  const rotationResult = pageRotationTransform(rotation, 0, 0);
+  // The crop rect rotated into output space, then used as the origin: every item position is relative to the visible region's own lower-left corner, exactly as a viewer presents it.
   const visibleRect = rotatedRectBounds(cropBox, rotationResult.matrix);
   const widthPt = visibleRect.maxX - visibleRect.minX;
   const heightPt = visibleRect.maxY - visibleRect.minY;
