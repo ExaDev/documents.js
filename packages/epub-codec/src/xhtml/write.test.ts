@@ -379,6 +379,18 @@ describe("writeXhtmlBody", () => {
     expect(xml).toContain('<pre><code class="language-js">x = 1</code></pre>');
   });
 
+  it("recognises a foreign producer's own <pre> via the legacy monospace-plus-newline heuristic alone, with neither preformatted nor codeLanguage set", () => {
+    const xml = write([
+      {
+        kind: "paragraph",
+        runs: [
+          { text: "line one\nline two", fontFamily: MONOSPACE_FONT_FAMILY },
+        ],
+      },
+    ]);
+    expect(xml).toContain("<pre>");
+  });
+
   it("never treats a plain paragraph as preformatted just because it happens to have one monospace run without a newline", () => {
     const xml = write([
       {
@@ -938,6 +950,52 @@ describe("writeXhtmlBody", () => {
     expect(unrepresented?.message).not.toContain("footnote reference");
   });
 
+  it("writes a clean internal-link construct extent as its own <a href> targeting the resolved anchor", () => {
+    const xml = write([
+      {
+        kind: "paragraph",
+        runs: [{ text: "See" }, { text: "this" }],
+        constructs: [
+          {
+            descriptor: {
+              kind: "link",
+              target: { kind: "internal", anchor: "bm1" },
+            },
+            startRun: 1,
+            endRun: 2,
+          },
+        ],
+      },
+    ]);
+    expect(xml).toContain('<a href="#bm1">this</a>');
+  });
+
+  it("never treats a run-level link construct with an external target as a representable reference extent", () => {
+    // isReferenceExtent recognises only an internal link target here -- an external one is the run-level ContentRun.hyperlink field's own established territory (ExaDev/document-schema.js#22), so a construct-level extent naming one is neither wrapped in its own <a> nor reported as an unhandled anchor (reportUnhandledAnchorExtents only covers descriptor.kind === "anchor").
+    const { xml, diagnostics } = writeWithSink(
+      [
+        {
+          kind: "paragraph",
+          runs: [{ text: "See" }, { text: "this" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "link",
+                target: { kind: "external", uri: "https://example.com" },
+              },
+              startRun: 1,
+              endRun: 2,
+            },
+          ],
+        },
+      ],
+      () => undefined,
+    );
+    expect(xml).not.toContain("<a ");
+    expect(xml).toContain("this");
+    expect(diagnostics).toHaveLength(0);
+  });
+
   // ExaDev/documents.js#994's round-12 regression, one input shape past the same-startRun collision immediately above: two footnote extents that genuinely CROSS -- fn2's own startRun (1) falls strictly INSIDE fn1's already-winning range (runs 0-2), rather than sharing fn1's exact startRun. Because a winning range extent advances the write walk straight from its own startRun to its own endRun, index 1 is never visited at all, so the previous fix (which only looked for a collision among extents sharing the SAME startRun) never saw fn2 and dropped it with no diagnostic whatsoever -- the exact silent-drop class this whole diagnostic exists to close, just reached via a different input shape. document-schema.js's own RunConstructExtentSchema comment names this precise shape ("two entries may cross freely") as real, representable input.
   it("reports CONSTRUCT_UNREPRESENTED and preserves all run text when two footnote extents genuinely cross", () => {
     const blocks: ContentBlock[] = [
@@ -1042,7 +1100,7 @@ describe("writeXhtmlBody", () => {
   });
 
   it("restores a bookmark target as an id attribute on its single wrapped element, replacing any id the element already carries", () => {
-    // A nested bookmark: the inner one wraps the paragraph first and stamps its own id onto it; the outer one must overwrite that id with its own name, not leave the inner one in place alongside it.
+    // A nested bookmark: the inner one wraps the paragraph first and stamps its own id onto it; the outer one must overwrite that id with its own name, not leave both id attributes in the array alongside it. The paragraph's own direction gives the wrapped <p> a second, unrelated attribute the filter must leave untouched -- a plain object literal's own duplicate-key-overwrite semantics would otherwise hide a filter that removed nothing at all (an extra "id" entry collapses to the same final serialized attribute either way), so this checks the raw attributes array directly rather than the serialized XML string.
     const blocks: ContentBlock[] = [
       {
         kind: "constructStart",
@@ -1052,13 +1110,19 @@ describe("writeXhtmlBody", () => {
         kind: "constructStart",
         descriptor: { kind: "anchor", anchorType: "bookmark", name: "inner" },
       },
-      { kind: "paragraph", runs: [{ text: "target" }] },
+      { kind: "paragraph", direction: "rtl", runs: [{ text: "target" }] },
       { kind: "constructEnd" },
       { kind: "constructEnd" },
     ];
-    const xml = write(blocks);
-    expect(xml).toContain('<p id="outer">target</p>');
-    expect(xml).not.toContain("inner");
+    const body = writeBody(blocks);
+    const [p] = body.children;
+    if (p?.type !== "element") {
+      throw new Error("expected a <p> element");
+    }
+    expect(p.attributes).toEqual([
+      { name: "dir", value: "rtl" },
+      { name: "id", value: "outer" },
+    ]);
   });
 
   it("reports CONSTRUCT_UNREPRESENTED with the exact message when a bookmark wraps more than one written element", () => {
