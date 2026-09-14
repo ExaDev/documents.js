@@ -62,6 +62,16 @@ describe("removeChild / insertBefore / insertAfter", () => {
     expect(container).toEqual([a, before, b, after]);
   });
 
+  it("insertBefore appends at the end when the reference sibling is not in the container, rather than immediately before the last element", () => {
+    const a = el("a");
+    const b = el("b");
+    const container: XmlNode[] = [a, b];
+    const stray = el("stray");
+    const newNode = el("new");
+    insertBefore(container, stray, newNode);
+    expect(container).toEqual([a, b, newNode]);
+  });
+
   it("insertAfter places the node right after a found reference that is not the container's last element", () => {
     const a = el("a");
     const b = el("b");
@@ -126,6 +136,14 @@ describe("insertInSchemaOrder", () => {
     expect(
       parent.children.map((c) => (c.type === "element" ? c.tag : c.type)),
     ).toEqual(RPR_ORDER);
+  });
+
+  it("appends after a same-rank sibling rather than inserting before it", () => {
+    const parent = el("w:rPr", {}, [el("w:b")]);
+    insertInSchemaOrder(parent, el("w:b"), RPR_ORDER);
+    expect(
+      parent.children.map((c) => (c.type === "element" ? c.tag : c.type)),
+    ).toEqual(["w:b", "w:b"]);
   });
 });
 
