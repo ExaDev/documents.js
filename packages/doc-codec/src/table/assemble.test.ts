@@ -8,6 +8,7 @@ import {
   cellMergeEntryMissingMessage,
   COLUMN_BOUNDARY_ARRAY_TOO_SHORT_MESSAGE,
   gridBoundaryNotFoundMessage,
+  indexOrUndefined,
   rowDefinitionMissingMessage,
 } from "./read";
 
@@ -111,6 +112,47 @@ describe("assembleBlocks", () => {
       throw new Error(`expected a nested table, got '${nested?.kind}'`);
     }
     expect(nested.rows[0]?.cells).toHaveLength(2);
+  });
+
+  it("degrades a cell's own dangling nested run rather than throwing, even when the run reaches the cell's own last entry, regardless of whether the whole document stream ends", () => {
+    // A cell's own accumulated entries always end with the boundary paragraph that closed the cell in the first place (tryAssembleTable's own isCellBoundary branch pushes `entry` before checking it), so a nested run collected from them can never reach the cell's own array end -- unlike the top-level walk two tests above, streamContinues for a cell's own content is unconditional, never routed through documentStreamEnds at all. Passing true here (the "worst case" for the outer table's own run, which itself reaches this whole array's end) proves the cell's own degrade is genuinely independent of it, not merely untriggered by this particular value.
+    const nestedDangling = entry({
+      blocks: [marker("nested")],
+      properties: { tableDepth: 2 },
+      terminator: PARAGRAPH_MARK,
+    });
+    const entries: ParagraphEntry[] = [
+      nestedDangling,
+      entry({ properties: { tableDepth: 1 }, terminator: CELL_MARK }),
+      entry({
+        properties: { tableDepth: 1, tableRowEnd: true },
+        terminator: CELL_MARK,
+        grpprl: [defTablePrl([0, 3000])],
+      }),
+    ];
+    let blocks: ContentBlock[] = [];
+    expect(() => {
+      blocks = assembleBlocks(entries, true);
+    }).not.toThrow();
+    const outerTable = blocks[0];
+    if (outerTable?.kind !== "table") {
+      throw new Error(`expected an outer table, got '${outerTable?.kind}'`);
+    }
+    const outerCell = outerTable.rows[0]?.cells[0];
+    if (outerCell === undefined) throw new Error("expected the outer cell");
+    expect(outerCell.blocks).toEqual([marker("nested")]);
+  });
+});
+
+describe("indexOrUndefined", () => {
+  // gridIndexFor's own real caller can never pass -1 here (canonicalColumnBoundariesTwips is always built from the union of every boundary gridIndexFor is ever asked to look up, so a match always exists) -- exercised directly, the same discipline this file's other internal-defect helpers already follow.
+  it("turns findIndex's own -1 sentinel into undefined", () => {
+    expect(indexOrUndefined(-1)).toBeUndefined();
+  });
+
+  it("passes any other index straight through, including zero", () => {
+    expect(indexOrUndefined(0)).toBe(0);
+    expect(indexOrUndefined(5)).toBe(5);
   });
 });
 
