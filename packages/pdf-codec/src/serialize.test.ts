@@ -70,6 +70,13 @@ describe("writeObject / serializeObject", () => {
     expect(text(serializeObject(pdfName("!~")))).toBe("/!~");
   });
 
+  it("escapes every printable-ASCII delimiter/special character even though each sits inside the !-~ safe range", () => {
+    // Every one of these is within 0x21-0x7e (so the range check alone would leave all of them unescaped) and is a genuine PDF delimiter or reserved name character (ISO 32000-1 7.2.2/7.3.5) that must never appear literally inside a written name, since an unescaped '/' or '(' would be read by a parser as ending the name or starting a different token entirely.
+    expect(text(serializeObject(pdfName("#()<>[]{}/%")))).toBe(
+      "/#23#28#29#3c#3e#5b#5d#7b#7d#2f#25",
+    );
+  });
+
   it("escapes DEL (0x7f), one past the safe range's own upper boundary", () => {
     expect(text(serializeObject(pdfName("\x7f")))).toBe("/#7f");
   });
