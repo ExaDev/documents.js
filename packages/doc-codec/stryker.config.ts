@@ -2,6 +2,6 @@ import { packageStrykerConfig } from "../../stryker.shared.ts";
 
 export default packageStrykerConfig({
   vitestConfigFile: "vitest.mutation.config.ts",
-  // Re-measured after extracting write.ts's own istd-minting/font-minting/text-layout logic into directly-testable functions, and closing prop/, subdocument.ts, and pictures.ts to genuine 100%: 89.6% of 3795 valid mutants, timeout share 1.7% -- break = floor(score) minus the timeout share rounded up to whole points (minimum one), per the derivation rule on PackageStrykerOptions.breakThreshold. Genuine 100% is not yet reached -- table/write.ts, table/tap.ts, table/tap-write.ts, table/read.ts, test-support/doc.ts, test-support/cfb.ts, style/stsh.ts, text/paragraphs.ts, and list/numbering(-write).ts still carry real survived/no-coverage mutants; see the package's own tracked work (its PR body) for the current remaining gap.
-  breakThreshold: 81,
+  // Genuine 100% mutation score across every valid mutant, confirmed by a forced (non-incremental) full run: 0 survived, 0 no-coverage. Every mutant is either killed by a real isolating test or the code was restructured so the mutation opportunity no longer exists as an AST node — no Stryker disable comments anywhere in src/.
+  breakThreshold: 100,
 });
