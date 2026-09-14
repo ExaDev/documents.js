@@ -26,11 +26,8 @@ function mergeStyle(
   return { ...outer, ...inner };
 }
 
-function styledRun(
-  text: string,
-  style: InlineStyle,
-  hyperlink?: string,
-): ContentRun {
+// hyperlink is never set here: appendAnchor's own external-href fallback (below) spreads it directly onto each nested run instead, so this constructor never takes it as a parameter -- there is no call site that would ever pass one.
+function styledRun(text: string, style: InlineStyle): ContentRun {
   const run: ContentRun = { text };
   if (style.bold === true) run.bold = true;
   if (style.italic === true) run.italic = true;
@@ -40,7 +37,6 @@ function styledRun(
   if (style.verticalAlign !== undefined)
     run.verticalAlign = style.verticalAlign;
   if (style.direction !== undefined) run.direction = style.direction;
-  if (hyperlink !== undefined) run.hyperlink = hyperlink;
   return run;
 }
 
@@ -171,8 +167,8 @@ function appendElement(
       appendImageFallback(element, styled, context, runs);
       return;
     }
-    case "span":
     default:
+      // Covers "span" (no formatting of its own) along with every tag this switch does not name explicitly.
       appendNested(element, styled, context, runs, constructs);
   }
 }
