@@ -826,6 +826,26 @@ describe("readOdfParagraph: run-level construct extents (fields, bookmarks)", ()
     });
   });
 
+  it("mints sequentially INCREASING names across multiple unnamed notes, not the same name reused or a decreasing counter", () => {
+    const note = (text: string) =>
+      el("text:note", { "text:note-class": "footnote" }, [
+        el("text:note-citation", {}, [txt(text)]),
+      ]);
+    const p = el("text:p", {}, [note("1"), note("2")]);
+    const sink: OdfDefinitionsSink = {
+      entries: {},
+      nextNoteOrdinal: 1,
+      nextAnnotationOrdinal: 1,
+    };
+    const paragraph = readOdfParagraph(p, { parts: {} }, { definitions: sink });
+    expect(
+      paragraph.constructs?.map((c) =>
+        c.descriptor.kind === "anchor" ? c.descriptor.name : undefined,
+      ),
+    ).toEqual(["note1", "note2"]);
+    expect(Object.keys(sink.entries)).toEqual(["note:note1", "note:note2"]);
+  });
+
   it("reads an unnamed office:annotation as a point comment anchor at its run position, with its body and author in the definitions sink", () => {
     const annotation = el("office:annotation", {}, [
       el("dc:creator", {}, [txt("C. Reviewer")]),
@@ -860,6 +880,22 @@ describe("readOdfParagraph: run-level construct extents (fields, bookmarks)", ()
       author: "C. Reviewer",
       dateIso: "2026-08-20T14:00:00",
     });
+  });
+
+  it("mints sequentially INCREASING names across multiple unnamed annotations, not the same name reused or a decreasing counter", () => {
+    const annotation = (text: string) =>
+      el("office:annotation", {}, [el("text:p", {}, [txt(text)])]);
+    const p = el("text:p", {}, [annotation("first"), annotation("second")]);
+    const sink: OdfDefinitionsSink = {
+      entries: {},
+      nextNoteOrdinal: 1,
+      nextAnnotationOrdinal: 1,
+    };
+    readOdfParagraph(p, { parts: {} }, { definitions: sink });
+    expect(Object.keys(sink.entries)).toEqual([
+      "comment:annotation1",
+      "comment:annotation2",
+    ]);
   });
 
   it("assembles an annotation body's paragraphs and list items in document order, not paragraphs-then-lists", () => {
