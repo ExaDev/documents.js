@@ -771,9 +771,14 @@ describe("readXlsContent", () => {
       }),
     );
 
-    expect(
-      readXlsContent(bytes).sheets[0]?.conditionalFormats?.[0]?.style,
-    ).toBeUndefined();
+    expect(readXlsContent(bytes).sheets[0]?.conditionalFormats).toStrictEqual([
+      {
+        type: "cellIs",
+        operator: "greaterThan",
+        formula1: "10",
+        ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
+      },
+    ]);
   });
 
   it("reads a CondFmt12/CF12 colour-scale rule into ContentSheet.conditionalFormats, resolving its own indexed colours through the icv fixed table (ExaDev/documents.js#1104) -- workbook/conditional-format-12.test.ts covers the [MS-XLS] field mapping in full; this is the end-to-end proof from real bytes to ContentSheet", () => {
