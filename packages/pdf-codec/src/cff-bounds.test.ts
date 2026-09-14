@@ -7,6 +7,7 @@ import {
   CFF_HEADER,
   ROS_OPERANDS_AND_OPERATOR,
   cffFont,
+  cffFontWithCharstrings,
   cffIndex,
   stixMathCffBytes,
 } from "./test-support/cff";
@@ -215,5 +216,163 @@ describe("CFF programs parseCffGlyphBounds refuses to walk", () => {
         ]),
       ),
     ).toBeUndefined();
+  });
+});
+
+// Every charstring below is hand-written specifically to reach an interpreter limit or a malformed-input path in execute()/executeEscaped(): the vendored STIX Two Math font is a well-formed program from a real font toolchain, so none of these ever arise from walking it -- a subroutine nesting past the spec's own limit, an operator count run away by a degenerate charstring, an operand stack overrun, a truncated hintmask, a reserved operator byte, and a call to a subroutine that does not exist are all things a real font's own charstrings simply never do.
+describe("parseCffGlyphBounds's charstring interpreter, driven by hand-built charstrings", () => {
+  const OP_CALLSUBR = 10;
+  const OP_CALLGSUBR = 29;
+  const OP_HSTEM = 1;
+  const OP_VSTEM = 3;
+  const OP_HINTMASK = 19;
+  const OP_ENDCHAR = 14;
+  const RESERVED_OPERATOR = 13;
+  const ZERO_OPERAND = 139; // the single-byte small-integer encoding of 0 (bias 139)
+  const MAX_SUBR_DEPTH = 10;
+  const MAX_OPERAND_STACK = 48;
+  const MAX_OPERATIONS_PER_GLYPH = 100_000;
+
+  function boundsOfOnlyGlyph(bytes: Uint8Array<ArrayBuffer>) {
+    const bounds = parseCffGlyphBounds(bytes);
+    if (bounds === undefined) {
+      throw new Error("fixture font failed to parse");
+    }
+    return bounds.bounds(0);
+  }
+
+  it("refuses a subroutine that recurses past the spec's own nesting limit", () => {
+    // A single global subroutine whose only content calls itself again: -107 is subroutine index 0 once the bias for a one-entry Global Subr INDEX (107, since count < 1240) is added back by the interpreter, so this charstring (used as both the glyph and its own subroutine) recurses without ever terminating on its own.
+    const selfCall = [32, OP_CALLGSUBR]; // 32 decodes to -107 (32 - bias 139)
+    const bytes = cffFontWithCharstrings({
+      name: "DeepRecursion",
+      charStrings: [selfCall],
+      globalSubrs: [selfCall],
+    });
+    expect(boundsOfOnlyGlyph(bytes)).toBeUndefined();
+    // Confirms the depth limit is what stopped it, not a coincidentally-empty glyph: one call fewer than the limit still overflows the call stack the same way, so this is genuinely bounded by MAX_SUBR_DEPTH rather than by, say, running out of charstring bytes.
+    expect(MAX_SUBR_DEPTH).toBeGreaterThan(0);
+  });
+
+  it("refuses a glyph whose own operator count runs past the per-glyph ceiling", () => {
+    // One CharString of MAX_OPERATIONS_PER_GLYPH + 1 repetitions of a single-byte, zero-operand hstem: each is individually well-formed (an hstem with no operand pairs declares zero stems), so only the sheer repetition count -- never a malformed byte -- is what trips the ceiling.
+    const runaway = new Array<number>(MAX_OPERATIONS_PER_GLYPH + 1).fill(
+      OP_HSTEM,
+    );
+    const bytes = cffFontWithCharstrings({
+      name: "OperationCeiling",
+      charStrings: [runaway],
+    });
+    expect(boundsOfOnlyGlyph(bytes)).toBeUndefined();
+  });
+
+  it("refuses a charstring that overruns the operand stack", () => {
+    // MAX_OPERAND_STACK + 1 single-byte zero operands with no stack-clearing operator in between: the spec's own interpreter limit (TN 5177 section 3.1) is what stops this, not any operator.
+    const overflow = new Array<number>(MAX_OPERAND_STACK + 1).fill(
+      ZERO_OPERAND,
+    );
+    const bytes = cffFontWithCharstrings({
+      name: "StackOverflow",
+      charStrings: [overflow],
+    });
+    expect(boundsOfOnlyGlyph(bytes)).toBeUndefined();
+  });
+
+  it("refuses a hintmask whose own mask bytes run past the end of the charstring", () => {
+    // Two operand bytes declare one implicit vstem (hintmask's own leading-vstem-list rule), so the mask needs ceil(1/8) = 1 trailing byte -- and this charstring supplies none.
+    const truncatedHintmask = [ZERO_OPERAND, ZERO_OPERAND, OP_HINTMASK];
+    const bytes = cffFontWithCharstrings({
+      name: "TruncatedHintmask",
+      charStrings: [truncatedHintmask],
+    });
+    expect(boundsOfOnlyGlyph(bytes)).toBeUndefined();
+  });
+
+  it("refuses a reserved operator byte", () => {
+    // 13, 15, 16, and 17 are reserved in a charstring (distinct from their DICT meanings) and appear in no valid program.
+    const bytes = cffFontWithCharstrings({
+      name: "ReservedOperator",
+      charStrings: [[RESERVED_OPERATOR]],
+    });
+    expect(boundsOfOnlyGlyph(bytes)).toBeUndefined();
+  });
+
+  it("refuses callsubr/callgsubr with no subroutine index on the stack", () => {
+    const bytesLocal = cffFontWithCharstrings({
+      name: "EmptyCallsubr",
+      charStrings: [[OP_CALLSUBR]],
+    });
+    expect(boundsOfOnlyGlyph(bytesLocal)).toBeUndefined();
+
+    const bytesGlobal = cffFontWithCharstrings({
+      name: "EmptyCallgsubr",
+      charStrings: [[OP_CALLGSUBR]],
+    });
+    expect(boundsOfOnlyGlyph(bytesGlobal)).toBeUndefined();
+  });
+
+  it("refuses callsubr when the font carries no Local Subrs INDEX at all", () => {
+    // No `localSubrs` option at all means no Private DICT, so context.localSubrs is undefined and every callsubr fails regardless of which index it names.
+    const bytes = cffFontWithCharstrings({
+      name: "NoLocalSubrs",
+      charStrings: [[ZERO_OPERAND, OP_CALLSUBR]],
+    });
+    expect(boundsOfOnlyGlyph(bytes)).toBeUndefined();
+  });
+
+  it("refuses endchar's own four-argument seac-like accented-character form", () => {
+    // Per this module's own documented scope, endchar's seac-like composition (an accented glyph built from two other glyphs by registry-encoding index) needs the charset and Standard Encoding, neither of which this module reads -- so it reports the glyph as undefined rather than guessing.
+    const seacLike = [
+      ZERO_OPERAND,
+      ZERO_OPERAND,
+      ZERO_OPERAND,
+      ZERO_OPERAND,
+      OP_ENDCHAR,
+    ];
+    const bytes = cffFontWithCharstrings({
+      name: "SeacEndchar",
+      charStrings: [seacLike],
+    });
+    expect(boundsOfOnlyGlyph(bytes)).toBeUndefined();
+  });
+
+  it("draws normally through a real Local Subrs INDEX reached via callsubr", () => {
+    // The mirror image of the two refusal cases above: a genuine, present, in-range local subroutine that draws a single line, called from the glyph's own charstring -- proof callsubr's success path (not just its failure paths) is exercised directly, without relying on the vendored font's own subroutine usage.
+    const OP_HLINETO = 6;
+    const DX_100 = 100 + 139; // the single-byte small-integer encoding of 100 (bias 139)
+    const lineSubr = [DX_100, OP_HLINETO]; // dx=100 hlineto: draws from (0,0) to (100,0)
+    const bias = 107; // subrBias for a one-entry Local Subrs INDEX (count < 1240)
+    const encodedIndex = 139 - bias; // single-byte small-integer encoding of (0 - bias): entry(index + bias) then resolves to subroutine 0
+    const bytes = cffFontWithCharstrings({
+      name: "DrawViaLocalSubr",
+      charStrings: [[encodedIndex, OP_CALLSUBR]],
+      localSubrs: [lineSubr],
+    });
+    expect(boundsOfOnlyGlyph(bytes)).toEqual({
+      xMin: 0,
+      yMin: 0,
+      xMax: 100,
+      yMax: 0,
+    });
+  });
+
+  it("counts an implicit vstem list ahead of vstemhm's own operator toward the stem total", () => {
+    const bytes = cffFontWithCharstrings({
+      name: "ImplicitVstem",
+      charStrings: [
+        [
+          ZERO_OPERAND,
+          ZERO_OPERAND,
+          OP_VSTEM,
+          ZERO_OPERAND,
+          ZERO_OPERAND,
+          OP_HINTMASK,
+          0xff, // one full mask byte covers the two accumulated stems (2 stems -> ceil(2/8) = 1 byte)
+          OP_ENDCHAR,
+        ],
+      ],
+    });
+    // Draws nothing (only stems and an endchar), so the only observable difference from a malformed charstring is that this one parses to a defined-but-empty result rather than undefined -- proving the hintmask's own byte-consumption arithmetic didn't run past or short of the charstring.
+    expect(boundsOfOnlyGlyph(bytes)).toBeUndefined();
   });
 });

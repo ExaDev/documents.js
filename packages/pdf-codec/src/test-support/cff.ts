@@ -136,3 +136,62 @@ export function cffFontWithBuiltinEncoding(options: {
     ...charStrings,
   ]);
 }
+
+// A complete-enough CFF program for exercising cff-bounds.ts's charstring interpreter directly: real header/Name/Top-DICT/String/Global-Subr INDEXes wrapped around hand-written CharStrings, with an optional Private DICT and Local Subrs INDEX. Unlike cffFontWithBuiltinEncoding's fixed one-byte `endchar` glyphs, every charstring here is caller-supplied, which is what lets a test drive execute()'s and executeEscaped()'s own interpreter limits and malformed-input paths directly -- none of which the vendored STIX Two Math font's own well-formed charstrings ever reach.
+export function cffFontWithCharstrings(options: {
+  readonly name: string;
+  readonly charStrings: readonly (readonly number[])[];
+  readonly globalSubrs?: readonly (readonly number[])[];
+  readonly localSubrs?: readonly (readonly number[])[]; // presence alone (even []) adds a Private DICT with a Subrs operator
+}): Uint8Array<ArrayBuffer> {
+  const nameIndex = cffIndex([[...new TextEncoder().encode(options.name)]]);
+  const stringIndex = cffIndex([]);
+  const globalSubrIndex = cffIndex(options.globalSubrs ?? []);
+  const hasPrivate = options.localSubrs !== undefined;
+
+  // Every Top DICT operand below is the fixed-width 5-byte 32-bit form (dictInt32), so the Top DICT's own byte length -- and therefore topDictIndexSize -- depends only on which operators are present, never on the offset values those operators end up carrying. That is what lets every downstream offset be computed in one pass instead of iterating until a size stops changing.
+  const topDictEntrySize = hasPrivate
+    ? dictInt32(0).length + 1 + dictInt32(0).length * 2 + 1
+    : dictInt32(0).length + 1;
+  const topDictIndexSize = cffIndex([
+    new Array<number>(topDictEntrySize).fill(0),
+  ]).length;
+
+  const afterGlobalSubrs =
+    CFF_HEADER.length +
+    nameIndex.length +
+    topDictIndexSize +
+    stringIndex.length +
+    globalSubrIndex.length;
+
+  // A Private DICT holding only a Subrs operator (19), whose own offset is relative to the Private DICT's own start (spec Table 23) -- fixed at the Private DICT's own byte length, since the Local Subrs INDEX immediately follows it. The Private DICT itself starts right where the Global Subr INDEX ends.
+  const privateDictBytes = [...dictInt32(6), 19];
+  const localSubrIndex = hasPrivate ? cffIndex(options.localSubrs ?? []) : [];
+  const privateSize = privateDictBytes.length;
+
+  const charStringsOffset = hasPrivate
+    ? afterGlobalSubrs + privateDictBytes.length + localSubrIndex.length
+    : afterGlobalSubrs;
+
+  const topDict = hasPrivate
+    ? [
+        ...dictInt32(charStringsOffset),
+        17,
+        ...dictInt32(privateSize),
+        ...dictInt32(afterGlobalSubrs),
+        18,
+      ]
+    : [...dictInt32(charStringsOffset), 17];
+
+  const charStringsIndex = cffIndex(options.charStrings);
+
+  return new Uint8Array([
+    ...CFF_HEADER,
+    ...nameIndex,
+    ...cffIndex([topDict]),
+    ...stringIndex,
+    ...globalSubrIndex,
+    ...(hasPrivate ? [...privateDictBytes, ...localSubrIndex] : []),
+    ...charStringsIndex,
+  ]);
+}
