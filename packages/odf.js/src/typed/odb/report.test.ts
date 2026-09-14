@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { Package } from "../../model/package";
 import { el, txt } from "../../xml/fragment";
 import { parsePackage } from "../../package-io/read";
@@ -17,10 +17,12 @@ function loadFixture(name: string): Package {
 }
 
 describe("readOdbReport: form-and-report.odb (real LibreOffice Report Builder output)", () => {
-  const report = readOdbReport(
-    loadFixture("form-and-report.odb"),
-    "SalesByRegion",
-  );
+  // Computed in beforeEach, not directly in this describe block (and not in beforeAll either): Stryker's per-test mutation coverage only attributes an executed statement to a specific test when that statement runs inside that test's own tracked window, which beforeEach (run immediately before each test, as part of running it) is part of but describe-body and beforeAll code (which run once, tied to no single test) are not -- either of those leaves every mutant this fixture alone would kill permanently unattributed to any test, regardless of how thorough the assertions below are.
+  let report: ReturnType<typeof readOdbReport>;
+
+  beforeEach(() => {
+    report = readOdbReport(loadFixture("form-and-report.odb"), "SalesByRegion");
+  });
 
   it("reports the report's user-visible name alongside the opaque persistent path its sub-document actually lives at", () => {
     expect(report.name).toBe("SalesByRegion");
@@ -329,9 +331,105 @@ describe("readOdbReport: synthetic report shapes", () => {
         ]),
       ]),
     ]);
-    expect(readOdbReport(pkg, "R").reportHeader?.elements[0]?.text).toBe(
-      "Total for region",
+    const element = readOdbReport(pkg, "R").reportHeader?.elements[0];
+    expect(element?.text).toBe("Total for region");
+    // toStrictEqual, not toEqual: this control's rpt:report-element has no rpt:report-component (no name) and the element itself carries no rpt:formula, so both fields must be genuinely ABSENT from the object -- toEqual alone would pass even if the reader set them to `undefined` explicitly, since it treats an undefined-valued property as equivalent to a missing one.
+    expect(element).toStrictEqual({
+      tag: "rpt:fixed-content",
+      text: "Total for region",
+    });
+  });
+
+  it("excludes rpt:report-element's own content from a control's text even when it happens to carry a stray text node of its own", () => {
+    const pkg = reportPackage([
+      el("rpt:detail", {}, [
+        el("rpt:fixed-content", {}, [
+          txt("Visible"),
+          el("rpt:report-element", {}, [txt("SHOULD-NOT-APPEAR")]),
+        ]),
+      ]),
+    ]);
+    expect(readOdbReport(pkg, "R").detail?.elements[0]?.text).toBe("Visible");
+  });
+
+  it("reads a direct text-node child of a control, not just text wrapped in a nested element", () => {
+    const pkg = reportPackage([
+      el("rpt:detail", {}, [
+        el("rpt:fixed-content", {}, [
+          txt("Direct text"),
+          el("rpt:report-element", {}),
+        ]),
+      ]),
+    ]);
+    expect(readOdbReport(pkg, "R").detail?.elements[0]?.text).toBe(
+      "Direct text",
     );
+  });
+
+  it("never treats a non-rpt: element as a control, even when it directly contains an rpt:report-element", () => {
+    const pkg = reportPackage([
+      el("rpt:detail", {}, [
+        el("table:table", {}, [
+          el("table:table-cell", {}, [el("rpt:report-element", {})]),
+        ]),
+      ]),
+    ]);
+    expect(readOdbReport(pkg, "R").detail?.elements).toEqual([]);
+  });
+
+  it("reads a false boolean attribute as a real false, not merely as 'present'", () => {
+    const pkg = reportPackage([
+      el("rpt:group", { "rpt:sort-ascending": "false" }),
+    ]);
+    expect(readOdbReport(pkg, "R").groups[0]?.sortAscending).toBe(false);
+  });
+
+  it("omits a band's own name when its layout table carries no table:name", () => {
+    const pkg = reportPackage([
+      el("rpt:detail", {}, [el("table:table", {}, [])]),
+    ]);
+    const report = readOdbReport(pkg, "R");
+    expect(report.detail).toEqual({ kind: "detail", elements: [] });
+    expect("name" in (report.detail ?? {})).toBe(false);
+  });
+
+  it("never treats a non-rpt:function element as a function, even when it happens to carry rpt:name and rpt:formula", () => {
+    const pkg = reportPackage([
+      el("rpt:something-else", { "rpt:name": "X", "rpt:formula": "Y" }),
+    ]);
+    expect(readOdbReport(pkg, "R").functions).toEqual([]);
+  });
+
+  it("omits every optional top-level and group field entirely when the source declares none of them", () => {
+    const pkg = reportPackage([el("rpt:group", {}, [])]);
+    const report = readOdbReport(pkg, "R");
+    for (const key of [
+      "command",
+      "commandType",
+      "caption",
+      "mimeType",
+      "reportHeader",
+      "pageHeader",
+      "detail",
+      "pageFooter",
+      "reportFooter",
+    ]) {
+      expect(key in report).toBe(false);
+    }
+    const group = report.groups[0];
+    expect(group).toBeDefined();
+    for (const key of [
+      "groupExpression",
+      "sortExpression",
+      "sortAscending",
+      "startNewColumn",
+      "resetPageNumber",
+      "keepTogether",
+      "header",
+      "footer",
+    ]) {
+      expect(group !== undefined && key in group).toBe(false);
+    }
   });
 });
 
@@ -381,5 +479,17 @@ describe("readOdbReport: error paths", () => {
       },
     };
     expect(() => readOdbReport(pkg, "R")).toThrow(/office:report/);
+  });
+
+  it("throws when the sub-document's content.xml is a binary part rather than XML", () => {
+    const pkg: Package = {
+      parts: {
+        "content.xml": baseContent,
+        "reports/Obj1/content.xml": { kind: "binary", base64: "" },
+      },
+    };
+    expect(() => readOdbReport(pkg, "R")).toThrow(
+      /reports\/Obj1\/content\.xml is not an XML part/,
+    );
   });
 });
