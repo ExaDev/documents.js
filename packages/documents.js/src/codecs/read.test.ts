@@ -27,6 +27,23 @@ describe("CONTENT_READERS.markdown", () => {
   });
 });
 
+describe("CONTENT_READERS.rtf", () => {
+  it("forwards the abort signal through to readRtfContent, which checks it before tokenizing", () => {
+    const controller = new AbortController();
+    controller.abort();
+    let caught: unknown;
+    try {
+      CONTENT_READERS.rtf(new TextEncoder().encode("{\\rtf1 hi}"), {
+        signal: controller.signal,
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(DOMException);
+    expect((caught as DOMException).name).toBe("AbortError");
+  });
+});
+
 describe("readDocumentLayout", () => {
   it("forwards the signal option through to readPdf, which checks it before parsing", () => {
     const controller = new AbortController();
