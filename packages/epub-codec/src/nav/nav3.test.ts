@@ -55,6 +55,13 @@ describe("readNav3TocHrefs", () => {
     expect(readNav3TocHrefs(xml)).toEqual(["a.xhtml"]);
   });
 
+  it('does not treat epub:type="toc-alt" as a real toc token, even though it starts with the literal substring "toc"', () => {
+    const xml = `<html xmlns:epub="urn"><body>
+      <nav epub:type="toc-alt"><ol><li><a href="ignored.xhtml">Ignored</a></li></ol></nav>
+    </body></html>`;
+    expect(readNav3TocHrefs(xml)).toBeUndefined();
+  });
+
   it("skips an <a> with no href attribute, rather than including it as literal 'undefined'", () => {
     const xml = `<html xmlns:epub="urn"><body>
       <nav epub:type="toc"><ol>
