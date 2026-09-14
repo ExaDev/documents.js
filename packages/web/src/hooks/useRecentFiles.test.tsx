@@ -128,6 +128,19 @@ describe("recordRecentFile", () => {
     expect(names).toHaveLength(20);
     expect(names).toContain("file-0");
   });
+
+  // A stale count of 0 (or negative, below the limit) skips the eviction query entirely, rather than running it anyway against a limit Dexie is guaranteed to resolve as "nothing to delete" -- IndexedDB's own getAll count is spec'd [EnforceRange] unsigned long, so a genuinely negative limit throws in a real browser rather than gracefully returning zero rows the way this suite's fake-indexeddb backend happens to for the specific query shape Dexie takes below the fast-path threshold. Asserting on bulkDelete's own call count (never on the resulting row count, which converges to the same "nothing changed" outcome via either path) is what actually distinguishes "skipped" from "ran and found nothing to do".
+  it("never queries for stale rows to delete while at or under the limit", async () => {
+    const bulkDeleteSpy = vi.spyOn(db.recentFiles, "bulkDelete");
+    for (let i = 0; i < 20; i++) {
+      await recordRecentFile({
+        format: "docx",
+        name: `file-${i}`,
+        sizeBytes: 1,
+      });
+    }
+    expect(bulkDeleteSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe("removeRecentFile", () => {
