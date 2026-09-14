@@ -165,6 +165,9 @@ describe("parseDestination", () => {
       parseDestination(pdfNum(5), resolver, pageIndexByRefNum, sink),
     ).toBeUndefined();
     expect(diagnostics[0]?.code).toBe("pdf/destination-invalid");
+    expect(diagnostics[0]?.message).toBe(
+      "a destination is not a display destination array; skipping it",
+    );
   });
 
   it("is invalid when the array has fewer than two elements", () => {
@@ -178,6 +181,9 @@ describe("parseDestination", () => {
       ),
     ).toBeUndefined();
     expect(diagnostics[0]?.code).toBe("pdf/destination-invalid");
+    expect(diagnostics[0]?.message).toBe(
+      "a destination is not a display destination array; skipping it",
+    );
   });
 
   it("accepts a bare non-negative integer page number (the PDF 2.0 spelling)", () => {
@@ -189,7 +195,19 @@ describe("parseDestination", () => {
         pageIndexByRefNum,
         sink,
       ),
-    ).toEqual({ pageIndex: 3, target: { kind: "fit" } });
+    ).toStrictEqual({ pageIndex: 3, target: { kind: "fit" } });
+  });
+
+  it("accepts page index 0, distinguishing >= 0 from > 0", () => {
+    const { sink } = collectDiagnostics();
+    expect(
+      parseDestination(
+        pdfArray([pdfNum(0), pdfName("Fit")]),
+        resolver,
+        pageIndexByRefNum,
+        sink,
+      ),
+    ).toStrictEqual({ pageIndex: 0, target: { kind: "fit" } });
   });
 
   it("rejects a non-integer bare page number rather than truncating it", () => {
@@ -228,7 +246,7 @@ describe("parseDestination", () => {
         pageIndexByRefNum,
         sink,
       ),
-    ).toEqual({ pageIndex: 7, target: { kind: "fit" } });
+    ).toStrictEqual({ pageIndex: 7, target: { kind: "fit" } });
   });
 
   it("is invalid when the page-index lookup cannot place the page element", () => {
@@ -260,7 +278,7 @@ describe("parseDestination", () => {
         pageIndexByRefNum,
         sink,
       ),
-    ).toEqual({
+    ).toStrictEqual({
       pageIndex: 0,
       target: { kind: "xyz", leftPt: 12, zoom: 2 },
     });
@@ -275,7 +293,7 @@ describe("parseDestination", () => {
         pageIndexByRefNum,
         sink,
       ),
-    ).toEqual({ pageIndex: 0, target: { kind: "fitH", topPt: 99 } });
+    ).toStrictEqual({ pageIndex: 0, target: { kind: "fitH", topPt: 99 } });
   });
 
   it("reads FitH with no coordinate at all", () => {
@@ -287,7 +305,7 @@ describe("parseDestination", () => {
         pageIndexByRefNum,
         sink,
       ),
-    ).toEqual({ pageIndex: 0, target: { kind: "fitH" } });
+    ).toStrictEqual({ pageIndex: 0, target: { kind: "fitH" } });
   });
 
   it("reads FitV's own single left coordinate", () => {
@@ -299,7 +317,7 @@ describe("parseDestination", () => {
         pageIndexByRefNum,
         sink,
       ),
-    ).toEqual({ pageIndex: 0, target: { kind: "fitV", leftPt: 44 } });
+    ).toStrictEqual({ pageIndex: 0, target: { kind: "fitV", leftPt: 44 } });
   });
 
   it("reads FitR's own four-coordinate rectangle", () => {
@@ -318,7 +336,7 @@ describe("parseDestination", () => {
         pageIndexByRefNum,
         sink,
       ),
-    ).toEqual({
+    ).toStrictEqual({
       pageIndex: 0,
       target: { kind: "fitR", leftPt: 1, bottomPt: 2, rightPt: 3, topPt: 4 },
     });
@@ -333,7 +351,7 @@ describe("parseDestination", () => {
         pageIndexByRefNum,
         sink,
       ),
-    ).toEqual({ pageIndex: 0, target: { kind: "fitB" } });
+    ).toStrictEqual({ pageIndex: 0, target: { kind: "fitB" } });
   });
 
   it("reads FitBH's own single top coordinate", () => {
@@ -345,7 +363,7 @@ describe("parseDestination", () => {
         pageIndexByRefNum,
         sink,
       ),
-    ).toEqual({ pageIndex: 0, target: { kind: "fitBH", topPt: 7 } });
+    ).toStrictEqual({ pageIndex: 0, target: { kind: "fitBH", topPt: 7 } });
   });
 
   it("reads FitBV's own single left coordinate", () => {
@@ -357,7 +375,7 @@ describe("parseDestination", () => {
         pageIndexByRefNum,
         sink,
       ),
-    ).toEqual({ pageIndex: 0, target: { kind: "fitBV", leftPt: 8 } });
+    ).toStrictEqual({ pageIndex: 0, target: { kind: "fitBV", leftPt: 8 } });
   });
 
   it("is invalid for an unrecognised display type, naming it in the diagnostic", () => {
@@ -370,6 +388,7 @@ describe("parseDestination", () => {
         sink,
       ),
     ).toBeUndefined();
+    expect(diagnostics[0]?.code).toBe("pdf/destination-invalid");
     expect(diagnostics[0]?.message).toContain("/Bogus");
   });
 
@@ -388,18 +407,6 @@ describe("parseDestination", () => {
 });
 
 describe("createDestinationRegistry", () => {
-  it("keeps only the first entry when the /Dests dictionary declares the same name twice", () => {
-    const { sink, diagnostics } = collectDiagnostics();
-    const catalog = pdfDict({
-      Dests: pdfDict({
-        dup: pdfArray([pdfRef(0, 0), pdfName("Fit")]),
-      }),
-    });
-    // A single-entry Map can't itself hold a duplicate key, so this exercises the duplicate check by calling the registry with a catalog whose /Dests dict entries iteration naturally yields "dup" once -- the duplicate branch itself is proven by the name-tree case below, which genuinely can repeat a name. This case instead confirms the ordinary non-duplicate path leaves the sink untouched.
-    createDestinationRegistry(catalog, makeResolver(), pageIndexByRefNum, sink);
-    expect(diagnostics).toEqual([]);
-  });
-
   it("warns and keeps the first entry when the /Names /Dests tree repeats a name", () => {
     const { sink, diagnostics } = collectDiagnostics();
     const catalog = pdfDict({
@@ -426,9 +433,13 @@ describe("createDestinationRegistry", () => {
       pageIndex: 0,
       target: { kind: "fit" },
     });
-    expect(
-      diagnostics.some((d) => d.code === "pdf/destination-duplicate"),
-    ).toBe(true);
+    const duplicateWarning = diagnostics.find(
+      (d) => d.code === "pdf/destination-duplicate",
+    );
+    expect(duplicateWarning).toBeDefined();
+    expect(duplicateWarning?.message).toBe(
+      'destination name "dup" is declared more than once; keeping the first',
+    );
   });
 
   it("skips an unparseable destination in the /Dests dictionary rather than adding a broken entry", () => {
@@ -589,7 +600,9 @@ describe("readOutline", () => {
     ]);
     const catalog = pdfDict({ Outlines: pdfDict({ First: pdfRef(1, 0) }) });
     const items = readOutline(catalog, registry, makeResolver(objects), sink);
-    expect(items).toEqual([{ title: "Node", children: [] }]);
+    // Strict, not just structural equality: the item must have no `destination` KEY at all, not merely one whose value happens to be undefined -- the conditional spread this proves is genuinely conditional.
+    expect(items).toStrictEqual([{ title: "Node", children: [] }]);
+    expect(Object.hasOwn(items[0]!, "destination")).toBe(false);
   });
 
   it("leaves destination unset for a node with neither /Dest nor /A", () => {
@@ -604,9 +617,9 @@ describe("readOutline", () => {
       [1, pdfDict({ Title: str("Node") })],
     ]);
     const catalog = pdfDict({ Outlines: pdfDict({ First: pdfRef(1, 0) }) });
-    expect(readOutline(catalog, registry, makeResolver(objects), sink)).toEqual(
-      [{ title: "Node", children: [] }],
-    );
+    const items = readOutline(catalog, registry, makeResolver(objects), sink);
+    expect(items).toStrictEqual([{ title: "Node", children: [] }]);
+    expect(Object.hasOwn(items[0]!, "destination")).toBe(false);
   });
 
   it("stops a chain at a repeated node and warns, with the shared visited set spanning parent and child recursion", () => {
@@ -627,6 +640,12 @@ describe("readOutline", () => {
     expect(items).toEqual([
       { title: "A", children: [{ title: "B", children: [] }] },
     ]);
-    expect(diagnostics.some((d) => d.code === "pdf/outline-cycle")).toBe(true);
+    const cycleWarning = diagnostics.find(
+      (d) => d.code === "pdf/outline-cycle",
+    );
+    expect(cycleWarning).toBeDefined();
+    expect(cycleWarning?.message).toBe(
+      "the outline contains a cycle; stopping the sibling chain at the repeated item",
+    );
   });
 });
