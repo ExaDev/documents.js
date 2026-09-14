@@ -14,7 +14,8 @@ export function resolveHrefTarget(
   sourceHref: string,
   href: string,
 ): HrefTarget | undefined {
-  if (href.length === 0 || URI_SCHEME_PATTERN.test(href)) {
+  // No separate `href.length === 0` guard: an empty href can never contain "#", so the hashIndex check immediately below already returns undefined for it -- a length check first would only duplicate that.
+  if (URI_SCHEME_PATTERN.test(href)) {
     return undefined;
   }
   const hashIndex = href.indexOf("#");
