@@ -191,6 +191,39 @@ describe("content.read / content.restore", () => {
 });
 
 describe("metadata.read / metadata.write", () => {
+  it("forwards the call's own abort signal through to metadata.read, rejecting immediately for an already-aborted one", async () => {
+    const editor = createDocx();
+    editor.body.appendParagraph().appendRun({ text: "hello docx" });
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      call(
+        router.metadata.read,
+        { format: "docx", bytes: editor.toBytes() },
+        { signal: controller.signal },
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("forwards the call's own abort signal through to metadata.write, rejecting immediately for an already-aborted one", async () => {
+    const editor = createDocx();
+    editor.body.appendParagraph().appendRun({ text: "hello docx" });
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      call(
+        router.metadata.write,
+        {
+          sourceFormat: "docx",
+          targetFormat: "docx",
+          bytes: editor.toBytes(),
+          overrides: { title: "x" },
+        },
+        { signal: controller.signal },
+      ),
+    ).rejects.toThrow();
+  });
+
   it("writes metadata overrides onto a docx document, then reads them back", async () => {
     const editor = createDocx();
     editor.body.appendParagraph().appendRun({ text: "hello docx" });
@@ -279,6 +312,23 @@ const PNG_1X1_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
 describe("pdf.inspect", () => {
+  it("forwards the call's own abort signal through to readPdf, rejecting immediately for an already-aborted one", async () => {
+    const converted = await call(router.convert, {
+      source: "markdown",
+      targetFormat: "pdf",
+      bytes: MARKDOWN_BYTES,
+    });
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      call(
+        router.pdf.inspect,
+        { bytes: converted.document.bytes },
+        { signal: controller.signal },
+      ),
+    ).rejects.toThrow();
+  });
+
   it("inspects a converted PDF's page count and item-kind breakdown", async () => {
     const converted = await call(router.convert, {
       source: "markdown",

@@ -8,7 +8,12 @@ import type {
 import { afterEach, describe, expect, it } from "vitest";
 
 import { mountWithMantine } from "../test/mountComponent";
-import { SlidesPreview, type SlidesPreviewProps } from "./SlidesPreview";
+import { previewFrame } from "./previewPanel.css";
+import {
+  doubleStrokeKeys,
+  SlidesPreview,
+  type SlidesPreviewProps,
+} from "./SlidesPreview";
 
 let unmount: (() => void) | undefined;
 
@@ -341,6 +346,8 @@ describe("SlidesPreview", () => {
     expect(html).toContain("rgb(0 0 255)");
     // Gap overlay: the plain stroke width, in the shape's own fill colour (not white, since the rect is filled).
     expect(html).toContain('stroke-width="2"');
+    expect(html).toContain("rgb(255 0 0)");
+    expect(html).not.toContain("white");
   });
 
   it("uses white as the double stroke's gap colour when the underlying shape has no fill", () => {
@@ -458,5 +465,177 @@ describe("SlidesPreview", () => {
       ]),
     });
     expect(html).toContain("line-height: 1.3");
+  });
+
+  it("applies no font-size at all on a shape's text box when fontScale is absent", () => {
+    const mounted = mountWithMantine(
+      <SlidesPreview
+        label="L"
+        format="odg"
+        content={drawingDocument([drawPage({ shapes: [shape()] })])}
+      />,
+    );
+    unmount = mounted.unmount;
+    const foreignObjectDiv = mounted.container.querySelector(
+      "foreignObject > div",
+    );
+    expect(foreignObjectDiv).not.toBeNull();
+    expect(foreignObjectDiv!.getAttribute("style")).not.toContain("font-size");
+  });
+
+  it("builds the shape's own padding from each of its four insets", () => {
+    const html = renderPreview({
+      label: "L",
+      format: "odg",
+      content: drawingDocument([
+        drawPage({
+          shapes: [
+            shape({
+              insetTopPt: 1,
+              insetRightPt: 2,
+              insetBottomPt: 3,
+              insetLeftPt: 4,
+            }),
+          ],
+        }),
+      ]),
+    });
+    expect(html).toContain("padding: 1pt 2pt 3pt 4pt");
+  });
+
+  it("gives a shape's own text box hidden overflow and a full-size box", () => {
+    const html = renderPreview({
+      label: "L",
+      format: "odg",
+      content: drawingDocument([drawPage({ shapes: [shape()] })]),
+    });
+    expect(html).toContain("overflow: hidden");
+    expect(html).toContain("width: 100%");
+    expect(html).toContain("height: 100%");
+  });
+
+  it("gives the preview frame the scrollable variant", () => {
+    const html = renderPreview({
+      label: "L",
+      format: "pptx",
+      content: presentationDocument([slide()]),
+    });
+    expect(html).toContain(previewFrame({ scroll: true }));
+    expect(html).not.toContain(previewFrame({ scroll: false }));
+  });
+
+  it("shows no loading overlay when not loading", () => {
+    const html = renderPreview({ label: "L", format: "pptx" });
+    expect(html).not.toContain("mantine-LoadingOverlay-root");
+  });
+
+  it("sizes the slide container's own aspect ratio and SVG viewBox from the slide's real dimensions", () => {
+    const html = renderPreview({
+      label: "L",
+      format: "pptx",
+      content: presentationDocument([
+        slide({ size: { widthPt: 720, heightPt: 405 } }),
+      ]),
+    });
+    expect(html).toContain("aspect-ratio: 720 / 405");
+    expect(html).toContain('viewBox="0 0 720 405"');
+  });
+
+  it("switches to a clicked slide and clamps back to the last real slide once fewer slides remain", () => {
+    const mounted = mountWithMantine(
+      <SlidesPreview
+        label="L"
+        format="pptx"
+        content={presentationDocument([
+          slide({
+            shapes: [
+              shape({
+                blocks: [{ kind: "paragraph", runs: [{ text: "first" }] }],
+              }),
+            ],
+          }),
+          slide({
+            shapes: [
+              shape({
+                blocks: [{ kind: "paragraph", runs: [{ text: "second" }] }],
+              }),
+            ],
+          }),
+        ])}
+      />,
+    );
+    unmount = mounted.unmount;
+    expect(mounted.container.innerHTML).toContain("first");
+    const secondInput =
+      mounted.container.querySelector<HTMLInputElement>('input[value="1"]');
+    expect(secondInput).not.toBeNull();
+    secondInput!.click();
+    expect(mounted.container.innerHTML).toContain("second");
+    expect(mounted.container.innerHTML).not.toContain("first");
+
+    mounted.rerender(
+      <SlidesPreview
+        label="L"
+        format="pptx"
+        content={presentationDocument([
+          slide({
+            shapes: [
+              shape({
+                blocks: [{ kind: "paragraph", runs: [{ text: "only" }] }],
+              }),
+            ],
+          }),
+        ])}
+      />,
+    );
+    expect(mounted.container.innerHTML).toContain("only");
+  });
+
+  it("resolves each channel of a colour independently, not just red", () => {
+    const vector: ContentVector = {
+      kind: "rect",
+      frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      fill: { r: 0.2, g: 0.4, b: 0.6 },
+    };
+    const html = renderPreview({
+      label: "L",
+      format: "odg",
+      content: drawingDocument([drawPage({ vectors: [vector] })]),
+    });
+    expect(html).toContain("rgb(51 102 153)");
+  });
+
+  it("joins multiple subpaths' path data with a separating space", () => {
+    const vector: ContentVector = {
+      kind: "path",
+      frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      subpaths: [
+        {
+          start: { xPt: 0, yPt: 0 },
+          segments: [{ kind: "line", to: { xPt: 1, yPt: 1 } }],
+          closed: true,
+        },
+        {
+          start: { xPt: 5, yPt: 5 },
+          segments: [{ kind: "line", to: { xPt: 6, yPt: 6 } }],
+          closed: true,
+        },
+      ],
+    };
+    const html = renderPreview({
+      label: "L",
+      format: "odg",
+      content: drawingDocument([drawPage({ vectors: [vector] })]),
+    });
+    expect(html).toContain("M 0 0 L 1 1 Z M 5 5 L 6 6 Z");
+  });
+});
+
+describe("doubleStrokeKeys", () => {
+  it("gives the underlay and gap elements distinct keys derived from the same base key", () => {
+    expect(doubleStrokeKeys(3)).toEqual({
+      underlay: "3-underlay",
+      gap: "3-gap",
+    });
   });
 });

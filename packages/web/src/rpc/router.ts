@@ -418,16 +418,12 @@ interface EditorParagraphHandle {
   remove(): void;
 }
 
-// The two access directions of the paragraph-family surface. Every editor class forwards paragraphs() itself with an identical zero-argument call, so there is no format-specific behaviour left to switch on: each of the four paragraph types satisfies EditorParagraphHandle structurally (this module's own top comment), which is what lets a single call return the union directly rather than needing one branch per format to narrow the session first. appendParagraph does still vary: it lives on the body for the three package-backed formats (docx/odt/markdown, which share an identical `body.appendParagraph` call) and on the editor itself for doc -- so that one genuine difference stays a real branch, narrowing only the case that actually differs from the rest.
+// The two access directions of the paragraph-family surface. Every editor class forwards paragraphs() itself with an identical zero-argument call, so there is no format-specific behaviour left to switch on: each of the four paragraph types satisfies EditorParagraphHandle structurally (this module's own top comment), which is what lets a single call return the union directly rather than needing one branch per format to narrow the session first. appendParagraph is no different, despite DocEditor also exposing a second, top-level appendParagraph of its own (a plain forward to `this.body.appendParagraph`, per doc/editor.ts's own definition): every one of the four editor classes carries a `body` with an identical `appendParagraph` call, so going through `body` uniformly reaches the correct target for every format, doc included, with no branch needed.
 export function paragraphsOf(session: EditorSession): EditorParagraphHandle[] {
   return session.editor.paragraphs();
 }
 
 export function appendParagraphOf(session: EditorSession, text: string): void {
-  if (session.format === "doc") {
-    session.editor.appendParagraph({ text });
-    return;
-  }
   session.editor.body.appendParagraph({ text });
 }
 
