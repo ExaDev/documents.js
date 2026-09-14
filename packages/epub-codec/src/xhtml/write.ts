@@ -77,15 +77,15 @@ function writeSectionChildren(
 ): XmlNode[] {
   const out: XmlNode[] = [];
   let index = 0;
-  while (index < children.length) {
+  for (;;) {
     const child = children[index];
     if (child === undefined) {
       break;
     }
     if (isListGroupNode(child)) {
-      // Every consecutive run of sibling ListGroupNode entries at this position is one <ul>/<ol> -- decompose emits one list group per item, as flat siblings, never pre-wrapped in a container element (see document-schema.js's own decomposeSectionBlocks/openListGroup).
+      // Every consecutive run of sibling ListGroupNode entries at this position is one <ul>/<ol> -- decompose emits one list group per item, as flat siblings, never pre-wrapped in a container element (see document-schema.js's own decomposeSectionBlocks/openListGroup). No separate `end < children.length` bound is needed ahead of isListGroupNode: past the array's own end, children[end] is undefined, and isListGroupNode(undefined) is already false (its own isRecord guard rejects a non-object outright), so the loop terminates at exactly the same point either way.
       let end = index;
-      while (end < children.length && isListGroupNode(children[end])) {
+      while (isListGroupNode(children[end])) {
         end += 1;
       }
       const items = children.slice(index, end) as ListGroupNode[];
@@ -99,8 +99,9 @@ function writeSectionChildren(
   return out;
 }
 
+// Never called with a ListGroupNode: writeSectionChildren's own loop above always groups a run of one or more sibling ListGroupNode entries and writes them through writeList before this function is reached at all, so its own parameter type excludes that member rather than carrying a dead exhaustiveness branch no test can ever reach.
 function writeSectionChild(
-  child: SectionChild,
+  child: Exclude<SectionChild, ListGroupNode>,
   context: XhtmlWriteContext,
 ): XmlNode[] {
   if (isHeadingGroupNode(child)) {
@@ -108,10 +109,6 @@ function writeSectionChild(
       writeHeading(child, context),
       ...writeSectionChildren(child.children, context),
     ];
-  }
-  if (isListGroupNode(child)) {
-    // Reached only for a lone list group with no sibling run (writeSectionChildren's own loop always groups runs of one or more before calling this) -- kept for exhaustiveness, never actually hit.
-    return [writeList([child], context)];
   }
   if (isSectionConstructGroupNode(child)) {
     return writeSectionConstructGroup(child, context);
