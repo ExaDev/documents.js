@@ -7,6 +7,7 @@ import {
   buildContextFormat1,
   buildContextFormat2,
   buildCoverageFormat1,
+  buildCoverageFormat2,
   buildFormat3Subtable,
   buildGdefTable,
   buildGsubTable,
@@ -226,6 +227,24 @@ describe("buildCoverageFormat1", () => {
     expect(u16(table, 4)).toBe(5);
     expect(u16(table, 6)).toBe(20);
     expect(u16(table, 8)).toBe(50);
+  });
+});
+
+describe("buildCoverageFormat2", () => {
+  it("writes each range's start/end and accumulates the running coverage index across multiple ranges", () => {
+    const table = buildCoverageFormat2([
+      [10, 12],
+      [20, 22],
+    ]);
+    expect(u16(table, 0)).toBe(2);
+    expect(u16(table, 2)).toBe(2);
+    expect(u16(table, 4)).toBe(10);
+    expect(u16(table, 6)).toBe(12);
+    expect(u16(table, 8)).toBe(0); // first range's own coverage index
+    expect(u16(table, 10)).toBe(20);
+    expect(u16(table, 12)).toBe(22);
+    // second range's coverage index carries the FIRST range's real glyph count (12-10+1=3), not 0 and not some other arithmetic combination
+    expect(u16(table, 14)).toBe(3);
   });
 });
 
@@ -462,6 +481,10 @@ describe("buildGsubTable", () => {
     const feature1TableAt = featureListAt + u16(table, featureListAt + 8 + 4);
     // feature 0's table is 4 + 3*2 = 10 bytes; feature 1's must start exactly after it.
     expect(feature1TableAt - feature0TableAt).toBe(10);
+    // feature 0's own three lookupIndices, each at its own 2-byte slot
+    expect(u16(table, feature0TableAt + 4)).toBe(0);
+    expect(u16(table, feature0TableAt + 6)).toBe(1);
+    expect(u16(table, feature0TableAt + 8)).toBe(2);
     expect(u16(table, feature1TableAt)).toBe(0);
     expect(u16(table, feature1TableAt + 2)).toBe(1);
     expect(u16(table, feature1TableAt + 4)).toBe(3);
@@ -492,6 +515,11 @@ describe("buildGsubTable", () => {
     const subtableOffset = u16(table, lookupAt + 6);
     // With no markFilteringSet slot, the one subtable starts right after the 6-byte header + one offset slot.
     expect(subtableOffset).toBe(8);
+    // No reserved slot means the table ends right after the subtable's own bytes, and those bytes must be exactly the input, not overwritten by a wrongly-reserved slot.
+    expect(table.length - lookupAt).toBe(10);
+    expect([
+      ...table.slice(lookupAt + subtableOffset, lookupAt + subtableOffset + 2),
+    ]).toEqual([9, 9]);
   });
 
   it("omits the markFilteringSet slot when the flag is set but does not select useMarkFilteringSet", () => {
@@ -504,6 +532,10 @@ describe("buildGsubTable", () => {
     expect(u16(table, lookupAt + 2)).toBe(0x0008);
     const subtableOffset = u16(table, lookupAt + 6);
     expect(subtableOffset).toBe(8);
+    expect(table.length - lookupAt).toBe(10);
+    expect([
+      ...table.slice(lookupAt + subtableOffset, lookupAt + subtableOffset + 2),
+    ]).toEqual([9, 9]);
   });
 
   it("writes the markFilteringSet slot, at the right offset, only when the flag selects useMarkFilteringSet", () => {

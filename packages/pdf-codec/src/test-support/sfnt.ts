@@ -41,7 +41,7 @@ export interface CmapSubtableSpec {
 function buildFormat0(mappings: ReadonlyMap<number, number>): Uint8Array {
   const subtable = new Uint8Array(262);
   const view = new DataView(subtable.buffer);
-  view.setUint16(0, 0);
+  // The format field (offset 0) is already 0 from Uint8Array's own zero-initialization -- format 0 is the one subtable format whose own numeric value needs no explicit write.
   view.setUint16(2, subtable.length);
   for (const [code, glyphId] of mappings) {
     subtable[6 + code] = glyphId;
@@ -344,32 +344,21 @@ function buildRecords(
   return bytes;
 }
 
-// Writes a SequenceRule's shared tail -- input count+values (glyphCount includes the implied first glyph, so the caller lists only the components after it), then substCount+records -- starting at `at` in `table`, returning the offset just past the last byte written.
-function putSequenceRuleTail(
-  table: TableBuilder,
-  at: number,
-  input: readonly number[],
-  records: readonly GsubRecordSpec[],
-): number {
-  table.setU16(at, input.length + 1);
-  let cursor = at + 2;
-  input.forEach((value) => {
-    table.setU16(cursor, value);
-    cursor += 2;
-  });
-  table.setU16(cursor, records.length);
-  table.put(cursor + 2, buildRecords(records));
-  return cursor + 2 + records.length * 4;
-}
-
-// A plain (non-chaining) SequenceRule body: the Contextual Substitution format carries no backtrack or lookahead fields at all, so this writes only what format 1/2 lookups ever need.
+// A plain (non-chaining) SequenceRule body: glyphCount+input (glyphCount includes the implied first glyph, so the caller lists only the components after it), then substCount+records. The Contextual Substitution format carries no backtrack or lookahead fields at all, so this writes only what format 1/2 lookups ever need.
 function buildSequenceRuleBytes(
   rule: { readonly input: readonly number[] },
   records: readonly GsubRecordSpec[],
 ): Uint8Array<ArrayBuffer> {
   const words = 1 + rule.input.length + 1 + records.length * 2;
   const table = new TableBuilder(words * 2);
-  putSequenceRuleTail(table, 0, rule.input, records);
+  table.setU16(0, rule.input.length + 1);
+  let cursor = 2;
+  rule.input.forEach((value) => {
+    table.setU16(cursor, value);
+    cursor += 2;
+  });
+  table.setU16(cursor, records.length);
+  table.put(cursor + 2, buildRecords(records));
   return table.bytes;
 }
 
