@@ -166,18 +166,10 @@ export function createDestinationRegistry(
     byName.set(name, entry);
   };
 
-  // The old-style dictionary (PDF 1.1, still widely emitted): name -> destination array, as direct dict entries.
+  // The old-style dictionary (PDF 1.1, still widely emitted): name -> destination array, as direct dict entries. No duplicate-name check here (unlike the name-tree walk below): destsDict.entries is a Map, whose own key uniqueness already guarantees every `name` this loop sees is distinct -- a dictionary literal's own duplicate keys, if the source bytes had any, were already collapsed to last-wins by the parser that built this Map, long before this function ever sees it.
   const destsDict = resolver.resolveDict(dictGet(catalog, "Dests"));
   if (destsDict !== undefined) {
     for (const [name, value] of destsDict.entries) {
-      if (byName.has(name)) {
-        sink({
-          code: "pdf/destination-duplicate",
-          severity: "warning",
-          message: `destination name "${name}" is declared more than once; keeping the first`,
-        });
-        continue;
-      }
       const parsed = parseDestination(value, resolver, pageIndex, sink);
       if (parsed !== undefined) {
         add(name, parsed);
