@@ -107,6 +107,29 @@ describe("transformOoo1Package: namespaces", () => {
     expect(out).toContain(`tz="unchanged"`);
   });
 
+  it("never resolves office:class through a decoy prefix bound to something other than the office namespace", () => {
+    // "t" is bound to the text namespace, never office -- classAttributeName must stay undefined, so a decoy "t:class" attribute placed before the real office:class is never mistaken for it.
+    const out = transformWhole(
+      `<office:document-content xmlns:t="http://openoffice.org/2000/text" office:version="1.0" t:class="spreadsheet" office:class="text"><office:body><t:p>hi</t:p></office:body></office:document-content>`,
+    );
+    expect(out).toContain(`<office:body><office:text>`);
+  });
+
+  it("resolves office:class from its own literal attribute name when no prefix is aliased to the office namespace at all", () => {
+    const out = transformWhole(
+      `<office:document-content xmlns:text="http://openoffice.org/2000/text" office:version="1.0" office:class="text"><office:body><text:p>hi</text:p></office:body></office:document-content>`,
+    );
+    expect(out).toContain(`<office:body><office:text>`);
+  });
+
+  it("never treats a coincidentally 'undefined:class'-named attribute as office:class when no alias prefix is bound", () => {
+    const out = transformWhole(
+      `<office:document-content xmlns:text="http://openoffice.org/2000/text" office:version="1.0" undefined:class="spreadsheet"><office:body><text:p>hi</text:p></office:body></office:document-content>`,
+    );
+    expect(out).not.toContain("office:spreadsheet");
+    expect(out).toContain(`<office:body><text:p>hi</text:p></office:body>`);
+  });
+
   it("rewrites a default (unprefixed) xmlns declaration to its OASIS successor, keeping it unprefixed", () => {
     const out = transformWhole(
       `<office:document-content xmlns="http://openoffice.org/2000/office" ${OOO_XMLNS} office:version="1.0" office:class="text"><office:body><text:p>hi</text:p></office:body></office:document-content>`,
@@ -536,6 +559,31 @@ describe("transformOoo1Package: metadata and package parts", () => {
     );
   });
 
+  it("only rewrites manifest:file-entry children when writing the synthesised media type, leaving a same-shaped decoy tag alone", () => {
+    const pkg: Package = {
+      parts: {
+        "META-INF/manifest.xml": {
+          kind: "xml",
+          nodes: parseXml(
+            `<manifest:manifest xmlns:manifest="http://openoffice.org/2001/manifest"><manifest:not-a-file-entry manifest:full-path="/" manifest:media-type="application/vnd.sun.xml.writer"/><manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.sun.xml.writer"/></manifest:manifest>`,
+          ),
+        },
+      },
+    };
+    const out = transformOoo1Package(pkg);
+    const manifest = out.parts["META-INF/manifest.xml"];
+    if (manifest?.kind !== "xml") {
+      throw new Error("manifest did not survive as an XML part");
+    }
+    const xml = selfCloseEmpty(buildXml(manifest.nodes));
+    expect(xml).toContain(
+      `<manifest:not-a-file-entry manifest:full-path="/" manifest:media-type="application/vnd.sun.xml.writer"/>`,
+    );
+    expect(xml).toContain(
+      `<manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/>`,
+    );
+  });
+
   it("resolves the manifest's own media type from its root entry alone, skipping a decoy element, a non-root entry, and a decoy attribute", () => {
     const pkg: Package = {
       parts: {
@@ -746,6 +794,26 @@ describe("transformToOoo1Package: namespaces and package identity", () => {
     );
   });
 
+  it("only rewrites the manifest's own root entry, skipping a same-shaped decoy tag and a decoy attribute placed before the real full-path", () => {
+    const pkg = odfPackage(`<text:p/>`, {
+      extraParts: {
+        "META-INF/manifest.xml": {
+          kind: "xml",
+          nodes: parseXml(
+            `<manifest:manifest xmlns:manifest="${ODF_NAMESPACES.manifest}"><manifest:not-a-file-entry manifest:full-path="/" manifest:media-type="text/plain"/><manifest:file-entry manifest:decoy="nope" manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/></manifest:manifest>`,
+          ),
+        },
+      },
+    });
+    const manifestXml = reversePart(pkg, "META-INF/manifest.xml");
+    expect(manifestXml).toContain(
+      `<manifest:not-a-file-entry manifest:full-path="/" manifest:media-type="text/plain"/>`,
+    );
+    expect(manifestXml).toContain(
+      `manifest:decoy="nope" manifest:full-path="/" manifest:media-type="application/vnd.sun.xml.writer"`,
+    );
+  });
+
   it("reverses a default (unprefixed) xmlns declaration back to its OpenOffice.org 1.x predecessor, keeping it unprefixed", () => {
     const pkg = odfPackage(`<text:p>hi</text:p>`);
     const contentPart = pkg.parts["content.xml"];
@@ -834,6 +902,13 @@ describe("transformToOoo1Package: document structure", () => {
     writeMimetype(pkg, ODF_MEDIA_TYPES.odt);
     const out = reversePart(pkg, "content.xml");
     expect(out).toContain(`<office:body><text:p>hi</text:p></office:body>`);
+  });
+
+  it("only unwraps a genre child for office:body itself, never for another element whose own first child happens to share a genre tag", () => {
+    const out = reverseContent(
+      `<text:p><office:text>trap</office:text></text:p>`,
+    );
+    expect(out).toContain(`<text:p><office:text>trap</office:text></text:p>`);
   });
 
   it("renames the font declaration container and its entries", () => {
@@ -963,6 +1038,11 @@ describe("transformToOoo1Package: text vocabulary", () => {
     );
   });
 
+  it("reverses text:outline-level back to text:level only on text:h, leaving it alone elsewhere", () => {
+    const out = reverseContent(`<text:p text:outline-level="1">Body</text:p>`);
+    expect(out).toContain(`<text:p text:outline-level="1">Body</text:p>`);
+  });
+
   it("renames the inline text:tab back to text:tab-stop", () => {
     const out = reverseContent(`<text:p>a<text:tab/>b</text:p>`);
     expect(out).toContain(`<text:p>a<text:tab-stop/>b</text:p>`);
@@ -1081,6 +1161,11 @@ describe("transformToOoo1Package: table and drawing vocabulary", () => {
     expect(out).toContain(`<table:table table:name="T">`);
   });
 
+  it("only converts table:is-sub-table on a real table:table, never a same-shaped attribute on another element", () => {
+    const out = reverseContent(`<text:p table:is-sub-table="true">hi</text:p>`);
+    expect(out).toContain(`<text:p table:is-sub-table="true">hi</text:p>`);
+  });
+
   it("reverses a cell's own content-validation-name back to validation-name", () => {
     const out = reverseContent(
       `<table:table><table:table-row><table:table-cell table:content-validation-name="V1"><text:p/></table:table-cell></table:table-row></table:table>`,
@@ -1112,6 +1197,19 @@ describe("transformToOoo1Package: table and drawing vocabulary", () => {
     expect(out).toContain(
       `<style:column fo:margin-left="1inch" fo:margin-right="2inch" fo:padding="3inch"/>`,
     );
+  });
+
+  it("leaves the fo:start-indent/fo:end-indent attribute name alone outside a real style:column in reverse too", () => {
+    const out = reverseContent(`<text:p fo:start-indent="1in">hi</text:p>`);
+    expect(out).toContain(`<text:p fo:start-indent="1inch">hi</text:p>`);
+  });
+
+  it("never reverses an in-shaped token inside a name-suffixed or xlink:href attribute", () => {
+    const out = reverseContent(
+      `<draw:image draw:name="Logo 2in" xlink:href="note 5in"/>`,
+    );
+    expect(out).toContain(`draw:name="Logo 2in"`);
+    expect(out).toContain(`xlink:href="#note 5in"`);
   });
 
   it("only unwraps the first frame-shaped child when a draw:frame somehow carries more than one, nesting the rest as the chosen shape's own trailing children", () => {
@@ -1218,6 +1316,24 @@ describe("transformToOoo1Package: lists", () => {
     writeMimetype(pkg, ODF_MEDIA_TYPES.odt);
     const out = reversePart(pkg, "content.xml");
     expect(out).toContain(`<text:list text:style-name="Unknown">`);
+  });
+
+  it("only threads listKind down from a genuine enclosing text:list, never from another element that merely resolves a list style", () => {
+    const pkg: Package = {
+      parts: {
+        "content.xml": {
+          kind: "xml",
+          nodes: parseXml(
+            `<office:document-content ${ODF_XMLNS} office:version="1.3"><office:automatic-styles><text:list-style style:name="L1"><text:list-level-style-number text:level="1"/></text:list-style></office:automatic-styles><office:body><office:text><text:p text:style-name="L1"><text:list><text:list-item><text:p>one</text:p></text:list-item></text:list></text:p></office:text></office:body></office:document-content>`,
+          ),
+        },
+      },
+    };
+    writeMimetype(pkg, ODF_MEDIA_TYPES.odt);
+    const out = reversePart(pkg, "content.xml");
+    expect(out).toContain(`<text:list>`);
+    expect(out).not.toContain("text:ordered-list");
+    expect(out).not.toContain("text:unordered-list");
   });
 });
 
