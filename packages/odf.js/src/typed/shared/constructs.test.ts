@@ -13,6 +13,7 @@ import type { Package } from "../../model/package";
 import type { XmlElement, XmlNode } from "../../model/node";
 import { el, txt } from "../../xml/fragment";
 import {
+  addOdfPackageResidue,
   canonicalOdfConstructDescriptor,
   collectOdfDataStyleDefinitions,
   collectOdfFieldMasterDefinitions,
@@ -30,6 +31,8 @@ import {
   pairOdfMarkerHalves,
   parseOdfFieldInstruction,
   resolveOdfMarkerEvents,
+  writeOdfAnnotationHalf,
+  writeOdfChangePoint,
   writeOdfDivision,
   writeOdfIndexWrapper,
   writeOdfPackageResidue,
@@ -58,6 +61,16 @@ describe("isEmbeddedObjectPart", () => {
   });
   it("does not match a path with no digits at all", () => {
     expect(isEmbeddedObjectPart("Object/content.xml")).toBe(false);
+  });
+});
+
+describe("addOdfPackageResidue", () => {
+  it("concatenates onto an already-existing key rather than overwriting it", () => {
+    const out: Record<string, SourceResidue> = {
+      k: { format: "odt", xml: "<a></a>" },
+    };
+    addOdfPackageResidue(out, "k", "odt", el("b", {}));
+    expect(out.k?.xml).toBe("<a></a><b></b>");
   });
 });
 
@@ -342,6 +355,22 @@ describe("isContentBearingNode (via odfMarkerHalfEventIndex)", () => {
   it("a non-content-bearing element (e.g. another bookmark half) preceding the half does not move it off the leading edge", () => {
     const decoy = el("text:bookmark-end", { "text:name": "other" });
     const { paragraph, half } = paragraphWithSiblings([decoy], 1);
+    const marker: OdfMarkerHalf = {
+      kind: "bookmark",
+      side: "start",
+      key: "b",
+      element: half,
+      parent: paragraph,
+      runPosition: 0,
+      order: 0,
+      descriptor: () => undefined,
+    };
+    expect(odfMarkerHalfEventIndex(marker, paragraph, 5)).toBe(5);
+  });
+
+  it("a comment node (neither text nor element) preceding the half does not move it off the leading edge", () => {
+    const comment: XmlNode = { type: "comment", value: "c" };
+    const { paragraph, half } = paragraphWithSiblings([comment], 1);
     const marker: OdfMarkerHalf = {
       kind: "bookmark",
       side: "start",
@@ -706,6 +735,35 @@ describe("insertOdfConstructMarkers", () => {
       { kind: "constructEnd" },
     ]);
   });
+
+  it("sorts primarily by ascending start index, not merely by end index", () => {
+    const blocks: ContentBlock[] = [
+      { kind: "paragraph", runs: [{ text: "a" }] },
+      { kind: "paragraph", runs: [{ text: "b" }] },
+    ];
+    // A long-running extent starting first but ending LAST, and a short point extent starting second but ending FIRST -- a comparator that fell back to comparing end index (as it would if the start-index clause were dropped from the OR chain) would sort these in the opposite order, and would additionally reject the long extent outright as improperly nested inside the point extent.
+    const long: OdfConstructExtent = {
+      startIndex: 0,
+      endIndex: 2,
+      order: 0,
+      descriptor: { kind: "division" },
+    };
+    const point: OdfConstructExtent = {
+      startIndex: 1,
+      endIndex: 1,
+      order: 0,
+      descriptor: { kind: "division", name: "point" },
+    };
+    const result = insertOdfConstructMarkers(blocks, [point, long]);
+    expect(result).toEqual([
+      { kind: "constructStart", descriptor: long.descriptor },
+      blocks[0],
+      { kind: "constructStart", descriptor: point.descriptor },
+      { kind: "constructEnd" },
+      blocks[1],
+      { kind: "constructEnd" },
+    ]);
+  });
 });
 
 describe("collectOdfProvenanceRegions", () => {
@@ -1020,6 +1078,12 @@ describe("parseOdfFieldInstruction", () => {
     const element = parseOdfFieldInstruction('<!--c--><foo a="1"/>');
     expect(element.tag).toBe("foo");
   });
+
+  it("throws when the instruction parses back to no element at all", () => {
+    expect(() => parseOdfFieldInstruction("<!--c-->")).toThrow(
+      /did not parse back to a single element/,
+    );
+  });
 });
 
 describe("canonicalOdfConstructDescriptor", () => {
@@ -1061,9 +1125,66 @@ describe("canonicalOdfConstructDescriptor", () => {
   });
 });
 
+describe("writeOdfChangePoint", () => {
+  it("writes the exact point-change element and id", () => {
+    const result = writeOdfChangePoint("id1");
+    expect(result.tag).toBe("text:change");
+    expect(result.attributes).toEqual([
+      { name: "text:change-id", value: "id1" },
+    ]);
+  });
+});
+
+describe("writeOdfAnnotationHalf", () => {
+  it("writes a dc:date child when the entry carries a dateIso", () => {
+    const result = writeOdfAnnotationHalf(
+      { name: "c1" },
+      { kind: "comment", body: [], dateIso: "2024-01-01T00:00:00Z" },
+    );
+    const dateEl = result.children.find(
+      (child): child is XmlElement =>
+        child.type === "element" && child.tag === "dc:date",
+    );
+    if (dateEl === undefined) {
+      throw new Error("expected a dc:date child");
+    }
+    const [text] = dateEl.children;
+    expect(text).toEqual({ type: "text", value: "2024-01-01T00:00:00Z" });
+  });
+
+  it("writes no dc:date child when the entry carries no dateIso", () => {
+    const result = writeOdfAnnotationHalf(
+      { name: "c1" },
+      { kind: "comment", body: [] },
+    );
+    expect(
+      result.children.some(
+        (child) => child.type === "element" && child.tag === "dc:date",
+      ),
+    ).toBe(false);
+  });
+});
+
 describe("writeOdfTrackedChanges", () => {
   it("wraps every region in a text:tracked-changes element, spelled exactly", () => {
     expect(writeOdfTrackedChanges([]).tag).toBe("text:tracked-changes");
+  });
+
+  it("throws for a change kind with no ODF region spelling (moveFrom/moveTo, refused by every real caller before reaching here)", () => {
+    const regions = [
+      {
+        id: "r1",
+        descriptor: {
+          kind: "provenance",
+          change: "moveFrom",
+        } as unknown as ProvenanceDescriptor & {
+          change: "insertion" | "deletion" | "formatChange";
+        },
+      },
+    ];
+    expect(() => writeOdfTrackedChanges(regions)).toThrow(
+      /has no ODF region spelling/,
+    );
   });
 
   it("writes no office:change-info at all when neither author nor date is present", () => {
