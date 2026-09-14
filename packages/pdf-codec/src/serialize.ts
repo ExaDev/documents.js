@@ -15,13 +15,10 @@ export function formatNumber(n: number): string {
   return n.toFixed(NUMBER_DECIMAL_PLACES).replace(/0+$/, "").replace(/\.$/, "");
 }
 
-const NAME_ESCAPE_PATTERN = /[^!-~]|[#()<>[\]{}/%]/;
-
 // PDF names encode any character outside the safe printable-ASCII set (or one of the delimiter/ special characters) with a #XX hex escape. Every name this writer emits is a plain ASCII identifier we chose ourselves (Type, Catalog, F1, Im3, ...), so this is a defensive general implementation rather than one tuned to a specific known-safe input set.
+//
+// No upfront "is this name already safe" regex test to short-circuit the loop below: for any name where that test would say yes, every character already satisfies the per-character check's own negation, so the loop would rebuild the identical string one character at a time -- the two branches always agree, and a whole-name pattern test here would just be a slower way to reach the same per-character loop this function already needs to run anyway to handle the escaped case.
 function escapeName(name: string): string {
-  if (!NAME_ESCAPE_PATTERN.test(name)) {
-    return name;
-  }
   let out = "";
   for (const ch of name) {
     const code = ch.codePointAt(0)!;
