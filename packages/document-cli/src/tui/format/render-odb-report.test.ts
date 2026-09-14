@@ -122,6 +122,23 @@ describe("renderOdbReportTo", () => {
     ).rejects.toThrow();
   });
 
+  it("threads the given signal into loadProvidedFonts specifically -- isolated from the pdf render's own separate abort check by targeting docx, which never reaches toPdfOptions at all", async () => {
+    const fontPath = join(workspace, "aborted-font-docx.ttf");
+    await writeFile(fontPath, fixtureCalibriFontBytes());
+    const output = join(workspace, "never-written-docx.docx");
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      renderOdbReportTo(doc, output, {
+        reportName: "SalesByRegion",
+        onDiagnostic: () => undefined,
+        fontFiles: [fontPath],
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow(/abort/i);
+  });
+
   it("rejects instead of reading a fontFiles entry once the given signal is already aborted", async () => {
     const fontPath = join(workspace, "aborted-font.ttf");
     await writeFile(fontPath, fixtureCalibriFontBytes());
