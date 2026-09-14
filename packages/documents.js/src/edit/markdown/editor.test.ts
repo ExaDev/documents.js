@@ -1,14 +1,68 @@
+import type { ContentDocument } from "document-schema.js";
 import { MarkdownDiagnosticCodes } from "markdown-codec";
 import { describe, expect, it } from "vitest";
 import { readMarkdownContent } from "../../markdown/read";
 import { buildMarkdownText } from "../../markdown/write";
-import { createMarkdownEditor, openMarkdown } from "./editor";
+import { createMarkdownEditor, MarkdownEditor, openMarkdown } from "./editor";
+
+// MarkdownEditor deliberately exposes no pageSize/margins getter of its own (mirroring every other live editor's constructor-only intake of these fields) -- reaching the private `document` field this way is the only way to prove createMarkdownEditor's own pageSize/margins options genuinely reach readMarkdownContent, since neither field is observable through toMarkdownText() (plain CommonMark/GFM text carries no page-geometry construct at all).
+function underlyingDocument(editor: MarkdownEditor): ContentDocument {
+  return (editor as unknown as { document: ContentDocument }).document;
+}
 
 describe("createMarkdownEditor", () => {
   it("produces a document whose toMarkdownText() matches what an empty readMarkdownContent round trip produces", () => {
     const editor = createMarkdownEditor();
     const expected = buildMarkdownText(readMarkdownContent(""));
     expect(editor.toMarkdownText()).toBe(expected);
+  });
+
+  it("passes pageSize and margins through to the underlying document rather than the default geometry", () => {
+    const pageSize = { widthPt: 300, heightPt: 400 };
+    const margins = { topPt: 10, rightPt: 20, bottomPt: 30, leftPt: 40 };
+    const editor = createMarkdownEditor({ pageSize, margins });
+    const document = underlyingDocument(editor);
+    if (document.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    expect(document.sections[0]?.pageSize).toEqual(pageSize);
+    expect(document.sections[0]?.margins).toEqual(margins);
+  });
+
+  it("defaults created/modified timestamps from systemClock when no clock is given", () => {
+    const before = Date.now();
+    const editor = createMarkdownEditor();
+    const after = Date.now();
+    const document = underlyingDocument(editor);
+    const createdIso = document.metadata.createdIso;
+    expect(createdIso).toBeDefined();
+    const createdMs = new Date(createdIso ?? "").getTime();
+    expect(createdMs).toBeGreaterThanOrEqual(before);
+    expect(createdMs).toBeLessThanOrEqual(after);
+  });
+});
+
+describe("MarkdownEditor constructor", () => {
+  it("throws for a non-wordprocessing ContentDocument", () => {
+    const presentation: ContentDocument = {
+      kind: "presentation",
+      metadata: {},
+      slides: [],
+    };
+    expect(() => new MarkdownEditor(presentation)).toThrow(
+      'MarkdownEditor requires a wordprocessing ContentDocument, got "presentation"',
+    );
+  });
+
+  it("throws for a wordprocessing document with no sections", () => {
+    const empty: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [],
+    };
+    expect(() => new MarkdownEditor(empty)).toThrow(
+      "markdown ContentDocument carries no sections",
+    );
   });
 });
 
@@ -28,6 +82,9 @@ describe("openMarkdown / toMarkdownText round trip", () => {
 
   it("round-trips headings, bold/italic/strike, a hyperlink, a bullet list, and a table", () => {
     const editor = openMarkdown(fixture);
+
+    // Exactly four paragraph-kind blocks (heading, prose, two list items), NOT five: the fixture's own table must not be surfaced through paragraphs() alongside them.
+    expect(editor.paragraphs()).toHaveLength(4);
 
     const [heading, prose] = editor.paragraphs();
     expect(heading?.headingLevel).toBe(1);
