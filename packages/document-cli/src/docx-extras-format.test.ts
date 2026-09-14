@@ -1,4 +1,4 @@
-import type { DocxExtras } from "documents.js";
+import type { DocxExtras, NumberingLevel } from "documents.js";
 import { decodePackage, readDocxExtras } from "documents.js";
 import { describe, expect, it } from "vitest";
 import { formatDocxExtrasLines } from "./docx-extras-format";
@@ -77,6 +77,25 @@ describe("formatDocxExtrasLines", () => {
     ]);
   });
 
+  it("joins two runs within the same paragraph with no separator between them", () => {
+    const extras: DocxExtras = {
+      ...EMPTY_EXTRAS,
+      headerFooterParts: [
+        {
+          path: "word/header1.xml",
+          kind: "header",
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [{ text: "Hello, " }, { text: "world." }],
+            },
+          ],
+        },
+      ],
+    };
+    expect(formatDocxExtrasLines(extras)).toContain("  [1] Hello, world.");
+  });
+
   it("renders a numbering definition keyed by numId, its own level keyed by ilvl in ascending numeric order", () => {
     const lines = formatDocxExtrasLines(fixtureExtras());
     expect(lines).toContain("numbering");
@@ -84,6 +103,105 @@ describe("formatDocxExtrasLines", () => {
     expect(lines).toContain(
       `    level 0: ${DOCX_EXTRAS_FIXTURE.numberingLevel.format} ${JSON.stringify(DOCX_EXTRAS_FIXTURE.numberingLevel.text)} starting at 1`,
     );
+  });
+
+  it("names the footnote's own type in parentheses when it has one", () => {
+    const extras: DocxExtras = {
+      ...EMPTY_EXTRAS,
+      footnotes: [{ text: "Endnote text", type: "endnote" }],
+    };
+    expect(formatDocxExtrasLines(extras)).toContain(
+      "  [1] (endnote) Endnote text",
+    );
+  });
+
+  it("omits the type parenthetical entirely for a footnote with none, not a blank pair", () => {
+    const extras: DocxExtras = {
+      ...EMPTY_EXTRAS,
+      footnotes: [{ text: "Plain footnote" }],
+    };
+    expect(formatDocxExtrasLines(extras)).toContain("  [1] Plain footnote");
+  });
+
+  it("recurses into a table cell's own paragraphs, not just top-level ones", () => {
+    const extras: DocxExtras = {
+      ...EMPTY_EXTRAS,
+      headerFooterParts: [
+        {
+          path: "word/header1.xml",
+          kind: "header",
+          blocks: [
+            {
+              kind: "table",
+              columnWidthsPt: [100, 100],
+              rows: [
+                {
+                  cells: [
+                    {
+                      blocks: [
+                        {
+                          kind: "paragraph",
+                          runs: [{ text: "Cell one" }],
+                        },
+                      ],
+                    },
+                    {
+                      blocks: [
+                        {
+                          kind: "paragraph",
+                          runs: [{ text: "Cell two" }],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    expect(formatDocxExtrasLines(extras)).toContain("  [1] Cell oneCell two");
+  });
+
+  it("names the restart level in a numbering level's own line when it has one", () => {
+    const extras: DocxExtras = {
+      ...EMPTY_EXTRAS,
+      numbering: {
+        "1": {
+          levels: {
+            "0": { format: "decimal", text: "%1.", startAt: 1, restart: 1 },
+          },
+        },
+      },
+    };
+    expect(formatDocxExtrasLines(extras)).toContain(
+      '    level 0: decimal "%1." starting at 1, restarts at level 1',
+    );
+  });
+
+  it("sorts numbering levels numerically, not lexicographically, once there are 10 or more", () => {
+    const level = (startAt: number): NumberingLevel => ({
+      format: "decimal",
+      text: "%1.",
+      startAt,
+    });
+    const extras: DocxExtras = {
+      ...EMPTY_EXTRAS,
+      numbering: {
+        "1": {
+          levels: {
+            "2": level(2),
+            "10": level(10),
+          },
+        },
+      },
+    };
+    const lines = formatDocxExtrasLines(extras);
+    const index2 = lines.findIndex((line) => line.includes("level 2:"));
+    const index10 = lines.findIndex((line) => line.includes("level 10:"));
+    // A lexicographic sort would place "10" before "2"; a numeric sort keeps 2 first.
+    expect(index2).toBeLessThan(index10);
   });
 
   it("separates non-empty sections with exactly one blank line, and never leads with one", () => {

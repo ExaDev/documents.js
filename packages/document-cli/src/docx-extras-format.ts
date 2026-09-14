@@ -88,7 +88,7 @@ function numberingLevelLine(ilvl: string, level: NumberingLevel): string {
   return `${indent(2)}level ${ilvl}: ${level.format} ${JSON.stringify(level.text)} starting at ${level.startAt}${restartSuffix}`;
 }
 
-// NumberingDefinitions is keyed by w:numId, each definition's own levels keyed by zero-based w:ilvl (both stringified -- see ooxml.js's own numbering.ts) -- levels are printed in ascending numeric order regardless of the object's own key enumeration order, since ilvl is a genuinely numeric axis even though the record itself is string-keyed.
+// NumberingDefinitions is keyed by w:numId, each definition's own levels keyed by zero-based w:ilvl (both stringified -- see ooxml.js's own numbering.ts) -- levels are printed in ascending numeric order. No explicit sort is needed for that: every ilvl key is a canonical non-negative integer string, and JS object property enumeration (Object.keys included) always visits such "array index" keys in ascending numeric order first, ahead of any other string keys, regardless of insertion order -- ECMA-262's own OrdinaryOwnPropertyKeys. A `.sort((a, b) => Number(a) - Number(b))` here would only ever re-produce the order Object.keys already returns.
 function numberingSection(numbering: NumberingDefinitions): readonly string[] {
   const numIds = Object.keys(numbering);
   if (numIds.length === 0) {
@@ -101,9 +101,7 @@ function numberingSection(numbering: NumberingDefinitions): readonly string[] {
       continue;
     }
     lines.push(`${indent(1)}numId ${numId}`);
-    const ilvls = Object.keys(definition.levels).sort(
-      (a, b) => Number(a) - Number(b),
-    );
+    const ilvls = Object.keys(definition.levels);
     for (const ilvl of ilvls) {
       const level = definition.levels[ilvl];
       if (level === undefined) {
