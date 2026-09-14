@@ -47,7 +47,8 @@ function promotePageBreakMarkers(
   };
 }
 
-function promoteBlock(block: ContentBlock): ContentBlock {
+// Exported (not merely internal) so the two conditions that gate a promotion -- the block's own styleId, and the exact (not merely substring, not merely per-run) text match -- are directly testable: a real markdown-codec-lowered marker paragraph is always a single run, so a hand-built multi-run block is the only way to exercise the join("") boundary, and a same-text-wrong-style paragraph is not a shape markdown-codec's own HTML-block lowering can produce for anything OTHER than this exact marker's own preformatted styling.
+export function promoteBlock(block: ContentBlock): ContentBlock {
   if (
     block.kind !== "paragraph" ||
     block.styleId !== HTML_PREFORMATTED_STYLE_ID
