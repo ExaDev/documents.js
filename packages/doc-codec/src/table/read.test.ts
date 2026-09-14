@@ -1492,6 +1492,42 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
     expect(cellText(block.rows[1]?.cells[0])).toBe("anchor");
     expect(block.rows[1]?.cells[0]?.rowSpan).toBe(2);
   });
+
+  it("cascades a row's own brcRight onto a legacy TCGRF.horzMerge anchor, not literally the row's last physical cell", () => {
+    // The identical three-cell legacy shape as the horzMerge tests above (a plain column, an anchor, and its own trailing continuation) but with the row's own sprmTTableBorders cascade applied too, so cascadeRowBorders' own isRightmostPhysicalCell check is exercised directly: the anchor (physical index 1) must still be treated as the row's real rightmost cell for brcRight, even though a further physical cell (the continuation) follows it.
+    const plain = { horzMerge: 0, vertMerge: 0 };
+    const anchor = { horzMerge: 2, vertMerge: 0 };
+    const continuation = { horzMerge: 1, vertMerge: 0 };
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000, 3000], [plain, anchor, continuation]),
+      ...tableBordersSprm,
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "a" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "b" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [{ text: "" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const block = tableBlock(document);
+    expect(block.rows[0]?.cells).toHaveLength(2);
+    expect(cellText(block.rows[0]?.cells[1])).toBe("b");
+    expect(block.rows[0]?.cells[1]?.colSpan).toBe(2);
+    expect(block.rows[0]?.cells[1]?.borders?.right).toEqual(RIGHT);
+  });
 });
 
 // The tolerance the reconstruction snaps boundaries within is one point, and ContentTable.columnWidthsPt is stated in points, so every expectation below is written in points and every drift is written as a fraction of one -- restated here from the point's own definition rather than imported from table/read.ts, so the two agree only if both are right.

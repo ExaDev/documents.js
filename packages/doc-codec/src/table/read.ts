@@ -55,7 +55,7 @@ function isSameColumnBoundary(
   return Math.abs(left - right) <= toleranceTwips;
 }
 
-// The tolerance isSameColumnBoundary actually uses for one table, never wider than TWIPS_PER_POINT and never wide enough to fold two boundaries the SAME row states as genuinely distinct into one: this reader's own writer has no equivalent of LibreOffice's MINLAY minimum-cell-width widening, so nothing stops a real producer's own table from stating a column narrower than a point, and treating that column's own two boundaries as "the same" would silently delete it -- a real narrow column, not phantom drift, since a single row's own rgdxaCenter entries are never ambiguous about how many columns that row states. Clamping to one twip below the narrowest strictly-positive gap any row states between two of its own adjacent boundaries makes that impossible: two boundaries closer together than the tightest real column this table declares are never merged, whichever rows they came from. A zero-width gap is a legal adjacent-duplicate boundary (a genuine zero-width cell, see logicalCellsForRow's own note) rather than a column at all, and is excluded so one zero-width cell in a table does not collapse every other boundary to exact matching.
+// The tolerance isSameColumnBoundary actually uses for one table, never wider than TWIPS_PER_POINT and never wide enough to fold two boundaries the SAME row states as genuinely distinct into one: this reader's own writer has no equivalent of LibreOffice's MINLAY minimum-cell-width widening, so nothing stops a real producer's own table from stating a column narrower than a point, and treating that column's own two boundaries as "the same" would silently delete it -- a real narrow column, not phantom drift, since a single row's own rgdxaCenter entries are never ambiguous about how many columns that row states. Clamping to one twip below the narrowest strictly-positive gap any row states between two of its own adjacent boundaries makes that impossible: two boundaries closer together than the tightest real column this table declares are never merged, whichever rows they came from. A zero-width gap is a legal adjacent-duplicate boundary (a genuine zero-width cell, see logicalCellsForRow's own note) rather than a column at all, and is excluded so one zero-width cell in a table does not collapse every other boundary to exact matching. No separate zero-gap case is needed for an empty positiveGaps: `Math.min()` of no arguments is `Infinity` per its own spec, so `Math.min(TWIPS_PER_POINT, Infinity - 1)` already collapses to TWIPS_PER_POINT on its own.
 function effectiveColumnBoundaryTolerance(
   definitions: readonly TableRowDefinition[],
 ): number {
@@ -68,9 +68,7 @@ function effectiveColumnBoundaryTolerance(
       return right;
     });
   }
-  return positiveGaps.length === 0
-    ? TWIPS_PER_POINT
-    : Math.min(TWIPS_PER_POINT, Math.min(...positiveGaps) - 1);
+  return Math.min(TWIPS_PER_POINT, Math.min(...positiveGaps) - 1);
 }
 
 interface RawCell {
@@ -116,11 +114,11 @@ function isRowBoundary(entry: ParagraphEntry, tableDepth: number): boolean {
 
 // Walks a flat span of paragraph entries at nesting `depth` (0 for the section's or a non-table cell's own top-level content) into a real ContentBlock[]: an ordinary paragraph passes straight through, and a contiguous run of entries at depth+1 folds into a nested ContentTable via tryAssembleTable -- recursively, since that table's own cells are themselves walked at depth+1, letting a table nest to whatever depth the file actually states rather than only one level. This one function is what both read.ts's top-level call (depth 0, the whole entries array) and every table cell's own content (depth tableDepth, the slice of entries between that cell's boundaries) share, so a table nested inside a table cell inside a table cell needs no separate code path from an ordinary top-level table.
 //
-// `documentStreamEnds` is true only for the walk over the final section's own entries, where the end of the array is the end of the document's whole text stream: every other walk (a cell's own entries, a header/footer story's, an earlier section's) ends at a boundary mark of some enclosing structure that itself continues, so a table run dangling at such an array's end still has a stream after it and degrades rather than reading as truncated.
-function walkBlocksAtDepth(
+// Shared by walkBlocksAtDepth and walkCellBlocks below: walks a flat span of entries at `depth`, folding each contiguous deeper-depth run into a table via tryAssembleTable (or flattening it back to paragraphs when that run's own TAP cannot be resolved), and defers to `resolveStreamContinues` for the one thing the two callers disagree on -- whether a run reaching all the way to `entries`' own end is a genuinely truncated document or simply the end of an enclosing structure that itself continues.
+function walkEntriesAtDepth(
   entries: readonly ParagraphEntry[],
   depth: number,
-  documentStreamEnds: boolean,
+  resolveStreamContinues: (nextIndex: number) => boolean,
 ): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   // Runs until entries[index] is undefined -- entries has no holes, so that is exactly when index reaches entries.length, with no separate bound of its own to state.
@@ -142,7 +140,7 @@ function walkBlocksAtDepth(
     const table = tryAssembleTable(
       runEntries,
       tableDepth,
-      !documentStreamEnds || nextIndex < entries.length,
+      resolveStreamContinues(nextIndex),
     );
     blocks.push(
       ...(table !== undefined
@@ -152,6 +150,27 @@ function walkBlocksAtDepth(
     index = nextIndex;
   }
   return blocks;
+}
+
+// `documentStreamEnds` is true only for the walk over the final section's own entries, where the end of the array is the end of the document's whole text stream: a table run dangling at such an array's end genuinely has nothing after it and is refused as truncated, rather than degrading (walkEntriesAtDepth's own `resolveStreamContinues` callback). Every other walk -- a header/footer story's, an earlier section's -- passes false, since those always end at a boundary mark of some enclosing structure that itself continues.
+function walkBlocksAtDepth(
+  entries: readonly ParagraphEntry[],
+  depth: number,
+  documentStreamEnds: boolean,
+): ContentBlock[] {
+  return walkEntriesAtDepth(
+    entries,
+    depth,
+    (nextIndex) => !documentStreamEnds || nextIndex < entries.length,
+  );
+}
+
+// A table cell's own content, walked recursively (tryAssembleTable's own isCellBoundary branch below): always followed by more stream, because `entries` here is a cell's own accumulated paragraphs plus the boundary paragraph that closed the cell in the first place, and that boundary paragraph's own depth is always `<= depth` -- never deep enough for collectTableRun to ever fold it into a run. A run collected from `entries` can therefore never reach `entries.length` (the trailing boundary paragraph is always still there, unconsumed, one entry past it), so an unresolvable nested table here always degrades rather than being treated as a truncated document -- unconditionally, not merely as it happens for whichever run this call is asked about.
+function walkCellBlocks(
+  entries: readonly ParagraphEntry[],
+  depth: number,
+): ContentBlock[] {
+  return walkEntriesAtDepth(entries, depth, () => true);
 }
 
 // Collects one contiguous run of paragraphs at table depth `tableDepth` or deeper -- up to but not including the first entry that has returned to a shallower depth (left this table entirely). Boundary detection lives here, once, so a row this reader ends up unable to resolve still degrades to flat paragraphs across the SAME span a successfully parsed table would have occupied, rather than needing its own separate boundary logic.
@@ -224,7 +243,7 @@ function tryAssembleTable(
     if (isCellBoundary(entry, tableDepth)) {
       // An ordinary cell mark -- not the row's own -- closes the cell that was accumulating: everything from the last cell (or row) boundary up to and including this paragraph, walked recursively so a nested table inside this very cell resolves rather than flattening to paragraphs.
       rowCells.push({
-        blocks: walkBlocksAtDepth(cellEntries, tableDepth, false),
+        blocks: walkCellBlocks(cellEntries, tableDepth),
       });
       cellEntries = [];
     }
@@ -433,6 +452,11 @@ function canonicalColumnBoundariesTwips(
   return canonical;
 }
 
+/** `Array.prototype.findIndex`'s own "no match" sentinel (-1), turned into `undefined` so `assertDefined` can treat it as the internal-defect case `gridBoundaryNotFoundMessage` names. gridIndexFor's own real caller can never actually pass -1 here (see its note), so this is exported for this package's own tests only, to stay independently testable against a contrived -1 even though nothing in the public read path can ever produce one. */
+export function indexOrUndefined(index: number): number | undefined {
+  return index === -1 ? undefined : index;
+}
+
 // The index of the canonical grid boundary one row's own raw boundary belongs to. A raw boundary need not appear in the canonical array at all once boundaries are clustered, so this snaps rather than looks up. The first match is always its own cluster's: canonicalColumnBoundariesTwips opens a new canonical entry only beyond the tolerance, so consecutive canonical entries are further apart than it, and every canonical entry below the one this boundary was absorbed into is therefore further than the tolerance from it. Finding no match at all cannot happen for a boundary that went into building the grid -- which is every boundary this is ever asked about -- so it is an internal invariant, not a malformed-input case.
 function gridIndexFor(
   canonicalBoundariesTwips: readonly number[],
@@ -442,7 +466,7 @@ function gridIndexFor(
   const index = canonicalBoundariesTwips.findIndex((candidate) =>
     isSameColumnBoundary(candidate, boundary, toleranceTwips),
   );
-  const found = index === -1 ? undefined : index;
+  const found = indexOrUndefined(index);
   assertDefined(found, gridBoundaryNotFoundMessage(boundary));
   return found;
 }
