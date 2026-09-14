@@ -282,6 +282,8 @@ describe("character formatting", () => {
     const runs =
       paragraphsOf(`${HEADER}\\pard \\super up\\nosupersub  base\\par}`)[0]
         ?.runs ?? [];
+    // Asserted as its own length first: if \nosupersub failed to clear verticalAlign, "up" and "base" would carry the identical character state and coalesce into one run, making runs[1] undefined and the verticalAlign assertion below vacuously pass regardless of what actually happened.
+    expect(runs).toHaveLength(2);
     expect(runs[0]?.verticalAlign).toBe("superscript");
     expect(runs[1]?.verticalAlign).toBeUndefined();
   });
@@ -2191,6 +2193,17 @@ describe("sections", () => {
     ).toEqual(["First.", "Second."]);
   });
 
+  it("still produces an empty paragraph when \\sect arrives with nothing accumulated, exactly as \\par does", () => {
+    // \sect closes its own paragraph with force=true (see applyStructureControlWord's own "sect" case), matching \par's own always-produce-a-paragraph convention rather than \page/\cell's implicit force=false boundary, which produces nothing when empty. \pard here opens a paragraph that accumulates no text at all before \sect.
+    const sections = sectionsOf(
+      `${HEADER}\\sectd\\pard\\sect\\sectd\\pard After.\\par}`,
+    );
+    expect(sections).toHaveLength(2);
+    expect(sections[0]?.blocks).toEqual([
+      { kind: "paragraph", runs: [] } satisfies Partial<ContentParagraph>,
+    ]);
+  });
+
   it("carries each section's own \\pgwsxnN/\\pghsxnN/\\marg*sxnN geometry rather than the document's", () => {
     const sections = sectionsOf(
       "{\\rtf1\\ansi\\paperw12240\\paperh15840\\margl1440\\margr1440\\margt1440\\margb1440" +
@@ -3923,6 +3936,8 @@ describe("character control word edge cases", () => {
     const runs =
       paragraphsOf(`${HEADER}\\pard \\super up\\nosupersub  base\\par}`)[0]
         ?.runs ?? [];
+    // Asserted as its own length first: see the identical comment on "reads \nosupersub as the off-spelling for both families" above.
+    expect(runs).toHaveLength(2);
     expect(runs[1]?.verticalAlign).toBeUndefined();
   });
 
