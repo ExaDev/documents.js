@@ -34,14 +34,15 @@ function asString(value: unknown): string {
   return value;
 }
 
-function parseNodes(raw: unknown): XmlNode[] {
+export function parseNodes(raw: unknown): XmlNode[] {
   if (!isUnknownArray(raw)) {
     throw new Error("fast-xml-parser output was not an ordered array");
   }
   return raw.map(parseNode);
 }
 
-function parseNode(raw: unknown): XmlNode {
+// Exported alongside parseAttributes and scalarText below purely so a test can drive each of this module's own runtime shape checks directly with an adversarial `unknown` value: fast-xml-parser's own `.parse()` return type is `any`, so nothing upstream of parseXml can guarantee these shapes at compile time, and no syntactically valid XML string reaches most of these branches through fast-xml-parser's own preserveOrder output (its shape is the library's own internal invariant, not something malformed input can violate) -- these are the same kind of runtime boundary check as node.ts's own isXmlNode, which is exported and unit-tested the identical way.
+export function parseNode(raw: unknown): XmlNode {
   if (!isRecord(raw)) {
     throw new Error("fast-xml-parser node was not an object");
   }
@@ -86,7 +87,7 @@ function parseNode(raw: unknown): XmlNode {
   };
 }
 
-function parseAttributes(raw: unknown): Attribute[] {
+export function parseAttributes(raw: unknown): Attribute[] {
   if (raw === undefined) {
     return [];
   }
@@ -104,7 +105,7 @@ function parseAttributes(raw: unknown): Attribute[] {
 }
 
 // Comments, CDATA and PIs wrap their text as [{ '#text': string }].
-function scalarText(raw: unknown): string {
+export function scalarText(raw: unknown): string {
   if (!isUnknownArray(raw) || raw.length === 0) {
     throw new Error("expected a scalar-text wrapper array");
   }
