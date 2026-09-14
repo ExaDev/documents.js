@@ -44,14 +44,11 @@ function paintOrderOf(item: { readonly paintOrder?: number }): number {
   return item.paintOrder;
 }
 
-// Every vector primitive on one draw:page, grouped by which of odf.js's own readOdpContent-produced ContentShapes each sits immediately before -- so a caller inserting synthetic shapes for them lands each group at its true position among the slide's real shapes, in ONE forward pass, rather than always at the end.
-export function collectSlideVectorGroups(
-  pageChildren: readonly XmlNode[],
-  pkg: Package,
+// The grouping logic itself, split from collectSlideVectorGroups below so it takes plain paintOrder-bearing data rather than an XmlNode tree and a Package -- both to keep the actual algorithm testable against hand-built inputs (a real odf.js-decoded page can never hand this a colliding shape/vector paintOrder, since both arrays are stamped from the one shared counter the module comment above describes) and because it is the whole of what this module adds on top of odf.js's own readDrawPageContent; the XML-facing wrapper below is just that call plus this.
+export function groupVectorsByShapePosition(
+  shapePaintOrders: readonly number[],
+  vectors: readonly ContentVector[],
 ): readonly DetectedSlideVectorGroup[] {
-  const { shapes, vectors } = readDrawPageContent(pageChildren, pkg);
-  const shapePaintOrders = shapes.map(paintOrderOf);
-
   interface MutableGroup {
     insertBeforeShapeIndex: number;
     vectors: ContentVector[];
@@ -79,4 +76,13 @@ export function collectSlideVectorGroups(
       paintOrder: index,
     })),
   }));
+}
+
+// Every vector primitive on one draw:page, grouped by which of odf.js's own readOdpContent-produced ContentShapes each sits immediately before -- so a caller inserting synthetic shapes for them lands each group at its true position among the slide's real shapes, in ONE forward pass, rather than always at the end.
+export function collectSlideVectorGroups(
+  pageChildren: readonly XmlNode[],
+  pkg: Package,
+): readonly DetectedSlideVectorGroup[] {
+  const { shapes, vectors } = readDrawPageContent(pageChildren, pkg);
+  return groupVectorsByShapePosition(shapes.map(paintOrderOf), vectors);
 }
