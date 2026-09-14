@@ -19,7 +19,7 @@ describe("ConfirmDialog", () => {
   });
 
   it('confirms on "y"', async () => {
-    const onConfirm = vi.fn();
+    const onConfirm = vi.fn<() => void>();
     const { lastFrame, stdin } = render(
       <ConfirmDialog
         message="Discard unsaved changes?"
@@ -33,7 +33,7 @@ describe("ConfirmDialog", () => {
   });
 
   it('confirms on "Y"', async () => {
-    const onConfirm = vi.fn();
+    const onConfirm = vi.fn<() => void>();
     const { lastFrame, stdin } = render(
       <ConfirmDialog
         message="Discard unsaved changes?"
@@ -47,7 +47,7 @@ describe("ConfirmDialog", () => {
   });
 
   it("confirms on Enter", async () => {
-    const onConfirm = vi.fn();
+    const onConfirm = vi.fn<() => void>();
     const { lastFrame, stdin } = render(
       <ConfirmDialog
         message="Discard unsaved changes?"
@@ -61,7 +61,7 @@ describe("ConfirmDialog", () => {
   });
 
   it('cancels on "n"', async () => {
-    const onCancel = vi.fn();
+    const onCancel = vi.fn<() => void>();
     const { lastFrame, stdin } = render(
       <ConfirmDialog
         message="Discard unsaved changes?"
@@ -75,7 +75,7 @@ describe("ConfirmDialog", () => {
   });
 
   it('cancels on "N"', async () => {
-    const onCancel = vi.fn();
+    const onCancel = vi.fn<() => void>();
     const { lastFrame, stdin } = render(
       <ConfirmDialog
         message="Discard unsaved changes?"
@@ -89,7 +89,7 @@ describe("ConfirmDialog", () => {
   });
 
   it("cancels on Escape", async () => {
-    const onCancel = vi.fn();
+    const onCancel = vi.fn<() => void>();
     const { lastFrame, stdin } = render(
       <ConfirmDialog
         message="Discard unsaved changes?"
@@ -105,8 +105,8 @@ describe("ConfirmDialog", () => {
   });
 
   it("does nothing on an unrelated key", async () => {
-    const onConfirm = vi.fn();
-    const onCancel = vi.fn();
+    const onConfirm = vi.fn<() => void>();
+    const onCancel = vi.fn<() => void>();
     const { lastFrame, stdin } = render(
       <ConfirmDialog
         message="Discard unsaved changes?"
