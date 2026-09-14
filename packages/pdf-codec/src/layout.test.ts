@@ -234,6 +234,33 @@ function layoutDocument(): LayoutDocument {
       logo: { format: "png", base64: "AA==", widthPx: 32, heightPx: 32 },
       photo: { format: "jpeg", base64: "/9k=", widthPx: 1024, heightPx: 768 },
     },
+    form: [
+      {
+        name: "author",
+        fieldType: "text",
+        value: "Jane Doe",
+        widgets: [
+          { pageIndex: 0, xPt: 72, yPt: 700, widthPt: 200, heightPt: 18 },
+        ],
+        children: [],
+      },
+      {
+        name: "options",
+        fieldType: "group",
+        widgets: [],
+        children: [
+          {
+            name: "options.subscribe",
+            fieldType: "checkbox",
+            checked: true,
+            widgets: [
+              { pageIndex: 0, xPt: 72, yPt: 660, widthPt: 12, heightPt: 12 },
+            ],
+            children: [],
+          },
+        ],
+      },
+    ],
   };
 }
 
