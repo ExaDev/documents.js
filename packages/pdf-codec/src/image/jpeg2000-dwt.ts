@@ -7,13 +7,6 @@
 // The widest read in either filter is the 9-7's own scaling step, whose loop (F-9) runs two lifting indices -- four samples -- past each end of the signal. Six samples of symmetric extension covers that with room to spare, and covers the 5-3's narrower reach as well.
 const EXTENSION_MARGIN = 6;
 
-// F.3.8.2 Table F.4: the four lifting parameters of the 9-7 analysis filter and its normalisation constant. The synthesis below applies each in reverse order with the opposite sign, which is what makes lifting invertible at all.
-const LIFT_ALPHA = -1.586134342059924;
-const LIFT_BETA = -0.052980118572961;
-const LIFT_GAMMA = 0.882911075530934;
-const LIFT_DELTA = 0.443506852043971;
-const LIFT_K = 1.230174104914001;
-
 export interface Jpeg2000ResolutionBounds {
   readonly u0: number;
   readonly u1: number;
@@ -124,6 +117,12 @@ function inverse53Filter(buffer: Int32Array, i0: number, i1: number): void {
 // --- The irreversible 9-7 filter (F.3.8.2, equations F-8 to F-13). ---
 
 function inverse97Filter(buffer: Float32Array, i0: number, i1: number): void {
+  // F.3.8.2 Table F.4: the four lifting parameters of the 9-7 analysis filter and its normalisation constant. The synthesis below applies each in reverse order with the opposite sign, which is what makes lifting invertible at all. Built inside this function rather than as module-level constants so a mutation to one of them is attributed, by Stryker's per-test coverage analysis, to the tests that actually call this function -- module-level `const`s here would run once at import time as static mutants, which Stryker tests against a single arbitrary covering test rather than the full set that genuinely exercises the 9-7 filter.
+  const LIFT_ALPHA = -1.586134342059924;
+  const LIFT_BETA = -0.052980118572961;
+  const LIFT_GAMMA = 0.882911075530934;
+  const LIFT_DELTA = 0.443506852043971;
+  const LIFT_K = 1.230174104914001;
   const base = EXTENSION_MARGIN - i0;
   const first = Math.floor(i0 / 2);
   const last = Math.floor(i1 / 2);
