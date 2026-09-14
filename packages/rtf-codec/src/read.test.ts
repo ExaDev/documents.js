@@ -2028,6 +2028,21 @@ describe("form fields", () => {
     });
   });
 
+  it("never opens a form field's own extent from a NESTED group's close whose destination isn't fieldInstruction, even one sharing state.field by reference", () => {
+    // \*\ud is a real, known destination in its own right ("body", not "fieldInstruction") -- \*\fldinst's own text "FORMTEXT" matches before this nested group even opens, but a check keyed on state.field's own definedness and formFieldControlType alone, without also requiring THIS group's own destination to genuinely be "fieldInstruction", would open the extent right here, at \*\ud's own premature close, rather than waiting for \*\fldinst's own real close. Appending "EXTRA" directly afterward (still within \*\fldinst's own outer scope) breaks the word-boundary match RTF's own control-word anchoring requires ("FORMTEXTEXTRA" no longer names any recognised keyword), so the CORRECT outcome is silence -- an ordinary, non-form field, never opened, never reported. Opening it early at \*\ud's own close instead forces formFieldStarted true before "EXTRA" is even read, so the field group's own later close reads the complete (now non-matching) instruction back, drops it, and reports FORM_FIELD_KEYWORD_LOST -- a diagnostic this input must never produce, since correct code never opens the extent in the first place.
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\field{\\*\\fldinst FORMTEXT{\\*\\ud MORE}EXTRA}{\\fldrslt result}}after\\par}`,
+      ),
+    );
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.FORM_FIELD_KEYWORD_LOST,
+      ),
+    ).toBe(false);
+  });
+
   it("swallows a stray \\par inside a \\*\\ffl entry instead of splitting the surrounding paragraph", () => {
     const blocks = blocksOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMDROPDOWN {\\*\\formfield{\\fftype2\\fftypetxt0\\ffhaslistbox{\\*\\ffl item1\\par item2}}}}{\\fldrslt X}}\\par}`,
@@ -2200,6 +2215,16 @@ describe("bookmarks", () => {
     expect(paragraph?.runs.map((run) => run.text).join("")).toBe(
       "before marked after",
     );
+  });
+
+  it("trims a bookmark's own name, since it is stated as ordinary #PCDATA rather than a delimiter-stripped control-word parameter", () => {
+    // The lone space right after \bkmkstart itself is consumed as the control word's own terminating delimiter (RTF's own rule for a bare, unparameterised control word), but a SECOND space before the name -- or one before the group's own closing brace -- is ordinary #PCDATA and becomes part of bookmark.name verbatim unless explicitly trimmed.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\*\\bkmkstart  padded }marked{\\*\\bkmkend padded}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      name: "padded",
+    });
   });
 
   it("reads a bookmark with no text between its halves as a point anchor", () => {
