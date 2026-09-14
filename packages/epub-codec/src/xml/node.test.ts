@@ -19,6 +19,25 @@ describe("isXmlNode", () => {
     expect(isXmlNode({ type: "unknown" })).toBe(false);
   });
 
+  it("rejects an object with an unrecognised type even when it otherwise has every field an element node would need", () => {
+    expect(
+      isXmlNode({
+        type: "unrecognised",
+        tag: "div",
+        attributes: [],
+        children: [],
+      }),
+    ).toBe(false);
+  });
+
+  it("rejects a value whose typeof is not object even when it carries every property a text node would need", () => {
+    const fnMasqueradingAsText = Object.assign(() => {}, {
+      type: "text",
+      value: "hi",
+    });
+    expect(isXmlNode(fnMasqueradingAsText)).toBe(false);
+  });
+
   it("accepts a text node with a string value", () => {
     expect(isXmlNode({ type: "text", value: "hello" })).toBe(true);
   });
@@ -123,6 +142,17 @@ describe("isXmlNode", () => {
         type: "element",
         tag: "p",
         attributes: [{ name: 5, value: "x" }],
+        children: [],
+      }),
+    ).toBe(false);
+  });
+
+  it("rejects an element node whose attribute has a well-formed name but a non-string value", () => {
+    expect(
+      isXmlNode({
+        type: "element",
+        tag: "p",
+        attributes: [{ name: "id", value: 5 }],
         children: [],
       }),
     ).toBe(false);
