@@ -28,7 +28,7 @@ export interface AddedOdfFormula {
 }
 
 // One past the highest "Object N" directory already present, so a second formula in the same document never collides with the first -- mirroring src/odf-package/media.ts's own nextPictureIndex exactly, including its tolerance of a gap left by an earlier object that is no longer there.
-function nextObjectIndex(pkg: Package): number {
+export function nextObjectIndex(pkg: Package): number {
   const pattern = /^Object (\d+)\//;
   let max = 0;
   for (const path of Object.keys(pkg.parts)) {
@@ -37,10 +37,8 @@ function nextObjectIndex(pkg: Package): number {
     if (digits === undefined) {
       continue;
     }
-    const index = Number.parseInt(digits, 10);
-    if (index > max) {
-      max = index;
-    }
+    // Math.max rather than an if-comparison: every "Object N" directory in a real package is distinct, so no two paths this loop sees ever carry the same index -- an if-guarded assignment and a running max are equally correct here, but only the latter has no tie-boundary comparison left for a mutation to flip unobservably.
+    max = Math.max(max, Number.parseInt(digits, 10));
   }
   return max + 1;
 }
