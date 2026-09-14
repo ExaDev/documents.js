@@ -90,7 +90,7 @@ function renderUpload(
     onFile?: (file: OpenedFile) => void;
   } = {},
 ): RenderedUpload {
-  const onFile = props.onFile ?? vi.fn();
+  const onFile = props.onFile ?? vi.fn<(file: OpenedFile) => void>();
   latestOnDrop = undefined;
   const mounted = mountWithMantine(<FileUpload onFile={onFile} {...props} />);
   unmount = mounted.unmount;
@@ -120,13 +120,17 @@ interface DroppedFileOverrides {
 function droppedFile(overrides: DroppedFileOverrides = {}): FileWithPath {
   const bytes = new Uint8Array(overrides.bytes ?? [1, 2, 3]);
   const name = overrides.name ?? "test.docx";
-  const file: FileWithPath = Object.assign(new File([bytes], name), {
-    path: name,
+  // Object.defineProperties, not object spread: FileWithPath.path/handle are readonly, and File's own name/size/type/lastModified live on the prototype as accessors rather than own enumerable properties, so a spread of `new File(...)` would silently drop every one of them (verified directly -- only Node's internal Blob/FileState symbols survive a spread). Defining the extra properties directly on the real File instance keeps its full prototype chain intact.
+  const file = new File([bytes], name);
+  return Object.defineProperties(file, {
+    path: { value: name, enumerable: true },
     // Overridden rather than left to jsdom's own Blob/File implementation: this test asserts on the exact bytes toOpenedFile reads back, and a real arrayBuffer() round trip through jsdom's Blob internals is an unnecessary source of timing/behaviour variance for what is otherwise a synchronous, known input.
-    arrayBuffer: () => Promise.resolve(bytes.buffer),
-    handle: overrides.handle,
+    arrayBuffer: {
+      value: () => Promise.resolve(bytes.buffer),
+      enumerable: true,
+    },
+    handle: { value: overrides.handle, enumerable: true },
   });
-  return file;
 }
 
 describe("FileUpload", () => {
