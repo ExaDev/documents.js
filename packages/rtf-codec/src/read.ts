@@ -502,29 +502,29 @@ function cloneGroupState(state: GroupState): GroupState {
   };
 }
 
-// A run's identity for the purpose of merging adjacent text: two stretches of text with the same answer here belong to one ContentRun.
+// A run's identity for the purpose of merging adjacent text: two stretches of text with the same answer here belong to one ContentRun. JSON.stringify of the whole tuple, rather than building each field into an "on"/"" flag string and joining with a separator, is deliberate: every field rides its own real value (or `undefined`, which JSON encodes as `null`) instead of a collapsed two-value ternary, so two genuinely different states can never produce the same key by accident -- unlike a hand-built delimited string, where an empty default for one field is indistinguishable from a real value that happens to also be empty, and removing the delimiter (or renaming a default) is invisible to every caller since nothing outside this function ever reads the key's own shape.
 function runKey(
   char: CharacterState,
   fontName: string | undefined,
   color: Color | undefined,
   hyperlink: string | undefined,
 ): string {
-  return [
-    char.bold ? "b" : "",
-    char.italic ? "i" : "",
-    char.underline ? "u" : "",
-    char.strike ? "s" : "",
-    fontName ?? "",
-    String(char.sizeHalfPoints),
+  return JSON.stringify([
+    char.bold,
+    char.italic,
+    char.underline,
+    char.strike,
+    fontName,
+    char.sizeHalfPoints,
     color === undefined
-      ? ""
+      ? undefined
       : `${String(color.r)},${String(color.g)},${String(color.b)}`,
-    hyperlink ?? "",
-    char.verticalAlign ?? "",
-    char.direction ?? "",
+    hyperlink,
+    char.verticalAlign,
+    char.direction,
     // A revision boundary is a run boundary: two stretches of text differing only in who inserted them are two runs, because the extent that names the insertion has to start and end somewhere.
-    JSON.stringify(char.revision),
-  ].join("|");
+    char.revision,
+  ]);
 }
 
 // "HYPERLINK "target"" is the <links> field type this reader maps onto ContentRun.hyperlink; the optional \\l switch names an in-document anchor rather than an external URI, which ContentRun states the only way it can -- as a fragment.
