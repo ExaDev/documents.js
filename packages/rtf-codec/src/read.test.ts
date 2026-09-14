@@ -3078,6 +3078,28 @@ describe("block accumulation across \\object/\\result scratch rendering", () => 
     expect(runs[0]?.text).toBe("beforeafter");
   });
 
+  it("flushes a run still pending before a genuinely non-empty addBlocks call, keeping it a separate run from identically-formatted text typed after", () => {
+    // A successfully-decoded picture is the ordinary non-empty case addBlocks' own flushRun call exists for: without it, "before" would stay pending across the image insertion and silently merge with "after" into one run once the image block itself has already been spliced between them positionally -- the two texts would still end up in the same final paragraph (addBlocks does not close the paragraph, only flushes and splices), so only the RUN boundary between them reveals a missing flush.
+    const PNG_HEX =
+      "89504e470d0a1a0a0000000d494844520000000100000001080600000" +
+      "01f15c4890000000a49444154789c6300010000050001" +
+      "0d0a2db40000000049454e44ae426082";
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard before{\\pict\\pngblip\\picwgoal720\\pichgoal720 ${PNG_HEX}}after\\par}`,
+    )[0];
+    const texts = paragraph?.runs.map((run) => run.text) ?? [];
+    expect(texts).toEqual(["before", "after"]);
+  });
+
+  it("never flushes a run still pending when addBlocks is called with a genuinely empty list, so it stays merged with identically-formatted text typed after the call", () => {
+    // A failed-picture-decode addBlocks call (the fixture above) never even reaches addBlocks' own emptiness check: buildPicture returning undefined is guarded by its OWN `if (image !== undefined)` at the call site, so addBlocks is never called there at all. objectState.resultBlocks is the one real call site that can genuinely pass an empty array -- an \object whose \result had no content of its own. \shppict (a "body"-kind destination, not a fresh \result scratch) types "blah" directly into the OUTER paragraph's own pendingRunText AFTER \result has already closed and restored state, so it is still genuinely pending -- unflushed -- at the exact moment \object's own close calls addBlocks(resultBlocks=[], ...). A guard-less addBlocks would flush it regardless of its own list being empty, splitting it from the identically-formatted text typed after \object closes.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\object{\\result}{\\shppict blah}} more\\par}`,
+    )[0];
+    const texts = paragraph?.runs.map((run) => run.text) ?? [];
+    expect(texts).toEqual(["blah more"]);
+  });
+
   it("flushes a run still pending when \\result's own scratch rendering begins, so it is not lost or merged into \\result's content", () => {
     const OBJDATA_HEX_LOCAL = bytesToHex(
       writeEmbeddedObjectData({
