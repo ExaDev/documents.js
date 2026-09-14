@@ -15,20 +15,26 @@ import {
   rgbHexToColor,
 } from "document-schema.js";
 import { isCompoundFile, readCompoundFile } from "archive-codec";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
+  RECORD_CALCCOUNT,
   RECORD_CF12,
   RECORD_CONTINUE,
   RECORD_DIMENSIONS,
   RECORD_EXTERNSHEET,
+  RECORD_HORIZONTALPAGEBREAKS,
   RECORD_LBL,
+  RECORD_MERGECELLS,
   RECORD_MSODRAWING,
   RECORD_MSODRAWINGGROUP,
+  RECORD_ROW,
   RECORD_SETUP,
   RECORD_SUPBOOK,
+  RECORD_VERTICALPAGEBREAKS,
 } from "./biff/record-types";
 import { readRecords } from "./biff/records";
+import * as writtenCellsModule from "./written-cells";
 import { PALETTE_ENTRY_COUNT } from "./biff/xf-colors";
 import { BiffWriteError } from "./biff/write-errors";
 import type { XlsContentDocument } from "./content";
@@ -1126,6 +1132,20 @@ describe("writeXlsContent", () => {
     expect(content.sheets[0]?.columns).toStrictEqual([]);
   });
 
+  it("leaves dataValidations and conditionalFormats entirely absent for a sheet declaring neither", () => {
+    // Own-property check, not a value check: a bug materialising either key with an explicit empty-array value would pass a plain .toStrictEqual([]) assertion just as easily as a genuinely absent key would.
+    const bytes = writeXlsContent(
+      document([sheet("Sheet1", [cell(0, 0, { kind: "number", value: 1 })])]),
+    );
+    const content = readXlsContent(bytes);
+    expect(Object.hasOwn(content.sheets[0] ?? {}, "dataValidations")).toBe(
+      false,
+    );
+    expect(Object.hasOwn(content.sheets[0] ?? {}, "conditionalFormats")).toBe(
+      false,
+    );
+  });
+
   it("round-trips a merge spanning only rows, and one spanning only columns", () => {
     const bytes = writeXlsContent(
       document([
@@ -1649,6 +1669,8 @@ describe("print settings", () => {
     const SETUP_FLAG_PORTRAIT = 0x0002;
     expect(grbitFor(400, 500) & SETUP_FLAG_PORTRAIT).not.toBe(0); // taller than wide
     expect(grbitFor(500, 400) & SETUP_FLAG_PORTRAIT).toBe(0); // wider than tall
+    // Exactly square: <= (not <) is what decides portrait for the tie, so this is the one case that actually distinguishes the two operators.
+    expect(grbitFor(450, 450) & SETUP_FLAG_PORTRAIT).not.toBe(0);
   });
 
   it("clamps a scale and a fit-to-page count past what their own Setup fields can hold", () => {
@@ -2930,6 +2952,209 @@ describe("buildWorksheetSubstream: Dimensions bytes content.ts never reads back"
     expect(u32AtOffset(data, 4)).toBe(0);
     expect(u16AtOffset(data, 8)).toBe(0);
     expect(u16AtOffset(data, 10)).toBe(0);
+  });
+});
+
+describe("buildWorksheetSubstream: sheet-writer.ts's own boundary and array-emptiness checks", () => {
+  const NO_DRAWING = { msoDrawingRecords: [], objRecords: [] };
+  const NO_STYLE_CTX = {
+    icvOf: () => 0,
+    xfIndexForCell: () => 0,
+    sstIndexFor: () => 0,
+  };
+
+  function recordsOf(
+    cells: readonly ContentSheetCell[],
+    overrides: Partial<Omit<ContentSheet, "name" | "cells">> = {},
+  ) {
+    const bytes = buildWorksheetSubstream(
+      sheet("S", cells, overrides),
+      NO_STYLE_CTX,
+      NO_DRAWING,
+    );
+    return readRecords(bytes);
+  }
+
+  function u16At(data: Uint8Array, offset: number): number {
+    return new DataView(
+      data.buffer,
+      data.byteOffset,
+      data.byteLength,
+    ).getUint16(offset, true);
+  }
+
+  /** RECORD_ROW's own first two u16 fields are rowIndex then colMic -- filters a records list down to the one Row record naming the given index, since a sheet with several rows produces several. */
+  function rowRecordAt(
+    records: ReturnType<typeof readRecords>,
+    rowIndex: number,
+  ) {
+    const row = records.find(
+      (record) =>
+        record.type === RECORD_ROW && u16At(record.data, 0) === rowIndex,
+    );
+    if (row === undefined) {
+      throw new Error(`no Row record for index ${rowIndex} was written`);
+    }
+    return row.data;
+  }
+
+  it("writes Row's own colMic/colMac as the row's true min column and one past its true max, across several cells sharing a row", () => {
+    const records = recordsOf([
+      cell(2, 5, { kind: "number", value: 1 }),
+      cell(2, 1, { kind: "number", value: 2 }),
+      cell(2, 9, { kind: "number", value: 3 }),
+    ]);
+    const data = rowRecordAt(records, 2);
+    expect(u16At(data, 2)).toBe(1); // colMic: the smallest column (1)
+    expect(u16At(data, 4)).toBe(10); // colMac: the largest column (9) + 1
+  });
+
+  it("writes Row's own colMic/colMac as 0/0 for a declared row with no cells of its own", () => {
+    const records = recordsOf([cell(0, 0, { kind: "number", value: 1 })], {
+      rows: [{ index: 4, heightPt: 20 }],
+    });
+    const data = rowRecordAt(records, 4);
+    expect(u16At(data, 2)).toBe(0);
+    expect(u16At(data, 4)).toBe(0);
+  });
+
+  it("writes no MergeCells record at all for a sheet whose cells carry no real span", () => {
+    // Every ordinary cell resolves rowSpan/colSpan to exactly 1 by default -- the degenerate case a real merge (either axis greater than one) must be told apart from, not just "rowSpan or colSpan stated at all".
+    const records = recordsOf([cell(0, 0, { kind: "number", value: 1 })]);
+    expect(records.some((record) => record.type === RECORD_MERGECELLS)).toBe(
+      false,
+    );
+  });
+
+  it("writes no MergeCells entry for a cell whose rowSpan/colSpan are both explicitly 1", () => {
+    const records = recordsOf([
+      cell(0, 0, { kind: "number", value: 1 }, { rowSpan: 1, colSpan: 1 }),
+    ]);
+    expect(records.some((record) => record.type === RECORD_MERGECELLS)).toBe(
+      false,
+    );
+  });
+
+  it("writes CalcCount's own cIter as the real iteration-limit constant, not an empty calculation-state block", () => {
+    const records = recordsOf([cell(0, 0, { kind: "number", value: 1 })]);
+    const calcCount = records.find(
+      (record) => record.type === RECORD_CALCCOUNT,
+    );
+    if (calcCount === undefined) {
+      throw new Error("no CalcCount record was written");
+    }
+    expect(u16At(calcCount.data, 0)).toBe(100);
+  });
+
+  it("refuses a column past BIFF8's own 256-column grid", () => {
+    expect(() =>
+      buildWorksheetSubstream(
+        sheet("S", [], { columns: [{ index: 256, widthPt: 50 }] }),
+        NO_STYLE_CTX,
+        NO_DRAWING,
+      ),
+    ).toThrow(/outside BIFF8's own 256-column grid/);
+  });
+
+  it("writes ColInfo's own flags as 0, not COLINFO_FLAG_HIDDEN, for a stated-but-not-hidden column", () => {
+    const records = recordsOf([], {
+      columns: [{ index: 0, widthPt: 100 }],
+    });
+    const colInfo = records.find((record) => record.type === 0x7d); // RECORD_COLINFO
+    if (colInfo === undefined) {
+      throw new Error("no ColInfo record was written");
+    }
+    expect(u16At(colInfo.data, 8)).toBe(0); // grbit
+  });
+
+  it("writes the Setup record's own iScale as the inactive-scale sentinel when fitToPages is stated, even if scalePercent is also present", () => {
+    // ContentSheetPrintSettings does not enforce the two as mutually exclusive at the type level -- fitToPages being stated is what must win, not merely scalePercent being absent.
+    const records = recordsOf([], {
+      printSettings: {
+        ...PRINT_SETTINGS,
+        scalePercent: 55,
+        fitToPages: { width: 2, height: 3 },
+      },
+    });
+    const setup = records.find((record) => record.type === RECORD_SETUP);
+    if (setup === undefined) {
+      throw new Error("no Setup record was written");
+    }
+    expect(u16At(setup.data, 2)).toBe(100); // iScale: SETUP_INACTIVE_SCALE_PERCENT, not the stated 55
+  });
+
+  it("writes no HorizontalPageBreaks/VerticalPageBreaks record for a sheet with declared but empty break arrays", () => {
+    const records = recordsOf([], {
+      printSettings: {
+        ...PRINT_SETTINGS,
+        manualBreaks: { rows: [], columns: [] },
+      },
+    });
+    expect(
+      records.some((record) => record.type === RECORD_HORIZONTALPAGEBREAKS),
+    ).toBe(false);
+    expect(
+      records.some((record) => record.type === RECORD_VERTICALPAGEBREAKS),
+    ).toBe(false);
+  });
+
+  it("writes no MergeCells or comment records at all for a sheet with neither", () => {
+    const records = recordsOf([cell(0, 0, { kind: "number", value: 1 })]);
+    expect(records.some((record) => record.type === RECORD_MERGECELLS)).toBe(
+      false,
+    );
+    // RECORD_NOTE ([MS-XLS] 0x001C) is writeSheetComments' own leading record -- absent entirely for a sheet with no commented cells.
+    expect(records.some((record) => record.type === 0x001c)).toBe(false);
+  });
+
+  it("writes a Row record's own cells sorted by column regardless of the order they were given in", () => {
+    const records = recordsOf([
+      cell(0, 9, { kind: "number", value: 1 }),
+      cell(0, 1, { kind: "number", value: 2 }),
+      cell(0, 5, { kind: "number", value: 3 }),
+    ]);
+    const numberRecords = records.filter((record) => record.type === 0x0203); // RECORD_NUMBER
+    const columns = numberRecords.map((record) => u16At(record.data, 2));
+    expect(columns).toStrictEqual([1, 5, 9]);
+  });
+
+  it("writes Row records themselves sorted by row index regardless of the order rows were declared or populated in", () => {
+    const records = recordsOf(
+      [
+        cell(9, 0, { kind: "number", value: 1 }),
+        cell(1, 0, { kind: "number", value: 2 }),
+      ],
+      { rows: [{ index: 5, heightPt: 20 }] },
+    );
+    const rowIndices = records
+      .filter((record) => record.type === RECORD_ROW)
+      .map((record) => u16At(record.data, 0));
+    expect(rowIndices).toStrictEqual([1, 5, 9]);
+  });
+
+  it("throws sheet-writer's own internal-error message when a cell reaches writeCellValueRecord disagreeing with written-cells.ts's own filter about its formatting", () => {
+    // written-cells.ts's own writesCellRecord calls cellCarriesFormatting as a same-module, unmocked local binding -- vi.spyOn on the exported name never intercepts that internal call, only a cross-module import of it, which is exactly the call writeCellValueRecord makes. So the cell given here carries REAL formatting (a genuine background), satisfying writesCellRecord's own unmocked check honestly and letting the cell reach the cell table; only writeCellValueRecord's own cross-module call is mocked false, the disagreement this internal-error guard exists to catch -- proving the guard actually fires and says what it claims to, rather than being unreachable dead code.
+    const spy = vi
+      .spyOn(writtenCellsModule, "cellCarriesFormatting")
+      .mockReturnValueOnce(false);
+    try {
+      expect(() =>
+        buildWorksheetSubstream(
+          sheet("S", [
+            cell(
+              0,
+              0,
+              { kind: "empty" },
+              { background: { kind: "solid", color: { r: 1, g: 0, b: 0 } } },
+            ),
+          ]),
+          NO_STYLE_CTX,
+          NO_DRAWING,
+        ),
+      ).toThrow(/internal error/);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
