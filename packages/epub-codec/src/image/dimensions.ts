@@ -75,8 +75,13 @@ function readJpegDimensions(bytes: Uint8Array): ImageDimensions | undefined {
     return undefined;
   }
   let offset = 2;
-  while (offset < bytes.length) {
-    if (bytes[offset] !== 0xff) {
+  // No `offset < bytes.length` loop bound: bytes[offset] reads as undefined once offset runs past the end, and that undefined-safe read is the loop's own real termination condition below, so a separate length comparison would only ever be a redundant restatement of it.
+  for (;;) {
+    const currentByte = bytes[offset];
+    if (currentByte === undefined) {
+      return undefined;
+    }
+    if (currentByte !== 0xff) {
       offset += 1;
       continue;
     }
@@ -93,7 +98,7 @@ function readJpegDimensions(bytes: Uint8Array): ImageDimensions | undefined {
     if (hasNoLengthField(marker)) {
       continue;
     }
-    // No separate `offset + 2 > bytes.length` guard here: for a Start-Of-Frame marker, the deeper `offset + 7 > bytes.length` check just below already rejects every truncation this one would (7 is always the larger bound), and for any other marker, readUint16BE's own ?? 0 fallback yields a length that only ever advances `offset` further past `bytes.length`, which the loop's own bound already terminates on.
+    // No separate `offset + 2 > bytes.length` guard here: for a Start-Of-Frame marker, the deeper `offset + 7 > bytes.length` check just below already rejects every truncation this one would (7 is always the larger bound), and for any other marker, readUint16BE's own ?? 0 fallback yields a length that only ever advances `offset` further past `bytes.length`, which the loop's own undefined-read check above already terminates on next iteration.
     const length = readUint16BE(bytes, offset);
     if (isStartOfFrameMarker(marker)) {
       if (offset + 7 > bytes.length) {
@@ -109,7 +114,6 @@ function readJpegDimensions(bytes: Uint8Array): ImageDimensions | undefined {
     }
     offset += length;
   }
-  return undefined;
 }
 
 // No separate `bytes.length >= 2` guard: bytes[0]/bytes[1] already read as undefined past the end of a shorter array, which can never equal 0xff/0xd8, so the equality checks alone already reject a too-short array.
