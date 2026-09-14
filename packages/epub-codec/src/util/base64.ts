@@ -29,8 +29,8 @@ export function bytesToBase64(bytes: Uint8Array<ArrayBuffer>): string {
 export function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
   const clean = b64.replace(/[^A-Za-z0-9+/=]/g, "");
   const len = clean.length;
-  const out = new Uint8Array(Math.floor((len * 3) / 4));
-  let position = 0;
+  // Appended to a plain array and converted once at the end, rather than written into a pre-sized Uint8Array and trimmed with subarray(): the padding in the final quad means the exact decoded length isn't known until every quad has been walked, and a pre-sized buffer only needs to be an upper bound, so its own size is never itself part of what a caller can observe -- any sufficiently large size decodes identically once trimmed.
+  const bytes: number[] = [];
   for (let i = 0; i < len; i += 4) {
     const c0 = DECODE[clean.charCodeAt(i)] ?? 255;
     const c1 = DECODE[clean.charCodeAt(i + 1)] ?? 255;
@@ -39,18 +39,15 @@ export function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
     if (c0 === 255 || c1 === 255) {
       throw new Error("invalid base64 input");
     }
-    out[position] = (c0 << 2) | (c1 >> 4);
-    position += 1;
+    bytes.push((c0 << 2) | (c1 >> 4));
     if (code2 !== 61) {
       const d2 = DECODE[code2] ?? 255;
-      out[position] = ((c1 & 0x0f) << 4) | (d2 >> 2);
-      position += 1;
+      bytes.push(((c1 & 0x0f) << 4) | (d2 >> 2));
       if (code3 !== 61) {
         const d3 = DECODE[code3] ?? 255;
-        out[position] = ((d2 & 0x03) << 6) | d3;
-        position += 1;
+        bytes.push(((d2 & 0x03) << 6) | d3);
       }
     }
   }
-  return out.subarray(0, position);
+  return new Uint8Array(bytes);
 }
