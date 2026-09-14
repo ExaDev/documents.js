@@ -77,6 +77,18 @@ describe("ensureDefaultContentType", () => {
     ensureDefaultContentType(pkg, "jpeg", "image/jpeg");
     expect(findChildElements(rootChildren(pkg), "Default")).toHaveLength(2);
   });
+
+  it("does not mistake an Override element carrying the same Extension attribute value for an existing Default", () => {
+    const pkg = emptyPackage();
+    ensureContentTypeOverride(pkg, "png", "image/png");
+    // Force an Extension attribute onto that Override entry, matching what ensureDefaultContentType would look for on a Default -- proving the presence check keys on the element's own tag, not merely on the attribute value.
+    const [override] = findChildElements(rootChildren(pkg), "Override");
+    if (override !== undefined) {
+      override.node.attributes.push({ name: "Extension", value: "png" });
+    }
+    ensureDefaultContentType(pkg, "png", "image/png");
+    expect(findChildElements(rootChildren(pkg), "Default")).toHaveLength(1);
+  });
 });
 
 describe("ensureContentTypeOverride", () => {
