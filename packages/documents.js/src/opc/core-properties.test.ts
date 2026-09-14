@@ -108,6 +108,15 @@ describe("addCoreProperties", () => {
     ).toHaveLength(0);
   });
 
+  it("omits cp:keywords for an empty (but defined) keywords array, not just an undefined one", () => {
+    const pkg = emptyPackage();
+    addCoreProperties(pkg, { title: "Has keywords field", keywords: [] });
+    const root = rootElement(pkg.parts[CORE_PROPERTIES_PATH]);
+    expect(
+      root === undefined ? [] : childrenWithTag(root, "cp:keywords"),
+    ).toHaveLength(0);
+  });
+
   it("registers the [Content_Types].xml override and the package-root relationship", () => {
     const pkg = emptyPackage();
     addCoreProperties(pkg, { title: "Doc" });
