@@ -214,10 +214,6 @@ function multiIndexOdbEntries(): (readonly [
   ];
 }
 
-export function embeddedHsqldbMultiIndexOdbPackage(): Package {
-  return decodePackage(embeddedHsqldbMultiIndexOdbBytes());
-}
-
 export function embeddedHsqldbMultiIndexOdbBytes(): Uint8Array<ArrayBuffer> {
   return zipPackage(multiIndexOdbEntries());
 }

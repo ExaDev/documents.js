@@ -1,5 +1,4 @@
-import type { Package } from "odf.js";
-import { base64ToBytes, decodePackage } from "odf.js";
+import { base64ToBytes } from "odf.js";
 
 // Never imported by src/index.ts and never reaches dist/. The ExaDev/odf.js repository's own real fixture (src/typed/ods/fixtures/sheet-formula.ods), base64-embedded here exactly like src/test-support/odb-fixture.ts's own .odb and src/test-support/firebird.ts's own .fbk streams -- a genuine, unmodified LibreOffice 26.2-generated spreadsheet built through that application's own UNO API (a Java client against a headless soffice, saved with the calc8 filter) and never hand-edited afterwards. Embedded rather than read off disk because odf.js ships only dist/ as a dependency: its fixtures directory exists in that repository, not in this package's own node_modules, so a test reading it from a sibling checkout would pass on one machine and fail in CI.
 //
@@ -93,8 +92,4 @@ const SHEET_FORMULA_ODS_BASE64 =
 
 export function sheetFormulaOdsBytes(): Uint8Array<ArrayBuffer> {
   return base64ToBytes(SHEET_FORMULA_ODS_BASE64);
-}
-
-export function sheetFormulaOdsPackage(): Package {
-  return decodePackage(sheetFormulaOdsBytes());
 }
