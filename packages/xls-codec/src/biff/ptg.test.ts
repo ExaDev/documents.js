@@ -277,8 +277,19 @@ describe("parseFormulaText", () => {
   });
 
   it("aborts a fixed-arity PtgFunc call with too few operands on the stack", () => {
-    // SIN needs one operand; none is pushed first, and a trailing A1 proves the abort is immediate rather than a coincidental fallthrough (see the binary-operator test above for why the trailing token matters).
+    // SIN needs one operand; none is pushed, then a trailing A1 follows. applyFunctionCall's arity guard returns before ever touching the stack, so a mutant that inverts its return value doesn't produce a malformed "SIN()" entry -- it returns as if the call had succeeded while leaving the stack untouched, and the caller then carries straight on to the trailing token instead of aborting. Without that trailing token the mutant and the real code would coincidentally agree (both leave the stack empty, both yield undefined); with it, the real code still aborts before reaching A1 while the mutant reaches it and reports "A1" instead.
     const rgce = bytes(0x41, ...u16(0x000f), ...ptgRef(0, 0));
+    expect(parseFormulaText(rgce, NO_SHEETS)).toBeUndefined();
+  });
+
+  it("aborts a fixed-arity PtgFunc call with too few operands even when the guard's own abort is skipped rather than inverted", () => {
+    // The sibling of the test above, for a DIFFERENT way this same guard can be defeated: a mutant that turns the if-block into a no-op (or the condition itself into a constant false) doesn't skip the abort by returning early -- it falls straight through to the splice/push below with a starved stack, and splice on an empty array with a negative, clamped start index is a silent no-op, so this still produces a well-formed (if argument-less) "SIN()" entry rather than leaving the stack untouched. A bare trailing A1 would then just leave "SIN()" and "A1" as two un-combined stack entries, which the final stack.length===1 check turns back into undefined for both the real code and this mutant alike (the same masking the sibling test above exists to avoid, from the opposite direction) -- so the trailing token here has to be an operator (PtgConcat) that combines them into one operand, the only way this mutant's fabricated "SIN()" can surface as an observably different final result from the real code's genuine abort.
+    const rgce = bytes(
+      0x41,
+      ...u16(0x000f),
+      ...ptgRef(0, 0),
+      0x08, // PtgConcat
+    );
     expect(parseFormulaText(rgce, NO_SHEETS)).toBeUndefined();
   });
 
@@ -286,6 +297,31 @@ describe("parseFormulaText", () => {
     // COUNT(A1:B1) -- cparams=1, iftab 0x0000.
     const rgce = bytes(...ptgArea(0, 0, 0, 1), 0x42, 0x01, ...u16(0x0000));
     expect(parseFormulaText(rgce, NO_SHEETS)).toBe("COUNT(A1:B1)");
+  });
+
+  it("formats a string concatenation", () => {
+    const rgce = bytes(...ptgRef(0, 0), ...ptgRef(0, 1), 0x08); // PtgConcat
+    expect(parseFormulaText(rgce, NO_SHEETS)).toBe("A1&B1");
+  });
+
+  it("aborts a concatenation with too few operands", () => {
+    const rgce = bytes(...ptgRef(0, 0), 0x08, ...ptgRef(0, 1)); // PtgConcat with only one operand pushed, then a trailing B1
+    expect(parseFormulaText(rgce, NO_SHEETS)).toBeUndefined();
+  });
+
+  it("formats PtgMissArg as an empty operand, filling an omitted optional argument", () => {
+    // IF(A1>0,1,) -- the third argument omitted, present in the token stream as a real (empty) operand so PtgFuncVar's own cparams=3 still counts it, matching a real producer's own encoding of a trailing omitted argument.
+    const rgce = bytes(
+      ...ptgRef(0, 0),
+      ...ptgInt(0),
+      0x0d, // PtgGt
+      ...ptgInt(1),
+      0x16, // PtgMissArg
+      0x42,
+      0x03,
+      ...u16(0x0001), // PtgFuncVar, IF, cparams=3
+    );
+    expect(parseFormulaText(rgce, NO_SHEETS)).toBe("IF(A1>0,1,)");
   });
 
   it("formats IF's PtgAttrIf/PtgAttrGoto control tokens as pure no-ops", () => {
@@ -341,6 +377,31 @@ describe("parseFormulaText", () => {
     expect(parseFormulaText(rgce, context)).toBe("'Data Sheet'!A1:B2");
   });
 
+  it("doubles an embedded single quote inside a sheet name that needs quoting", () => {
+    const context: FormulaSheetContext = {
+      sheets: [{ name: "O'Brien's Data" }],
+      sheetRanges: [{ firstSheetIndex: 0, lastSheetIndex: 0 }],
+    };
+    const rgce = bytes(0x3b, ...u16(0), ...ptgArea(0, 1, 0, 1).slice(1));
+    expect(parseFormulaText(rgce, context)).toBe("'O''Brien''s Data'!A1:B2");
+  });
+
+  it("aborts a multi-sheet range whose last sheet index does not resolve, even though its first does", () => {
+    // first being genuinely resolvable here is what isolates the OR's own second operand (last===undefined) from its first: a mutant that drops the second operand doesn't fall back to an empty stack the way a stack-starved abort would -- resolveSheetLabel instead returns a real (if malformed, embedding the literal text "undefined") label string, which gets pushed as one atomic operand. A bare trailing B1 would then leave TWO un-combined operands on the stack, which the final stack.length===1 check turns back into undefined for both the real code and the mutant alike -- so the trailing token has to be an operator (PtgConcat) that actually combines the 3D reference with B1 into a single operand, the only way the mutant's malformed-but-defined text can surface as an observably different final result.
+    const context: FormulaSheetContext = {
+      sheets: [{ name: "Jan" }],
+      sheetRanges: [{ firstSheetIndex: 0, lastSheetIndex: 5 }],
+    };
+    const rgce = bytes(
+      0x5a,
+      ...u16(0),
+      ...ptgRef(0, 0).slice(1),
+      ...ptgRef(0, 1),
+      0x08, // PtgConcat
+    );
+    expect(parseFormulaText(rgce, context)).toBeUndefined();
+  });
+
   it("resolves a multi-sheet 3D range, always quoted for the embedded colon", () => {
     const context: FormulaSheetContext = {
       sheets: [{ name: "Jan" }, { name: "Feb" }, { name: "Mar" }],
@@ -349,6 +410,19 @@ describe("parseFormulaText", () => {
     // PtgRef3d (value class): opcode 0x5A, ixti, then an RgceLoc.
     const rgce = bytes(0x5a, ...u16(0), ...ptgRef(0, 0).slice(1));
     expect(parseFormulaText(rgce, context)).toBe("'Jan:Mar'!A1");
+  });
+
+  it("aborts the whole parse when a 3D AREA reference's ixti does not resolve", () => {
+    // The PtgArea3d-specific twin of the PtgRef3d test below -- resolveSheetLabel's own undefined result is checked independently in each of the two call sites, so a mutant disabling only ONE of them survives unless both are exercised on their own opcode. A mutant that disables this check doesn't leave the stack starved the way a genuine abort-skip would: it pushes the literal text "undefined" spliced into the area reference as one atomic operand, so a bare trailing B1 would just leave that malformed operand and B1 as two un-combined stack entries, which the final stack.length===1 check turns back into undefined for both the real code and the mutant alike. The trailing token has to be an operator (PtgConcat) that actually combines them into a single operand for the mutant's malformed-but-defined text to surface as an observably different result.
+    const context: FormulaSheetContext = { sheets: [], sheetRanges: [] };
+    const rgce = bytes(
+      0x3b,
+      ...u16(0),
+      ...ptgArea(0, 1, 0, 1).slice(1),
+      ...ptgRef(0, 1),
+      0x08, // PtgConcat
+    );
+    expect(parseFormulaText(rgce, context)).toBeUndefined();
   });
 
   it("aborts the whole parse when a 3D reference's ixti does not resolve", () => {
@@ -364,8 +438,8 @@ describe("parseFormulaText", () => {
   });
 
   it("aborts on a token outside this reader's vocabulary, such as a shared formula's PtgExp", () => {
-    // PtgExp ([MS-XLS] 2.5.198.58): opcode 0x01. A real Formula record whose rgce is just this single token is exactly what a shared-formula member's own cell carries.
-    const rgce = bytes(0x01, ...u32(0));
+    // PtgExp ([MS-XLS] 2.5.198.58): opcode 0x01. A real Formula record whose rgce is just this single token is exactly what a shared-formula member's own cell carries. A trailing A1 is what actually distinguishes this abort from a coincidental fallthrough (see the binary-operator test above for the identical reasoning): PtgExp pushes nothing onto the stack either way, so an empty rgce alone reaches the same "undefined" result via the unrelated empty-stack fallthrough regardless of whether this guard fires.
+    const rgce = bytes(0x01, ...u32(0), ...ptgRef(0, 0));
     expect(parseFormulaText(rgce, NO_SHEETS)).toBeUndefined();
   });
 
@@ -543,6 +617,12 @@ describe("parseFormulaText array constants (PtgArray/PtgExtraArray)", () => {
     expect(parseFormulaText(rgce, NO_SHEETS, { rgcb })).toBe(
       '{"hi",TRUE,#DIV/0!}',
     );
+  });
+
+  it("formats a FALSE boolean array element, not just TRUE", () => {
+    const rgce = bytes(...ptgArrayToken());
+    const rgcb = bytes(...ptgExtraArray([[serBool(false)]]));
+    expect(parseFormulaText(rgce, NO_SHEETS, { rgcb })).toBe("{FALSE}");
   });
 
   it("reads two PtgArray tokens' worth of PtgExtraArray in sequence", () => {
