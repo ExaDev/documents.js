@@ -128,7 +128,8 @@ export interface Jpeg2000Codestream {
   readonly truncated: boolean;
 }
 
-class MarkerCursor {
+// Exported for direct unit testing of the primitives below: readHeaderSegment (the class's sole production caller) already re-derives and re-checks segmentEnd against cursor.data.length before ever calling bytes(), so the length it passes always already satisfies position + length <= data.length on its own -- only a direct cursor test can exercise this class's own arithmetic and bounds-checking in isolation from that guarantee.
+export class MarkerCursor {
   position: number;
 
   constructor(
@@ -234,12 +235,8 @@ function readCodingStyleParameters(
       `SPcod/SPcoc declares transformation ${String(transformCode)}, which is neither of the two ISO/IEC 15444-1 defines`,
     );
   }
-  // T.800 Table A.18: the transmitted values are xcb-2 and ycb-2, and the standard caps the code-block area at 4096 samples with each side at most 2^10.
-  if (
-    codeBlockWidthExp > 10 ||
-    codeBlockHeightExp > 10 ||
-    codeBlockWidthExp + codeBlockHeightExp > 12
-  ) {
+  // T.800 Table A.18: the transmitted values are xcb-2 and ycb-2, and the standard caps the code-block area at 4096 samples with each side at most 2^10. No separate per-side check is needed alongside the area cap: each exponent's own floor of 2 (from the `+ 2` above) means either one alone exceeding 10 already puts the sum past 12 (11 + 2 = 13), so the sum check below already catches every case an individual >10 check would.
+  if (codeBlockWidthExp + codeBlockHeightExp > 12) {
     throw new Jpeg2000ParseError(
       `code-block size 2^${String(codeBlockWidthExp)} by 2^${String(codeBlockHeightExp)} is outside the range ISO/IEC 15444-1 Table A.18 permits`,
     );
