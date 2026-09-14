@@ -779,12 +779,12 @@ interface TextOutlineFace {
   ): number | undefined;
 }
 
-// What an embedded font program turned out to carry, as resolved from a /FontDescriptor.
+// What an embedded font program turned out to carry, as resolved from a /FontDescriptor. The "glyf" case's own face carries only what every caller actually reads off it (glyf/unitsPerEm) -- composite-ness and the shown-code -> glyph-ID mapping are per-font-dictionary facts a Type0 or TrueType caller derives for itself, never read back off this intermediate value.
 type EmbeddedProgram =
   | {
       readonly kind: "glyf";
       readonly sfnt: SfntFont;
-      readonly face: TextOutlineFace;
+      readonly face: { readonly glyf: GlyfTable; readonly unitsPerEm: number };
     }
   | { readonly kind: "cff" }
   | { readonly kind: "absent" };
@@ -810,12 +810,8 @@ function openEmbeddedProgram(
       stream.dict,
       NOOP_DIAGNOSTIC_SINK,
     ).bytes;
-    if (
-      bytes.length >= 3 &&
-      bytes[0] === 0x01 &&
-      bytes[1] === 0x00 &&
-      bytes[2] === 0x04
-    ) {
+    // No separate bytes.length >= 3 guard: with noUncheckedIndexedAccess, an out-of-bounds index already reads as undefined, which can never strictly equal any of these three literals -- a short stream already fails the chain on its own without a length check duplicating that fact.
+    if (bytes[0] === 0x01 && bytes[1] === 0x00 && bytes[2] === 0x04) {
       return { kind: "cff" }; // a bare CFF program: header major 1, minor 0, hdrSize 4 (ISO 32000-1's /Type1C spelling)
     }
     const sfnt = parseSfnt(bytes);
@@ -840,12 +836,7 @@ function openEmbeddedProgram(
     return {
       kind: "glyf",
       sfnt,
-      face: {
-        composite: false,
-        glyf,
-        unitsPerEm: head.unitsPerEm,
-        glyphIdOf: () => undefined,
-      },
+      face: { glyf, unitsPerEm: head.unitsPerEm },
     };
   }
   return { kind: "absent" };
@@ -1138,8 +1129,8 @@ function drawTextRun(
   }
 }
 
-// TrueType contours to port subpaths: each contour's on/off-curve points walked into line and quadratic segments, each quadratic elevated to the exactly equivalent cubic (control points at 2/3 of the way from the on-curve ends toward the off-curve control -- the standard exact quadratic-to-cubic elevation, no approximation), then every point transformed as a point. A run of consecutive off-curve points implies an on-curve point at each neighbouring pair's midpoint, per the TrueType glyph specification's own contour convention.
-function glyphOutlineSubpaths(
+// TrueType contours to port subpaths: each contour's on/off-curve points walked into line and quadratic segments, each quadratic elevated to the exactly equivalent cubic (control points at 2/3 of the way from the on-curve ends toward the off-curve control -- the standard exact quadratic-to-cubic elevation, no approximation), then every point transformed as a point. A run of consecutive off-curve points implies an on-curve point at each neighbouring pair's midpoint, per the TrueType glyph specification's own contour convention. Exported solely so this suite can drive it directly with hand-built contours: a real embedded font's own glyphs (this module's only other route in) never reliably exercise every branch on demand -- no vendored face happens to start a contour off-curve, or carries a contour with no on-curve point at all, the way a hand-built GlyphOutline can.
+export function glyphOutlineSubpaths(
   outline: GlyphOutline,
   matrix: Matrix,
 ): readonly RasterSubpath[] {
@@ -1148,30 +1139,28 @@ function glyphOutlineSubpaths(
     if (contour.length < 3) {
       continue; // a degenerate contour (a stray point or pair) bounds no area and paints nothing
     }
-    // Rotate so the walk starts on a real on-curve point where one exists; a contour with none at all (a pure-quad circle, say) starts at the implied midpoint of its last and first points.
+    // Rotate so the walk starts on a real on-curve point where one exists; a contour with none at all (a pure-quad circle, say) starts at the implied midpoint of its last and first points. Both branches below share one hoisted condition rather than repeating `firstOn >= 0`: at firstOn === 0 the two `ordered` branches already coincide (rotating by zero is a no-op), so a lone, un-shared copy of the condition guarding `ordered` alone has no boundary input left where mutating it changes anything observable -- sharing it with `current`'s own branch (which genuinely does differ at that boundary) is what keeps the condition itself meaningful to test.
     const firstOn = contour.findIndex((point) => point.onCurve);
     const contourPoints = contour.map((point) => ({
       x: point.x,
       y: point.y,
       onCurve: point.onCurve,
     }));
+    const hasLeadingOnCurvePoint = firstOn >= 0;
     const ordered: readonly { x: number; y: number; onCurve: boolean }[] =
-      firstOn >= 0
+      hasLeadingOnCurvePoint
         ? [...contourPoints.slice(firstOn), ...contourPoints.slice(0, firstOn)]
         : contourPoints;
-    let current: { x: number; y: number } =
-      firstOn >= 0
-        ? { x: contourPoints[firstOn]!.x, y: contourPoints[firstOn]!.y }
-        : {
-            x:
-              (contourPoints[contourPoints.length - 1]!.x +
-                contourPoints[0]!.x) /
-              2,
-            y:
-              (contourPoints[contourPoints.length - 1]!.y +
-                contourPoints[0]!.y) /
-              2,
-          };
+    let current: { x: number; y: number } = hasLeadingOnCurvePoint
+      ? { x: contourPoints[firstOn]!.x, y: contourPoints[firstOn]!.y }
+      : {
+          x:
+            (contourPoints[contourPoints.length - 1]!.x + contourPoints[0]!.x) /
+            2,
+          y:
+            (contourPoints[contourPoints.length - 1]!.y + contourPoints[0]!.y) /
+            2,
+        };
     const start = current;
     const segments: RasterPathSegment[] = [];
     let pendingOffCurve: { x: number; y: number } | undefined;
