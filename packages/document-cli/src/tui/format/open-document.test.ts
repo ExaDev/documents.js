@@ -45,6 +45,28 @@ describe("openDocumentAtPath for .odb", () => {
   });
 });
 
+describe("openDocumentAtPath for an unrecognised extension", () => {
+  it("throws naming the path, rather than falling through to some format's own decoder", async () => {
+    const path = join(workspace, "mystery.unknownext");
+    await writeFile(path, "irrelevant");
+
+    await expect(openDocumentAtPath(path)).rejects.toThrow(
+      `Cannot tell what kind of document ${path} is from its extension`,
+    );
+  });
+});
+
+describe("openDocumentAtPath for .odf", () => {
+  it("throws explaining a standalone formula document has no editor, rather than opening one", async () => {
+    const path = join(workspace, "formula.odf");
+    await writeFile(path, "irrelevant");
+
+    await expect(openDocumentAtPath(path)).rejects.toThrow(
+      "A standalone .odf formula document has no editor; convert it to PDF (odfToPdf) instead",
+    );
+  });
+});
+
 describe("openDocumentAtPath for .xlsx", () => {
   it("opens read-only as a converted PDF preview instead of throwing", async () => {
     const bytes = xlsxTestBytes();
