@@ -60,6 +60,9 @@ describe("createEmptyOdsPackage", () => {
     const rootEntry = elementChildren(manifestRoot, "manifest:file-entry").find(
       (entry) => attr(entry, "manifest:full-path") === "/",
     );
+    if (rootEntry === undefined) {
+      throw new Error("expected a root manifest:file-entry");
+    }
     expect(attr(rootEntry, "manifest:media-type")).toBe(
       "application/vnd.oasis.opendocument.spreadsheet",
     );
