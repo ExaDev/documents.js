@@ -1,14 +1,38 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type * as MarkdownCodec from "markdown-codec";
 import {
   richMarkdownText,
   richMarkdownTextWithFrontMatter,
 } from "../test-support/markdown";
-import { readMarkdownContent } from "./read";
+import { HTML_PREFORMATTED_STYLE_ID } from "markdown-codec";
+import { promoteBlock, readMarkdownContent } from "./read";
+import { PAGE_BREAK_MARKER } from "./write";
 
 describe("readMarkdownContent", () => {
   it("produces a wordprocessing ContentDocument", () => {
     const content = readMarkdownContent(richMarkdownText());
     expect(content.kind).toBe("wordprocessing");
+  });
+
+  it("throws if markdown-codec's own reader ever produced a non-wordprocessing ContentDocument", async () => {
+    // Not a shape markdown-codec's real readMarkdownContent can ever produce (markdown has no presentation/spreadsheet/drawing/formula equivalent to lower into, per this module's own comment) -- this exercises the defensive guard directly via a mocked reader, since no real markdown text can trigger it.
+    vi.resetModules();
+    vi.doMock("markdown-codec", async () => {
+      const actual =
+        await vi.importActual<typeof MarkdownCodec>("markdown-codec");
+      return {
+        ...actual,
+        readMarkdownContent: () => ({
+          document: { kind: "spreadsheet", metadata: {}, sheets: [] },
+        }),
+      };
+    });
+    const { readMarkdownContent: mockedRead } = await import("./read");
+    expect(() => mockedRead("irrelevant")).toThrow(
+      "readMarkdownContent returned a non-wordprocessing ContentDocument",
+    );
+    vi.doUnmock("markdown-codec");
+    vi.resetModules();
   });
 
   // The read-side inverse of src/markdown/write.ts's page-break marker: an `<!-- page break -->` HTML comment lowers (via markdown-codec's own HTML block arm) to an HTMLPreformatted paragraph carrying that literal text, and this pass promotes exactly that paragraph to a pageBreak block -- so markdownToPdf re-renders a real page boundary and a pdfToMarkdown -> markdownToPdf round trip regenerates markers from real boundaries instead of accumulating them as visible literal text.
@@ -117,5 +141,32 @@ describe("readMarkdownContent", () => {
     expect(() =>
       readMarkdownContent(richMarkdownText(), { signal: controller.signal }),
     ).toThrow();
+  });
+});
+
+describe("promoteBlock", () => {
+  it("does not promote a paragraph carrying the exact marker text if it isn't HTML-preformatted styled", () => {
+    // markdown-codec's own HTML-block lowering never produces this exact combination for real input, but the gate is still styleId AND text, not text alone -- pinned directly.
+    const block = promoteBlock({
+      kind: "paragraph",
+      runs: [{ text: PAGE_BREAK_MARKER }],
+    });
+    expect(block).toEqual({
+      kind: "paragraph",
+      runs: [{ text: PAGE_BREAK_MARKER }],
+    });
+  });
+
+  it("promotes runs whose texts concatenate (with no separator) to exactly the marker", () => {
+    // A real marker paragraph is always a single run; this splits it across two runs so a join that inserted any separator between them would produce a non-matching string and fail to promote, proving the join really does concatenate with "" rather than something else.
+    const promoted = promoteBlock({
+      kind: "paragraph",
+      styleId: HTML_PREFORMATTED_STYLE_ID,
+      runs: [
+        { text: PAGE_BREAK_MARKER.slice(0, 6) },
+        { text: PAGE_BREAK_MARKER.slice(6) },
+      ],
+    });
+    expect(promoted).toEqual({ kind: "pageBreak" });
   });
 });
