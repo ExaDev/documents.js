@@ -216,13 +216,35 @@ describe("readFontFace style-bit precedence", () => {
 });
 
 describe("readFontFace error handling", () => {
+  it("names thrown errors FontFaceParseError, not the generic Error", () => {
+    const garbage = new Uint8Array([0x00, 0x01, 0x02, 0x03]);
+    try {
+      readFontFace(garbage, "not-a-font.bin");
+      expect.unreachable("readFontFace did not throw");
+    } catch (error) {
+      expect((error as FontFaceParseError).name).toBe("FontFaceParseError");
+    }
+  });
+
   it("throws FontFaceParseError, naming the source, for bytes that are not a recognised sfnt container at all", () => {
     const garbage = new Uint8Array([0x00, 0x01, 0x02, 0x03]);
+    // "not-a-font.bin" (the source label) also appears inside the TrueType Collection message below, so asserting it alone would not catch isTrueTypeCollection wrongly reporting every failure as a .ttc -- the generic wording is what actually distinguishes the two.
     expect(() => readFontFace(garbage, "not-a-font.bin")).toThrow(
       FontFaceParseError,
     );
     expect(() => readFontFace(garbage, "not-a-font.bin")).toThrow(
-      /not-a-font\.bin/,
+      /no recognised sfnt version/,
+    );
+  });
+
+  it("throws the generic parse failure, not a crash, for a buffer too short to hold even the 4-byte 'ttcf' tag", () => {
+    // isTrueTypeCollection's own hasBytes(bytes, 0, 4) check exists precisely so a too-short buffer never reaches u32, which would throw past the bounds this file has instead of a FontFaceParseError.
+    const tooShort = new Uint8Array([0x00, 0x01]);
+    expect(() => readFontFace(tooShort, "truncated.bin")).toThrow(
+      FontFaceParseError,
+    );
+    expect(() => readFontFace(tooShort, "truncated.bin")).toThrow(
+      /no recognised sfnt version/,
     );
   });
 
