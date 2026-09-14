@@ -7,7 +7,7 @@ import type {
 import { PAGE_SIZE_LETTER } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import type { XlsContentDocument } from "xls-codec";
-import { odsToXlsx } from "../convert/convert";
+import { docxToPdf, odsToXlsx } from "../convert/convert";
 import { readOdfFormulaContent } from "../odf/formula/read";
 import { FRACTION_FORMULA, odfFormulaBytes } from "../test-support/odf";
 import { minimalDocxBytes } from "../test-support/docx";
@@ -300,6 +300,18 @@ describe("DOCUMENT_FORMAT_CODECS: content read/write round trips", () => {
     expect(roundTripped).toEqual(expected);
   });
 
+  it("xls: content.write refuses a non-spreadsheet ContentDocument by name", () => {
+    const codec = requireContentCodec("xls");
+    const wordprocessing: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [],
+    };
+    expect(() => codec.write!(wordprocessing)).toThrow(
+      "DOCUMENT_FORMAT_CODECS.xls.content.write: expected a spreadsheet ContentDocument",
+    );
+  });
+
   // Mirrors ppt-codec's own write.test.ts fixture shape. The writer's own scope is text-box slides only (see that package's README scope note); like pptx/odp above, a black-box substantive-text check is the right-scoped proof of wiring here rather than exact equality -- ppt-codec's own reader always reports PowerPoint's fixed default text insets (0.1in left/right, 0.05in top/bottom) regardless of what a shape actually carries, since it does not yet read a shape's own OfficeArtFOPT inset override (see read.ts's own DEFAULT_INSET_LEFT_RIGHT_PT/DEFAULT_INSET_TOP_BOTTOM_PT comment), a pre-existing, documented gap this registry wiring did not introduce.
   it("ppt: read -> write -> read carries the source slide text through", () => {
     const codec = requireContentCodec("ppt");
@@ -352,6 +364,16 @@ describe("DOCUMENT_FORMAT_CODECS: pdf has a layout codec, not a content codec", 
   it("pdf has no content entry at all", () => {
     expect(DOCUMENT_FORMAT_CODECS.pdf.content).toBeUndefined();
     expect(DOCUMENT_FORMAT_CODECS.pdf.layout).toBeDefined();
+  });
+
+  it("layout.write forwards the abort signal through to writePdf's own per-page check", () => {
+    const codec = DOCUMENT_FORMAT_CODECS.pdf.layout!;
+    const layout = codec.read(docxToPdf(minimalDocxBytes()));
+    const controller = new AbortController();
+    controller.abort();
+    expect(() => {
+      codec.write(layout, { signal: controller.signal });
+    }).toThrow(DOMException);
   });
 });
 
