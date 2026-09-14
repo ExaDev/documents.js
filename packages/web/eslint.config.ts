@@ -79,6 +79,19 @@ export default tseslint.config(
     },
   },
   {
+    // formatBytes and reopenTooltipLabel are pure helpers exported alongside RecentFilesPanel for the identical reason __root.tsx's own colorSchemeTooltipLabel/navbarConfig are: Mantine's Tooltip only mounts its floating label content once genuinely open, which a render-only test cannot drive, so the label logic needs to be callable directly.
+    files: ["src/ui/RecentFilesPanel.tsx"],
+    rules: {
+      "react-refresh/only-export-components": [
+        "warn",
+        {
+          allowConstantExport: true,
+          allowExportNames: ["formatBytes", "reopenTooltipLabel"],
+        },
+      ],
+    },
+  },
+  {
     files: ["src/workers/**/*.ts"],
     languageOptions: { globals: { ...globals.worker } },
   },

@@ -29,7 +29,8 @@ vi.mock("./reopenMailbox", () => ({
   },
 }));
 
-const { RecentFilesPanel } = await import("./RecentFilesPanel");
+const { formatBytes, reopenTooltipLabel, RecentFilesPanel } =
+  await import("./RecentFilesPanel");
 
 // handleReopen chains several real awaits (queryPermission, maybe requestPermission, getFile, arrayBuffer) before it calls setPendingReopen/navigate, so a fixed count of Promise.resolve() ticks is fragile against a chain this long -- flushing on a real macrotask boundary (setTimeout) guarantees every already-queued microtask has drained first, regardless of how many awaits the chain happens to have.
 function flushPromises(): Promise<void> {
@@ -116,10 +117,41 @@ describe("RecentFilesPanel", () => {
     expect(html()).toContain("2.0 KB");
   });
 
+  it("formats exactly 1024 bytes as KB, not B", () => {
+    useRecentFiles.mockReturnValue([record({ sizeBytes: 1024 })]);
+    const { html } = renderPanel();
+    expect(html()).toContain("1.0 KB");
+    expect(html()).not.toContain("1024 B");
+  });
+
   it("formats a size in MB once at or above 1024 * 1024 bytes", () => {
     useRecentFiles.mockReturnValue([record({ sizeBytes: 1024 * 1024 * 3 })]);
     const { html } = renderPanel();
     expect(html()).toContain("3.0 MB");
+  });
+
+  it("formats exactly 1024 * 1024 bytes as MB, not KB", () => {
+    useRecentFiles.mockReturnValue([record({ sizeBytes: 1024 * 1024 })]);
+    const { html } = renderPanel();
+    expect(html()).toContain("1.0 MB");
+    expect(html()).not.toContain("1024.0 KB");
+  });
+
+  it("separates the size and relative time with a space around the middle dot", () => {
+    useRecentFiles.mockReturnValue([record({ sizeBytes: 500 })]);
+    const { container } = renderPanel();
+    const sizeText = Array.from(container.querySelectorAll("p")).find((p) =>
+      p.textContent.includes("500 B"),
+    );
+    expect(sizeText?.textContent).toMatch(/^500 B · /);
+  });
+
+  it("enables the reopen action when the record has a handle", () => {
+    useRecentFiles.mockReturnValue([record({ handle: fakeHandle() })]);
+    const { container } = renderPanel();
+    const reopenButton =
+      container.querySelectorAll<HTMLButtonElement>("button")[0];
+    expect(reopenButton?.disabled).toBe(false);
   });
 
   it("disables the reopen action and shows a fallback tooltip when the record has no handle", () => {
@@ -212,5 +244,78 @@ describe("RecentFilesPanel", () => {
     await flushPromises();
     expect(navigate).not.toHaveBeenCalled();
     expect(notifyError).not.toHaveBeenCalled();
+  });
+
+  it("queries permission in read mode, and skips requesting it again once already granted", async () => {
+    const queryPermission = vi.fn(() =>
+      Promise.resolve("granted" as PermissionState),
+    );
+    const requestPermission = vi.fn(() =>
+      Promise.resolve("denied" as PermissionState),
+    );
+    const handle = fakeHandle({ queryPermission, requestPermission });
+    useRecentFiles.mockReturnValue([record({ id: 7, handle })]);
+    const { container } = renderPanel();
+    container.querySelectorAll("button")[0]!.click();
+    await flushPromises();
+    expect(queryPermission).toHaveBeenCalledWith({ mode: "read" });
+    expect(requestPermission).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith({ to: "/convert" });
+  });
+
+  it("requests permission in read mode when the initial query is not granted", async () => {
+    const queryPermission = vi.fn(() =>
+      Promise.resolve("prompt" as PermissionState),
+    );
+    const requestPermission = vi.fn(() =>
+      Promise.resolve("granted" as PermissionState),
+    );
+    const handle = fakeHandle({ queryPermission, requestPermission });
+    useRecentFiles.mockReturnValue([record({ id: 7, handle })]);
+    const { container } = renderPanel();
+    container.querySelectorAll("button")[0]!.click();
+    await flushPromises();
+    expect(requestPermission).toHaveBeenCalledWith({ mode: "read" });
+  });
+
+  it("names the record in the permission-denied error message", async () => {
+    const handle = fakeHandle({
+      queryPermission: () => Promise.resolve("prompt"),
+      requestPermission: () => Promise.resolve("denied"),
+    });
+    useRecentFiles.mockReturnValue([
+      record({ id: 7, name: "secret.docx", handle }),
+    ]);
+    const { container } = renderPanel();
+    container.querySelectorAll("button")[0]!.click();
+    await flushPromises();
+    const [, error] = notifyError.mock.calls[0] as [string, Error];
+    expect(error.message).toBe('Access to "secret.docx" was not granted.');
+  });
+});
+
+describe("formatBytes", () => {
+  it("formats bytes below 1024 as a plain byte count", () => {
+    expect(formatBytes(500)).toBe("500 B");
+  });
+
+  it("formats exactly 1024 bytes as KB, not B", () => {
+    expect(formatBytes(1024)).toBe("1.0 KB");
+  });
+
+  it("formats exactly 1024 * 1024 bytes as MB, not KB", () => {
+    expect(formatBytes(1024 * 1024)).toBe("1.0 MB");
+  });
+});
+
+describe("reopenTooltipLabel", () => {
+  it("labels a handle-backed record for reopening", () => {
+    expect(reopenTooltipLabel(true)).toBe("Reopen in Convert");
+  });
+
+  it("explains why a handle-less record can't be reopened directly", () => {
+    expect(reopenTooltipLabel(false)).toBe(
+      "This browser can't reopen files directly -- pick it again from the tool you need",
+    );
   });
 });
