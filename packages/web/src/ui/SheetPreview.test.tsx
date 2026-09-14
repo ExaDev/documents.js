@@ -369,6 +369,61 @@ describe("SheetPreview", () => {
     );
   });
 
+  // A number cell already produces the identical right-aligned recipe class, so a shared assertion above would pass even if percentage or currency stopped being recognised at all -- these two cases each render as the sheet's only cell specifically so their alignment is the sole recipe class present, distinguishing "recognised" from "fell through to the left-aligned default".
+  it("classes a percentage cell as right-aligned on its own, not only alongside a number cell", () => {
+    const html = renderPreview({
+      label: "L",
+      format: "xlsx",
+      content: spreadsheetDocument([
+        sheet({
+          columns: [{ index: 0 }],
+          rows: [{ index: 0 }],
+          cells: [
+            cell({
+              row: 0,
+              column: 0,
+              value: { kind: "percentage", value: 0.5 },
+              displayText: "50%",
+            }),
+          ],
+        }),
+      ]),
+    });
+    expect(html).toContain(
+      cellRecipe({ align: "right", verticalAlign: "bottom", error: false }),
+    );
+    expect(html).not.toContain(
+      cellRecipe({ align: "left", verticalAlign: "bottom", error: false }),
+    );
+  });
+
+  it("classes a currency cell as right-aligned on its own, not only alongside a number cell", () => {
+    const html = renderPreview({
+      label: "L",
+      format: "xlsx",
+      content: spreadsheetDocument([
+        sheet({
+          columns: [{ index: 0 }],
+          rows: [{ index: 0 }],
+          cells: [
+            cell({
+              row: 0,
+              column: 0,
+              value: { kind: "currency", value: 9.99, currency: "USD" },
+              displayText: "$9.99",
+            }),
+          ],
+        }),
+      ]),
+    });
+    expect(html).toContain(
+      cellRecipe({ align: "right", verticalAlign: "bottom", error: false }),
+    );
+    expect(html).not.toContain(
+      cellRecipe({ align: "left", verticalAlign: "bottom", error: false }),
+    );
+  });
+
   it("respects a cell's own explicit alignment and vertical alignment overrides", () => {
     const html = renderPreview({
       label: "L",

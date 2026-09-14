@@ -39,11 +39,9 @@ export function SheetPreview({
 }: SheetPreviewProps) {
   const sheets = content?.kind === "spreadsheet" ? content.sheets : undefined;
   const [activeSheetIndex, setActiveSheetIndex] = useState(0);
-  // Clamped rather than reset via an effect -- if `content` changes to a sheet count smaller than the previously-selected index, this falls back to the last real sheet instead of an effect racing the render.
+  // Clamped rather than reset via an effect -- if `content` changes to a sheet count smaller than the previously-selected index, this falls back to the last real sheet instead of an effect racing the render. No separate empty-sheets branch: Math.min against a length of 0 already yields -1, an out-of-range index that reads back as undefined the same as the 0 this would otherwise special-case to, so a dedicated check for "no sheets at all" would only ever produce a value with the identical downstream effect.
   const clampedIndex =
-    sheets !== undefined && sheets.length > 0
-      ? Math.min(activeSheetIndex, sheets.length - 1)
-      : 0;
+    sheets === undefined ? 0 : Math.min(activeSheetIndex, sheets.length - 1);
   const activeSheet = sheets?.[clampedIndex];
 
   return (
