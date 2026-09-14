@@ -698,10 +698,8 @@ export function buildWorksheetSubstream(
     pieces.push(writeMergeCellsRecord(merges));
   }
 
-  const commentedCells = sheet.cells.filter(hasComment);
-  if (commentedCells.length > 0) {
-    pieces.push(...writeSheetComments(commentedCells));
-  }
+  // No commentedCells.length>0 guard: writeSheetComments already returns an empty array for an empty input (nothing to sort, nothing to map), so spreading its result pushes nothing regardless -- a guard here would only ever decide between calling a function that does nothing and not calling it.
+  pieces.push(...writeSheetComments(sheet.cells.filter(hasComment)));
 
   // A comment's own Note/Obj/Txo triple takes object ids 1..N (writeSheetComments above); drawing-writer.ts's own buildDrawingWritePlan continues object-id assignment from N+1, so every image/embedded-object shape's MsoDrawing/Obj records are placed after the comments' own, matching what that plan already assumes about the ids it minted.
   pieces.push(...drawing.msoDrawingRecords, ...drawing.objRecords);
