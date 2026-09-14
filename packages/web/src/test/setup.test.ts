@@ -11,7 +11,7 @@ describe("window.matchMedia stub", () => {
 
   it("invokes a listener added via addEventListener when an event is dispatched, and stops once removed", () => {
     const list = window.matchMedia("(prefers-color-scheme: dark)");
-    const listener = vi.fn();
+    const listener = vi.fn<() => void>();
     list.addEventListener("change", listener);
     // dispatchEvent's own return value follows the real EventTarget contract: true means the event was not cancelled.
     expect(list.dispatchEvent({} as MediaQueryListEvent)).toBe(true);
@@ -24,7 +24,9 @@ describe("window.matchMedia stub", () => {
 
   it("ignores a non-function EventListenerObject passed to addEventListener/removeEventListener rather than throwing", () => {
     const list = window.matchMedia("(prefers-color-scheme: dark)");
-    const listenerObject: EventListenerObject = { handleEvent: vi.fn() };
+    const listenerObject: EventListenerObject = {
+      handleEvent: vi.fn<() => void>(),
+    };
     expect(() => {
       list.addEventListener("change", listenerObject);
       list.removeEventListener("change", listenerObject);
