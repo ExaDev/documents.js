@@ -19,6 +19,7 @@ import {
   MarkdownInvalidUtf8Error,
   MarkdownNestingLimitExceededError,
   MarkdownParseError,
+  MarkdownWriteError,
 } from "./diagnostics";
 
 function minimalDocument(blocks: readonly ContentBlock[]): ContentDocument {
@@ -464,6 +465,24 @@ function captureThrown(fn: () => void): unknown {
 
 // The throw tier's own error classes, exercised directly rather than only observed via .toThrow(SomeClass) at a real call site elsewhere: an instanceof check alone cannot distinguish a correct message/code/field from a mutated one, so each case here asserts every field the constructor sets, not just the class.
 describe("throw-tier error classes carry their own precise code, message, and fields", () => {
+  it("MarkdownParseError: constructed directly (not through a subclass), name/code/message all carry the constructor's own arguments", () => {
+    // Every concrete subclass overwrites `this.name` in its own constructor right after calling super(), so a MarkdownInvalidUtf8Error/MarkdownInputTooLargeError/MarkdownNestingLimitExceededError instance can never observe MarkdownParseError's own `this.name = "MarkdownParseError"` assignment -- it is immediately clobbered. Only a direct instantiation of the base class exercises that line.
+    const error = new MarkdownParseError("md/some-code", "some message");
+    expect(error).toBeInstanceOf(MarkdownParseError);
+    expect(error.name).toBe("MarkdownParseError");
+    expect(error.code).toBe("md/some-code");
+    expect(error.message).toBe("some message");
+  });
+
+  it("MarkdownWriteError: constructed directly (not through a subclass), name/code/message all carry the constructor's own arguments", () => {
+    // The write-side twin of the MarkdownParseError case above -- every concrete subclass (MarkdownUnbalancedConstructMarkersError and siblings) overwrites `this.name` immediately after super(), so only a direct instantiation observes the base class's own assignment.
+    const error = new MarkdownWriteError("md/some-code", "some message");
+    expect(error).toBeInstanceOf(MarkdownWriteError);
+    expect(error.name).toBe("MarkdownWriteError");
+    expect(error.code).toBe("md/some-code");
+    expect(error.message).toBe("some message");
+  });
+
   it("MarkdownInvalidUtf8Error: default message, code, and MarkdownParseError lineage", () => {
     const error = new MarkdownInvalidUtf8Error();
     expect(error).toBeInstanceOf(MarkdownParseError);

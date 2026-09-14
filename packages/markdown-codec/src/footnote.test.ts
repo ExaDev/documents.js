@@ -831,6 +831,9 @@ describe("writing footnotes back out", () => {
     );
     const unmatchedEndTyped =
       unmatchedEnd as MarkdownUnbalancedConstructMarkersError;
+    expect(unmatchedEndTyped.name).toBe(
+      "MarkdownUnbalancedConstructMarkersError",
+    );
     expect(unmatchedEndTyped.imbalanceKind).toBe("unmatchedEnd");
     expect(unmatchedEndTyped.blockIndex).toBe(0);
     expect(unmatchedEndTyped.code).toBe("md/unbalanced-construct-markers");
