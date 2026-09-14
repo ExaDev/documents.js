@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { db } from "../db/dexie";
 import {
+  definedIds,
   recordRecentFile,
   removeRecentFile,
   type RecentFileEntry,
@@ -49,9 +50,10 @@ afterEach(async () => {
 
 describe("useRecentFiles", () => {
   it("returns entries ordered by lastOpenedAt, most recent first", async () => {
+    // Inserted in the OPPOSITE order from lastOpenedAt (newest row added first) -- natural table/insertion order would read back [newest, oldest] unsorted, then .reverse() would wrongly flip it to [oldest, newest]. Only a genuine orderBy("lastOpenedAt") produces the correct [newest, oldest] here.
     await db.recentFiles.bulkAdd([
-      { format: "docx", name: "oldest", sizeBytes: 1, lastOpenedAt: 1 },
       { format: "docx", name: "newest", sizeBytes: 1, lastOpenedAt: 2 },
+      { format: "docx", name: "oldest", sizeBytes: 1, lastOpenedAt: 1 },
     ]);
     const { result, unmount } = mountUseRecentFiles();
     await vi.waitFor(() => {
@@ -93,13 +95,15 @@ describe("recordRecentFile", () => {
   });
 
   it("evicts the single stalest entry once the table exceeds its 20-entry limit", async () => {
-    for (let i = 0; i < 20; i++) {
-      await recordRecentFile({
-        format: "docx",
+    // Inserted in the OPPOSITE order from lastOpenedAt (file-19's own lastOpenedAt is the smallest, despite being added last) -- natural insertion order would evict whichever row happens to sort first by id, not by lastOpenedAt. Only a genuine orderBy("lastOpenedAt") picks file-19 as the actual stalest row.
+    await db.recentFiles.bulkAdd(
+      Array.from({ length: 20 }, (_, i) => ({
+        format: "docx" as const,
         name: `file-${i}`,
         sizeBytes: 1,
-      });
-    }
+        lastOpenedAt: 20 - i,
+      })),
+    );
     expect(await db.recentFiles.count()).toBe(20);
 
     await recordRecentFile({ format: "docx", name: "file-20", sizeBytes: 1 });
@@ -107,7 +111,8 @@ describe("recordRecentFile", () => {
     const remaining = await db.recentFiles.count();
     expect(remaining).toBe(20);
     const names = (await db.recentFiles.toArray()).map((r) => r.name);
-    expect(names).not.toContain("file-0");
+    expect(names).not.toContain("file-19");
+    expect(names).toContain("file-0");
     expect(names).toContain("file-20");
   });
 
@@ -136,5 +141,17 @@ describe("removeRecentFile", () => {
     if (id === undefined) throw new Error("expected an auto-assigned id");
     await removeRecentFile(id);
     expect(await db.recentFiles.get(id)).toBeUndefined();
+  });
+});
+
+describe("definedIds", () => {
+  it("keeps only the records whose id is actually defined", () => {
+    expect(definedIds([{ id: 1 }, { id: undefined }, { id: 3 }])).toEqual([
+      1, 3,
+    ]);
+  });
+
+  it("returns an empty array when every record's id is undefined", () => {
+    expect(definedIds([{ id: undefined }, { id: undefined }])).toEqual([]);
   });
 });

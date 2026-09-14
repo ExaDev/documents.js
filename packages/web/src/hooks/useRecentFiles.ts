@@ -25,6 +25,11 @@ export interface RecentFileEntry {
   handle?: FileSystemFileHandle;
 }
 
+// Dexie types a record's own primary key as possibly undefined (a record that was never actually persisted), which bulkDelete's own number[] parameter can't accept -- exported so a test can drive the narrowing directly against a mixed array, since every record this module's own callers ever read back from the table already has a real assigned id.
+export function definedIds(records: readonly { id?: number }[]): number[] {
+  return records.map((record) => record.id).filter((id) => id !== undefined);
+}
+
 // Called uniformly from FileUpload's onFile, so every tool's opens are recorded without each route wiring it up itself. FIFO eviction at write time keeps the table capped at RECENT_FILES_LIMIT rather than growing unbounded.
 export async function recordRecentFile(entry: RecentFileEntry) {
   await db.recentFiles.add({ ...entry, lastOpenedAt: Date.now() });
@@ -34,9 +39,7 @@ export async function recordRecentFile(entry: RecentFileEntry) {
     .orderBy("lastOpenedAt")
     .limit(staleCount)
     .toArray();
-  await db.recentFiles.bulkDelete(
-    stale.map((record) => record.id).filter((id) => id !== undefined),
-  );
+  await db.recentFiles.bulkDelete(definedIds(stale));
 }
 
 export async function removeRecentFile(id: number) {

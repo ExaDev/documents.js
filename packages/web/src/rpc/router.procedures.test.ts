@@ -130,6 +130,31 @@ describe("content.read / content.restore", () => {
     expect(read.content.kind).toBe("wordprocessing");
   });
 
+  it("reads odt content via the ODF package path", async () => {
+    const editor = createOdt();
+    editor.body.appendParagraph().appendRun({ text: "hello odt" });
+    const read = await call(router.content.read, {
+      format: "odt",
+      bytes: editor.toBytes(),
+    });
+    expect(read.content.kind).toBe("wordprocessing");
+  });
+
+  it("tags a markdown bullet list item bullet and an ordered list item ordered", async () => {
+    const bytes = enc("- bullet item\n\n1. ordered item\n");
+    const read = await call(router.content.read, { format: "markdown", bytes });
+    if (read.content.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const [bulletBlock, orderedBlock] = read.content.sections[0]?.blocks ?? [];
+    expect(
+      bulletBlock?.kind === "paragraph" ? bulletBlock.list?.numId : undefined,
+    ).toMatch(/^bullet:/);
+    expect(
+      orderedBlock?.kind === "paragraph" ? orderedBlock.list?.numId : undefined,
+    ).toMatch(/^ordered:/);
+  });
+
   it("resolves a docx list paragraph's opaque numId against its real numbering.xml definition", async () => {
     // The tree-based docx writer (buildDocumentBytes) emits a real word/numbering.xml abstractNum/num pair for any list-membership paragraph -- built via the same public assembleTree/buildDocumentBytes pipeline the Package/JSON tool uses, not a hand-authored fixture, so router.ts's own normalizeDocxListKinds resolves against a real NumberingDefinitions map exactly as it would for a document Word itself produced. (ExaDev/documents.js#1273: this writer currently always synthesises numId "1" as a bullet list regardless of the source ContentListMembership's own numId/format, so this asserts the writer's real current output rather than the specific numId/format requested below.)
     const bytes = buildDocumentBytes(
