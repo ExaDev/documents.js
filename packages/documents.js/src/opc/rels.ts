@@ -29,7 +29,7 @@ function ensureRelationshipsRootAtPath(
 }
 
 // The next unused rId in a Relationships root, scanning existing Id attributes for the highest numeric suffix -- never reusing or guessing an id that might already be referenced elsewhere.
-function allocateRelationshipId(relationshipsRoot: XmlElement): string {
+export function allocateRelationshipId(relationshipsRoot: XmlElement): string {
   let max = 0;
   for (const child of relationshipsRoot.children) {
     if (child.type !== "element" || child.tag !== "Relationship") {
@@ -48,9 +48,11 @@ function allocateRelationshipId(relationshipsRoot: XmlElement): string {
       continue;
     }
     const n = Number.parseInt(digits, 10);
-    if (n > max) {
-      max = n;
-    }
+    // Math.max, not an if/comparison: the two ever differ observably only on a tie, and every
+    // path here is keyed by its own literal numeric suffix, so no two iterations of this loop can
+    // ever see the same n twice -- a tie can only be n against its own already-recorded max, which
+    // assigns the identical value back, an if-based '>' vs '>=' comparison could never distinguish.
+    max = Math.max(max, n);
   }
   return `rId${max + 1}`;
 }

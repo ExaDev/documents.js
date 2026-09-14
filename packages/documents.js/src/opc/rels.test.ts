@@ -6,7 +6,12 @@ import {
   rootElement,
 } from "ooxml.js";
 import { describe, expect, it } from "vitest";
-import { addRelationship, addRootRelationship } from "./rels";
+import { el } from "../xml/fragment";
+import {
+  addRelationship,
+  addRootRelationship,
+  allocateRelationshipId,
+} from "./rels";
 
 const IMAGE_TYPE =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
@@ -98,6 +103,10 @@ describe("addRootRelationship", () => {
 
     const rels = rootElement(pkg.parts["_rels/.rels"]);
     expect(rels).toBeDefined();
+    expect(rels?.tag).toBe("Relationships");
+    expect(rels === undefined ? undefined : attr(rels, "xmlns")).toBe(
+      "http://schemas.openxmlformats.org/package/2006/relationships",
+    );
     const [relationship] =
       rels === undefined ? [] : childrenWithTag(rels, "Relationship");
     expect(relationship).toBeDefined();
@@ -164,5 +173,24 @@ describe("addRootRelationship", () => {
     expect(
       relationships.map((relationship) => attr(relationship, "Id")),
     ).toEqual(["rId1", "rId2"]);
+  });
+});
+
+describe("allocateRelationshipId", () => {
+  it("allocates rId1 for an empty root", () => {
+    const root = el("Relationships");
+    expect(allocateRelationshipId(root)).toBe("rId1");
+  });
+
+  it("continues from a pre-existing higher id rather than starting from 1", () => {
+    const root = el("Relationships", {}, [
+      el("Relationship", { Id: "rId5", Type: IMAGE_TYPE, Target: "x" }),
+    ]);
+    expect(allocateRelationshipId(root)).toBe("rId6");
+  });
+
+  it("ignores a non-Relationship child even if it carries an Id-shaped attribute", () => {
+    const root = el("Relationships", {}, [el("SomethingElse", { Id: "rId9" })]);
+    expect(allocateRelationshipId(root)).toBe("rId1");
   });
 });
