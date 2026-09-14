@@ -1,7 +1,7 @@
 import { Box, Text, useInput } from "ink";
 import { useState, type Dispatch, type ReactElement } from "react";
 import type { ContentVector, OdgVector, OdpShape } from "documents.js";
-import { ListView } from "../../../components/list-view.js";
+import { ListView, selectedColor } from "../../../components/list-view.js";
 import { TextField } from "../../../components/text-field.js";
 import { useNavigationInput } from "../../../keybindings/use-navigation-input.js";
 import type { Action } from "../../../state/actions.js";
@@ -167,7 +167,7 @@ function VectorDetail(props: {
         selectedIndex={selectedIndex}
         reservedRows={5}
         renderItem={(row, isSelected) => (
-          <Text color={isSelected ? "cyan" : undefined}>
+          <Text color={selectedColor(isSelected)}>
             {isSelected ? "> " : "  "}
             {row.label}
           </Text>
@@ -322,7 +322,7 @@ function ShapeDetail(props: {
         selectedIndex={selectedIndex}
         reservedRows={5}
         renderItem={(row, isSelected) => (
-          <Text color={isSelected ? "cyan" : undefined}>
+          <Text color={selectedColor(isSelected)}>
             {isSelected ? "> " : "  "}
             {row.label}
           </Text>
