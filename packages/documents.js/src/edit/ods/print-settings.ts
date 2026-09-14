@@ -297,14 +297,12 @@ export function readSheetPrintSettings(
       : parsePageSize(layoutProperties);
   const margins =
     layoutProperties === undefined ? undefined : parseMargins(layoutProperties);
-  const printTokens = new Set(
+  // A whitespace-split array (no separate empty-token filtering needed: .includes("grid")/.includes("headers") below finds either token regardless of any empty entries a stray double space or leading/trailing space would otherwise produce) of style:print's own space-separated tokens.
+  const printWords =
     (layoutProperties === undefined
       ? undefined
       : attr(layoutProperties, "style:print")
-    )
-      ?.split(" ")
-      .filter((token) => token.length > 0) ?? [],
-  );
+    )?.split(" ") ?? [];
   const pageOrder =
     (layoutProperties === undefined
       ? undefined
@@ -347,8 +345,8 @@ export function readSheetPrintSettings(
   return {
     pageSize: pageSize ?? PAGE_SIZE_A4,
     margins: margins ?? DEFAULT_MARGINS,
-    gridlines: printTokens.has("grid"),
-    headers: printTokens.has("headers"),
+    gridlines: printWords.includes("grid"),
+    headers: printWords.includes("headers"),
     pageOrder,
     ...(printRange !== undefined ? { printRange } : {}),
     ...(scalePercent !== undefined ? { scalePercent } : {}),
