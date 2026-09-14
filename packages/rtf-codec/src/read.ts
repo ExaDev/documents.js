@@ -641,11 +641,10 @@ function insertConstructMarkers(
       left.startIndex - right.startIndex || right.endIndex - left.endIndex,
   );
   const ordered = dropCrossingExtents(sorted, sink);
-  const closing = [...ordered].reverse();
   const out: ContentBlock[] = [];
   for (let index = 0; index <= blocks.length; index += 1) {
-    // Closes first, then opens, so an extent ending where another begins does not enclose it -- and closes run innermost-first (the reverse of the outermost-first open order), which is the only sequence that leaves the brackets balanced.
-    for (const extent of closing) {
+    // Closes first, then opens, so an extent ending where another begins does not enclose it. Each extent's own constructEnd marker is anonymous (it carries no descriptor to distinguish it from any other extent's), so the order this loop visits `ordered` in when several extents close at the same index is not itself observable in the output -- what makes the brackets balance is that every closing marker for a given index is pushed before that index's own opening ones, not which of several simultaneous closes came first.
+    for (const extent of ordered) {
       if (extent.endIndex === index) {
         out.push({ kind: "constructEnd" });
       }
@@ -787,12 +786,11 @@ class ContentBuilder {
       return;
     }
     this.openBookmarks.set(name, {
-      descriptor: bookmarkAnchorDescriptor(
-        name,
-        bookmark.columnFirst === undefined && bookmark.columnLast === undefined
-          ? undefined
-          : { first: bookmark.columnFirst, last: bookmark.columnLast },
-      ),
+      // bookmarkAnchorDescriptor's own bookmarkColumnResidue already treats {first: undefined, last: undefined} identically to undefined itself (both fields absent means no residue either way), so there is no need to pre-collapse the two here -- the object is always the same shape, and the callee's own undefined-field handling is what actually decides whether a clause is produced.
+      descriptor: bookmarkAnchorDescriptor(name, {
+        first: bookmark.columnFirst,
+        last: bookmark.columnLast,
+      }),
       paragraphSerial: this.paragraphSerial,
       runIndex: this.runs.length,
       inTable: para.inTable,
@@ -872,7 +870,8 @@ class ContentBuilder {
     char: CharacterState,
     hyperlink: string | undefined,
   ): void {
-    if (text.length === 0 || char.hidden) {
+    // No length guard on `text` itself: this method's one call site (emitText, below) is only ever reached with a non-empty string -- decodeCodepageBytes runs after flushBytes' own `pendingBytes.length === 0` guard, and every other emitText caller (a \uN escape, a special character or symbol) hands it a literal 1-character string -- so an empty-string branch here would never fire on real input.
+    if (char.hidden) {
       return;
     }
     const fontName =
@@ -1897,21 +1896,15 @@ function readRtfDetail(
 
     if (token.kind === "groupEnd") {
       flushBytes();
-      if (
-        state.destination === "picture" &&
-        state.picture !== undefined &&
-        state.pictureOwner
-      ) {
+      // No `state.destination === "picture"` check here: pictureOwner is set true only at the same moment a group's own destination becomes "picture" (below, on group open), and cloneGroupState resets it to false on every child regardless of what destination that child inherits -- so pictureOwner true already implies this group's destination was "picture" for its own whole lifetime. The nested-plain-group case a malformed \pict can contain is exactly why the flag exists at all: that child inherits destination "picture" by reference but starts with its own fresh pictureOwner false, which is what pictureOwner (not destination) is the one actually gating here.
+      if (state.picture !== undefined && state.pictureOwner) {
         const image = buildPicture(state.picture, sink);
         if (image !== undefined) {
           builder.addBlocks([image], state.para.inTable);
         }
       }
-      if (
-        state.destination === "objectData" &&
-        state.objectData !== undefined &&
-        state.objectDataOwner
-      ) {
+      // Same reasoning as pictureOwner above: objectDataOwner is set true only alongside destination "objectData" and reset false on every other child.
+      if (state.objectData !== undefined && state.objectDataOwner) {
         const embedded = buildEmbeddedObject(
           state.objectData,
           state.object,
@@ -1929,11 +1922,8 @@ function readRtfDetail(
         // \result's own scratch accumulator (opened by beginResultScratch when this group started) is finished now: every \par it contained has already closed a real paragraph inside it, and endResultScratch force-closes whatever paragraph was still open otherwise. Recorded, not yet acted on: \object's own group-end handling further up the stack either splices these blocks in or discards them once \objdata's real decode's fate is finally known, and this \result's own group-end cannot know that outcome when \result comes first in the source -- \objdata may not even have been read yet.
         state.resultOf.resultBlocks = builder.endResultScratch(state.para);
       }
-      if (
-        state.destination === "object" &&
-        state.object !== undefined &&
-        state.objectOwner
-      ) {
+      // Same reasoning again: objectOwner is set true only alongside destination "object" and reset false on every other child.
+      if (state.object !== undefined && state.objectOwner) {
         // Every child \objdata/\result this \object's own group can legally contain has, by construction, already closed by the time \object's own closing brace is reached -- so `decoded`, `objectDataSeen` and `resultBlocks` are all final here, regardless of which sibling the source actually listed first.
         const objectState = state.object;
         if (!objectState.decoded && objectState.resultBlocks !== undefined) {
