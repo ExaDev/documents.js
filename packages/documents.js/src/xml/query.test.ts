@@ -21,6 +21,12 @@ describe("xml/query", () => {
     expect(cursor?.container).toBe(container);
   });
 
+  it("findChildElement returns undefined when no child element matches the requested tag, even though an element of a different tag is present", () => {
+    const run = el("w:r");
+    const container: XmlNode[] = [run];
+    expect(findChildElement(container, "w:p")).toBeUndefined();
+  });
+
   it("findChildElements returns only direct children, in document order", () => {
     const runA = el("w:r");
     const runB = el("w:r");
