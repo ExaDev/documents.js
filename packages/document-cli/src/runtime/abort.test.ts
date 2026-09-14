@@ -61,4 +61,46 @@ describe("createRuntimeSignal", () => {
     vi.advanceTimersByTime(42);
     expect((signal.reason as Error).message).toBe("Timed out after 42ms");
   });
+
+  it("names SIGINT in the interrupt error's message", () => {
+    const { signal } = createRuntimeSignal({});
+    process.emit("SIGINT");
+    expect((signal.reason as Error).message).toBe("Interrupted by SIGINT");
+  });
+
+  it("aborts the combined signal via SIGINT even though a timeout was also configured", () => {
+    vi.useFakeTimers();
+    const { signal } = createRuntimeSignal({ timeoutMs: 1000 });
+    expect(signal.aborted).toBe(false);
+    process.emit("SIGINT");
+    expect(signal.aborted).toBe(true);
+    expect((signal.reason as Error).message).toBe("Interrupted by SIGINT");
+  });
+
+  it("unrefs the timeout so a pending timeout never keeps the process alive on its own", () => {
+    const realSetTimeout = globalThis.setTimeout;
+    let capturedTimer: NodeJS.Timeout | undefined;
+    let unrefCallCount = 0;
+    const setTimeoutSpy = vi
+      .spyOn(globalThis, "setTimeout")
+      .mockImplementation(((
+        handler: () => void,
+        timeout?: number,
+      ): NodeJS.Timeout => {
+        const timer = realSetTimeout(handler, timeout);
+        const realUnref = timer.unref.bind(timer);
+        timer.unref = () => {
+          unrefCallCount += 1;
+          return realUnref();
+        };
+        capturedTimer = timer;
+        return timer;
+      }) as typeof globalThis.setTimeout);
+
+    createRuntimeSignal({ timeoutMs: 60_000 });
+
+    expect(unrefCallCount).toBe(1);
+    setTimeoutSpy.mockRestore();
+    clearTimeout(capturedTimer);
+  });
 });
