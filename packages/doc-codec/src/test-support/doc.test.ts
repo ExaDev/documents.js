@@ -9,13 +9,18 @@ import {
   buildInlinePictureBytes,
   buildPlcfSedBytes,
   buildStsh,
+  dataStreamParts,
   mainDocumentPageBreakCps,
   mergeChpxRuns,
+  PIECE_BOUNDARY_MISSING_MESSAGE,
   pieceBoundaries,
   recordHeaderBytes,
   requireArrayEntry,
   requireMapEntry,
   sameGrpprl,
+  SEPX_OFFSET_MISSING_MESSAGE,
+  tablePartOffsetMissingMessage,
+  TEXT_FC,
   type DocSpec,
   type ParagraphAccumulator,
 } from "./doc";
@@ -484,6 +489,18 @@ describe("buildDoc", () => {
     );
   });
 
+  it("writes exactly one byte per character when compressed, never spilling a second byte past the last one", () => {
+    // Every position within the compressed text is self-healing regardless of which branch runs: the position for character k receives a stray high byte from character k-1's own write (if the wrong, two-byte branch were taken) before character k's own correct low-byte write lands on top of it last, since the loop always runs in increasing index order. Only the byte one past the very last character has nothing after it to self-heal that way -- so the paragraph's own trailing mark (always the actual last character buildDoc writes here, with no footnotes/headers/etc appended after it) is given an arbitrary code whose high byte (0x12) is non-zero, purely to make that one spillover byte observable; readDocStreams reads the raw stream directly; no downstream parse of this arbitrary mark value is needed.
+    const streams = readDocStreams(
+      buildDoc({
+        compressed: true,
+        paragraphs: [{ runs: [{ text: "a" }], mark: 0x1234 }],
+      }),
+    );
+    const ccpText = 2; // "a" (1 character) plus its own trailing mark (1).
+    expect(streams.wordDocument[TEXT_FC + ccpText]).toBe(0);
+  });
+
   it("round-trips a long paragraph whose own byte length crosses more FKP page boundaries than a short one would", () => {
     // textByteLength (text.length * bytesPerCharacter) decides where the FKP pages land; a short text's own page placement doesn't shift even if this were computed wrongly (both round down to the same page), so this needs enough characters to actually cross an extra 512-byte FKP_PAGE_SIZE boundary.
     const text = "y".repeat(600);
@@ -759,6 +776,34 @@ describe("buildPlcfSedBytes", () => {
     expect(view.getUint32(10, true)).toBe(0x11223344); // sed.fcSepx.
     expect(view.getUint16(14, true)).toBe(0); // sed.fnMpr -- ignored.
     expect(view.getUint32(16, true)).toBe(0xffffffff); // sed.fcMpr -- ignored.
+  });
+});
+
+describe("doc.ts's own internal-defect messages", () => {
+  // These name invariants each call site's own comment already explains as unreachable for real input (an array/map lookup that can never actually miss, given how the looked-up key was itself derived) -- tested against a hardcoded duplicate of the exact text, the same discipline table/read.ts's own internal-defect messages follow.
+  it("carries SEPX_OFFSET_MISSING_MESSAGE's own exact text", () => {
+    expect(SEPX_OFFSET_MISSING_MESSAGE).toBe("Sepx offset missing");
+  });
+
+  it("carries PIECE_BOUNDARY_MISSING_MESSAGE's own exact text", () => {
+    expect(PIECE_BOUNDARY_MISSING_MESSAGE).toBe("piece boundary missing");
+  });
+
+  it("carries tablePartOffsetMissingMessage's own exact text", () => {
+    expect(tablePartOffsetMissingMessage("clx")).toBe(
+      "table part offset missing for clx",
+    );
+  });
+});
+
+describe("dataStreamParts", () => {
+  it("is empty when data is absent", () => {
+    expect(dataStreamParts(undefined)).toEqual([]);
+  });
+
+  it("carries exactly one Data entry when data is present", () => {
+    const data = new Uint8Array([1, 2, 3]);
+    expect(dataStreamParts(data)).toEqual([{ path: "Data", bytes: data }]);
   });
 });
 
