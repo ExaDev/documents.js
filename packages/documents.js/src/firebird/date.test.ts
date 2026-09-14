@@ -35,6 +35,30 @@ describe("decodeFirebirdDate", () => {
     );
     expect(decodeFirebirdDate(days)).toEqual({ year: 2024, month: 2, day: 29 });
   });
+
+  it("excludes 1700 from the leap years despite being divisible by 4, since it isn't divisible by 400", () => {
+    // The century-based correction term (the 4-year rule minus a further exception every 100 years, restored every 400) is exactly what distinguishes this from a naive 4-year-only leap rule -- 1700 is the case that rule exists for.
+    const days = Math.round(
+      (Date.UTC(1700, 1, 28) - Date.UTC(1858, 10, 17)) / 86400000,
+    );
+    expect(decodeFirebirdDate(days)).toEqual({ year: 1700, month: 2, day: 28 });
+    expect(formatFirebirdDate(days)).toBe("1700-02-28");
+  });
+
+  it("formats a year under 1000 with leading zeros", () => {
+    const days = Math.round(
+      (Date.UTC(500, 1, 28) - Date.UTC(1858, 10, 17)) / 86400000,
+    );
+    expect(decodeFirebirdDate(days)).toEqual({ year: 500, month: 2, day: 28 });
+    expect(formatFirebirdDate(days)).toBe("0500-02-28");
+  });
+
+  it("rolls over correctly into March of the following (non-leap) year, one day after a year ending in 59", () => {
+    const days = Math.round(
+      (Date.UTC(1859, 2, 1) - Date.UTC(1858, 10, 17)) / 86400000,
+    );
+    expect(decodeFirebirdDate(days)).toEqual({ year: 1859, month: 3, day: 1 });
+  });
 });
 
 describe("decodeFirebirdTime", () => {
@@ -60,6 +84,12 @@ describe("decodeFirebirdTime", () => {
   it("formats to HH:MM:SS.mmm", () => {
     const ticks = (9 * 3600 + 5 * 60 + 1) * 10000;
     expect(formatFirebirdTime(ticks)).toBe("09:05:01.000");
+  });
+
+  it("converts a non-zero fraction of a tick-second to milliseconds by dividing, not multiplying", () => {
+    // 5000 ticks (of 10000 ticks/second) is half a second -- 500ms, not the 50000 a fractions * 10 mutant would produce.
+    const ticks = 5000;
+    expect(formatFirebirdTime(ticks)).toBe("00:00:00.500");
   });
 });
 
