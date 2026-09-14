@@ -89,8 +89,13 @@ describe("createEmptyOdsPackage", () => {
   it("content.xml declares the of: namespace (required for table:formula's OpenFormula grammar to recalculate on open) alongside version 1.3 and one empty, named default sheet", () => {
     const pkg = createEmptyOdsPackage();
     const root = xmlRoot(pkg, "content.xml");
+    expect(root.tag).toBe("office:document-content");
     expect(attr(root, "xmlns:of")).toBe(
       "urn:oasis:names:tc:opendocument:xmlns:of:1.2",
+    );
+    // xmlns:table specifically (rather than only xmlns:of, hand-declared separately above): pins that CONTENT_NS_PREFIXES's own prefix list is actually spread into the element's attributes, not silently dropped.
+    expect(attr(root, "xmlns:table")).toBe(
+      "urn:oasis:names:tc:opendocument:xmlns:table:1.0",
     );
     expect(attr(root, "office:version")).toBe("1.3");
 
@@ -119,7 +124,10 @@ describe("createEmptyOdsPackage", () => {
   it("styles.xml declares version 1.3, a PAGE_SIZE_A4/2cm-margin page layout, and the Standard master page referencing it", () => {
     const pkg = createEmptyOdsPackage();
     const root = xmlRoot(pkg, "styles.xml");
+    expect(root.tag).toBe("office:document-styles");
     expect(attr(root, "office:version")).toBe("1.3");
+    // An empty office:styles sibling, distinct from office:automatic-styles below -- odf.js's own consumers expect this element to exist even when this scaffold defines no named paragraph/cell styles in it.
+    expect(elementChild(root, "office:styles")).toBeDefined();
 
     const automaticStyles = elementChild(root, "office:automatic-styles");
     const pageLayout = elementChild(automaticStyles, "style:page-layout");
@@ -141,6 +149,7 @@ describe("createEmptyOdsPackage", () => {
   it("meta.xml has an empty office:meta when no metadata is given", () => {
     const pkg = createEmptyOdsPackage();
     const root = xmlRoot(pkg, "meta.xml");
+    expect(root.tag).toBe("office:document-meta");
     expect(attr(root, "office:version")).toBe("1.3");
     const meta = elementChild(root, "office:meta");
     expect(meta.children).toHaveLength(0);
