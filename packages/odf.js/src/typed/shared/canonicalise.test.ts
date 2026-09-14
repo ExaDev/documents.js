@@ -15,6 +15,7 @@ import {
   canonicalImage,
   canonicalMetadata,
   canonicalParagraph,
+  canonicalRun,
   canonicalTable,
 } from "./canonicalise";
 
@@ -27,6 +28,96 @@ function paragraph(
 ): ContentParagraph {
   return { kind: "paragraph", runs: [RUN], ...overrides };
 }
+
+describe("canonicalRun", () => {
+  it("keeps only text when no other field is stated", () => {
+    expect(canonicalRun({ text: "plain" })).toEqual({ text: "plain" });
+  });
+
+  it("carries bold through when stated", () => {
+    expect(canonicalRun({ text: "x", bold: true })).toEqual({
+      text: "x",
+      bold: true,
+    });
+  });
+
+  it("carries italic through when stated", () => {
+    expect(canonicalRun({ text: "x", italic: true })).toEqual({
+      text: "x",
+      italic: true,
+    });
+  });
+
+  it("carries underline through when stated", () => {
+    expect(canonicalRun({ text: "x", underline: true })).toEqual({
+      text: "x",
+      underline: true,
+    });
+  });
+
+  it("carries strike through when stated", () => {
+    expect(canonicalRun({ text: "x", strike: true })).toEqual({
+      text: "x",
+      strike: true,
+    });
+  });
+
+  it("carries fontFamily through when stated", () => {
+    expect(canonicalRun({ text: "x", fontFamily: "Arial" })).toEqual({
+      text: "x",
+      fontFamily: "Arial",
+    });
+  });
+
+  it("carries sizePt through when stated", () => {
+    expect(canonicalRun({ text: "x", sizePt: 12 })).toEqual({
+      text: "x",
+      sizePt: 12,
+    });
+  });
+
+  it("quantises color through canonicalColor's own hex-pair round trip when stated", () => {
+    expect(canonicalRun({ text: "x", color: { r: 0.9, g: 0, b: 0 } })).toEqual({
+      text: "x",
+      color: { r: 230 / 255, g: 0, b: 0 },
+    });
+  });
+
+  it("carries hyperlink through when stated", () => {
+    expect(
+      canonicalRun({ text: "x", hyperlink: "https://example.com" }),
+    ).toEqual({
+      text: "x",
+      hyperlink: "https://example.com",
+    });
+  });
+
+  it("carries every field at once, none clobbering another", () => {
+    expect(
+      canonicalRun({
+        text: "x",
+        bold: true,
+        italic: true,
+        underline: true,
+        strike: true,
+        fontFamily: "Arial",
+        sizePt: 12,
+        color: { r: 0, g: 0, b: 0 },
+        hyperlink: "https://example.com",
+      }),
+    ).toEqual({
+      text: "x",
+      bold: true,
+      italic: true,
+      underline: true,
+      strike: true,
+      fontFamily: "Arial",
+      sizePt: 12,
+      color: { r: 0, g: 0, b: 0 },
+      hyperlink: "https://example.com",
+    });
+  });
+});
 
 describe("canonicalParagraph", () => {
   it("keeps only the run text when no other field is stated", () => {
