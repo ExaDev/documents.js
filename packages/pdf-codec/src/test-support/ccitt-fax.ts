@@ -47,7 +47,8 @@ export const CCITT_FAX_FIXTURES: readonly CcittFaxFixture[] = [
     name: "checker8",
     columns: 16,
     rows: 8,
-    isBlack: (x, y) => (((x / 2) | 0) + ((y / 2) | 0)) % 2 === 0,
+    // Same-parity check rather than "sum is even": a+b and a-b always share the same parity, so a `+` here would be an equivalent mutant under an ArithmeticOperator swap to `-` -- no bitmap this fixture ever produces could distinguish the two. Comparing parities directly leaves no arithmetic operator for that mutation to target.
+    isBlack: (x, y) => (((x / 2) | 0) & 1) === (((y / 2) | 0) & 1),
     encodings: {
       group4: "Jrl8vl//wwgggggv+EEEEEEEF/4YQQQQQX/ABABA",
       group3OneDimensional:
