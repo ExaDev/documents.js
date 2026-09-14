@@ -189,6 +189,14 @@ describe("FileUpload", () => {
     expect(html()).toContain('data-multiple="false"');
   });
 
+  it("memoises the file access port across re-renders instead of recreating it every render", () => {
+    createFileAccess.mockReturnValue(fileAccessStub());
+    const { rerender } = renderUpload({ formatHint: "docx" });
+    rerender({ formatHint: "odt" });
+    rerender({ formatHint: "pdf" });
+    expect(createFileAccess).toHaveBeenCalledTimes(1);
+  });
+
   it("recomputes the normalised accept map when the accept prop itself changes", () => {
     createFileAccess.mockReturnValue(fileAccessStub());
     const { html, rerender } = renderUpload({
