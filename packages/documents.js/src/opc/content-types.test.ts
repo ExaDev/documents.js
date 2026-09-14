@@ -42,7 +42,9 @@ describe("defaultContentTypeForExtension", () => {
   });
 
   it("throws for an unknown extension rather than guessing", () => {
-    expect(() => defaultContentTypeForExtension("tiff")).toThrow();
+    expect(() => defaultContentTypeForExtension("tiff")).toThrow(
+      "no known default content type for extension: tiff",
+    );
   });
 });
 
@@ -50,6 +52,12 @@ describe("ensureDefaultContentType", () => {
   it("creates [Content_Types].xml with a Default entry when none exists", () => {
     const pkg = emptyPackage();
     ensureDefaultContentType(pkg, "png", "image/png");
+    const part = pkg.parts["[Content_Types].xml"];
+    const root = part?.kind === "xml" ? part.nodes[0] : undefined;
+    expect(root?.type === "element" ? root.tag : undefined).toBe("Types");
+    expect(root?.type === "element" ? attr(root, "xmlns") : undefined).toBe(
+      "http://schemas.openxmlformats.org/package/2006/content-types",
+    );
     const defaults = findChildElements(rootChildren(pkg), "Default");
     const node = soleNode(defaults);
     expect(attr(node, "Extension")).toBe("png");
