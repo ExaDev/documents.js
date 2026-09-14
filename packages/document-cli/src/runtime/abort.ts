@@ -1,31 +1,16 @@
-// Hand-written rather than AbortSignal.any -- that API needs Node 20.3+, and this package's own engines.node is only ">=20", so relying on it would silently break on the oldest Node this package still declares support for.
+// Hand-written rather than AbortSignal.any -- that API needs Node 20.3+, and this package's own engines.node is only ">=20", so relying on it would silently break on the oldest Node this package still declares support for. Never guards against an already-aborted input with an `if (signal.aborted)` pre-check: this function's only call site (createRuntimeSignal below) always passes two AbortControllers it just constructed on the line above, so neither can be aborted yet -- a pre-check here would be dead defensive code for a case this module never produces, not a general-purpose combinator with callers this codebase does not control.
+// `{ once: true }` is deliberately not passed to either addEventListener call below: an AbortSignal's own "abort" event is defined to fire at most once per signal (its whole lifecycle is unaborted -> aborted, with no way back), so the listener already runs at most once regardless -- `once: true` here would be a redundant, behaviourally unobservable option, not a real safeguard.
 function combineSignals(a: AbortSignal, b: AbortSignal): AbortSignal {
   const controller = new AbortController();
   const forward = (signal: AbortSignal): void => {
     controller.abort(signal.reason);
   };
-  if (a.aborted) {
+  a.addEventListener("abort", () => {
     forward(a);
-  } else {
-    a.addEventListener(
-      "abort",
-      () => {
-        forward(a);
-      },
-      { once: true },
-    );
-  }
-  if (b.aborted) {
+  });
+  b.addEventListener("abort", () => {
     forward(b);
-  } else {
-    b.addEventListener(
-      "abort",
-      () => {
-        forward(b);
-      },
-      { once: true },
-    );
-  }
+  });
   return controller.signal;
 }
 
