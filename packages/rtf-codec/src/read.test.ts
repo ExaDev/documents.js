@@ -2185,8 +2185,12 @@ describe("bookmarks", () => {
     ]);
     // Adjacent runs, split apart only because startBookmark/endBookmark each flush the pending run at the marker's own position -- not two genuinely different formatting spans.
     expect(paragraphs[1]?.runs).toHaveLength(2);
-    expect(diagnostics.map((diagnostic) => diagnostic.code)).toContain(
-      RtfDiagnosticCodes.BLOCK_CONSTRUCT_EXTENTS_CROSSED,
+    const crossed = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.BLOCK_CONSTRUCT_EXTENTS_CROSSED,
+    );
+    expect(crossed?.message).toBe(
+      "a 'anchor' construct's own block extent crosses an already-open one instead of nesting inside or sitting disjoint from it -- both bookmarks likely closed and opened within the same paragraph, which this reader cannot express as two separate extents, so this one is dropped",
     );
   });
 
@@ -2531,9 +2535,10 @@ describe("unicode fallback skip", () => {
   });
 
   it("consumes a fallback text run exactly its own length and resumes reading real text immediately after it", () => {
-    // \uc3 with a three-byte fallback run ("abc") that exactly exhausts the skip count on its own token boundary -- the reader must advance past the whole run and reset its own byte offset, not stop one byte short of it or re-read part of "abc" as real text.
+    // \uc3 with a three-byte fallback run ("abc") that is its OWN complete text token -- ended by \b0, a genuine token boundary, rather than continuing into "real" within the same token -- so the skip count exactly exhausts it. The reader must advance past the whole token and reset its own byte offset there, not stop one byte short of it (which would leak a trailing byte of "abc" into the visible text).
     const runs =
-      paragraphsOf(`${HEADER}\\pard \\uc3\\u9731 abcreal\\par}`)[0]?.runs ?? [];
+      paragraphsOf(`${HEADER}\\pard \\uc3\\u9731 abc\\b0 real\\par}`)[0]
+        ?.runs ?? [];
     const text = runs.map((run) => run.text).join("");
     expect(text).not.toContain("abc");
     expect(text).toContain("real");
@@ -2541,14 +2546,24 @@ describe("unicode fallback skip", () => {
 });
 
 describe("block-scoped construct extent ordering", () => {
-  it("returns a fresh copy of the block list, not the same array reference, when there are no extents to splice", () => {
-    const blocks = blocksOf(`${HEADER}\\pard{\\*\\bkmkstart a}x\\par}`);
-    // Every block-list caller receives insertConstructMarkers' own return value directly; a fresh array here is what lets endSection push the section's own "blocks: blocks" without it silently aliasing internal accumulator state.
-    expect(Array.isArray(blocks)).toBe(true);
+  it("returns the block list itself, not undefined, when there are genuinely no extents to splice at all", () => {
+    // No bookmark anywhere in this document, so sectionBlockExtents is empty and insertConstructMarkers' own fast path is what actually produces the section's blocks -- an emptied fast path would hand endSection undefined instead of the real block list.
+    const blocks = blocksOf(`${HEADER}\\pard one\\par\\pard two\\par}`);
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "one", sizePt: 12 }] },
+      { kind: "paragraph", runs: [{ text: "two", sizePt: 12 }] },
+    ]);
   });
 
-  it("nests a shorter extent inside a longer one that opens at the identical start index and closes it innermost-first", () => {
-    // "outer" and "inner" both start in the first paragraph -- tied startIndex -- but "outer" spans one paragraph further before its own \bkmkend, so at that tie the longer extent must sort first (open outermost) and last (close innermost-first), nesting correctly rather than crossing.
+  function anchorNameOf(block: ContentBlock | undefined): string | undefined {
+    return block?.kind === "constructStart" &&
+      block.descriptor.kind === "anchor"
+      ? block.descriptor.name
+      : undefined;
+  }
+
+  it("nests a shorter extent inside a longer one that opens at the identical start index", () => {
+    // "outer" and "inner" both start in the first paragraph -- tied startIndex -- but "outer" spans one paragraph further before its own \bkmkend, so at that tie the longer extent must sort first (open outermost).
     const blocks = blocksOf(
       `${HEADER}\\pard{\\*\\bkmkstart outer}{\\*\\bkmkstart inner}One\\par\\pard Two{\\*\\bkmkend inner}\\par\\pard Three{\\*\\bkmkend outer}\\par}`,
     );
@@ -2561,20 +2576,35 @@ describe("block-scoped construct extent ordering", () => {
       "paragraph",
       "constructEnd",
     ]);
-    const outerStart = blocks[0];
-    const innerStart = blocks[1];
+    expect(anchorNameOf(blocks[0])).toBe("outer");
+    expect(anchorNameOf(blocks[1])).toBe("inner");
+  });
+
+  it("keeps two disjoint extents in their own start order, earlier-starting first, when their spans do not tie", () => {
+    // "first" and "second" open at genuinely different, non-tied start indices -- the sort's own first comparator clause (by startIndex) is what this fixture exercises, distinct from the tied-start case above.
+    const blocks = blocksOf(
+      `${HEADER}\\pard{\\*\\bkmkstart first}One\\par\\pard Two{\\*\\bkmkend first}\\par\\pard{\\*\\bkmkstart second}Three\\par\\pard Four{\\*\\bkmkend second}\\par}`,
+    );
+    const starts = blocks.filter((block) => block.kind === "constructStart");
+    expect(starts.map((block) => anchorNameOf(block))).toEqual([
+      "first",
+      "second",
+    ]);
+  });
+
+  it("keeps a shorter extent nested inside a longer one that shares its exact end index, rather than dropping it as crossing", () => {
+    // "inner" starts strictly after "outer" but closes at the SAME index "outer" does -- true nesting with a shared endpoint, not a crossing pair. If the crossing check's own end-side comparison read "greater than or equal to" instead of strictly "greater than", this exact tie would be misread as a cross and "inner" would be dropped.
+    const blocks = blocksOf(
+      `${HEADER}\\pard{\\*\\bkmkstart outer}Zero\\par\\pard{\\*\\bkmkstart inner}One\\par\\pard Two\\par\\pard Three{\\*\\bkmkend outer}{\\*\\bkmkend inner}\\par}`,
+    );
+    const starts = blocks.filter((block) => block.kind === "constructStart");
+    expect(starts.map((block) => anchorNameOf(block))).toEqual([
+      "outer",
+      "inner",
+    ]);
     expect(
-      outerStart?.kind === "constructStart" &&
-        outerStart.descriptor.kind === "anchor"
-        ? outerStart.descriptor.name
-        : undefined,
-    ).toBe("outer");
-    expect(
-      innerStart?.kind === "constructStart" &&
-        innerStart.descriptor.kind === "anchor"
-        ? innerStart.descriptor.name
-        : undefined,
-    ).toBe("inner");
+      blocks.filter((block) => block.kind === "constructEnd"),
+    ).toHaveLength(2);
   });
 });
 
@@ -2744,6 +2774,19 @@ describe("table row and column derivation", () => {
         ? firstBlock.runs.map((run) => run.text).join("")
         : undefined,
     ).toBe("dangling");
+  });
+
+  it("still closes a dangling cell holding only an already-flushed block (no pending text at all) when \\row follows directly", () => {
+    // A picture already pushed into cellBlocks via addBlocks, with nothing typed after it -- pendingRunText is genuinely empty here, so this exercises endRow's own cellBlocks.length check specifically, not the pendingRunText half of its guard.
+    const PNG_HEX =
+      "89504e470d0a1a0a0000000d494844520000000100000001080600000" +
+      "01f15c4890000000a49444154789c6300010000050001" +
+      "0d0a2db40000000049454e44ae426082";
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\cellx1440\\pard\\intbl{\\pict\\pngblip\\picwgoal720\\pichgoal720 ${PNG_HEX}}\\row\\pard x\\par}`,
+    );
+    expect(table.rows[0]?.cells).toHaveLength(1);
+    expect(table.rows[0]?.cells[0]?.blocks[0]?.kind).toBe("image");
   });
 
   it("reports the exact TABLE_ROW_WITHOUT_DEFINITION message text", () => {
@@ -3152,6 +3195,38 @@ describe("resource limits", () => {
 });
 
 describe("group-open dispatch", () => {
+  it("never initialises picture state for a plain nested group with no \\pict destination of its own", () => {
+    // If every group open unconditionally began collecting picture state, an ordinary formatting group's own close would spuriously run buildPicture against an empty PictureState and report UNSUPPORTED_PICTURE_FORMAT for content that was never a picture at all.
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\b bold} plain\\par}`),
+    );
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.UNSUPPORTED_PICTURE_FORMAT,
+      ),
+    ).toBe(false);
+  });
+
+  it("never initialises embedded-object state for a plain nested group with no \\*\\objdata destination of its own", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\b bold} plain\\par}`),
+    );
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+      ),
+    ).toBe(false);
+  });
+
+  it("never treats a plain nested group as a bookmark, so its own text is not swallowed as a bookmark name", () => {
+    const runs =
+      paragraphsOf(`${HEADER}\\pard before{\\b bold} after\\par}`)[0]?.runs ??
+      [];
+    expect(runs.map((run) => run.text).join("")).toContain("bold");
+  });
+
   it("skips a header table's own second occurrence rather than re-reading it as body content", () => {
     // {\fonttbl ...} is already consumed by readRtfHeader; a SECOND, malformed occurrence later in the body must still be recognised as a header destination and skipped whole, not fall through to an unknown-destination diagnostic or leak its own text into the document.
     const { document, diagnostics } = readRtfContent(
@@ -3338,6 +3413,17 @@ describe("character control word edge cases", () => {
     expect(runs[0]?.verticalAlign).toBe("subscript");
   });
 
+  it("reads an explicit positive \\upN as a genuine raise, not just the no-parameter default", () => {
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\up6 raised\\par}`)[0]?.runs ?? [];
+    expect(runs[0]?.verticalAlign).toBe("superscript");
+  });
+
+  it("reads exactly \\outlinelevel8, the spec's own upper bound, as a real heading level rather than clearing it", () => {
+    const paragraph = paragraphsOf(`${HEADER}\\pard\\outlinelevel8 x\\par}`)[0];
+    expect(paragraph?.headingLevel).toBe(9);
+  });
+
   it("reads \\up0 as restoring the baseline, distinct from both a positive and a negative offset", () => {
     const runs =
       paragraphsOf(`${HEADER}\\pard \\up0 base\\par}`)[0]?.runs ?? [];
@@ -3463,24 +3549,29 @@ describe("structure control word edge cases", () => {
 });
 
 describe("control word dispatch order", () => {
-  it("reads \\bkmkcolf/\\bkmkcoll inside a bookmark start, but ignores every other control word there", () => {
-    const paragraph = paragraphsOf(
-      `${HEADER}\\pard{\\*\\bkmkstart\\b\\pard\\sect Named}x{\\*\\bkmkend Named}\\par}`,
-    )[0];
-    // A stray \b/\pard/\sect inside the bookmark's own destination must not touch the surrounding character/paragraph/document state at all -- the bookmark still resolves normally and the run right after it is still unformatted.
-    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+  it("reads \\bkmkcolf/\\bkmkcoll inside a bookmark start, but never lets a stray \\par there actually close a paragraph", () => {
+    // \par is a real structural word (builder.endParagraph), not merely a formatting flag, so a broken bookmarkStart guard that let it fall through would be directly observable as an extra paragraph -- unlike a stray \b, whose effect is confined to a group's own discarded char state either way.
+    const paragraphs = paragraphsOf(
+      `${HEADER}\\pard before{\\*\\bkmkstart\\par Named}after{\\*\\bkmkend Named}\\par}`,
+    );
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.runs.map((run) => run.text).join("")).toBe(
+      "beforeafter",
+    );
+    expect(paragraphs[0]?.constructs?.[0]?.descriptor).toMatchObject({
       name: "Named",
     });
-    expect(
-      paragraph?.runs.find((run) => run.text === "x")?.bold,
-    ).toBeUndefined();
   });
 
-  it("ignores every control word inside a bookmark end destination", () => {
-    const paragraph = paragraphsOf(
-      `${HEADER}\\pard{\\*\\bkmkstart Word}x{\\*\\bkmkend\\b Word}\\par}`,
-    )[0];
-    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+  it("never lets a stray \\par inside a bookmark end destination actually close a paragraph", () => {
+    const paragraphs = paragraphsOf(
+      `${HEADER}\\pard before{\\*\\bkmkstart Word}mid{\\*\\bkmkend\\par Word}after\\par}`,
+    );
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.runs.map((run) => run.text).join("")).toBe(
+      "beforemidafter",
+    );
+    expect(paragraphs[0]?.constructs?.[0]?.descriptor).toMatchObject({
       name: "Word",
     });
   });
