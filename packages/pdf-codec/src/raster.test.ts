@@ -2006,9 +2006,37 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
       b.classicXrefAndTrailer(7, "/Root 1 0 R"),
     );
     expect(
-      diagnostics.find((d) => d.code === "raster/text-cff-outlines"),
-    ).toBeDefined();
+      diagnostics.find((d) => d.code === "raster/text-cff-outlines")?.message,
+    ).toBe(
+      "font resource /F1 (Custom) carries CFF outlines; this raster surface fills sfnt (TrueType/glyf) outlines only, so its text is not rendered rather than approximated",
+    );
     expect(rasteriser.ops).toEqual([]);
+  });
+
+  it("names a diagnostic's face by /Subtype when a Type0 font has no /BaseFont, for the CFF-descendant refusal too", () => {
+    const b = new SmallFixture();
+    b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    b.object(
+      3,
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    );
+    b.object(
+      4,
+      "<< /Type /Font /Subtype /Type0 /Encoding /Identity-H /DescendantFonts [6 0 R] >>",
+    );
+    b.object(
+      6,
+      "<< /Type /Font /Subtype /CIDFontType0 /FontDescriptor 7 0 R >>",
+    );
+    b.object(7, "<< /Type /FontDescriptor /Flags 4 >>");
+    b.stream(5, "<< >>", enc("BT /F1 12 Tf 10 50 Td <0041> Tj ET"));
+    const { diagnostics } = refusalDiagnostics(
+      b.classicXrefAndTrailer(7, "/Root 1 0 R"),
+    );
+    expect(
+      diagnostics.find((d) => d.code === "raster/text-cff-outlines")?.message,
+    ).toContain("(Type0)");
   });
 
   it("names a font dictionary with no /Subtype at all as (none), the same fallback the descendant-subtype refusal uses", () => {
@@ -2022,6 +2050,40 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
       diagnostics.find((d) => d.code === "raster/text-outlines-unavailable")
         ?.message,
     ).toContain("a font of subtype (none)");
+    expect(rasteriser.ops).toEqual([]);
+  });
+
+  it("names a diagnostic's face by /Subtype when /BaseFont is absent, not the bare fallback", () => {
+    const { diagnostics, rasteriser } = refusalDiagnostics(
+      onePagePdf("BT /F1 24 Tf 20 50 Td (H) Tj ET", {
+        pageResources: "/Resources << /Font << /F1 4 0 R >> >>",
+        extraObjects: [
+          [
+            4,
+            "<< /Type /Font /Subtype /Type1 /FirstChar 0 /LastChar 255 /FontDescriptor 6 0 R >>",
+          ],
+          [6, "<< /Type /FontDescriptor /Flags 4 >>"],
+        ],
+      }),
+    );
+    expect(
+      diagnostics.find((d) => d.code === "raster/text-outlines-unavailable")
+        ?.message,
+    ).toContain("(Type1)");
+    expect(rasteriser.ops).toEqual([]);
+  });
+
+  it("falls all the way back to the bare word (font) when neither /BaseFont nor /Subtype is stated", () => {
+    const { diagnostics, rasteriser } = refusalDiagnostics(
+      onePagePdf("BT /F1 24 Tf 20 50 Td (H) Tj ET", {
+        pageResources: "/Resources << /Font << /F1 4 0 R >> >>",
+        extraObjects: [[4, "<< /Type /Font >>"]],
+      }),
+    );
+    expect(
+      diagnostics.find((d) => d.code === "raster/text-outlines-unavailable")
+        ?.message,
+    ).toContain("(font)");
     expect(rasteriser.ops).toEqual([]);
   });
 
