@@ -364,7 +364,8 @@ function readContentForFormat(
   }
 }
 
-function sanitizeImageAsset(asset: LayoutImageAsset) {
+// Exported purely so router.test.ts can pin the exact byteLength arithmetic against a base64 string of a controlled length, rather than needing a real embedded image round-tripped through a full docx-to-PDF conversion just to exercise one estimate formula.
+export function sanitizeImageAsset(asset: LayoutImageAsset) {
   return {
     format: asset.format,
     widthPx: asset.widthPx,
