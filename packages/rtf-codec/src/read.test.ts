@@ -2967,11 +2967,11 @@ describe("table row and column derivation", () => {
       HEADER +
         "\\trowd\\trleft0\\clmgf\\cellx1440\\clmrg\\cellx2880\\pard\\intbl merged\\cell\\pard\\intbl\\cell\\row" +
         "\\trowd\\trleft0\\clvmgf\\cellx1440\\cellx2880\\pard\\intbl v\\cell\\pard\\intbl w\\cell\\row" +
-        "\\trowd\\trleft0\\clvmrg\\cellx1440\\cellx2880\\pard\\intbl\\cell\\pard\\intbl x\\cell\\row\\pard z\\par}",
+        "\\trowd\\trleft0\\clvmrg\\cellx1440\\cellx2880\\pard\\intbl stray\\cell\\pard\\intbl x\\cell\\row\\pard z\\par}",
     );
     // Row 0's horizontal continuation cell is dropped, leaving one cell.
     expect(table.rows[0]?.cells).toHaveLength(1);
-    // Row 2's vertical continuation cell keeps its own slot (an empty one), so the row still reports two cells.
+    // Row 2's vertical continuation cell keeps its own slot (an empty one), so the row still reports two cells. Its own cell carries a "stray" run in the source (a real producer's own vertically-merged continuation cell does sometimes still write placeholder text, even though the spec's own merge model says only the anchor's content is real) -- a genuinely early-returned `{ blocks: [] }` discards it regardless; a fallen-through cell would keep `cell.blocks` (the stray paragraph) instead.
     expect(table.rows[2]?.cells).toHaveLength(2);
     expect(table.rows[2]?.cells[0]?.blocks).toEqual([]);
   });
@@ -2985,6 +2985,38 @@ describe("table row and column derivation", () => {
     );
     expect(table.rows[0]?.cells[0]?.rowSpan).toBe(2);
     expect(table.rows[2]?.cells[0]?.rowSpan).toBeUndefined();
+  });
+
+  it("never scans for a continuation at all under a genuinely ordinary cell that carries no \\clvmgf anchor of its own", () => {
+    // Row 0's cell is a plain, unmerged cell -- no \clvmgf -- while row 1's cell at the identical column IS a \clvmrg continuation (malformed on its own, since nothing anchors it, but the reader's own rowSpan derivation must still be gated on THIS cell's own verticalMergeFirst flag, not on whether a match happens to exist somewhere later). A guard that entered the scanning loop unconditionally would find row 1's continuation anyway and wrongly extend row 0's plain cell to rowSpan 2.
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\cellx1440\\pard\\intbl A\\cell\\row" +
+        "\\trowd\\trleft0\\clvmrg\\cellx1440\\pard\\intbl\\cell\\row\\pard x\\par}",
+    );
+    expect(table.rows[0]?.cells[0]?.rowSpan).toBeUndefined();
+  });
+
+  it("derives rowSpan of exactly three when a merge run spans two genuine continuation rows, not one", () => {
+    // Two REAL \clvmrg continuation rows after the anchor, not one: a scan loop that stepped backwards instead of forwards would revisit the anchor's own row on its second iteration (rowIndex itself is never a verticalMergeContinuation, so that immediately breaks the loop) and stop after counting only the FIRST continuation -- rowSpan 2 -- indistinguishable from the existing "exactly two, not three" fixture above, which only ever has one continuation row to begin with and so cannot tell a reversed loop direction apart from a correct one.
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\clvmgf\\cellx1440\\pard\\intbl A\\cell\\row" +
+        "\\trowd\\trleft0\\clvmrg\\cellx1440\\pard\\intbl\\cell\\row" +
+        "\\trowd\\trleft0\\clvmrg\\cellx1440\\pard\\intbl\\cell\\row" +
+        "\\trowd\\trleft0\\cellx1440\\pard\\intbl B\\cell\\row\\pard x\\par}",
+    );
+    expect(table.rows[0]?.cells[0]?.rowSpan).toBe(3);
+  });
+
+  it("still matches a continuation whose own row places it at cell position one, not only at position zero", () => {
+    // The anchor is the SECOND cell of its own row here (a plain first cell precedes it), so its own resolved column value is 1, not 0 -- and the continuation row below it also places its own \clvmrg continuation as its second cell, so indexOf(column) resolves to matchIndex 1 too. A check that mistook a real matchIndex of 1 for the sentinel "not found" value (rather than genuinely comparing it against -1) would wrongly treat this real match as absent and stop the scan immediately, every existing fixture only ever has its own match at position 0.
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\cellx1440\\clvmgf\\cellx2880\\pard\\intbl first\\cell\\pard\\intbl anchor\\cell\\row" +
+        "\\trowd\\trleft0\\cellx1440\\clvmrg\\cellx2880\\pard\\intbl x\\cell\\pard\\intbl\\cell\\row\\pard z\\par}",
+    );
+    expect(table.rows[0]?.cells[1]?.rowSpan).toBe(2);
   });
 
   it("leaves rowSpan at one for a \\clvmgf anchor in the table's own last row, with no following row to continue into", () => {
