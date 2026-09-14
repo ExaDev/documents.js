@@ -20,9 +20,7 @@ export function buildSfnt(
   let offset = directorySize;
   entries.forEach(([tag, bytes], index) => {
     const recordOffset = DIRECTORY_HEADER_SIZE + index * RECORD_SIZE;
-    for (let i = 0; i < 4; i++) {
-      font[recordOffset + i] = tag.charCodeAt(i);
-    }
+    font.set(new TextEncoder().encode(tag), recordOffset);
     view.setUint32(recordOffset + 8, offset);
     view.setUint32(recordOffset + 12, bytes.length);
     font.set(bytes, offset);
@@ -102,28 +100,29 @@ function buildFormat6(mappings: ReadonlyMap<number, number>): Uint8Array {
 export function buildCmapTable(
   subtables: readonly CmapSubtableSpec[],
 ): Uint8Array<ArrayBuffer> {
-  const encoded = subtables.map((spec) =>
-    spec.format === 0
-      ? buildFormat0(spec.mappings)
-      : spec.format === 4
-        ? buildFormat4(spec.mappings)
-        : buildFormat6(spec.mappings),
-  );
+  const encoded = subtables.map((spec) => ({
+    spec,
+    bytes:
+      spec.format === 0
+        ? buildFormat0(spec.mappings)
+        : spec.format === 4
+          ? buildFormat4(spec.mappings)
+          : buildFormat6(spec.mappings),
+  }));
   const headerSize = 4 + subtables.length * 8;
-  const total = encoded.reduce((sum, bytes) => sum + bytes.length, headerSize);
+  const total = encoded.reduce(
+    (sum, { bytes }) => sum + bytes.length,
+    headerSize,
+  );
   const table = new Uint8Array(total);
   const view = new DataView(table.buffer);
   view.setUint16(2, subtables.length);
   let offset = headerSize;
-  subtables.forEach((spec, index) => {
+  encoded.forEach(({ spec, bytes }, index) => {
     const recordOffset = 4 + index * 8;
     view.setUint16(recordOffset, spec.platformId);
     view.setUint16(recordOffset + 2, spec.encodingId);
     view.setUint32(recordOffset + 4, offset);
-    const bytes = encoded[index];
-    if (bytes === undefined) {
-      throw new Error("cmap subtable was not encoded");
-    }
     table.set(bytes, offset);
     offset += bytes.length;
   });
@@ -345,9 +344,37 @@ function buildRecords(
   return bytes;
 }
 
-// One (Chain)SequenceRule body: [chained] backtrack count+values, input count+values (glyphCount includes the implied first glyph, so the caller lists only the components after it), [chained] lookahead count+values, then substCount+records — the plain Contextual rule carries no backtrack or lookahead count fields at all, which is why `chained` gates them rather than an empty array doing it.
+// Writes a SequenceRule's shared tail -- input count+values (glyphCount includes the implied first glyph, so the caller lists only the components after it), then substCount+records -- starting at `at` in `table`, returning the offset just past the last byte written.
+function putSequenceRuleTail(
+  table: TableBuilder,
+  at: number,
+  input: readonly number[],
+  records: readonly GsubRecordSpec[],
+): number {
+  table.setU16(at, input.length + 1);
+  let cursor = at + 2;
+  input.forEach((value) => {
+    table.setU16(cursor, value);
+    cursor += 2;
+  });
+  table.setU16(cursor, records.length);
+  table.put(cursor + 2, buildRecords(records));
+  return cursor + 2 + records.length * 4;
+}
+
+// A plain (non-chaining) SequenceRule body: the Contextual Substitution format carries no backtrack or lookahead fields at all, so this writes only what format 1/2 lookups ever need.
 function buildSequenceRuleBytes(
-  chained: boolean,
+  rule: { readonly input: readonly number[] },
+  records: readonly GsubRecordSpec[],
+): Uint8Array<ArrayBuffer> {
+  const words = 1 + rule.input.length + 1 + records.length * 2;
+  const table = new TableBuilder(words * 2);
+  putSequenceRuleTail(table, 0, rule.input, records);
+  return table.bytes;
+}
+
+// A ChainSequenceRule body: backtrack count+values, input count+values (glyphCount includes the implied first glyph, so the caller lists only the components after it), lookahead count+values, then substCount+records.
+function buildChainSequenceRuleBytes(
   rule: {
     readonly backtrack: readonly number[];
     readonly input: readonly number[];
@@ -357,34 +384,34 @@ function buildSequenceRuleBytes(
 ): Uint8Array<ArrayBuffer> {
   const words =
     1 +
+    rule.backtrack.length +
+    1 +
     rule.input.length +
     1 +
-    records.length * 2 +
-    (chained ? 1 + rule.backtrack.length + 1 + rule.lookahead.length : 0);
+    rule.lookahead.length +
+    1 +
+    records.length * 2;
   const table = new TableBuilder(words * 2);
-  let at = 0;
-  const putArray = (values: readonly number[]): void => {
+  // Writes a plain count+values array (backtrack, lookahead) starting at `at`, returning the offset just past it.
+  const putArray = (at: number, values: readonly number[]): number => {
     table.setU16(at, values.length);
-    at += 2;
+    let cursor = at + 2;
     values.forEach((value) => {
-      table.setU16(at, value);
-      at += 2;
+      table.setU16(cursor, value);
+      cursor += 2;
     });
+    return cursor;
   };
-  if (chained) {
-    putArray(rule.backtrack);
-  }
-  table.setU16(at, rule.input.length + 1);
-  at += 2;
+  const afterBacktrack = putArray(0, rule.backtrack);
+  table.setU16(afterBacktrack, rule.input.length + 1);
+  let cursor = afterBacktrack + 2;
   rule.input.forEach((value) => {
-    table.setU16(at, value);
-    at += 2;
+    table.setU16(cursor, value);
+    cursor += 2;
   });
-  if (chained) {
-    putArray(rule.lookahead);
-  }
-  table.setU16(at, records.length);
-  table.put(at + 2, buildRecords(records));
+  const afterLookahead = putArray(cursor, rule.lookahead);
+  table.setU16(afterLookahead, records.length);
+  table.put(afterLookahead + 2, buildRecords(records));
   return table.bytes;
 }
 
@@ -444,11 +471,7 @@ export function buildContextFormat1(
     [buildCoverageFormat1(firstGlyphs)],
     ruleSets.map((rules) =>
       rules.map((rule) =>
-        buildSequenceRuleBytes(
-          false,
-          { backtrack: [], input: rule.input, lookahead: [] },
-          rule.records,
-        ),
+        buildSequenceRuleBytes({ input: rule.input }, rule.records),
       ),
     ),
   );
@@ -475,11 +498,7 @@ export function buildContextFormat2(
     [buildCoverageFormat1(firstGlyphs), classDef],
     ruleSetsByClass.map((rules) =>
       rules.map((rule) =>
-        buildSequenceRuleBytes(
-          false,
-          { backtrack: [], input: rule.input, lookahead: [] },
-          rule.records,
-        ),
+        buildSequenceRuleBytes({ input: rule.input }, rule.records),
       ),
     ),
   );
@@ -497,7 +516,7 @@ export function buildChainContextFormat1(
     },
     [buildCoverageFormat1(firstGlyphs)],
     ruleSets.map((rules) =>
-      rules.map((rule) => buildSequenceRuleBytes(true, rule, rule.records)),
+      rules.map((rule) => buildChainSequenceRuleBytes(rule, rule.records)),
     ),
   );
 }
@@ -530,7 +549,7 @@ export function buildChainContextFormat2(
       classDefs.lookahead,
     ],
     ruleSetsByClass.map((rules) =>
-      rules.map((rule) => buildSequenceRuleBytes(true, rule, rule.records)),
+      rules.map((rule) => buildChainSequenceRuleBytes(rule, rule.records)),
     ),
   );
 }
@@ -641,9 +660,7 @@ export function buildGsubTable(
   featureList.setU16(0, features.length);
   let featureTableAt = 2 + features.length * 6;
   features.forEach((feature, index) => {
-    for (let c = 0; c < 4; c++) {
-      featureList.bytes[2 + index * 6 + c] = feature.tag.charCodeAt(c);
-    }
+    featureList.bytes.set(new TextEncoder().encode(feature.tag), 2 + index * 6);
     featureList
       .setU16(2 + index * 6 + 4, featureTableAt)
       .put(featureTableAt, featureTables[index]!);
@@ -699,9 +716,8 @@ export function buildGdefTable(classes: {
   readonly markGlyphSets?: readonly Uint8Array[];
 }): Uint8Array<ArrayBuffer> {
   const withSets = classes.markGlyphSets !== undefined;
-  const sets = classes.markGlyphSets ?? [];
-  const markGlyphSetsDef = withSets
-    ? (() => {
+  const markGlyphSetsDef = classes.markGlyphSets
+    ? ((sets: readonly Uint8Array[]) => {
         const defSize =
           4 + sets.length * 4 + sets.reduce((n, s) => n + s.length, 0);
         const def = new TableBuilder(defSize);
@@ -717,7 +733,7 @@ export function buildGdefTable(classes: {
           at += coverage.length;
         });
         return def.bytes;
-      })()
+      })(classes.markGlyphSets)
     : undefined;
   const headerSize = withSets ? 14 : 12;
   const blobs = [
