@@ -48,10 +48,8 @@ export function mirrorIndex(position: number, i0: number, i1: number): number {
     return i0;
   }
   const period = 2 * (length - 1);
-  let offset = (position - i0) % period;
-  if (offset < 0) {
-    offset += period;
-  }
+  // The double modulo is the standard way to fold a JS `%` result (which follows the sign of position - i0, so it can itself be negative) into [0, period) without a separate negative-offset branch: the result is already fully normalized before the mirror step below ever runs.
+  const offset = (((position - i0) % period) + period) % period;
   return i0 + (offset >= length ? period - offset : offset);
 }
 
@@ -94,8 +92,12 @@ export function interleave(
 
 // --- The reversible 5-3 filter (F.3.8.2, equations F-5 and F-6). ---
 
-// Runs in place over an extended buffer where `buffer[index - i0 + EXTENSION_MARGIN]` holds sample `index`, the margin already filled by symmetric extension.
-function inverse53Filter(buffer: Int32Array, i0: number, i1: number): void {
+// Runs in place over an extended buffer where `buffer[index - i0 + EXTENSION_MARGIN]` holds sample `index`, the margin already filled by symmetric extension. Exported for direct unit testing: synthesiseLine's own scratch buffer is always sized generously enough (Math.max(width, height) + 2 * EXTENSION_MARGIN) that a wrong loop bound here would silently write into real, already-allocated cells rather than throwing -- only inspecting exactly which cells this function itself touches, directly, can tell the two apart.
+export function inverse53Filter(
+  buffer: Int32Array,
+  i0: number,
+  i1: number,
+): void {
   const base = EXTENSION_MARGIN - i0;
   const first = Math.floor(i0 / 2) - 1;
   const last = Math.floor(i1 / 2) + 1;
@@ -117,7 +119,12 @@ function inverse53Filter(buffer: Int32Array, i0: number, i1: number): void {
 
 // --- The irreversible 9-7 filter (F.3.8.2, equations F-8 to F-13). ---
 
-function inverse97Filter(buffer: Float32Array, i0: number, i1: number): void {
+// Exported for the same reason as inverse53Filter above.
+export function inverse97Filter(
+  buffer: Float32Array,
+  i0: number,
+  i1: number,
+): void {
   // F.3.8.2 Table F.4: the four lifting parameters of the 9-7 analysis filter and its normalisation constant. The synthesis below applies each in reverse order with the opposite sign, which is what makes lifting invertible at all. Built inside this function rather than as module-level constants so a mutation to one of them is attributed, by Stryker's per-test coverage analysis, to the tests that actually call this function -- module-level `const`s here would run once at import time as static mutants, which Stryker tests against a single arbitrary covering test rather than the full set that genuinely exercises the 9-7 filter.
   const LIFT_ALPHA = -1.586134342059924;
   const LIFT_BETA = -0.052980118572961;
@@ -235,16 +242,13 @@ export function inverseDwt53Level(
   const width = u1 - u0;
   const height = v1 - v0;
   const output = new Int32Array(Math.max(width * height, 0));
-  if (width <= 0 || height <= 0) {
-    return output;
-  }
+  // No separate "is either dimension non-positive" guard is needed: interleave's own loops, sized from the same u0/u1/v0/v1, never iterate when width or height is non-positive (subbandBounds collapses each such range to an empty one), and both loops below are bounded by width/height directly, so they no-op the same way. All that's left for a non-positive dimension to threaten is scratch's own allocation, guarded the same way output's already is above.
+  const scratch = new Int32Array(
+    Math.max(Math.max(width, height) + 2 * EXTENSION_MARGIN, 0),
+  );
   interleave(interleaveSource(bands, bounds), bounds, (u, v, value) => {
     output[(v - v0) * width + (u - u0)] = value;
   });
-
-  const scratch = new Int32Array(
-    Math.max(width, height) + 2 * EXTENSION_MARGIN,
-  );
   // HOR_SR (F.3.5) then VER_SR (F.3.6), in that order -- with integer lifting the two are not commutative.
   for (let v = 0; v < height; v++) {
     const rowStart = v * width;
@@ -295,16 +299,13 @@ export function inverseDwt97Level(
   const width = u1 - u0;
   const height = v1 - v0;
   const output = new Float32Array(Math.max(width * height, 0));
-  if (width <= 0 || height <= 0) {
-    return output;
-  }
+  // See inverseDwt53Level's identical comment: no separate non-positive-dimension guard is needed once scratch's own allocation is floored at 0 the same way output's already is above.
+  const scratch = new Float32Array(
+    Math.max(Math.max(width, height) + 2 * EXTENSION_MARGIN, 0),
+  );
   interleave(interleaveSource(bands, bounds), bounds, (u, v, value) => {
     output[(v - v0) * width + (u - u0)] = value;
   });
-
-  const scratch = new Float32Array(
-    Math.max(width, height) + 2 * EXTENSION_MARGIN,
-  );
   for (let v = 0; v < height; v++) {
     const rowStart = v * width;
     synthesiseLine(
