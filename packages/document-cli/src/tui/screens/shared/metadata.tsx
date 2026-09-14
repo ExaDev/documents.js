@@ -1,7 +1,7 @@
 import { Box, Text } from "ink";
 import { useState, type ReactElement } from "react";
 import type { MetadataOverrides } from "documents.js";
-import { ListView } from "../../components/list-view.js";
+import { ListView, selectedColor } from "../../components/list-view.js";
 import { TextField } from "../../components/text-field.js";
 import { useNavigationInput } from "../../keybindings/use-navigation-input.js";
 import {
@@ -138,10 +138,7 @@ export function MetadataScreen(): ReactElement {
             items={EDITABLE_FIELDS}
             selectedIndex={selectedIndex}
             renderItem={(field, isSelected) => (
-              <Text
-                color={isSelected ? "cyan" : undefined}
-                inverse={isSelected}
-              >
+              <Text color={selectedColor(isSelected)} inverse={isSelected}>
                 {field.label}
               </Text>
             )}

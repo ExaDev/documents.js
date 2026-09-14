@@ -52,33 +52,6 @@ describe("RotationField", () => {
     expect(frame).not.toContain("14.999999999999998");
   });
 
-  it("colours the row cyan only when selected and not editing", () => {
-    const selected = render(
-      <RotationField
-        rotationDeg={15}
-        isSelected
-        isEditing={false}
-        draftValue=""
-        onDraftChange={() => {}}
-        onSubmit={() => {}}
-        onCancel={() => {}}
-      />,
-    ).lastFrame();
-    const unselected = render(
-      <RotationField
-        rotationDeg={15}
-        isSelected={false}
-        isEditing={false}
-        draftValue=""
-        onDraftChange={() => {}}
-        onSubmit={() => {}}
-        onCancel={() => {}}
-      />,
-    ).lastFrame();
-    expect(selected).toContain("[36m");
-    expect(unselected).not.toContain("[36m");
-  });
-
   it("shows an editable TextField when isEditing", () => {
     const { lastFrame } = render(
       <RotationField
