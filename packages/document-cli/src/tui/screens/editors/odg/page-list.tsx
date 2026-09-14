@@ -1,6 +1,6 @@
 import { Box, Text } from "ink";
 import type { ReactElement } from "react";
-import { ListView } from "../../../components/list-view.js";
+import { ListView, selectedColor } from "../../../components/list-view.js";
 import { useNavigationInput } from "../../../keybindings/use-navigation-input.js";
 import { useAppDispatch, useAppState } from "../../../state/context.js";
 import { anyOverlayOpen } from "../../../state/types.js";
@@ -54,7 +54,7 @@ export function OdgPageListScreen(): ReactElement {
           // A count of `page.shapes()` (text/image frames) only -- cheap and always available. Vector (rect/ellipse/line/path) counts need a `readOdgContent` read per page (see shared.ts's `buildPageItems`), too heavy to run once per row on every list render; page-detail.tsx pays that cost for the one page actually being viewed.
           const shapeCount = page === undefined ? 0 : page.shapes().length;
           return (
-            <Text color={isSelected ? "cyan" : undefined}>
+            <Text color={selectedColor(isSelected)}>
               {isSelected ? "> " : "  "}Page {pageIndex + 1} ({shapeCount} shape
               {shapeCount === 1 ? "" : "s"}, vectors not counted here)
             </Text>

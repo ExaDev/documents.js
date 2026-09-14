@@ -3,7 +3,7 @@ import { basename, dirname, extname, join } from "node:path";
 import { Box, Text } from "ink";
 import { useState, type ReactElement } from "react";
 import { formatToExtension } from "../../format.js";
-import { ListView } from "../components/list-view.js";
+import { ListView, selectedColor } from "../components/list-view.js";
 import { TextField } from "../components/text-field.js";
 import { describeError } from "../errors.js";
 import { exportToPdf } from "../format/export-pdf.js";
@@ -236,7 +236,7 @@ export function FilePickerScreen(): ReactElement {
         selectedIndex={selectedIndex}
         emptyMessage="This directory is empty."
         renderItem={(entry, isSelected) => (
-          <Text color={isSelected ? "cyan" : undefined} inverse={isSelected}>
+          <Text color={selectedColor(isSelected)} inverse={isSelected}>
             {entry.isDirectory ? `${entry.name}/` : entry.name}
           </Text>
         )}

@@ -1,7 +1,7 @@
 import { Box, Text } from "ink";
 import { useState, type ReactElement } from "react";
 import type { Box as GeometryBox, OdpShape, PptxShape } from "documents.js";
-import { ListView } from "../../../components/list-view.js";
+import { ListView, selectedColor } from "../../../components/list-view.js";
 import { TextField } from "../../../components/text-field.js";
 import { useNavigationInput } from "../../../keybindings/use-navigation-input.js";
 import { useAppDispatch, useAppState } from "../../../state/context.js";
@@ -143,7 +143,7 @@ function FieldRow(props: FieldRowProps): ReactElement {
     const trimmed = shape.text.trim();
     return (
       <Box flexDirection="column">
-        <Text color={isSelected ? "cyan" : undefined} bold={isSelected}>
+        <Text color={selectedColor(isSelected)} bold={isSelected}>
           Text:
         </Text>
         <Text dimColor={!isSelected}>
@@ -154,7 +154,7 @@ function FieldRow(props: FieldRowProps): ReactElement {
   }
 
   return (
-    <Text color={isSelected ? "cyan" : undefined} inverse={isSelected}>
+    <Text color={selectedColor(isSelected)} inverse={isSelected}>
       {FIELD_LABELS[fieldKey]}: {describeFieldValue(fieldKey, shape)}
     </Text>
   );
