@@ -108,6 +108,19 @@ describe("rptDefinitionFromReport refusals", () => {
     ).toThrow(/declares no rpt:group-expression/);
   });
 
+  it("refuses a single-length group level whose one slot holds no group", () => {
+    // Not a shape odf.js's own reader can ever produce (its groups array is always populated element-for-element) -- this exercises the defensive guard directly, since a length-1 array with a hole is otherwise unreachable through any real .odb fixture.
+    const holed = emptyReport({
+      groups: [undefined] as unknown as OdbReportGroup[],
+    });
+    expect(() => rptDefinitionFromReport(holed)).toThrow(
+      RptReportStructureError,
+    );
+    expect(() => rptDefinitionFromReport(holed)).toThrow(
+      /a group nesting level reported a non-zero length but held no group/,
+    );
+  });
+
   it("refuses sibling groups at one nesting level rather than keeping the first and dropping the rest", () => {
     const siblings = emptyReport({
       groups: [
