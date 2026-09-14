@@ -114,7 +114,10 @@ function renderBlock(block: ContentBlock): ReactNode {
 }
 
 function renderParagraph(paragraph: ContentParagraph): ReactNode {
-  const headingMatch = HEADING_STYLE_PATTERN.exec(paragraph.styleId ?? "");
+  const headingMatch =
+    paragraph.styleId === undefined
+      ? null
+      : HEADING_STYLE_PATTERN.exec(paragraph.styleId);
   if (headingMatch !== null) {
     const Tag = HEADING_TAGS[Number(headingMatch[1])];
     if (Tag !== undefined)
@@ -155,7 +158,8 @@ function renderListNodes(nodes: ReturnType<typeof buildListForest>): ReactNode {
     const items = group.nodes.map((node, nodeIndex) => (
       <li key={nodeIndex}>
         {renderRunsMd(node.runs)}
-        {node.children.length > 0 && renderListNodes(node.children)}
+        {/* No length guard: mapping an empty children array already renders nothing, so gating the call on length > 0 first is a no-op check around an already-no-op call. */}
+        {renderListNodes(node.children)}
       </li>
     ));
     return group.ordered ? (

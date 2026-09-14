@@ -364,12 +364,13 @@ function readContentForFormat(
   }
 }
 
-function sanitizeImageAsset(asset: LayoutImageAsset) {
+// Exported purely so router.test.ts can pin the exact byteLength arithmetic against a base64 string of a controlled length, rather than needing a real embedded image round-tripped through a full docx-to-PDF conversion just to exercise one estimate formula. No Math.ceil around the division: asset.base64 is always produced by documents.js's own bytesToBase64 encoder (readPdf's own image extraction is the only producer of a LayoutImageAsset), which pads every output to a multiple of 4 characters -- a real base64 encoding's own length invariant, not an assumption about this one caller -- so `length * 3 / 4` is already exactly integral for every value this ever actually receives, and rounding it up could only ever be a no-op.
+export function sanitizeImageAsset(asset: LayoutImageAsset) {
   return {
     format: asset.format,
     widthPx: asset.widthPx,
     heightPx: asset.heightPx,
-    byteLength: Math.ceil((asset.base64.length * 3) / 4),
+    byteLength: (asset.base64.length * 3) / 4,
   };
 }
 
@@ -417,35 +418,13 @@ interface EditorParagraphHandle {
   remove(): void;
 }
 
-// The two access directions of the paragraph-family surface. Every editor class forwards paragraphs() itself; appendParagraph lives on the body for the three package-backed formats (docx/odt/markdown) and on the editor for doc -- each case narrows the session union to ONE class, since calling through a union of distinct classes requires their signatures to unify and the paragraph types deliberately do not.
+// The two access directions of the paragraph-family surface. Every editor class forwards paragraphs() itself with an identical zero-argument call, so there is no format-specific behaviour left to switch on: each of the four paragraph types satisfies EditorParagraphHandle structurally (this module's own top comment), which is what lets a single call return the union directly rather than needing one branch per format to narrow the session first. appendParagraph is no different, despite DocEditor also exposing a second, top-level appendParagraph of its own (a plain forward to `this.body.appendParagraph`, per doc/editor.ts's own definition): every one of the four editor classes carries a `body` with an identical `appendParagraph` call, so going through `body` uniformly reaches the correct target for every format, doc included, with no branch needed.
 export function paragraphsOf(session: EditorSession): EditorParagraphHandle[] {
-  switch (session.format) {
-    case "docx":
-      return session.editor.paragraphs();
-    case "odt":
-      return session.editor.paragraphs();
-    case "doc":
-      return session.editor.paragraphs();
-    case "markdown":
-      return session.editor.paragraphs();
-  }
+  return session.editor.paragraphs();
 }
 
 export function appendParagraphOf(session: EditorSession, text: string): void {
-  switch (session.format) {
-    case "docx":
-      session.editor.body.appendParagraph({ text });
-      return;
-    case "odt":
-      session.editor.body.appendParagraph({ text });
-      return;
-    case "markdown":
-      session.editor.body.appendParagraph({ text });
-      return;
-    case "doc":
-      session.editor.appendParagraph({ text });
-      return;
-  }
+  session.editor.body.appendParagraph({ text });
 }
 
 export function paragraphTexts(session: EditorSession): string[] {

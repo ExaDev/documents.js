@@ -38,7 +38,7 @@ function OdmPage() {
     chapterFiles: OpenedFile[],
   ) => {
     if (masterFile === undefined) return;
-    renderOdm.reset();
+    // useMutation's own "pending" dispatch already clears the previous data/error before this call's result settles -- a separate reset() call immediately beforehand would only repeat that, never add a state transition of its own.
     renderOdm.mutate(
       {
         master: masterFile.bytes,

@@ -46,10 +46,9 @@ export function SlidesPreview({
         ? content.pages
         : undefined;
   const [activeIndex, setActiveIndex] = useState(0);
+  // No separate empty-slides branch: Math.min against a length of 0 already yields -1, an out-of-range index that reads back as undefined the same as the 0 this would otherwise special-case to, so a dedicated check for "no slides at all" would only ever produce a value with the identical downstream effect.
   const clampedIndex =
-    slides !== undefined && slides.length > 0
-      ? Math.min(activeIndex, slides.length - 1)
-      : 0;
+    slides === undefined ? 0 : Math.min(activeIndex, slides.length - 1);
   const active = slides?.[clampedIndex];
 
   return (
@@ -158,8 +157,8 @@ function rotationTransform(
 
 function renderShape(shape: ContentShape, key: number): ReactNode {
   const { xPt, yPt, widthPt, heightPt } = shape.frame;
-  const fontSize =
-    shape.fontScale !== undefined ? `${shape.fontScale}em` : undefined;
+  // No `fontScale !== undefined` guard: an absent fontScale would template to the invalid CSS length "undefinedem", and a browser's CSSOM (jsdom included) already rejects an unparseable style value as a no-op rather than ever writing it -- provably the same rendered outcome as this key being `undefined` (which React also drops from the style object outright), so a guard reproducing that already-guaranteed behaviour would only ever hold two provably-equal branches.
+  const fontSize = `${shape.fontScale}em`;
   const lineHeight =
     shape.lineSpacingReduction !== undefined
       ? String(1.5 - shape.lineSpacingReduction)
@@ -199,6 +198,14 @@ function renderVector(vector: ContentVector, key: number): ReactNode {
   return renderVectorSingle(vector, key, undefined);
 }
 
+// Distinct React keys for the two stacked elements a double stroke simulates -- factored out so a test can pin the exact strings directly rather than only through a rendered React key, which never reaches the DOM and so is otherwise unobservable from rendered HTML alone (two siblings sharing one key would only ever surface as a React console warning, not a markup difference).
+export function doubleStrokeKeys(key: number): {
+  underlay: string;
+  gap: string;
+} {
+  return { underlay: `${key}-underlay`, gap: `${key}-gap` };
+}
+
 // SVG has no native double stroke. Simulates it by stacking two elements: a thick stroke in the stroke color (3x width) underneath, and a thin stroke in the fill/gap color on top -- the thin overlay creates a gap in the center of the thick underlay, leaving two visible stroke-colored lines. For unfilled shapes, white is used as the gap color (matching the typical slide background).
 function renderDoubleStrokeVector(
   vector: ContentVector,
@@ -207,13 +214,14 @@ function renderDoubleStrokeVector(
 ): ReactNode {
   const fill = "fill" in vector ? colorToCss(vector.fill) : "none";
   const gapColor = fill === "none" ? "white" : fill;
+  const keys = doubleStrokeKeys(key);
   return (
     <g key={key}>
-      {renderVectorSingle(vector, `${key}-underlay`, {
+      {renderVectorSingle(vector, keys.underlay, {
         stroke: colorToCss(stroke.color),
         strokeWidth: stroke.widthPt * 3,
       })}
-      {renderVectorSingle(vector, `${key}-gap`, {
+      {renderVectorSingle(vector, keys.gap, {
         stroke: gapColor,
         strokeWidth: stroke.widthPt,
       })}

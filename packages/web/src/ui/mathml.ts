@@ -2,10 +2,9 @@ import type { MathMlNode } from "documents.js";
 
 export const MATHML_NS = "http://www.w3.org/1998/Math/MathML";
 
-// Real MathML producers write element tags with a "math:" namespace prefix when math is not the document's default namespace (<math:mfrac>, <math:mrow>). The browser's MathML parser expects unprefixed tags inside a namespaced <math>, so the prefix must be stripped.
+// Real MathML producers write element tags with a "math:" namespace prefix when math is not the document's default namespace (<math:mfrac>, <math:mrow>). The browser's MathML parser expects unprefixed tags inside a namespaced <math>, so the prefix must be stripped. No branch on "was there a colon at all": slice(-1 + 1) === slice(0) === the whole string for an unprefixed tag, so the unconditional slice already returns the tag unchanged in that case -- an explicit ternary here would only ever hold two provably-equal branches.
 function stripMathMlNamespace(tag: string): string {
-  const colonIndex = tag.indexOf(":");
-  return colonIndex === -1 ? tag : tag.slice(colonIndex + 1);
+  return tag.slice(tag.indexOf(":") + 1);
 }
 
 // Walks a parsed MathML tree (MathMlNode is a generic parsed-XML tree, not MathML-specific types) onto a real DOM node via createElementNS -- React's JSX doesn't create MathML elements with the correct namespace, so every consumer that wants to display one (FormulaPreview's own standalone panel, contentBlocks.tsx's embedded-formula block) walks it imperatively through this shared helper rather than duplicating the walk.

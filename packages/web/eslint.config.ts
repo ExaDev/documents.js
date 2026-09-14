@@ -69,8 +69,36 @@ export default tseslint.config(
     },
   },
   {
+    // doubleStrokeKeys is a pure helper exported alongside the SlidesPreview component purely so a test can pin its return value directly: the React `key` strings it computes never reach rendered DOM output at all (React keys are consumed internally, not written to markup), so a rendering-only test has no way to observe them -- the one case in this file where allowConstantExport's "still a component-shaped module" carve-out doesn't apply, since the export is a function, not a constant.
+    files: ["src/ui/SlidesPreview.tsx"],
+    rules: {
+      "react-refresh/only-export-components": [
+        "warn",
+        { allowConstantExport: true, allowExportNames: ["doubleStrokeKeys"] },
+      ],
+    },
+  },
+  {
+    // formatBytes and reopenTooltipLabel are pure helpers exported alongside RecentFilesPanel for the identical reason __root.tsx's own colorSchemeTooltipLabel/navbarConfig are: Mantine's Tooltip only mounts its floating label content once genuinely open, which a render-only test cannot drive, so the label logic needs to be callable directly.
+    files: ["src/ui/RecentFilesPanel.tsx"],
+    rules: {
+      "react-refresh/only-export-components": [
+        "warn",
+        {
+          allowConstantExport: true,
+          allowExportNames: ["formatBytes", "reopenTooltipLabel"],
+        },
+      ],
+    },
+  },
+  {
     files: ["src/workers/**/*.ts"],
     languageOptions: { globals: { ...globals.worker } },
+  },
+  {
+    // setup.ts's own window.matchMedia stub implements MediaQueryList's legacy addListener/removeListener members because the real interface still declares them as required -- deprecated does not mean absent, and a stub that only satisfies the non-deprecated half of the type would be an incomplete implementation of what it stands in for. Testing that those two members are genuinely present and callable (setup.test.ts) means calling them by name, which is exactly what this rule exists to flag in ordinary application code; scoped to the one test file that has a legitimate reason to.
+    files: ["src/test/setup.test.ts"],
+    rules: { "@typescript-eslint/no-deprecated": "off" },
   },
   {
     files: [

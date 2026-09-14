@@ -111,7 +111,7 @@ const pwa = VitePWA({
   },
 });
 
-export default defineConfig(({ command }) => ({
+export default defineConfig(({ command, mode }) => ({
   // Only the production build serves from GitHub Pages' project-site subpath. Base was previously computed from CI alone, at module scope, and applied unconditionally to `vite` (dev) too -- every CI run of the e2e suite starts the dev server under the same CI=true env var the real Pages build reads, so the dev server silently served every asset from /<repo>/ while the browser requested them from /, and the app never rendered at all. Gating on `command` (vite's own build/serve discriminator) instead of the env var alone is the actual fix, not a workaround: dev must always stay at '/' regardless of which environment it runs in.
   base: command === "build" && process.env.CI ? pagesBase() : "/",
   define: {
@@ -121,8 +121,18 @@ export default defineConfig(({ command }) => ({
     __APP_COMMIT_TIMESTAMP__: JSON.stringify(commitTimestampMs),
   },
   plugins: [
-    // Must precede react(): the router plugin's route-tree codegen needs to run before plugin-react's JSX transform sees the generated imports.
-    tanstackRouter({ target: "react", autoCodeSplitting: true }),
+    // Must precede react(): the router plugin's route-tree codegen needs to run before plugin-react's JSX transform sees the generated imports. routeFileIgnorePattern excludes a route file's own unit tests from the generated route tree -- without it, the first test added directly under src/routes/ (e.g. index.test.ts) warns "does not export a Route" on every build and test run, and the existing dash-prefix convention (this directory's own -Sidebar.tsx, a genuine non-route support file) is the wrong fix for a test file: dash-prefixing every *.test.ts(x) here would read oddly next to every other test file in the package, which carries no such prefix.
+    //
+    // The whole plugin is omitted outright under mode "test" (vitest's own default mode, unless a run overrides it), not merely tuned via autoCodeSplitting as it was before -- a build-time concern must not leak into how tests execute, the identical reasoning `base` above is gated on `command`, just carried further once a second symptom of the same leak turned up. Neither a normal unit-test run nor Stryker's mutation run needs the plugin's codegen at all: no test file imports routeTree.gen.ts (which router.tsx alone consumes, and which is committed to the repo already, not regenerated per run) or mounts a route through the real router; every route test mounts Route.options.component directly, calling the runtime createFileRoute()/routeFile-object factories that ship in @tanstack/react-router itself, which need no Vite plugin to work. Confirmed as more than a latent risk, not merely a hygiene tidy-up: Stryker's instrumentation rewrites every mutable literal in a matched file into a stryMutAct-guarded conditional, including each route file's own `createFileRoute("/id")` argument -- and the plugin's own route-tree generator statically requires that argument to already be a plain string or template literal so it can rewrite it, so instrumenting any route file under the previous per-flag gating crashed route-tree generation outright ("expected route id to be a string literal or plain template literal") the moment a full mutation run touched more than one route file at once, taking the whole Stryker child process down with it rather than just marking one mutant erroneous.
+    ...(mode === "test"
+      ? []
+      : [
+          tanstackRouter({
+            target: "react",
+            autoCodeSplitting: true,
+            routeFileIgnorePattern: "\\.test\\.tsx?$",
+          }),
+        ]),
     react(),
     vanillaExtractPlugin(),
     pwa,
@@ -173,6 +183,8 @@ export default defineConfig(({ command }) => ({
           environment: "jsdom",
           include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
           setupFiles: ["./src/test/setup.ts"],
+          // Vitest stubs out CSS imports by default (an empty module, no rules ever reach jsdom's document.styleSheets) since most suites never need a real cascade. This package's own *.css.ts modules (vanilla-extract) are mutated by Stryker like any other source file, and the only way to kill a mutated style value is to read it back from an actually-applied stylesheet -- see src/test/cssRule.ts's own module comment for the read-back mechanics.
+          css: true,
         },
       },
     ],
