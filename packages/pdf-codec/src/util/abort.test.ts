@@ -18,8 +18,13 @@ describe("throwIfAborted", () => {
   it("throws an AbortError DOMException once the signal is aborted", () => {
     const controller = new AbortController();
     controller.abort();
-    expect(() => {
+    try {
       throwIfAborted(controller.signal);
-    }).toThrow(DOMException);
+      expect.unreachable("throwIfAborted did not throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(DOMException);
+      expect((error as DOMException).name).toBe("AbortError");
+      expect((error as DOMException).message).toBe("Aborted");
+    }
   });
 });
