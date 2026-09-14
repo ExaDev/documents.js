@@ -34,6 +34,12 @@ const CHART_GRAPHIC_URI =
   "http://schemas.openxmlformats.org/drawingml/2006/chart";
 const DRAWING_REL_SUFFIX = "/drawing";
 
+// A whole-number attribute read as ECMA-376's own min/max/row-index vocabulary spells it: absent becomes NaN directly, never routed through a placeholder string first -- attr's own "string | undefined" would otherwise force a "?? \"\"" just to satisfy Number.parseInt's signature, and every string that could stand in for the absent case parses to NaN just the same, making the placeholder's own text a distinction with no behavioural difference to test.
+function parseIntAttr(element: XmlElement, name: string): number {
+  const raw = attr(element, name);
+  return raw === undefined ? Number.NaN : Number.parseInt(raw, 10);
+}
+
 // One declared <col min max width> range, kept as the RANGE the anchor geometry needs -- readColumns deliberately materialises only each element's starting index (the repeat-hazard policy), but a column in the middle of a min..max span has a real width a drawing placed against it must resolve through.
 interface DeclaredColumn {
   readonly min: number;
@@ -51,19 +57,15 @@ class SheetGridGeometry {
     const cols = childrenWithTag(worksheet, "cols")[0];
     if (cols !== undefined) {
       for (const col of childrenWithTag(cols, "col")) {
-        const min = Number.parseInt(attr(col, "min") ?? "", 10);
-        const max = Number.parseInt(attr(col, "max") ?? "", 10);
+        const min = parseIntAttr(col, "min");
+        const max = parseIntAttr(col, "max");
         const widthRaw = attr(col, "width");
         const widthPt =
           widthRaw === undefined
             ? undefined
             : columnWidthCharsToPt(Number(widthRaw));
-        if (
-          Number.isInteger(min) &&
-          Number.isInteger(max) &&
-          min >= 1 &&
-          max >= min
-        ) {
+        // No separate Number.isInteger(min)/(max) guard is needed: both are always the result of Number.parseInt just above, which can only ever return NaN or a genuine integer -- never a finite non-integer -- and min >= 1 already rejects NaN on its own (every comparison against NaN is false). A "max >= min" guard is equally unnecessary here, for a different reason: columnWidthPt's own lookup below only ever matches a range via "index >= column.min && index <= column.max", and an inverted range (max < min) can never satisfy both halves of that for any index at all -- pushing one through unguarded is exactly as inert as rejecting it, since nothing else ever reads `columns` besides that lookup.
+        if (min >= 1) {
           this.columns.push({
             min: min - 1,
             max: max - 1,
@@ -84,10 +86,11 @@ class SheetGridGeometry {
     const sheetData = childrenWithTag(worksheet, "sheetData")[0];
     if (sheetData !== undefined) {
       for (const row of childrenWithTag(sheetData, "row")) {
-        const r = Number.parseInt(attr(row, "r") ?? "", 10);
+        const r = parseIntAttr(row, "r");
         const htRaw = attr(row, "ht");
         const ht = htRaw === undefined ? Number.NaN : Number(htRaw);
-        if (Number.isInteger(r) && r >= 1 && Number.isFinite(ht)) {
+        // Same redundant isInteger drop as the column read above: r is always Number.parseInt's own result (NaN or a genuine integer), and r >= 1 already rejects NaN unaided.
+        if (r >= 1 && Number.isFinite(ht)) {
           this.rowHeights.set(r - 1, ht);
         }
       }
