@@ -2632,6 +2632,21 @@ describe("block-scoped construct extent ordering", () => {
       blocks.filter((block) => block.kind === "constructEnd"),
     ).toHaveLength(2);
   });
+
+  it("still sorts an inner extent's later start ahead of an outer one's earlier start when the inner extent closes -- and so is pushed into the pending list -- first", () => {
+    // "outer" opens before "inner" does but closes after it, so "inner" is the one whose \bkmkend is seen first and is therefore the one flushClosingBookmarks pushes into sectionBlockExtents first -- the pre-sort array order here is [inner, outer], the REVERSE of correct start order. If the sort's own first comparator clause summed the two startIndex values instead of subtracting them, the comparator would return the same (wrong-signed) result regardless of which extent it was asked about first -- since addition is commutative -- and never trigger the swap this out-of-order push requires, leaving "inner" sorted ahead of "outer". dropCrossingExtents would then see "outer" arrive after "inner" already claimed the first slot and misread the true nesting as a cross, dropping "outer" entirely.
+    const blocks = blocksOf(
+      `${HEADER}\\pard{\\*\\bkmkstart outer}Zero\\par\\pard{\\*\\bkmkstart inner}One\\par\\pard{\\*\\bkmkend inner}Two\\par\\pard{\\*\\bkmkend outer}Three\\par}`,
+    );
+    const starts = blocks.filter((block) => block.kind === "constructStart");
+    expect(starts.map((block) => anchorNameOf(block))).toEqual([
+      "outer",
+      "inner",
+    ]);
+    expect(
+      blocks.filter((block) => block.kind === "constructEnd"),
+    ).toHaveLength(2);
+  });
 });
 
 describe("table cell merge span", () => {
@@ -2713,19 +2728,21 @@ describe("bookmark bookkeeping", () => {
   });
 
   it("genuinely deletes a resolved bookmark from the open set, so a second \\bkmkend for the same name reports it as unpaired rather than resolving twice", () => {
-    // If endBookmark's own delete call were a no-op, 'dup' would still be sitting in openBookmarks when the second bkmkend arrives, and it would be silently (and wrongly) treated as still open instead of triggering BOOKMARK_UNPAIRED.
+    // If endBookmark's own delete call were a no-op, 'dup' would still be sitting in openBookmarks when the second bkmkend arrives: it would be silently (and wrongly) treated as still open instead of triggering the bkmkend-with-no-bkmkstart diagnostic here, AND it would still be open at the document's own end, triggering reportUnclosedBookmarks' own "has no matching \\bkmkend" diagnostic instead -- a DIFFERENT diagnostic that also names 'dup' and would, wrongly, still leave the naive count-only assertion this replaced at exactly one match, masking the missing delete entirely. Asserting the exact message (not just a length-one count of anything mentioning 'dup') is what actually distinguishes the two.
     const { diagnostics } = readRtfContent(
       bytes(
         `${HEADER}\\pard {\\*\\bkmkstart dup}one{\\*\\bkmkend dup}{\\*\\bkmkend dup}\\par}`,
       ),
     );
-    expect(
-      diagnostics.filter(
-        (diagnostic) =>
-          diagnostic.code === RtfDiagnosticCodes.BOOKMARK_UNPAIRED &&
-          diagnostic.message.includes("dup"),
-      ),
-    ).toHaveLength(1);
+    const unpaired = diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.BOOKMARK_UNPAIRED &&
+        diagnostic.message.includes("dup"),
+    );
+    expect(unpaired).toHaveLength(1);
+    expect(unpaired[0]?.message).toBe(
+      "a \\bkmkend named 'dup' has no matching \\bkmkstart, so no anchor construct is produced for it",
+    );
   });
 });
 
