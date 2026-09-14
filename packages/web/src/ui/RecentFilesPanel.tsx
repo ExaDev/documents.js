@@ -10,10 +10,18 @@ import { notifyError } from "./notify";
 import { iconFlexShrink, minWidthZero } from "./RecentFilesPanel.css";
 import { setPendingReopen } from "./reopenMailbox";
 
-function formatBytes(bytes: number): string {
+// Exported so a test can pin the exact KB/MB boundary directly, rather than only through rendered text.
+export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// Factored out for the identical reason __root.tsx's colorSchemeTooltipLabel is: Mantine's Tooltip only mounts its floating label content once genuinely open (hover/focus), which a render-only test cannot drive, so this pure lookup is what a test can actually assert against.
+export function reopenTooltipLabel(hasHandle: boolean): string {
+  return hasHandle
+    ? "Reopen in Convert"
+    : "This browser can't reopen files directly -- pick it again from the tool you need";
 }
 
 export function RecentFilesPanel() {
@@ -93,13 +101,7 @@ export function RecentFilesPanel() {
             </Stack>
           </Group>
           <Group gap={4} wrap="nowrap">
-            <Tooltip
-              label={
-                record.handle !== undefined
-                  ? "Reopen in Convert"
-                  : "This browser can't reopen files directly -- pick it again from the tool you need"
-              }
-            >
+            <Tooltip label={reopenTooltipLabel(record.handle !== undefined)}>
               <ActionIcon
                 variant="subtle"
                 disabled={record.handle === undefined}
