@@ -112,6 +112,16 @@ describe("renderOdbReportTo", () => {
     ).rejects.toThrow(/SalesByRegion/);
   });
 
+  it("genuinely threads the given report name through rather than dropping it, which the sole declared report would silently absorb as a default for any name including an unknown one", async () => {
+    // FORM_AND_REPORT_ODB_PATH declares exactly one report ("SalesByRegion"). If { report: options.reportName } lost its `report` field entirely (rather than merely being given the wrong value), readOdbReportContent would still succeed by defaulting to that sole report -- so an empty reportName, which cannot coincide with any real report name, is the input that specifically proves the field survives the call rather than being dropped.
+    await expect(
+      renderOdbReportTo(doc, join(workspace, "never-written-4.docx"), {
+        reportName: "",
+        onDiagnostic: () => undefined,
+      }),
+    ).rejects.toThrow();
+  });
+
   it("rejects instead of reading a fontFiles entry once the given signal is already aborted", async () => {
     const fontPath = join(workspace, "aborted-font.ttf");
     await writeFile(fontPath, fixtureCalibriFontBytes());
