@@ -2,7 +2,7 @@ import { Group, Text, useMantineTheme } from "@mantine/core";
 import { Dropzone } from "@mantine/dropzone";
 import type { FileWithPath } from "@mantine/dropzone";
 import { IconCheck, IconFile, IconUpload, IconX } from "@tabler/icons-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { createFileAccess } from "../adapters/fileAccess/createFileAccess";
 import { recordRecentFile } from "../hooks/useRecentFiles";
@@ -48,7 +48,8 @@ export function FileUpload({
   loading,
 }: FileUploadProps) {
   const theme = useMantineTheme();
-  const fileAccess = useMemo(() => createFileAccess(), []);
+  // useState's lazy initializer, not useMemo(() => createFileAccess(), []): the initializer runs exactly once on mount by React's own contract, with no dependency array whose own literal contents a mutation could tamper with -- an empty deps array here is otherwise a mutation an equal-length array of any other literal value survives too, since useMemo's own comparison is element-by-element against the previous array's values, never the array's identity or length.
+  const [fileAccess] = useState(() => createFileAccess());
   const dropzoneAccept = useMemo(() => {
     if (accept === undefined) return undefined;
     const normalised: Record<string, string[]> = {};
