@@ -1210,15 +1210,14 @@ export function glyphOutlineSubpaths(
     if (pendingOffCurve !== undefined) {
       emitQuad(current, pendingOffCurve, start);
     }
-    if (segments.length >= 2) {
-      const startPx = applyMatrix(matrix, start);
-      subpaths.push({
-        startXPx: startPx.x,
-        startYPx: startPx.y,
-        segments,
-        closed: true,
-      });
-    }
+    // No separate segments.length guard: the contour.length < 3 continue above already guarantees at least two segments here. Walking a contour of n >= 3 points emits exactly one segment per point that isn't the first half of a still-open off-curve pair (an on-curve point always emits, and only the very first off-curve point encountered after a clear state emits none) -- for n >= 3 points that can defer at most one single emission this way, and the loop's own trailing flush emits one more for a pair left open at the end, so the count can never drop below n - 1, i.e. never below 2.
+    const startPx = applyMatrix(matrix, start);
+    subpaths.push({
+      startXPx: startPx.x,
+      startYPx: startPx.y,
+      segments,
+      closed: true,
+    });
   }
   return subpaths;
 }
