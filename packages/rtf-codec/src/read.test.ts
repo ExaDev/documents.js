@@ -3299,6 +3299,20 @@ describe("group-open dispatch", () => {
     ).toBe(false);
   });
 
+  it("never routes a nested destination's own hex escape into the enclosing \\pict's own binary payload", () => {
+    // \*\bkmkstart is a real, known destination -- a child group nested inside \pict -- so state.picture is inherited by reference (unlike destination, which the child correctly switches to "bookmarkStart"). A guard keyed on destination alone, forced true, would misroute the hex escape into the picture's own binary buffer instead of the bookmark's name.
+    const PNG_HEX =
+      "89504e470d0a1a0a0000000d494844520000000100000001080600000" +
+      "01f15c4890000000a49444154789c6300010000050001" +
+      "0d0a2db40000000049454e44ae426082";
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard{\\pict\\pngblip\\picwgoal720\\pichgoal720{\\*\\bkmkstart\\'41}${PNG_HEX}}{\\*\\bkmkend\\'41}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      name: "A",
+    });
+  });
+
   it("never treats a plain nested group as a bookmark, so its own text is not swallowed as a bookmark name", () => {
     const runs =
       paragraphsOf(`${HEADER}\\pard before{\\b bold} after\\par}`)[0]?.runs ??
