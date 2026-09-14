@@ -348,10 +348,8 @@ export function walkDrawShapes(
       }
     } else if (node.tag === "draw:g") {
       const ownFunctions = readOwnTransformFunctions(node);
-      const nested =
-        ownFunctions.length === 0
-          ? groupFunctions
-          : [...ownFunctions, ...groupFunctions];
+      // No length-0 shortcut returning groupFunctions unchanged: spreading an empty ownFunctions ahead of groupFunctions produces the identical content either way, so the shortcut was a pure allocation micro-optimisation, not an observable behavioural branch.
+      const nested = [...ownFunctions, ...groupFunctions];
       walkDrawShapes(node.children, nested, pkg, out, indexState, listIdState);
     }
   }
@@ -378,8 +376,8 @@ function parseOdfPercentUnit(value: string): number | undefined {
   if (match === null) {
     return undefined;
   }
-  const numeric = match[1];
-  return numeric === undefined ? undefined : Number(numeric) / 100;
+  // match[1]'s own group has no `?` quantifier of its own (only the alternation inside it does), so it always matches once `match` itself is non-null -- the same mandatory-group guarantee typed/shared/units.ts's parseOdfLength/parseOdfAngleDeg rely on for their own match[1]!.
+  return Number(match[1]!) / 100;
 }
 
 // svg:stroke-opacity's own value grammar (OASIS ODF 1.3, style:graphic-properties): "a value of type double 18.2 in the range [0,1] or a value of type zeroToHundredPercent 18.3.41" -- unlike draw:opacity, which is always a percentage.
@@ -1226,10 +1224,8 @@ function walkDrawPageContent(
       }
     } else if (node.tag === "draw:g") {
       const ownFunctions = readOwnTransformFunctions(node);
-      const nested =
-        ownFunctions.length === 0
-          ? groupFunctions
-          : [...ownFunctions, ...groupFunctions];
+      // See walkDrawShapes' own identical construction above for why there is no length-0 shortcut here either.
+      const nested = [...ownFunctions, ...groupFunctions];
       walkDrawPageContent(
         node.children,
         nested,
