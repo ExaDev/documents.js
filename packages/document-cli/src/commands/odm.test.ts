@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createOdt } from "documents.js";
@@ -120,6 +120,21 @@ describe("odm-to-pdf", () => {
     expect(stderr).toContain("--chapter");
   });
 
+  it("fails the same way when --chapters-dir is given but does not contain the href's basename", async () => {
+    const emptyDir = join(workspace, "empty-chapters-dir");
+    await mkdir(emptyDir);
+    const { exitCode, stderr } = await runCli([
+      "odm-to-pdf",
+      join(workspace, "book.odm"),
+      join(workspace, "unresolved-via-dir.pdf"),
+      "--chapters-dir",
+      emptyDir,
+    ]);
+    expect(exitCode).not.toBe(EXIT_SUCCESS);
+    expect(stderr).toContain("--chapters-dir");
+    expect(stderr).toContain("--chapter");
+  });
+
   it("rejects a malformed --chapter flag missing the '=' separator", async () => {
     const { exitCode, stderr } = await runCli([
       "odm-to-pdf",
@@ -132,7 +147,7 @@ describe("odm-to-pdf", () => {
     expect(stderr).toContain("--chapter must be formatted as <href>=<file>");
   });
 
-  it("rejects conflicting positional and --out destinations", async () => {
+  it("rejects conflicting positional and --out destinations, naming both under the odm-to-pdf command", async () => {
     const { exitCode, stderr } = await runCli([
       "odm-to-pdf",
       join(workspace, "book.odm"),
@@ -143,7 +158,9 @@ describe("odm-to-pdf", () => {
       workspace,
     ]);
     expect(exitCode).toBe(EXIT_USAGE_ERROR);
-    expect(stderr).toContain("conflicting output destinations");
+    expect(stderr).toBe(
+      `[odm-to-pdf] conflicting output destinations: positional '${join(workspace, "positional.pdf")}' and --out '${join(workspace, "flag.pdf")}'\n`,
+    );
   });
 
   it("emits a JSON result summary on stderr under --json, naming the real output path", async () => {
@@ -162,5 +179,40 @@ describe("odm-to-pdf", () => {
       type: "result",
       output,
     });
+  });
+
+  it("registers odm-to-pdf with its own description and every conversion/font/chapter option", () => {
+    const command = createProgram().commands.find(
+      (candidate) => candidate.name() === "odm-to-pdf",
+    );
+    expect(command?.description()).toBe(
+      "convert a .odm master document to pdf, resolving each chapter's external .odt reference via --chapters-dir and/or --chapter",
+    );
+    const longs = (command?.options ?? []).map((option) => option.long);
+    expect(longs).toEqual(
+      expect.arrayContaining([
+        "--out",
+        "--timeout",
+        "--json",
+        "--quiet",
+        "--verbose",
+        "--font-file",
+        "--report-font-substitutions",
+        "--chapters-dir",
+        "--chapter",
+      ]),
+    );
+    const chaptersDirOption = command?.options.find(
+      (option) => option.long === "--chapters-dir",
+    );
+    expect(chaptersDirOption?.description).toBe(
+      "directory to search for each unresolved chapter href, matched by the href's own basename",
+    );
+    const chapterOption = command?.options.find(
+      (option) => option.long === "--chapter",
+    );
+    expect(chapterOption?.description).toBe(
+      "resolve one chapter href to a local file explicitly; repeatable",
+    );
   });
 });
