@@ -1,3 +1,10 @@
+## [7.11.3](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.11.2...document-schema.js%407.11.3) (2026-09-14)
+
+### Miscellaneous Chores
+
+* bump pinned pnpm to 12.4.1 across the workspace ([4e81c2d](https://github.com/ExaDev/documents.js/commit/4e81c2dfdb08fff226c20a0f267baffa87758e0f))
+* **lint:** except each package's own measured eslint-config 2.12.1 debt ([11c35bc](https://github.com/ExaDev/documents.js/commit/11c35bc61db74c68b4be725c34452509fba00c2a))
+
 ## [7.11.2](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.11.1...document-schema.js%407.11.2) (2026-09-13)
 
 ### Bug Fixes

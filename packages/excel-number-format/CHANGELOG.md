@@ -1,3 +1,10 @@
+## [1.2.4](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.2.3...excel-number-format%401.2.4) (2026-09-14)
+
+### Miscellaneous Chores
+
+* bump pinned pnpm to 12.4.1 across the workspace ([4e81c2d](https://github.com/ExaDev/documents.js/commit/4e81c2dfdb08fff226c20a0f267baffa87758e0f))
+* **lint:** except each package's own measured eslint-config 2.12.1 debt ([11c35bc](https://github.com/ExaDev/documents.js/commit/11c35bc61db74c68b4be725c34452509fba00c2a))
+
 ## [1.2.3](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.2.2...excel-number-format%401.2.3) (2026-09-12)
 
 ### Tests
