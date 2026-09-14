@@ -369,6 +369,28 @@ describe("readOdbInventory: db:database-description variants (RNG-derived, never
     });
   });
 
+  it("treats a db:server-database with no db:type as a bare external connection with no url", () => {
+    const pkg: Package = {
+      parts: {
+        "content.xml": databaseContentPart([
+          el("db:data-source", {}, [
+            el("db:connection-data", {}, [
+              el("db:database-description", {}, [
+                el("db:server-database", {
+                  "db:hostname": "db.example.com",
+                  "db:port": "3306",
+                  "db:database-name": "salesdb",
+                }),
+              ]),
+            ]),
+          ]),
+        ]),
+        "META-INF/manifest.xml": manifestPart(BASE_MANIFEST_ENTRIES),
+      },
+    };
+    expect(readOdbInventory(pkg).connection).toEqual({ type: "external" });
+  });
+
   it("reads a db:file-based-database href as an external connection", () => {
     const pkg: Package = {
       parts: {
