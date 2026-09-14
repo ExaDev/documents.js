@@ -34,7 +34,7 @@ const CHART_GRAPHIC_URI =
   "http://schemas.openxmlformats.org/drawingml/2006/chart";
 const DRAWING_REL_SUFFIX = "/drawing";
 
-// A whole-number attribute read as ECMA-376's own min/max/row-index vocabulary spells it: absent becomes NaN directly, never routed through a placeholder string first -- attr's own "string | undefined" would otherwise force a "?? \"\"" just to satisfy Number.parseInt's signature, and every string that could stand in for the absent case parses to NaN just the same, making the placeholder's own text a distinction with no behavioural difference to test.
+// A whole-number attribute read as ECMA-376's own min/max/row-index vocabulary spells it. The "raw === undefined" branch is a genuinely irreducible equivalent mutation opportunity, not merely an untested one: Number.parseInt itself already returns NaN for undefined (it stringifies its argument first, and "undefined" starts with a non-digit), so the explicit NaN literal here produces exactly the value Number.parseInt(raw, 10) would already compute if TypeScript allowed passing raw (string | undefined) to a parameter typed string -- it exists only to satisfy that signature, not to change the outcome. No test built on this function's own observable contract (the returned number, never which branch computed it) can tell the two apart, any more than a test could tell +180 from -180 apart in a value always later reduced modulo 360 (see canonicalizeGroupRotation's own doc comment in shared/drawingml.ts for the general shape of this argument).
 function parseIntAttr(element: XmlElement, name: string): number {
   const raw = attr(element, name);
   return raw === undefined ? Number.NaN : Number.parseInt(raw, 10);
@@ -59,11 +59,8 @@ class SheetGridGeometry {
       for (const col of childrenWithTag(cols, "col")) {
         const min = parseIntAttr(col, "min");
         const max = parseIntAttr(col, "max");
-        const widthRaw = attr(col, "width");
-        const widthPt =
-          widthRaw === undefined
-            ? undefined
-            : columnWidthCharsToPt(Number(widthRaw));
+        // No "widthRaw === undefined" guard is needed: Number(undefined) is already NaN, columnWidthCharsToPt propagates a NaN input straight through to a NaN result, and the isFinite check below already converts that to undefined -- an absent width attribute reaches the identical outcome whichever branch computes it.
+        const widthPt = columnWidthCharsToPt(Number(attr(col, "width")));
         // No separate Number.isInteger(min)/(max) guard is needed: both are always the result of Number.parseInt just above, which can only ever return NaN or a genuine integer -- never a finite non-integer -- and min >= 1 already rejects NaN on its own (every comparison against NaN is false). A "max >= min" guard is equally unnecessary here, for a different reason: columnWidthPt's own lookup below only ever matches a range via "index >= column.min && index <= column.max", and an inverted range (max < min) can never satisfy both halves of that for any index at all -- pushing one through unguarded is exactly as inert as rejecting it, since nothing else ever reads `columns` besides that lookup.
         if (min >= 1) {
           this.columns.push({
@@ -75,11 +72,12 @@ class SheetGridGeometry {
       }
     }
     const sheetFormatPr = childrenWithTag(worksheet, "sheetFormatPr")[0];
+    // No "sheetFormatPr === undefined" ternary is needed here: attr(undefined, ...) would be a type error (attr expects a real XmlElement), so the guard stays -- but the NUMBER side of it below drops the equivalent redundant ternary, since Number(undefined) is already NaN.
     const defaultRaw =
       sheetFormatPr === undefined
         ? undefined
         : attr(sheetFormatPr, "defaultRowHeight");
-    const parsed = defaultRaw === undefined ? Number.NaN : Number(defaultRaw);
+    const parsed = Number(defaultRaw);
     this.defaultRowHeightPt = Number.isFinite(parsed)
       ? parsed
       : DEFAULT_ROW_HEIGHT_PT;
@@ -87,8 +85,7 @@ class SheetGridGeometry {
     if (sheetData !== undefined) {
       for (const row of childrenWithTag(sheetData, "row")) {
         const r = parseIntAttr(row, "r");
-        const htRaw = attr(row, "ht");
-        const ht = htRaw === undefined ? Number.NaN : Number(htRaw);
+        const ht = Number(attr(row, "ht"));
         // Same redundant isInteger drop as the column read above: r is always Number.parseInt's own result (NaN or a genuine integer), and r >= 1 already rejects NaN unaided.
         if (r >= 1 && Number.isFinite(ht)) {
           this.rowHeights.set(r - 1, ht);
@@ -183,14 +180,15 @@ function readAnchorChild(marker: XmlElement, tag: string): number {
       : child.children
           .map((node) => (node.type === "text" ? node.value : ""))
           .join("");
-  const parsed = text === undefined || text === "" ? Number.NaN : Number(text);
+  // No "undefined or empty" guard is needed: Number(undefined) and Number("") are already NaN and 0 respectively, and the isFinite check below already maps BOTH of those through to the same 0 fallback this function returns for any other malformed text -- the explicit NaN this ternary substitutes for "" changes nothing downstream of it.
+  const parsed = Number(text);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
 // An anchor-level numeric attribute (xdr:ext's cx/cy): the same degrade-to-0 contract readAnchorChild gives a marker's child-text values, never a NaN frame.
 function numericAttr(element: XmlElement, name: string): number {
-  const raw = attr(element, name);
-  const parsed = raw === undefined ? Number.NaN : Number(raw);
+  // No "raw === undefined" guard is needed: Number(undefined) is already NaN, which the isFinite check below already degrades to 0, the same outcome the explicit NaN branch produces.
+  const parsed = Number(attr(element, name));
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
