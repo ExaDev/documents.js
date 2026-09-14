@@ -697,6 +697,19 @@ describe("embedded objects", () => {
     expect(object?.document).toEqual(embedded);
   });
 
+  it("skips a non-hex, non-whitespace byte inside \\objdata's own #SDATA text rather than folding it into the nibble pairing", () => {
+    // Inserted at an even offset -- a real byte boundary -- so a reader that correctly discards the stray "g" decodes identically to the unmodified hex; a reader that instead treats it as a pairable nibble value corrupts every byte from this point on.
+    const poisoned = `${OBJDATA_HEX.slice(0, 10)}g${OBJDATA_HEX.slice(10)}`;
+    const object = blocksOf(
+      `${HEADER}\\pard{\\object\\objemb{\\*\\objdata ${poisoned}}}\\par}`,
+    ).find(
+      (block): block is ContentEmbeddedObjectBlock =>
+        block.kind === "embeddedObject",
+    );
+    expect(object?.objectKind).toBe("spreadsheet");
+    expect(object?.document).toEqual(embedded);
+  });
+
   it("discards \\result's own fallback content when \\objdata already decoded, rather than folding it into the surrounding paragraph", () => {
     const paragraphs = paragraphsOf(
       `${HEADER}\\pard before {\\object\\objemb{\\*\\objdata ${OBJDATA_HEX}}{\\result{\\pard\\plain fallback text\\par}}} after\\par}`,
