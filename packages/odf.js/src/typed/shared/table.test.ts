@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { Package } from "../../model/package";
 import type { XmlElement } from "../../model/node";
+import type { ContentTable, ContentTableCell } from "document-schema.js";
 import { el, txt } from "../../xml/fragment";
-import { readOdfTable } from "./table";
+import { attrValue } from "../../xml/query";
+import { StyleRegistry } from "../../styles/registry";
+import {
+  readOdfTable,
+  readCellStyleDecoration,
+  writeOdfTable,
+  type OdfTableWriteContext,
+} from "./table";
 
 // Grammar verified against a real LibreOffice-generated .odp: a presentation's own draw:frame-wrapped table uses table:table/table:table-column/table:table-row/table:table-cell/table:covered-table-cell, column width via table:table-column's own table:style-name -> a style:family="table-column" style:style's style:table-column-properties/@style:column-width, row height the analogous table:family="table-row"/style:table-row-properties/@style:row-height -- and, notably, a real saved table frame carries an EXTRA sibling draw:image (an .svm fallback preview) alongside table:table, which shapes.ts's own readDrawFrameContent (not this module) is responsible for not mistaking for the frame's real content.
 
@@ -374,5 +382,557 @@ describe("readOdfTable: overall shape", () => {
       rows: [],
       columnWidthsPt: [],
     });
+  });
+});
+
+describe("readOdfTable: repeat-count edge cases (readRepeatCount)", () => {
+  it("a zero repeated count is invalid and falls back to a single entry, not zero entries", () => {
+    const table = el("table:table", {}, [
+      el("table:table-column", { "table:number-columns-repeated": "0" }),
+    ]);
+    expect(readOdfTable(table, { parts: {} }).columnWidthsPt).toEqual([0]);
+  });
+
+  it("a negative repeated count is invalid and falls back to a single entry", () => {
+    const table = el("table:table", {}, [
+      el("table:table-column", { "table:number-columns-repeated": "-3" }),
+    ]);
+    expect(readOdfTable(table, { parts: {} }).columnWidthsPt).toEqual([0]);
+  });
+
+  it("a non-numeric repeated count is invalid and falls back to a single entry", () => {
+    const table = el("table:table", {}, [
+      el("table:table-column", { "table:number-columns-repeated": "abc" }),
+    ]);
+    expect(readOdfTable(table, { parts: {} }).columnWidthsPt).toEqual([0]);
+  });
+
+  it("a genuinely positive repeated count on a row is honoured in full, not truncated", () => {
+    const table = el("table:table", {}, [
+      el("table:table-row", { "table:number-rows-repeated": "4" }, [cell("x")]),
+    ]);
+    expect(readOdfTable(table, { parts: {} }).rows).toHaveLength(4);
+  });
+});
+
+describe("readCellStyleDecoration", () => {
+  function cellPropsStyle(attrs: Record<string, string>): XmlElement {
+    return el("style:table-cell-properties", attrs);
+  }
+
+  it("returns everything undefined for an empty element list", () => {
+    expect(readCellStyleDecoration([])).toEqual({
+      background: undefined,
+      borders: undefined,
+      alignment: undefined,
+      verticalAlignment: undefined,
+    });
+  });
+
+  it("returns everything undefined when the style element carries neither a table-cell-properties nor a paragraph-properties child", () => {
+    const styleElement = el("style:style", {});
+    expect(readCellStyleDecoration([styleElement])).toEqual({
+      background: undefined,
+      borders: undefined,
+      alignment: undefined,
+      verticalAlignment: undefined,
+    });
+  });
+
+  it.each(["top", "middle", "bottom"] as const)(
+    "resolves style:vertical-align=%s",
+    (value) => {
+      const styleElement = el("style:style", {}, [
+        cellPropsStyle({ "style:vertical-align": value }),
+      ]);
+      expect(readCellStyleDecoration([styleElement]).verticalAlignment).toBe(
+        value,
+      );
+    },
+  );
+
+  it('leaves verticalAlignment undefined for "automatic", the one enumerated ODF value ContentSheetCell has no member for', () => {
+    const styleElement = el("style:style", {}, [
+      cellPropsStyle({ "style:vertical-align": "automatic" }),
+    ]);
+    expect(
+      readCellStyleDecoration([styleElement]).verticalAlignment,
+    ).toBeUndefined();
+  });
+
+  it.each(["left", "center", "right", "justify"] as const)(
+    "resolves fo:text-align=%s from a sibling style:paragraph-properties child",
+    (value) => {
+      const styleElement = el("style:style", {}, [
+        el("style:paragraph-properties", { "fo:text-align": value }),
+      ]);
+      expect(readCellStyleDecoration([styleElement]).alignment).toBe(value);
+    },
+  );
+
+  it('leaves alignment undefined for a fo:text-align value this package does not model (e.g. ODF\'s own "start")', () => {
+    const styleElement = el("style:style", {}, [
+      el("style:paragraph-properties", { "fo:text-align": "start" }),
+    ]);
+    expect(readCellStyleDecoration([styleElement]).alignment).toBeUndefined();
+  });
+
+  it("folds background/alignment/verticalAlignment across a multi-element chain, a later element overriding an earlier one", () => {
+    const base = el("style:style", {}, [
+      cellPropsStyle({
+        "fo:background-color": "#ff0000",
+        "style:vertical-align": "top",
+      }),
+      el("style:paragraph-properties", { "fo:text-align": "left" }),
+    ]);
+    const override = el("style:style", {}, [
+      cellPropsStyle({
+        "fo:background-color": "#00ff00",
+        "style:vertical-align": "bottom",
+      }),
+      el("style:paragraph-properties", { "fo:text-align": "right" }),
+    ]);
+    const decoration = readCellStyleDecoration([base, override]);
+    expect(decoration.background).toEqual({
+      kind: "solid",
+      color: { r: 0, g: 1, b: 0 },
+    });
+    expect(decoration.verticalAlignment).toBe("bottom");
+    expect(decoration.alignment).toBe("right");
+  });
+
+  it("accumulates per-edge borders across a multi-element chain rather than only keeping the last element's own edges", () => {
+    const withLeft = el("style:style", {}, [
+      cellPropsStyle({ "fo:border-left": "1pt solid #000000" }),
+    ]);
+    const withTop = el("style:style", {}, [
+      cellPropsStyle({ "fo:border-top": "2pt dashed #ffffff" }),
+    ]);
+    const decoration = readCellStyleDecoration([withLeft, withTop]);
+    expect(decoration.borders?.left).toEqual({
+      color: { r: 0, g: 0, b: 0 },
+      widthPt: 1,
+      style: "solid",
+    });
+    expect(decoration.borders?.top).toEqual({
+      color: { r: 1, g: 1, b: 1 },
+      widthPt: 2,
+      style: "dashed",
+    });
+  });
+});
+
+describe("writeOdfTable", () => {
+  // Returns the write context alongside the minted <style:style> elements, read back from the SAME automaticStyles element object registry.intern() pushes into -- the identical pattern styles/registry.test.ts's own automaticStylesOf establishes, rather than reaching into the registry's own private fields.
+  function writeContext(): {
+    context: OdfTableWriteContext;
+    mintedStyles: () => XmlElement[];
+  } {
+    const automaticStyles = el("office:automatic-styles", {}, []);
+    const pkg: Package = {
+      parts: {
+        "content.xml": {
+          kind: "xml",
+          nodes: [el("office:document-content", {}, [automaticStyles])],
+        },
+      },
+    };
+    const registry = StyleRegistry.forPart(pkg, "content.xml");
+    let nextTable = 1;
+    return {
+      context: {
+        registry,
+        mintTableName: () => `Table${nextTable++}`,
+        mintListStyleName: (kind) => `L${kind}`,
+      },
+      mintedStyles: () =>
+        automaticStyles.children.filter(
+          (c): c is XmlElement =>
+            c.type === "element" && c.tag === "style:style",
+        ),
+    };
+  }
+
+  function paragraphCell(text: string): ContentTableCell {
+    return { blocks: [{ kind: "paragraph", runs: [{ text }] }] };
+  }
+
+  // attrValue itself requires a real XmlElement; every caller here is reading an attribute off a `.find`/array-index result that is legitimately `XmlElement | undefined` under noUncheckedIndexedAccess, so this short-circuits the same way optional chaining does rather than asserting the element is present.
+  function attr(
+    element: XmlElement | undefined,
+    name: string,
+  ): string | undefined {
+    return element === undefined ? undefined : attrValue(element, name);
+  }
+
+  function elementsWithTag(nodes: XmlElement["children"], tag: string) {
+    return nodes.filter(
+      (n): n is XmlElement => n.type === "element" && n.tag === tag,
+    );
+  }
+
+  it("mints a document-unique table:name from the context on every call", () => {
+    const { context } = writeContext();
+    const table: ContentTable = {
+      kind: "table",
+      rows: [],
+      columnWidthsPt: [],
+    };
+    const first = writeOdfTable(table, context);
+    const second = writeOdfTable(table, context);
+    expect(attrValue(first, "table:name")).toBe("Table1");
+    expect(attrValue(second, "table:name")).toBe("Table2");
+  });
+
+  it("writes one table:table-column per column width, with no style-name for a non-positive width", () => {
+    const table: ContentTable = {
+      kind: "table",
+      rows: [],
+      columnWidthsPt: [0, 100],
+    };
+    const { context } = writeContext();
+    const written = writeOdfTable(table, context);
+    const columns = elementsWithTag(written.children, "table:table-column");
+    expect(columns).toHaveLength(2);
+    expect(attr(columns[0], "table:style-name")).toBeUndefined();
+    expect(attr(columns[1], "table:style-name")).toBeDefined();
+  });
+
+  it("writes a table:style-name on a row only when it carries a heightPt", () => {
+    const table: ContentTable = {
+      kind: "table",
+      rows: [
+        { cells: [paragraphCell("a")] },
+        { cells: [paragraphCell("b")], heightPt: 20 },
+      ],
+      columnWidthsPt: [],
+    };
+    const { context } = writeContext();
+    const written = writeOdfTable(table, context);
+    const rows = elementsWithTag(written.children, "table:table-row");
+    expect(attr(rows[0], "table:style-name")).toBeUndefined();
+    expect(attr(rows[1], "table:style-name")).toBeDefined();
+  });
+
+  it("writes a style:width on the table's own style only when the columns state a positive total width", () => {
+    const withWidth: ContentTable = {
+      kind: "table",
+      rows: [],
+      columnWidthsPt: [50, 50],
+    };
+    const withoutWidth: ContentTable = {
+      kind: "table",
+      rows: [],
+      columnWidthsPt: [],
+    };
+    const { context: ctxWith, mintedStyles: stylesWith } = writeContext();
+    writeOdfTable(withWidth, ctxWith);
+    const tableStyleWith = stylesWith().find(
+      (s) => attrValue(s, "style:family") === "table",
+    );
+    const propsWith = tableStyleWith?.children.find(
+      (c): c is XmlElement =>
+        c.type === "element" && c.tag === "style:table-properties",
+    );
+    expect(attr(propsWith, "style:width")).toBeDefined();
+
+    const { context: ctxWithout, mintedStyles: stylesWithout } = writeContext();
+    writeOdfTable(withoutWidth, ctxWithout);
+    const tableStyleWithout = stylesWithout().find(
+      (s) => attrValue(s, "style:family") === "table",
+    );
+    const propsWithout = tableStyleWithout?.children.find(
+      (c): c is XmlElement =>
+        c.type === "element" && c.tag === "style:table-properties",
+    );
+    expect(attr(propsWithout, "style:width")).toBeUndefined();
+  });
+
+  it("marks a colSpan'd cell's own covered neighbour, writing it as table:covered-table-cell rather than repeating the anchor's content", () => {
+    const table: ContentTable = {
+      kind: "table",
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [{ kind: "paragraph", runs: [{ text: "anchor" }] }],
+              colSpan: 2,
+            },
+            paragraphCell("skipped"),
+          ],
+        },
+      ],
+      columnWidthsPt: [],
+    };
+    const { context } = writeContext();
+    const written = writeOdfTable(table, context);
+    const row = elementsWithTag(written.children, "table:table-row")[0];
+    const rowCells =
+      row === undefined
+        ? []
+        : row.children.filter((n): n is XmlElement => n.type === "element");
+    expect(rowCells[0]?.tag).toBe("table:table-cell");
+    expect(attr(rowCells[0], "table:number-columns-spanned")).toBe("2");
+    expect(rowCells[1]?.tag).toBe("table:covered-table-cell");
+  });
+
+  it("marks a rowSpan'd cell's own covered neighbour in the row below, writing it as table:covered-table-cell", () => {
+    const table: ContentTable = {
+      kind: "table",
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [{ kind: "paragraph", runs: [{ text: "anchor" }] }],
+              rowSpan: 2,
+            },
+            paragraphCell("sibling"),
+          ],
+        },
+        { cells: [paragraphCell("covered"), paragraphCell("plain")] },
+      ],
+      columnWidthsPt: [],
+    };
+    const { context } = writeContext();
+    const written = writeOdfTable(table, context);
+    const rows = elementsWithTag(written.children, "table:table-row");
+    const row1Cells =
+      rows[1] === undefined
+        ? []
+        : rows[1].children.filter((n): n is XmlElement => n.type === "element");
+    expect(row1Cells[0]?.tag).toBe("table:covered-table-cell");
+    expect(row1Cells[1]?.tag).toBe("table:table-cell");
+  });
+
+  it("writes table:number-columns-spanned/table:number-rows-spanned only when the cell actually states a span", () => {
+    const table: ContentTable = {
+      kind: "table",
+      rows: [{ cells: [paragraphCell("plain")] }],
+      columnWidthsPt: [],
+    };
+    const { context } = writeContext();
+    const written = writeOdfTable(table, context);
+    const row = elementsWithTag(written.children, "table:table-row")[0];
+    const writtenCell =
+      row === undefined
+        ? undefined
+        : row.children.find((n): n is XmlElement => n.type === "element");
+    expect(attr(writtenCell, "table:number-columns-spanned")).toBeUndefined();
+    expect(attr(writtenCell, "table:number-rows-spanned")).toBeUndefined();
+  });
+
+  it("writes a table:style-name on a cell only when it carries background or borders", () => {
+    const table: ContentTable = {
+      kind: "table",
+      rows: [
+        {
+          cells: [
+            paragraphCell("plain"),
+            {
+              blocks: [{ kind: "paragraph", runs: [{ text: "filled" }] }],
+              background: { kind: "solid", color: { r: 1, g: 0, b: 0 } },
+            },
+          ],
+        },
+      ],
+      columnWidthsPt: [],
+    };
+    const { context } = writeContext();
+    const written = writeOdfTable(table, context);
+    const row = elementsWithTag(written.children, "table:table-row")[0];
+    const cells =
+      row === undefined
+        ? []
+        : row.children.filter((n): n is XmlElement => n.type === "element");
+    expect(attr(cells[0], "table:style-name")).toBeUndefined();
+    expect(attr(cells[1], "table:style-name")).toBeDefined();
+  });
+
+  it("writes each per-edge border only for edges the cell actually states, leaving the others absent", () => {
+    const table: ContentTable = {
+      kind: "table",
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [{ kind: "paragraph", runs: [{ text: "bordered" }] }],
+              borders: {
+                left: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
+              },
+            },
+          ],
+        },
+      ],
+      columnWidthsPt: [],
+    };
+    const { context, mintedStyles } = writeContext();
+    writeOdfTable(table, context);
+    const cellStyleEl = mintedStyles().find(
+      (s) => attrValue(s, "style:family") === "table-cell",
+    );
+    const props = cellStyleEl?.children.find(
+      (c): c is XmlElement =>
+        c.type === "element" && c.tag === "style:table-cell-properties",
+    );
+    expect(attr(props, "fo:border-left")).toBeDefined();
+    expect(attr(props, "fo:border-top")).toBeUndefined();
+    expect(attr(props, "fo:border-right")).toBeUndefined();
+    expect(attr(props, "fo:border-bottom")).toBeUndefined();
+  });
+
+  it("groups consecutive same-list paragraphs into one text:list, closing it when membership changes", () => {
+    const table: ContentTable = {
+      kind: "table",
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [
+                {
+                  kind: "paragraph",
+                  runs: [{ text: "item1" }],
+                  list: { numId: "bullet:list1", level: 0 },
+                },
+                {
+                  kind: "paragraph",
+                  runs: [{ text: "item2" }],
+                  list: { numId: "bullet:list1", level: 0 },
+                },
+                { kind: "paragraph", runs: [{ text: "plain" }] },
+              ],
+            },
+          ],
+        },
+      ],
+      columnWidthsPt: [],
+    };
+    const { context } = writeContext();
+    const written = writeOdfTable(table, context);
+    const row = elementsWithTag(written.children, "table:table-row")[0];
+    const writtenCell =
+      row === undefined
+        ? undefined
+        : row.children.find((n): n is XmlElement => n.type === "element");
+    const cellChildren =
+      writtenCell === undefined
+        ? []
+        : writtenCell.children.filter(
+            (n): n is XmlElement => n.type === "element",
+          );
+    expect(cellChildren).toHaveLength(2);
+    expect(cellChildren[0]?.tag).toBe("text:list");
+    expect(cellChildren[0]?.children).toHaveLength(2);
+    expect(cellChildren[1]?.tag).toBe("text:p");
+  });
+
+  it("closes an open list and starts a fresh one when membership switches to a different numId", () => {
+    const table: ContentTable = {
+      kind: "table",
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [
+                {
+                  kind: "paragraph",
+                  runs: [{ text: "a" }],
+                  list: { numId: "bullet:list1", level: 0 },
+                },
+                {
+                  kind: "paragraph",
+                  runs: [{ text: "b" }],
+                  list: { numId: "ordered:list2", level: 0 },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      columnWidthsPt: [],
+    };
+    const { context } = writeContext();
+    const written = writeOdfTable(table, context);
+    const row = elementsWithTag(written.children, "table:table-row")[0];
+    const writtenCell =
+      row === undefined
+        ? undefined
+        : row.children.find((n): n is XmlElement => n.type === "element");
+    const cellChildren =
+      writtenCell === undefined
+        ? []
+        : writtenCell.children.filter(
+            (n): n is XmlElement => n.type === "element",
+          );
+    expect(cellChildren).toHaveLength(2);
+    expect(cellChildren[0]?.tag).toBe("text:list");
+    expect(cellChildren[1]?.tag).toBe("text:list");
+  });
+
+  it("writes a nested table found inside a cell by recursing into writeOdfTable, minting its own table:name off the same document-wide counter", () => {
+    const table: ContentTable = {
+      kind: "table",
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [
+                {
+                  kind: "table",
+                  rows: [{ cells: [paragraphCell("nested")] }],
+                  columnWidthsPt: [],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      columnWidthsPt: [],
+    };
+    const { context } = writeContext();
+    const written = writeOdfTable(table, context);
+    expect(attrValue(written, "table:name")).toBe("Table1");
+    const row = elementsWithTag(written.children, "table:table-row")[0];
+    const writtenCell =
+      row === undefined
+        ? undefined
+        : row.children.find((n): n is XmlElement => n.type === "element");
+    const nestedTable =
+      writtenCell === undefined
+        ? undefined
+        : writtenCell.children.find(
+            (n): n is XmlElement =>
+              n.type === "element" && n.tag === "table:table",
+          );
+    expect(
+      nestedTable === undefined
+        ? undefined
+        : attrValue(nestedTable, "table:name"),
+    ).toBe("Table2");
+  });
+
+  it("refuses to write a cell block kind readTableCell could never read back, naming the offending kind", () => {
+    const table: ContentTable = {
+      kind: "table",
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [
+                {
+                  kind: "image",
+                  format: "png",
+                  base64: "",
+                  widthPt: 1,
+                  heightPt: 1,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      columnWidthsPt: [],
+    };
+    const { context } = writeContext();
+    expect(() => writeOdfTable(table, context)).toThrow(/image/);
   });
 });
