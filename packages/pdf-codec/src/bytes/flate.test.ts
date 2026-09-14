@@ -1,6 +1,17 @@
-import { deflateSync } from "fflate";
-import { describe, expect, it } from "vitest";
-import { deflate, inflate, inflateTolerant } from "./flate";
+import type * as Fflate from "fflate";
+import { deflateSync, unzlibSync } from "fflate";
+import { describe, expect, it, vi } from "vitest";
+import {
+  MAX_INFLATE_OUTPUT_BYTES,
+  deflate,
+  inflate,
+  inflateTolerant,
+} from "./flate";
+
+vi.mock("fflate", async (importOriginal) => {
+  const actual = await importOriginal<typeof Fflate>();
+  return { ...actual, unzlibSync: vi.fn(actual.unzlibSync) };
+});
 
 const sample = new TextEncoder().encode(
   "the quick brown fox jumps over the lazy dog, ".repeat(20),
@@ -21,6 +32,26 @@ describe("deflate / inflate", () => {
     // A zlib header's first byte's low nibble must be 8 (the DEFLATE compression method), and the 16-bit big-endian header must be a multiple of 31 -- the check the zlib spec itself defines.
     expect(compressed[0]! & 0x0f).toBe(8);
     expect(((compressed[0]! << 8) + compressed[1]!) % 31).toBe(0);
+  });
+
+  it("an explicit level is actually passed through to zlibSync, not discarded", () => {
+    // Level 0 is stored (no compression), so it round-trips correctly but produces output far larger than the default level's compressed size for this same, highly repetitive sample -- a difference only observable if the level option genuinely reaches zlibSync rather than being dropped.
+    const stored = deflate(sample, 0);
+    const defaultLevel = deflate(sample);
+    expect(stored.length).toBeGreaterThan(defaultLevel.length);
+    expect(inflate(stored)).toEqual(sample);
+  });
+});
+
+describe("inflate's output-size guard", () => {
+  it("rejects a decompressed output over the configured byte limit", () => {
+    // unzlibSync itself is mocked here rather than actually decompressing half a gigabyte: the guard only reads `.length`, and driving hundreds of megabytes of real (de)compression through every one of this package's mutation-tested mutants would multiply the whole suite's runtime for no genuine coverage this fake object doesn't already provide.
+    vi.mocked(unzlibSync).mockReturnValueOnce({
+      length: MAX_INFLATE_OUTPUT_BYTES + 1,
+    } as unknown as ReturnType<typeof unzlibSync>);
+    expect(() => inflate(new Uint8Array())).toThrow(
+      `inflated output exceeds the ${MAX_INFLATE_OUTPUT_BYTES}-byte limit`,
+    );
   });
 });
 
