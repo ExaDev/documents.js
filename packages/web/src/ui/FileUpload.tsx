@@ -69,9 +69,8 @@ export function FileUpload({
     });
   };
 
-  // Chromium's native picker (used elsewhere in the app -- e.g. Convert's "reuse this upload for a different target" flow relies on it returning a FileSystemFileHandle) is driven directly rather than Dropzone's own <input type=file> click path, so there is exactly one code path that ever calls showOpenFilePicker. activateOnClick=false leaves drag-and-drop untouched.
+  // Chromium's native picker (used elsewhere in the app -- e.g. Convert's "reuse this upload for a different target" flow relies on it returning a FileSystemFileHandle) is driven directly rather than Dropzone's own <input type=file> click path, so there is exactly one code path that ever calls showOpenFilePicker. activateOnClick=false leaves drag-and-drop untouched. No supportsNativePicker() guard here: this handler is only ever wired up as Dropzone's onClick below when that already holds, so a second check inside the handler itself would never see it fail.
   const handleClick = () => {
-    if (!fileAccess.supportsNativePicker()) return;
     void fileAccess.openFile({ accept }).then((opened) => {
       if (opened === undefined) return;
       recordIfRecognised(opened);
