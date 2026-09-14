@@ -303,6 +303,26 @@ describe("writeOdsContent XML shapes", () => {
     expect(pkg.parts["Pictures/image1.png"]?.kind).toBe("binary");
   });
 
+  it("writes table:table-column and table:table-row with no table:style-name when the column/row carries no width, height, or manual break", () => {
+    const pkg = writeOdsContent(
+      documentOf([
+        sheetOf([
+          {
+            row: 0,
+            column: 0,
+            value: { kind: "string", value: "x" },
+            displayText: "x",
+          },
+        ]),
+      ]),
+    );
+    const table = firstTable(pkg);
+    const column = childrenWithTag(table, "table:table-column")[0]!;
+    expect(attrValue(column, "table:style-name")).toBeUndefined();
+    const row = childrenWithTag(table, "table:table-row")[0]!;
+    expect(attrValue(row, "table:style-name")).toBeUndefined();
+  });
+
   describe("the sheet's own master page", () => {
     it("writes style:master-page-name on the table's own style:style[family='table'], not on table:table itself", () => {
       const pkg = writeOdsContent(documentOf([sheetOf([])]));
