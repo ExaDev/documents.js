@@ -32,8 +32,8 @@ export function jpeg2000FixtureSamples(fixture: Jpeg2000Fixture): number[][] {
   const bytes = base64ToBytes(fixture.expected);
   const wide = fixture.bitDepth > 8;
   const perComponent = fixture.width * fixture.height;
-  const planes: number[][] = [];
-  for (let c = 0; c < fixture.componentCount; c++) {
+  // Built from fixture.componentCount via Array.from's length argument, not a counted for-loop: an off-by-one loop bound here would silently append one extra all-zero plane (every index inside it reads past the end of `bytes`, and `?? 0` swallows the resulting `undefined`), a difference visible only in the returned array's own length -- exactly the kind of boundary a comparison-operator mutant survives when nothing re-checks the plane count.
+  return Array.from({ length: fixture.componentCount }, (_, c) => {
     const plane: number[] = [];
     for (let i = 0; i < perComponent; i++) {
       const at = (c * perComponent + i) * (wide ? 2 : 1);
@@ -43,9 +43,8 @@ export function jpeg2000FixtureSamples(fixture: Jpeg2000Fixture): number[][] {
           : (bytes[at] ?? 0),
       );
     }
-    planes.push(plane);
-  }
-  return planes;
+    return plane;
+  });
 }
 
 export const JPEG2000_FIXTURES: readonly Jpeg2000Fixture[] = [
