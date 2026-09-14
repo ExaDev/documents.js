@@ -234,7 +234,7 @@ function renameQName(
   prefixes: ReadonlyMap<string, string>,
 ): string {
   const colon = qname.indexOf(":");
-  if (colon < 0) {
+  if (colon === -1) {
     return qname;
   }
   const canonical = prefixes.get(qname.slice(0, colon));
@@ -571,7 +571,8 @@ function prefixRenames(root: XmlElement): Map<string, string> {
     }
     const declared = attribute.name.slice("xmlns:".length);
     const canonical = CANONICAL_PREFIX_BY_URI.get(attribute.value);
-    if (canonical !== undefined && canonical !== declared) {
+    // No "canonical !== declared" guard: recording declared -> declared here is a genuine no-op (renameQName's own canonical === undefined check is the only branch that reads this map, and a self-mapped entry resolves identically to a missing one), so skipping it would only be an allocation micro-optimisation, not a behavioural difference worth a second condition.
+    if (canonical !== undefined) {
       renames.set(declared, canonical);
     }
   }
