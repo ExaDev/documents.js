@@ -72,6 +72,18 @@ describe("parseOpf", () => {
     expect(manifest[0]?.properties).toEqual(["nav", "scripted"]);
   });
 
+  it("drops the empty tokens leading and trailing whitespace would otherwise leave in a manifest item's properties", () => {
+    const { manifest } = parseOpf(
+      `<package xmlns="http://www.idpf.org/2007/opf">
+        <manifest>
+          <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="  nav scripted  "/>
+        </manifest>
+        <spine/>
+      </package>`,
+    );
+    expect(manifest[0]?.properties).toEqual(["nav", "scripted"]);
+  });
+
   it("skips a manifest item missing a required attribute, keeping the well-formed ones", () => {
     const { manifest } = parseOpf(
       `<package xmlns="http://www.idpf.org/2007/opf">
