@@ -22,6 +22,7 @@ import {
   RECORD_CF12,
   RECORD_CONTINUE,
   RECORD_DIMENSIONS,
+  RECORD_EOF,
   RECORD_EXTERNSHEET,
   RECORD_HORIZONTALPAGEBREAKS,
   RECORD_LBL,
@@ -260,7 +261,7 @@ describe("writeXlsContent", () => {
           sheet("Sheet1", [cell(0, 0, { kind: "error", value: "#MADE_UP!" })]),
         ]),
       ),
-    ).toThrow(BiffWriteError);
+    ).toThrow(/is not one of the eight error values/);
   });
 
   it("round-trips percentage, currency, date, time, and dateTime cells with no explicit format, through their own representative default codes", () => {
@@ -1095,7 +1096,7 @@ describe("writeXlsContent", () => {
           sheet("Sheet1", [cell(0, 256, { kind: "number", value: 1 })]),
         ]),
       ),
-    ).toThrow(BiffWriteError);
+    ).toThrow(/outside BIFF8's own grid/);
   });
 
   it("refuses a cell whose row alone is outside the grid", () => {
@@ -1724,6 +1725,28 @@ describe("print settings", () => {
     });
   });
 
+  it("keeps a manual page break landing exactly on BIFF8's own last row/column, rather than dropping it too", () => {
+    const settings: ContentSheetPrintSettings = {
+      ...PRINT_SETTINGS,
+      manualBreaks: { rows: [0xffff], columns: [0xff] },
+    };
+    expect(roundTripped(settings)?.manualBreaks).toStrictEqual({
+      rows: [0xffff],
+      columns: [0xff],
+    });
+  });
+
+  it("writes manual page breaks in ascending index order regardless of the order they were declared in", () => {
+    const settings: ContentSheetPrintSettings = {
+      ...PRINT_SETTINGS,
+      manualBreaks: { rows: [20, 5, 15], columns: [9, 1, 4] },
+    };
+    expect(roundTripped(settings)?.manualBreaks).toStrictEqual({
+      rows: [5, 15, 20],
+      columns: [1, 4, 9],
+    });
+  });
+
   it("round-trips a row-only manual break with no column break, and a column-only one with no row break", () => {
     expect(
       roundTripped({
@@ -1816,6 +1839,54 @@ describe("formula records", () => {
     const written = findCell(readXlsContent(writeXlsContent(content)), 0, 0, 0);
     expect(written?.formula).toBe("A1/A2");
     expect(written?.value).toStrictEqual({ kind: "error", value: "#DIV/0!" });
+  });
+
+  it("refuses a formula whose cached error result is not one of the eight [MS-XLS] defines", () => {
+    expect(() =>
+      writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(
+              0,
+              0,
+              { kind: "error", value: "#MADE_UP!" },
+              { formula: "A1/A2" },
+            ),
+          ]),
+        ]),
+      ),
+    ).toThrow(/is not one of the eight error values/);
+  });
+
+  it("refuses a formula whose cached value resolves to an empty cell, which no Formula record can express", () => {
+    expect(() =>
+      writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(0, 0, { kind: "empty" }, { formula: "IF(FALSE,1)" }),
+          ]),
+        ]),
+      ),
+    ).toThrow(/resolves to an empty cell/);
+  });
+
+  it("round-trips a formula whose cached result is a string, writing the trailing String record it needs", () => {
+    const content = document([
+      sheet("Sheet1", [
+        cell(
+          0,
+          0,
+          { kind: "string", value: "positive" },
+          { formula: 'IF(A1>0,"positive","not positive")' },
+        ),
+      ]),
+    ]);
+    const written = findCell(readXlsContent(writeXlsContent(content)), 0, 0, 0);
+    expect(written?.formula).toBe('IF(A1>0,"positive","not positive")');
+    expect(written?.value).toStrictEqual({
+      kind: "string",
+      value: "positive",
+    });
   });
 
   it("round-trips a formula whose cached result is a date, a time, and a date-time", () => {
@@ -3056,6 +3127,16 @@ describe("buildWorksheetSubstream: sheet-writer.ts's own boundary and array-empt
     ).toThrow(/outside BIFF8's own 256-column grid/);
   });
 
+  it("accepts a column exactly at BIFF8's own last column index", () => {
+    expect(() =>
+      buildWorksheetSubstream(
+        sheet("S", [], { columns: [{ index: 255, widthPt: 50 }] }),
+        NO_STYLE_CTX,
+        NO_DRAWING,
+      ),
+    ).not.toThrow();
+  });
+
   it("writes ColInfo's own flags as 0, not COLINFO_FLAG_HIDDEN, for a stated-but-not-hidden column", () => {
     const records = recordsOf([], {
       columns: [{ index: 0, widthPt: 100 }],
@@ -3105,6 +3186,11 @@ describe("buildWorksheetSubstream: sheet-writer.ts's own boundary and array-empt
     );
     // RECORD_NOTE ([MS-XLS] 0x001C) is writeSheetComments' own leading record -- absent entirely for a sheet with no commented cells.
     expect(records.some((record) => record.type === 0x001c)).toBe(false);
+  });
+
+  it("ends every worksheet substream with a real EOF record", () => {
+    const records = recordsOf([cell(0, 0, { kind: "number", value: 1 })]);
+    expect(records.at(-1)?.type).toBe(RECORD_EOF);
   });
 
   it("writes a Row record's own cells sorted by column regardless of the order they were given in", () => {
