@@ -1049,21 +1049,43 @@ describe("renderPdfPage: vector draw ops", () => {
     });
   });
 
-  it("draws a dotted general path (line and cubic segments alike) as dot trains, not a dash array", () => {
-    // drawPath's own dotted branch -- a for-loop over each subpath's line AND cubic segments, flattening cubics before dotting them -- has no coverage at all: every other dotted test in this file goes through drawLine's single two-point segment instead.
+  it("draws a dotted general path's own line segment as an exact dot train, scaling the dot size by widthPt x scale", () => {
+    // drawPath's own dotted branch has no coverage at all outside this describe block: every other dotted test in this file goes through drawLine's single two-point segment instead. At scale 1, multiplying and dividing widthPt by pixelsPerPt are indistinguishable, so this pins it at scale 3.
     const rasteriser = new RecordingRasteriser();
     drive(
-      onePagePdf(
-        "[0 4] 0 d 1 J 2 w 0 0 0 RG 20 20 m 80 20 l 80 60 40 80 20 60 c h S",
-      ),
+      onePagePdf("[0 4] 0 d 1 J 2 w 0 0 0 RG 20 20 m 60 20 l S"),
+      0,
+      { scale: 3 },
+      rasteriser,
+    );
+    const squares = rasteriser.ops.filter(isFillRect);
+    // Device length 40pt x 3 = 120px, spacing = max(widthPx x 2, 1) = 12px: dots at 0, 12, ..., 120 -- 11 of them.
+    expect(squares).toHaveLength(11);
+    expect(squares[0]).toEqual({
+      kind: "fillRect",
+      xPx: 57,
+      yPx: 237,
+      widthPx: 6,
+      heightPx: 6,
+      color: { r: 0, g: 0, b: 0 },
+    });
+    expect(squares[squares.length - 1]).toMatchObject({ xPx: 177, yPx: 237 });
+  });
+
+  it("draws a dotted general path's own cubic segment as a dot train too, not only its line segments", () => {
+    // A cubic whose control points are collinear with its endpoints flattens to just its own endpoint (the same fact flattenCubic's own suite pins directly), so the resulting dot train is exactly as predictable as the line-segment case above -- this isolates drawPath's cubic branch from its line branch, which the line-only test above never touches.
+    const rasteriser = new RecordingRasteriser();
+    drive(
+      onePagePdf("[0 4] 0 d 1 J 2 w 0 0 0 RG 20 20 m 40 20 60 20 80 20 c S"),
       0,
       {},
       rasteriser,
     );
     const squares = rasteriser.ops.filter(isFillRect);
-    expect(squares.length).toBeGreaterThan(2);
-    // The very first dot sits at the subpath's own start point: page (20, 20) -> device (20, 80).
+    // Device length 60pt, spacing = max(2 x 2, 1) = 4px: dots at 0, 4, ..., 60 -- 16 of them.
+    expect(squares).toHaveLength(16);
     expect(squares[0]).toMatchObject({ xPx: 19, yPx: 79 });
+    expect(squares[squares.length - 1]).toMatchObject({ xPx: 79, yPx: 79 });
   });
 
   it("fills a general path with the paint operator's own fill rule and carries strokes on the same op", () => {
