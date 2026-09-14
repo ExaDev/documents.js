@@ -62,13 +62,9 @@ function relatedPartPaths(
   partPath: string,
   relType: string,
 ): string[] {
-  const paths: string[] = [];
-  for (const rel of resolveRelationships(pkg, partPath).values()) {
-    if (rel.type === relType) {
-      paths.push(rel.target);
-    }
-  }
-  return paths;
+  return Array.from(resolveRelationships(pkg, partPath).values())
+    .filter((rel) => rel.type === relType)
+    .map((rel) => rel.target);
 }
 
 // --- legacy xl/comments{N}.xml ----------------------------------------------------------------------------------
@@ -119,9 +115,8 @@ function readLegacyComments(
           : Number.parseInt(authorIdRaw, 10);
       const author =
         authorIndex === undefined ? undefined : authors[authorIndex];
-      if (author !== undefined) {
-        entry.author = author;
-      }
+      // Assigned unconditionally, even when author is undefined: entry.author is optional and every consumer (ContentSheetCellCommentSchema, this codebase's toEqual-based tests, JSON serialisation) treats an explicit undefined value identically to the key being absent altogether, so a presence guard here would only ever be a no-op.
+      entry.author = author;
       into.set(`${position.row}:${position.column}`, {
         row: position.row,
         column: position.column,
@@ -181,10 +176,8 @@ function readThreadedCreatedAt(element: XmlElement): string | undefined {
   if (dT !== undefined) {
     return dT;
   }
+  // No "dCreation === undefined" guard: Number(undefined) is NaN (unlike Number(null), which is 0), so an absent dCreation already falls through Number.isFinite to the same undefined result this guard would have returned directly.
   const dCreation = attr(element, "dCreation");
-  if (dCreation === undefined) {
-    return undefined;
-  }
   const ms = Number(dCreation);
   return Number.isFinite(ms) ? new Date(ms).toISOString() : undefined;
 }
@@ -195,10 +188,8 @@ function readThreadedComments(
   sheetPath: string,
   into: Map<string, SheetCellComment>,
 ): void {
+  // No "partPaths.length === 0" early return: with no threaded-comment parts, the loop below simply never runs, and readPersons on a sheet with no person relationships either just returns an empty, unused map -- an early return here would only ever skip work whose absence is already unobservable.
   const partPaths = relatedPartPaths(pkg, sheetPath, REL_THREADED_COMMENTS);
-  if (partPaths.length === 0) {
-    return;
-  }
   const persons = readPersons(pkg, sheetPath);
   for (const path of partPaths) {
     const root = rootElement(pkg.parts[path]);
@@ -218,18 +209,10 @@ function readThreadedComments(
         column: position.column,
         text: textContent(textEl),
       };
-      const author = readThreadedAuthor(element, persons);
-      if (author !== undefined) {
-        entry.author = author;
-      }
-      const createdAt = readThreadedCreatedAt(element);
-      if (createdAt !== undefined) {
-        entry.createdAt = createdAt;
-      }
-      const parentId = attr(element, "parentId") ?? attr(element, "parent");
-      if (parentId !== undefined) {
-        entry.parentId = parentId;
-      }
+      // author/createdAt/parentId are assigned unconditionally: each is an optional field on ThreadedCommentEntry, and every consumer below (the parentId===undefined root test, the toEqual-based tests, JSON serialisation) treats an explicit undefined value identically to the key being absent, so a presence guard here would only ever be a no-op.
+      entry.author = readThreadedAuthor(element, persons);
+      entry.createdAt = readThreadedCreatedAt(element);
+      entry.parentId = attr(element, "parentId") ?? attr(element, "parent");
       const key = `${position.row}:${position.column}`;
       const group = groups.get(key);
       if (group === undefined) {
@@ -245,24 +228,17 @@ function readThreadedComments(
       if (rootEntry === undefined) {
         continue;
       }
-      const comment: ContentSheetCellComment = { text: rootEntry.text };
-      if (rootEntry.author !== undefined) {
-        comment.author = rootEntry.author;
-      }
-      if (rootEntry.createdAt !== undefined) {
-        comment.createdAt = rootEntry.createdAt;
-      }
+      const comment: ContentSheetCellComment = {
+        text: rootEntry.text,
+        author: rootEntry.author,
+        createdAt: rootEntry.createdAt,
+      };
       const replies = group.filter((entry) => entry !== rootEntry);
       if (replies.length > 0) {
-        comment.replies = replies.map((reply) => {
-          const answer: { text: string; author?: string } = {
-            text: reply.text,
-          };
-          if (reply.author !== undefined) {
-            answer.author = reply.author;
-          }
-          return answer;
-        });
+        comment.replies = replies.map((reply) => ({
+          text: reply.text,
+          author: reply.author,
+        }));
       }
       into.set(key, { row: rootEntry.row, column: rootEntry.column, comment });
     }
