@@ -182,9 +182,8 @@ export function xrefStreamWithObjectStreamPdf(): Uint8Array<ArrayBuffer> {
   );
   b.stream(5, EMPTY_DICT, enc(HELLO_CONTENT));
 
-  // /W [1 4 2]: 1-byte type, 4-byte second field, 2-byte third field -- type 2 (compressed) rows store the containing ObjStm's object number and the index within it; type 1 (uncompressed) rows store a plain byte offset and generation.
+  // /W [1 4 2]: 1-byte type, 4-byte second field, 2-byte third field -- type 2 (compressed) rows store the containing ObjStm's object number and the index within it; type 1 (uncompressed) rows store a plain byte offset and generation. Object 0's own row is never written explicitly: readXref's `type === 0` branch skips a free entry outright regardless of its other field values, so xrefRows' pre-zeroed leading 7 bytes (type 0, offset/gen both 0) already read exactly the same as any other free-list-head content a literal here could assert.
   const rows: number[][] = [
-    [0, 0, 0, 0, 0, 255, 255], // object 0: the conventional free-list head
     [2, 0, 0, 0, 4, 0, 0], // object 1 (Catalog): in ObjStm 4, index 0
     [2, 0, 0, 0, 4, 0, 1], // object 2 (Pages): index 1
     [2, 0, 0, 0, 4, 0, 2], // object 3 (Page): index 2
@@ -194,21 +193,22 @@ export function xrefStreamWithObjectStreamPdf(): Uint8Array<ArrayBuffer> {
   rows.push([1, ...be4(objStmOffset), 0, 0]);
   rows.push([1, ...be4(contentOffset), 0, 0]);
   const xrefObjNum = 6;
-  // The xref stream's own row references its own not-yet-written offset -- known in advance because FixtureBuilder assigns it the moment `stream()` is called, before any bytes are written.
+  // The xref stream's own row references its own not-yet-written offset -- known in advance because FixtureBuilder assigns it the moment `stream()` is called, before any bytes are written. Reserved by a length bump rather than a placeholder row literal: any placeholder value here is fully overwritten below before `xrefRows` is ever built from it, so a literal would only assert bytes nothing downstream can observe.
   const xrefOffsetPlaceholderIndex = rows.length;
-  rows.push([1, 0, 0, 0, 0, 0, 0]); // patched below once the real offset is known
+  rows.length += 1;
 
   const xrefOffset = b.length; // object 6 (the xref stream) starts here, matching what stream(6, ...) is about to record
   rows[xrefOffsetPlaceholderIndex] = [1, ...be4(xrefOffset), 0, 0];
-  const xrefRows = new Uint8Array(rows.length * 7);
+  const totalRows = rows.length + 1; // + object 0's own implicit free-list-head row, never written explicitly (see the comment on `rows` above)
+  const xrefRows = new Uint8Array(totalRows * 7);
   rows.forEach((row, i) => {
-    xrefRows.set(row, i * 7);
+    xrefRows.set(row, (i + 1) * 7);
   });
   const xrefCompressed = zlibSync(xrefRows);
 
   b.stream(
     xrefObjNum,
-    `<< /Type /XRef /Size ${rows.length} /W [1 4 2] /Index [0 ${rows.length}] /Root 1 0 R /Filter /FlateDecode >>`,
+    `<< /Type /XRef /Size ${totalRows} /W [1 4 2] /Index [0 ${totalRows}] /Root 1 0 R /Filter /FlateDecode >>`,
     xrefCompressed,
   );
   b.raw(`startxref\n${xrefOffset}\n%%EOF`);
