@@ -9,7 +9,7 @@ import config from "./release-workspace.config";
  *
  * These tests make that agreement mechanical rather than a convention someone has to remember, which is the same invariant commitlint.config.ts already relies on from the other direction: a type cannot trigger a release without also being accepted by commit-msg validation, or the reverse.
  *
- * analyzeCommits/generateNotes are typed as Record<string, unknown> in @exadev/semantic-release-workspace's own ReleaseWorkspaceOptions -- they are passed straight through to @semantic-release/commit-analyzer and @semantic-release/release-notes-generator, whose own option shapes this SDK does not model -- so TypeScript cannot enforce the releaseRules/presetConfig.types agreement on its own, and the runtime narrowing below is still load-bearing.
+ * analyzeCommits/generateNotes are typed as `Record<string, unknown>` in \@exadev/semantic-release-workspace's own ReleaseWorkspaceOptions -- they are passed straight through to \@semantic-release/commit-analyzer and \@semantic-release/release-notes-generator, whose own option shapes this SDK does not model -- so TypeScript cannot enforce the releaseRules/presetConfig.types agreement on its own, and the runtime narrowing below is still load-bearing.
  */
 
 const CONFIG_FILE = "release-workspace.config.ts";
