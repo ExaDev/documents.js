@@ -1660,6 +1660,9 @@ importers:
       jsdom:
         specifier: 30.0.1
         version: 30.0.1
+      ooxml.js:
+        specifier: 8.14.6
+        version: link:../ooxml.js
       semantic-release:
         specifier: 25.0.9
         version: 25.0.9(supports-color@10.2.2)(typescript@6.0.3)
