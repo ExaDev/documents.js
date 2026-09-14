@@ -2,7 +2,8 @@
 export function relsPathFor(partPath: string): string {
   const lastSlash = partPath.lastIndexOf("/");
   const dir = lastSlash === -1 ? "" : partPath.slice(0, lastSlash);
-  const fileName = lastSlash === -1 ? partPath : partPath.slice(lastSlash + 1);
+  // No lastSlash === -1 ternary guard here (unlike dir above): slicing from lastSlash + 1 already returns the whole path when there is no slash at all (lastIndexOf yields -1, so the slice starts at 0), making a guard for that case redundant -- see src/mathml/nodes.ts's localName for the identical pattern and reasoning.
+  const fileName = partPath.slice(lastSlash + 1);
   return `${dir}/_rels/${fileName}.rels`;
 }
 
@@ -24,11 +25,9 @@ export function buildRelativeTarget(
   const toFileName = toPartPath.slice(toPartPath.lastIndexOf("/") + 1);
 
   let common = 0;
-  while (
-    common < fromDirs.length &&
-    common < toDirs.length &&
-    fromDirs[common] === toDirs[common]
-  ) {
+  // A single combined bound, not two independently-ANDed length checks: with two separate `common < fromDirs.length && common < toDirs.length` clauses, relaxing (or dropping) either one in isolation never changes the loop's outcome on its own -- the OTHER, still-correct clause independently stops the loop at the same `common`, and wherever the two arrays' lengths genuinely differ, the fromDirs[common] === toDirs[common] comparison itself already fails once one side runs out (a real segment can never equal undefined). That made every mutation on either individual clause (and on the && joining them) permanently equivalent. A single combinedLimit bound has no sibling clause left to compensate, so a boundary mutation on it is only masked when the two paths share every directory segment all the way to a shared length -- covered by the identical-directories case below.
+  const combinedLimit = Math.min(fromDirs.length, toDirs.length);
+  while (common < combinedLimit && fromDirs[common] === toDirs[common]) {
     common++;
   }
 
