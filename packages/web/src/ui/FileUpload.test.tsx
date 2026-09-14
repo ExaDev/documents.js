@@ -22,6 +22,7 @@ vi.mock("@mantine/dropzone", () => {
     activateOnClick: boolean;
     disabled: boolean | undefined;
     loading: boolean | undefined;
+    multiple: boolean | undefined;
     accept: Record<string, string[]> | undefined;
     children: React.ReactNode;
   }) {
@@ -33,6 +34,7 @@ vi.mock("@mantine/dropzone", () => {
         data-activate-on-click={String(props.activateOnClick)}
         data-disabled={String(props.disabled)}
         data-loading={String(props.loading)}
+        data-multiple={String(props.multiple)}
         data-accept={JSON.stringify(props.accept ?? null)}
         data-has-onclick={String(props.onClick !== undefined)}
         onClick={props.onClick}
@@ -77,8 +79,10 @@ function fileAccessStub(
 
 interface RenderedUpload {
   html: () => string;
+  container: HTMLElement;
   click: () => void;
   drop: (files: FileWithPath[]) => void;
+  rerender: (props: Partial<Parameters<typeof FileUpload>[0]>) => void;
 }
 
 function renderUpload(
@@ -92,6 +96,7 @@ function renderUpload(
   unmount = mounted.unmount;
   return {
     html: () => mounted.container.innerHTML,
+    container: mounted.container,
     click: () => {
       mounted.container
         .querySelector<HTMLButtonElement>('[data-testid="dropzone"]')
@@ -99,6 +104,9 @@ function renderUpload(
     },
     drop: (files: FileWithPath[]) => {
       latestOnDrop?.(files);
+    },
+    rerender: (nextProps) => {
+      mounted.rerender(<FileUpload onFile={onFile} {...nextProps} />);
     },
   };
 }
@@ -135,12 +143,28 @@ describe("FileUpload", () => {
     });
     expect(html()).toContain("report.pdf");
     expect(html()).not.toContain("Drag a file here");
+    expect(html()).toContain("tabler-icon-file");
+    expect(html()).not.toContain("tabler-icon-upload");
+  });
+
+  it("shows the upload icon, not the file icon, when no file is present", () => {
+    createFileAccess.mockReturnValue(fileAccessStub());
+    const { html } = renderUpload();
+    expect(html()).toContain("tabler-icon-upload");
+    expect(html()).not.toContain("tabler-icon-file");
   });
 
   it("shows the format hint only when there is no file yet", () => {
     createFileAccess.mockReturnValue(fileAccessStub());
     const { html } = renderUpload({ formatHint: "docx, odt, or pdf" });
     expect(html()).toContain("docx, odt, or pdf");
+  });
+
+  it("renders no hint paragraph at all when there is no file and no formatHint", () => {
+    createFileAccess.mockReturnValue(fileAccessStub());
+    const { container } = renderUpload();
+    // One <p> for the "Drag a file here..." label alone -- a second, empty one would mean the hint block rendered anyway with nothing to show.
+    expect(container.querySelectorAll("p")).toHaveLength(1);
   });
 
   it("hides the format hint once a file is present", () => {
@@ -157,6 +181,23 @@ describe("FileUpload", () => {
     const { html } = renderUpload({ loading: true, disabled: true });
     expect(html()).toContain('data-loading="true"');
     expect(html()).toContain('data-disabled="true"');
+  });
+
+  it("never allows the dropzone to accept more than one file", () => {
+    createFileAccess.mockReturnValue(fileAccessStub());
+    const { html } = renderUpload();
+    expect(html()).toContain('data-multiple="false"');
+  });
+
+  it("recomputes the normalised accept map when the accept prop itself changes", () => {
+    createFileAccess.mockReturnValue(fileAccessStub());
+    const { html, rerender } = renderUpload({
+      accept: { "application/pdf": ".pdf" },
+    });
+    expect(html()).toContain("application/pdf");
+    rerender({ accept: { "application/msword": ".doc" } });
+    expect(html()).toContain("application/msword");
+    expect(html()).not.toContain("application/pdf");
   });
 
   it("normalises a single accept extension string into an array", () => {
@@ -207,13 +248,16 @@ describe("FileUpload", () => {
       fileAccessStub({ supportsNativePicker: () => true, openFile }),
     );
     const onFile = vi.fn();
-    const { click } = renderUpload({ onFile });
+    const accept: FilePickerAcceptType["accept"] = {
+      "application/pdf": [".pdf"],
+    };
+    const { click } = renderUpload({ onFile, accept });
 
     click();
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(openFile).toHaveBeenCalled();
+    expect(openFile).toHaveBeenCalledWith({ accept });
     expect(onFile).toHaveBeenCalledWith(
       expect.objectContaining({ name: "picked.docx" }),
     );
