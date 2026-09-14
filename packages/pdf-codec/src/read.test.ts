@@ -280,6 +280,10 @@ describe("readPdf: cancellation", () => {
     ).toThrow();
   });
 
+  it("reads an unaborted pageless document normally, resolving its catalog to zero pages", () => {
+    expect(readPdf(pagelessPdf()).pages).toHaveLength(0);
+  });
+
   // The abort contract's real granularity (ExaDev/documents.js#585): the signal is consulted once per page-loop iteration, so a signal aborted WHILE page 1 is being read (here: the sink fires on page 1's missing-/Resources warning and aborts) stops the parse before page 2 is ever interpreted, rather than running to completion.
   it("honours an aborted signal between pages, not only before reading begins", () => {
     const controller = new AbortController();
