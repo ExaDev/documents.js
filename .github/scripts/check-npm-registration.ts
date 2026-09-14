@@ -43,7 +43,7 @@ export function touchedPackageDirectories(
   return directories;
 }
 
-function git(args: string[]): string {
+function git(args: readonly string[]): string {
   return execFileSync("git", args, { encoding: "utf8" });
 }
 

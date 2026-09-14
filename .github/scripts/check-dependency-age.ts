@@ -30,7 +30,7 @@ export function minimumReleaseAgeMinutes(workspaceYamlText: string): number {
 
 // Pure, and exported for the unit tests, because the minutes-vs-days unit is the one thing here a test can actually pin down: at a 60-minute window a package published two days ago is old enough, and would be far too new if the same 60 were read as days.
 export function isTooNew(
-  publishedAt: Date,
+  publishedAt: Readonly<Date>,
   now: number,
   minimumAgeMinutes: number,
 ): boolean {
@@ -70,11 +70,11 @@ export function splitNameAndVersion(nameAtVersion: string): PackageVersion {
   };
 }
 
-function git(args: string[]): string {
+function git(args: readonly string[]): string {
   return execFileSync("git", args, { encoding: "utf8" });
 }
 
-function publishedAt(name: string, version: string): Date {
+function fetchPublishedAt(name: string, version: string): Date {
   let raw: string;
   try {
     raw = execFileSync("pnpm", ["info", name, "time", "--json"], {
@@ -138,7 +138,10 @@ function main(): void {
 
     const now = Date.now();
     const tooNew = introduced
-      .map((pkg) => ({ pkg, publishedAt: publishedAt(pkg.name, pkg.version) }))
+      .map((pkg) => ({
+        pkg,
+        publishedAt: fetchPublishedAt(pkg.name, pkg.version),
+      }))
       .filter(({ publishedAt }) =>
         isTooNew(publishedAt, now, minimumAgeMinutes),
       );
