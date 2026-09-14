@@ -688,5 +688,15 @@ describe("decodeSvgText / encodeSvgText", () => {
     expect(() => decodeSvgText(new Uint8Array([0xff, 0xfe, 0x00]))).toThrow(
       SvgInvalidUtf8Error,
     );
+    let caught: unknown;
+    try {
+      decodeSvgText(new Uint8Array([0xff, 0xfe, 0x00]));
+    } catch (error) {
+      caught = error;
+    }
+    expect((caught as Error).name).toBe("SvgInvalidUtf8Error");
+    expect((caught as Error).message).toBe(
+      "svg text must be well-formed UTF-8",
+    );
   });
 });
