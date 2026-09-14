@@ -3761,6 +3761,12 @@ describe("\\uN surrogate arithmetic", () => {
       paragraphsOf(`${HEADER}\\pard \\u-4064 x\\par}`)[0]?.runs ?? [];
     expect(runs[0]?.text.codePointAt(0)).toBe(0xf020);
   });
+
+  it("emits no character at all for a bare \\u with no numeric parameter", () => {
+    // A malformed \u with no digits after it has code === undefined; the code branch that calls emitText must be skipped entirely rather than calling String.fromCharCode(undefined), which coerces to U+0000 (NaN's own ToUint16 result) and would silently insert a stray NUL character into the run. skipUnicodeFallback still runs unconditionally either way, consuming the one ANSI fallback character \uN's own grammar always requires -- so "b" here is the fallback, never part of the emitted text, regardless of code's own definedness.
+    const runs = paragraphsOf(`${HEADER}\\pard a\\u b\\par}`)[0]?.runs ?? [];
+    expect(runs.map((run) => run.text).join("")).toBe("a");
+  });
 });
 
 describe("picture format control words", () => {
