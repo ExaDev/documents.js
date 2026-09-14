@@ -30,8 +30,8 @@ function looksLikeXml(bytes: Uint8Array<ArrayBuffer>): boolean {
   if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
     i = 3;
   }
-  while (i < bytes.length) {
-    // No separate `b === undefined` guard: within this loop's own bound (i < bytes.length), a Uint8Array never holds a hole, so b is always a real byte -- and even if it weren't, undefined matches none of the whitespace comparisons below and fails `b === 0x3c` exactly the same way this guard's own `return false` does.
+  // No `i < bytes.length` loop bound, and no separate `b === undefined` early return: bytes[i] reads as undefined once i runs past the end, undefined matches none of the whitespace comparisons below, and `undefined === 0x3c` is false -- so the loop's own final `return b === 0x3c` already answers "false" for an end-of-array read exactly like an explicit early return would, making a separate length or undefined check a redundant restatement of it.
+  for (;;) {
     const b = bytes[i];
     if (b === 0x20 || b === 0x09 || b === 0x0a || b === 0x0d) {
       i = i + 1;
@@ -39,5 +39,4 @@ function looksLikeXml(bytes: Uint8Array<ArrayBuffer>): boolean {
     }
     return b === 0x3c;
   }
-  return false;
 }
