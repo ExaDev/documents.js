@@ -215,6 +215,7 @@ describe("collectDocumentFormulas", () => {
     const entries = collectDocumentFormulas(document);
     expect(entries).toHaveLength(1);
     expect(entries[0]?.formula.presentation?.latex).toBe("m \\times a");
+    expect(entries[0]?.locate).toBe("slides[0].shapes[0]/blocks[0]");
   });
 
   it("walks a drawing page's shapes", () => {
