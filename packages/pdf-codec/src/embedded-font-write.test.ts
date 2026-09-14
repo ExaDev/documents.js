@@ -32,7 +32,7 @@ import { writeObject } from "./serialize";
 import type { SfntSubsetResult } from "./sfnt-subset";
 import { subsetSfnt } from "./sfnt-subset";
 import { parseSfnt } from "./sfnt";
-import { carlitoRegularBytes } from "./test-support/fonts";
+import { caladeaItalicBytes, carlitoRegularBytes } from "./test-support/fonts";
 
 // The end-to-end proof this module exists for: take a real vendored face, cut a real subset of it for a real string, build the whole PDF object group, assemble a genuine PDF file around it by hand, and read that file back with this package's own readPdf. Nothing here is a synthetic fixture -- the font is the checked-in Carlito Regular, the subset is sfnt-subset.ts's own output, and the file is a complete, well-formed PDF with a real cross-reference table.
 //
@@ -477,5 +477,30 @@ describe("the subset tag", () => {
     expect(embeddedSubsetTag("Carlito-Regular", [0, 15])).not.toBe(
       embeddedSubsetTag("Carlito-Bold", [0, 15]),
     );
+  });
+});
+
+describe("buildEmbeddedFontObjects: FLAG_ITALIC", () => {
+  it("sets the ITALIC descriptor bit for a face whose own italicAngleDegrees is non-zero", () => {
+    const sfnt = parseSfnt(caladeaItalicBytes())!;
+    const face = loadEmbeddedFace(sfnt)!;
+    expect(face.metrics.italicAngleDegrees).not.toBe(0); // real Caladea Italic data, not a synthetic fixture -- confirms this test exercises the branch it claims to
+    const subset = subsetSfnt(sfnt, [0x41])!;
+    const usedGlyphs = collectEmbeddedGlyphs(["A"], face);
+    const { descriptor } = buildEmbeddedFontObjects(
+      face,
+      subset,
+      usedGlyphs,
+      {
+        cidFontRef: pdfRef(1, 0),
+        descriptorRef: pdfRef(2, 0),
+        fontFileRef: pdfRef(3, 0),
+        toUnicodeRef: pdfRef(4, 0),
+      },
+      false,
+    );
+    const flags = asNumber(dictGet(descriptor, "Flags"))!;
+    const FLAG_ITALIC = 64;
+    expect(flags & FLAG_ITALIC).toBe(FLAG_ITALIC);
   });
 });
