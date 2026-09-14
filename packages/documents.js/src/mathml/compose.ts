@@ -8,15 +8,12 @@ export const EMPTY_BOX: MathBox = {
   items: [],
 };
 
-// Translates every item in `items` by (dxPt, dyPt) -- the one place this module touches an individual MathLayoutItem's own coordinate fields, since MathStroke's points and MathAssembledGlyphs' placements are each a nested array unlike MathGlyphRun/MathRule's flat xPt/yPt.
+// Translates every item in `items` by (dxPt, dyPt) -- the one place this module touches an individual MathLayoutItem's own coordinate fields, since MathStroke's points and MathAssembledGlyphs' placements are each a nested array unlike MathGlyphRun/MathRule's flat xPt/yPt. No dxPt===0&&dyPt===0 fast path: adding zero to any coordinate is a no-op, so the general map below already produces an equal (if not reference-identical) result for a zero shift, on every item kind, with nothing for a special case to shortcut.
 export function shiftItems(
   items: readonly MathLayoutItem[],
   dxPt: number,
   dyPt: number,
 ): MathLayoutItem[] {
-  if (dxPt === 0 && dyPt === 0) {
-    return [...items];
-  }
   return items.map((item) => {
     if (item.kind === "stroke") {
       return {
