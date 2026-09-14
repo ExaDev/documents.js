@@ -2,12 +2,27 @@ import { describe, expect, it } from "vitest";
 import {
   interleave,
   type InterleaveSource,
+  inverse53Filter,
+  inverse97Filter,
   inverseDwt53Level,
   inverseDwt97Level,
   mirrorIndex,
   subbandBounds,
   synthesiseLine,
 } from "./jpeg2000-dwt";
+
+// Every buffer cell inverse53Filter/inverse97Filter actually write to gets a value distinguishable from this sentinel: the even step's own F-5 arithmetic maps a uniform 100 to 100 - floor((100 + 100 + 2) / 4) = 50, and every later lifting step further changes whatever it touches, so a sentinel-filled buffer's own untouched/touched split can be read straight off which cells still equal 100.
+const SENTINEL = 100;
+
+function touchedIndices(buffer: ArrayLike<number>): number[] {
+  const touched: number[] = [];
+  for (let i = 0; i < buffer.length; i++) {
+    if (buffer[i] !== SENTINEL) {
+      touched.push(i);
+    }
+  }
+  return touched;
+}
 
 // The whole-image fixtures in jpeg2000.test.ts already pin this transform against real encoder output at every size and origin the fixture set covers. What follows pins the pieces those cannot isolate: the exact integers the 5-3 lifting produces for a signal short enough to compute by hand from the specification's own equations, the DC gain that makes a flat image survive, and the coordinate split a caller has to size its subband buffers by.
 
@@ -147,6 +162,18 @@ describe("inverseDwt97Level", () => {
     ).toEqual([]);
   });
 
+  it("does not crash allocating scratch space for grossly inverted (u1 < u0 and v1 < v0) bounds", () => {
+    const bands = {
+      ll: new Float32Array(0),
+      hl: new Float32Array(0),
+      lh: new Float32Array(0),
+      hh: new Float32Array(0),
+    };
+    const bounds = { u0: 20, u1: 0, v0: 20, v1: 0 };
+    expect(() => inverseDwt97Level(bands, bounds)).not.toThrow();
+    expect(inverseDwt97Level(bands, bounds)).toHaveLength(400);
+  });
+
   it("applies the single-sample gain at the correct absolute row when the vertical origin is nonzero", () => {
     // u0/v0 both odd this time (band hh), and v0 = 3 rather than 0, so an (index - v0) mutant that instead adds v0 would write the vertical pass's result to output[6] (out of this length-1 buffer) rather than back to output[0], leaving the horizontal pass's own result unhalved.
     const bounds = { u0: 1, u1: 2, v0: 3, v1: 4 };
@@ -196,6 +223,20 @@ describe("inverseDwt53Level, zero-size and non-square cases", () => {
     expect(
       Array.from(inverseDwt53Level(emptyBands, { u0: 0, u1: 4, v0: 2, v1: 2 })),
     ).toEqual([]);
+  });
+
+  it("does not crash allocating scratch space for grossly inverted (u1 < u0 and v1 < v0) bounds", () => {
+    // Both dimensions negative enough that Math.max(width, height) alone would fall below -2 * EXTENSION_MARGIN, which would make scratch's own size negative without its own floor at 0.
+    const bands = {
+      ll: new Int32Array(0),
+      hl: new Int32Array(0),
+      lh: new Int32Array(0),
+      hh: new Int32Array(0),
+    };
+    const bounds = { u0: 20, u1: 0, v0: 20, v1: 0 };
+    expect(() => inverseDwt53Level(bands, bounds)).not.toThrow();
+    // width * height = (-20) * (-20) = 400: the same Math.max(..., 0) floor already sizes output to that, filled with its default zeros, since raster order is undefined for bounds no real caller would ever pass.
+    expect(inverseDwt53Level(bands, bounds)).toHaveLength(400);
   });
 
   it("reconstructs a flat signal correctly across a non-square level with a nonzero origin", () => {
@@ -356,6 +397,34 @@ describe("synthesiseLine", () => {
     expect(filterCalls).toBe(1);
   });
 
+  it("reads each fill-loop sample from mirrorIndex(i0 + k, i0, i1), not mirrorIndex(i0 - k, i0, i1)", () => {
+    const i0 = 10;
+    const i1 = 12;
+    const fed: number[] = [];
+    synthesiseLine(
+      (index) => index, // echo: fed[] below ends up holding exactly what each fillScratch call's own source-index argument was
+      () => {
+        // Write-back is not under test here.
+      },
+      i0,
+      i1,
+      (_offset, value) => {
+        fed.push(value);
+      },
+      () => 0,
+      () => {
+        // No filtering needed for this test.
+      },
+      (value) => value,
+    );
+    // mirrorIndex itself is separately verified correct (see the describe block below), so it doubles here as ground truth for what synthesiseLine's fill loop ought to have fed it.
+    const expected = [];
+    for (let k = -6; k < i1 - i0 + 6; k++) {
+      expected.push(mirrorIndex(i0 + k, i0, i1));
+    }
+    expect(fed).toEqual(expected);
+  });
+
   it("writes exactly [i0, i1) back from the scratch buffer, for a length-2 range", () => {
     const written: number[] = [];
     synthesiseLine(
@@ -375,6 +444,38 @@ describe("synthesiseLine", () => {
       (value) => value,
     );
     expect(written).toEqual([10, 11]);
+  });
+});
+
+describe("inverse53Filter", () => {
+  it("writes to exactly the buffer cells the F-5/F-6 equations need for i0 = 0, i1 = 8, and no others", () => {
+    const buffer = new Int32Array(30).fill(SENTINEL);
+    inverse53Filter(buffer, 0, 8);
+    // base = EXTENSION_MARGIN(6) - i0(0) = 6. Even step: n from floor(0/2) - 1 = -1 to floor(8/2) + 1 = 5 inclusive, indices base + 2n = 4, 6, 8, 10, 12, 14, 16. Odd step: n from -1 to 4 (5 excluded), indices base + 2n + 1 = 5, 7, 9, 11, 13, 15.
+    expect(touchedIndices(buffer)).toEqual([
+      4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+    ]);
+  });
+
+  it("writes to exactly the buffer cells the F-5/F-6 equations need for an odd, offset i0/i1", () => {
+    const buffer = new Int32Array(30).fill(SENTINEL);
+    inverse53Filter(buffer, 3, 9);
+    // base = 6 - 3 = 3. Even: n from floor(3/2) - 1 = 0 to floor(9/2) + 1 = 5, indices 3 + 2n = 3, 5, 7, 9, 11, 13. Odd: n from 0 to 4 (5 excluded), indices 3 + 2n + 1 = 4, 6, 8, 10, 12.
+    expect(touchedIndices(buffer)).toEqual([
+      3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+    ]);
+  });
+});
+
+describe("inverse97Filter", () => {
+  it("writes to exactly the buffer cells the F-8/F-9 normalisation pass needs for i0 = 0, i1 = 8, and no others", () => {
+    // F-8/F-9 is the widest of the four passes (its own n range is the other three's each extended by one or two further steps), so the overall touched set below is entirely this pass's own -- direct evidence for its own loop bound and for `last`'s own division.
+    const buffer = new Float32Array(30).fill(SENTINEL);
+    inverse97Filter(buffer, 0, 8);
+    // base = 6, first = floor(0/2) = 0, last = floor(8/2) = 4. F-8/F-9: n from first - 2 = -2 to last + 2 = 6, touching both even(n) = base + 2n and odd(n) = base + 2n + 1 for each -- every integer from base + 2*(-2) = 2 to base + 2*6 + 1 = 19.
+    expect(touchedIndices(buffer)).toEqual(
+      Array.from({ length: 18 }, (_, index) => index + 2),
+    );
   });
 });
 
