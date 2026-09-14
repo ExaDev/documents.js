@@ -100,6 +100,20 @@ describe("document shape", () => {
     );
   });
 
+  it("rejects a document whose very first token is not itself a group-opening brace, even when a later token happens to be a control word named rtf", () => {
+    // No leading "{" at all: the first token is the \rtf control word itself, so its own kind is "controlWord", not "groupStart". A second \rtf1 immediately after makes the SECOND and THIRD conditions of assertRtfHeaderPresent's own OR chain both individually false on this input -- the first condition (checking the very first token's kind) is the only one standing between this and being wrongly accepted as well-formed.
+    expect(() => readRtfContent(bytes("\\rtf1\\rtf1"))).toThrow(
+      RtfNotAnRtfDocumentError,
+    );
+  });
+
+  it("rejects a properly braced document whose first control word names a destination other than rtf", () => {
+    // The brace and the control-word shape are both correct here -- only the control word's own NAME is wrong (\ansi, not \rtf) -- so this is the one fixture that actually exercises assertRtfHeaderPresent's own third OR clause: the first two conditions are both false on this input, leaving the name check alone to reject it.
+    expect(() => readRtfContent(bytes("{\\ansi not rtf}"))).toThrow(
+      RtfNotAnRtfDocumentError,
+    );
+  });
+
   it("produces a wordprocessing ContentDocument its own schema accepts", () => {
     const { document } = readRtfContent(
       bytes(`${HEADER}\\pard\\plain Hello.\\par}`),
@@ -3434,6 +3448,12 @@ describe("unbalanced groups", () => {
     expect(found?.message).toBe(
       "2 group(s) were still open at the end of the input; each is treated as closing there",
     );
+  });
+
+  it("still flushes and keeps trailing ANSI text that reached input's end with no closing brace or other event to flush it itself", () => {
+    // "text" here is the very last thing the tokenizer produced: nothing after it (no control word, no brace, no hex byte) ever triggers flushBytes on its own, so only the main loop's own unconditional trailing flushBytes() call -- reached once the token stream itself is exhausted -- moves it out of the pending-bytes buffer and into a run finish() can still build a paragraph from. Without that call, "text" is silently dropped: emitText/appendText never runs for it, runs stays empty, and endParagraph's own force=false early return then produces no paragraph at all instead of one holding this trailing text.
+    const paragraph = paragraphsOf(`${HEADER}\\pard{\\b text`).at(-1);
+    expect(paragraph?.runs.map((run) => run.text).join("")).toBe("text");
   });
 
   it("counts every still-open group at the end of input, not one fewer or one more", () => {
