@@ -2106,6 +2106,29 @@ describe("form fields", () => {
         "a form field's contentControl is dropped: its \\fldrslt content crossed a paragraph or table-cell boundary, and this reader's per-paragraph construct extent cannot span one",
     });
   });
+
+  it("does not crash on a bare \\*\\ffname outside any \\field group, where state.field is genuinely undefined", () => {
+    // \*\ffname is recognised (DESTINATION_KINDS maps it to "formFieldName") regardless of what encloses it, so a hostile or truncated producer's own stray occurrence outside \field reaches emitText with state.field inherited from the root -- undefined, never set by anything else. Without its own field?.formField !== undefined guard, `state.field.formField.name += text` would throw rather than silently discard, exactly as the trailing comment on this whole if-chain says every other unhandled destination already does.
+    expect(() =>
+      readRtfContent(bytes(`${HEADER}\\pard{\\*\\ffname stray}kept\\par}`)),
+    ).not.toThrow();
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard{\\*\\ffname stray}kept\\par}`,
+    )[0];
+    expect(paragraph?.runs.map((run) => run.text).join("")).toBe("kept");
+  });
+
+  it("does not crash on a bare \\*\\ffhelptext outside any \\field group, where state.field is genuinely undefined", () => {
+    expect(() =>
+      readRtfContent(bytes(`${HEADER}\\pard{\\*\\ffhelptext stray}kept\\par}`)),
+    ).not.toThrow();
+  });
+
+  it("does not crash on a bare \\*\\ffl outside any \\field group, where state.field is genuinely undefined", () => {
+    expect(() =>
+      readRtfContent(bytes(`${HEADER}\\pard{\\*\\ffl stray}kept\\par}`)),
+    ).not.toThrow();
+  });
 });
 
 describe("byte runs larger than an argument list", () => {
