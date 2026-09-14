@@ -919,6 +919,7 @@ class ContentBuilder {
     this.runs = [];
     this.runProvenance = [];
     this.resolveBookmarkPositions(para, blockIndex);
+    // Genuinely irreducible equivalent mutant: `+=` here versus `-=` produces a strictly decreasing rather than increasing sequence, but every one of paragraphSerial's own readers (endBookmark, resolveBookmarkPositions, endFormField) only ever tests it for EQUALITY against a value captured earlier from this identical field -- never for ordering, never against a literal, never as an index. A strictly monotonic sequence in either direction visits each value at most once, so "captured serial equals current serial" (same paragraph) versus "captured serial differs from current serial" (a different paragraph) is preserved regardless of which direction the sequence moves in. Left as `+=` because it is the natural reading (a forward-counting serial), not because `-=` would be wrong.
     this.paragraphSerial += 1;
   }
 
@@ -1154,6 +1155,7 @@ class ContentBuilder {
       let column = 0;
       for (const [index] of row.cells.entries()) {
         indices.push(column);
+        // Genuinely irreducible equivalent mutant: `+=` here versus `-=` produces numerically opposite (negated) column values, but every consumer of these indices (the rowSpan loop below) only ever compares one row's own value against another row's own indices via indexOf equality, never against an absolute position, a literal, or anything outside this same accumulation. Since every row runs through this identical accumulation, a uniform sign flip is a bijection that preserves which values coincide across rows and which do not -- the actual rowSpan/column-match OUTPUT this drives is provably identical under `+=` or `-=` for any input. Left as `+=` because it is the natural reading (a running total of widths), not because `-=` would be wrong.
         column += horizontalSpanAt(row.definitions, index);
       }
       return indices;
@@ -1635,6 +1637,7 @@ function readRtfDetail(
   const builder = new ContentBuilder(header, sink);
   const section = defaultSectionState(header);
 
+  // pictureOwner/objectDataOwner/objectOwner/isFieldGroup below are each genuinely irreducible equivalent mutants at `false`: every check that reads one of them (the groupEnd handler's own `state.picture !== undefined && state.pictureOwner`, `state.objectData !== undefined && state.objectDataOwner`, `state.object !== undefined && state.objectOwner`, `state.isFieldGroup && state.field?.formFieldStarted === true`) is a short-circuited `&&` whose OTHER operand -- picture/objectData/object/field -- is ALSO `undefined` on this root object and can only ever become defined on a freshly cloned CHILD, in the very same branch that also sets its own Owner/isFieldGroup flag true. Since root's own picture/objectData/object/field never change (nothing ever assigns to root directly; every mutation targets a `child` object instead), the paired `undefined` operand already makes each `&&` false regardless of what these four flags are set to here, for as long as `state` could ever actually be this root object at one of those check sites (including the state-still-root case of a stray extra closing brace after the document's own root group has already closed). Mutating any of the four to `true` therefore changes nothing observable for any input.
   const root: GroupState = {
     destination: "body",
     uc: 1, // "A default of 1 should be assumed if no \ucN keyword has been seen in the current or outer scopes."
