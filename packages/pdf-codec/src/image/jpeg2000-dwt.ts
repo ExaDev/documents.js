@@ -41,8 +41,8 @@ export function subbandBounds(
   };
 }
 
-// F.3.4's whole-sample symmetric extension: outside [i0, i1) the signal is mirrored about its own two end samples, so index i0 - k reads as i0 + k and index i1 - 1 + k as i1 - 1 - k, repeating with period 2(n - 1).
-function mirrorIndex(position: number, i0: number, i1: number): number {
+// F.3.4's whole-sample symmetric extension: outside [i0, i1) the signal is mirrored about its own two end samples, so index i0 - k reads as i0 + k and index i1 - 1 + k as i1 - 1 - k, repeating with period 2(n - 1). Exported for direct unit testing: synthesiseLine, this function's sole production caller, only ever reaches its loop (the one place mirrorIndex is called) once it has already special-cased length 0 and length 1 itself, so no length <= 1 input ever reaches mirrorIndex through that path -- only a direct call can exercise this function's own guard against it.
+export function mirrorIndex(position: number, i0: number, i1: number): number {
   const length = i1 - i0;
   if (length <= 1) {
     return i0;
@@ -56,14 +56,15 @@ function mirrorIndex(position: number, i0: number, i1: number): number {
 }
 
 // The interleave of F.3.3, written generically over "read a subband sample" / "write an interleaved sample" so the reversible and irreversible paths share one copy of the coordinate arithmetic -- the part most likely to be got wrong, and the part that is identical between them.
-interface InterleaveSource {
+// Exported for direct unit testing of the loop bounds below: the reversible and irreversible reconstructions this function serves both immediately overwrite whatever it writes with a filtered value (a single-sample degenerate case aside, in which the raw interleaved value survives untouched but every call site's own subband is already known-flat there), so no caller-level test can distinguish an interleave loop running one iteration long or short from its output alone.
+export interface InterleaveSource {
   readonly ll: (u: number, v: number) => number;
   readonly hl: (u: number, v: number) => number;
   readonly lh: (u: number, v: number) => number;
   readonly hh: (u: number, v: number) => number;
 }
 
-function interleave(
+export function interleave(
   source: InterleaveSource,
   bounds: Jpeg2000ResolutionBounds,
   write: (u: number, v: number, value: number) => void,
@@ -160,8 +161,8 @@ function inverse97Filter(buffer: Float32Array, i0: number, i1: number): void {
   }
 }
 
-// F.3.7 1D_SR: the one-dimensional synthesis of an interleaved signal spanning [i0, i1). `read` supplies sample `index` and `write` receives the reconstructed one, both in absolute coordinates, so the same routine serves rows and columns without transposing anything.
-function synthesiseLine(
+// F.3.7 1D_SR: the one-dimensional synthesis of an interleaved signal spanning [i0, i1). `read` supplies sample `index` and `write` receives the reconstructed one, both in absolute coordinates, so the same routine serves rows and columns without transposing anything. Exported for direct unit testing: inverseDwt53Level/97Level, this function's only production callers, already refuse to call it at all once their own width <= 0 || height <= 0 guard has returned, so i1 - i0 is always positive by the time either caller's loop reaches it -- only a direct call can exercise this function's own length <= 0 and length === 1 branches in isolation.
+export function synthesiseLine(
   read: (index: number) => number,
   write: (index: number, value: number) => void,
   i0: number,
