@@ -22,6 +22,10 @@ const EXPECTED_METADATA_RESIDUE_XMP = [
 // The metadata/residue cluster (#721 phase 6): catalog /Lang as the document language, the XMP /Metadata stream split into a semantic Dublin Core mirror (filling only fields /Info does not carry -- in a PDF/A file these live ONLY in XMP) and a raw-packet residue entry, and the package-level residue rows for the catalog and trailer facts no content node owns (viewer/session behaviour, output intents, private/application data, the trailer /ID).
 
 describe("readPdf: document language and XMP", () => {
+  it("reads the fixture's own single page alongside its metadata and residue facts", () => {
+    expect(readPdf(metadataResiduePdf()).pages).toHaveLength(1);
+  });
+
   it("reads catalog /Lang as metadata.language", () => {
     const doc = readPdf(metadataResiduePdf());
     expect(doc.metadata.language).toBe("en-GB");
