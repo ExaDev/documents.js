@@ -1873,6 +1873,7 @@ function readRtfDetail(
           };
           child.objectOwner = true;
         }
+        // Genuinely irreducible equivalent mutant if this whole condition were forced to `true`: state.bookmark, like pictureOwner/objectDataOwner/objectOwner on the root object earlier, is only ever acted on paired with a `state.destination === "bookmarkStart"`/`"bookmarkEnd"` check (both at group-end, below, and in emitText) -- never on its own definedness. A stray bookmark object on some OTHER recognised destination's own child (say \object) is read back at that child's own group-end (`state.bookmark !== undefined`), but neither the bookmarkStart nor the bookmarkEnd branch beneath it ever fires, since `child.destination` is set from `kind` independently of this block and was never "bookmarkStart"/"bookmarkEnd" to begin with.
         if (kind === "bookmarkStart" || kind === "bookmarkEnd") {
           child.bookmark = {
             name: "",
@@ -1884,7 +1885,8 @@ function readRtfDetail(
       } else {
         index += 1;
       }
-      if (objectState !== undefined && isResultDestination) {
+      // No separate `objectState !== undefined &&` clause: isResultDestination's own definition already asserts it, and the same TypeScript aliased-condition narrowing the comment on isDuplicateResult above relies on carries through this bare check too.
+      if (isResultDestination) {
         // Unreachable for a duplicate \result: isDuplicateResult forces kind to "skip" above, which continues the outer loop before this point is ever reached. \result's own content now builds into a totally isolated scratch accumulator (see ContentBuilder's own beginResultScratch) rather than the paragraph/block list/table state already accumulating around \object -- so it can neither destroy that state nor be destroyed by it, regardless of where \object sits (mid-paragraph, inside a table cell, or anywhere else). `object` is cleared on this child (rather than inherited, as cloneGroupState would otherwise carry it forward by reference) so that a malformed \objdata nested inside \result's own fallback content -- not itself wrapped in its own \object, which real RTF never does but a hostile or corrupt file could -- decodes or fails entirely on its own terms, without marking THIS \object decoded.
         builder.beginResultScratch();
         child.resultOf = objectState;
