@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { EpubInvalidOpfError, type EpubDiagnosticSink } from "../diagnostics";
+import {
+  EpubInvalidOpfError,
+  type EpubDiagnostic,
+  type EpubDiagnosticSink,
+} from "../diagnostics";
 import { parseOpf } from "./parse";
 
 const OPF_XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -161,5 +165,112 @@ describe("parseOpf", () => {
     expect(
       codes.filter((c) => c === "epub/metadata-field-unmapped"),
     ).toHaveLength(2);
+  });
+
+  it("reports dc:contributor as an unmapped metadata field too, with the exact message naming it", () => {
+    const diagnostics: EpubDiagnostic[] = [];
+    parseOpf(
+      `<package xmlns="http://www.idpf.org/2007/opf">
+        <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+          <dc:contributor>A Contributor</dc:contributor>
+        </metadata>
+        <manifest/>
+        <spine/>
+      </package>`,
+      (d) => diagnostics.push(d),
+    );
+    expect(diagnostics).toContainEqual({
+      code: "epub/metadata-field-unmapped",
+      severity: "info",
+      message:
+        "<dc:contributor> has no document-schema.js LayoutMetadata field to carry it; dropped",
+    });
+  });
+
+  it("treats a whitespace-only dc:title, dc:language, and dc:date as absent, not empty strings", () => {
+    const { metadata } = parseOpf(
+      `<package xmlns="http://www.idpf.org/2007/opf">
+        <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+          <dc:title>   </dc:title>
+          <dc:language>   </dc:language>
+          <dc:date>   </dc:date>
+        </metadata>
+        <manifest/>
+        <spine/>
+      </package>`,
+    );
+    expect(metadata).toEqual({});
+  });
+
+  it("drops whitespace-only dc:creator/dc:subject values while keeping the real ones", () => {
+    const { metadata } = parseOpf(
+      `<package xmlns="http://www.idpf.org/2007/opf">
+        <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+          <dc:creator>   </dc:creator>
+          <dc:creator>Ada Lovelace</dc:creator>
+          <dc:subject>   </dc:subject>
+          <dc:subject>Fiction</dc:subject>
+        </metadata>
+        <manifest/>
+        <spine/>
+      </package>`,
+    );
+    expect(metadata.author).toBe("Ada Lovelace");
+    expect(metadata.keywords).toEqual(["Fiction"]);
+  });
+
+  it("carries no author or keywords field at all when every dc:creator/dc:subject is whitespace-only", () => {
+    const { metadata } = parseOpf(
+      `<package xmlns="http://www.idpf.org/2007/opf">
+        <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+          <dc:creator>   </dc:creator>
+          <dc:subject>   </dc:subject>
+        </metadata>
+        <manifest/>
+        <spine/>
+      </package>`,
+    );
+    expect(Object.hasOwn(metadata, "author")).toBe(false);
+    expect(Object.hasOwn(metadata, "keywords")).toBe(false);
+  });
+
+  it('reads dcterms:modified from the EPUB 2-style <meta name="dcterms:modified" content="..."/> variant', () => {
+    const { metadata } = parseOpf(
+      `<package xmlns="http://www.idpf.org/2007/opf">
+        <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+          <meta name="dcterms:modified" content="2026-03-03T00:00:00Z"/>
+        </metadata>
+        <manifest/>
+        <spine/>
+      </package>`,
+    );
+    expect(metadata.modifiedIso).toBe("2026-03-03T00:00:00Z");
+  });
+
+  it('skips a name="dcterms:modified" meta with a whitespace-only content, rather than reading it as an empty string', () => {
+    const { metadata } = parseOpf(
+      `<package xmlns="http://www.idpf.org/2007/opf">
+        <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+          <meta name="dcterms:modified" content="   "/>
+        </metadata>
+        <manifest/>
+        <spine/>
+      </package>`,
+    );
+    expect(Object.hasOwn(metadata, "modifiedIso")).toBe(false);
+  });
+
+  it('keeps scanning past a property="dcterms:modified" meta with empty text to find a later, real one', () => {
+    const { metadata } = parseOpf(
+      `<package xmlns="http://www.idpf.org/2007/opf">
+        <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+          <meta property="dcterms:modified"></meta>
+          <meta property="dcterms:modified">2026-04-04T00:00:00Z</meta>
+        </metadata>
+        <manifest/>
+        <spine/>
+      </package>`,
+    );
+    expect(metadata.modifiedIso).toBe("2026-04-04T00:00:00Z");
   });
 });
