@@ -48,15 +48,19 @@ export function subbandBounds(
   };
 }
 
-// F.3.4's whole-sample symmetric extension: outside [i0, i1) the signal is mirrored about its own two end samples, so index i0 - k reads as i0 + k and index i1 - 1 + k as i1 - 1 - k, repeating with period 2(n - 1). Exported for direct unit testing: synthesiseLine, this function's sole production caller, only ever reaches its loop (the one place mirrorIndex is called) once it has already special-cased length 0 and length 1 itself, so no length <= 1 input ever reaches mirrorIndex through that path -- only a direct call can exercise this function's own guard against it.
-export function mirrorIndex(position: number, i0: number, i1: number): number {
+// F.3.4's whole-sample symmetric extension: outside [i0, i1) the signal is mirrored about its own two end samples, so index i0 - k reads as i0 + k and index i1 - 1 + k as i1 - 1 - k, repeating with period 2(n - 1). Takes the position as an offset from i0 (rather than an absolute position the caller would otherwise add i0 to, only for this function to immediately subtract it back out again) since mirroring about i0 is an inherently symmetric operation on that offset -- offset and -offset always mirror identically, an equivalence a caller-side i0 + k versus i0 - k mistake could never actually observe either way. Exported for direct unit testing: synthesiseLine, this function's sole production caller, only ever reaches its loop (the one place mirrorIndex is called) once it has already special-cased length 0 and length 1 itself, so no length <= 1 input ever reaches mirrorIndex through that path -- only a direct call can exercise this function's own guard against it.
+export function mirrorIndex(
+  offsetFromI0: number,
+  i0: number,
+  i1: number,
+): number {
   const length = i1 - i0;
   if (length <= 1) {
     return i0;
   }
   const period = 2 * (length - 1);
-  // The double modulo is the standard way to fold a JS `%` result (which follows the sign of position - i0, so it can itself be negative) into [0, period) without a separate negative-offset branch: the result is already fully normalized before the mirror step below ever runs.
-  const offset = (((position - i0) % period) + period) % period;
+  // The double modulo is the standard way to fold a JS `%` result (which follows the sign of offsetFromI0, so it can itself be negative) into [0, period) without a separate negative-offset branch: the result is already fully normalized before the mirror step below ever runs.
+  const offset = ((offsetFromI0 % period) + period) % period;
   return i0 + (offset >= length ? period - offset : offset);
 }
 
@@ -197,7 +201,7 @@ export function synthesiseLine(
     return;
   }
   for (let k = -EXTENSION_MARGIN; k < length + EXTENSION_MARGIN; k++) {
-    fillScratch(EXTENSION_MARGIN + k, read(mirrorIndex(i0 + k, i0, i1)));
+    fillScratch(EXTENSION_MARGIN + k, read(mirrorIndex(k, i0, i1)));
   }
   runFilter();
   for (let k = 0; k < length; k++) {
