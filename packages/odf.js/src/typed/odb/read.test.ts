@@ -133,6 +133,18 @@ describe("resolveOdbComponent", () => {
       /no report named "SalesForm"/,
     );
   });
+
+  it('names the available list as "(none)" rather than a bare empty string when the .odb declares no component of that kind at all', () => {
+    const emptyPkg: Package = {
+      parts: {
+        "content.xml": databaseContentPart([]),
+        "META-INF/manifest.xml": manifestPart(BASE_MANIFEST_ENTRIES),
+      },
+    };
+    expect(() => resolveOdbComponent(emptyPkg, "form", "Anything")).toThrow(
+      /no form named "Anything" -- available: \(none\)/,
+    );
+  });
 });
 
 describe("readOdbInventory: synthetic fully-populated embedded package", () => {
@@ -223,6 +235,46 @@ describe("readOdbInventory: synthetic fully-populated embedded package", () => {
   });
 });
 
+describe("readOdbInventory: table names from db:schema-definition", () => {
+  it("reads db:schema-definition/db:table-definitions table names alongside db:table-representations, deduplicating a name the two sources share", () => {
+    const pkg: Package = {
+      parts: {
+        "content.xml": databaseContentPart([
+          el("db:table-representations", {}, [
+            el("db:table-representation", { "db:name": "Customers" }),
+            el("db:table-representation", { "db:name": "Orders" }),
+          ]),
+          el("db:schema-definition", {}, [
+            el("db:table-definitions", {}, [
+              // "Orders" is the same table db:table-representations already named above -- it must appear once in the result, proving the reader actually deduplicates across the two sources rather than merely happening not to repeat within one of them.
+              el("db:table-definition", { "db:name": "Orders" }),
+              el("db:table-definition", { "db:name": "Invoices" }),
+            ]),
+          ]),
+        ]),
+        "META-INF/manifest.xml": manifestPart(BASE_MANIFEST_ENTRIES),
+      },
+    };
+    expect(readOdbInventory(pkg).tables).toEqual([
+      "Customers",
+      "Orders",
+      "Invoices",
+    ]);
+  });
+
+  it("reads no table names when office:database has a db:schema-definition with no db:table-definitions child", () => {
+    const pkg: Package = {
+      parts: {
+        "content.xml": databaseContentPart([
+          el("db:schema-definition", {}, []),
+        ]),
+        "META-INF/manifest.xml": manifestPart(BASE_MANIFEST_ENTRIES),
+      },
+    };
+    expect(readOdbInventory(pkg).tables).toEqual([]);
+  });
+});
+
 describe("readOdbInventory: query definitions", () => {
   it("reads db:escape-processing when present, as a real boolean, and omits the field entirely when absent", () => {
     const pkg: Package = {
@@ -232,7 +284,7 @@ describe("readOdbInventory: query definitions", () => {
             el("db:query", {
               "db:name": "WithFlag",
               "db:command": "SELECT 1",
-              "db:escape-processing": "false",
+              "db:escape-processing": "true",
             }),
             el("db:query", { "db:name": "NoFlag", "db:command": "SELECT 2" }),
           ]),
@@ -242,10 +294,30 @@ describe("readOdbInventory: query definitions", () => {
     };
     const inventory = readOdbInventory(pkg);
     expect(inventory.queries).toEqual([
-      { name: "WithFlag", command: "SELECT 1", escapeProcessing: false },
+      { name: "WithFlag", command: "SELECT 1", escapeProcessing: true },
       { name: "NoFlag", command: "SELECT 2" },
     ]);
     expect("escapeProcessing" in (inventory.queries[1] ?? {})).toBe(false);
+  });
+
+  it('reads db:escape-processing="false" as a real false, distinguishing it from a bare string comparison against the wrong literal', () => {
+    const pkg: Package = {
+      parts: {
+        "content.xml": databaseContentPart([
+          el("db:queries", {}, [
+            el("db:query", {
+              "db:name": "Disabled",
+              "db:command": "SELECT 1",
+              "db:escape-processing": "false",
+            }),
+          ]),
+        ]),
+        "META-INF/manifest.xml": manifestPart(BASE_MANIFEST_ENTRIES),
+      },
+    };
+    expect(readOdbInventory(pkg).queries).toEqual([
+      { name: "Disabled", command: "SELECT 1", escapeProcessing: false },
+    ]);
   });
 
   it("skips a db:query missing its mandatory db:command rather than returning it half-populated", () => {
@@ -388,7 +460,80 @@ describe("readOdbInventory: db:database-description variants (RNG-derived, never
         "META-INF/manifest.xml": manifestPart(BASE_MANIFEST_ENTRIES),
       },
     };
-    expect(readOdbInventory(pkg).connection).toEqual({ type: "external" });
+    // toStrictEqual, not toEqual: readConnectionInfo's own ternary either omits `url` entirely or sets it to a real string -- it never sets the key to a literal `undefined`. toEqual treats an `undefined`-valued property as equivalent to an absent one, so it cannot tell those two shapes apart; toStrictEqual can, and is what actually proves the key is genuinely missing.
+    expect(readOdbInventory(pkg).connection).toStrictEqual({
+      type: "external",
+    });
+  });
+
+  it("formats a db:server-database (hostname, no port) into a descriptive url with no port suffix", () => {
+    const pkg: Package = {
+      parts: {
+        "content.xml": databaseContentPart([
+          el("db:data-source", {}, [
+            el("db:connection-data", {}, [
+              el("db:database-description", {}, [
+                el("db:server-database", {
+                  "db:type": "mysql",
+                  "db:hostname": "db.example.com",
+                  "db:database-name": "salesdb",
+                }),
+              ]),
+            ]),
+          ]),
+        ]),
+        "META-INF/manifest.xml": manifestPart(BASE_MANIFEST_ENTRIES),
+      },
+    };
+    expect(readOdbInventory(pkg).connection).toEqual({
+      type: "external",
+      url: "mysql://db.example.com/salesdb",
+    });
+  });
+
+  it("formats a db:server-database with neither a hostname nor a local socket name (only a database name) into a bare scheme-and-name url", () => {
+    const pkg: Package = {
+      parts: {
+        "content.xml": databaseContentPart([
+          el("db:data-source", {}, [
+            el("db:connection-data", {}, [
+              el("db:database-description", {}, [
+                el("db:server-database", {
+                  "db:type": "mysql",
+                  "db:database-name": "salesdb",
+                }),
+              ]),
+            ]),
+          ]),
+        ]),
+        "META-INF/manifest.xml": manifestPart(BASE_MANIFEST_ENTRIES),
+      },
+    };
+    expect(readOdbInventory(pkg).connection).toEqual({
+      type: "external",
+      url: "mysql:///salesdb",
+    });
+  });
+
+  it("formats a db:server-database with neither a hostname/local-socket-name nor a database name into a bare scheme url", () => {
+    const pkg: Package = {
+      parts: {
+        "content.xml": databaseContentPart([
+          el("db:data-source", {}, [
+            el("db:connection-data", {}, [
+              el("db:database-description", {}, [
+                el("db:server-database", { "db:type": "mysql" }),
+              ]),
+            ]),
+          ]),
+        ]),
+        "META-INF/manifest.xml": manifestPart(BASE_MANIFEST_ENTRIES),
+      },
+    };
+    expect(readOdbInventory(pkg).connection).toEqual({
+      type: "external",
+      url: "mysql://",
+    });
   });
 
   it("reads a db:file-based-database href as an external connection", () => {
@@ -414,6 +559,30 @@ describe("readOdbInventory: db:database-description variants (RNG-derived, never
     expect(readOdbInventory(pkg).connection).toEqual({
       type: "external",
       url: "../data/",
+    });
+  });
+
+  it("treats a db:file-based-database with no xlink:href as a bare external connection with no url", () => {
+    const pkg: Package = {
+      parts: {
+        "content.xml": databaseContentPart([
+          el("db:data-source", {}, [
+            el("db:connection-data", {}, [
+              el("db:database-description", {}, [
+                el("db:file-based-database", {
+                  "db:media-type":
+                    "application/vnd.oasis.opendocument.spreadsheet",
+                }),
+              ]),
+            ]),
+          ]),
+        ]),
+        "META-INF/manifest.xml": manifestPart(BASE_MANIFEST_ENTRIES),
+      },
+    };
+    // toStrictEqual: see the "no db:type" test above for why toEqual cannot prove `url` is absent rather than merely undefined.
+    expect(readOdbInventory(pkg).connection).toStrictEqual({
+      type: "external",
     });
   });
 });
@@ -467,6 +636,15 @@ describe("readOdbInventory: malformed db:component handling", () => {
         }),
       ]),
     ).toEqual([{ name: "Sales & Marketing", href: "forms/A&B" }]);
+  });
+
+  it("skips a stray child that is neither db:component nor db:component-collection, rather than misreading it as one", () => {
+    expect(
+      formsInventory([
+        el("db:desc", {}, [txt("Not a real component.")]),
+        el("db:component", { "db:name": "Good", "xlink:href": "forms/Obj4" }),
+      ]),
+    ).toEqual([{ name: "Good", href: "forms/Obj4" }]);
   });
 });
 
