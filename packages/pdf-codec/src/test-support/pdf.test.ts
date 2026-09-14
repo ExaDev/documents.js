@@ -177,6 +177,22 @@ describe("incrementalUpdatePdf", () => {
       "[0 0 200 100]",
     );
   });
+
+  it("pads every offset in the first revision's own xref section to exactly 10 digits, matching the second revision's", () => {
+    const text = decode(incrementalUpdatePdf());
+    const firstXrefIdx = text.indexOf("xref\n0 6\n");
+    const section = text.slice(firstXrefIdx, text.indexOf("trailer"));
+    expect(section.match(/\d{10} 00000 n /g)).toHaveLength(5);
+  });
+
+  it("closes the first revision's own trailer with a self-contained, well-formed startxref and %%EOF", () => {
+    const text = decode(incrementalUpdatePdf());
+    const firstXrefIdx = text.indexOf("xref\n0 6\n");
+    const firstTrailerIdx = text.indexOf("trailer", firstXrefIdx);
+    expect(text.slice(firstTrailerIdx)).toMatch(
+      /^trailer\n<< \/Size 6 \/Root 1 0 R >>\nstartxref\n\d+\n%%EOF\n3 0 obj/,
+    );
+  });
 });
 
 describe("unsupportedSecurityHandlerPdf", () => {
@@ -306,6 +322,11 @@ describe("symbolFontProgramPdf", () => {
 
 // FixtureBuilder itself, exercised directly: the exported fixture functions above only ever feed it well-formed dicts and object numbers that genuinely exist, so its own /Length-insertion regex, misuse guard, and xref-padding arithmetic have no route to coverage except a test that deliberately probes their edge cases.
 describe("FixtureBuilder", () => {
+  it("defaults header() to version 1.7 when called with no argument", () => {
+    const text = decode(new FixtureBuilder().header().bytes());
+    expect(text).toBe("%PDF-1.7\n");
+  });
+
   it("inserts /Length at the dict's own true end, not at the first nested '>>' it happens to find", () => {
     const bytes = new FixtureBuilder()
       .stream(1, "<< /Sub << /X 1 >> >>", new TextEncoder().encode("abc"))
