@@ -633,9 +633,7 @@ function insertConstructMarkers(
   extents: readonly BlockConstructExtent[],
   sink: RtfDiagnosticSink,
 ): ContentBlock[] {
-  if (extents.length === 0) {
-    return [...blocks];
-  }
+  // No early return for an empty `extents`: the loop below already produces exactly `[...blocks]` when there is nothing to splice (both marker loops are no-ops against an empty `ordered`), so a dedicated fast path here would be a pure equivalent-mutant-prone optimisation with no observable difference.
   const sorted = [...extents].sort(
     (left, right) =>
       left.startIndex - right.startIndex || right.endIndex - left.endIndex,
@@ -929,11 +927,9 @@ class ContentBuilder {
     para: ParagraphState,
     blockIndex: number,
   ): void {
+    // No `open.blockIndex === undefined` guard: a still-open bookmark's own paragraphSerial is fixed at the paragraph it opened in, and this reader's paragraphSerial only ever advances (never resets), so `open.paragraphSerial === this.paragraphSerial` can hold true for at most one resolveBookmarkPositions call per bookmark -- the very call for the paragraph it opened in. A defined blockIndex and a matching serial can therefore never coincide, making the guard permanently redundant rather than a real defensive check.
     for (const open of this.openBookmarks.values()) {
-      if (
-        open.blockIndex === undefined &&
-        open.paragraphSerial === this.paragraphSerial
-      ) {
+      if (open.paragraphSerial === this.paragraphSerial) {
         open.blockIndex = blockIndex;
       }
     }
@@ -942,9 +938,7 @@ class ContentBuilder {
 
   // Turns every bookmark whose end half has arrived into a block extent ending at `endIndex`. Called once per closed paragraph, and again when a block list is finalised -- a bookmark whose {\*\bkmkend ...} follows the list's last \par has no later paragraph to be resolved against, so without the second call it would silently vanish.
   private flushClosingBookmarks(inTable: boolean, endIndex: number): void {
-    if (this.closingBookmarks.length === 0) {
-      return;
-    }
+    // No `this.closingBookmarks.length === 0` guard: looping over an empty array and reassigning `this.closingBookmarks = []` to an already-empty array are both no-ops, so a dedicated fast path here would be equivalent-mutant-prone with no observable difference.
     const target = inTable ? this.cellBlockExtents : this.sectionBlockExtents;
     for (const closing of this.closingBookmarks) {
       if (closing.inTable !== inTable) {
@@ -956,10 +950,15 @@ class ContentBuilder {
         });
         continue;
       }
+      if (closing.blockIndex === undefined) {
+        // Provably unreachable: reaching closingBookmarks at all requires paragraphSerial to have moved past this bookmark's own opening serial (endBookmark only pushes here on a serial mismatch), and the only way paragraphSerial ever moves is a resolveBookmarkPositions call that runs before it -- the very call that resolves blockIndex for every bookmark whose serial matches at that moment, this one included. A still-undefined blockIndex here means that invariant broke, so this fails loudly rather than guessing a position with a numeric fallback.
+        throw new Error(
+          "internal invariant violated: a closing bookmark reached flushClosingBookmarks with no resolved blockIndex",
+        );
+      }
       target.push({
         descriptor: closing.descriptor,
-        // A start with no block index of its own opened after the last paragraph of its own scope closed, so the extent covers only the block the end sits in.
-        startIndex: closing.blockIndex ?? Math.max(0, endIndex - 1),
+        startIndex: closing.blockIndex,
         endIndex,
       });
     }
@@ -999,11 +998,10 @@ class ContentBuilder {
       style?.name === undefined || style.name.length === 0
         ? paragraph
         : { ...paragraph, styleId: style.name };
-    const withHeading =
-      headingLevel === undefined ? withStyle : { ...withStyle, headingLevel };
     return {
-      ...withHeading,
-      // Every consumer reads .alignment/.direction by value, never by key presence (toEqual ignores an undefined-valued key the same way it ignores an absent one), so unconditionally including both removes two equivalent-mutant-prone ternaries with no observable difference.
+      ...withStyle,
+      // Every consumer reads .headingLevel/.alignment/.direction by value, never by key presence (toEqual ignores an undefined-valued key the same way it ignores an absent one), so unconditionally including all three removes equivalent-mutant-prone ternaries with no observable difference.
+      headingLevel,
       alignment: para.alignment,
       direction: para.direction,
       ...(para.indentLeftTwips === 0
@@ -1027,7 +1025,8 @@ class ContentBuilder {
   // "\slN Space between lines ... If N is a positive value, this size is used only if it is taller than the tallest character ... if N is a negative value, the absolute value of N is used" and "\slmultN Line spacing multiple ... 1 Multiple line spacing, relative to 'Single'". ContentParagraph.lineSpacing is a multiple of single line height, so only the \slmult1 form converts exactly: RTF states its multiple in 240ths of a line, Word's own unit for it. An \sl0 or absent value means automatic spacing and produces no field at all.
   private lineSpacingFields(para: ParagraphState): { lineSpacing?: number } {
     const value = para.lineSpacingTwips;
-    if (value === undefined || value === 0 || !para.lineSpacingIsMultiple) {
+    // No `value === 0` clause: when value is 0, multiple below is also exactly 0, and the trailing `multiple > 0` check already returns {} for that case -- an explicit early check for the same thing here would be an equivalent-mutant-prone duplicate of that guard, not a distinct check.
+    if (value === undefined || !para.lineSpacingIsMultiple) {
       return {};
     }
     const multiple = Math.abs(value) / 240;
@@ -1754,7 +1753,8 @@ function readRtfDetail(
       // RTF's own <obj> grammar allows only one \result child, but a malformed producer can still write two -- recognised here, mirroring \objdata's own duplicate check just below, by resultSeen already being true from the first one, so the second is skipped whole rather than rendered into a scratch accumulator nothing will read.
       // objectState is provably defined here: isResultDestination's own definition already asserts `objectState !== undefined`, and TypeScript's aliased-condition narrowing carries that through the `&&` below.
       const isDuplicateResult = isResultDestination && objectState.resultSeen;
-      if (objectState !== undefined && isResultDestination) {
+      // No separate `objectState !== undefined &&` clause: isResultDestination's own definition already asserts it, and the same TypeScript aliased-condition narrowing the comment above relies on carries through this bare check too.
+      if (isResultDestination) {
         // Recorded regardless of whether this \result is ultimately kept or discarded: \object's own group-end diagnostic (below) needs to know whether a \result existed at all, distinctly from whether \objdata did, and the duplicate check just above needs it too.
         objectState.resultSeen = true;
       }
@@ -2148,17 +2148,18 @@ function applyPictureControlWord(
       if (param !== undefined) picture.scaleYPercent = param;
       return;
     default:
-      return;
+      // The trailing return statement other switches in this file give their own default case is omitted here on purpose: this is the function's own last statement, so falling out of the switch and falling out of this void function end in the identical place either way.
+      break;
   }
 }
 
 // RTF 1.5's own Form Fields table states \ffresN/\ffdefresN only in list-field terms ("Result field for a form field. Values from 0 to N-1, where N is the number of \ffl entries" / "Default entry for list field"), but \ffres/\ffdefres are RTF's own serialisation of the binary FFDataBits structure [MS-DOC] 2.9.79 defines, and that structure spells out a checkbox's own iRes meaning explicitly: 0 (unchecked), 1 (checked), or the reserved sentinel 25 (undefined, treated as unchecked). Both control words are captured here via formFieldValueNumber's own bare-defaults-to-0 Value-word rule, regardless of the field's iType; formFieldContentControl in constructs.ts is where the checkbox-specific sentinel handling and the dropdown's own zero-based-index reading of the identical \ffres are actually decided. \ffprot ("1 if this field is protected, 0 otherwise" -- RTF 1.9.1's own Form Fields table, mirroring [MS-DOC] 2.9.79 FFDataBits.fProt) is read via formFieldValueBit above, matching its own Value-word classification's literal 0-default for a bare occurrence -- see formFieldValueBit's own comment for the exact citations. \ffownhelp is deliberately NOT read the same way, despite carrying the identical Value-word classification: LibreOffice's own RTF exporter (sw/source/filter/ww8/rtfattributeoutput.cxx, confirmed against its published source) emits the BARE control word, with no numeric parameter, whenever the control model exposes a HelpText property at all -- every one of its three FFOWNHELP emission sites gates on `xPropSetInfo->hasPropertyByName("HelpText")`, a property-existence check, not a literal unconditional emission -- immediately before a `{\*\ffhelptext ...}` destination that actually carries the control's real HelpText property -- so treating a bare occurrence as the Value-word literal default of false, the way \ffprot's bare form correctly does, silently discards genuine author-set help text from this real producer on every read, with the reader's own downstream `helpText.trim().length > 0` check in constructs.ts already filtering out the empty/absent case the spec's 0-default exists to describe. \ffownhelp is read via toggleValue instead, exactly like a bare `\b`/`\i`: this is a considered divergence from its own literal Value-word default, not an oversight, made for the identical real-world-producer reason FORM_FIELD_RESULT_UNDEFINED's own \ffres25-to-\ffdefres fallback exists above -- do not "simplify" this back to formFieldValueBit, that would re-break the LibreOffice case this divergence exists for. An explicit \ffownhelp0 still reads as false (a producer that spells out the zero is making an explicit claim the reader still honours), and a field that never mentions \ffownhelp at all still defaults to false via FormFieldState's own initial value; only the bare, unparameterised form's own default changes.
+// Every recognised word is a no-op default outcome from the caller's own point of view: the sole call site (applyControlWord below) unconditionally treats destination "formField" as fully handled regardless of which word matched or whether any did, via its own unconditional formField-family guard right after -- so this function's result was never actually observable, and returning it at all was a boolean the caller could never branch on differently. Void rather than boolean for that reason, with an unmatched word simply falling out of the switch as a real no-op.
 function applyFormFieldControlWord(
   name: string,
   param: number | undefined,
   formField: FormFieldState,
-): boolean {
-  // Each case falls through to the single return true below rather than returning true itself: the return value's own truth is never independently observable per case (nothing downstream distinguishes "ffres handled this" from "ffdefres handled this", only "some case here did"), so one shared return after the switch is both simpler and leaves no per-case boolean literal for a mutation to hide behind unobserved.
+): void {
   switch (name) {
     case "ffres":
       formField.resultIndex = formFieldValueNumber(param);
@@ -2173,9 +2174,8 @@ function applyFormFieldControlWord(
       formField.ownHelp = toggleValue(param);
       break;
     default:
-      return false;
+      break;
   }
-  return true;
 }
 
 function applyCharacterControlWord(
@@ -2439,8 +2439,8 @@ function applyStructureControlWord(
   builder: ContentBuilder,
   section: SectionState,
   sink: RtfDiagnosticSink,
-): boolean {
-  // Each case falls through to the single return true below (see applyFormFieldControlWord's own identical comment for why).
+): void {
+  // Void, not boolean: this is the last dispatcher in applyControlWord's own chain, called unconditionally with its result never inspected -- an unrecognised word simply falls out of the switch as a real no-op, exactly as the spec requires of any control word a reader does not know.
   switch (name) {
     case "par":
       builder.endParagraph(state.para, true);
@@ -2489,9 +2489,8 @@ function applyStructureControlWord(
       builder.endSection(section, state.para);
       break;
     default:
-      return false;
+      break;
   }
-  return true;
 }
 
 function applyControlWord(
@@ -2529,12 +2528,9 @@ function applyControlWord(
     return;
   }
   const formField = state.field?.formField;
-  if (
-    state.destination === "formField" &&
-    formField !== undefined &&
-    applyFormFieldControlWord(name, param, formField)
-  ) {
-    return;
+  // Applying a genuine \ffres/\ffdefres/\ffprot/\ffownhelp word and discarding an unrecognised one are handled by the SAME unconditional return just below: nothing here branches on which of the two happened, so applyFormFieldControlWord's own effect (if any) is folded into that one guard rather than gated by a second, redundant destination check of its own.
+  if (state.destination === "formField" && formField !== undefined) {
+    applyFormFieldControlWord(name, param, formField);
   }
   if (
     state.destination === "formField" ||
