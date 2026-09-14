@@ -97,6 +97,27 @@ function firstTable(pkg: Package): XmlElement {
   return table;
 }
 
+function contentValidations(pkg: Package): XmlElement {
+  const body = findChildElement(
+    partRoot(pkg, "content.xml").children,
+    "office:body",
+  );
+  const spreadsheet =
+    body === undefined
+      ? undefined
+      : findChildElement(body.children, "office:spreadsheet");
+  const container =
+    spreadsheet === undefined
+      ? undefined
+      : findChildElement(spreadsheet.children, "table:content-validations");
+  if (container === undefined) {
+    throw new Error(
+      "expected office:body/office:spreadsheet/table:content-validations",
+    );
+  }
+  return container;
+}
+
 function contentAutomaticStyles(pkg: Package): XmlElement {
   const container = findChildElement(
     partRoot(pkg, "content.xml").children,
@@ -369,6 +390,173 @@ describe("writeOdsContent XML shapes", () => {
       "style:table-cell-properties",
     )[0]!;
     expect(attrValue(properties, "fo:background-color")).toBe("#ff0000");
+  });
+
+  describe("data validation messages", () => {
+    it("writes no table:help-message/table:error-message and no table:allow-empty-cell for a bare rule with no message fields and allowBlank left absent", () => {
+      const pkg = writeOdsContent(
+        documentOf([
+          sheetOf([], {
+            dataValidations: [
+              {
+                ranges: [
+                  { startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 },
+                ],
+                type: "list",
+                formula1: '"a,b,c"',
+              },
+            ],
+          }),
+        ]),
+      );
+      const rule = childrenWithTag(
+        contentValidations(pkg),
+        "table:content-validation",
+      )[0]!;
+      expect(attrValue(rule, "table:allow-empty-cell")).toBeUndefined();
+      expect(childrenWithTag(rule, "table:help-message")).toHaveLength(0);
+      expect(childrenWithTag(rule, "table:error-message")).toHaveLength(0);
+    });
+
+    it("writes table:allow-empty-cell=false only when allowBlank is explicitly false", () => {
+      const pkg = writeOdsContent(
+        documentOf([
+          sheetOf([], {
+            dataValidations: [
+              {
+                ranges: [
+                  { startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 },
+                ],
+                type: "list",
+                formula1: '"a,b,c"',
+                allowBlank: false,
+              },
+            ],
+          }),
+        ]),
+      );
+      const rule = childrenWithTag(
+        contentValidations(pkg),
+        "table:content-validation",
+      )[0]!;
+      expect(attrValue(rule, "table:allow-empty-cell")).toBe("false");
+    });
+
+    it("writes table:help-message and table:error-message with display/title/body only when the corresponding fields are actually set", () => {
+      const pkg = writeOdsContent(
+        documentOf([
+          sheetOf([], {
+            dataValidations: [
+              {
+                ranges: [
+                  { startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 },
+                ],
+                type: "list",
+                formula1: '"a,b,c"',
+                showInputMessage: true,
+                promptTitle: "Pick one",
+                prompt: "Choose a value",
+                showErrorMessage: true,
+                errorTitle: "Invalid",
+                error: "That value is not allowed",
+                errorStyle: "warning",
+              },
+            ],
+          }),
+        ]),
+      );
+      const rule = childrenWithTag(
+        contentValidations(pkg),
+        "table:content-validation",
+      )[0]!;
+      const help = childrenWithTag(rule, "table:help-message")[0]!;
+      expect(attrValue(help, "table:display")).toBe("true");
+      expect(attrValue(help, "table:title")).toBe("Pick one");
+      expect(childrenWithTag(help, "text:p")[0]!.children[0]).toMatchObject({
+        type: "text",
+        value: "Choose a value",
+      });
+      const error = childrenWithTag(rule, "table:error-message")[0]!;
+      expect(attrValue(error, "table:display")).toBe("true");
+      expect(attrValue(error, "table:title")).toBe("Invalid");
+      expect(attrValue(error, "table:message-type")).toBe("warning");
+      expect(childrenWithTag(error, "text:p")[0]!.children[0]).toMatchObject({
+        type: "text",
+        value: "That value is not allowed",
+      });
+    });
+
+    it("omits table:display when a message's title/body exist but its own show flag was never set", () => {
+      const pkg = writeOdsContent(
+        documentOf([
+          sheetOf([], {
+            dataValidations: [
+              {
+                ranges: [
+                  { startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 },
+                ],
+                type: "list",
+                formula1: '"a,b,c"',
+                promptTitle: "Pick one",
+              },
+            ],
+          }),
+        ]),
+      );
+      const rule = childrenWithTag(
+        contentValidations(pkg),
+        "table:content-validation",
+      )[0]!;
+      const help = childrenWithTag(rule, "table:help-message")[0]!;
+      expect(attrValue(help, "table:display")).toBeUndefined();
+      expect(attrValue(help, "table:title")).toBe("Pick one");
+    });
+
+    it("interns a rule with showInputMessage/showErrorMessage true as a definition distinct from an otherwise-identical rule with them left unset", () => {
+      const rangeAt = (row: number) => ({
+        startRow: row,
+        startColumn: 0,
+        endRow: row,
+        endColumn: 0,
+      });
+      const pkg = writeOdsContent(
+        documentOf([
+          sheetOf([], {
+            dataValidations: [
+              {
+                ranges: [rangeAt(0)],
+                type: "list",
+                formula1: '"a,b,c"',
+                showInputMessage: true,
+              },
+              {
+                ranges: [rangeAt(1)],
+                type: "list",
+                formula1: '"a,b,c"',
+              },
+              {
+                ranges: [rangeAt(2)],
+                type: "list",
+                formula1: '"x,y,z"',
+                showErrorMessage: true,
+              },
+              {
+                ranges: [rangeAt(3)],
+                type: "list",
+                formula1: '"x,y,z"',
+              },
+            ],
+          }),
+        ]),
+      );
+      const rows = childrenWithTag(firstTable(pkg), "table:table-row");
+      const nameOfRow = (row: number) => {
+        const cell = childrenWithTag(rows[row]!, "table:table-cell")[0]!;
+        return attrValue(cell, "table:content-validation-name");
+      };
+      expect(nameOfRow(0)).not.toBe(nameOfRow(1));
+      expect(nameOfRow(2)).not.toBe(nameOfRow(3));
+    });
   });
 
   describe("the sheet's own master page", () => {
