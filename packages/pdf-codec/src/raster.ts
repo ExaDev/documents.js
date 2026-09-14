@@ -968,8 +968,9 @@ function buildTextOutlineFace(
         glyf: program.face.glyf,
         unitsPerEm: program.face.unitsPerEm,
         glyphIdOf: (codes, offset) => {
+          // No separate cid < entries.length guard: cid is always a non-negative index (built from two unsigned byte shifts), and a plain array already reads out of bounds as undefined -- entries[cid] alone is exactly the ": undefined" branch for every cid past the map's own last entry.
           const cid = (codes[offset]! << 8) | codes[offset + 1]!;
-          return cid < entries.length ? entries[cid] : undefined;
+          return entries[cid];
         },
       };
     }
@@ -1225,8 +1226,7 @@ export function glyphOutlineSubpaths(
 
 // --- Read-side helpers whose read.ts originals are module-private. ---
 
-// The %PDF- header scan readPdf performs (a junk-prefixed file is legal per ISO 32000-1 7.5.2, so a window is searched rather than offset 0 required): re-derived here because read.ts's own copy is not exported, with raster.test.ts holding the observable behaviour to the same pdf/no-header error readPdf throws for a non-PDF input.
-const PDF_HEADER_BYTES = new TextEncoder().encode("%PDF-");
+// The %PDF- header scan readPdf performs (a junk-prefixed file is legal per ISO 32000-1 7.5.2, so a window is searched rather than offset 0 required): re-derived here because read.ts's own copy is not exported, with raster.test.ts holding the observable behaviour to the same pdf/no-header error readPdf throws for a non-PDF input. A latin1 decode maps each byte 0-255 to the identical code point one-for-one, so String.prototype.includes over it is exactly a byte-sequence search -- the language's own substring search, rather than a hand-written double loop whose own bounds arithmetic would just be re-deriving what indexOf already guarantees correct.
 const HEADER_SEARCH_WINDOW = 1024;
 
 function hasPdfHeader(bytes: Uint8Array<ArrayBuffer>): boolean {
@@ -1234,15 +1234,7 @@ function hasPdfHeader(bytes: Uint8Array<ArrayBuffer>): boolean {
     0,
     Math.min(HEADER_SEARCH_WINDOW, bytes.length),
   );
-  outer: for (let i = 0; i <= window.length - PDF_HEADER_BYTES.length; i++) {
-    for (let j = 0; j < PDF_HEADER_BYTES.length; j++) {
-      if (window[i + j] !== PDF_HEADER_BYTES[j]) {
-        continue outer;
-      }
-    }
-    return true;
-  }
-  return false;
+  return new TextDecoder("latin1").decode(window).includes("%PDF-");
 }
 
 interface PageBoxRect {
