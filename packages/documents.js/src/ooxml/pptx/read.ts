@@ -19,8 +19,8 @@ export interface ReadPptxContentOptions {
 
 const PRESENTATION_PART = "ppt/presentation.xml";
 
-// Every slide's own part path, in p:sldIdLst document order -- the same order the upstream reader itself resolves slides in (see ooxml.js's own readSlidePathsInOrder), needed here only to locate each slide's raw p:sld root for the second, vector-detecting pass below.
-function slidePathsInOrder(pkg: Package): readonly string[] {
+// Every slide's own part path, in p:sldIdLst document order -- the same order the upstream reader itself resolves slides in (see ooxml.js's own readSlidePathsInOrder), needed here only to locate each slide's raw p:sld root for the second, vector-detecting pass below. Exported (not merely internal) so its own two malformed-package guards -- no ppt/presentation.xml part, or one with no p:sldIdLst -- are directly testable: readPptxContent's own upstream flat reader has no slides to map over at all in either of those same shapes, so nothing calling THIS function through readPptxContent can ever observe which of its two possible return values ("[]" vs "the mutant's own placeholder array") actually came back.
+export function slidePathsInOrder(pkg: Package): readonly string[] {
   const presentationRoot = rootElement(pkg.parts[PRESENTATION_PART]);
   if (presentationRoot === undefined) {
     return [];
