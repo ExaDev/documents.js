@@ -14,7 +14,9 @@ import {
   type AuditAdvisory,
 } from "./audit-autofix";
 
-function advisory(overrides: Partial<AuditAdvisory> = {}): AuditAdvisory {
+function advisory(
+  overrides: Readonly<Partial<AuditAdvisory>> = {},
+): AuditAdvisory {
   return {
     module_name: "undici",
     vulnerable_versions: ">=7.0.0 <7.29.0",

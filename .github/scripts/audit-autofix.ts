@@ -160,7 +160,7 @@ function writeWorkspaceDoc(doc: Document): void {
 // `overrides` is passed as the complete desired state, not a patch: keys it omits are deleted individually, which is what the prune pass at the end of a run relies on. Entries whose value is not a string are left alone rather than removed, since currentOverrides only reports string-valued keys -- a value this script does not understand is not a value it should destroy.
 export function withOverrides(
   workspace: Document,
-  overrides: Record<string, string>,
+  overrides: Readonly<Record<string, string>>,
 ): Document {
   const cloned = workspace.clone();
   // An empty map is written as a bare `overrides: {}` line that never goes away on its own -- deleting the key when there is nothing to override keeps a fully-pruned file clean instead of accumulating dead boilerplate. The comment above the key goes with it, which is correct: it documents overrides that no longer exist.
@@ -227,8 +227,8 @@ function hasUncommittedChanges(): boolean {
 // `-r`, unlike the single-importer form this was ported from: `overrides` in pnpm-workspace.yaml is a workspace-wide setting, but a non-recursive `pnpm update` re-resolves the root importer's dependencies only, leaving every one of this workspace's package importers on the resolutions already in the lockfile. Since almost everything an advisory names here is transitive to a package rather than to the root, the update would report success while the vulnerable entries the audit found stayed exactly where they were -- and the re-audit below would then correctly refuse to call the candidate fixed. Recursive is the form that matches where the overrides apply.
 function attemptBatch(
   workspace: Document,
-  baseOverrides: Record<string, string>,
-  batch: Candidate[],
+  baseOverrides: Readonly<Record<string, string>>,
+  batch: readonly Candidate[],
 ): { succeeded: Candidate[]; conflicted: boolean } {
   const overrides = { ...baseOverrides };
   for (const c of batch) overrides[c.overrideKey] = c.range;
@@ -254,8 +254,8 @@ function attemptBatch(
 // A single candidate whose override the registry can never satisfy (or that conflicts with peers) must not sink every other, independently-fixable candidate in the same batch. attemptBatch's own audit check already tells us exactly which candidates in a batch succeeded when the update itself ran cleanly, so bisection is only needed to isolate a genuine `conflicted` (non-zero exit) failure; if two halves that each update fine independently still conflict combined, fall back to a linear greedy pass, which always terminates with a verified-working subset.
 function resolveMaximalSubset(
   workspace: Document,
-  baseOverrides: Record<string, string>,
-  batch: Candidate[],
+  baseOverrides: Readonly<Record<string, string>>,
+  batch: readonly Candidate[],
 ): Candidate[] {
   if (batch.length === 0) return [];
 
@@ -285,8 +285,8 @@ function resolveMaximalSubset(
 
 function greedyResolve(
   workspace: Document,
-  baseOverrides: Record<string, string>,
-  batch: Candidate[],
+  baseOverrides: Readonly<Record<string, string>>,
+  batch: readonly Candidate[],
 ): Candidate[] {
   const working: Candidate[] = [];
   for (const c of batch) {
@@ -299,7 +299,9 @@ function greedyResolve(
 }
 
 // Splits audit advisories into fixable candidates (grouped by override selector) and deferred entries with a reason each. Pure — no filesystem, no subprocesses — so the unit tests cover grouping, dedup, and the not-overridable and no-patch deferral paths through it.
-export function classifyAdvisories(advisories: AuditAdvisory[]): Classified {
+export function classifyAdvisories(
+  advisories: readonly AuditAdvisory[],
+): Classified {
   const deferred: { advisory: AuditAdvisory; reason: string }[] = [];
   const candidatesByKey = new Map<string, Candidate>();
 
@@ -342,7 +344,7 @@ export function classifyAdvisories(advisories: AuditAdvisory[]): Classified {
 
 // An override is inert when no version its selector could rewrite is present: the selector is the vulnerable range on the key (`pkg@<range>`), and the override only acts on resolutions matching that range. If nothing resolved matches the selector, the override forces nothing today -- regardless of what the package resolves outside the selector. The autofix only ever adds overrides, so without this pass the map accumulates one entry per historical advisory forever. Dropping inert entries is self-correcting rather than risky: if a future update resolves back into a vulnerable range, the next audit run re-adds the override through the same fix path.
 export function inertOverrideKeys(
-  overrides: Record<string, string>,
+  overrides: Readonly<Record<string, string>>,
   resolvedVersions: Map<string, Set<string>>,
 ): string[] {
   const inert: string[] = [];
