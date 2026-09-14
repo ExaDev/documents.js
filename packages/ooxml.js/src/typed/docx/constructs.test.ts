@@ -135,14 +135,17 @@ describe("runRangeMarkerExtents: isBlockScopedHalf", () => {
     expect(extents).toEqual([]);
   });
 
+  // A run of dummy filler elements, purely to occupy array slots: isBlockScopedHalf's "position" is index.elements.indexOf(half.element), not a half's own runPosition, so pinning a half to a specific array position means padding the array out to it.
+  const filler = (): XmlElement => el("w:r", {}, []);
+
   it("treats a found half sitting exactly at the first content-bearing position as NOT leading", () => {
-    // firstContentIndex is a real index equal to this half's own position, so leading must be false (strictly less than, not less-than-or-equal) -- and trailing is pinned false by a lastContentIndex far beyond both halves' positions, so the pair is kept only if leading is computed correctly.
+    // The start half sits at array position 0, exactly firstContentIndex (0): leading must be false there (strictly less than, not less-than-or-equal), or the pair would be wrongly dropped. The end half sits at array position 5, past a lastContentIndex of 2 by a wide margin, pinning IT as block-scoped (via trailing) regardless of either boundary mutant here or in the sibling test below -- so the pair's own "both block-scoped" AND hinges entirely on the start half's own leading value.
     const startEl = el("w:bookmarkStart", { "w:id": "z", "w:name": "bm" }, []);
     const endEl = el("w:bookmarkEnd", { "w:id": "z" }, []);
     const index: ParagraphContentIndex = {
-      elements: [startEl, endEl],
+      elements: [startEl, filler(), filler(), filler(), filler(), endEl],
       firstContentIndex: 0,
-      lastContentIndex: 100,
+      lastContentIndex: 2,
     };
     const extents = runRangeMarkerExtents(
       [half(startEl, "start", 0), half(endEl, "end", 5)],
@@ -150,6 +153,25 @@ describe("runRangeMarkerExtents: isBlockScopedHalf", () => {
     );
     expect(extents).toEqual([
       { descriptor: bookmarkAnchorDescriptor("bm"), startRun: 0, endRun: 5 },
+    ]);
+  });
+
+  it("treats a found half sitting exactly at the last content-bearing position as NOT trailing", () => {
+    // The end half sits at array position 15, exactly lastContentIndex (15): trailing must be false there (strictly greater than, not greater-than-or-equal), or the pair would be wrongly dropped. The start half sits at array position 0, clearly below a firstContentIndex of 10, pinning IT as block-scoped (via leading) regardless of either boundary mutant -- so the AND hinges entirely on the end half's own trailing value.
+    const startEl = el("w:bookmarkStart", { "w:id": "z", "w:name": "bm" }, []);
+    const endEl = el("w:bookmarkEnd", { "w:id": "z" }, []);
+    const elements = [startEl, ...Array.from({ length: 14 }, filler), endEl];
+    const index: ParagraphContentIndex = {
+      elements,
+      firstContentIndex: 10,
+      lastContentIndex: 15,
+    };
+    const extents = runRangeMarkerExtents(
+      [half(startEl, "start", 0), half(endEl, "end", 15)],
+      index,
+    );
+    expect(extents).toEqual([
+      { descriptor: bookmarkAnchorDescriptor("bm"), startRun: 0, endRun: 15 },
     ]);
   });
 });
