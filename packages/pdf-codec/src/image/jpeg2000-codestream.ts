@@ -27,14 +27,6 @@ const MARKER_EOC = 0xffd9;
 export type Jpeg2000ProgressionOrder =
   "LRCP" | "RLCP" | "RPCL" | "PCRL" | "CPRL";
 
-const PROGRESSION_ORDERS: readonly Jpeg2000ProgressionOrder[] = [
-  "LRCP",
-  "RLCP",
-  "RPCL",
-  "PCRL",
-  "CPRL",
-];
-
 // T.800 A.6.1 Table A.20: the wavelet filter the tile-component was transformed with.
 export type Jpeg2000Transform = "reversible-5-3" | "irreversible-9-7";
 
@@ -277,8 +269,16 @@ function readCodingStyleParameters(
 }
 
 function readCodingDefaults(cursor: MarkerCursor): Jpeg2000CodingDefaults {
+  // T.800 A.6.1 Table A.16: the five progression orders, in the order the Table's own values run. Built inside this function rather than as a module-level constant so a mutation to one of its entries is attributed, by Stryker's per-test coverage analysis, to the tests that actually call this function -- a module-level `const` here would run once at import time as a static mutant, which Stryker tests against a single arbitrary covering test rather than the full set that genuinely exercises this lookup.
+  const progressionOrders: readonly Jpeg2000ProgressionOrder[] = [
+    "LRCP",
+    "RLCP",
+    "RPCL",
+    "PCRL",
+    "CPRL",
+  ];
   const scod = cursor.uint8();
-  const progressionOrder = PROGRESSION_ORDERS[cursor.uint8()];
+  const progressionOrder = progressionOrders[cursor.uint8()];
   if (progressionOrder === undefined) {
     throw new Jpeg2000ParseError(
       "COD declares a progression order outside the five ISO/IEC 15444-1 Table A.16 defines",
