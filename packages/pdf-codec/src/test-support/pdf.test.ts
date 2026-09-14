@@ -9,7 +9,9 @@ import {
   inlineImagePdf,
   minimalClassicXrefPdf,
   nonZeroOriginMediaBoxPdf,
+  pagelessPdf,
   rotatedPagePdf,
+  symbolFontProgramPdf,
   unsupportedSecurityHandlerPdf,
   withInfoDictPdf,
   xrefStreamWithObjectStreamPdf,
@@ -67,6 +69,7 @@ describe("xrefStreamWithObjectStreamPdf", () => {
   it("is well-formed, with startxref pointing at the xref stream's own header", () => {
     const bytes = xrefStreamWithObjectStreamPdf();
     const text = expectWellFormedHeaderAndTrailer(bytes);
+    expect(text.startsWith("%PDF-1.5\n")).toBe(true); // xref streams are a 1.5+ feature, distinct from the classic-xref fixtures' own 1.4
     const match = /startxref\n(\d+)\n%%EOF$/.exec(text);
     expect(match).not.toBeNull();
     const offset = Number(match![1]);
@@ -275,6 +278,29 @@ describe("inlineImagePdf", () => {
     expect(text).toContain("BI /W 2 /H 2");
     expect(text).toContain(" ID ");
     expect(text).toContain(" EI Q");
+    // The raw 2x2 RGB pixel bytes themselves must sit between ID and EI -- the substring checks above would pass unchanged even with no pixel data at all. latin1 decoding is one character per byte, so the string index doubles as the byte offset.
+    const pixelStart = text.indexOf(" ID ") + " ID ".length;
+    const pixelBytes = [255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0];
+    expect([
+      ...bytes.slice(pixelStart, pixelStart + pixelBytes.length),
+    ]).toEqual(pixelBytes);
+  });
+});
+
+describe("pagelessPdf", () => {
+  it("is a well-formed, structurally valid document with an empty page tree", () => {
+    const bytes = pagelessPdf();
+    verifyFullClassicXref(bytes);
+    const text = expectWellFormedHeaderAndTrailer(bytes);
+    expect(text).toContain("<< /Type /Catalog /Pages 2 0 R >>");
+    expect(text).toContain("<< /Type /Pages /Kids [] /Count 0 >>");
+  });
+});
+
+describe("symbolFontProgramPdf", () => {
+  it("zero-pads a single-hex-digit code to two digits in the content stream", () => {
+    const text = decode(symbolFontProgramPdf(Uint8Array.from([1, 2, 3]), 5));
+    expect(text).toContain("<05> Tj ET");
   });
 });
 

@@ -314,6 +314,11 @@ describe("readPdf: page notes", () => {
   it("does not mistake a third-party tool's own hidden sticky note for pptx speaker notes", () => {
     const doc = readPdf(pdfWithForeignHiddenAnnotationPdf());
     expect(doc.pages[0]!.notes).toBeUndefined();
+    // Proves the annotation itself was genuinely read and excluded on its /T marker -- not that it (or its /Annots entry) never reached the reader at all, which would leave notes undefined for an unrelated reason.
+    const sticky = doc.pages[0]!.annotations?.find((a) => a.subtype === "Text");
+    expect(sticky?.contents).toBe(
+      "A real reviewer note, not pptx speaker notes",
+    );
   });
 });
 
