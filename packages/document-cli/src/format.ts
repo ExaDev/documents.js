@@ -59,13 +59,10 @@ export function isDocumentFormat(value: string): value is DocumentFormat {
   return value in FORMAT_TO_EXTENSION;
 }
 
-// Reads the extension after the last '.' in the final path segment (so 'a.b/c.docx' -> 'docx', '.gitignore' -> undefined -- a leading dot with no further '.' is not an extension). Returns undefined for no recognised extension, an unrecognised one, a bare '-' (stdin/stdout marker), or a path with none at all -- callers decide how to react to an unresolved format, this module only classifies.
+// Reads the extension after the last '.' in the final path segment (so 'a.b/c.docx' -> 'docx', '.gitignore' -> undefined -- a leading dot with no further '.' is not an extension). Returns undefined for no recognised extension, an unrecognised one, a bare '-' (stdin/stdout marker, which has no '.' of its own and so already falls out of the extension check below with no special-cased branch needed), or a path with none at all -- callers decide how to react to an unresolved format, this module only classifies.
 export function inferFormatFromExtension(
   path: string,
 ): DocumentFormat | undefined {
-  if (path === "-") {
-    return undefined;
-  }
   const lastSegment = path.split(/[/\\]/).pop() ?? path;
   const dotIndex = lastSegment.lastIndexOf(".");
   if (dotIndex <= 0) {

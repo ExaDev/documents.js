@@ -58,6 +58,11 @@ describe("inferFormatFromExtension", () => {
     expect(inferFormatFromExtension(".gitignore")).toBeUndefined();
   });
 
+  it("treats a leading dot as the whole filename, not an extension, even when the remainder spells a real format", () => {
+    // ".docx" (a dotfile literally named that, with no further '.') must not extract "docx" as its extension -- dotIndex is 0 here, which is <= 0 (no extension) rather than a genuine split point. ".gitignore" above can't distinguish this on its own, since "gitignore" isn't a recognised format either way; this needs a leading-dot name whose remainder DOES match one.
+    expect(inferFormatFromExtension(".docx")).toBeUndefined();
+  });
+
   it("returns undefined for an unrecognised extension", () => {
     expect(inferFormatFromExtension("archive.zip")).toBeUndefined();
   });
