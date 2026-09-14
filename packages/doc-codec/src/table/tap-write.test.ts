@@ -246,6 +246,24 @@ describe("encodeTableRowGrpprl", () => {
     expect(decoded.definition?.cells[0]?.borders?.left?.style).toBe("dotted");
   });
 
+  it("does not group two sides whose only difference is the red colour channel", () => {
+    const borders: ContentCellBorders = {
+      top: { widthPt: 1, color: { r: 0.1, g: 0.34, b: 0.56 } },
+      left: { widthPt: 1, color: { r: 0.9, g: 0.34, b: 0.56 } },
+    };
+    const cell: TableCellToWrite = { vertMerge: 0, horzMerge: 0, borders };
+    const grpprl = encodeTableRowGrpprl([0, 100], [cell], undefined);
+    const decoded = decode(grpprl);
+    expect(decoded.definition?.cells[0]?.borders?.top?.color.r).toBeCloseTo(
+      0.1,
+      1,
+    );
+    expect(decoded.definition?.cells[0]?.borders?.left?.color.r).toBeCloseTo(
+      0.9,
+      1,
+    );
+  });
+
   it("does not group two sides whose only difference is the green colour channel", () => {
     const borders: ContentCellBorders = {
       top: { widthPt: 1, color: { r: 0.12, g: 0.34, b: 0.56 } },
