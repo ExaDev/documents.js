@@ -227,3 +227,174 @@ describe("collectUsedGlyphs", () => {
     ).toBe(0x239d);
   });
 });
+
+const RED = { r: 0.25, g: 0.5, b: 0.75 };
+// No cmap entry in STIX Two Math (a Supplementary Private Use Area-B code point, never assigned by any font's own cmap) -- standing in for "this character has no glyph", the branch encodeGlyphRunToCids skips over rather than crashing on.
+const UNMAPPED_CODE_POINT = 0x10fffd;
+
+describe("writeFormulaContentStream, an ordinary glyph run", () => {
+  it("shows the run's own CIDs at its own computed size, color, and position", () => {
+    const font = loadMathFont().font;
+    const aId = font.glyphId(0x41)!;
+    const bId = font.glyphId(0x42)!;
+    expect(aId).toBeDefined();
+    expect(bId).toBeDefined();
+    const content = write(
+      positioned(
+        box(
+          [
+            {
+              kind: "glyphs",
+              xPt: 5,
+              yPt: 20,
+              text: "AB",
+              sizePt: 16,
+              color: RED,
+            },
+          ],
+          50,
+        ),
+      ),
+    );
+    // Box-local (5, 20) against a 50pt box placed with its own bottom-left at page (100, 200): x is a plain offset (105); y is re-anchored from "20pt down from the box's own top" to "30pt up from its bottom", landing at page y = 230.
+    expect(content).toBe(
+      "BT\n" +
+        `/${RESOURCE} 16 Tf\n` +
+        "0.25 0.5 0.75 rg\n" +
+        "1 0 0 1 105 230 Tm\n" +
+        `<${aId.toString(16).padStart(4, "0")}${bId.toString(16).padStart(4, "0")}> Tj\n` +
+        "ET\n",
+    );
+  });
+
+  it("skips a character with no glyph in the font's cmap, rather than crashing or emitting a bogus CID", () => {
+    const font = loadMathFont().font;
+    expect(font.glyphId(UNMAPPED_CODE_POINT)).toBeUndefined();
+    const aId = font.glyphId(0x41)!;
+    const content = write(
+      positioned(
+        box(
+          [
+            {
+              kind: "glyphs",
+              xPt: 0,
+              yPt: 0,
+              text: `A${String.fromCodePoint(UNMAPPED_CODE_POINT)}A`,
+              sizePt: 12,
+              color: BLACK,
+            },
+          ],
+          50,
+        ),
+      ),
+    );
+    // Two 'A's worth of CIDs, not three code points' worth: the unmapped middle character contributed nothing.
+    const hex = `${aId.toString(16).padStart(4, "0")}${aId.toString(16).padStart(4, "0")}`;
+    expect(content).toContain(`<${hex}> Tj`);
+  });
+
+  it("emits nothing at all when every character in the run is unmapped", () => {
+    const content = write(
+      positioned(
+        box(
+          [
+            {
+              kind: "glyphs",
+              xPt: 0,
+              yPt: 0,
+              text: String.fromCodePoint(UNMAPPED_CODE_POINT),
+              sizePt: 12,
+              color: BLACK,
+            },
+          ],
+          50,
+        ),
+      ),
+    );
+    expect(content).toBe("");
+  });
+});
+
+describe("writeFormulaContentStream, a rule", () => {
+  it("fills an axis-aligned rectangle from the rule's own top-left corner and size, re-anchored to page space", () => {
+    const content = write(
+      positioned(
+        box(
+          [
+            {
+              kind: "rule",
+              xPt: 10,
+              yPt: 5,
+              widthPt: 30,
+              heightPt: 2,
+              color: RED,
+            },
+          ],
+          50,
+        ),
+      ),
+    );
+    // xPt=10 -> page x 110. topY = box-local yPt=5 re-anchored to page y 245 (200 + 50 - 5); the filled rect's own y is its BOTTOM edge, topY - heightPt = 243.
+    expect(content).toBe("0.25 0.5 0.75 rg\n" + "110 243 30 2 re\n" + "f\n");
+  });
+});
+
+describe("writeFormulaContentStream, a stroke", () => {
+  it("draws an open polyline through every point, moveto first then lineto the rest", () => {
+    const content = write(
+      positioned(
+        box(
+          [
+            {
+              kind: "stroke",
+              points: [
+                { xPt: 0, yPt: 0 },
+                { xPt: 4, yPt: 10 },
+                { xPt: 8, yPt: 0 },
+              ],
+              widthPt: 1.5,
+              color: RED,
+            },
+          ],
+          50,
+        ),
+      ),
+    );
+    expect(content).toBe(
+      "0.25 0.5 0.75 RG\n" +
+        "1.5 w\n" +
+        "100 250 m\n" + // (0,0) box-local -> page (100, 250)
+        "104 240 l\n" + // (4,10) -> page (104, 240)
+        "108 250 l\n" + // (8,0) -> page (108, 250)
+        "S\n",
+    );
+  });
+
+  it("draws nothing for a stroke with fewer than two points", () => {
+    const content = write(
+      positioned(
+        box(
+          [
+            {
+              kind: "stroke",
+              points: [{ xPt: 0, yPt: 0 }],
+              widthPt: 1,
+              color: RED,
+            },
+          ],
+          50,
+        ),
+      ),
+    );
+    expect(content).toBe("");
+  });
+
+  it("draws nothing for a stroke with no points at all", () => {
+    const content = write(
+      positioned(
+        box([{ kind: "stroke", points: [], widthPt: 1, color: RED }], 50),
+      ),
+    );
+    expect(content).toBe("");
+  });
+});
