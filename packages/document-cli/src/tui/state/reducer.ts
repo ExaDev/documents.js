@@ -2233,6 +2233,7 @@ export function appReducer(state: AppState, action: Action): AppState {
       if (doc === undefined) {
         return withStatus(state, "info", "There is nothing to undo");
       }
+      // doc/xls/ppt are deliberately absent from this list: they gained real live-view editors (DocEditor/XlsEditor/PptEditor) and a reopenEditable case of their own in the same change that widened EditableOpenDocument to include them, so -- like every other EditableOpenDocument format -- they push real undo snapshots via mutate() and must be able to pop them back off here too. Only the genuinely read-only, no-live-editor formats belong in this list.
       if (
         doc.format === "odb" ||
         doc.format === "xlsx" ||
@@ -2240,9 +2241,6 @@ export function appReducer(state: AppState, action: Action): AppState {
         doc.format === "svg" ||
         doc.format === "rtf" ||
         doc.format === "wpd" ||
-        doc.format === "doc" ||
-        doc.format === "xls" ||
-        doc.format === "ppt" ||
         doc.format === "epub"
       ) {
         return withStatus(
