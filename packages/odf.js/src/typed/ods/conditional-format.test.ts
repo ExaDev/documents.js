@@ -723,6 +723,49 @@ describe("readConditionalFormats (synthetic packages, real calcext wire shapes)"
     expect(residueElements).toHaveLength(1);
   });
 
+  it("falls back to residue for a top-elements/bottom-elements/top-percent/bottom-percent condition with no operand at all (no parenthesised rank to extract)", () => {
+    for (const value of [
+      "top-elements",
+      "bottom-elements",
+      "top-percent",
+      "bottom-percent",
+    ]) {
+      const table = tableWith(
+        el("calcext:conditional-formats", {}, [
+          el(
+            "calcext:conditional-format",
+            { "calcext:target-range-address": "Sheet1.A1:Sheet1.A1" },
+            [el("calcext:condition", { "calcext:value": value })],
+          ),
+        ]),
+      );
+      const pkg = conditionalFormatsPackage(table);
+      const { formats, residueElements } = readConditionalFormats(table, pkg);
+      expect(formats).toEqual([]);
+      expect(residueElements).toHaveLength(1);
+    }
+  });
+
+  it("promotes a duplicate-values rule read back from calcext:condition, not just parsed in isolation", () => {
+    const table = tableWith(
+      el("calcext:conditional-formats", {}, [
+        el(
+          "calcext:conditional-format",
+          { "calcext:target-range-address": "Sheet1.A1:Sheet1.A1" },
+          [el("calcext:condition", { "calcext:value": "duplicate" })],
+        ),
+      ]),
+    );
+    const pkg = conditionalFormatsPackage(table);
+    const { formats } = readConditionalFormats(table, pkg);
+    expect(formats).toStrictEqual([
+      {
+        type: "duplicateValues",
+        ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }],
+      },
+    ]);
+  });
+
   it("promotes every text-matching mode into its own rule type, carrying the matched text verbatim", () => {
     const cases: [string, string][] = [
       ["begins-with(foo)", "beginsWith"],
