@@ -1105,6 +1105,42 @@ describe("writeOdsContent: data validation and conditional formatting", () => {
       2,
     );
   });
+
+  it("omits calcext:show-value on a dataBar rule that never set showValue at all", () => {
+    const ranges = [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }];
+    const pkg = writeOdsContent(
+      documentOf([
+        sheetOf([], {
+          conditionalFormats: [
+            {
+              type: "dataBar",
+              ranges,
+              min: { type: "min" },
+              max: { type: "max" },
+              color: { r: 1, g: 0, b: 0 },
+            },
+          ],
+        }),
+      ]),
+    );
+    const table = firstTable(pkg);
+    const wrapper = childrenWithTag(table, "calcext:conditional-formats")[0]!;
+    const dataBar = childrenWithTag(
+      childrenWithTag(wrapper, "calcext:conditional-format")[0]!,
+      "calcext:data-bar",
+    )[0]!;
+    expect(attrValue(dataBar, "calcext:show-value")).toBeUndefined();
+  });
+
+  it("writes no calcext:conditional-formats element when conditionalFormats is an empty (not undefined) array", () => {
+    const pkg = writeOdsContent(
+      documentOf([sheetOf([], { conditionalFormats: [] })]),
+    );
+    const table = firstTable(pkg);
+    expect(childrenWithTag(table, "calcext:conditional-formats")).toHaveLength(
+      0,
+    );
+  });
 });
 
 describe("writeOdsContent: a cell's own runs -- bare newline vs. formatted line-break", () => {
