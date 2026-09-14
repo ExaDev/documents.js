@@ -1661,7 +1661,7 @@ importers:
         specifier: 30.0.1
         version: 30.0.1
       ooxml.js:
-        specifier: 8.14.6
+        specifier: 8.14.7
         version: link:../ooxml.js
       semantic-release:
         specifier: 25.0.9
