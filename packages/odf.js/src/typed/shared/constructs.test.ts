@@ -264,7 +264,7 @@ describe("odfDivisionDescriptor", () => {
       ]),
       sectionPackage([]),
     );
-    expect(descriptor.linked).toEqual({ href: "chapter.odt" });
+    expect(descriptor.linked).not.toHaveProperty("sectionName");
   });
 });
 
@@ -355,9 +355,10 @@ describe("isContentBearingNode (via odfMarkerHalfEventIndex)", () => {
     expect(odfMarkerHalfEventIndex(marker, paragraph, 5)).toBe(5);
   });
 
-  it("returns undefined when the half's own recorded parent is not the paragraph passed in", () => {
-    const other = el("text:p", {});
+  it("returns undefined when the half's own recorded parent is not the paragraph passed in, even though the half is a genuine child of that other parent", () => {
+    // The half's own recorded parent is a real container that DOES hold it as a child (so a bypassed guard would not accidentally bail out on the later indexOf === -1 check instead) -- only the mismatch against the paragraph argument itself should short-circuit this.
     const half = el("text:bookmark-start", { "text:name": "b" });
+    const other = el("text:p", {}, [half]);
     const marker: OdfMarkerHalf = {
       kind: "bookmark",
       side: "start",
@@ -368,7 +369,7 @@ describe("isContentBearingNode (via odfMarkerHalfEventIndex)", () => {
       order: 0,
       descriptor: () => undefined,
     };
-    const paragraph = el("text:p", {}, [half]);
+    const paragraph = el("text:p", {});
     expect(odfMarkerHalfEventIndex(marker, paragraph, 5)).toBeUndefined();
   });
 
@@ -407,8 +408,19 @@ function half(overrides: Partial<OdfMarkerHalf>): OdfMarkerHalf {
 describe("pairOdfMarkerHalves", () => {
   const paragraph = el("text:p", {});
 
+  // Every start/end half below carries a genuinely RESOLVING descriptor -- so if a bypassed length check let the pairing proceed anyway, it would actually build an extent from starts[0]/ends[0], not merely fall through some other guard (an unresolved descriptor) that would mask the very check under test.
+  const resolvingDescriptor: RunConstructExtent["descriptor"] = {
+    kind: "anchor",
+    anchorType: "bookmark",
+    name: "k",
+  };
+
   it("drops a key with no start half at all", () => {
-    const end = half({ side: "end", element: el("text:bookmark-end", {}) });
+    const end = half({
+      side: "end",
+      element: el("text:bookmark-end", {}),
+      descriptor: () => resolvingDescriptor,
+    });
     const { extents } = pairOdfMarkerHalves([end], paragraph);
     expect(extents).toEqual([]);
   });
@@ -417,12 +429,18 @@ describe("pairOdfMarkerHalves", () => {
     const startA = half({
       side: "start",
       element: el("text:bookmark-start", { id: "a" }),
+      descriptor: () => resolvingDescriptor,
     });
     const startB = half({
       side: "start",
       element: el("text:bookmark-start", { id: "b" }),
+      descriptor: () => resolvingDescriptor,
     });
-    const end = half({ side: "end", element: el("text:bookmark-end", {}) });
+    const end = half({
+      side: "end",
+      element: el("text:bookmark-end", {}),
+      descriptor: () => resolvingDescriptor,
+    });
     const { extents } = pairOdfMarkerHalves([startA, startB, end], paragraph);
     expect(extents).toEqual([]);
   });
@@ -431,14 +449,17 @@ describe("pairOdfMarkerHalves", () => {
     const start = half({
       side: "start",
       element: el("text:bookmark-start", {}),
+      descriptor: () => resolvingDescriptor,
     });
     const endA = half({
       side: "end",
       element: el("text:bookmark-end", { id: "a" }),
+      descriptor: () => resolvingDescriptor,
     });
     const endB = half({
       side: "end",
       element: el("text:bookmark-end", { id: "b" }),
+      descriptor: () => resolvingDescriptor,
     });
     const { extents } = pairOdfMarkerHalves([start, endA, endB], paragraph);
     expect(extents).toEqual([]);
@@ -547,29 +568,52 @@ function event(overrides: Partial<OdfMarkerEvent>): OdfMarkerEvent {
 }
 
 describe("resolveOdfMarkerEvents", () => {
+  // Every start/end event below carries a genuinely RESOLVING descriptor -- so if a bypassed length check let the pairing proceed anyway, it would actually build an extent from starts[0]/ends[0], not merely fall through some other guard (an unresolved descriptor) that would mask the very check under test.
+  const resolvingDescriptor: RunConstructExtent["descriptor"] = {
+    kind: "anchor",
+    anchorType: "bookmark",
+    name: "k",
+  };
+
   it("drops a key with no qualified start", () => {
-    const end = event({ side: "end", element: el("text:bookmark-end", {}) });
+    const end = event({
+      side: "end",
+      element: el("text:bookmark-end", {}),
+      descriptor: () => resolvingDescriptor,
+    });
     const { extents } = resolveOdfMarkerEvents([end]);
     expect(extents).toEqual([]);
   });
 
   it("drops a key with two qualified starts", () => {
-    const startA = event({ element: el("text:bookmark-start", { id: "a" }) });
-    const startB = event({ element: el("text:bookmark-start", { id: "b" }) });
-    const end = event({ side: "end", element: el("text:bookmark-end", {}) });
+    const startA = event({
+      element: el("text:bookmark-start", { id: "a" }),
+      descriptor: () => resolvingDescriptor,
+    });
+    const startB = event({
+      element: el("text:bookmark-start", { id: "b" }),
+      descriptor: () => resolvingDescriptor,
+    });
+    const end = event({
+      side: "end",
+      element: el("text:bookmark-end", {}),
+      descriptor: () => resolvingDescriptor,
+    });
     const { extents } = resolveOdfMarkerEvents([startA, startB, end]);
     expect(extents).toEqual([]);
   });
 
   it("drops a key with two qualified ends", () => {
-    const start = event({});
+    const start = event({ descriptor: () => resolvingDescriptor });
     const endA = event({
       side: "end",
       element: el("text:bookmark-end", { id: "a" }),
+      descriptor: () => resolvingDescriptor,
     });
     const endB = event({
       side: "end",
       element: el("text:bookmark-end", { id: "b" }),
+      descriptor: () => resolvingDescriptor,
     });
     const { extents } = resolveOdfMarkerEvents([start, endA, endB]);
     expect(extents).toEqual([]);
@@ -651,7 +695,8 @@ describe("insertOdfConstructMarkers", () => {
       order: 1,
       descriptor: { kind: "division", name: "inner" },
     };
-    const result = insertOdfConstructMarkers(blocks, [outer, inner]);
+    // Passed inner-first, deliberately the wrong order, so a real sort is what puts the outer extent ahead of the inner one -- a comparator collapsed to always-equal (a stable sort's no-op) would leave this input order untouched instead.
+    const result = insertOdfConstructMarkers(blocks, [inner, outer]);
     // The outer extent (endIndex 1) must open before the inner one (endIndex 0), which itself closes immediately (a point extent) before the outer's own block.
     expect(result).toEqual([
       { kind: "constructStart", descriptor: outer.descriptor },
@@ -847,10 +892,15 @@ describe("collectOdfFontFaceDefinitions", () => {
 });
 
 describe("collectOdfNamedExpressions", () => {
-  it("skips a child with no table:name", () => {
+  it("skips a child with no table:name, even though it is otherwise complete enough to mint an entry", () => {
+    // table:cell-range-address is present so a bypassed name guard would actually reach out[...] = entry, rather than being masked by the inner "no cell-range-address" guard further down.
     const out: Record<string, DefinitionEntry> = {};
     collectOdfNamedExpressions(
-      [el("table:named-expressions", {}, [el("table:named-range", {})])],
+      [
+        el("table:named-expressions", {}, [
+          el("table:named-range", { "table:cell-range-address": "$A$1:$A$2" }),
+        ]),
+      ],
       out,
     );
     expect(out).toEqual({});
@@ -918,6 +968,22 @@ describe("collectOdfNamedExpressions", () => {
     expect(out).toEqual({});
   });
 
+  it("carries no baseCellAddress for a named-expression when it is absent", () => {
+    const out: Record<string, DefinitionEntry> = {};
+    collectOdfNamedExpressions(
+      [
+        el("table:named-expressions", {}, [
+          el("table:named-expression", {
+            "table:name": "e1",
+            "table:expression": "1+1",
+          }),
+        ]),
+      ],
+      out,
+    );
+    expect(out["named-expression:e1"]).not.toHaveProperty("baseCellAddress");
+  });
+
   it("skips a named-expression with no table:expression", () => {
     const out: Record<string, DefinitionEntry> = {};
     collectOdfNamedExpressions(
@@ -971,6 +1037,26 @@ describe("canonicalOdfConstructDescriptor", () => {
       controlType: "index",
     };
     expect(() => canonicalOdfConstructDescriptor(descriptor)).not.toThrow();
+    expect(canonicalOdfConstructDescriptor(descriptor)).toEqual(descriptor);
+  });
+
+  it("passes a non-index contentControl through unchanged even when it does carry a source (the controlType check is its own real gate, not implied by the source check alone)", () => {
+    const descriptor: ConstructDescriptor = {
+      kind: "contentControl",
+      controlType: "richText",
+      source: { format: "odt", xml: "<text:table-of-content-source/>" },
+    };
+    expect(canonicalOdfConstructDescriptor(descriptor)).toEqual(descriptor);
+  });
+
+  it("passes a non-contentControl descriptor through unchanged even when it happens to carry contentControl-shaped fields (the kind check is its own real gate, not implied by the controlType/source checks alone)", () => {
+    const descriptor = {
+      kind: "anchor",
+      anchorType: "bookmark",
+      name: "b",
+      controlType: "index",
+      source: { format: "odt", xml: "<text:table-of-content-source/>" },
+    } as unknown as ConstructDescriptor;
     expect(canonicalOdfConstructDescriptor(descriptor)).toEqual(descriptor);
   });
 });
@@ -1044,12 +1130,18 @@ describe("odfRunConstructWriteKind", () => {
     ).toBeUndefined();
   });
 
-  it("writes a footnote as note and a comment as comment, once their definition resolves", () => {
+  it("writes a footnote, an endnote, and a comment as note/note/comment, once their definition resolves", () => {
     const noteDescriptor: RunConstructExtent["descriptor"] = {
       kind: "anchor",
       anchorType: "footnote",
       name: "n1",
       definition: "note:n1",
+    };
+    const endnoteDescriptor: RunConstructExtent["descriptor"] = {
+      kind: "anchor",
+      anchorType: "endnote",
+      name: "n2",
+      definition: "note:n2",
     };
     const commentDescriptor: RunConstructExtent["descriptor"] = {
       kind: "anchor",
@@ -1059,14 +1151,33 @@ describe("odfRunConstructWriteKind", () => {
     };
     const definitions: Record<string, DefinitionEntry> = {
       "note:n1": { kind: "footnote", body: [] },
+      "note:n2": { kind: "endnote", body: [] },
       "comment:c1": { kind: "comment", body: [] },
     };
     expect(
       odfRunConstructWriteKind(extent(noteDescriptor, 0, 0), definitions),
     ).toBe("note");
     expect(
+      odfRunConstructWriteKind(extent(endnoteDescriptor, 0, 0), definitions),
+    ).toBe("note");
+    expect(
       odfRunConstructWriteKind(extent(commentDescriptor, 0, 0), definitions),
     ).toBe("comment");
+  });
+
+  it("refuses an anchor whose type is none of footnote/endnote/comment, even with a resolving definition (bookmark is excluded by the earlier branch; nothing else in AnchorType reaches this far)", () => {
+    const descriptor = {
+      kind: "anchor",
+      anchorType: "notARealAnchorType",
+      name: "n1",
+      definition: "note:n1",
+    } as unknown as RunConstructExtent["descriptor"];
+    const definitions: Record<string, DefinitionEntry> = {
+      "note:n1": { kind: "footnote", body: [] },
+    };
+    expect(
+      odfRunConstructWriteKind(extent(descriptor, 0, 0), definitions),
+    ).toBeUndefined();
   });
 
   it("refuses a moveFrom/moveTo provenance change (no ODF spelling exists for either)", () => {
@@ -1157,6 +1268,15 @@ describe("odfIndexWrapperTag / writeOdfIndexWrapper", () => {
   it("throws when the residue's own top-level element does not end in -source", () => {
     expect(() =>
       odfIndexWrapperTag(descriptorWithSourceXml("<text:table-of-content/>")),
+    ).toThrow();
+  });
+
+  it("really checks for the -source suffix specifically, not merely that the tag has some suffix", () => {
+    // Blindly slicing the last 7 characters off "text:bibliography-sourcX" (a tag that does NOT end in "-source") lands exactly on the real "text:bibliography" wrapper tag -- so a weakened endsWith check that let this through would silently succeed instead of throwing.
+    expect(() =>
+      odfIndexWrapperTag(
+        descriptorWithSourceXml("<text:bibliography-sourcX/>"),
+      ),
     ).toThrow();
   });
 
