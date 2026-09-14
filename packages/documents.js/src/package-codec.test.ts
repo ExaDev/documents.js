@@ -118,6 +118,7 @@ describe("decodeDocumentPackage / encodeDocumentPackage: unsupported formats", (
         throw error;
       }
       expect(error.format).toBe("markdown");
+      expect(error.name).toBe("UnsupportedPackageFormatError");
     }
   });
 

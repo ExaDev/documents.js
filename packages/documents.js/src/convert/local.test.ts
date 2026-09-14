@@ -649,6 +649,9 @@ describe("createLocalDocumentConverter: convert", () => {
     );
     await expect(promise).rejects.toBeInstanceOf(UnsupportedConversionError);
     await expect(promise).rejects.toThrow(/unsupported conversion/);
+    await promise.catch((error: unknown) => {
+      expect((error as Error).name).toBe("UnsupportedConversionError");
+    });
   });
 
   it("collects a char/substituted diagnostic for a character outside WinAnsi", async () => {

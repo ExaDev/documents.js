@@ -72,5 +72,6 @@ describe("extractSourceFontsForFormat", () => {
       );
     }
     expect(caught.format).toBe("xlsx");
+    expect(caught.name).toBe("UnsupportedFontSourceFormatError");
   });
 });
