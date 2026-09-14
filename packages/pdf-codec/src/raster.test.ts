@@ -895,6 +895,194 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
     // The page carries text only, so nothing else paints.
     expect(rasteriser.ops).toEqual([]);
   });
+
+  // A bare Type0/CIDFontType2 skeleton around the real vendored Carlito face, with every dict entry a caller can override -- the same font bytes type0CarlitoPdf uses, but exposing the descendant/descriptor/encoding shape directly so each of buildTextOutlineFace's own branch conditions can be driven independently of the others.
+  function type0Skeleton(overrides: {
+    readonly encoding?: string;
+    readonly descendantFontsEntry?: string;
+    readonly descendantExtra?: string;
+    readonly cidToGidMap?: string;
+    readonly fontDescriptorBody?: string;
+  }): Uint8Array<ArrayBuffer> {
+    const fontBytes = carlitoRegularBytes();
+    const b = new SmallFixture();
+    b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    b.object(
+      3,
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    );
+    b.object(
+      4,
+      `<< /Type /Font /Subtype /Type0 /BaseFont /Carlito /Encoding ${overrides.encoding ?? "/Identity-H"} ${overrides.descendantFontsEntry ?? "/DescendantFonts [7 0 R]"} >>`,
+    );
+    b.object(
+      7,
+      `<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Carlito /FontDescriptor 8 0 R ${overrides.cidToGidMap ?? ""} ${overrides.descendantExtra ?? ""} >>`,
+    );
+    b.object(
+      8,
+      overrides.fontDescriptorBody ??
+        "<< /Type /FontDescriptor /FontName /Carlito /Flags 32 /FontFile2 9 0 R >>",
+    );
+    b.stream(9, `<< /Length1 ${fontBytes.length} >>`, fontBytes);
+    b.stream(5, "<< >>", enc("BT /F1 24 Tf 20 50 Td <0000> Tj ET"));
+    return b.classicXrefAndTrailer(9, "/Root 1 0 R");
+  }
+
+  function refusalDiagnostics(bytes: Uint8Array<ArrayBuffer>): {
+    readonly diagnostics: PdfDiagnostic[];
+    readonly rasteriser: RecordingRasteriser;
+  } {
+    const diagnostics: PdfDiagnostic[] = [];
+    const rasteriser = new RecordingRasteriser();
+    drive(bytes, 0, { sink: (d) => diagnostics.push(d) }, rasteriser);
+    return { diagnostics, rasteriser };
+  }
+
+  it("refuses a Type0 font whose /Encoding is not Identity-H", () => {
+    const { diagnostics, rasteriser } = refusalDiagnostics(
+      type0Skeleton({ encoding: "/90ms-RKSJ-H" }),
+    );
+    expect(
+      diagnostics.find((d) => d.code === "raster/text-outlines-unavailable")
+        ?.message,
+    ).toContain("not Identity-H");
+    expect(rasteriser.ops).toEqual([]);
+  });
+
+  it("refuses a Type0 font with no readable /DescendantFonts entry", () => {
+    const { diagnostics, rasteriser } = refusalDiagnostics(
+      type0Skeleton({ descendantFontsEntry: "" }),
+    );
+    expect(
+      diagnostics.find((d) => d.code === "raster/text-outlines-unavailable")
+        ?.message,
+    ).toContain("no readable /DescendantFonts entry");
+    expect(rasteriser.ops).toEqual([]);
+  });
+
+  it("refuses a descendant font of a subtype that is neither CIDFontType0 nor CIDFontType2, naming the real subtype", () => {
+    const bytes = type0Skeleton({});
+    // Overwrite object 7's own Subtype in place -- simplest way to force an unsupported descendant subtype without duplicating the whole skeleton.
+    const text = new TextDecoder("latin1").decode(bytes);
+    const patched = new TextEncoder().encode(
+      text.replace("/Subtype /CIDFontType2", "/Subtype /CIDFontType9"),
+    );
+    const { diagnostics, rasteriser } = refusalDiagnostics(patched);
+    expect(
+      diagnostics.find((d) => d.code === "raster/text-outlines-unavailable")
+        ?.message,
+    ).toContain("a descendant font of subtype CIDFontType9");
+    expect(rasteriser.ops).toEqual([]);
+  });
+
+  it("refuses a CIDFontType2 descendant with no readable embedded program", () => {
+    const { diagnostics, rasteriser } = refusalDiagnostics(
+      type0Skeleton({
+        fontDescriptorBody:
+          "<< /Type /FontDescriptor /FontName /Carlito /Flags 32 >>",
+      }),
+    );
+    expect(
+      diagnostics.find((d) => d.code === "raster/text-outlines-unavailable")
+        ?.message,
+    ).toContain("no readable /FontFile2");
+    expect(rasteriser.ops).toEqual([]);
+  });
+
+  it("refuses a CIDFontType2 descendant whose /CIDToGIDMap is neither /Identity nor a readable stream", () => {
+    const { diagnostics, rasteriser } = refusalDiagnostics(
+      type0Skeleton({ cidToGidMap: "/CIDToGIDMap 7" }),
+    );
+    expect(
+      diagnostics.find((d) => d.code === "raster/text-outlines-unavailable")
+        ?.message,
+    ).toContain("neither /Identity nor a readable stream");
+    expect(rasteriser.ops).toEqual([]);
+  });
+
+  it("maps CIDs through an explicit /CIDToGIDMap stream rather than treating CID as GID directly", () => {
+    // CID 0 (the shown code) maps to GID 15 ('H') via the stream -- Identity would instead look up GID 0 (.notdef), a completely different, much smaller shape. type0Skeleton has no stream-object escape hatch for the map itself, so this one is built directly rather than bending the helper further.
+    const cidToGidMapBytes = new Uint8Array([0x00, 0x0f]); // one entry: CID 0 -> GID 15
+    const b = new SmallFixture();
+    const fontBytes = carlitoRegularBytes();
+    b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    b.object(
+      3,
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    );
+    b.object(
+      4,
+      "<< /Type /Font /Subtype /Type0 /BaseFont /Carlito /Encoding /Identity-H /DescendantFonts [7 0 R] >>",
+    );
+    b.object(
+      7,
+      "<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Carlito /FontDescriptor 8 0 R /CIDToGIDMap 10 0 R >>",
+    );
+    b.object(
+      8,
+      "<< /Type /FontDescriptor /FontName /Carlito /Flags 32 /FontFile2 9 0 R >>",
+    );
+    b.stream(9, `<< /Length1 ${fontBytes.length} >>`, fontBytes);
+    b.stream(10, "<< >>", cidToGidMapBytes);
+    b.stream(5, "<< >>", enc("BT /F1 24 Tf 20 50 Td <0000> Tj ET"));
+    const mappedBytes = b.classicXrefAndTrailer(10, "/Root 1 0 R");
+
+    const sfnt = parseSfnt(fontBytes)!;
+    const head = parseHead(sfnt)!;
+    const maxp = parseMaxp(sfnt)!;
+    const glyf = parseGlyf(sfnt, {
+      numGlyphs: maxp.numGlyphs,
+      indexToLocFormat: head.indexToLocFormat,
+    })!;
+    const expectedInk = glyf.glyphInkBounds(15)!; // 'H'
+
+    const rasteriser = new RecordingRasteriser();
+    drive(mappedBytes, 0, {}, rasteriser);
+    const paths = rasteriser.ops.filter(isPath);
+    expect(paths).toHaveLength(1);
+    const { minX, minY } = pathOpBounds(paths[0]!);
+    const sizePt = 24;
+    const scale = sizePt / head.unitsPerEm;
+    expect(minX).toBeCloseTo(20 + expectedInk.xMin * scale, 1);
+    expect(minY).toBeCloseTo(100 - 50 - expectedInk.yMax * scale, 1);
+  });
+
+  it("refuses a Type1 font whose embedded program is not CFF outlines", () => {
+    const { diagnostics, rasteriser } = refusalDiagnostics(
+      onePagePdf("BT /F1 24 Tf 20 50 Td (H) Tj ET", {
+        pageResources: "/Resources << /Font << /F1 4 0 R >> >>",
+        extraObjects: [
+          [
+            4,
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Custom /FirstChar 0 /LastChar 255 /FontDescriptor 6 0 R >>",
+          ],
+          [6, "<< /Type /FontDescriptor /FontName /Custom /Flags 4 >>"],
+        ],
+      }),
+    );
+    expect(
+      diagnostics.find((d) => d.code === "raster/text-outlines-unavailable")
+        ?.message,
+    ).toContain("PostScript program");
+    expect(rasteriser.ops).toEqual([]);
+  });
+
+  it("refuses an unrecognised font subtype, naming it in the diagnostic", () => {
+    const { diagnostics, rasteriser } = refusalDiagnostics(
+      onePagePdf("BT /F1 24 Tf 20 50 Td (H) Tj ET", {
+        pageResources: "/Resources << /Font << /F1 4 0 R >> >>",
+        extraObjects: [[4, "<< /Type /Font /Subtype /Type3 >>"]],
+      }),
+    );
+    expect(
+      diagnostics.find((d) => d.code === "raster/text-outlines-unavailable")
+        ?.message,
+    ).toContain("a font of subtype Type3");
+    expect(rasteriser.ops).toEqual([]);
+  });
 });
 
 // --- Optional content: a rendering must take the viewer's side. ---
