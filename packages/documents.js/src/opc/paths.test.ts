@@ -40,4 +40,10 @@ describe("buildRelativeTarget", () => {
       buildRelativeTarget("ppt/presentation.xml", "ppt/slides/slide1.xml"),
     ).toBe("slides/slide1.xml");
   });
+
+  it("targets a nested part from a root-level part with no directory of its own", () => {
+    expect(buildRelativeTarget("document.xml", "word/document.xml")).toBe(
+      "word/document.xml",
+    );
+  });
 });
