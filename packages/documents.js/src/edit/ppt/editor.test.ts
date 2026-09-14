@@ -1,7 +1,8 @@
+import type { ContentDocument } from "document-schema.js";
 import { SLIDE_SIZE_WIDESCREEN } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { fixedClock } from "../../ports/clock";
-import { createPpt, openPpt } from "./editor";
+import { createPpt, openPpt, PptEditor } from "./editor";
 
 const FIXED_ISO = "2026-01-01T00:00:00.000Z";
 
@@ -10,6 +11,19 @@ describe("createPpt", () => {
     const editor = createPpt({ clock: fixedClock(new Date(FIXED_ISO)) });
     expect(editor.slides()).toHaveLength(0);
     expect(editor.metadata.createdIso).toBe(FIXED_ISO);
+  });
+});
+
+describe("PptEditor constructor guard", () => {
+  it("rejects a non-presentation ContentDocument, naming the offending kind", () => {
+    const spreadsheet: ContentDocument = {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [],
+    };
+    expect(() => new PptEditor(spreadsheet)).toThrow(
+      'PptEditor requires a presentation ContentDocument, got "spreadsheet"',
+    );
   });
 });
 

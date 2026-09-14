@@ -148,3 +148,16 @@ describe("ppt/write + ppt/read: OLE-embedded objects", () => {
     ).toBe("Nested deck");
   });
 });
+
+describe("writePptContent: constructor guard", () => {
+  it("rejects a non-presentation ContentDocument, naming the offending kind", () => {
+    const spreadsheet: ContentDocument = {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [],
+    };
+    expect(() => writePptContent(spreadsheet)).toThrow(
+      "writePptContent requires a presentation ContentDocument, got 'spreadsheet'",
+    );
+  });
+});
