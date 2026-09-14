@@ -31,7 +31,8 @@ export function encodeOdfText(text: string): XmlNode[] {
     const ch = text.charAt(i);
     if (ch === " ") {
       let runLength = 1;
-      while (i + runLength < text.length && text[i + runLength] === " ") {
+      // No explicit i + runLength < text.length bound check: indexing a string past its end yields undefined in JavaScript, and undefined === " " is already false, so the length comparison could never change the loop's outcome -- it would only ever agree with what the character comparison below already decides on its own, making it a permanently equivalent mutation target.
+      while (text[i + runLength] === " ") {
         runLength += 1;
       }
       if (runLength >= MIN_SPACE_RUN_FOR_TEXT_S) {
