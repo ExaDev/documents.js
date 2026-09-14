@@ -163,6 +163,109 @@ describe("readXlsxContent: cell comments -- legacy notes (xl/comments{N}.xml, sy
     expect(findCell(cells, 0, 0).comment).toEqual({ text: "Plain note" });
   });
 
+  it("builds a legacy note's text strictly from its <t> runs, not the whole text element's own concatenated content", () => {
+    // "Ignored stray text" sits directly under <text>, outside any <r><t>; only "Kept" -- the content of the actual <t> run -- should survive. textContent(text) would concatenate both, so a correct result here proves the code walks <t> elements specifically rather than falling back to the whole subtree's text.
+    const cells = readCommentedCells(
+      [
+        el("Relationship", {
+          Id: "rId1",
+          Type: REL_COMMENTS,
+          Target: "../comments1.xml",
+        }),
+      ],
+      {
+        "xl/comments1.xml": {
+          kind: "xml",
+          nodes: [
+            el("comments", {}, [
+              el("commentList", {}, [
+                el("comment", { ref: "A1" }, [
+                  el("text", {}, [
+                    txt("Ignored stray text"),
+                    el("r", {}, [el("t", {}, [txt("Kept")])]),
+                  ]),
+                ]),
+              ]),
+            ]),
+          ],
+        },
+      },
+    );
+    expect(findCell(cells, 0, 0).comment).toEqual({ text: "Kept" });
+  });
+
+  it("leaves author unset when a comment references authorId but the comments part has no <authors> element at all", () => {
+    const cells = readCommentedCells(
+      [
+        el("Relationship", {
+          Id: "rId1",
+          Type: REL_COMMENTS,
+          Target: "../comments1.xml",
+        }),
+      ],
+      {
+        "xl/comments1.xml": {
+          kind: "xml",
+          nodes: [
+            el("comments", {}, [
+              el("commentList", {}, [
+                el("comment", { ref: "A1", authorId: "0" }, [
+                  el("text", {}, [txt("No authors list")]),
+                ]),
+              ]),
+            ]),
+          ],
+        },
+      },
+    );
+    expect(findCell(cells, 0, 0).comment).toEqual({ text: "No authors list" });
+  });
+
+  it("filters related parts by relationship type: a mistyped relationship pointing at an otherwise-valid legacy comments part is never read as one", () => {
+    const cells = readCommentedCells(
+      [
+        el("Relationship", {
+          Id: "rId1",
+          Type: REL_COMMENTS,
+          Target: "../comments1.xml",
+        }),
+        el("Relationship", {
+          Id: "rId2",
+          Type: REL_PERSON,
+          Target: "../comments-decoy.xml",
+        }),
+      ],
+      {
+        "xl/comments1.xml": {
+          kind: "xml",
+          nodes: [
+            el("comments", {}, [
+              el("commentList", {}, [
+                el("comment", { ref: "A1" }, [
+                  el("text", {}, [txt("Real note")]),
+                ]),
+              ]),
+            ]),
+          ],
+        },
+        "xl/comments-decoy.xml": {
+          kind: "xml",
+          nodes: [
+            el("comments", {}, [
+              el("commentList", {}, [
+                el("comment", { ref: "B1" }, [
+                  el("text", {}, [txt("Decoy note")]),
+                ]),
+              ]),
+            ]),
+          ],
+        },
+      },
+    );
+    expect(findCell(cells, 0, 0).comment).toEqual({ text: "Real note" });
+    expect(findCell(cells, 0, 1).comment).toBeUndefined();
+  });
+
   it("materialises an empty cell for a note anchored to a cell the sheetData never wrote -- the same policy that keeps an <f>-only formula cell", () => {
     const cells = readCommentedCells(
       [
@@ -419,6 +522,102 @@ describe("readXlsxContent: cell comments -- threaded comments ([MS-XLSX], synthe
     expect(findCell(cells, 0, 0).comment).toEqual({
       text: "Note",
       author: "A & B",
+    });
+  });
+
+  it("matches threadedComment children by local name only, ignoring a same-shaped sibling element with a different tag", () => {
+    // "note" carries a valid ref/text shape of its own -- if childrenWithLocalName matched on element type alone, it would be read as a second thread and wrongly attach a comment to B1.
+    const cells = readCommentedCells(
+      [
+        el("Relationship", {
+          Id: "rId1",
+          Type: REL_THREADED_COMMENTS,
+          Target: "../threadedComments/threadedComment1.xml",
+        }),
+      ],
+      {
+        "xl/threadedComments/threadedComment1.xml": {
+          kind: "xml",
+          nodes: [
+            el("ThreadedComments", {}, [
+              el("threadedComment", { ref: "A1", id: "tc-root" }, [
+                el("text", {}, [txt("Real thread")]),
+              ]),
+              el("note", { ref: "B1" }, [
+                el("text", {}, [txt("Should never surface")]),
+              ]),
+            ]),
+          ],
+        },
+      },
+    );
+    expect(findCell(cells, 0, 0).comment).toEqual({ text: "Real thread" });
+    expect(findCell(cells, 0, 1).comment).toBeUndefined();
+  });
+
+  it("finds the thread root by parentId even when a reply is written before it in document order", () => {
+    const cells = readCommentedCells(
+      [
+        el("Relationship", {
+          Id: "rId1",
+          Type: REL_THREADED_COMMENTS,
+          Target: "../threadedComments/threadedComment1.xml",
+        }),
+      ],
+      {
+        "xl/threadedComments/threadedComment1.xml": {
+          kind: "xml",
+          nodes: [
+            el("ThreadedComments", {}, [
+              el(
+                "threadedComment",
+                { ref: "A1", id: "tc-reply", parentId: "tc-root" },
+                [el("text", {}, [txt("Reply text")])],
+              ),
+              el("threadedComment", { ref: "A1", id: "tc-root" }, [
+                el("text", {}, [txt("Root text")]),
+              ]),
+            ]),
+          ],
+        },
+      },
+    );
+    expect(findCell(cells, 0, 0).comment).toEqual({
+      text: "Root text",
+      replies: [{ text: "Reply text" }],
+    });
+  });
+
+  it("finds the thread root by the older parent attribute even when a reply is written before it in document order", () => {
+    const cells = readCommentedCells(
+      [
+        el("Relationship", {
+          Id: "rId1",
+          Type: REL_THREADED_COMMENTS,
+          Target: "../threadedComments/threadedComment1.xml",
+        }),
+      ],
+      {
+        "xl/threadedComments/threadedComment1.xml": {
+          kind: "xml",
+          nodes: [
+            el("tc:ThreadedComments", {}, [
+              el(
+                "tc:threadedComment",
+                { ref: "A1", dId: "reply", parent: "root" },
+                [el("tc:text", {}, [txt("Old reply text")])],
+              ),
+              el("tc:threadedComment", { ref: "A1", dId: "root" }, [
+                el("tc:text", {}, [txt("Old root text")]),
+              ]),
+            ]),
+          ],
+        },
+      },
+    );
+    expect(findCell(cells, 0, 0).comment).toEqual({
+      text: "Old root text",
+      replies: [{ text: "Old reply text" }],
     });
   });
 
