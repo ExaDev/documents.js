@@ -7,10 +7,16 @@ import {
 import { assembleTree } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 
-import { createDocx, encodeMarkdownText, openDocx } from "documents.js";
+import {
+  createDoc,
+  createDocx,
+  encodeMarkdownText,
+  openDocx,
+} from "documents.js";
 import {
   appendParagraphOf,
   normalizeContentForSource,
+  sanitizeImageAsset,
   openEditorSession,
   paragraphsOf,
   paragraphTexts,
@@ -142,6 +148,220 @@ describe("normalizeContentForSource", () => {
     const result = normalizeContentForSource(content, "odt");
     expect(firstStyleId(result)).toBe("horizontal-rule");
   });
+
+  it("does not treat an empty paragraph with a bottom AND top border as a horizontal rule", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [],
+      borders: { bottom: BOTTOM_BORDER, top: BOTTOM_BORDER },
+    });
+    const result = normalizeContentForSource(content, "docx");
+    expect(firstStyleId(result)).toBeUndefined();
+  });
+
+  it("does not treat an empty paragraph with a bottom AND right border as a horizontal rule", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [],
+      borders: { bottom: BOTTOM_BORDER, right: BOTTOM_BORDER },
+    });
+    const result = normalizeContentForSource(content, "docx");
+    expect(firstStyleId(result)).toBeUndefined();
+  });
+
+  it("still detects the border-only rule when multiple whitespace-only runs join to nothing, not just a single run", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [{ text: " " }, { text: " " }],
+      borders: { bottom: BOTTOM_BORDER },
+    });
+    const result = normalizeContentForSource(content, "docx");
+    expect(firstStyleId(result)).toBe("horizontal-rule");
+  });
+
+  it("rewrites a paragraph with a headingLevel into the heading-{N} convention", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [{ text: "Title" }],
+      headingLevel: 2,
+    });
+    const result = normalizeContentForSource(content, "docx");
+    expect(firstStyleId(result)).toBe("heading-2");
+  });
+
+  it("rewrites a docx style literally named HeadingN into the heading-{N} convention via the fallback pattern, when headingLevel itself is absent", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [{ text: "Title" }],
+      styleId: "Heading3",
+    });
+    const result = normalizeContentForSource(content, "docx");
+    expect(firstStyleId(result)).toBe("heading-3");
+  });
+
+  it("rewrites a styleId containing only Code into the code-block convention", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [{ text: "x" }],
+      styleId: "MyCodeStyle",
+    });
+    const result = normalizeContentForSource(content, "docx");
+    expect(firstStyleId(result)).toBe("code-block");
+  });
+
+  it("rewrites a styleId containing only Source into the code-block convention", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [{ text: "x" }],
+      styleId: "SourceListing",
+    });
+    const result = normalizeContentForSource(content, "docx");
+    expect(firstStyleId(result)).toBe("code-block");
+  });
+
+  it("rewrites a styleId containing only Preformatted into the code-block convention", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [{ text: "x" }],
+      styleId: "PreformattedText",
+    });
+    const result = normalizeContentForSource(content, "docx");
+    expect(firstStyleId(result)).toBe("code-block");
+  });
+
+  it("does not treat a styleId containing only 'Horizontal' (not 'Line') as a horizontal rule", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [{ text: "x" }],
+      styleId: "HorizontalSomethingElse",
+    });
+    const result = normalizeContentForSource(content, "docx");
+    expect(firstStyleId(result)).toBe("HorizontalSomethingElse");
+  });
+
+  it("does not treat a styleId containing only 'Line' (not 'Horizontal') as a horizontal rule", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [{ text: "x" }],
+      styleId: "SomeLineStyle",
+    });
+    const result = normalizeContentForSource(content, "docx");
+    expect(firstStyleId(result)).toBe("SomeLineStyle");
+  });
+
+  it("recurses into a table's cells when normalizing wordprocessing semantics for docx/odt", () => {
+    const content: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 595, heightPt: 842 },
+          margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+          blocks: [
+            {
+              kind: "table",
+              columnWidthsPt: [100],
+              rows: [
+                {
+                  cells: [
+                    {
+                      blocks: [
+                        { kind: "paragraph", runs: [], styleId: "Heading1" },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = normalizeContentForSource(content, "docx");
+    const block =
+      result.kind === "wordprocessing"
+        ? result.sections[0]?.blocks[0]
+        : undefined;
+    const cell = block?.kind === "table" ? block.rows[0]?.cells[0] : undefined;
+    const cellBlock = cell?.blocks[0];
+    expect(
+      cellBlock?.kind === "paragraph" ? cellBlock.styleId : undefined,
+    ).toBe("heading-1");
+  });
+
+  it("recurses into a table's cells when normalizing markdown styling too", () => {
+    const content: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 595, heightPt: 842 },
+          margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+          blocks: [
+            {
+              kind: "table",
+              columnWidthsPt: [100],
+              rows: [
+                {
+                  cells: [
+                    {
+                      blocks: [
+                        {
+                          kind: "paragraph",
+                          runs: [],
+                          headingLevel: 2,
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = normalizeContentForSource(content, "markdown");
+    const block =
+      result.kind === "wordprocessing"
+        ? result.sections[0]?.blocks[0]
+        : undefined;
+    const cell = block?.kind === "table" ? block.rows[0]?.cells[0] : undefined;
+    const cellBlock = cell?.blocks[0];
+    expect(
+      cellBlock?.kind === "paragraph" ? cellBlock.styleId : undefined,
+    ).toBe("heading-2");
+  });
+
+  it("dispatches to the markdown-specific rewrite only for a genuinely markdown source, not merely because a docx/odt paragraph happens to carry the same styleId", () => {
+    // HORIZONTAL_RULE_STYLE_ID ("HorizontalRule") deliberately does not contain "Line", so docx/odt's own Horizontal+Line name heuristic never matches it -- only normalizeMarkdownStyling's exact-constant check does, making this genuinely distinguishing rather than coincidentally identical across both branches.
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [],
+      styleId: "HorizontalRule",
+    });
+    expect(firstStyleId(normalizeContentForSource(content, "markdown"))).toBe(
+      "horizontal-rule",
+    );
+    expect(firstStyleId(normalizeContentForSource(content, "docx"))).toBe(
+      "HorizontalRule",
+    );
+  });
+
+  it("never touches bytes for an odt source, even when bytes are supplied and are not valid docx bytes", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [{ text: "x" }],
+      styleId: "Quotations",
+    });
+    const notDocxBytes = new TextEncoder().encode("not a docx file at all");
+    expect(() =>
+      normalizeContentForSource(content, "odt", notDocxBytes),
+    ).not.toThrow();
+    expect(
+      firstStyleId(normalizeContentForSource(content, "odt", notDocxBytes)),
+    ).toBe("quote");
+  });
 });
 
 describe("the Package / JSON tool's dump-to-restore pipeline", () => {
@@ -212,5 +432,69 @@ describe("the Editors tool's session surface", () => {
     const savedBytes = session.editor.toBytes();
     const reopened = openDocx(savedBytes);
     expect(reopened.paragraphs()[0]!.text).toBe("hello edited");
+  });
+
+  it("opens a doc session, whose appendParagraph lives on the editor itself rather than a body", () => {
+    const editor = createDoc();
+    editor.appendParagraph({ text: "hello doc" });
+    const session = openEditorSession("doc", editor.toBytes());
+    expect(paragraphTexts(session)).toEqual(["hello doc"]);
+    appendParagraphOf(session, "second paragraph");
+    expect(paragraphTexts(session)).toEqual(["hello doc", "second paragraph"]);
+  });
+
+  it("collapses a genuinely multi-run paragraph to its edited text at the first run's position", () => {
+    // markdown-codec splits "**bold** and plain" into a bold run followed by a plain run for the same paragraph -- setParagraphTextAt must remove every run past the first, not just overwrite the first one and leave the rest trailing.
+    const session = openEditorSession(
+      "markdown",
+      new TextEncoder().encode("**bold** and plain\n"),
+    );
+    if (session.format !== "markdown") {
+      throw new Error("expected a markdown session");
+    }
+    expect(session.editor.paragraphs()[0]!.runs().length).toBeGreaterThan(1);
+    setParagraphTextAt(session, 0, "replaced");
+    expect(paragraphTexts(session)).toEqual(["replaced"]);
+    expect(session.editor.paragraphs()[0]!.runs().length).toBe(1);
+  });
+
+  it("appends a fresh run when setting text on a paragraph that starts with no runs at all", () => {
+    const editor = createDocx();
+    editor.body.appendParagraph();
+    const session = openEditorSession("docx", editor.toBytes());
+    if (session.format !== "docx") {
+      throw new Error("expected a docx session");
+    }
+    expect(session.editor.paragraphs()[0]!.runs()).toEqual([]);
+    setParagraphTextAt(session, 0, "now has text");
+    expect(paragraphTexts(session)).toEqual(["now has text"]);
+  });
+
+  it("throws for setParagraphText at an index with no paragraph there", () => {
+    const session = openEditorSession(
+      "markdown",
+      new TextEncoder().encode("only paragraph\n"),
+    );
+    expect(() => {
+      setParagraphTextAt(session, 5, "x");
+    }).toThrow("no paragraph at index 5");
+  });
+});
+
+describe("sanitizeImageAsset", () => {
+  it("estimates byteLength from the base64 string's own length, three bytes per four base64 characters", () => {
+    // "AAAAAAAA" is 8 base64 characters (no padding), so the real decode is exactly 6 bytes -- a formula transposed to *3*4 or /3/4 would report 96 or 1 instead.
+    const result = sanitizeImageAsset({
+      format: "png",
+      base64: "AAAAAAAA",
+      widthPx: 4,
+      heightPx: 4,
+    });
+    expect(result).toEqual({
+      format: "png",
+      widthPx: 4,
+      heightPx: 4,
+      byteLength: 6,
+    });
   });
 });

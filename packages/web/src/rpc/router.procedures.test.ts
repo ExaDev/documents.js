@@ -1,7 +1,19 @@
 // @vitest-environment node
 // jsdom's own TextEncoder (patched in from Node's util module by the unit project's jsdom environment) constructs its Uint8Array in a different realm than the one bare `Uint8Array` resolves to inside that same environment, so a router.ts procedure's z.instanceof(Uint8Array) input schema rejects it as "expected Uint8Array, received Uint8Array" -- confirmed directly by comparing `bytes instanceof Uint8Array` (false under jsdom, true under node) for the identical TextEncoder().encode() call. router.ts itself is pure Node-executable document logic with no DOM dependency, so forcing this one file onto vitest's node environment sidesteps the realm split entirely rather than working around it per call site.
 import { call } from "@orpc/server";
-import { createDocx, createOdt, zipPackage } from "documents.js";
+import type { ContentDocument } from "documents.js";
+import {
+  buildDocumentBytes,
+  createDocx,
+  createOdg,
+  createOdp,
+  createOds,
+  createOdt,
+  createPptx,
+  documentTreeWithSchema,
+  zipPackage,
+} from "documents.js";
+import { assembleTree } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 
 import { router } from "./router";
@@ -117,6 +129,65 @@ describe("content.read / content.restore", () => {
     });
     expect(read.content.kind).toBe("wordprocessing");
   });
+
+  it("reads pptx content via the OPC package path", async () => {
+    const read = await call(router.content.read, {
+      format: "pptx",
+      bytes: createPptx().toBytes(),
+    });
+    expect(read.content.kind).toBe("presentation");
+  });
+
+  it("reads xlsx content via the OPC package path", async () => {
+    const converted = await call(router.convert, {
+      source: "markdown",
+      targetFormat: "xlsx",
+      bytes: MARKDOWN_BYTES,
+    });
+    const read = await call(router.content.read, {
+      format: "xlsx",
+      bytes: converted.document.bytes,
+    });
+    expect(read.content.kind).toBe("spreadsheet");
+  });
+
+  it("reads odp content via the ODF package path", async () => {
+    const read = await call(router.content.read, {
+      format: "odp",
+      bytes: createOdp().toBytes(),
+    });
+    expect(read.content.kind).toBe("presentation");
+  });
+
+  it("reads ods content via the ODF package path", async () => {
+    const read = await call(router.content.read, {
+      format: "ods",
+      bytes: createOds().toBytes(),
+    });
+    expect(read.content.kind).toBe("spreadsheet");
+  });
+
+  it("reads odg content via the ODF package path", async () => {
+    const read = await call(router.content.read, {
+      format: "odg",
+      bytes: createOdg().toBytes(),
+    });
+    expect(read.content.kind).toBe("drawing");
+  });
+
+  it("throws for pdf, which has no standalone content reader", async () => {
+    const converted = await call(router.convert, {
+      source: "markdown",
+      targetFormat: "pdf",
+      bytes: MARKDOWN_BYTES,
+    });
+    await expect(
+      call(router.content.read, {
+        format: "pdf",
+        bytes: converted.document.bytes,
+      }),
+    ).rejects.toThrow("PDF has no standalone content reader");
+  });
 });
 
 describe("metadata.read / metadata.write", () => {
@@ -203,6 +274,10 @@ describe("odm.render", () => {
   });
 });
 
+// A real, minimal, valid 1x1 transparent PNG -- decoded and re-embedded (never re-encoded) so a docx built through the tree pipeline below carries a genuine image the PDF layout pass places a real "image" item for, rather than only text.
+const PNG_1X1_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
 describe("pdf.inspect", () => {
   it("inspects a converted PDF's page count and item-kind breakdown", async () => {
     const converted = await call(router.convert, {
@@ -220,6 +295,62 @@ describe("pdf.inspect", () => {
       expect(asset).not.toHaveProperty("base64");
       expect(asset.byteLength).toBeGreaterThanOrEqual(0);
     }
+  });
+
+  it("counts every item of every kind across every page, and sanitizes each real embedded image", async () => {
+    const content: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 595, heightPt: 842 },
+          margins: { topPt: 36, rightPt: 36, bottomPt: 36, leftPt: 36 },
+          blocks: [
+            { kind: "paragraph", runs: [{ text: "Some text" }] },
+            {
+              kind: "image",
+              format: "png",
+              base64: PNG_1X1_BASE64,
+              widthPt: 10,
+              heightPt: 10,
+            },
+          ],
+        },
+      ],
+    };
+    const docxBytes = buildDocumentBytes(
+      documentTreeWithSchema(assembleTree(content)),
+      "docx",
+    );
+    const converted = await call(router.convert, {
+      source: "docx",
+      targetFormat: "pdf",
+      bytes: docxBytes,
+    });
+    const inspected = await call(router.pdf.inspect, {
+      bytes: converted.document.bytes,
+    });
+    // A real image item was placed on the page, and the per-kind tally reflects the real page/item walk rather than an empty or stubbed count.
+    expect(inspected.itemKindCounts.image).toBeGreaterThanOrEqual(1);
+    const totalCounted = Object.values(inspected.itemKindCounts).reduce(
+      (sum, count) => sum + count,
+      0,
+    );
+    const totalItems = inspected.layout.pages.reduce(
+      (sum, page) => sum + page.items.length,
+      0,
+    );
+    expect(totalCounted).toBe(totalItems);
+    expect(totalItems).toBeGreaterThan(1);
+    // The sanitized images map carries one real, non-empty entry per embedded image, each with a genuine positive byteLength -- not an empty object a no-op map body would also produce.
+    const imageIds = Object.keys(inspected.layout.images);
+    expect(imageIds.length).toBeGreaterThanOrEqual(1);
+    const [firstId] = imageIds;
+    expect(inspected.layout.images[firstId!]).toMatchObject({
+      format: "png",
+      widthPx: 1,
+      heightPx: 1,
+    });
   });
 });
 
