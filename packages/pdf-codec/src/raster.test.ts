@@ -319,6 +319,15 @@ describe("renderPdfPage: geometry and clipPt", () => {
     }
   });
 
+  it("does not find a %PDF- header planted past the search window's own 1024-byte limit", () => {
+    // hasPdfHeader searches only a bounded prefix (ISO 32000-1 7.5.2 allows junk before the header, not an unbounded scan) -- a header sitting well past that window is exactly as absent as no header at all.
+    const junkPrefix = new Uint8Array(1030).fill(0x41); // 1030 > HEADER_SEARCH_WINDOW's own 1024
+    const bytes = new Uint8Array([...junkPrefix, ...enc("%PDF-1.7\n")]);
+    expect(() =>
+      renderPdfPage(bytes, 0, {}, new RecordingRasteriser()),
+    ).toThrow(/no "%PDF-" header/);
+  });
+
   it("checks for an already-aborted signal before any parsing begins", () => {
     const controller = new AbortController();
     controller.abort();
@@ -1160,6 +1169,29 @@ describe("renderPdfPage: text through embedded sfnt outlines", () => {
     expect(second.minX - first.minX).toBeCloseTo(advancePt, 2);
   });
 
+  it("draws no path at all for a glyph with an empty outline (a space), while still advancing past it", () => {
+    const bytes = type0CarlitoPdf("H H");
+    const rasteriser = new RecordingRasteriser();
+    drive(bytes, 0, {}, rasteriser);
+    const glyphOps = rasteriser.ops.filter(isPath);
+    // Two H's painted, the space between them painting nothing -- not three ops, and not two ops sitting on top of each other.
+    expect(glyphOps.length).toBe(2);
+    const sfnt = parseSfnt(carlitoRegularBytes())!;
+    const cmap = buildCmapLookup(sfnt)!;
+    const hmtx = parseHmtx(sfnt);
+    const head = parseHead(sfnt)!;
+    const spaceAdvancePt =
+      (hmtx.advanceWidth(cmap(" ".codePointAt(0)!)!) / head.unitsPerEm) * 24;
+    const hAdvancePt =
+      (hmtx.advanceWidth(cmap("H".codePointAt(0)!)!) / head.unitsPerEm) * 24;
+    const first = pathOpBounds(glyphOps[0]!);
+    const second = pathOpBounds(glyphOps[1]!);
+    expect(second.minX - first.minX).toBeCloseTo(
+      hAdvancePt + spaceAdvancePt,
+      2,
+    );
+  });
+
   it("absorbs interpreter-only spacing state through the end-matrix correction", () => {
     // The same two-glyph run under 150% horizontal scaling (Tz): the interpreter's end matrix reflects the scaling, and the correction must widen the per-glyph advances to match rather than leaving the second glyph short of where the page placed it.
     const bytes = type0CarlitoPdf("HH", "150 Tz");
@@ -1351,6 +1383,20 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
       diagnostics.find((d) => d.code === "raster/text-outlines-unavailable")
         ?.message,
     ).toContain("a descendant font of subtype CIDFontType9");
+    expect(rasteriser.ops).toEqual([]);
+  });
+
+  it("names an unstated descendant subtype as (none), not a blank or undefined string", () => {
+    const bytes = type0Skeleton({});
+    const text = new TextDecoder("latin1").decode(bytes);
+    const patched = new TextEncoder().encode(
+      text.replace("/Subtype /CIDFontType2 ", ""),
+    );
+    const { diagnostics, rasteriser } = refusalDiagnostics(patched);
+    expect(
+      diagnostics.find((d) => d.code === "raster/text-outlines-unavailable")
+        ?.message,
+    ).toContain("a descendant font of subtype (none)");
     expect(rasteriser.ops).toEqual([]);
   });
 
