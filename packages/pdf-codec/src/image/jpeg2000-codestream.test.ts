@@ -3,7 +3,7 @@ import {
   JPEG2000_FIXTURES,
   jpeg2000FixtureBytes,
 } from "../test-support/jpeg2000";
-import { parseJpeg2000Codestream } from "./jpeg2000-codestream";
+import { MarkerCursor, parseJpeg2000Codestream } from "./jpeg2000-codestream";
 import {
   Jpeg2000ParseError,
   Jpeg2000UnsupportedError,
@@ -14,6 +14,34 @@ function fixture(name: string): Uint8Array<ArrayBuffer> {
   expect(found).toBeDefined();
   return jpeg2000FixtureBytes(found?.codestream ?? "");
 }
+
+describe("MarkerCursor", () => {
+  it("assembles a uint32 from its high and low uint16 halves, not by dividing the high half", () => {
+    const cursor = new MarkerCursor(
+      Uint8Array.from([0x00, 0x01, 0x00, 0x00]), // 0x00010000 = 65536
+    );
+    expect(cursor.uint32()).toBe(65536);
+  });
+
+  it("throws when asked to read more bytes than remain", () => {
+    const cursor = new MarkerCursor(Uint8Array.from([1, 2, 3]));
+    expect(() => cursor.bytes(4)).toThrow(Jpeg2000ParseError);
+    expect(() => cursor.bytes(4)).toThrow(/more data than the codestream/);
+  });
+
+  it("rejects a negative length outright, before it could otherwise appear to fit", () => {
+    const cursor = new MarkerCursor(Uint8Array.from([1, 2, 3, 4, 5]));
+    expect(() => cursor.bytes(-1)).toThrow(Jpeg2000ParseError);
+  });
+
+  it("advances its own position by exactly the slice length read", () => {
+    const cursor = new MarkerCursor(Uint8Array.from([1, 2, 3, 4, 5]));
+    cursor.uint8(); // position: 0 -> 1
+    const slice = cursor.bytes(3); // position: 1 -> 4
+    expect(Array.from(slice)).toEqual([2, 3, 4]);
+    expect(cursor.uint8()).toBe(5); // proves position landed on index 4, not 4 - 3 = -2 or left at 1
+  });
+});
 
 describe("parseJpeg2000Codestream", () => {
   it("reads the geometry, coding style and quantization of a real main header", () => {
@@ -143,6 +171,409 @@ describe("parseJpeg2000Codestream", () => {
     const broken = new Uint8Array(original);
     broken[comOffset + 2] = 0x7f;
     expect(() => parseJpeg2000Codestream(broken)).toThrow(Jpeg2000ParseError);
+  });
+});
+
+// A hand-built minimal codestream, precise down to the byte, for exercising header-segment guards a real encoder's output never happens to trip.
+function u16(value: number): number[] {
+  return [(value >>> 8) & 0xff, value & 0xff];
+}
+function u32(value: number): number[] {
+  return [
+    (value >>> 24) & 0xff,
+    (value >>> 16) & 0xff,
+    (value >>> 8) & 0xff,
+    value & 0xff,
+  ];
+}
+function segment(markerCode: number, body: readonly number[]): number[] {
+  const length = 2 + body.length; // Lxxx counts itself, per T.800 A.4.
+  return [...u16(markerCode), ...u16(length), ...body];
+}
+
+const MARKER_SOC = 0xff4f;
+const MARKER_SIZ = 0xff51;
+const MARKER_COD = 0xff52;
+const MARKER_QCD = 0xff5c;
+const MARKER_SOT = 0xff90;
+const MARKER_SOD = 0xff93;
+const MARKER_EOC = 0xffd9;
+
+function sizSegment(
+  overrides: Partial<{
+    xsiz: number;
+    ysiz: number;
+    xosiz: number;
+    yosiz: number;
+    xtsiz: number;
+    ytsiz: number;
+    xtosiz: number;
+    ytosiz: number;
+    componentCount: number;
+    componentBytes: readonly number[];
+  }> = {},
+): number[] {
+  const {
+    xsiz = 4,
+    ysiz = 4,
+    xosiz = 0,
+    yosiz = 0,
+    xtsiz = 4,
+    ytsiz = 4,
+    xtosiz = 0,
+    ytosiz = 0,
+    componentCount = 1,
+  } = overrides;
+  const componentBytes =
+    overrides.componentBytes ??
+    Array.from({ length: componentCount * 3 }, (_, index) =>
+      index % 3 === 0 ? 7 : 1,
+    ); // Ssiz = 7 (8-bit unsigned), XRsiz = YRsiz = 1
+  return segment(MARKER_SIZ, [
+    ...u16(0), // Rsiz
+    ...u32(xsiz),
+    ...u32(ysiz),
+    ...u32(xosiz),
+    ...u32(yosiz),
+    ...u32(xtsiz),
+    ...u32(ytsiz),
+    ...u32(xtosiz),
+    ...u32(ytosiz),
+    ...u16(componentCount),
+    ...componentBytes,
+  ]);
+}
+
+function codSegment(
+  overrides: Partial<{
+    scod: number;
+    progression: number;
+    layers: number;
+    mct: number;
+    decompLevels: number;
+    cbW: number;
+    cbH: number;
+    cbStyle: number;
+    transform: number;
+  }> = {},
+): number[] {
+  const {
+    scod = 0,
+    progression = 0,
+    layers = 1,
+    mct = 0,
+    decompLevels = 0,
+    cbW = 0,
+    cbH = 0,
+    cbStyle = 0,
+    transform = 1,
+  } = overrides;
+  return segment(MARKER_COD, [
+    scod,
+    progression,
+    ...u16(layers),
+    mct,
+    decompLevels,
+    cbW,
+    cbH,
+    cbStyle,
+    transform,
+  ]);
+}
+
+function qcdSegment(styleCode = 0, guardBits = 0): number[] {
+  return segment(MARKER_QCD, [(guardBits << 5) | styleCode]);
+}
+
+// SOC + SIZ + COD + QCD + whatever else the caller supplies, terminated by EOC unless told not to. Sized and positioned entirely from what it is given, so a caller only ever states what a test cares about.
+function minimalCodestream(
+  opts: {
+    siz?: readonly number[];
+    cod?: readonly number[];
+    qcd?: readonly number[];
+    afterMainHeader?: readonly number[];
+    omitEoc?: boolean;
+  } = {},
+): Uint8Array<ArrayBuffer> {
+  const bytes = [
+    ...u16(MARKER_SOC),
+    ...(opts.siz ?? sizSegment()),
+    ...(opts.cod ?? codSegment()),
+    ...(opts.qcd ?? qcdSegment()),
+    ...(opts.afterMainHeader ?? []),
+  ];
+  if (opts.omitEoc !== true) {
+    bytes.push(...u16(MARKER_EOC));
+  }
+  return Uint8Array.from(bytes);
+}
+
+// SOT + a tile-part header + SOD, sized correctly from its own body. Psot 0 means "runs to the end of the codestream", the same convention the real format uses.
+function tilePart(
+  tileIndex: number,
+  header: readonly number[],
+  data: readonly number[],
+  psot = 0,
+): number[] {
+  return [
+    ...u16(MARKER_SOT),
+    ...u16(10),
+    ...u16(tileIndex),
+    ...u32(psot),
+    0, // TPsot
+    0, // TNsot
+    ...header,
+    ...u16(MARKER_SOD),
+    ...data,
+  ];
+}
+
+describe("parseJpeg2000Codestream, header-segment guards a real encoder never trips", () => {
+  it("rejects a SIZ segment declaring zero components", () => {
+    const data = minimalCodestream({
+      siz: sizSegment({ componentCount: 0, componentBytes: [] }),
+    });
+    expect(() => parseJpeg2000Codestream(data)).toThrow(/zero components/);
+  });
+
+  it("rejects a SIZ segment whose own length has no room for every component it declares", () => {
+    const data = minimalCodestream({
+      siz: sizSegment({ componentCount: 2, componentBytes: [7, 1, 1] }), // declares 2, provides 1
+    });
+    expect(() => parseJpeg2000Codestream(data)).toThrow(
+      /leaves room for fewer/,
+    );
+  });
+
+  it("rejects a SIZ segment whose x extent has no area", () => {
+    const data = minimalCodestream({ siz: sizSegment({ xosiz: 4 }) }); // xsiz(4) <= xosiz(4)
+    expect(() => parseJpeg2000Codestream(data)).toThrow(/no area/);
+  });
+
+  it("rejects a SIZ segment whose y extent has no area even though its x extent does", () => {
+    const data = minimalCodestream({ siz: sizSegment({ yosiz: 4 }) });
+    expect(() => parseJpeg2000Codestream(data)).toThrow(/no area/);
+  });
+
+  it("rejects a SIZ segment declaring a zero-width tile", () => {
+    const data = minimalCodestream({ siz: sizSegment({ xtsiz: 0 }) });
+    expect(() => parseJpeg2000Codestream(data)).toThrow(/zero-sized tile/);
+  });
+
+  it("rejects a SIZ segment declaring a zero-height tile even though its width is fine", () => {
+    const data = minimalCodestream({ siz: sizSegment({ ytsiz: 0 }) });
+    expect(() => parseJpeg2000Codestream(data)).toThrow(/zero-sized tile/);
+  });
+
+  it("rejects a COD segment declaring a transform ISO/IEC 15444-1 does not define", () => {
+    const data = minimalCodestream({ cod: codSegment({ transform: 5 }) });
+    expect(() => parseJpeg2000Codestream(data)).toThrow(/neither of the two/);
+  });
+
+  it("rejects a COD segment whose code-block area exceeds Table A.18's cap", () => {
+    const data = minimalCodestream({ cod: codSegment({ cbW: 12, cbH: 12 }) }); // exponents 14 and 14, area 2^28
+    expect(() => parseJpeg2000Codestream(data)).toThrow(
+      /outside the range ISO\/IEC 15444-1 Table A\.18/,
+    );
+  });
+
+  it("accepts a COD segment whose code-block area sits exactly at Table A.18's cap", () => {
+    const data = minimalCodestream({ cod: codSegment({ cbW: 3, cbH: 3 }) }); // exponents 5 and 5, sum 10, well inside the cap
+    const codestream = parseJpeg2000Codestream(data);
+    expect(codestream.main.cod).toMatchObject({
+      codeBlockWidthExp: 5,
+      codeBlockHeightExp: 5,
+    });
+  });
+
+  it("rejects a COD segment declaring a progression order ISO/IEC 15444-1 Table A.16 does not define", () => {
+    const data = minimalCodestream({
+      cod: codSegment({ progression: 5 }),
+    });
+    expect(() => parseJpeg2000Codestream(data)).toThrow(
+      /outside the five ISO\/IEC 15444-1 Table A\.16/,
+    );
+  });
+
+  it("rejects a COD segment declaring zero quality layers", () => {
+    const data = minimalCodestream({ cod: codSegment({ layers: 0 }) });
+    expect(() => parseJpeg2000Codestream(data)).toThrow(/zero quality layers/);
+  });
+
+  it("rejects a QCD segment declaring a quantization style Table A.28 does not define", () => {
+    const data = minimalCodestream({ qcd: qcdSegment(3) });
+    expect(() => parseJpeg2000Codestream(data)).toThrow(/does not define/);
+  });
+
+  it("rejects a marker segment whose own declared length is shorter than the length field itself", () => {
+    const data = minimalCodestream({
+      afterMainHeader: [...u16(0xff64), ...u16(1)], // COM, Lcom = 1: shorter than the 2-byte length field that carries it
+    });
+    expect(() => parseJpeg2000Codestream(data)).toThrow(
+      /shorter than the length field itself/,
+    );
+  });
+
+  it("rejects a COM marker whose declared length leaves no room for its own registration field", () => {
+    const data = minimalCodestream({
+      afterMainHeader: [...u16(0xff64), ...u16(2)], // COM, Lcom = 2: passes the length < 2 guard but leaves nothing for Rcom
+    });
+    expect(() => parseJpeg2000Codestream(data)).toThrow(
+      /more data than the codestream carries/,
+    );
+  });
+
+  it("records a per-component coding style override from a COC marker", () => {
+    const coc = segment(0xff53, [0, 0, 0, 0, 0, 0, 1]); // component 0, decompLevels 0, cbW/cbH/style 0, reversible
+    const data = minimalCodestream({ afterMainHeader: coc });
+    expect(parseJpeg2000Codestream(data).main.coc.get(0)).toMatchObject({
+      transform: "reversible-5-3",
+    });
+  });
+
+  it("records a per-component quantization override from a QCC marker", () => {
+    const qcc = segment(0xff5d, [0, 0]); // component 0, Sqcc: style none, guardBits 0
+    const data = minimalCodestream({ afterMainHeader: qcc });
+    expect(parseJpeg2000Codestream(data).main.qcc.get(0)).toMatchObject({
+      style: "none",
+    });
+  });
+
+  it("records that a POC marker changed the progression order, without parsing its entries", () => {
+    const poc = segment(0xff5f, [0, 0, 0, 0, 0, 0]);
+    const data = minimalCodestream({ afterMainHeader: poc });
+    expect(parseJpeg2000Codestream(data).main.hasProgressionChanges).toBe(true);
+  });
+
+  it("records that an RGN marker declares a region of interest, without applying it", () => {
+    const rgn = segment(0xff5e, [0, 0, 0]);
+    const data = minimalCodestream({ afterMainHeader: rgn });
+    expect(parseJpeg2000Codestream(data).main.hasRegionOfInterest).toBe(true);
+  });
+
+  it("records that a PPT marker moves packet headers out of the packet bodies", () => {
+    const ppt = segment(0xff61, [0]);
+    const data = minimalCodestream({ afterMainHeader: ppt });
+    expect(parseJpeg2000Codestream(data).main.hasPackedPacketHeaders).toBe(
+      true,
+    );
+  });
+
+  it("rejects an SOC or SOD marker appearing unexpectedly inside the main header", () => {
+    const data = minimalCodestream({
+      afterMainHeader: [...u16(MARKER_SOD)],
+    });
+    expect(() => parseJpeg2000Codestream(data)).toThrow(/unexpected marker/);
+  });
+
+  it("rejects a main header carrying no COD marker", () => {
+    const data = minimalCodestream({ cod: [] });
+    expect(() => parseJpeg2000Codestream(data)).toThrow(/no COD marker/);
+  });
+
+  it("rejects a main header carrying no QCD marker", () => {
+    const data = minimalCodestream({ qcd: [] });
+    expect(() => parseJpeg2000Codestream(data)).toThrow(/no QCD marker/);
+  });
+
+  it("rejects a tile-part header that ends before an SOD marker appears", () => {
+    const data = minimalCodestream({
+      afterMainHeader: [
+        ...u16(MARKER_SOT),
+        ...u16(10),
+        ...u16(0),
+        ...u32(0),
+        0,
+        0,
+      ],
+      omitEoc: true, // an EOC here would itself be a marker the tile-part-header loop reads, rather than genuinely running out of data
+    });
+    expect(() => parseJpeg2000Codestream(data)).toThrow(
+      /ended without an SOD marker/,
+    );
+  });
+
+  it("rejects a tile-part header that runs into a second SOT rather than reaching SOD", () => {
+    const data = minimalCodestream({
+      afterMainHeader: [
+        ...u16(MARKER_SOT),
+        ...u16(10),
+        ...u16(0),
+        ...u32(0),
+        0,
+        0,
+        ...u16(MARKER_SOT),
+      ],
+    });
+    expect(() => parseJpeg2000Codestream(data)).toThrow(/rather than at SOD/);
+  });
+
+  it("rejects a tile-part whose Psot is shorter than its own header", () => {
+    const data = minimalCodestream({
+      afterMainHeader: [
+        ...u16(MARKER_SOT),
+        ...u16(10),
+        ...u16(0),
+        ...u32(4), // Psot 4 doesn't even cover the fixed 12-byte SOT header
+        0,
+        0,
+        ...u16(MARKER_SOD),
+      ],
+    });
+    expect(() => parseJpeg2000Codestream(data)).toThrow(
+      /shorter than its own header/,
+    );
+  });
+
+  it("trims a trailing EOC from the last tile-part's own data when Psot runs to the end of the codestream", () => {
+    const data = minimalCodestream({
+      afterMainHeader: tilePart(0, [], [0xaa, 0xbb, 0xcc]),
+    });
+    const codestream = parseJpeg2000Codestream(data);
+    const part = codestream.tileParts[0];
+    expect(part).toBeDefined();
+    expect(Array.from(data.subarray(part?.dataStart, part?.dataEnd))).toEqual([
+      0xaa, 0xbb, 0xcc,
+    ]);
+  });
+
+  it("leaves a tile-part's data untrimmed when it does not end in 0xFF 0xD9", () => {
+    const withoutEoc = minimalCodestream({
+      afterMainHeader: tilePart(0, [], [0xaa, 0xbb, 0xcc, 0xdd]),
+      omitEoc: true, // an EOC right here would itself be the trailing bytes the trim check is for
+    });
+    const codestream = parseJpeg2000Codestream(withoutEoc);
+    const part = codestream.tileParts[0];
+    expect(part).toBeDefined();
+    // The tile-part's own trailing 0xFF 0xD9 only gets trimmed when Psot runs to the codestream's own end and the real EOC marker sits there -- not merely because the last two bytes happen to match.
+    expect(part?.dataEnd).toBe(withoutEoc.length);
+  });
+
+  it("does not let a tile-part's own header override the main header's coding and quantization defaults with nothing", () => {
+    const data = minimalCodestream({
+      afterMainHeader: tilePart(0, [], []),
+    });
+    const part = parseJpeg2000Codestream(data).tileParts[0];
+    expect(part?.header.cod).toBeUndefined();
+    expect(part?.header.qcd).toBeUndefined();
+  });
+
+  it("lets a tile-part's own COD marker override just the coding defaults, leaving quantization to the main header", () => {
+    const data = minimalCodestream({
+      afterMainHeader: tilePart(0, codSegment({ layers: 3 }), []),
+    });
+    const part = parseJpeg2000Codestream(data).tileParts[0];
+    expect(part?.header.cod).toMatchObject({ layers: 3 });
+    expect(part?.header.qcd).toBeUndefined();
+  });
+
+  it("lets a tile-part's own QCD marker override just the quantization, leaving coding style to the main header", () => {
+    const data = minimalCodestream({
+      afterMainHeader: tilePart(0, qcdSegment(1, 3), []),
+    });
+    const part = parseJpeg2000Codestream(data).tileParts[0];
+    expect(part?.header.qcd).toMatchObject({ style: "derived", guardBits: 3 });
+    expect(part?.header.cod).toBeUndefined();
   });
 });
 
