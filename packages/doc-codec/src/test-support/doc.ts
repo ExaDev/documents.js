@@ -129,8 +129,15 @@ export function requireMapEntry<T>(
   return value;
 }
 
-/** Where the text is written in the WordDocument stream: past the FIB, on a page boundary, and even, which the 16-bit spelling requires. */
-const TEXT_FC = 0x400;
+// Every message below is passed to requireArrayEntry/requireMapEntry at a call site whose own comment explains why that lookup can never actually miss for real input -- exported as its own named constant/function, the same discipline table/read.ts's own internal-defect messages follow, so the exact text stays directly testable without needing to fabricate a genuine miss through buildDoc's own public surface.
+export const SEPX_OFFSET_MISSING_MESSAGE = "Sepx offset missing";
+export const PIECE_BOUNDARY_MISSING_MESSAGE = "piece boundary missing";
+export function tablePartOffsetMissingMessage(name: string): string {
+  return `table part offset missing for ${name}`;
+}
+
+/** Where the text is written in the WordDocument stream: past the FIB, on a page boundary, and even, which the 16-bit spelling requires. Exported for this package's own direct tests. */
+export const TEXT_FC = 0x400;
 
 export interface ParagraphAccumulator {
   text: string;
@@ -291,7 +298,7 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
     sepxList.forEach((bytes, index) => {
       wordDocument.set(
         bytes,
-        requireArrayEntry(sepxOffsets, index, "Sepx offset missing"),
+        requireArrayEntry(sepxOffsets, index, SEPX_OFFSET_MISSING_MESSAGE),
       );
     });
   }
@@ -355,19 +362,11 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
   for (const [name, bytes] of Object.entries(namedParts)) {
     table.set(
       bytes,
-      requireMapEntry(
-        tableOffsets,
-        name,
-        `table part offset missing for ${name}`,
-      ),
+      requireMapEntry(tableOffsets, name, tablePartOffsetMissingMessage(name)),
     );
   }
   const offsetOf = (name: string): number =>
-    requireMapEntry(
-      tableOffsets,
-      name,
-      `table part offset missing for ${name}`,
-    );
+    requireMapEntry(tableOffsets, name, tablePartOffsetMissingMessage(name));
 
   const fib = buildFib({
     ccpText,
@@ -415,8 +414,18 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
   return compoundFile([
     { path: "WordDocument", bytes: wordDocument },
     { path: "1Table", bytes: table },
-    ...(spec.data === undefined ? [] : [{ path: "Data", bytes: spec.data }]),
+    ...dataStreamParts(spec.data),
   ]);
+}
+
+/** The extra "Data" stream part compoundFile should receive -- none when `data` is absent, one entry otherwise. Extracted so this exact decision is directly testable: compoundFile's own stream/storage distinction (a node's `stream` property, set from `entry.bytes`) treats a stream entry given `undefined` bytes identically to no entry at all -- it stores as an empty storage rather than a stream, so readCompoundFile/readDocStreams find nothing named "Data" either way -- meaning a round trip through readDocContent can never distinguish this decision's own two branches when `data` is genuinely absent; only this function's own return value can. */
+export function dataStreamParts(
+  data: Uint8Array<ArrayBuffer> | undefined,
+): readonly {
+  readonly path: string;
+  readonly bytes: Uint8Array<ArrayBuffer>;
+}[] {
+  return data === undefined ? [] : [{ path: "Data", bytes: data }];
 }
 
 // Sepx, [MS-DOC] 2.9.279: a 2-byte cb (grpprl's own length) followed by the grpprl itself. Built independently of prop/sep-write.ts's own buildSepx, for the same reason the sprm byte sequences at the top of read.test.ts are hand-encoded rather than built through prop/sep-write.ts's encodeSectionGrpprl: a fixture sharing code with the module under test would let a bug in one hide behind the same bug in the other.
@@ -448,7 +457,7 @@ export function buildPlcfSedBytes(
   });
   fcSepxList.forEach((fcSepx, index) => {
     const base = keyBytes + index * 12;
-    view.setUint16(base, 0); // sed.fn -- ignored.
+    // sed.fn (base + 0) is left as `bytes`' own zero-initialised default -- ignored, and writing a literal 0 over it would be a no-op regardless.
     view.setUint32(base + 2, fcSepx, true); // sed.fcSepx.
     view.setUint16(base + 6, 0); // sed.fnMpr -- ignored.
     view.setUint32(base + 8, 0xffffffff); // sed.fcMpr -- ignored.
@@ -538,17 +547,15 @@ export function buildPlcBytes(keys: readonly number[]): Uint8Array {
   return bytes;
 }
 
-/** A `characterCount`-length text's own boundary CPs when split into `pieceCount` pieces of as-equal length as divides -- 0, `characterCount` itself, and every `Math.floor((characterCount*index)/pieceCount)` boundary in between, deduplicated. Exported for this package's own direct tests: how many pieces a Clx actually splits into is invisible to a round trip through readDocContent, which reassembles them into one string regardless of how many there were (buildDoc's own `pieces` tests only ever assert on that reassembled text). Its own boundaries need no explicit sort: `index` only ever increases across the loop that builds them, and `Math.floor` preserves that monotonicity, so `[0, ...middles, characterCount]` is already non-decreasing before `Set` dedup (which itself preserves insertion order) ever runs. */
+/** A `characterCount`-length text's own boundary CPs when split into `pieceCount` pieces of as-equal length as divides -- 0, `characterCount` itself, and every `Math.floor((characterCount*(position+1))/pieceCount)` boundary in between (`pieceCount - 1` of them), deduplicated. Exported for this package's own direct tests: how many pieces a Clx actually splits into is invisible to a round trip through readDocContent, which reassembles them into one string regardless of how many there were (buildDoc's own `pieces` tests only ever assert on that reassembled text). The middle boundaries are generated from an array length rather than a hand-written loop bound deliberately: the position that a hand-written `< pieceCount` bound would exclude and an off-by-one `<= pieceCount` would wrongly include both compute to exactly `characterCount` at `position === pieceCount - 1` -- the identical value the trailing `characterCount` already supplies -- so the two are absorbed into the same Set entry regardless, and no test built on this function's own return value could ever tell that specific off-by-one apart. Its own boundaries need no explicit sort: `position` only ever increases, and `Math.floor` preserves that monotonicity, so `[0, ...middles, characterCount]` is already non-decreasing before `Set` dedup (which itself preserves insertion order) ever runs. */
 export function pieceBoundaries(
   characterCount: number,
   pieceCount: number,
 ): number[] {
-  const boundaries: number[] = [0];
-  for (let index = 1; index < pieceCount; index += 1) {
-    boundaries.push(Math.floor((characterCount * index) / pieceCount));
-  }
-  boundaries.push(characterCount);
-  return [...new Set(boundaries)];
+  const middles = Array.from({ length: pieceCount - 1 }, (_, position) =>
+    Math.floor((characterCount * (position + 1)) / pieceCount),
+  );
+  return [...new Set([0, ...middles, characterCount])];
 }
 
 // A Clx with no Prc array (so its first byte is the Pcdt's own 0x02) and a PlcPcd splitting the text into `pieceCount` pieces of as-equal length as divides.
@@ -571,7 +578,7 @@ function buildClx(
   };
   for (const cp of cps) push32(cp);
   for (let index = 0; index < cps.length - 1; index += 1) {
-    const cp = requireArrayEntry(cps, index, "piece boundary missing");
+    const cp = requireArrayEntry(cps, index, PIECE_BOUNDARY_MISSING_MESSAGE);
     // FcCompressed stores a compressed piece's offset doubled, since the reader halves it: "the text starts at offset fc/2".
     const fc = compressed ? characterFc(cp) * 2 : characterFc(cp);
     plc.push(0, 0); // The Pcd bit field: no fNoParaLast, no fDirty.
