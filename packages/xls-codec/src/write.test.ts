@@ -214,6 +214,7 @@ describe("writeXlsContent", () => {
       kind: "boolean",
       value: false,
     });
+    expect(findCell(content, 0, 0, 1)?.displayText).toBe("FALSE");
   });
 
   it("round-trips every [MS-XLS]-defined error value", () => {
@@ -809,6 +810,10 @@ describe("writeXlsContent", () => {
       expect(findCell(content, 0, 0, 1)?.alignment).toBe("center");
       expect(findCell(content, 0, 0, 2)?.alignment).toBe("right");
       expect(findCell(content, 0, 0, 3)?.alignment).toBe("justify");
+      // Own-property check, not just a value check: a horizontal-only cell must leave the verticalAlignment KEY absent, not merely undefined when read through optional chaining -- a bug materialising the key with an explicit undefined value would pass a plain .toBeUndefined() assertion just as easily as a genuinely absent key would.
+      expect(
+        Object.hasOwn(findCell(content, 0, 0, 0) ?? {}, "verticalAlignment"),
+      ).toBe(false);
     });
 
     it("round-trips each vertical alignment this package's schema can express", () => {
@@ -837,6 +842,10 @@ describe("writeXlsContent", () => {
       const content = readXlsContent(bytes);
       expect(findCell(content, 0, 0, 0)?.verticalAlignment).toBe("top");
       expect(findCell(content, 0, 0, 1)?.verticalAlignment).toBe("middle");
+      // Own-property check, not just a value check: a vertical-only cell must leave the alignment KEY absent, not merely undefined when read through optional chaining -- see the mirrored check in the horizontal-alignment test above for why a plain .toBeUndefined() would not catch this.
+      expect(Object.hasOwn(findCell(content, 0, 0, 0) ?? {}, "alignment")).toBe(
+        false,
+      );
     });
 
     it("leaves alignment/verticalAlignment absent for a cell that states neither, matching the value-kind default and the schema's own documented bottom default", () => {
@@ -889,6 +898,35 @@ describe("writeXlsContent", () => {
       const readBack = findCell(readXlsContent(bytes), 0, 1, 2);
       expect(readBack?.value).toStrictEqual({ kind: "empty" });
       expect(readBack?.alignment).toBe("center");
+    });
+
+    it("round-trips a border-only empty cell through a real Blank record, with neither fill nor alignment involved", () => {
+      // Isolates the borders leg of mapCell's own blank-drop conjunction from every sibling leg (background/alignment/verticalAlignment/font) -- a cell whose ONLY reason to survive is its own border must still survive when nothing else about it is decorated.
+      const border = { color: rgbHexToColor("0000ff"), widthPt: 0.75 } as const;
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(1, 2, { kind: "empty" }, { borders: { left: border } }),
+          ]),
+        ]),
+      );
+      const readBack = findCell(readXlsContent(bytes), 0, 1, 2);
+      expect(readBack?.value).toStrictEqual({ kind: "empty" });
+      expect(readBack?.borders).toStrictEqual({ left: border });
+    });
+
+    it("round-trips a vertical-alignment-only empty cell through a real Blank record, with neither fill nor a border involved", () => {
+      // Isolates the verticalAlignment leg of mapCell's own blank-drop conjunction from every sibling leg -- a cell whose ONLY reason to survive is its own vertical alignment must still survive when nothing else about it is decorated.
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(1, 2, { kind: "empty" }, { verticalAlignment: "top" }),
+          ]),
+        ]),
+      );
+      const readBack = findCell(readXlsContent(bytes), 0, 1, 2);
+      expect(readBack?.value).toStrictEqual({ kind: "empty" });
+      expect(readBack?.verticalAlignment).toBe("top");
     });
 
     it("still writes nothing for an empty cell carrying no alignment either", () => {
@@ -967,8 +1005,9 @@ describe("writeXlsContent", () => {
     const content = readXlsContent(bytes);
     const row0 = content.sheets[0]?.rows.find((row) => row.index === 0);
     const row5 = content.sheets[0]?.rows.find((row) => row.index === 5);
-    expect(row0?.heightPt).toBe(30);
-    expect(row5?.hidden).toBe(true);
+    // toStrictEqual, not just a per-field .toBe: a row carrying only heightPt must not also carry a spuriously-materialised hidden key (and vice versa for row5), which a per-field check reading only the key it expects would miss entirely.
+    expect(row0).toStrictEqual({ index: 0, heightPt: 30 });
+    expect(row5).toStrictEqual({ index: 5, hidden: true });
   });
 
   it("round-trips declared column widths and hidden columns", () => {
@@ -985,7 +1024,9 @@ describe("writeXlsContent", () => {
     const content = readXlsContent(bytes);
     const column0 = content.sheets[0]?.columns.find((col) => col.index === 0);
     const column3 = content.sheets[0]?.columns.find((col) => col.index === 3);
+    // toStrictEqual on the width, not just .toBeCloseTo: a column carrying only widthPt must not also carry a spuriously-materialised hidden key, which a per-field check reading only widthPt would miss entirely. column3 always round-trips with SOME widthPt too -- a real ColInfo record always states a column's own width, whether or not the document that produced it declared one -- so hidden alone is confirmed directly instead.
     expect(column0?.widthPt).toBeCloseTo(100, 0);
+    expect(column0).toStrictEqual({ index: 0, widthPt: column0?.widthPt });
     expect(column3?.hidden).toBe(true);
   });
 
