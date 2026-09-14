@@ -161,6 +161,18 @@ describe("DocxTable cell access and mutation", () => {
     }
     expect(roundTrippedTable.rows[0]?.heightPt).toBeCloseTo(34, 5);
   });
+
+  it("heightPt can be updated to a new value and cleared back to undefined on a row that already has one", () => {
+    const tableElement = buildTable({ rows: 1, columns: 1 });
+    const table = new DocxTable([tableElement], tableElement);
+    const row = table.rows()[0]!;
+    row.heightPt = 20;
+    expect(row.heightPt).toBeCloseTo(20, 5);
+    row.heightPt = 40;
+    expect(row.heightPt).toBeCloseTo(40, 5);
+    row.heightPt = undefined;
+    expect(row.heightPt).toBeUndefined();
+  });
 });
 
 describe("DocxTableCell background", () => {
@@ -216,6 +228,142 @@ describe("DocxTableCell background", () => {
       el("w:shd", { "w:val": "pct25", "w:color": "0000ff", "w:fill": "auto" }),
     );
     expect(cell.background).toEqual({ r: 0, g: 0, b: 1 });
+  });
+});
+
+describe("DocxTableCell.borders", () => {
+  // Same walk-to-w:tcPr helper as the background describe block above, duplicated locally since that one is scoped to its own describe callback.
+  function tcPrOf(tableElement: XmlNode, cell: DocxTableCell): XmlElement {
+    cell.colSpan = 1;
+    const tr = tableElement.type === "element" ? tableElement : undefined;
+    const row =
+      tr?.children.find((c) => c.type === "element" && c.tag === "w:tr") ??
+      undefined;
+    const tc =
+      row?.type === "element"
+        ? row.children.find((c) => c.type === "element" && c.tag === "w:tc")
+        : undefined;
+    const tcPr =
+      tc?.type === "element"
+        ? tc.children.find((c) => c.type === "element" && c.tag === "w:tcPr")
+        : undefined;
+    if (tcPr?.type !== "element") {
+      throw new Error("expected w:tcPr");
+    }
+    return tcPr;
+  }
+
+  it("borders is undefined for a cell with no w:tcBorders, and round-trips all four edges through the setter", () => {
+    const tableElement = buildTable({ rows: 1, columns: 1 });
+    const table = new DocxTable([tableElement], tableElement);
+    const cell = table.cell(0, 0);
+    expect(cell.borders).toBeUndefined();
+
+    cell.borders = {
+      top: { color: { r: 1, g: 0, b: 0 }, widthPt: 2, style: "dashed" },
+      left: { color: { r: 0, g: 1, b: 0 }, widthPt: 1.5, style: "dotted" },
+      bottom: { color: { r: 0, g: 0, b: 1 }, widthPt: 0.5, style: "double" },
+      right: { color: { r: 0, g: 0, b: 0 }, widthPt: 1, style: "solid" },
+    };
+
+    expect(cell.borders).toEqual({
+      top: { color: { r: 1, g: 0, b: 0 }, widthPt: 2, style: "dashed" },
+      left: { color: { r: 0, g: 1, b: 0 }, widthPt: 1.5, style: "dotted" },
+      bottom: { color: { r: 0, g: 0, b: 1 }, widthPt: 0.5, style: "double" },
+      right: { color: { r: 0, g: 0, b: 0 }, widthPt: 1, style: "solid" },
+    });
+  });
+
+  it("clearing borders (undefined) removes w:tcBorders entirely", () => {
+    const tableElement = buildTable({ rows: 1, columns: 1 });
+    const table = new DocxTable([tableElement], tableElement);
+    const cell = table.cell(0, 0);
+    cell.borders = {
+      top: { color: { r: 0, g: 0, b: 0 }, widthPt: 1, style: "solid" },
+    };
+    expect(cell.borders).not.toBeUndefined();
+    cell.borders = undefined;
+    expect(cell.borders).toBeUndefined();
+  });
+
+  it("clearing borders on a cell with no w:tcPr at all is a no-op, not an error", () => {
+    const tableElement = buildTable({ rows: 1, columns: 1 });
+    const table = new DocxTable([tableElement], tableElement);
+    const cell = table.cell(0, 0);
+    expect(() => {
+      cell.borders = undefined;
+    }).not.toThrow();
+    expect(cell.borders).toBeUndefined();
+  });
+
+  it('an edge whose w:val is "nil" or "none" is excluded from the read-back borders, and an edge with neither w:sz nor w:color falls back to a 1pt black solid border', () => {
+    const tableElement = buildTable({ rows: 1, columns: 1 });
+    const table = new DocxTable([tableElement], tableElement);
+    const cell = table.cell(0, 0);
+    const tcPr = tcPrOf(tableElement, cell);
+    tcPr.children.push(
+      el("w:tcBorders", {}, [
+        el("w:top", { "w:val": "nil" }),
+        el("w:left", { "w:val": "none" }),
+        el("w:bottom", { "w:val": "single" }),
+      ]),
+    );
+
+    const borders = cell.borders;
+    expect(borders?.top).toBeUndefined();
+    expect(borders?.left).toBeUndefined();
+    expect(borders?.bottom).toEqual({
+      color: { r: 0, g: 0, b: 0 },
+      widthPt: 1,
+      style: "solid",
+    });
+  });
+
+  it('an edge whose w:color is "auto" (rather than absent) also falls back to black', () => {
+    const tableElement = buildTable({ rows: 1, columns: 1 });
+    const table = new DocxTable([tableElement], tableElement);
+    const cell = table.cell(0, 0);
+    const tcPr = tcPrOf(tableElement, cell);
+    tcPr.children.push(
+      el("w:tcBorders", {}, [
+        el("w:top", { "w:val": "single", "w:sz": "16", "w:color": "auto" }),
+      ]),
+    );
+
+    expect(cell.borders?.top).toEqual({
+      color: { r: 0, g: 0, b: 0 },
+      widthPt: 2,
+      style: "solid",
+    });
+  });
+
+  it("borders is undefined when w:tcBorders is present but every edge is nil/none, since an empty resolved map is treated the same as no borders at all", () => {
+    const tableElement = buildTable({ rows: 1, columns: 1 });
+    const table = new DocxTable([tableElement], tableElement);
+    const cell = table.cell(0, 0);
+    const tcPr = tcPrOf(tableElement, cell);
+    tcPr.children.push(
+      el("w:tcBorders", {}, [
+        el("w:top", { "w:val": "nil" }),
+        el("w:left", { "w:val": "none" }),
+      ]),
+    );
+
+    expect(cell.borders).toBeUndefined();
+  });
+
+  it("an unrecognised w:val reads back as the 'solid' default, mirroring ooxml.js read.js's own fallback for unrecognised vals", () => {
+    const tableElement = buildTable({ rows: 1, columns: 1 });
+    const table = new DocxTable([tableElement], tableElement);
+    const cell = table.cell(0, 0);
+    const tcPr = tcPrOf(tableElement, cell);
+    tcPr.children.push(
+      el("w:tcBorders", {}, [
+        el("w:top", { "w:val": "wave", "w:sz": "8", "w:color": "123456" }),
+      ]),
+    );
+
+    expect(cell.borders?.top?.style).toBe("solid");
   });
 });
 
