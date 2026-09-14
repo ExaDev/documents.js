@@ -51,9 +51,7 @@ const DXF_DEFAULT_FOREGROUND_TEXT_COLOR = 32767; // DXFFntD.icvFore's own docume
 export function parseDxfStyle(
   dxfBytes: Uint8Array<ArrayBuffer>,
 ): RawConditionalFormatStyle | undefined {
-  if (dxfBytes.length === 0) {
-    return undefined;
-  }
+  // No explicit length guard: an empty (or too-short-for-its-own-header) dxfBytes runs straight into the try block below and throws BiffFormatError on its first cursor read, landing in the catch at the bottom exactly like any other malformed dxf -- a dedicated early return here would only ever produce the identical undefined this catch already produces.
   try {
     const cursor = new BlockCursor([dxfBytes]);
     const flags1 = cursor.u32();
@@ -166,18 +164,15 @@ function readCf(
   if (operator === undefined) {
     return undefined;
   }
-  if (rgce1.length === 0) {
-    // A comparison condition always compares against something -- a zero-length first operand is a malformed record, not a legitimate empty rule, so the whole rule degrades to absent rather than promoting a formula1 the schema requires but this record never actually carried.
-    return undefined;
-  }
   try {
+    // No explicit rgce1.length===0 guard: a comparison condition always compares against something, and a zero-length first operand is a malformed record rather than a legitimate empty rule -- but parseFormulaText already returns undefined for an empty rgce (its own token loop never runs, so its stack never reaches the one-operand shape a result requires), which the formula1===undefined check right below already degrades to absent. A dedicated early return here would only ever produce that identical undefined.
     const formula1 = parseFormulaText(rgce1, formulaSheets);
     if (formula1 === undefined) {
-      // ContentSheetConditionalFormatSchema's own 'cellIs' variant requires formula1 -- a Ptg stream this reader cannot render as text (an unsupported token) leaves nothing valid to promote, so the whole rule degrades to absent rather than a fabricated placeholder.
+      // ContentSheetConditionalFormatSchema's own 'cellIs' variant requires formula1 -- a Ptg stream this reader cannot render as text (an unsupported token, or no tokens at all) leaves nothing valid to promote, so the whole rule degrades to absent rather than a fabricated placeholder.
       return undefined;
     }
-    const formula2 =
-      rgce2.length > 0 ? parseFormulaText(rgce2, formulaSheets) : undefined;
+    // rgce2 gets the identical treatment: parseFormulaText(rgce2, ...) already returns undefined for an absent second operand, so a length>0 guard ahead of the call would only ever choose between calling it and getting undefined back, or not calling it and supplying undefined directly -- the same result either way.
+    const formula2 = parseFormulaText(rgce2, formulaSheets);
 
     return {
       operator,
