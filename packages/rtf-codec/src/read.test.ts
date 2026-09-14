@@ -16,8 +16,16 @@ import {
   RtfNotAnRtfDocumentError,
 } from "./diagnostics";
 import { bytesToHex, hexToBytes } from "./base64";
+import { newPendingCell } from "./cell-format";
 import { writeEmbeddedObjectData } from "./embedded-object";
-import { readRtf, readRtfContent } from "./read";
+import {
+  appendToLastListItem,
+  closingBookmarkExtent,
+  readRtf,
+  readRtfContent,
+  verticalMergeRowSpan,
+} from "./read";
+import { bookmarkAnchorDescriptor } from "./constructs";
 import { bytes, text } from "./test-support/bytes";
 
 // Stands in for a hostile producer who writes the identical spec-conformant ObjectHeader/NativeDataSize/NativeData/Presentation envelope writeEmbeddedObjectData produces, but wraps an arbitrary JSON payload inside NativeData's own Package stream instead of a genuine ContentEmbeddedObject -- writeEmbeddedObjectData itself always rebuilds its payload object field-by-field from a real ContentEmbeddedObject, so it cannot be used to smuggle an extra key the way a raw \objdata forged by hand can. Reuses a real envelope's own ObjectHeader and Presentation bytes verbatim (both fixed, independent of the JSON payload) and only replaces NativeData, so the forged bytes are byte-identical to a real \objdata this codec produced except for the one field under test.
@@ -2890,8 +2898,8 @@ describe("bookmark bookkeeping", () => {
 });
 
 describe("run and paragraph accumulation", () => {
-  it("bumps the paragraph serial forward with each closed paragraph, never backward", () => {
-    // A bookmark opened in the second paragraph and closed in the third must resolve to a block-scoped extent (its own start and end genuinely differ), which only holds if paragraphSerial actually counts upward -- a serial that decremented would make the second paragraph's own number collide with the first's.
+  it("gives each closed paragraph its own distinct serial identity", () => {
+    // A bookmark opened in the second paragraph and closed in the third must resolve to a block-scoped extent (its own start and end genuinely differ), which only holds if each closed paragraph actually gets a serial distinct from every other one -- a serial that collided across paragraphs would make the second paragraph's own identity indistinguishable from the first's.
     const blocks = blocksOf(
       `${HEADER}\\pard One\\par\\pard{\\*\\bkmkstart s}Two\\par\\pard Three{\\*\\bkmkend s}\\par}`,
     );
@@ -4032,5 +4040,77 @@ describe("the tree-form entry point", () => {
     );
     expect(documentPackage.kind).toBe("wordprocessing");
     expect(documentPackage.children.length).toBeGreaterThan(0);
+  });
+});
+
+describe("internal invariants exercised directly (no legitimate RTF input can reach these)", () => {
+  it("closingBookmarkExtent throws when a closing bookmark somehow reaches it with no resolved blockIndex", () => {
+    const closing = {
+      descriptor: bookmarkAnchorDescriptor("orphan", undefined),
+      paragraphSerial: Symbol("paragraph"),
+      runIndex: 0,
+      inTable: false,
+      blockIndex: undefined,
+    };
+    expect(() => closingBookmarkExtent(closing, 3)).toThrow(
+      "internal invariant violated: a closing bookmark reached flushClosingBookmarks with no resolved blockIndex",
+    );
+  });
+
+  it("closingBookmarkExtent returns the real extent once blockIndex is actually resolved", () => {
+    const closing = {
+      descriptor: bookmarkAnchorDescriptor("resolved", undefined),
+      paragraphSerial: Symbol("paragraph"),
+      runIndex: 0,
+      inTable: false,
+      blockIndex: 2,
+    };
+    expect(closingBookmarkExtent(closing, 5)).toEqual({
+      descriptor: closing.descriptor,
+      startIndex: 2,
+      endIndex: 5,
+    });
+  });
+
+  it("appendToLastListItem throws when the list has no entry to append to", () => {
+    expect(() => {
+      appendToLastListItem([], "text");
+    }).toThrow(
+      "internal invariant violated: a form field list item's text arrived with no list item entry to append to",
+    );
+  });
+
+  it("appendToLastListItem appends to the last entry, in place, leaving earlier entries untouched", () => {
+    const items = ["first", "second"];
+    appendToLastListItem(items, " more");
+    expect(items).toEqual(["first", "second more"]);
+  });
+
+  it("verticalMergeRowSpan throws when a row index in range has no corresponding columnIndices/rows entry", () => {
+    const rows = [
+      { cells: [], definitions: [], direction: undefined },
+      { cells: [], definitions: [], direction: undefined },
+    ];
+    // Mismatched on purpose: columnIndices has one fewer entry than rows, which resolveRows' own construction (one rows.map(...) call over the identical `rows`) can never actually produce.
+    const columnIndices = [[0]];
+    expect(() => verticalMergeRowSpan(rows, columnIndices, 0, 0)).toThrow(
+      "internal invariant violated: verticalMergeRowSpan's own row index scan reached an index with no corresponding columnIndices/rows entry",
+    );
+  });
+
+  it("verticalMergeRowSpan counts consecutive vertical-merge continuations forward from rowIndex + 1", () => {
+    const continuation = () => ({
+      ...newPendingCell(),
+      verticalMergeContinuation: true,
+    });
+    const ordinary = () => ({ ...newPendingCell() });
+    const rows = [
+      { cells: [], definitions: [ordinary()], direction: undefined },
+      { cells: [], definitions: [continuation()], direction: undefined },
+      { cells: [], definitions: [continuation()], direction: undefined },
+      { cells: [], definitions: [ordinary()], direction: undefined },
+    ];
+    const columnIndices = [[0], [0], [0], [0]];
+    expect(verticalMergeRowSpan(rows, columnIndices, 0, 0)).toBe(3);
   });
 });
