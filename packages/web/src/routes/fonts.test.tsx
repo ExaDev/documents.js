@@ -6,6 +6,13 @@ import { mountWithProviders } from "../test/mountComponent";
 
 vi.mock("../rpc/client", () => ({ getRpcClient: vi.fn() }));
 
+const notifyError = vi.fn<(title: string, error: unknown) => void>();
+vi.mock("../ui/notify", () => ({
+  notifyError: (title: string, error: unknown) => {
+    notifyError(title, error);
+  },
+}));
+
 // Stands in for the real FileUpload (already covered by its own dedicated test suite): FontsPage's own logic -- inferring the format, resetting the previous mutation, triggering extractFonts only for a recognised format, and surfacing an unrecognised-format alert -- is what this file exercises, not FileUpload's drag-and-drop wiring.
 let latestOnFile: ((file: OpenedFile) => void) | undefined;
 vi.mock("../ui/FileUpload", () => ({
@@ -40,6 +47,7 @@ function mountFontsPage() {
 afterEach(() => {
   latestOnFile = undefined;
   vi.mocked(getRpcClient).mockReset();
+  notifyError.mockReset();
 });
 
 describe("FontsPage", () => {
@@ -59,6 +67,7 @@ describe("FontsPage", () => {
     const client = createMockRpcClient();
     vi.mocked(client.fonts.extractSourceFonts).mockResolvedValue([
       { family: "Times New Roman", bold: false, italic: true },
+      { family: "Arial", bold: true, italic: false },
     ]);
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountFontsPage();
@@ -71,8 +80,11 @@ describe("FontsPage", () => {
     const [input] = vi.mocked(client.fonts.extractSourceFonts).mock.calls[0]!;
     expect(input.format).toBe("docx");
     expect(input.bytes).toBeInstanceOf(Uint8Array);
-    expect(mounted.container.textContent).toContain("yes");
-    expect(mounted.container.textContent).toContain("no");
+    const rows = mounted.container.querySelectorAll("tbody tr");
+    expect(rows[0]?.textContent).toBe("Times New Romannoyes");
+    expect(rows[1]?.textContent).toBe("Arialyesno");
+    // A recognised upload never shows the unrecognised-format alert.
+    expect(mounted.container.textContent).not.toContain("Could not recognise");
     mounted.unmount();
   });
 
@@ -108,19 +120,41 @@ describe("FontsPage", () => {
 
   it("notifies and shows no font table when extraction rejects", async () => {
     const client = createMockRpcClient();
-    vi.mocked(client.fonts.extractSourceFonts).mockRejectedValue(
-      new Error("worker crashed"),
-    );
+    const failure = new Error("worker crashed");
+    vi.mocked(client.fonts.extractSourceFonts).mockRejectedValue(failure);
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountFontsPage();
 
     latestOnFile?.(openedFile("report.docx"));
     await vi.waitFor(() => {
-      expect(client.fonts.extractSourceFonts).toHaveBeenCalled();
+      expect(notifyError).toHaveBeenCalledWith("Could not read fonts", failure);
     });
     expect(mounted.container.textContent).not.toContain(
       "No embedded fonts found.",
     );
+    mounted.unmount();
+  });
+
+  it("clears the previous result before extracting again, so an unrecognised second upload shows no stale table", async () => {
+    const client = createMockRpcClient();
+    vi.mocked(client.fonts.extractSourceFonts).mockResolvedValue([
+      { family: "Times New Roman", bold: false, italic: true },
+    ]);
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountFontsPage();
+
+    latestOnFile?.(openedFile("report.docx"));
+    await vi.waitFor(() => {
+      expect(mounted.container.textContent).toContain("Times New Roman");
+    });
+
+    latestOnFile?.(openedFile("notes.txt"));
+    await vi.waitFor(() => {
+      expect(mounted.container.textContent).toContain(
+        'Could not recognise "notes.txt"',
+      );
+    });
+    expect(mounted.container.textContent).not.toContain("Times New Roman");
     mounted.unmount();
   });
 });
