@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  CompactXmlNodeSchema,
   decodeCompactPackage,
   decodePackage,
   encodeCompactPackage,
@@ -8,7 +9,7 @@ import {
   toCompact,
   zipPackage,
 } from "./index";
-import type { Package, XmlElement } from "./index";
+import type { CompactPackage, Package, XmlElement } from "./index";
 
 function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
@@ -179,6 +180,109 @@ describe("compact size", () => {
   });
 });
 
+describe("isCompactXmlNode (via CompactXmlNodeSchema)", () => {
+  it("rejects a non-array value", () => {
+    expect(CompactXmlNodeSchema.safeParse("nope").success).toBe(false);
+    expect(CompactXmlNodeSchema.safeParse({ 0: 1, 1: 0 }).success).toBe(false);
+  });
+
+  it("accepts a text/cdata/comment node ([1|2|3, number])", () => {
+    expect(CompactXmlNodeSchema.safeParse([1, 0]).success).toBe(true);
+    expect(CompactXmlNodeSchema.safeParse([2, 0]).success).toBe(true);
+    expect(CompactXmlNodeSchema.safeParse([3, 0]).success).toBe(true);
+  });
+
+  it("rejects a text/cdata/comment node with the wrong tuple length", () => {
+    expect(CompactXmlNodeSchema.safeParse([1, 0, 0]).success).toBe(false);
+    expect(CompactXmlNodeSchema.safeParse([2, 0, 0]).success).toBe(false);
+    expect(CompactXmlNodeSchema.safeParse([3, 0, 0]).success).toBe(false);
+    expect(CompactXmlNodeSchema.safeParse([1]).success).toBe(false);
+  });
+
+  it("rejects a text/cdata/comment node whose value slot is not a number", () => {
+    expect(CompactXmlNodeSchema.safeParse([1, "x"]).success).toBe(false);
+    expect(CompactXmlNodeSchema.safeParse([2, "x"]).success).toBe(false);
+    expect(CompactXmlNodeSchema.safeParse([3, "x"]).success).toBe(false);
+  });
+
+  it("accepts a declaration node ([4, attrPairs])", () => {
+    expect(CompactXmlNodeSchema.safeParse([4, [0, 1]]).success).toBe(true);
+    expect(CompactXmlNodeSchema.safeParse([4, []]).success).toBe(true);
+  });
+
+  it("rejects a declaration node with the wrong tuple length", () => {
+    expect(CompactXmlNodeSchema.safeParse([4, [0, 1], 9]).success).toBe(false);
+    expect(CompactXmlNodeSchema.safeParse([4]).success).toBe(false);
+  });
+
+  it("rejects a declaration node whose attr pairs are not a valid CompactAttrPairs", () => {
+    expect(CompactXmlNodeSchema.safeParse([4, "not-an-array"]).success).toBe(
+      false,
+    );
+    expect(CompactXmlNodeSchema.safeParse([4, [0, "x"]]).success).toBe(false);
+  });
+
+  it("accepts a pi node ([5, number, number])", () => {
+    expect(CompactXmlNodeSchema.safeParse([5, 0, 1]).success).toBe(true);
+  });
+
+  it("rejects a pi node with the wrong tuple length", () => {
+    expect(CompactXmlNodeSchema.safeParse([5, 0]).success).toBe(false);
+    expect(CompactXmlNodeSchema.safeParse([5, 0, 1, 2]).success).toBe(false);
+  });
+
+  it("rejects a pi node whose target or content slot is not a number", () => {
+    expect(CompactXmlNodeSchema.safeParse([5, "x", 1]).success).toBe(false);
+    expect(CompactXmlNodeSchema.safeParse([5, 0, "x"]).success).toBe(false);
+  });
+
+  it("accepts an element node ([0, tag, attrPairs, children])", () => {
+    expect(CompactXmlNodeSchema.safeParse([0, 0, [], []]).success).toBe(true);
+    expect(
+      CompactXmlNodeSchema.safeParse([0, 0, [1, 2], [[1, 0]]]).success,
+    ).toBe(true);
+  });
+
+  it("rejects an element node with the wrong tuple length", () => {
+    expect(CompactXmlNodeSchema.safeParse([0, 0, [], [], 9]).success).toBe(
+      false,
+    );
+    expect(CompactXmlNodeSchema.safeParse([0, 0, []]).success).toBe(false);
+  });
+
+  it("rejects an element node whose tag slot is not a number", () => {
+    expect(CompactXmlNodeSchema.safeParse([0, "x", [], []]).success).toBe(
+      false,
+    );
+  });
+
+  it("rejects an element node whose attr pairs are not a valid CompactAttrPairs", () => {
+    expect(
+      CompactXmlNodeSchema.safeParse([0, 0, "not-an-array", []]).success,
+    ).toBe(false);
+    expect(CompactXmlNodeSchema.safeParse([0, 0, [0, "x"], []]).success).toBe(
+      false,
+    );
+  });
+
+  it("rejects an element node whose children slot is not an array", () => {
+    expect(
+      CompactXmlNodeSchema.safeParse([0, 0, [], "not-an-array"]).success,
+    ).toBe(false);
+  });
+
+  it("rejects an element node whose children are not all valid compact nodes", () => {
+    expect(
+      CompactXmlNodeSchema.safeParse([0, 0, [], [["not-a-node"]]]).success,
+    ).toBe(false);
+  });
+
+  it("rejects an unrecognised leading type code, even one that happens to satisfy the element-shape checks", () => {
+    expect(CompactXmlNodeSchema.safeParse([9]).success).toBe(false);
+    expect(CompactXmlNodeSchema.safeParse([9, 0, [], []]).success).toBe(false);
+  });
+});
+
 describe("compact adversarial cases", () => {
   it("round-trips an empty Package", () => {
     const pkg: Package = { parts: {} };
@@ -215,6 +319,56 @@ describe("compact adversarial cases", () => {
       },
     };
     expect(fromCompact(toCompact(pkg))).toEqual(pkg);
+  });
+
+  it("round-trips a cdata node", () => {
+    const pkg: Package = {
+      parts: {
+        "word/document.xml": {
+          kind: "xml",
+          nodes: [{ type: "cdata", value: "<raw> & unescaped" }],
+        },
+      },
+    };
+    expect(fromCompact(toCompact(pkg))).toEqual(pkg);
+  });
+
+  it("round-trips a processing-instruction node", () => {
+    const pkg: Package = {
+      parts: {
+        "word/document.xml": {
+          kind: "xml",
+          nodes: [
+            {
+              type: "pi",
+              target: "mso-application",
+              content: 'progid="Word.Document"',
+            },
+          ],
+        },
+      },
+    };
+    expect(fromCompact(toCompact(pkg))).toEqual(pkg);
+  });
+
+  it("throws with the out-of-range string index when a string-table lookup fails", () => {
+    const cpkg: CompactPackage = {
+      s: [],
+      p: { "word/document.xml": [[1, 5]] },
+    };
+    expect(() => fromCompact(cpkg)).toThrow(
+      "fromCompact: string table index 5 is out of range",
+    );
+  });
+
+  it("throws when an attribute index-pairs array has odd length", () => {
+    const cpkg: CompactPackage = {
+      s: ["name-only"],
+      p: { "word/document.xml": [[4, [0]]] },
+    };
+    expect(() => fromCompact(cpkg)).toThrow(
+      "fromCompact: attribute index pairs array has odd length",
+    );
   });
 
   it("round-trips a large base64 binary part as a single interned string", () => {
