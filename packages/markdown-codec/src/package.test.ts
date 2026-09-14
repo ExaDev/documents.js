@@ -229,8 +229,18 @@ describe("writeMarkdown: DocumentTree -> markdown text", () => {
       sheets: [],
     });
 
-    expect(() => writeMarkdown(spreadsheet)).toThrow(
-      MarkdownUnsupportedDocumentKindError,
+    let thrown: unknown;
+    try {
+      writeMarkdown(spreadsheet);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(MarkdownUnsupportedDocumentKindError);
+    const typed = thrown as MarkdownUnsupportedDocumentKindError;
+    expect(typed.kind).toBe("spreadsheet");
+    expect(typed.code).toBe("md/write-side-not-wordprocessing");
+    expect(typed.message).toBe(
+      "writeMarkdown only supports a 'wordprocessing' ContentDocument, got 'spreadsheet'",
     );
   });
 
@@ -242,8 +252,15 @@ describe("writeMarkdown: DocumentTree -> markdown text", () => {
       children: [],
     };
 
-    expect(() => writeMarkdown(formula)).toThrow(
-      MarkdownUnsupportedDocumentKindError,
+    let thrown: unknown;
+    try {
+      writeMarkdown(formula);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(MarkdownUnsupportedDocumentKindError);
+    expect((thrown as MarkdownUnsupportedDocumentKindError).kind).toBe(
+      "formula",
     );
   });
 
@@ -261,10 +278,16 @@ describe("writeMarkdown: DocumentTree -> markdown text", () => {
       readMarkdown(BLOCKQUOTED).documentPackage;
     expect(styles).toBeDefined();
 
-    expect(() => writeMarkdown(packageWithoutStyles)).toThrow(
-      MarkdownPackageFlattenError,
-    );
-    expect(() => writeMarkdown(packageWithoutStyles)).toThrow(/style ref/);
+    let thrown: unknown;
+    try {
+      writeMarkdown(packageWithoutStyles);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(MarkdownPackageFlattenError);
+    const typed = thrown as MarkdownPackageFlattenError;
+    expect(typed.code).toBe("md/package-flatten-failed");
+    expect(typed.message).toMatch(/style ref/);
   });
 
   it("reports a PACKAGE_TABLE_DROPPED diagnostic per non-empty package-level table flattenTree cannot carry into markdown", () => {
