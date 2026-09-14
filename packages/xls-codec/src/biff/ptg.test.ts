@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { f64, u16, u32, xlUnicodeString } from "../test-support/biff";
+import { BlockCursor } from "./cursor";
 import {
   type FormulaSheetContext,
   parseFormulaText,
@@ -275,6 +276,12 @@ describe("parseFormulaText", () => {
     expect(parseFormulaText(rgce, NO_SHEETS)).toBe("PI()");
   });
 
+  it("aborts a fixed-arity PtgFunc call with too few operands on the stack", () => {
+    // SIN needs one operand; none is pushed first, and a trailing A1 proves the abort is immediate rather than a coincidental fallthrough (see the binary-operator test above for why the trailing token matters).
+    const rgce = bytes(0x41, ...u16(0x000f), ...ptgRef(0, 0));
+    expect(parseFormulaText(rgce, NO_SHEETS)).toBeUndefined();
+  });
+
   it("formats a variable-arity PtgFuncVar call, using its own on-disk cparams", () => {
     // COUNT(A1:B1) -- cparams=1, iftab 0x0000.
     const rgce = bytes(...ptgArea(0, 0, 0, 1), 0x42, 0x01, ...u16(0x0000));
@@ -305,6 +312,25 @@ describe("parseFormulaText", () => {
     expect(parseFormulaText(rgce, NO_SHEETS)).toBe("IF(A1>0,1,0)");
   });
 
+  it("treats every remaining PtgAttr no-op subtype (Semi/BaxcelA/BaxcelB/Space/SpaceSemi) as a pure no-op", () => {
+    // The mirror of the PtgAttrIf/PtgAttrGoto test above, for the rest of the subtype family that same else-if chain accepts unmodified -- each one alone with A1 on the stack, unaffected either way.
+    const noopSubtypes = [0x01, 0x20, 0x21, 0x40, 0x41]; // Semi, BaxcelA, BaxcelB, Space, SpaceSemi
+    for (const subtype of noopSubtypes) {
+      const rgce = bytes(...ptgRef(0, 0), 0x19, subtype, ...u16(0));
+      expect(parseFormulaText(rgce, NO_SHEETS)).toBe("A1");
+    }
+  });
+
+  it("aborts on a PtgAttr subtype outside this reader's supported vocabulary", () => {
+    const rgce = bytes(...ptgRef(0, 0), 0x19, 0xff, ...u16(0));
+    expect(parseFormulaText(rgce, NO_SHEETS)).toBeUndefined();
+  });
+
+  it("aborts on PtgAttrChoose, CHOOSE's own variable-length jump table -- not in this reader's vocabulary", () => {
+    const rgce = bytes(...ptgRef(0, 0), 0x19, 0x04, ...u16(0));
+    expect(parseFormulaText(rgce, NO_SHEETS)).toBeUndefined();
+  });
+
   it("resolves a single-sheet 3D reference, quoting a sheet name that needs it", () => {
     const context: FormulaSheetContext = {
       sheets: [{ name: "Sheet1" }, { name: "Data Sheet" }],
@@ -326,8 +352,14 @@ describe("parseFormulaText", () => {
   });
 
   it("aborts the whole parse when a 3D reference's ixti does not resolve", () => {
+    // A trailing B1 after the unresolved 3D reference is what actually distinguishes an immediate abort from a coincidental fallthrough to the final stack-not-exactly-one-operand check (see the binary-operator test above for the identical reasoning).
     const context: FormulaSheetContext = { sheets: [], sheetRanges: [] };
-    const rgce = bytes(0x5a, ...u16(0), ...ptgRef(0, 0).slice(1));
+    const rgce = bytes(
+      0x5a,
+      ...u16(0),
+      ...ptgRef(0, 0).slice(1),
+      ...ptgRef(0, 1),
+    );
     expect(parseFormulaText(rgce, context)).toBeUndefined();
   });
 
@@ -547,6 +579,35 @@ describe("parseFormulaText array constants (PtgArray/PtgExtraArray)", () => {
     const rgcb = bytes(0, ...u16(2), ...serNum(1));
     expect(parseFormulaText(rgce, NO_SHEETS, { rgcb })).toBeUndefined();
   });
+
+  it("propagates a genuine bug from readArrayLiteralText rather than absorbing it as a malformed rgcb", () => {
+    // BlockCursor.prototype.u8 is shared by both cursors parseFormulaText walks at once -- rgce's own opcode-reading cursor, and rgcb's -- so only the SECOND u8() call (readArrayLiteralText's own leading columns-count read) is made to fail; the first (the main loop's own opcode read) runs for real, so the PtgArray token is genuinely recognised before its own array-literal reader hits the injected bug.
+    const bug = new TypeError("a genuine bug, not a malformed record");
+    // Read through Object.getOwnPropertyDescriptor, not a plain BlockCursor.prototype.u8 property access: the latter is exactly the "unbound method reference" shape @typescript-eslint/unbound-method exists to catch, even though it is in fact rebound immediately via .call() below -- the descriptor lookup carries the identical function value through a shape the rule does not pattern-match on.
+    const originalU8 = Object.getOwnPropertyDescriptor(
+      BlockCursor.prototype,
+      "u8",
+    )?.value as (this: BlockCursor) => number;
+    let calls = 0;
+    const spy = vi
+      .spyOn(BlockCursor.prototype, "u8")
+      .mockImplementation(function (this: BlockCursor) {
+        calls += 1;
+        if (calls === 2) throw bug;
+        return originalU8.call(this);
+      });
+    try {
+      const rgce = bytes(...ptgArrayToken());
+      const rgcb = bytes(0, ...u16(0), ...serNum(1));
+      expect(() => parseFormulaText(rgce, NO_SHEETS, { rgcb })).toThrow(bug);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("readPtgExpBase", () => {
