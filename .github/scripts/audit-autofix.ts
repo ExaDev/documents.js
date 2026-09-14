@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { satisfies } from "semver";
-import { type Document, parse, parseDocument } from "yaml";
+import { type Document, parse, parseAllDocuments, parseDocument } from "yaml";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 
 export interface AuditAdvisory {
@@ -160,7 +160,7 @@ function writeWorkspaceDoc(doc: Document): void {
 // `overrides` is passed as the complete desired state, not a patch: keys it omits are deleted individually, which is what the prune pass at the end of a run relies on. Entries whose value is not a string are left alone rather than removed, since currentOverrides only reports string-valued keys -- a value this script does not understand is not a value it should destroy.
 export function withOverrides(
   workspace: Document,
-  overrides: Record<string, string>,
+  overrides: Readonly<Record<string, string>>,
 ): Document {
   const cloned = workspace.clone();
   // An empty map is written as a bare `overrides: {}` line that never goes away on its own -- deleting the key when there is nothing to override keeps a fully-pruned file clean instead of accumulating dead boilerplate. The comment above the key goes with it, which is correct: it documents overrides that no longer exist.
@@ -198,13 +198,13 @@ function restoreFromGit(): void {
 
 function setOutput(name: string, value: string): void {
   const outputFile = process.env.GITHUB_OUTPUT;
-  if (!outputFile) return;
+  if (outputFile === undefined || outputFile === "") return;
   appendFileSync(outputFile, `${name}=${value}\n`);
 }
 
 function appendSummary(markdown: string): void {
   const summaryFile = process.env.GITHUB_STEP_SUMMARY;
-  if (!summaryFile) return;
+  if (summaryFile === undefined || summaryFile === "") return;
   appendFileSync(summaryFile, markdown);
 }
 
@@ -227,8 +227,8 @@ function hasUncommittedChanges(): boolean {
 // `-r`, unlike the single-importer form this was ported from: `overrides` in pnpm-workspace.yaml is a workspace-wide setting, but a non-recursive `pnpm update` re-resolves the root importer's dependencies only, leaving every one of this workspace's package importers on the resolutions already in the lockfile. Since almost everything an advisory names here is transitive to a package rather than to the root, the update would report success while the vulnerable entries the audit found stayed exactly where they were -- and the re-audit below would then correctly refuse to call the candidate fixed. Recursive is the form that matches where the overrides apply.
 function attemptBatch(
   workspace: Document,
-  baseOverrides: Record<string, string>,
-  batch: Candidate[],
+  baseOverrides: Readonly<Record<string, string>>,
+  batch: readonly Candidate[],
 ): { succeeded: Candidate[]; conflicted: boolean } {
   const overrides = { ...baseOverrides };
   for (const c of batch) overrides[c.overrideKey] = c.range;
@@ -254,8 +254,8 @@ function attemptBatch(
 // A single candidate whose override the registry can never satisfy (or that conflicts with peers) must not sink every other, independently-fixable candidate in the same batch. attemptBatch's own audit check already tells us exactly which candidates in a batch succeeded when the update itself ran cleanly, so bisection is only needed to isolate a genuine `conflicted` (non-zero exit) failure; if two halves that each update fine independently still conflict combined, fall back to a linear greedy pass, which always terminates with a verified-working subset.
 function resolveMaximalSubset(
   workspace: Document,
-  baseOverrides: Record<string, string>,
-  batch: Candidate[],
+  baseOverrides: Readonly<Record<string, string>>,
+  batch: readonly Candidate[],
 ): Candidate[] {
   if (batch.length === 0) return [];
 
@@ -285,8 +285,8 @@ function resolveMaximalSubset(
 
 function greedyResolve(
   workspace: Document,
-  baseOverrides: Record<string, string>,
-  batch: Candidate[],
+  baseOverrides: Readonly<Record<string, string>>,
+  batch: readonly Candidate[],
 ): Candidate[] {
   const working: Candidate[] = [];
   for (const c of batch) {
@@ -299,7 +299,9 @@ function greedyResolve(
 }
 
 // Splits audit advisories into fixable candidates (grouped by override selector) and deferred entries with a reason each. Pure — no filesystem, no subprocesses — so the unit tests cover grouping, dedup, and the not-overridable and no-patch deferral paths through it.
-export function classifyAdvisories(advisories: AuditAdvisory[]): Classified {
+export function classifyAdvisories(
+  advisories: readonly AuditAdvisory[],
+): Classified {
   const deferred: { advisory: AuditAdvisory; reason: string }[] = [];
   const candidatesByKey = new Map<string, Candidate>();
 
@@ -342,7 +344,7 @@ export function classifyAdvisories(advisories: AuditAdvisory[]): Classified {
 
 // An override is inert when no version its selector could rewrite is present: the selector is the vulnerable range on the key (`pkg@<range>`), and the override only acts on resolutions matching that range. If nothing resolved matches the selector, the override forces nothing today -- regardless of what the package resolves outside the selector. The autofix only ever adds overrides, so without this pass the map accumulates one entry per historical advisory forever. Dropping inert entries is self-correcting rather than risky: if a future update resolves back into a vulnerable range, the next audit run re-adds the override through the same fix path.
 export function inertOverrideKeys(
-  overrides: Record<string, string>,
+  overrides: Readonly<Record<string, string>>,
   resolvedVersions: Map<string, Set<string>>,
 ): string[] {
   const inert: string[] = [];
@@ -361,23 +363,28 @@ export function inertOverrideKeys(
   return inert;
 }
 
-// The resolved package@version set from the lockfile's `packages` map, minus peer-dependency suffixes. This workspace's pnpm-lock.yaml is a single YAML document, so there is no stream to search: the multi-document form the reference implementation handled is what pnpm writes when a project pins its own pnpm binary through packageManagerDependencies, which adds a self-management lockfile as a document of its own ahead of the project's; this workspace pins pnpm through package.json's packageManager field alone and gets one document. `parse` is deliberate rather than incidental -- it throws outright on a multi-document source, so if that ever changes this fails loudly instead of silently reading whichever document happened to come first. The map is the union of every importer's resolutions, which is what an inertness check needs across thirteen packages.
+// The resolved package@version set from the lockfile's `packages` map(s), minus peer-dependency suffixes. pnpm writes a multi-document lockfile once a project pins its own pnpm binary through packageManagerDependencies -- a self-management document listing the pinned pnpm build's own per-platform packages, ahead of the project's own document -- and this workspace does exactly that (package.json's packageManager field, pnpm 12), so the single-document assumption this function used to make no longer holds. Every document in the stream that carries a `packages` map has its entries unioned into the same result, rather than picking one: the self-management document's own entries (`@pnpm/exe.*` platform binaries) are real resolved packages too, just never ones `pnpm audit` has advisories against, so including them changes nothing about correctness and needs no guess about which document is "the real" project lockfile. A document with no `packages` map at all is skipped rather than treated as an error on its own; only a stream where no document anywhere has a packages map is an error, since that means the lockfile as a whole resolves nothing. The map is the union of every importer's resolutions, which is what an inertness check needs across every package in the workspace.
 export function resolvedVersionsFromLockfileText(
   yamlText: string,
 ): Map<string, Set<string>> {
-  const parsed: unknown = parse(yamlText);
-  if (!isRecord(parsed) || !isRecord(parsed.packages)) {
-    throw new Error("lockfile had no packages map");
-  }
   const byPackage = new Map<string, Set<string>>();
-  for (const key of Object.keys(parsed.packages)) {
-    const stripped = key.replace(/(\([^)]*\))+$/, "");
-    const at = stripped.lastIndexOf("@");
-    const pkg = stripped.slice(0, at);
-    const version = stripped.slice(at + 1);
-    const existing = byPackage.get(pkg) ?? new Set<string>();
-    existing.add(version);
-    byPackage.set(pkg, existing);
+  let sawPackagesMap = false;
+  for (const document of parseAllDocuments(yamlText)) {
+    const parsed: unknown = document.toJS();
+    if (!isRecord(parsed) || !isRecord(parsed.packages)) continue;
+    sawPackagesMap = true;
+    for (const key of Object.keys(parsed.packages)) {
+      const stripped = key.replace(/(\([^)]*\))+$/, "");
+      const at = stripped.lastIndexOf("@");
+      const pkg = stripped.slice(0, at);
+      const version = stripped.slice(at + 1);
+      const existing = byPackage.get(pkg) ?? new Set<string>();
+      existing.add(version);
+      byPackage.set(pkg, existing);
+    }
+  }
+  if (!sawPackagesMap) {
+    throw new Error("lockfile had no packages map");
   }
   return byPackage;
 }
@@ -549,7 +556,7 @@ function main(): void {
 }
 
 if (
-  process.argv[1] &&
+  process.argv[1] !== undefined &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   main();
