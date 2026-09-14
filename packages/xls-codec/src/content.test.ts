@@ -1474,6 +1474,49 @@ describe("readXlsContent", () => {
     expect(column3).toStrictEqual({ index: 3, hidden: true });
   });
 
+  it("omits a column entirely when it states neither a usable width nor a hidden flag", () => {
+    // The mirror image of the hidden-alone case above: coldx 0 (no usable width) AND grbit clear (not hidden) means the ColInfo record states nothing ContentSheetColumn has a field for, so the column must not appear in the output at all -- not as a bare {index} entry either.
+    const globals = concat(
+      record(RECORD_BOF, bofData(BOF_TYPE_WORKBOOK)),
+      ...xfTable(0),
+      record(RECORD_BOUNDSHEET8, [
+        ...u32(0),
+        0x00,
+        0x00,
+        ...shortXlUnicodeString("Sheet1"),
+      ]),
+      record(RECORD_EOF, []),
+    );
+    const finalBytes = xlsFile(
+      concat(
+        record(RECORD_BOF, bofData(BOF_TYPE_WORKBOOK)),
+        ...xfTable(0),
+        record(RECORD_BOUNDSHEET8, [
+          ...u32(globals.length),
+          0x00,
+          0x00,
+          ...shortXlUnicodeString("Sheet1"),
+        ]),
+        record(RECORD_EOF, []),
+        record(RECORD_BOF, bofData(BOF_TYPE_WORKSHEET)),
+        record(RECORD_COLINFO, [
+          ...u16(3),
+          ...u16(3),
+          ...u16(0), // coldx: 0 -- no usable width
+          ...u16(15),
+          ...u16(0x0000), // grbit: not hidden
+        ]),
+        record(RECORD_EOF, []),
+      ),
+    );
+
+    const content = readXlsContent(finalBytes);
+
+    expect(
+      content.sheets[0]?.columns.find((col) => col.index === 3),
+    ).toBeUndefined();
+  });
+
   it("leaves numberFormatCode entirely absent for a cell whose own ixfe resolves to no cell format at all", () => {
     // An ixfe past the end of the workbook's own cell-format table -- a malformed record this reader must not crash on, and must not report a fabricated format for either. Own-property check, not a value check: a bug materialising the key with an explicit undefined value would pass a plain .toBeUndefined() assertion just as easily as a genuinely absent key would.
     const bytes = xlsFile(

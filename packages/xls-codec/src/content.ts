@@ -770,17 +770,11 @@ function alignmentOf(
   if (format === undefined) {
     return {};
   }
-  const result: {
-    alignment?: Alignment;
-    verticalAlignment?: "top" | "middle" | "bottom";
-  } = {};
-  if (format.alignment.horizontal !== undefined) {
-    result.alignment = format.alignment.horizontal;
-  }
-  if (format.alignment.vertical !== undefined) {
-    result.verticalAlignment = format.alignment.vertical;
-  }
-  return result;
+  // Assigned unconditionally rather than each behind its own "if !== undefined" guard: mapCell, this function's only caller, already re-checks each field against undefined before ever copying it onto the ContentSheetCell it builds, so a guard here would only ever decide between two objects mapCell treats identically -- one whose own field is absent, and one whose own field holds undefined, both of which mapCell's own check reads the same way.
+  return {
+    alignment: format.alignment.horizontal,
+    verticalAlignment: format.alignment.vertical,
+  };
 }
 
 /**
