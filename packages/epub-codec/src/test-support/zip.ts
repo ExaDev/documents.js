@@ -2,33 +2,40 @@ import { expect } from "vitest";
 
 // Little-endian integer readers over raw zip bytes, shared by every test that walks a zip's physical local-file-header layout rather than trusting a round trip through unzipPackage's Record (which makes no ordering promise of its own to test against). Never imported by src/index.ts and never reaches dist/ -- test-only, mirroring odf.js's and ooxml.js's own identical test-support convention.
 
+// Narrows a byte the caller already knows is defined by construction (a lower Uint8Array index than one already checked against undefined -- see readUint16LE/readUint32LE, the only two callers). A plain `as number` assertion would say the same thing to the type checker alone; this says it to a reader running the code too, and fails loudly instead of silently coercing to NaN in the impossible case where the premise is ever wrong.
+export function definedByte(value: number | undefined): number {
+  if (value === undefined) {
+    throw new Error("unreachable: expected a byte already known to be defined");
+  }
+  return value;
+}
+
 export function readUint16LE(bytes: Uint8Array, offset: number): number {
-  const b0 = bytes[offset];
   const b1 = bytes[offset + 1];
-  if (b0 === undefined || b1 === undefined) {
+  // No separate `bytes[offset] === undefined` check: a Uint8Array holds no gaps, so b1 (the higher index) reads as undefined whenever bytes[offset] would too, and never the other way around -- checking b1 alone already covers every truncation a b0 check would.
+  if (b1 === undefined) {
     throw new Error(
       `truncated zip bytes while reading a uint16 at offset ${offset}`,
     );
   }
-  return b0 | (b1 << 8);
+  return definedByte(bytes[offset]) | (b1 << 8);
 }
 
 export function readUint32LE(bytes: Uint8Array, offset: number): number {
-  const b0 = bytes[offset];
-  const b1 = bytes[offset + 1];
-  const b2 = bytes[offset + 2];
   const b3 = bytes[offset + 3];
-  if (
-    b0 === undefined ||
-    b1 === undefined ||
-    b2 === undefined ||
-    b3 === undefined
-  ) {
+  // No separate bytes[offset]/[offset+1]/[offset+2] check: a Uint8Array holds no gaps, so b3 (the highest index) reads as undefined whenever any earlier byte would too, and never the other way around -- checking b3 alone already covers every truncation the other three checks would.
+  if (b3 === undefined) {
     throw new Error(
       `truncated zip bytes while reading a uint32 at offset ${offset}`,
     );
   }
-  return (b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)) >>> 0;
+  return (
+    (definedByte(bytes[offset]) |
+      (definedByte(bytes[offset + 1]) << 8) |
+      (definedByte(bytes[offset + 2]) << 16) |
+      (b3 << 24)) >>>
+    0
+  );
 }
 
 // Walks local file headers (signature 0x04034b50) from the start of a zip, in physical emission order, returning each entry's declared filename. This is the byte-level ordering guarantee zipPackage's ordered-entries contract exists to provide.

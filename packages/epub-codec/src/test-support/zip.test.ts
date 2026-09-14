@@ -1,10 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
   assertMimetypeEntryLayout,
+  definedByte,
   localFileHeaderNames,
   readUint16LE,
   readUint32LE,
 } from "./zip";
+
+describe("definedByte", () => {
+  it("returns the value unchanged when it is a real byte", () => {
+    expect(definedByte(42)).toBe(42);
+  });
+
+  it("throws when the value is undefined", () => {
+    expect(() => definedByte(undefined)).toThrow(
+      "unreachable: expected a byte already known to be defined",
+    );
+  });
+});
 
 // A local file header's own fixed-position fields this module's readers walk: signature (4 bytes), then a run of fields irrelevant to these helpers up to compressed size at +18 (4 bytes), filename length at +26 (2 bytes), extra field length at +28 (2 bytes), the filename itself starting at +30, then the extra field, then the compressed data.
 function buildLocalFileHeader(
