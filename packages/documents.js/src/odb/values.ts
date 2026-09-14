@@ -51,18 +51,19 @@ export function compareCellKeys(
   right: CellComparisonKey,
   fail: CellValueFailure,
 ): number {
+  // Ordered as less-than-first rather than equality-first: with equality checked first, the surrounding guard already rules out left === right by the time a `<` (or `<=`) comparison runs, making the two relational spellings produce identical output for every reachable input -- an unkillable, permanently-equivalent mutant. Checking `<` first means a `<`-to-`<=` mutation is reachable at the equal-values input (it would wrongly report -1 instead of 0), so this ordering carries no equivalent-mutant gap.
   if (left.valueClass === "numeric" && right.valueClass === "numeric") {
-    return left.numeric === right.numeric
-      ? 0
-      : left.numeric < right.numeric
-        ? -1
-        : 1;
+    return left.numeric < right.numeric
+      ? -1
+      : left.numeric > right.numeric
+        ? 1
+        : 0;
   }
   if (left.valueClass === "boolean" && right.valueClass === "boolean") {
     return left.boolean === right.boolean ? 0 : left.boolean ? 1 : -1;
   }
   if (left.valueClass === "text" && right.valueClass === "text") {
-    return left.text === right.text ? 0 : left.text < right.text ? -1 : 1;
+    return left.text < right.text ? -1 : left.text > right.text ? 1 : 0;
   }
   throw fail(
     `cannot compare a ${left.valueClass} value with a ${right.valueClass} value`,
