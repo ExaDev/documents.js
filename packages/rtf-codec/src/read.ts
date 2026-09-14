@@ -1179,7 +1179,9 @@ class ContentBuilder {
           const column = columnIndices[rowIndex]?.[cellIndex];
           let rowSpan = 1;
           if (definition?.verticalMergeFirst === true && column !== undefined) {
+            // Genuinely irreducible equivalent mutant on this bound (`<` versus `<=`): one extra pass with `next === rows.length` would index `columnIndices[next]`/`rows[next]` one past the end of both arrays, but a JavaScript array read past its own length is `undefined` rather than a thrown error, and `?.`/`?? -1` (below) already turn that `undefined` into matchIndex -1 -- the exact value that immediately breaks the loop on any ordinary out-of-range lookup too. The extra pass changes nothing observable for any input.
             for (let next = rowIndex + 1; next < rows.length; next += 1) {
+              // Genuinely unreachable, not a real defensive fallback: columnIndices is built by rows.map(...) two lines above, so columnIndices.length === rows.length always, and the loop's own bound (next < rows.length) already guarantees columnIndices[next] is defined for every next this line ever sees. The `?.` and `?? -1` exist only because noUncheckedIndexedAccess types the access as number[] | undefined regardless -- the fallback keeps TypeScript satisfied for a branch that can never actually execute.
               const matchIndex = columnIndices[next]?.indexOf(column) ?? -1;
               const match =
                 matchIndex === -1
