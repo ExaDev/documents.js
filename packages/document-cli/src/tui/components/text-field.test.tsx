@@ -5,7 +5,7 @@ import { TextField } from "./text-field.js";
 
 describe("TextField", () => {
   it("calls onCancel on Escape while focused", async () => {
-    const onCancel = vi.fn();
+    const onCancel = vi.fn<() => void>();
     render(
       <TextField
         value=""
@@ -20,7 +20,7 @@ describe("TextField", () => {
   });
 
   it("ignores Escape while not focused, leaving onCancel uncalled", async () => {
-    const onCancel = vi.fn();
+    const onCancel = vi.fn<() => void>();
     render(
       <TextField
         value=""
