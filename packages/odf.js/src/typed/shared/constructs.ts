@@ -147,8 +147,8 @@ export const ODF_CONSUMED_PART_PATHS: ReadonlySet<string> = new Set([
   "META-INF/manifest.xml",
 ]);
 
-// An embedded sub-document's own parts -- the "Object N" directory convention every real producer's draw:object href actually names (confirmed against real LibreOffice output: "Object 1/content.xml", "Object 1/styles.xml", "Object 1/settings.xml" under a draw:object xlink:href="./Object 1"). Those parts are consumed by the embedded-object readers into their own whole ContentDocuments, so quarantining them too would put one sub-document in two channels at once. This helper cannot see hrefs, so it excludes the whole convention-shaped range rather than ever double-carrying a sub-document; the cost of a false exclusion is only a residue row the semantic channel already carries, while the cost of a false inclusion is the double-carry itself.
-function isEmbeddedObjectPart(path: string): boolean {
+// An embedded sub-document's own parts -- the "Object N" directory convention every real producer's draw:object href actually names (confirmed against real LibreOffice output: "Object 1/content.xml", "Object 1/styles.xml", "Object 1/settings.xml" under a draw:object xlink:href="./Object 1"). Those parts are consumed by the embedded-object readers into their own whole ContentDocuments, so quarantining them too would put one sub-document in two channels at once. This helper cannot see hrefs, so it excludes the whole convention-shaped range rather than ever double-carrying a sub-document; the cost of a false exclusion is only a residue row the semantic channel already carries, while the cost of a false inclusion is the double-carry itself. Exported so the regex's own three boundary facts (must start with "Object ", must be only digits after it, must end there) can each be pinned directly -- a black-box test through collectOdfNonContentPartResidue/writeOdfPackageResidue could only ever observe "quarantined or not", which cannot distinguish a loosened anchor from the correct one.
+export function isEmbeddedObjectPart(path: string): boolean {
   const [firstSegment] = path.split("/");
   return firstSegment !== undefined && /^Object \d+$/.test(firstSegment);
 }
@@ -572,9 +572,7 @@ export function insertOdfConstructMarkers(
   blocks: readonly ContentBlock[],
   extents: readonly OdfConstructExtent[],
 ): ContentBlock[] {
-  if (extents.length === 0) {
-    return [...blocks];
-  }
+  // No early return for an empty extents list: with nested/openingAt both empty, the loop below already reduces to "copy every defined block in order", which is exactly `[...blocks]` -- a dedicated guard was a redundant, behaviourally unobservable shortcut for the same result.
   const nested = acceptProperlyNestedOdfExtents(extents);
   const openingAt = new Map<number, OdfConstructExtent[]>();
   for (const extent of nested) {
