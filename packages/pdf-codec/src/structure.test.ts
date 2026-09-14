@@ -151,5 +151,7 @@ describe("readPdf: marked-content association", () => {
     expect(new TextDecoder().decode(bytes)).toContain(
       "/P << /MCID 0 >> BDC\nBT /F1 12 Tf 10 100 Td (Owned by nothing) Tj ET\nEMC",
     );
+    // The struct element itself is the tree's only content (nothing else references its own dict), so this checks it independently of the page-association behaviour above.
+    expect(doc.structure).toEqual([{ id: "struct1", type: "P", children: [] }]);
   });
 });
