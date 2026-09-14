@@ -1,3 +1,9 @@
+## [1.4.11](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.10...document-rest%401.4.11) (2026-09-14)
+
+### Tests
+
+* **document-rest:** raise the pipe-address test's own timeout to 60s ([77b124c](https://github.com/ExaDev/documents.js/commit/77b124c2afd2b8f307acb95b66e1254652b7e70d))
+
 ## [1.4.10](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.9...document-rest%401.4.10) (2026-09-14)
 
 
