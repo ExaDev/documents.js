@@ -199,7 +199,10 @@ describe("parseOpf", () => {
         <spine/>
       </package>`,
     );
-    expect(metadata).toEqual({});
+    // toEqual alone would not catch a title/language/createdIso key present with an undefined value (it ignores undefined properties on both sides) -- hasOwn checks the key's actual presence.
+    expect(Object.hasOwn(metadata, "title")).toBe(false);
+    expect(Object.hasOwn(metadata, "language")).toBe(false);
+    expect(Object.hasOwn(metadata, "createdIso")).toBe(false);
   });
 
   it("drops whitespace-only dc:creator/dc:subject values while keeping the real ones", () => {
@@ -272,5 +275,57 @@ describe("parseOpf", () => {
       </package>`,
     );
     expect(metadata.modifiedIso).toBe("2026-04-04T00:00:00Z");
+  });
+
+  it("ignores a <meta> whose property is not dcterms:modified, rather than reading any meta's text", () => {
+    const { metadata } = parseOpf(
+      `<package xmlns="http://www.idpf.org/2007/opf">
+        <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+          <meta property="dcterms:title">Some Other Value</meta>
+        </metadata>
+        <manifest/>
+        <spine/>
+      </package>`,
+    );
+    expect(Object.hasOwn(metadata, "modifiedIso")).toBe(false);
+  });
+
+  it('trims whitespace around a property="dcterms:modified" meta\'s own text', () => {
+    const { metadata } = parseOpf(
+      `<package xmlns="http://www.idpf.org/2007/opf">
+        <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+          <meta property="dcterms:modified">  2026-05-05T00:00:00Z  </meta>
+        </metadata>
+        <manifest/>
+        <spine/>
+      </package>`,
+    );
+    expect(metadata.modifiedIso).toBe("2026-05-05T00:00:00Z");
+  });
+
+  it("ignores a <meta> whose name is not dcterms:modified, rather than reading any meta's content", () => {
+    const { metadata } = parseOpf(
+      `<package xmlns="http://www.idpf.org/2007/opf">
+        <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+          <meta name="cover" content="cover-image"/>
+        </metadata>
+        <manifest/>
+        <spine/>
+      </package>`,
+    );
+    expect(Object.hasOwn(metadata, "modifiedIso")).toBe(false);
+  });
+
+  it('trims whitespace around a name="dcterms:modified" meta\'s own content attribute', () => {
+    const { metadata } = parseOpf(
+      `<package xmlns="http://www.idpf.org/2007/opf">
+        <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+          <meta name="dcterms:modified" content="  2026-06-06T00:00:00Z  "/>
+        </metadata>
+        <manifest/>
+        <spine/>
+      </package>`,
+    );
+    expect(metadata.modifiedIso).toBe("2026-06-06T00:00:00Z");
   });
 });
