@@ -5,7 +5,7 @@ import releaseConfig from "./release-workspace.config";
 /**
  * Commit-message validation for the whole workspace. Commit messages are a property of the repository, not of a package, so this config lives at the root: every package carried an identical copy, and in one repository only one of those could ever have run.
  *
- * The allowed type list is derived from release-workspace.config.ts's own releaseRules rather than restated here, preserving the invariant every package's own config was built around: a conventional-commit type cannot trigger a release without also being accepted by commit-msg validation, or the reverse. That file is the canonical release configuration -- @exadev/semantic-release-workspace reads it directly via `--config` -- so deriving from it means there is exactly one place a type gets added.
+ * The allowed type list is derived from release-workspace.config.ts's own releaseRules rather than restated here, preserving the invariant every package's own config was built around: a conventional-commit type cannot trigger a release without also being accepted by commit-msg validation, or the reverse. That file is the canonical release configuration -- \@exadev/semantic-release-workspace reads it directly via `--config` -- so deriving from it means there is exactly one place a type gets added.
  *
  * A plain import, not a JSON import: release-workspace.config.ts is itself a TypeScript module now, so there is no import-attribute inconsistency across loaders to guard against here the way a `.json` import would have -- commitlint's own TypeScript loader resolves this exactly as it resolves this file.
  */
