@@ -65,8 +65,8 @@ export interface DocSpec {
   readonly data?: Uint8Array<ArrayBuffer>;
 }
 
-// Two grpprls are the same exception when both are absent or their bytes match, which is what decides whether adjacent stretches merge into one ChpxFkp run.
-function sameGrpprl(
+/** Two grpprls are the same exception when both are absent or their bytes match, which is what decides whether adjacent stretches merge into one ChpxFkp run. Exported for this package's own direct tests, since a round trip through readDocContent re-derives its own per-paragraph runs regardless of how many ChpxFkp records the writer actually merged them into -- whether two adjacent, identically-formatted stretches became one physical record or two is invisible from the read side alone. */
+export function sameGrpprl(
   a: readonly number[] | undefined,
   b: readonly number[] | undefined,
 ): boolean {
@@ -74,10 +74,65 @@ function sameGrpprl(
   return a.length === b.length && a.every((byte, index) => byte === b[index]);
 }
 
+/** Folds a flat run-range sequence into ChpxFkp-ready records, merging any adjacent pair that shares byte-identical formatting (sameGrpprl) into one -- the same "one exception over a run of unchanging properties" a real producer writes, per this function's own former inline comment (still true of its behaviour, just no longer attached to a single call site now that it is reused directly by this package's own tests). Exported for those tests: whether two adjacent, identically-formatted stretches became one physical ChpxFkp record or two is invisible to a round trip through readDocContent, which re-derives its own per-paragraph runs regardless. */
+export function mergeChpxRuns<
+  T extends { start: number; end: number; grpprl?: readonly number[] },
+>(runRanges: readonly T[]): T[] {
+  const mergedRuns: T[] = [];
+  for (const run of runRanges) {
+    const previous = mergedRuns[mergedRuns.length - 1];
+    if (
+      previous?.end === run.start &&
+      sameGrpprl(previous.grpprl, run.grpprl)
+    ) {
+      previous.end = run.end;
+      continue;
+    }
+    mergedRuns.push({ ...run });
+  }
+  return mergedRuns;
+}
+
+/** Which CPs the main document's own paragraphs mark as a manual page break -- scoped to `end <= ccpText` so a subdocument's own paragraph (footnote, header/footer, comment, endnote) can never register one, exactly as DocParagraphSpec.pageBreak's own doc comment states ("Main-document paragraphs only; ignored elsewhere"): every subdocument's own paragraphs share this identical accumulator's `paragraphs` array, so nothing else already scopes them out before this function sees them. Exported for this package's own direct tests: a subdocument paragraph that sets `pageBreak` regardless would need a CP coincidence with a real main-document section mark to observe any effect through a full buildDoc round trip. */
+export function mainDocumentPageBreakCps(
+  paragraphs: readonly { spec: DocParagraphSpec; end: number }[],
+  ccpText: number,
+): Set<number> {
+  const pageBreakCps = new Set<number>();
+  for (const { spec: paragraph, end } of paragraphs) {
+    if (paragraph.pageBreak === true && end <= ccpText) {
+      pageBreakCps.add(end);
+    }
+  }
+  return pageBreakCps;
+}
+
+/** `values[index]`, asserted defined -- or throws `message`. Exported so each call site's own "this index can never actually be missing" invariant (see each one's own comment) stays directly testable via a genuinely mismatched array/index pair, without needing to fabricate one through buildDoc's own public surface. */
+export function requireArrayEntry<T>(
+  values: readonly (T | undefined)[],
+  index: number,
+  message: string,
+): T {
+  const value = values[index];
+  if (value === undefined) throw new Error(message);
+  return value;
+}
+
+/** The Map equivalent of requireArrayEntry, for buildDoc's own table-offset bookkeeping. */
+export function requireMapEntry<T>(
+  map: ReadonlyMap<string, T>,
+  key: string,
+  message: string,
+): T {
+  const value = map.get(key);
+  if (value === undefined) throw new Error(message);
+  return value;
+}
+
 /** Where the text is written in the WordDocument stream: past the FIB, on a page boundary, and even, which the 16-bit spelling requires. */
 const TEXT_FC = 0x400;
 
-interface ParagraphAccumulator {
+export interface ParagraphAccumulator {
   text: string;
   readonly paragraphs: { spec: DocParagraphSpec; start: number; end: number }[];
   readonly runRanges: {
@@ -87,8 +142,8 @@ interface ParagraphAccumulator {
   }[];
 }
 
-// Appends `paragraphs`' own text/marks onto a shared accumulator -- the logical-text-building step every document-stream range this builder writes shares (the main document, and each footnote/endnote/comment/header-footer story appendSubdocument below writes in turn), so a subdocument's own paragraphs flow into the identical ChpxFkp/PapxFkp/Clx-building machinery the main document already uses rather than a second, parallel implementation.
-function appendParagraphs(
+// Appends `paragraphs`' own text/marks onto a shared accumulator -- the logical-text-building step every document-stream range this builder writes shares (the main document, and each footnote/endnote/comment/header-footer story appendSubdocument below writes in turn), so a subdocument's own paragraphs flow into the identical ChpxFkp/PapxFkp/Clx-building machinery the main document already uses rather than a second, parallel implementation. Exported for this package's own direct tests: a paragraph's own trailing-mark-merge logic (below) only ever changes how many ChpxFkp records the writer emits, which a round trip through readDocContent cannot observe (it re-derives its own per-paragraph runs regardless).
+export function appendParagraphs(
   acc: ParagraphAccumulator,
   paragraphs: readonly DocParagraphSpec[],
 ): void {
@@ -101,7 +156,7 @@ function appendParagraphs(
         acc.runRanges.push({
           start: runStart,
           end: acc.text.length,
-          ...(run.grpprl === undefined ? {} : { grpprl: run.grpprl }),
+          grpprl: run.grpprl,
         });
       }
     }
@@ -121,8 +176,8 @@ function appendParagraphs(
   }
 }
 
-// Appends one document-stream range's own stories onto the accumulator -- shared by footnotes/endnotes/comments (each story a plain paragraph list) and headerFooterStories (already flat, one entry per fixed Plcfhdd slot) -- and returns that range's own boundary plex keys (PlcffndTxt/PlcfandTxt/PlcfendTxt/Plcfhdd's own aCP), local to the range's own start rather than the whole document, matching what each of those structures states as its own CPs. A non-empty story gets its own trailing guard paragraph mark, [MS-DOC]'s own "not considered part of the story contents" -- an empty one (`[]`) gets neither content nor a guard, matching "the beginning CP has the same value as the next CP". `bareStories` skips the guard append, spelling each story as ending at its own final content mark the way a real producer writes note stories (DocSpec.bareNoteStories).
-function appendSubdocument(
+// Appends one document-stream range's own stories onto the accumulator -- shared by footnotes/endnotes/comments (each story a plain paragraph list) and headerFooterStories (already flat, one entry per fixed Plcfhdd slot) -- and returns that range's own boundary plex keys (PlcffndTxt/PlcfandTxt/PlcfendTxt/Plcfhdd's own aCP), local to the range's own start rather than the whole document, matching what each of those structures states as its own CPs. A non-empty story gets its own trailing guard paragraph mark, [MS-DOC]'s own "not considered part of the story contents" -- an empty one (`[]`) gets neither content nor a guard, matching "the beginning CP has the same value as the next CP". `bareStories` skips the guard append, spelling each story as ending at its own final content mark the way a real producer writes note stories (DocSpec.bareNoteStories). Exported for this package's own direct tests: whether a guard paragraph was actually appended changes only the returned keys' own spacing, which buildDoc's own footnote/comment/endnote round-trip tests cannot observe on their own (a guard paragraph's own text is empty either way, so `.text` reads identically whether or not one was appended).
+export function appendSubdocument(
   acc: ParagraphAccumulator,
   stories: readonly (readonly DocParagraphSpec[])[],
   bareStories: boolean,
@@ -177,20 +232,7 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
   const ccpEdn = acc.text.length - ccpText - ccpFtn - ccpHdd - ccpAtn;
 
   const { text, paragraphs, runRanges } = acc;
-
-  // Adjacent stretches with identical formatting become ONE ChpxFkp run, which is what a real producer writes: the format stores formatting as exceptions over runs of unchanging properties, not one entry per authored span. It matters for what the reader is exercised against, because the resulting run routinely spans paragraph boundaries -- two consecutive bold paragraphs are one Chpx covering both, including the paragraph mark between them -- so the reader has to split runs by paragraph itself rather than inheriting the split from the formatting table.
-  const mergedRuns: typeof runRanges = [];
-  for (const run of runRanges) {
-    const previous = mergedRuns[mergedRuns.length - 1];
-    if (
-      previous?.end === run.start &&
-      sameGrpprl(previous.grpprl, run.grpprl)
-    ) {
-      previous.end = run.end;
-      continue;
-    }
-    mergedRuns.push({ ...run });
-  }
+  const mergedRuns = mergeChpxRuns(runRanges);
 
   const characterFc = (cp: number): number => TEXT_FC + cp * bytesPerCharacter;
   const textByteLength = text.length * bytesPerCharacter;
@@ -215,20 +257,20 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
   }
   const wordDocument = new Uint8Array(sepxCursor);
   const wordView = new DataView(wordDocument.buffer);
-  for (let index = 0; index < text.length; index += 1) {
+  Array.from({ length: text.length }).forEach((_, index) => {
     const code = text.charCodeAt(index);
     if (compressed) {
       wordDocument[characterFc(index)] = code & 0xff;
     } else {
       wordView.setUint16(characterFc(index), code, true);
     }
-  }
+  });
 
   wordDocument.set(
     buildChpxFkp(
       mergedRuns.map((run) => ({
         fc: characterFc(run.start),
-        ...(run.grpprl === undefined ? {} : { grpprl: run.grpprl }),
+        grpprl: run.grpprl,
       })),
       characterFc(text.length),
     ),
@@ -239,7 +281,7 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
       paragraphs.map(({ spec: paragraph, start }) => ({
         fc: characterFc(start),
         istd: paragraph.istd ?? 0,
-        ...(paragraph.grpprl === undefined ? {} : { grpprl: paragraph.grpprl }),
+        grpprl: paragraph.grpprl,
       })),
       characterFc(text.length),
     ),
@@ -247,9 +289,10 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
   );
   if (sepxList !== undefined) {
     sepxList.forEach((bytes, index) => {
-      const offset = sepxOffsets[index];
-      if (offset === undefined) throw new Error("Sepx offset missing");
-      wordDocument.set(bytes, offset);
+      wordDocument.set(
+        bytes,
+        requireArrayEntry(sepxOffsets, index, "Sepx offset missing"),
+      );
     });
   }
 
@@ -266,12 +309,7 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
   const stsh = buildStsh(spec.styles ?? []);
   // A section's own start CP is derived from the paragraph stream itself, not stated separately: every SECTION_MARK-terminated paragraph the spec places closes one section and opens the next, mirroring how a real .doc's own end-of-section character marks the boundary PlcfSed.aCp then restates as a CP -- EXCEPT a paragraph the spec marks `pageBreak`, whose 0x000C is a manual page break instead (no PlcfSed boundary lands after it), the distinction [MS-DOC]'s own PlcfSed.aCP text draws between the two spellings of the identical character. Scanned only over the main document's own range: SECTION_MARK is a main-document-only construct, and a subdocument's own text could otherwise coincidentally contain the identical byte value with no section meaning at all.
   const sectionStartCps = [0];
-  const pageBreakCps = new Set<number>();
-  for (const { spec: paragraph, end } of paragraphs) {
-    if (paragraph.pageBreak === true && end <= ccpText) {
-      pageBreakCps.add(end);
-    }
-  }
+  const pageBreakCps = mainDocumentPageBreakCps(paragraphs, ccpText);
   for (let index = 0; index < ccpText; index += 1) {
     if (
       text.charCodeAt(index) === SECTION_MARK &&
@@ -315,17 +353,21 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
   }
   const table = new Uint8Array(tableLength);
   for (const [name, bytes] of Object.entries(namedParts)) {
-    const offset = tableOffsets.get(name);
-    if (offset === undefined)
-      throw new Error(`table part offset missing for ${name}`);
-    table.set(bytes, offset);
+    table.set(
+      bytes,
+      requireMapEntry(
+        tableOffsets,
+        name,
+        `table part offset missing for ${name}`,
+      ),
+    );
   }
-  const offsetOf = (name: string): number => {
-    const offset = tableOffsets.get(name);
-    if (offset === undefined)
-      throw new Error(`table part offset missing for ${name}`);
-    return offset;
-  };
+  const offsetOf = (name: string): number =>
+    requireMapEntry(
+      tableOffsets,
+      name,
+      `table part offset missing for ${name}`,
+    );
 
   const fib = buildFib({
     ccpText,
@@ -386,8 +428,8 @@ function buildSepxBytes(grpprl: readonly number[]): Uint8Array {
   ]);
 }
 
-// A PlcfSed for `startCps.length` sections: startCps (each section's own PlcfSed.aCp[i], per [MS-DOC] 2.8.26 "the beginning of a range of text ... that constitutes a section") plus a trailing ccpText -- the "last CP does not begin a new section" terminator -- bracketing one 12-byte Sed ([MS-DOC] 2.9.269) per section, each naming where buildSepxBytes' own bytes for that section were placed in the WordDocument stream.
-function buildPlcfSedBytes(
+// A PlcfSed for `startCps.length` sections: startCps (each section's own PlcfSed.aCp[i], per [MS-DOC] 2.8.26 "the beginning of a range of text ... that constitutes a section") plus a trailing ccpText -- the "last CP does not begin a new section" terminator -- bracketing one 12-byte Sed ([MS-DOC] 2.9.269) per section, each naming where buildSepxBytes' own bytes for that section were placed in the WordDocument stream. Exported for this package's own direct tests. sed.fn/fnMpr/fcMpr's own littleEndian argument is omitted, not merely `false`: every one of those three fields writes a byte-order-symmetric constant (0x0000, or 0xffffffff -- all bytes identical), so which endianness DataView is told to use can never change the bytes actually produced.
+export function buildPlcfSedBytes(
   startCps: readonly number[],
   ccpText: number,
   fcSepxList: readonly number[],
@@ -406,10 +448,10 @@ function buildPlcfSedBytes(
   });
   fcSepxList.forEach((fcSepx, index) => {
     const base = keyBytes + index * 12;
-    view.setUint16(base, 0, true); // sed.fn -- ignored.
+    view.setUint16(base, 0); // sed.fn -- ignored.
     view.setUint32(base + 2, fcSepx, true); // sed.fcSepx.
-    view.setUint16(base + 6, 0, true); // sed.fnMpr -- ignored.
-    view.setUint32(base + 8, 0xffffffff, true); // sed.fcMpr -- ignored.
+    view.setUint16(base + 6, 0); // sed.fnMpr -- ignored.
+    view.setUint32(base + 8, 0xffffffff); // sed.fcMpr -- ignored.
   });
   return bytes;
 }
@@ -433,34 +475,32 @@ export function buildInlinePictureBytes(
   picfView.setUint16(34, 1000, true); // picmid.my: no scaling.
 
   const shapeHeader = recordHeaderBytes(0xf004, 0);
-  const uid = new Uint8Array(16);
+  // The blip's own UID: a placeholder, never read back by this package's own reader (findBlipRecord locates the blip by its own record header alone), so it stays the zero bytes `out` already starts with -- only its length is ever consulted, to size `out` and the blip header's own recLen below.
+  const uidLength = 16;
   const blipHeader = recordHeaderBytes(
     0xf01e,
     0x06e0,
-    uid.length + 1 + pngBytes.length,
+    uidLength + 1 + pngBytes.length,
   );
 
-  const dataStreamBytes = new Uint8Array(picLocation);
+  // `picLocation` bytes of leading pad precede PICF in the "Data" stream -- content this package's own reader never inspects (it locates PICF at exactly `picLocation` and reads forward from there), so `out`'s own zero-initialised bytes already match it with no write of their own needed.
   const out = new Uint8Array(
-    dataStreamBytes.length +
+    picLocation +
       picf.length +
       shapeHeader.length +
       blipHeader.length +
-      uid.length +
+      uidLength +
       1 +
       pngBytes.length,
   );
-  let cursor = 0;
-  out.set(dataStreamBytes, cursor);
-  cursor += dataStreamBytes.length;
+  let cursor = picLocation;
   out.set(picf, cursor);
   cursor += picf.length;
   out.set(shapeHeader, cursor);
   cursor += shapeHeader.length;
   out.set(blipHeader, cursor);
   cursor += blipHeader.length;
-  out.set(uid, cursor);
-  cursor += uid.length;
+  cursor += uidLength; // The UID's own bytes, left as `out`'s existing zeros -- see its own declaration above.
   out[cursor] = 0xff; // tag.
   cursor += 1;
   out.set(pngBytes, cursor);
@@ -473,8 +513,8 @@ export function buildInlinePictureBytes(
   return { dataStreamBytes: out, picLocationGrpprl };
 }
 
-// [MS-ODRAW] 2.2.1's OfficeArtRecordHeader -- the 8-byte version/instance/type/length header shared by every OfficeArt record, including the ones this fixture doesn't otherwise model (recVer is fixed at 0xF for a container, arbitrary/ignored for an atom, since this package's own reader never checks it).
-function recordHeaderBytes(
+// [MS-ODRAW] 2.2.1's OfficeArtRecordHeader -- the 8-byte version/instance/type/length header shared by every OfficeArt record, including the ones this fixture doesn't otherwise model (recVer is fixed at 0xF for a container, arbitrary/ignored for an atom, since this package's own reader never checks it). Exported for this package's own direct tests: findBlipRecord's own forward scan for a validated blip is robust enough to find the real blip regardless of what precedes it (see buildInlinePictureBytes' own note), so asserting only on readInlinePicture's own final result can never confirm this header's own bytes were actually written where intended.
+export function recordHeaderBytes(
   recType: number,
   recInstance: number,
   recLen = 0,
@@ -489,13 +529,26 @@ function recordHeaderBytes(
 }
 
 // A CP-only PLC -- PlcffndTxt/PlcfandTxt/PlcfendTxt/Plcfhdd's own shape, [MS-DOC]'s own "a PLC that contains only CPs and no additional data": just the aCP array itself, one 4-byte little-endian value per key, no data section at all (element size 0, so parsePlc's own count = keys.length - 1 falls straight out of the byte length alone).
-function buildPlcBytes(keys: readonly number[]): Uint8Array {
+export function buildPlcBytes(keys: readonly number[]): Uint8Array {
   const bytes = new Uint8Array(keys.length * 4);
   const view = new DataView(bytes.buffer);
   keys.forEach((key, index) => {
     view.setUint32(index * 4, key, true);
   });
   return bytes;
+}
+
+/** A `characterCount`-length text's own boundary CPs when split into `pieceCount` pieces of as-equal length as divides -- 0, `characterCount` itself, and every `Math.floor((characterCount*index)/pieceCount)` boundary in between, deduplicated. Exported for this package's own direct tests: how many pieces a Clx actually splits into is invisible to a round trip through readDocContent, which reassembles them into one string regardless of how many there were (buildDoc's own `pieces` tests only ever assert on that reassembled text). Its own boundaries need no explicit sort: `index` only ever increases across the loop that builds them, and `Math.floor` preserves that monotonicity, so `[0, ...middles, characterCount]` is already non-decreasing before `Set` dedup (which itself preserves insertion order) ever runs. */
+export function pieceBoundaries(
+  characterCount: number,
+  pieceCount: number,
+): number[] {
+  const boundaries: number[] = [0];
+  for (let index = 1; index < pieceCount; index += 1) {
+    boundaries.push(Math.floor((characterCount * index) / pieceCount));
+  }
+  boundaries.push(characterCount);
+  return [...new Set(boundaries)];
 }
 
 // A Clx with no Prc array (so its first byte is the Pcdt's own 0x02) and a PlcPcd splitting the text into `pieceCount` pieces of as-equal length as divides.
@@ -505,12 +558,7 @@ function buildClx(
   compressed: boolean,
   characterFc: (cp: number) => number,
 ): Uint8Array {
-  const boundaries: number[] = [0];
-  for (let index = 1; index < pieceCount; index += 1) {
-    boundaries.push(Math.floor((characterCount * index) / pieceCount));
-  }
-  boundaries.push(characterCount);
-  const cps = [...new Set(boundaries)].sort((a, b) => a - b);
+  const cps = pieceBoundaries(characterCount, pieceCount);
 
   const plc: number[] = [];
   const push32 = (value: number): void => {
@@ -523,8 +571,7 @@ function buildClx(
   };
   for (const cp of cps) push32(cp);
   for (let index = 0; index < cps.length - 1; index += 1) {
-    const cp = cps[index];
-    if (cp === undefined) throw new Error("piece boundary missing");
+    const cp = requireArrayEntry(cps, index, "piece boundary missing");
     // FcCompressed stores a compressed piece's offset doubled, since the reader halves it: "the text starts at offset fc/2".
     const fc = compressed ? characterFc(cp) * 2 : characterFc(cp);
     plc.push(0, 0); // The Pcd bit field: no fNoParaLast, no fDirty.
@@ -542,8 +589,8 @@ function buildClx(
   ]);
 }
 
-// An STSH whose STSHI carries the full header a real producer writes -- Stshif, ftcBi, and the latent-style data -- so the reader's use of cbStshi to skip forward is genuinely exercised rather than trivially satisfied by a header that happens to be exactly Stshif.
-function buildStsh(styles: readonly DocStyleSpec[]): Uint8Array {
+// An STSH whose STSHI carries the full header a real producer writes -- Stshif, ftcBi, and the latent-style data -- so the reader's use of cbStshi to skip forward is genuinely exercised rather than trivially satisfied by a header that happens to be exactly Stshif. Exported for this package's own direct tests: cbStshi's own exact byte count, and the STSHI's latent-style array specifically, are never independently checked by anything downstream (the reader skips forward by cbStshi wholesale, without validating what it actually skipped past), so a round trip through readDocContent cannot tell a correctly-sized STSHI apart from a wrongly-sized one that still happens to parse.
+export function buildStsh(styles: readonly DocStyleSpec[]): Uint8Array {
   const stiMax = styles.length;
   const stshiBytes: number[] = [];
   const push16 = (value: number): void => {
@@ -607,8 +654,7 @@ function buildStsh(styles: readonly DocStyleSpec[]): Uint8Array {
       pushLpUpx(std, [...(style.chpxGrpprl ?? [])]);
     }
     out.push(std.length & 0xff, (std.length >> 8) & 0xff, ...std);
-    // "LPStd structures are stored on even-byte boundaries, but this length MUST NOT include this padding."
-    if (std.length % 2 === 1) out.push(0);
+    // "LPStd structures are stored on even-byte boundaries, but this length MUST NOT include this padding." No padding byte is ever needed here, though: std's own fixed fields before grLPUpxSw always contribute an even byte count (10 fixed bytes, plus xstzName's own 4 + 2*name.length, itself always even), and pushLpUpx's own cbUpx-plus-payload-plus-conditional-pad is by construction always even too -- so std.length is always even, for every style this fixture can produce, regardless of stk or grpprl content.
   });
   return new Uint8Array(out);
 }
