@@ -26,19 +26,13 @@ export function packageFromEntries(
 // An XML part (after any BOM/whitespace) starts with '<'; no standard EPUB binary part (png, jpeg, gif, svg's own raster fallback, embedded font, audio, video, ...) starts with '<' -- SVG itself is XML and is correctly classified as such -- so a misclassification only ever stores an XML part losslessly as base64, it never misparses a binary part. Mirrors ooxml.js's and odf.js's own identical sniff exactly.
 function looksLikeXml(bytes: Uint8Array<ArrayBuffer>): boolean {
   let i = 0;
-  if (
-    bytes.length >= 3 &&
-    bytes[0] === 0xef &&
-    bytes[1] === 0xbb &&
-    bytes[2] === 0xbf
-  ) {
+  // No separate `bytes.length >= 3` clause: an index past the end of `bytes` reads as undefined, which can never equal one of the three real BOM byte values, so the equality checks alone already reject a too-short array.
+  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
     i = 3;
   }
   while (i < bytes.length) {
+    // No separate `b === undefined` guard: within this loop's own bound (i < bytes.length), a Uint8Array never holds a hole, so b is always a real byte -- and even if it weren't, undefined matches none of the whitespace comparisons below and fails `b === 0x3c` exactly the same way this guard's own `return false` does.
     const b = bytes[i];
-    if (b === undefined) {
-      return false;
-    }
     if (b === 0x20 || b === 0x09 || b === 0x0a || b === 0x0d) {
       i = i + 1;
       continue;
