@@ -146,7 +146,8 @@ function writeList(
     const itemId = items[index]?.node.list.itemId;
     let end = index + 1;
     if (itemId !== undefined) {
-      while (end < items.length && items[end]?.node.list.itemId === itemId) {
+      // No separate `end < items.length` bound is needed ahead of the itemId comparison: past the array's own end, items[end] is undefined, and its own optional-chained `?.node.list.itemId` is therefore undefined too -- which can never equal itemId, since this branch only runs when itemId is itself a real, defined string -- so the loop terminates at exactly the same point either way.
+      while (items[end]?.node.list.itemId === itemId) {
         end += 1;
       }
     }
