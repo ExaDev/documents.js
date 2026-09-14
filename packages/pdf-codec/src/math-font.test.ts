@@ -58,6 +58,41 @@ describe("loadMathFont", () => {
     );
   });
 
+  it("parses every *Pt MATH constant this package exposes, not just the two spot-checked above", () => {
+    // Design-unit values below come from the same independent standalone script the previous test's own top comment describes, reading STIXTwoMath-Regular.otf's raw sfnt bytes directly rather than this package's own parser. Checking every field this package's MathFontMetrics actually exposes (math-table.ts's MATH_VALUE_RECORD_INDEX), not just axisHeight/fractionRuleThickness, is what catches an index entry pointing at the wrong MathValueRecord slot: a transposed pair of adjacent indices would still leave axisHeight and fractionRuleThickness correct.
+    const { metricsAt } = loadMathFont();
+    const metrics = metricsAt(12);
+    const pt = (designUnits: number): number => (designUnits / 1000) * 12;
+    expect(metrics.subscriptShiftDownPt).toBeCloseTo(pt(210), 6);
+    expect(metrics.subscriptBaselineDropMinPt).toBeCloseTo(pt(160), 6);
+    expect(metrics.superscriptShiftUpPt).toBeCloseTo(pt(360), 6);
+    expect(metrics.superscriptShiftUpCrampedPt).toBeCloseTo(pt(252), 6);
+    expect(metrics.superscriptBaselineDropMaxPt).toBeCloseTo(pt(230), 6);
+    expect(metrics.subSuperscriptGapMinPt).toBeCloseTo(pt(150), 6);
+    expect(metrics.spaceAfterScriptPt).toBeCloseTo(pt(40), 6);
+    expect(metrics.upperLimitGapMinPt).toBeCloseTo(pt(135), 6);
+    expect(metrics.upperLimitBaselineRiseMinPt).toBeCloseTo(pt(300), 6);
+    expect(metrics.lowerLimitGapMinPt).toBeCloseTo(pt(135), 6);
+    expect(metrics.lowerLimitBaselineDropMinPt).toBeCloseTo(pt(670), 6);
+    expect(metrics.stackTopShiftUpPt).toBeCloseTo(pt(470), 6);
+    expect(metrics.stackBottomShiftDownPt).toBeCloseTo(pt(385), 6);
+    expect(metrics.stackGapMinPt).toBeCloseTo(pt(150), 6);
+    expect(metrics.fractionNumeratorShiftUpPt).toBeCloseTo(pt(585), 6);
+    expect(metrics.fractionNumeratorDisplayShiftUpPt).toBeCloseTo(pt(640), 6);
+    expect(metrics.fractionDenominatorShiftDownPt).toBeCloseTo(pt(585), 6);
+    expect(metrics.fractionDenominatorDisplayShiftDownPt).toBeCloseTo(
+      pt(640),
+      6,
+    );
+    expect(metrics.fractionNumeratorGapMinPt).toBeCloseTo(pt(68), 6);
+    expect(metrics.fractionDenominatorGapMinPt).toBeCloseTo(pt(68), 6);
+    expect(metrics.radicalRuleThicknessPt).toBeCloseTo(pt(68), 6);
+    expect(metrics.radicalExtraAscenderPt).toBeCloseTo(pt(78), 6);
+    expect(metrics.radicalVerticalGapPt).toBeCloseTo(pt(85), 6);
+    expect(metrics.radicalKernBeforeDegreePt).toBeCloseTo(pt(65), 6);
+    expect(metrics.radicalKernAfterDegreePt).toBeCloseTo(pt(-335), 6);
+  });
+
   it("glyph() reports advance width, italic correction, and (for glyphs the font's MathTopAccentAttachment table covers) a top-accent x position", () => {
     const { metricsAt } = loadMathFont();
     const metrics = metricsAt(10);
