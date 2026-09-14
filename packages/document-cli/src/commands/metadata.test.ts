@@ -167,6 +167,22 @@ describe("metadata", () => {
     ]);
 
     expect(exitCode).not.toBe(EXIT_SUCCESS);
+    expect(stderr).toContain("[metadata]");
     expect(stderr).toContain("cannot infer a source format");
+  });
+
+  it("describes the command and its --json option", () => {
+    const command = createProgram().commands.find(
+      (candidate) => candidate.name() === "metadata",
+    );
+    expect(command?.description()).toContain(
+      "print a document's own title/author/subject/keywords/creator/producer/created/modified metadata",
+    );
+    const jsonOption = command?.options.find(
+      (option) => option.long === "--json",
+    );
+    expect(jsonOption?.description).toBe(
+      "emit the metadata as a JSON object instead of a human-readable report",
+    );
   });
 });
