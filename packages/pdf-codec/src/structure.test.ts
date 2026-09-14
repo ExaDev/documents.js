@@ -108,7 +108,8 @@ describe("readPdf: marked-content association", () => {
   });
 
   it("carries the enclosing page MCID onto content a form XObject paints, but not into a form that numbers its own MCIDs", () => {
-    const doc = readPdf(taggedFormPdf());
+    const bytes = taggedFormPdf();
+    const doc = readPdf(bytes);
     const textItem = (text: string) =>
       doc.pages[0]!.items.find((i) => i.kind === "text" && i.text === text);
     // FmA is invoked inside the /P <</MCID 0>> span and declares no /StructParents of its own, so its text paints that span's content item.
@@ -117,11 +118,28 @@ describe("readPdf: marked-content association", () => {
     });
     // FmB declares /StructParents 3 and marks its own MCID 0 under that key -- the /Stm-qualified channel, which must not resolve against the page's numbering even though FmB is invoked inside the /P <</MCID 1>> span.
     expect(textItem("Self-marked form text")).not.toHaveProperty("structure");
+    // Wrapping FmB's own Do in a page-level MCID span it never inherits from is exactly the point of this fixture, but that also makes the wrapper invisible to every assertion above (the item ends up with no `structure` property whether the span is there or not) -- check the raw content streams directly for the spans the fixture's own name and comment claim it declares.
+    const text = new TextDecoder().decode(bytes);
+    expect(text).toContain(
+      "/P << /MCID 0 >> BDC\n/FmA Do\nEMC\n/P << /MCID 1 >> BDC\n/FmB Do\nEMC",
+    );
+    expect(text).toContain(
+      "/Span << /MCID 0 >> BDC\nBT /F1 12 Tf 10 10 Td (Self-marked form text) Tj ET\nEMC",
+    );
+  });
+
+  it("reads both of taggedFormPdf's own struct elements from its /K walk", () => {
+    const doc = readPdf(taggedFormPdf());
+    expect(doc.structure).toEqual([
+      { id: "struct1", type: "P", title: "Carried span", children: [] },
+      { id: "struct2", type: "P", title: "Own numbering", children: [] },
+    ]);
   });
 
   it("reports a diagnostic when a page declares /StructParents the parent tree does not carry", () => {
+    const bytes = parentTreeMissingEntryPdf();
     const diagnostics: PdfDiagnostic[] = [];
-    const doc = readPdf(parentTreeMissingEntryPdf(), {
+    const doc = readPdf(bytes, {
       sink: (d) => diagnostics.push(d),
     });
     expect(
@@ -129,5 +147,9 @@ describe("readPdf: marked-content association", () => {
     ).toBe(true);
     // The tree's key 0 names an owner for MCID 0, but the page declares /StructParents 4: no owner, and no accidental lookup through the position-shaped key either.
     expect(doc.pages[0]!.items[0]).not.toHaveProperty("structure");
+    // An item genuinely marked but resolving to no owner and an item never marked at all produce the identical `structure`-free result above, so this checks the fixture's own raw content stream genuinely wraps the text in the /P <</MCID 0>> span its own name and comment describe.
+    expect(new TextDecoder().decode(bytes)).toContain(
+      "/P << /MCID 0 >> BDC\nBT /F1 12 Tf 10 100 Td (Owned by nothing) Tj ET\nEMC",
+    );
   });
 });
