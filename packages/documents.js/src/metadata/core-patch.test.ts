@@ -33,4 +33,17 @@ describe("mergeMetadata", () => {
       mergeMetadata({ title: "Original", author: "Ada" }, { title: "New" }),
     ).toEqual({ title: "New", author: "Ada" });
   });
+
+  it("keeps the current subject when overrides does not mention it", () => {
+    expect(
+      mergeMetadata({ subject: "Original subject" }, { title: "New" }),
+    ).toEqual({ subject: "Original subject", title: "New" });
+  });
+
+  it("keeps the current keywords when overrides does not mention them", () => {
+    expect(mergeMetadata({ keywords: ["a", "b"] }, { title: "New" })).toEqual({
+      keywords: ["a", "b"],
+      title: "New",
+    });
+  });
 });
