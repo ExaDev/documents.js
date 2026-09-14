@@ -14,6 +14,11 @@ describe("relsPathFor", () => {
   it("handles a root-level part with no directory", () => {
     expect(relsPathFor("document.xml")).toBe("/_rels/document.xml.rels");
   });
+
+  // A single-character directory puts the slash at index 1 -- deliberately exercising a genuinely different lastSlash value from the -1/no-slash case above, so a mutation swapping which index the filename split point compares against would extract the whole path as the filename rather than just the part after the slash.
+  it("splits correctly when the directory is a single character", () => {
+    expect(relsPathFor("a/file.xml")).toBe("a/_rels/file.xml.rels");
+  });
 });
 
 describe("buildRelativeTarget", () => {
@@ -45,5 +50,10 @@ describe("buildRelativeTarget", () => {
     expect(buildRelativeTarget("document.xml", "word/document.xml")).toBe(
       "word/document.xml",
     );
+  });
+
+  // Both parts share the identical, fully-matching directory chain ("a/b"), so the common-prefix scan runs all the way to that shared length on both sides at once -- the one case where the two length bounds stop protecting each other (see buildRelativeTarget's own comment on combinedLimit).
+  it("targets a sibling part in a two-level-deep identical directory chain", () => {
+    expect(buildRelativeTarget("a/b/x.xml", "a/b/y.xml")).toBe("y.xml");
   });
 });
