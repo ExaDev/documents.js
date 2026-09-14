@@ -33,11 +33,15 @@ const EXTENSION_TO_FORMAT: Readonly<Record<string, DocumentFormat>> = {
   epub: "epub",
 };
 
-// Reads the extension after the last '.' in the final path segment. Returns undefined for no recognised extension, an unrecognised one, or a path with none at all -- callers decide how to react to an unresolved format, this module only classifies.
+// Reads the extension after the last '.' in the final path segment. Returns undefined for no recognised extension, an unrecognised one, or a path with none at all -- callers decide how to react to an unresolved format, this module only classifies. The final segment is found via the last separator's own index rather than `split(...).pop()`: splitting a string always yields an array of at least one element, so `.pop()` can never actually return undefined and a `?? filename` fallback for that case would be unreachable -- lastIndexOf's -1 "not found" sentinel is a real, already-exercised case (a filename with no separator at all), not a defensive guess.
 export function inferFormatFromFilename(
   filename: string,
 ): DocumentFormat | undefined {
-  const lastSegment = filename.split(/[/\\]/).pop() ?? filename;
+  const lastSeparator = Math.max(
+    filename.lastIndexOf("/"),
+    filename.lastIndexOf("\\"),
+  );
+  const lastSegment = filename.slice(lastSeparator + 1);
   const dotIndex = lastSegment.lastIndexOf(".");
   if (dotIndex <= 0) return undefined;
   const extension = lastSegment.slice(dotIndex + 1).toLowerCase();
