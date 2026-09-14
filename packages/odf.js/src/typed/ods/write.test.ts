@@ -323,6 +323,54 @@ describe("writeOdsContent XML shapes", () => {
     expect(attrValue(row, "table:style-name")).toBeUndefined();
   });
 
+  it("writes table:table-cell with no table:style-name when the cell carries no background, borders, or alignment", () => {
+    const pkg = writeOdsContent(
+      documentOf([
+        sheetOf([
+          {
+            row: 0,
+            column: 0,
+            value: { kind: "string", value: "plain" },
+            displayText: "plain",
+          },
+        ]),
+      ]),
+    );
+    const cell = firstCell(pkg);
+    expect(attrValue(cell, "table:style-name")).toBeUndefined();
+  });
+
+  it("writes a background-only cell's style:table-cell-properties on its own minted style:style", () => {
+    const pkg = writeOdsContent(
+      documentOf([
+        sheetOf([
+          {
+            row: 0,
+            column: 0,
+            value: { kind: "string", value: "coloured" },
+            displayText: "coloured",
+            background: { kind: "solid", color: { r: 1, g: 0, b: 0 } },
+          },
+        ]),
+      ]),
+    );
+    const cell = firstCell(pkg);
+    const styleName = attrValue(cell, "table:style-name")!;
+    expect(styleName).toBeDefined();
+    const cellStyle = childrenWithTag(
+      contentAutomaticStyles(pkg),
+      "style:style",
+    ).find(
+      (styleElement) => attrValue(styleElement, "style:name") === styleName,
+    )!;
+    expect(attrValue(cellStyle, "style:family")).toBe("table-cell");
+    const properties = childrenWithTag(
+      cellStyle,
+      "style:table-cell-properties",
+    )[0]!;
+    expect(attrValue(properties, "fo:background-color")).toBe("#ff0000");
+  });
+
   describe("the sheet's own master page", () => {
     it("writes style:master-page-name on the table's own style:style[family='table'], not on table:table itself", () => {
       const pkg = writeOdsContent(documentOf([sheetOf([])]));
