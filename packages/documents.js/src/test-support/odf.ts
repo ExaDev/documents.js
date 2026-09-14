@@ -1,5 +1,4 @@
-import type { Package } from "odf.js";
-import { decodePackage, ODF_MEDIA_TYPES, zipPackage } from "odf.js";
+import { ODF_MEDIA_TYPES, zipPackage } from "odf.js";
 
 // Never imported by src/index.ts and never reaches dist/. Hand-authored ODF formula (.odf) XML zipped via odf.js's own zipPackage/decodePackage, mirroring src/test-support/odt.ts's own established convention exactly (same mimetype-part-first-and-stored requirement, same "not from a real LibreOffice binary" scope) -- see that file's own top-of-file comment for the full reasoning. Every fixture wraps its own MathML content in the real office:body > office:math > math:math structure a genuine LibreOffice-authored .odf uses, with every math element under a "math:" namespace prefix (not the bare, unprefixed form) -- deliberately, since that IS what real LibreOffice output uses (confirmed by src/mathml/nodes.ts's own localName-stripping design, built specifically to handle this), so these fixtures exercise the realistic path, not merely the more lenient one.
 
@@ -28,13 +27,6 @@ export function odfFormulaBytes(
     ["mimetype", { bytes: MIMETYPE, stored: true }],
     ["content.xml", { bytes: contentXml }],
   ]);
-}
-
-export function odfFormulaPackage(
-  mathMlInner: string,
-  options?: { readonly starMath?: string },
-): Package {
-  return decodePackage(odfFormulaBytes(mathMlInner, options));
 }
 
 // A small, curated set of real formulas covering every construct the task's own test requirement names: a simple fraction, a square root, a superscript/subscript combination, and a small matrix via mtable.
