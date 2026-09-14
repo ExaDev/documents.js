@@ -548,25 +548,25 @@ interface SkipPosition {
   readonly textOffset: number;
 }
 
-// The \uN fallback skip, implementing the spec's own rules verbatim: `count` characters are skipped, "any RTF control word or symbol is considered a single character", "a \binN keyword, its argument, and the binary data that follows are considered one character", and "if an RTF scope delimiter character ... is encountered while scanning skippable data, the skippable data is considered to end before the delimiter". A text run is consumed byte by byte, which is why the caller carries a byte offset alongside its token index.
+// The \uN fallback skip, implementing the spec's own rules verbatim: `count` characters are skipped, "any RTF control word or symbol is considered a single character", "a \binN keyword, its argument, and the binary data that follows are considered one character", and "if an RTF scope delimiter character ... is encountered while scanning skippable data, the skippable data is considered to end before the delimiter". A text run is consumed byte by byte, which is why the returned position carries a byte offset alongside its token index -- but the STARTING position never needs one: this reader's one call site always begins a fresh skip right after the \uN token that triggered it, never mid-token, so the parameter is a bare token index rather than a full SkipPosition. Every text token this loop touches is therefore entered at its own offset 0 (either the initial one, or a later one just reset by the full-consumption branch below), which is what lets `available` below be the token's own plain length rather than a length-minus-an-offset that is always zero in practice.
 function skipUnicodeFallback(
   tokens: readonly RtfToken[],
-  from: SkipPosition,
+  fromIndex: number,
   count: number,
 ): SkipPosition {
-  let { index, textOffset } = from;
+  let index = fromIndex;
+  let textOffset = 0;
   let remaining = count;
-  while (remaining > 0 && index < tokens.length) {
+  while (remaining > 0) {
     const token = tokens[index];
     if (token === undefined) break;
     if (token.kind === "groupStart" || token.kind === "groupEnd") {
       break;
     }
     if (token.kind === "text") {
-      const available = token.bytes.length - textOffset;
-      const consumed = Math.min(available, remaining);
+      const consumed = Math.min(token.bytes.length, remaining);
       remaining -= consumed;
-      textOffset += consumed;
+      textOffset = consumed;
       if (textOffset >= token.bytes.length) {
         index += 1;
         textOffset = 0;
@@ -2066,11 +2066,7 @@ function readRtfDetail(
         // "Unicode values greater than 32767 are expressed as negative numbers ... convert F020 to decimal (61472) and subtract 65536." A lone surrogate is emitted with fromCharCode so a surrogate pair written as two \uN keywords composes into one astral character.
         emitText(String.fromCharCode(code < 0 ? code + 0x1_00_00 : code));
       }
-      const skipped = skipUnicodeFallback(
-        tokens,
-        { index: index + 1, textOffset: 0 },
-        state.uc,
-      );
+      const skipped = skipUnicodeFallback(tokens, index + 1, state.uc);
       index = skipped.index;
       textOffset = skipped.textOffset;
       continue;
