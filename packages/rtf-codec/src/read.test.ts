@@ -3063,6 +3063,15 @@ describe("block accumulation across \\object/\\result scratch rendering", () => 
     expect(text).toContain("pending text");
   });
 
+  it("keeps a run pending before \\result as its own separate run, not merged with identically-formatted text typed after \\object closes", () => {
+    // \result here is genuinely EMPTY and \objdata is absent entirely, so nothing else along the way ever calls addBlocks with a non-empty list -- not \objdata's own decode (there is none), not \object's own close splicing resultBlocks in (endResultScratch returns [] for an empty scratch, and addBlocks' own length===0 guard makes that call a no-op too). beginResultScratch's own flushRun call is therefore the ONLY thing that can push "pending " into a real run before \object's group closes. captureAccumulatorState/restoreAccumulatorState round-trip the raw pendingRunText/pendingRunKey either way, so a MISSING flushRun call is invisible to a plain "is the text still there" check -- it only shows up as pendingRunKey surviving the round trip unflushed, which then lets "pending " silently merge with " more" into ONE run instead of staying two, since " more" shares the identical (plain) formatting key and appendText only flushes on a key CHANGE.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard pending {\\object{\\result}} more\\par}`,
+    )[0];
+    const texts = paragraph?.runs.map((run) => run.text) ?? [];
+    expect(texts).toEqual(["pending ", " more"]);
+  });
+
   it("closes an open table before splicing \\result's own recovered blocks in, so a table inside \\result is not left dangling in tableRows", () => {
     const paragraphs = paragraphsOf(
       `${HEADER}\\pard{\\object\\objemb{\\*\\objdata 68656c6c6f}{\\result{\\trowd\\trleft0\\cellx1440\\pard\\intbl cell\\cell\\row\\pard done\\par}}}\\par}`,
@@ -3071,6 +3080,14 @@ describe("block accumulation across \\object/\\result scratch rendering", () => 
       .map((p) => p.runs.map((r) => r.text).join(""))
       .join("|");
     expect(text).toContain("done");
+  });
+
+  it("closes a table whose \\row is the very last thing in \\result's own content, with no \\par after it to trigger endParagraph's own closeTable call", () => {
+    // \result's content ends on \row with para.inTable still true -- endParagraph(para, false)'s own internal closeTable() call is gated on `!para.inTable`, so it does NOT fire here (unlike the fixture above, where \result's content ends on an explicit \par OUTSIDE the table, and THAT closeTable call is what actually closes it, leaving endResultScratch's own trailing call redundant for that case). endResultScratch's own explicit closeTable() call is the only thing that can still turn tableRows into a real block here.
+    const blocks = blocksOf(
+      `${HEADER}\\pard{\\object\\objemb{\\*\\objdata 00}{\\result{\\trowd\\trleft0\\cellx1440\\pard\\intbl cell\\cell\\row}}}\\par}`,
+    );
+    expect(blocks.some((block) => block.kind === "table")).toBe(true);
   });
 });
 
