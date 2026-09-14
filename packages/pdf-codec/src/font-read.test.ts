@@ -101,6 +101,23 @@ describe("createFontResolver: simple fonts", () => {
     );
   });
 
+  it("defaults a simple font with no /BaseFont at all to Helvetica", () => {
+    const { sink } = collectDiagnostics();
+    const fontDict = pdfDict({ Subtype: pdfName("Type1") });
+    const resources = pdfDict({ Font: pdfDict({ F1: fontDict }) });
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    const font = resolve("F1", resources);
+    expect(font).toMatchObject({
+      composite: false,
+      family: "Helvetica",
+      bold: false,
+      italic: false,
+    });
+  });
+
   it("reports a diagnostic when falling back for a family that does not match any standard-14 face", () => {
     const { sink, diagnostics } = collectDiagnostics();
     const fontDict = pdfDict({
@@ -692,6 +709,54 @@ describe("createFontResolver: composite (Type0) fonts", () => {
     expect(font?.widthOf(10)).toBe(1000);
     expect(font?.widthOf(12)).toBe(1000);
     expect(font?.widthOf(999)).toBe(600); // falls back to /DW
+  });
+
+  it("skips a malformed /W entry (a non-numeric leading operand) rather than losing the rest of the array", () => {
+    const { sink } = collectDiagnostics();
+    const descendant = pdfDict({
+      Subtype: pdfName("CIDFontType2"),
+      W: pdfArray([
+        pdfName("not-a-cid"), // malformed leading operand: skipped, not a c/cFirst
+        pdfNum(3),
+        pdfArray([pdfNum(500), pdfNum(600)]),
+      ]),
+    });
+    const fontDict = pdfDict({
+      Subtype: pdfName("Type0"),
+      BaseFont: pdfName("Calibri"),
+      Encoding: pdfName("Identity-H"),
+      DescendantFonts: pdfArray([descendant]),
+    });
+    const resources = pdfDict({ Font: pdfDict({ F1: fontDict }) });
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    const font = resolve("F1", resources);
+    expect(font?.widthOf(3)).toBe(500);
+    expect(font?.widthOf(4)).toBe(600);
+  });
+
+  it("defaults a composite font with no /BaseFont at all to Helvetica", () => {
+    const { sink } = collectDiagnostics();
+    const descendant = pdfDict({ Subtype: pdfName("CIDFontType2") });
+    const fontDict = pdfDict({
+      Subtype: pdfName("Type0"),
+      Encoding: pdfName("Identity-H"),
+      DescendantFonts: pdfArray([descendant]),
+    });
+    const resources = pdfDict({ Font: pdfDict({ F1: fontDict }) });
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    const font = resolve("F1", resources);
+    expect(font).toMatchObject({
+      composite: true,
+      family: "Helvetica",
+      bold: false,
+      italic: false,
+    });
   });
 
   it("decodes 2-byte codes via /ToUnicode", () => {
