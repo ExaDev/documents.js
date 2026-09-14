@@ -667,15 +667,12 @@ interface UsedRange {
 function computeUsedRange(sheet: ContentSheet): UsedRange {
   let maxRow: number | undefined;
   let maxColumn: number | undefined;
+  // Math.max makes a redundant "is this genuinely bigger" comparison unnecessary: setting maxRow/maxColumn to a value no larger than what it already holds is a no-op regardless of whether that comparison used > or >=, so a hand-written comparison here would be an unkillable equivalent mutant rather than a real behavioural choice.
   const bumpRow = (row: number): void => {
-    if (maxRow === undefined || row > maxRow) {
-      maxRow = row;
-    }
+    maxRow = maxRow === undefined ? row : Math.max(maxRow, row);
   };
   const bumpColumn = (column: number): void => {
-    if (maxColumn === undefined || column > maxColumn) {
-      maxColumn = column;
-    }
+    maxColumn = maxColumn === undefined ? column : Math.max(maxColumn, column);
   };
 
   for (const cell of sheet.cells) {
