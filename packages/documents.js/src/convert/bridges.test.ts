@@ -616,6 +616,20 @@ describe("ods <-> xlsx: ods -> xlsx (one hop, the character-width-unit conversio
     const original = odsContentOf(richOdsBytes());
     const originalSheet = original.sheets[0]!;
 
+    // The source ODS fixture's own header row and every cell's rendered displayText: buildRichFixturePackage (test-support/ods.ts) writes a distinct text:p run for every cell alongside its office:value, and none of it is exercised by any assertion below (those check only the CONVERTED xlsx side's `.value`) -- so a header cell silently losing its label, or a cell's displayText silently losing its rendered text, would go undetected without checking the source fixture directly.
+    expect(cellAt(originalSheet, 0, 0)?.displayText).toBe("Name");
+    expect(cellAt(originalSheet, 0, 1)?.displayText).toBe("Amount");
+    expect(cellAt(originalSheet, 0, 2)?.displayText).toBe("Active");
+    expect(cellAt(originalSheet, 1, 0)?.displayText).toBe("Widget");
+    expect(cellAt(originalSheet, 1, 1)?.displayText).toBe("42.5");
+    expect(cellAt(originalSheet, 1, 2)?.displayText).toBe("TRUE");
+    expect(cellAt(originalSheet, 2, 0)?.displayText).toBe("15%");
+    expect(cellAt(originalSheet, 2, 1)?.displayText).toBe("$9.99");
+    expect(cellAt(originalSheet, 2, 2)?.displayText).toBe("2026-01-15");
+    expect(cellAt(originalSheet, 3, 0)?.displayText).toBe("14:30");
+    expect(cellAt(originalSheet, 3, 1)?.displayText).toBe("85");
+    expect(cellAt(originalSheet, 4, 0)?.displayText).toBe("Merged Cell");
+
     const xlsxBytes = odsToXlsx(richOdsBytes());
     const xlsx = xlsxContentOf(xlsxBytes);
     const sheet = xlsx.sheets[0]!;
@@ -623,6 +637,14 @@ describe("ods <-> xlsx: ods -> xlsx (one hop, the character-width-unit conversio
     expect(cellAt(sheet, 0, 0)?.value).toEqual({
       kind: "string",
       value: "Name",
+    });
+    expect(cellAt(sheet, 0, 1)?.value).toEqual({
+      kind: "string",
+      value: "Amount",
+    });
+    expect(cellAt(sheet, 0, 2)?.value).toEqual({
+      kind: "string",
+      value: "Active",
     });
     expect(cellAt(sheet, 1, 0)?.value).toEqual({
       kind: "string",

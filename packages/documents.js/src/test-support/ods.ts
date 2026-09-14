@@ -263,10 +263,6 @@ export function gridOdsBytes(): Uint8Array<ArrayBuffer> {
   return encodePackage(buildGridFixturePackage());
 }
 
-export function gridOdsPackage(): Package {
-  return decodePackage(gridOdsBytes());
-}
-
 // A third fixture, purpose-built for the ods<->xlsx cross-format bridge's own round-trip tests (src/convert/bridges.test.ts): three explicitly-widthed columns (3cm/4cm/2cm) and every office:value-type ODS distinguishes on one row each -- string, float, boolean, percentage, currency, date, time -- plus a formula cell (table:formula carried verbatim, never evaluated by either side of the bridge) and a genuine 2-column merge. This is deliberately the richest of the three ods.ts fixtures: xlsx write support (ooxml.js's buildXlsxPackageFromContent) is new to the ecosystem, so the bridge's own tests need real, independently-authored ground truth to check against, not a fixture built through the very editor (createOds) the bridge composes with on its own write-back hop.
 function buildRichFixturePackage(): Package {
   const columns = [
@@ -445,10 +441,6 @@ export function richOdsBytes(): Uint8Array<ArrayBuffer> {
   return encodePackage(buildRichFixturePackage());
 }
 
-export function richOdsPackage(): Package {
-  return decodePackage(richOdsBytes());
-}
-
 // A fourth fixture, purpose-built for the per-cell decoration wiring (ContentSheetCell's background/borders/alignment/verticalAlignment, all four added to document-schema.js's ContentSheetCellSchema and all four genuinely populated by odf.js's own readOdsContent -- see typed/shared/table.ts's readCellStyleDecoration). Deliberately hand-authored ODF XML rather than built through createOds/OdsCell, for the same independent-construction reason this module's other fixtures are: OdsCell has no decoration setter at all today, so the editor could not express this fixture even if it were the right tool.
 //
 // One sheet, "Decorated", one row of two cells: A1 carries a yellow fo:background-color, a full fo:border shorthand, an explicit fo:text-align="right" and style:vertical-align="top"; B1 carries only a red fo:border-bottom, with no background, no alignment, and no vertical alignment of its own -- so a single fixture exercises both the "declares everything" and the "declares exactly one edge and nothing else" branches of the layout wiring at once.
@@ -563,8 +555,4 @@ function buildDecoratedFixturePackage(): Package {
 
 export function decoratedOdsBytes(): Uint8Array<ArrayBuffer> {
   return encodePackage(buildDecoratedFixturePackage());
-}
-
-export function decoratedOdsPackage(): Package {
-  return decodePackage(decoratedOdsBytes());
 }
