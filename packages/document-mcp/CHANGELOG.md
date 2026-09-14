@@ -1,3 +1,11 @@
+## [4.14.13](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.12...document-mcp%404.14.13) (2026-09-14)
+
+
+### Dependencies
+
+- Updated documents.js to 7.20.12
+- Updated document-operations to 1.1.12
+
 ## [4.14.12](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.11...document-mcp%404.14.12) (2026-09-14)
 
 ### Documentation
