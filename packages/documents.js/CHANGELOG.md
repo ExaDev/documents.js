@@ -1,3 +1,10 @@
+## [7.20.12](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.11...documents.js%407.20.12) (2026-09-14)
+
+
+### Dependencies
+
+- Updated epub-codec to 1.5.5
+
 ## [7.20.11](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.10...documents.js%407.20.11) (2026-09-14)
 
 ### Miscellaneous Chores
