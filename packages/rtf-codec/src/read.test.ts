@@ -1671,6 +1671,17 @@ describe("form fields", () => {
     ).toBe("Guten Tag");
   });
 
+  it("never routes a nested destination's own text into a \\*\\ffl entry, even one sharing state.field.formField by reference", () => {
+    // \listtext nested directly inside the first \*\ffl group shares state.field.formField by reference (the same shape the bookmark and \*\fldinst fixtures elsewhere in this file exercise) but its own destination is "listText", not "formFieldListItem" -- a check keyed on state.field.formField's own definedness alone would let "stray" leak into the entry ahead of "Hello" itself.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMDROPDOWN  {\\*\\formfield{\\fftype2\\ffres0\\fftypetxt0\\ffhaslistbox\\ffdefres0{\\*\\ffl{\\listtext stray}Hello}{\\*\\ffl Guten Tag}}}}{\\fldrslt Hello}}\\par}`,
+    )[0];
+    const extent = paragraph?.constructs?.[0];
+    expect(extent?.descriptor).toMatchObject({
+      options: ["Hello", "Guten Tag"],
+    });
+  });
+
   // The same \ffres field FFDataBits gives a checkbox's own state carries, for iTypeDrop, a zero-based index into the \*\ffl list -- a genuinely real Word fixture rather than PHPRtfLite's own always-25 constant: unlike the "reads a FORMDROPDOWN..." test above, whose \ffres25 sentinel falls through to \ffdefres0 for its "Hello" value, this fixture's own \ffres1 already names a real (non-sentinel) selection directly, with no fallback involved.
   it("reads a FORMDROPDOWN field's \\ffres as a zero-based index selecting one of its own \\*\\ffl entries", () => {
     const paragraph = paragraphsOf(
@@ -2782,6 +2793,16 @@ describe("table cell merge span", () => {
 });
 
 describe("bookmark bookkeeping", () => {
+  it("never routes a nested destination's own text into the enclosing bookmark's own name, even one sharing state.bookmark by reference", () => {
+    // \listtext is a real, known destination ("listText", not "body", not "fieldInstruction", not any of the formField* destinations already checked above) that can genuinely nest inside a \*\bkmkstart group while inheriting state.bookmark by reference -- the same shape the \*\ud-inside-\*\fldinst fixture elsewhere in this file exercises for state.field. A check keyed on state.bookmark's own definedness alone, without also requiring THIS group's own destination to genuinely be bookmarkStart/bookmarkEnd, would append "stray" straight into the bookmark's own name instead of silently discarding it (the trailing comment on this whole if-chain: "listText" ... discard).
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\*\\bkmkstart{\\listtext stray}name}marked{\\*\\bkmkend name}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      name: "name",
+    });
+  });
+
   it("silently drops a bookmark start whose own name is empty, never opening an extent for it", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard before {\\*\\bkmkstart}marked{\\*\\bkmkend}after\\par}`,
