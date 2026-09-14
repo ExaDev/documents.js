@@ -97,6 +97,18 @@ describe("CFF programs probeCff refuses to read", () => {
     ).toBeUndefined();
   });
 
+  it("refuses a too-small headerSize even when a valid Name INDEX and Top DICT sit exactly where that headerSize points", () => {
+    // Unlike the case above, this Name INDEX is placed at byte offset 2 -- exactly where headerSize's own (invalid) value of 2 would have readCffIndex start looking -- so the only thing standing between this input and a wrongly-defined probe result is the headerSize < CFF_HEADER_SIZE check itself.
+    const bytes = new Uint8Array([
+      1,
+      0,
+      2, // majorVersion 1, minorVersion 0, headerSize 2 (invalid: less than the real 4-byte header)
+      ...cffIndex([[...new TextEncoder().encode("TooShort")]]),
+      ...cffIndex([[139, 0]]),
+    ]);
+    expect(probeCff(bytes)).toBeUndefined();
+  });
+
   it("returns undefined for an empty Name INDEX, which declares a FontSet holding no font", () => {
     expect(
       probeCff(

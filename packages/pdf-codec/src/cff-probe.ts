@@ -48,9 +48,10 @@ export function probeCff(
   }
 
   const nameIndex = readCffIndex(bytes, headerSize);
-  if (nameIndex === undefined || nameIndex.count === 0) {
+  if (nameIndex === undefined) {
     return undefined;
   }
+  // No separate `nameIndex.count === 0` check: readCffIndex's own contract guarantees entry(0) is undefined whenever count is 0 (an empty INDEX's entry() always returns undefined -- see its own zero-count branch), so this one check already covers both an empty FontSet and a genuinely unreadable first entry.
   const nameBytes = nameIndex.entry(0);
   if (nameBytes === undefined) {
     return undefined;
