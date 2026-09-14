@@ -24,16 +24,6 @@ const BOX_CONTIGUOUS_CODESTREAM = 0x6a703263; // 'jp2c'
 export type Jp2ColourSpace =
   "greyscale" | "srgb" | "sycc" | "cmyk" | "e-srgb" | "rommrgb" | "cielab";
 
-const ENUMERATED_COLOUR_SPACES = new Map<number, Jp2ColourSpace>([
-  [12, "cmyk"],
-  [14, "cielab"],
-  [16, "srgb"],
-  [17, "greyscale"],
-  [18, "sycc"],
-  [20, "e-srgb"],
-  [24, "rommrgb"],
-]);
-
 export interface Jp2ImageHeader {
   readonly width: number;
   readonly height: number;
@@ -246,7 +236,17 @@ function readColourSpecification(
   const method = data[start] ?? 0;
   if (method === 1) {
     if (end - start >= 7) {
-      into.colourSpace = ENUMERATED_COLOUR_SPACES.get(
+      // I.5.3.3 Table I.10: the enumerated colour spaces this codec recognises by number. Anything else is reported by its raw value rather than guessed at. Built inside this function rather than as a module-level constant so a mutation to one of its entries is attributed, by Stryker's per-test coverage analysis, to the tests that actually call this function -- a module-level `const` here would run once at import time as a static mutant, which Stryker tests against a single arbitrary covering test rather than the full set that genuinely exercises this map.
+      const enumeratedColourSpaces = new Map<number, Jp2ColourSpace>([
+        [12, "cmyk"],
+        [14, "cielab"],
+        [16, "srgb"],
+        [17, "greyscale"],
+        [18, "sycc"],
+        [20, "e-srgb"],
+        [24, "rommrgb"],
+      ]);
+      into.colourSpace = enumeratedColourSpaces.get(
         readUint32(data, start + 3),
       );
     }
