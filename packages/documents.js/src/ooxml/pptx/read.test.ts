@@ -4,7 +4,7 @@ import {
   minimalPptxPackage,
   pptxWithLegacyOleObjectPackage,
 } from "../../test-support/pptx";
-import { readPptxContent } from "./read";
+import { readPptxContent, slidePathsInOrder } from "./read";
 
 // readPptxContent is now a thin adapter over ooxml.js's own readPptxContent (the flat reader; the bare readPptx name reads the tree-form DocumentTree since ooxml.js 4.0.0): placeholder -> layout -> master -> theme inheritance, the run-property cascade, and group-transform flattening all live upstream in ooxml.js now, with their own test coverage there. These tests exercise only the wrapping this file is actually responsible for -- ContentDocument's discriminant/formatVersion, the metadata/slides passthrough -- not the OOXML semantics readPptx itself resolves.
 
@@ -68,5 +68,40 @@ describe("readPptxContent", () => {
     expect(
       paragraph?.kind === "paragraph" ? paragraph.runs[0]?.text : undefined,
     ).toBe("Legacy doc text");
+  });
+});
+
+describe("slidePathsInOrder", () => {
+  it("returns an empty array when the package has no ppt/presentation.xml part at all", () => {
+    const pkg = minimalPptxPackage();
+    const rest = Object.fromEntries(
+      Object.entries(pkg.parts).filter(
+        ([path]) => path !== "ppt/presentation.xml",
+      ),
+    );
+    expect(slidePathsInOrder({ ...pkg, parts: rest })).toEqual([]);
+  });
+
+  it("returns an empty array when presentation.xml carries no p:sldIdLst element", () => {
+    const pkg = minimalPptxPackage();
+    expect(
+      slidePathsInOrder({
+        ...pkg,
+        parts: {
+          ...pkg.parts,
+          "ppt/presentation.xml": {
+            kind: "xml",
+            nodes: [
+              {
+                type: "element",
+                tag: "p:presentation",
+                attributes: [],
+                children: [],
+              },
+            ],
+          },
+        },
+      }),
+    ).toEqual([]);
   });
 });
