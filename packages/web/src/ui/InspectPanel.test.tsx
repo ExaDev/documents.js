@@ -76,13 +76,17 @@ describe("InspectPanel", () => {
   });
 
   it("renders a pdf-backed result's plural page count, item-kind table, and structure tree", () => {
-    const html = renderPanel({ data: pdfResult({ pageCount: 2 }) });
-    expect(html).toContain("2");
-    expect(html).toContain("pages");
-    expect(html).toContain("text");
-    expect(html).toContain("3");
-    expect(html).toContain("image");
-    expect(html).toContain("1");
+    const mounted = mountWithMantine(
+      <InspectPanel data={pdfResult({ pageCount: 2 })} />,
+    );
+    unmount = mounted.unmount;
+    // Checked precisely against the pageCount text itself -- the structure tree below separately renders a "pages [0]" node from layout.pages, a coincidental match a bare toContain("pages") can't tell apart from the pluralised count.
+    expect(mounted.container.innerHTML).toContain(">2</strong> pages<");
+    // Checked as actual table rows, not loose substring search -- the structure tree below separately renders "images"/"pages [0]"/formatVersion's own "1", which coincidentally contain "image"/"1" regardless of whether the item-kind table itself renders anything at all.
+    const rows = mounted.container.querySelectorAll("tbody tr");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.textContent).toBe("text3");
+    expect(rows[1]?.textContent).toBe("image1");
   });
 
   it("renders a pdf-backed result's page count as singular for exactly one page", () => {
