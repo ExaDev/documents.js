@@ -2978,6 +2978,7 @@ describe("link and image titles (the `link` construct annotation)", () => {
     expect(beyondRuns).toBeInstanceOf(MarkdownInvalidRunConstructExtentError);
     const beyondRunsTyped =
       beyondRuns as MarkdownInvalidRunConstructExtentError;
+    expect(beyondRunsTyped.name).toBe("MarkdownInvalidRunConstructExtentError");
     expect(beyondRunsTyped.faultKind).toBe("beyondRuns");
     expect(beyondRunsTyped.entryIndex).toBe(0);
     expect(beyondRunsTyped.code).toBe("md/run-construct-extent-invalid");
