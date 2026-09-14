@@ -33,7 +33,6 @@ import type { XmlElement, XmlNode } from "./xml/node";
 import { parseXml } from "./xml/parse";
 import { packageFromEntries } from "./package-io/read";
 import { serializePackage } from "./package-io/write";
-import type { ZipEntry } from "./zip";
 
 // The public write entry points: writeEpubContent (the primary API -- a flat ContentDocument in, a minimal valid EPUB 3 out) and writeEpub (flattenTree composed on top, for a caller holding a DocumentTree instead -- matching markdown-codec's own dual-level API and readEpub's own tree/flat pairing in src/read.ts). Only EPUB 3 is ever written (ExaDev/documents.js#801's own explicit scope: EPUB 2 is read-only), and only a 'wordprocessing' document -- EPUB has no presentation/spreadsheet/drawing/formula analogue.
 
@@ -157,8 +156,12 @@ export function writeEpubContent(
 
   const anchorSectionIndex = buildAnchorSectionIndex(document.sections);
 
-  const sectionXhtml: { body: XmlElement; residueXml: string | undefined }[] =
-    [];
+  // Carries the source ContentSection alongside its own written body/residue, not just the index: sectionXhtml is built in the same order and from the same array as document.sections, so a later re-lookup by index (document.sections[index]) would always be defined by construction anyway -- storing the reference directly here says so, rather than leaving a caller to re-derive (or defensively re-check) a fact already known at this point.
+  const sectionXhtml: {
+    section: ContentSection;
+    body: XmlElement;
+    residueXml: string | undefined;
+  }[] = [];
   document.sections.forEach((section: ContentSection, index) => {
     const sourceHref = sectionXhtmlPath(index);
     try {
@@ -171,7 +174,7 @@ export function writeEpubContent(
       // A same-format (EPUB-to-EPUB) restorable-fidelity re-emission of this package's own CSS residue (src/xhtml/read.ts's own STYLE_RESIDUE quarantine): the raw <link rel="stylesheet">/<style> elements this section's own source XHTML carried, re-parsed and spliced back into the written <head> verbatim, never interpreted -- matching this whole family's residue-channel contract (document-schema.js's own "a same-format writer may re-emit its own residue verbatim").
       const residueXml =
         section.source?.format === "epub" ? section.source.xml : undefined;
-      sectionXhtml.push({ body, residueXml });
+      sectionXhtml.push({ section, body, residueXml });
     } catch (error) {
       if (error instanceof ConstructMarkerImbalanceError) {
         throw new EpubUnbalancedConstructMarkersError(
@@ -220,50 +223,26 @@ export function writeEpubContent(
     identifier: `urn:uuid:${crypto.randomUUID()}`,
   });
 
-  const entries: [string, ZipEntry][] = [
-    [
-      OCF_MIMETYPE_PATH,
-      {
-        bytes: new TextEncoder().encode(EPUB_MIME_TYPE),
-        stored: true,
-      },
-    ],
-    [
-      OCF_CONTAINER_PATH,
-      {
-        bytes: new TextEncoder().encode(writeContainerXml(OPF_PATH)),
-      },
-    ],
-    [OPF_PATH, { bytes: new TextEncoder().encode(opfXml) }],
-    [
-      NAV_PATH,
-      {
-        bytes: new TextEncoder().encode(writeNav3Document(navEntries)),
-      },
-    ],
+  // Plain [path, bytes] pairs, not ZipEntry: this array's only consumer is the entryBytes loop directly below, which reads nothing but .bytes -- packageFromEntries/serializePackage (ExaDev/documents.js#963's own Package model) own the actual OCF mimetype-first/stored-uncompressed byte layout now (see serializePackage's own hoist), so a per-entry "stored" flag has no reader left on this path.
+  const entries: [string, Uint8Array<ArrayBuffer>][] = [
+    [OCF_MIMETYPE_PATH, new TextEncoder().encode(EPUB_MIME_TYPE)],
+    [OCF_CONTAINER_PATH, new TextEncoder().encode(writeContainerXml(OPF_PATH))],
+    [OPF_PATH, new TextEncoder().encode(opfXml)],
+    [NAV_PATH, new TextEncoder().encode(writeNav3Document(navEntries))],
   ];
-  sectionXhtml.forEach(({ body, residueXml }, index) => {
-    const section = document.sections[index];
-    const head = buildHead(
-      section === undefined
-        ? `Section ${String(index + 1)}`
-        : sectionTitle(section, index),
-      residueXml,
-    );
+  sectionXhtml.forEach(({ section, body, residueXml }, index) => {
+    const head = buildHead(sectionTitle(section, index), residueXml);
     const xml = `${XHTML_DOCTYPE}${buildXml([head, body])}</html>`;
-    entries.push([
-      sectionXhtmlPath(index),
-      { bytes: new TextEncoder().encode(xml) },
-    ]);
+    entries.push([sectionXhtmlPath(index), new TextEncoder().encode(xml)]);
   });
   for (const image of registeredImages) {
-    entries.push([`${OPF_DIR}/${image.href}`, { bytes: image.bytes }]);
+    entries.push([`${OPF_DIR}/${image.href}`, image.bytes]);
   }
 
   // The lossless byte-level Package model (ExaDev/documents.js#963) is this function's own last step, not a separate entry point a caller must reach for themselves: writeEpubContent stays this package's one-shot ContentDocument-in/bytes-out convenience, but internally it now crosses the identical encodePackage boundary a caller reaching for decodePackage/encodePackage directly would. packageFromEntries classifies each entry exactly as parsePackage's own read-side classification would (an XML entry parsed into nodes, a binary entry kept as base64), which serializePackage then re-derives back to these same bytes -- a real round trip through the Package model, not a bypass of it, even though this writer (matching ooxml.js's own buildDocxPackageFromContent precedent: "each writer builds a fresh package rather than touching the decoded one") always builds a brand-new package rather than reusing one read.ts might have decoded.
   const entryBytes: Record<string, Uint8Array<ArrayBuffer>> = {};
-  for (const [path, entry] of entries) {
-    entryBytes[path] = entry.bytes;
+  for (const [path, bytes] of entries) {
+    entryBytes[path] = bytes;
   }
   return serializePackage(packageFromEntries(entryBytes));
 }
