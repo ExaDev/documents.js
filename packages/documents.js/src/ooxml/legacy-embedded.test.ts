@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import * as docCodec from "doc-codec";
 import { writeDocContent } from "doc-codec";
 import { writeXlsContent } from "xls-codec";
 import { writePptContent } from "ppt-codec";
@@ -93,5 +94,13 @@ describe("decodeLegacyEmbeddedObject", () => {
     expect(
       decodeLegacyEmbeddedObject(new TextEncoder().encode("not a CFB file")),
     ).toBeUndefined();
+  });
+
+  it("never invokes a legacy reader at all for bytes that carry no compound-file signature", () => {
+    // Every legacy reader would itself reject non-CFB bytes too (its own first step is archive-codec's readCompoundFile), so the outcome alone can't distinguish the isCompoundFile guard existing from it being skipped -- this spies on readDocContent to prove the guard actually short-circuits before any reader is ever called, rather than merely happening to produce the same undefined result by falling through all three try/catch blocks.
+    const spy = vi.spyOn(docCodec, "readDocContent");
+    decodeLegacyEmbeddedObject(new TextEncoder().encode("not a CFB file"));
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 });
