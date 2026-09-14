@@ -52,25 +52,18 @@ export function localFileHeaderNames(bytes: Uint8Array): string[] {
 /**
  * Asserts the exact byte layout EPUB 3.3 section 6.3 pins for a package's first entry: a "mimetype" part, stored uncompressed with a zero-length extra field, containing exactly "application/epub+zip", so a reader can identify the container as an EPUB from fixed byte offsets alone, without parsing the zip central directory first.
  */
+// No per-assertion description string is passed to any expect() call below: vitest's second `expect` argument only ever labels a failure message and is never itself part of the pass/fail decision, so a caller can observe no difference between any two description strings -- the assertions' own values (the signature bytes, 8, 0, "mimetype", mediaType) are what a malformed layout is actually caught by.
 export function assertMimetypeEntryLayout(
   bytes: Uint8Array,
   mediaType: string,
 ): void {
   const decoder = new TextDecoder();
-  expect(
-    Array.from(bytes.subarray(0, 4)),
-    'local file header signature "PK\\x03\\x04"',
-  ).toEqual([0x50, 0x4b, 0x03, 0x04]);
-  expect(readUint16LE(bytes, 8), "compression method (0 = stored)").toBe(0);
-  expect(readUint16LE(bytes, 26), 'filename length ("mimetype".length)').toBe(
-    8,
+  expect(Array.from(bytes.subarray(0, 4))).toEqual([0x50, 0x4b, 0x03, 0x04]);
+  expect(readUint16LE(bytes, 8)).toBe(0);
+  expect(readUint16LE(bytes, 26)).toBe(8);
+  expect(readUint16LE(bytes, 28)).toBe(0);
+  expect(decoder.decode(bytes.subarray(30, 38))).toBe("mimetype");
+  expect(decoder.decode(bytes.subarray(38, 38 + mediaType.length))).toBe(
+    mediaType,
   );
-  expect(readUint16LE(bytes, 28), "extra field length").toBe(0);
-  expect(decoder.decode(bytes.subarray(30, 38)), "filename bytes").toBe(
-    "mimetype",
-  );
-  expect(
-    decoder.decode(bytes.subarray(38, 38 + mediaType.length)),
-    "mimetype content bytes",
-  ).toBe(mediaType);
 }
