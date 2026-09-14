@@ -960,7 +960,7 @@ describe("canonicalOdfConstructDescriptor", () => {
   it("passes a non-index contentControl through unchanged", () => {
     const descriptor: ConstructDescriptor = {
       kind: "contentControl",
-      controlType: "sdt",
+      controlType: "richText",
     };
     expect(canonicalOdfConstructDescriptor(descriptor)).toEqual(descriptor);
   });
