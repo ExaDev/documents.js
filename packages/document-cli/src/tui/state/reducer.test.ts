@@ -316,6 +316,133 @@ describe("appReducer document lifecycle", () => {
   });
 });
 
+describe("appReducer SAVE_SUCCESS", () => {
+  it("says so when there is no open document to record the path against", () => {
+    const result = appReducer(createInitialState(), {
+      type: "SAVE_SUCCESS",
+      path: "/tmp/orphan.docx",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+
+  // documentWithPath's own read-only-preview branches (xlsx/csv/svg/rtf) are otherwise never reached by any other action -- SAVE_AS on one of these formats is the only path that dispatches SAVE_SUCCESS against them, so this proves the layout/bytes pair survives the rewrite untouched alongside the new path.
+  it("updates a read-only preview document's own path while keeping its layout and bytes untouched", () => {
+    const bytes = xlsxTestBytes();
+    const layout = readPdf(xlsxToPdf(bytes));
+    const cases: readonly ["xlsx" | "csv" | "svg" | "rtf", string][] = [
+      ["xlsx", "/tmp/renamed.xlsx"],
+      ["csv", "/tmp/renamed.csv"],
+      ["svg", "/tmp/renamed.svg"],
+      ["rtf", "/tmp/renamed.rtf"],
+    ];
+    for (const [format, newPath] of cases) {
+      const opened = appReducer(createInitialState(), {
+        type: "OPEN_FILE_SUCCESS",
+        path: "/tmp/original",
+        doc: { format, layout, bytes, path: "/tmp/original" },
+      });
+      const saved = appReducer(opened, {
+        type: "SAVE_SUCCESS",
+        path: newPath,
+      });
+      const doc = saved.openDocument;
+      if (doc?.format !== format) {
+        throw new Error(`expected a ${format} document, got ${doc?.format}`);
+      }
+      expect(doc.path).toBe(newPath);
+      expect(doc.layout).toBe(layout);
+      expect(doc.bytes).toBe(bytes);
+      expect(saved.hasUnsavedChanges).toBe(false);
+    }
+  });
+});
+
+describe("appReducer OPEN_OVERLAY / CLOSE_OVERLAY", () => {
+  it("opens and closes the confirmClose overlay without touching any other overlay", () => {
+    const opened = appReducer(createInitialState(), {
+      type: "OPEN_OVERLAY",
+      overlay: "confirmClose",
+    });
+    expect(opened.overlays.confirmClose).toBe(true);
+    expect(opened.overlays.confirmQuit).toBe(false);
+
+    const closed = appReducer(opened, {
+      type: "CLOSE_OVERLAY",
+      overlay: "confirmClose",
+    });
+    expect(closed.overlays.confirmClose).toBe(false);
+  });
+});
+
+describe("appReducer REQUEST_CLOSE / CONFIRM_CLOSE / CANCEL_CLOSE", () => {
+  it("says so when there is no open document to close", () => {
+    const result = appReducer(createInitialState(), { type: "REQUEST_CLOSE" });
+    expect(result.status?.severity).toBe("info");
+  });
+
+  it("closes immediately, with no confirmation overlay, when there are no unsaved changes", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const requested = appReducer(created, { type: "REQUEST_CLOSE" });
+    expect(requested.openDocument).toBeUndefined();
+    expect(requested.overlays.confirmClose).toBe(false);
+  });
+
+  it("opens the confirmClose overlay instead of closing outright when there are unsaved changes", () => {
+    const edited = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      {
+        type: "APPEND_PARAGRAPH",
+        text: "x",
+        styleId: undefined,
+        alignment: undefined,
+      },
+    ]);
+    const requested = appReducer(edited, { type: "REQUEST_CLOSE" });
+    expect(requested.overlays.confirmClose).toBe(true);
+    expect(requested.openDocument).toBeDefined();
+  });
+
+  it("CONFIRM_CLOSE closes the document and its own confirmation overlay together", () => {
+    const edited = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      {
+        type: "APPEND_PARAGRAPH",
+        text: "x",
+        styleId: undefined,
+        alignment: undefined,
+      },
+      { type: "REQUEST_CLOSE" },
+    ]);
+    expect(edited.overlays.confirmClose).toBe(true);
+
+    const confirmed = appReducer(edited, { type: "CONFIRM_CLOSE" });
+    expect(confirmed.openDocument).toBeUndefined();
+    expect(confirmed.overlays.confirmClose).toBe(false);
+  });
+
+  it("CANCEL_CLOSE dismisses the overlay and keeps the document open with its edits intact", () => {
+    const edited = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      {
+        type: "APPEND_PARAGRAPH",
+        text: "x",
+        styleId: undefined,
+        alignment: undefined,
+      },
+      { type: "REQUEST_CLOSE" },
+    ]);
+
+    const cancelled = appReducer(edited, { type: "CANCEL_CLOSE" });
+    expect(cancelled.overlays.confirmClose).toBe(false);
+    expect(cancelled.openDocument).toBe(edited.openDocument);
+    expect(cancelled.hasUnsavedChanges).toBe(true);
+  });
+});
+
 describe("appReducer SET_METADATA", () => {
   it("patches a real docx document's metadata through the live editor.metadata setter", () => {
     const created = appReducer(createInitialState(), {
@@ -1422,6 +1549,36 @@ describe("appReducer undo", () => {
     expect(undone.status?.severity).toBe("info");
     expect(undone.openDocument).toBe(created.openDocument);
   });
+
+  it("caps the undo stack at 20 snapshots, dropping the oldest ones first", () => {
+    let state = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    for (let i = 0; i < 25; i++) {
+      state = appReducer(state, {
+        type: "APPEND_PARAGRAPH",
+        text: `p${i}`,
+        styleId: undefined,
+        alignment: undefined,
+      });
+    }
+    expect(state.undoStack).toHaveLength(20);
+
+    // Undoing 20 times empties the capped stack exactly -- proving the retained entries are the 20 MOST RECENT snapshots (the tail), not an arbitrary 20, since undoing keeps peeling paragraphs off the end down to a stable, non-empty prefix rather than running out early or restoring past the true starting point.
+    for (let i = 0; i < 20; i++) {
+      state = appReducer(state, { type: "UNDO" });
+    }
+    expect(state.undoStack).toHaveLength(0);
+    expect(docxDocument(state).editor.paragraphs()).toHaveLength(
+      docxDocument(
+        appReducer(createInitialState(), {
+          type: "CREATE_DOCUMENT",
+          format: "docx",
+        }),
+      ).editor.paragraphs().length + 5,
+    );
+  });
 });
 
 describe("appReducer ADD_SLIDE_TABLE", () => {
@@ -1658,6 +1815,67 @@ describe("appReducer MERGE_SLIDE_TABLE_CELLS", () => {
     });
     expect(result.status?.severity).toBe("warning");
     expect(result.status?.text).toContain("pptx or odp");
+  });
+
+  it("rejects a non-integer or non-positive rowSpan/colSpan instead of merging anything", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withTable = appReducer(opened, {
+      type: "ADD_SLIDE_TABLE",
+      slideIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+      rows: 3,
+      columns: 3,
+    });
+
+    const cases: readonly [number, number][] = [
+      [0, 1], // rowSpan below 1
+      [1, 0], // colSpan below 1
+      [1.5, 1], // rowSpan not an integer
+      [1, 1.5], // colSpan not an integer
+    ];
+    for (const [rowSpan, colSpan] of cases) {
+      const result = appReducer(withTable, {
+        type: "MERGE_SLIDE_TABLE_CELLS",
+        slideIndex: 0,
+        tableIndex: 0,
+        startRow: 0,
+        startColumn: 0,
+        rowSpan,
+        colSpan,
+      });
+      expect(result.status?.severity).toBe("warning");
+      expect(result.status?.text).toContain("positive integers");
+      // Rejected outright, before any cell was ever touched -- the same open document object survives untouched, not a partially-applied merge.
+      expect(result.openDocument).toBe(withTable.openDocument);
+    }
+  });
+
+  it("rejects a colSpan that overruns the table's own column count", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withTable = appReducer(opened, {
+      type: "ADD_SLIDE_TABLE",
+      slideIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+      rows: 2,
+      columns: 2,
+    });
+
+    const result = appReducer(withTable, {
+      type: "MERGE_SLIDE_TABLE_CELLS",
+      slideIndex: 0,
+      tableIndex: 0,
+      startRow: 0,
+      startColumn: 0,
+      rowSpan: 1,
+      colSpan: 3,
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toContain("exceeds this table's own 2 columns");
+    expect(result.openDocument).toBe(withTable.openDocument);
   });
 });
 
