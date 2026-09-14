@@ -7,6 +7,13 @@
 // The widest read in either filter is the 9-7's own scaling step, whose loop (F-9) runs two lifting indices -- four samples -- past each end of the signal. Six samples of symmetric extension covers that with room to spare, and covers the 5-3's narrower reach as well.
 const EXTENSION_MARGIN = 6;
 
+// Calls `fn` once per row index 0..count - 1. Exported for direct unit testing: HOR_SR's own row loop below writes each row at `row * width`, which for row === height lands exactly on output's own one-past-the-end index -- silently absorbed by TypedArray semantics (an out-of-bounds write is a no-op, an out-of-bounds read is undefined) regardless of what that row's own reconstruction would have computed, so a wrong loop bound there is unobservable through inverseDwt53Level/97Level's own returned array. Only counting and recording calls directly, on this extracted primitive, can catch it.
+export function times(count: number, fn: (index: number) => void): void {
+  for (let index = 0; index < count; index++) {
+    fn(index);
+  }
+}
+
 export interface Jpeg2000ResolutionBounds {
   readonly u0: number;
   readonly u1: number;
@@ -250,7 +257,7 @@ export function inverseDwt53Level(
     output[(v - v0) * width + (u - u0)] = value;
   });
   // HOR_SR (F.3.5) then VER_SR (F.3.6), in that order -- with integer lifting the two are not commutative.
-  for (let v = 0; v < height; v++) {
+  times(height, (v) => {
     const rowStart = v * width;
     synthesiseLine(
       (index) => output[rowStart + index - u0] ?? 0,
@@ -268,7 +275,7 @@ export function inverseDwt53Level(
       },
       (value) => value >> 1,
     );
-  }
+  });
   for (let u = 0; u < width; u++) {
     synthesiseLine(
       (index) => output[(index - v0) * width + u] ?? 0,
@@ -306,7 +313,7 @@ export function inverseDwt97Level(
   interleave(interleaveSource(bands, bounds), bounds, (u, v, value) => {
     output[(v - v0) * width + (u - u0)] = value;
   });
-  for (let v = 0; v < height; v++) {
+  times(height, (v) => {
     const rowStart = v * width;
     synthesiseLine(
       (index) => output[rowStart + index - u0] ?? 0,
@@ -324,7 +331,7 @@ export function inverseDwt97Level(
       },
       (value) => value / 2,
     );
-  }
+  });
   for (let u = 0; u < width; u++) {
     synthesiseLine(
       (index) => output[(index - v0) * width + u] ?? 0,
