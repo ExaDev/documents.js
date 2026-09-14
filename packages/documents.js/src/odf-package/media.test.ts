@@ -7,7 +7,7 @@ import {
   setDocumentMediaType,
 } from "odf.js";
 import { describe, expect, it } from "vitest";
-import { addImageMedia } from "./media";
+import { addImageMedia, nextPictureIndex } from "./media";
 
 const ODT_MEDIA_TYPE = "application/vnd.oasis.opendocument.text";
 const PNG_BYTES: Uint8Array<ArrayBuffer> = new Uint8Array([
@@ -93,5 +93,28 @@ describe("addImageMedia", () => {
     expect(() => addImageMedia(pkg, PNG_BYTES, "png")).toThrow(
       /documentMediaType/,
     );
+  });
+});
+
+describe("nextPictureIndex", () => {
+  it("ignores a same-named file outside Pictures/", () => {
+    const pkg: Package = {
+      parts: { "Other/image9.png": { kind: "binary", base64: "" } },
+    };
+    expect(nextPictureIndex(pkg, "png")).toBe(1);
+  });
+
+  it("continues from a pre-existing higher index rather than starting from 1", () => {
+    const pkg: Package = {
+      parts: { "Pictures/image5.png": { kind: "binary", base64: "" } },
+    };
+    expect(nextPictureIndex(pkg, "png")).toBe(6);
+  });
+
+  it("does not let an extension containing a regex-special character match unrelated files", () => {
+    const pkg: Package = {
+      parts: { "Pictures/image1.pXg": { kind: "binary", base64: "" } },
+    };
+    expect(nextPictureIndex(pkg, "p.g")).toBe(1);
   });
 });
