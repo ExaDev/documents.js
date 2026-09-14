@@ -292,6 +292,107 @@ describe("renderPdfPage: geometry and clipPt", () => {
     ).toThrow(/page index 7/);
   });
 
+  it("rejects a page index at exactly the page count (the first invalid index, not just far out of range), naming the count singular for one page", () => {
+    expect(() =>
+      renderPdfPage(onePagePdf(content), 1, {}, new RecordingRasteriser()),
+    ).toThrow(
+      /page index 1 is outside this document's page tree \(it declares 1 page\)$/,
+    );
+  });
+
+  it("rejects a negative page index", () => {
+    expect(() =>
+      renderPdfPage(onePagePdf(content), -1, {}, new RecordingRasteriser()),
+    ).toThrow(/page index -1/);
+  });
+
+  it("names the page count plural for a multi-page document", () => {
+    expect(() =>
+      renderPdfPage(
+        twoPagesFirstWithoutResourcesPdf(),
+        5,
+        {},
+        new RecordingRasteriser(),
+      ),
+    ).toThrow(/it declares 2 pages\)$/);
+  });
+
+  it("falls back to /MediaBox and emits a diagnostic when /CropBox is degenerate", () => {
+    const diagnostics: PdfDiagnostic[] = [];
+    const rasteriser = new RecordingRasteriser();
+    drive(
+      onePagePdf(content, { pageEntries: "/CropBox [0 0 0 100] " }),
+      0,
+      { sink: (d) => diagnostics.push(d) },
+      rasteriser,
+    );
+    expect(rasteriser.geometry).toMatchObject({ widthPx: 200, heightPx: 100 });
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "pdf/invalid-crop-box",
+        severity: "warning",
+      }),
+    );
+  });
+
+  it("computes page extent correctly for a MediaBox whose origin is not (0, 0)", () => {
+    const b = new SmallFixture();
+    b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    b.object(
+      3,
+      "<< /Type /Page /Parent 2 0 R /MediaBox [50 50 250 150] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    );
+    b.object(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+    b.stream(5, "<< >>", enc(content));
+    const bytes = b.classicXrefAndTrailer(5, "/Root 1 0 R");
+    const rasteriser = new RecordingRasteriser();
+    drive(bytes, 0, {}, rasteriser);
+    // width = urx - llx = 200, height = ury - lly = 100 -- urx + llx (300) or ury + lly (200) would both be wrong here precisely because the origin is non-zero.
+    expect(rasteriser.geometry).toMatchObject({ widthPx: 200, heightPx: 100 });
+  });
+
+  it("reports a zero-height intersection distinctly from a zero-width one, with the exact requested and page ranges in the message", () => {
+    const bytes = onePagePdf(content);
+    expect(() =>
+      drive(
+        bytes,
+        0,
+        { clipPt: { xPt: 10, yPt: 200, widthPt: 30, heightPt: 40 } },
+        new RecordingRasteriser(),
+      ),
+    ).toThrow(
+      "renderPdfPage clipPt does not intersect the page's visible region (clip x 10..40, y 200..240; page 0..200 x 0..100)",
+    );
+  });
+
+  it("intersects the requested clip with the page's own extent when the clip partially overhangs it, rather than rejecting it", () => {
+    const rasteriser = new RecordingRasteriser();
+    drive(
+      onePagePdf(content),
+      0,
+      { clipPt: { xPt: 10, yPt: 20, widthPt: 300, heightPt: 40 }, scale: 2 },
+      rasteriser,
+    );
+    // Requested width 300 clamped to the page's own 200pt right edge: a visible region of 190pt wide (200 - 10), at 2x scale.
+    expect(rasteriser.geometry).toMatchObject({ widthPx: 380, heightPx: 80 });
+    // The rect at page point (10, 20) sits at device x = (10 - clipLeft(10)) * 2 = 0.
+    expect(rasteriser.ops.find(isFillRect)).toMatchObject({ xPx: 0 });
+  });
+
+  it("names its own diagnostic code for a missing /Resources dict, not just the message text", () => {
+    const diagnostics: PdfDiagnostic[] = [];
+    drive(
+      twoPagesFirstWithoutResourcesPdf(),
+      0,
+      { sink: (d) => diagnostics.push(d) },
+      new RecordingRasteriser(),
+    );
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({ code: "pdf/object-missing-value" }),
+    );
+  });
+
   it("returns whatever the rasteriser's finish produces", () => {
     const rasteriser = new RecordingRasteriser();
     const result = renderPdfPage(onePagePdf(content), 0, {}, rasteriser);
@@ -822,6 +923,41 @@ describe("renderPdfPage: optional-content visibility", () => {
   it("does not draw content in a layer the default configuration leaves OFF", () => {
     const rasteriser = new RecordingRasteriser();
     drive(ocRectPdf(), 0, {}, rasteriser);
+    const fills = rasteriser.ops.filter(isFillRect);
+    expect(fills).toEqual([
+      {
+        kind: "fillRect",
+        xPx: 60,
+        yPx: 70,
+        widthPx: 30,
+        heightPx: 20,
+        color: { r: 0, g: 0, b: 0 },
+      },
+    ]);
+  });
+
+  it("still draws content in a NAMED layer the default configuration leaves ON, alongside one it leaves OFF", () => {
+    // Two named layers this time -- L1 (OFF) and L2 (ON, not listed in /OFF at all) -- so hiding every layer indiscriminately (rather than only the ones the default configuration actually turns off) would be indistinguishable from correct behaviour in the single-layer fixture above.
+    const b = new SmallFixture();
+    b.object(
+      1,
+      "<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [6 0 R 7 0 R] /D << /BaseState /ON /OFF [6 0 R] >> >> >>",
+    );
+    b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    b.object(
+      3,
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Properties << /L1 << /OC 6 0 R >> /L2 << /OC 7 0 R >> >> >> /Contents 5 0 R >>",
+    );
+    b.object(6, "<< /Type /OCG /Name (Watermark) >>");
+    b.object(7, "<< /Type /OCG /Name (Body) >>");
+    b.stream(
+      5,
+      "<< >>",
+      enc("/OC /L1 BDC 10 10 30 20 re f EMC /OC /L2 BDC 60 10 30 20 re f EMC"),
+    );
+    const bytes = b.classicXrefAndTrailer(7, "/Root 1 0 R");
+    const rasteriser = new RecordingRasteriser();
+    drive(bytes, 0, {}, rasteriser);
     const fills = rasteriser.ops.filter(isFillRect);
     expect(fills).toEqual([
       {
