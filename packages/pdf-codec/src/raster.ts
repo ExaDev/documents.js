@@ -1115,16 +1115,26 @@ function drawTextRun(
       glyphScale,
       multiplyMatrices(trm, interpretToDeviceMatrix),
     );
-    const subpaths = glyphOutlineSubpaths(outline, glyphMatrix);
-    if (subpaths.length === 0) {
-      continue;
-    }
-    rasteriser.draw({
-      kind: "path",
-      subpaths,
-      fill: { color: item.color, fillRule: "nonzero" },
-    });
+    drawGlyphOutline(outline, glyphMatrix, item.color, rasteriser);
   }
+}
+
+// One glyph's outline drawn as a single filled path, factored out of the per-glyph loop above solely so raster.test.ts can drive it directly with a hand-built outline: every one of a real vendored face's own glyphs with at least one contour flattens to at least one subpath (glyphOutlineSubpaths' own suite already establishes that a contour under three points contributes none), so the "a non-empty outline still produced no subpaths" branch below has no route to coverage through any real embedded font.
+export function drawGlyphOutline(
+  outline: GlyphOutline,
+  glyphMatrix: Matrix,
+  color: LayoutColor,
+  rasteriser: PageRasteriser,
+): void {
+  const subpaths = glyphOutlineSubpaths(outline, glyphMatrix);
+  if (subpaths.length === 0) {
+    return;
+  }
+  rasteriser.draw({
+    kind: "path",
+    subpaths,
+    fill: { color, fillRule: "nonzero" },
+  });
 }
 
 // TrueType contours to port subpaths: each contour's on/off-curve points walked into line and quadratic segments, each quadratic elevated to the exactly equivalent cubic (control points at 2/3 of the way from the on-curve ends toward the off-curve control -- the standard exact quadratic-to-cubic elevation, no approximation), then every point transformed as a point. A run of consecutive off-curve points implies an on-curve point at each neighbouring pair's midpoint, per the TrueType glyph specification's own contour convention. Exported solely so this suite can drive it directly with hand-built contours: a real embedded font's own glyphs (this module's only other route in) never reliably exercise every branch on demand -- no vendored face happens to start a contour off-curve, or carries a contour with no on-curve point at all, the way a hand-built GlyphOutline can.

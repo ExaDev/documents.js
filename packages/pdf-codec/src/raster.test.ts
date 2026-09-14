@@ -9,7 +9,12 @@ import { parseHmtx } from "./hmtx-table";
 import type { GlyphContourPoint, GlyphOutline } from "./glyf-contours";
 import type { Matrix } from "./matrix";
 import { applyMatrix, BEZIER_KAPPA, IDENTITY_MATRIX } from "./matrix";
-import { flattenCubic, glyphOutlineSubpaths, renderPdfPage } from "./raster";
+import {
+  drawGlyphOutline,
+  flattenCubic,
+  glyphOutlineSubpaths,
+  renderPdfPage,
+} from "./raster";
 import type {
   PageRasteriser,
   RasterDrawOp,
@@ -779,6 +784,19 @@ describe("glyphOutlineSubpaths", () => {
     expect(glyphOutlineSubpaths(exactlyThree, IDENTITY_MATRIX)).toHaveLength(1);
   });
 
+  it("draws nothing for a non-empty outline whose only contour is still too short to produce a subpath", () => {
+    // decodeGlyphOutline's own contract only guarantees a non-empty contours array, not that every contour individually clears the 3-point floor -- the same tooShort shape above, but driven through drawGlyphOutline's own draw-or-skip decision rather than glyphOutlineSubpaths directly.
+    const tooShort = outlineOf([pt(0, 0, true), pt(1, 0, true)]);
+    const rasteriser = new RecordingRasteriser();
+    drawGlyphOutline(
+      tooShort,
+      IDENTITY_MATRIX,
+      { r: 0, g: 0, b: 0 },
+      rasteriser,
+    );
+    expect(rasteriser.ops).toEqual([]);
+  });
+
   it("starts at the implied midpoint of the last and first points for a contour with no on-curve point at all, walking every consecutive off-curve pair through its own midpoint", () => {
     // Three off-curve points, none on-curve: start = midpoint(P2, P0), then each consecutive pair (P0,P1) and (P1,P2) implies its own on-curve midpoint, and the walk closes with a final quad from the last implied point back through P2 to start.
     const outline = outlineOf([
@@ -1031,8 +1049,8 @@ describe("renderPdfPage: vector draw ops", () => {
     });
   });
 
-  it("draws a dotted general path's own line segment as an exact dot train, scaling the dot size by widthPt x scale", () => {
-    // drawPath's own dotted branch has no coverage at all outside this describe block: every other dotted test in this file goes through drawLine's single two-point segment instead. At scale 1, multiplying and dividing widthPt by pixelsPerPt are indistinguishable, so this pins it at scale 3.
+  it("draws a dotted two-point path as an exact dot train, scaling the dot size by widthPt x scale", () => {
+    // A single "m ... l S" open segment is exactly the shape detectLine reduces to an ExtractedLine (interpret.ts), so this actually drives drawLine's own dotted branch, not drawPath's -- drawPath's dotted branch needs a path detectLine won't collapse, which the two-segment test below covers. At scale 1, multiplying and dividing widthPt by pixelsPerPt are indistinguishable, so this pins it at scale 3.
     const rasteriser = new RecordingRasteriser();
     drive(
       onePagePdf("[0 4] 0 d 1 J 2 w 0 0 0 RG 20 20 m 60 20 l S"),
@@ -1052,6 +1070,24 @@ describe("renderPdfPage: vector draw ops", () => {
       color: { r: 0, g: 0, b: 0 },
     });
     expect(squares[squares.length - 1]).toMatchObject({ xPx: 177, yPx: 237 });
+  });
+
+  it("draws a dotted general path's own line segment as a dot train, not only through drawLine's single-segment shape", () => {
+    // Two straight segments in one open subpath: detectLine only ever collapses a subpath of exactly one segment, so this one stays an ExtractedPath and genuinely drives drawPath's own "line" kind branch -- the sibling test above, despite drawing a straight line, never reaches this branch at all.
+    const rasteriser = new RecordingRasteriser();
+    drive(
+      onePagePdf("[0 4] 0 d 1 J 2 w 0 0 0 RG 20 20 m 60 20 l 60 60 l S"),
+      0,
+      {},
+      rasteriser,
+    );
+    const squares = rasteriser.ops.filter(isFillRect);
+    // Two 40pt segments, spacing = max(2 x 2, 1) = 4px: 11 dots each (0, 4, ..., 40), 22 total -- including the shared corner point drawn once by each segment's own end/start.
+    expect(squares).toHaveLength(22);
+    expect(squares[0]).toMatchObject({ xPx: 19, yPx: 79 });
+    expect(squares[10]).toMatchObject({ xPx: 59, yPx: 79 });
+    expect(squares[11]).toMatchObject({ xPx: 59, yPx: 79 });
+    expect(squares[squares.length - 1]).toMatchObject({ xPx: 59, yPx: 39 });
   });
 
   it("draws a dotted general path's own cubic segment as a dot train too, not only its line segments", () => {
