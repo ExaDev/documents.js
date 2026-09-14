@@ -420,6 +420,41 @@ describe("createLocalDocumentConverter: convert", () => {
     );
     expect(result.document.format).toBe("pdf");
     expect(pdfHeader(result.document.bytes)).toBe("%PDF-");
+    // onDocument must actually reach odfToPdf -- this is the pair's own onDocument-forwarding contract (see this file's own top comment on the special-case odf -> pdf route), and the surest proof options genuinely reach the call rather than an empty object.
+    expect(result.package?.kind).toBe("formula");
+  });
+
+  it("pdf: odf source forwards the abort signal to odfToPdf, which checks it before rendering", () => {
+    const converter = createLocalDocumentConverter();
+    const controller = new AbortController();
+    controller.abort();
+    let caught: unknown;
+    try {
+      void converter.convert(
+        {
+          source: { format: "odf", bytes: odfFormulaBytes(FRACTION_FORMULA) },
+          targetFormat: "pdf",
+        },
+        { signal: controller.signal },
+      );
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(DOMException);
+    expect((caught as DOMException).name).toBe("AbortError");
+  });
+
+  // odf's own special-case route only ever applies to a pdf target -- every other odf conversion goes through the ordinary composition pathfinder, which reports odf unsupported as a source for anything but pdf (see composition.ts's own module doc). A source.format === "odf" check alone, without also requiring targetFormat === "pdf", would wrongly route this non-pdf request through odfToPdf and resolve successfully with mislabelled PDF bytes instead of rejecting.
+  it("rejects odf as a source for a non-pdf target, rather than silently routing it through odfToPdf", async () => {
+    const converter = createLocalDocumentConverter();
+    const promise = converter.convert(
+      {
+        source: { format: "odf", bytes: odfFormulaBytes(FRACTION_FORMULA) },
+        targetFormat: "markdown",
+      },
+      { signal: new AbortController().signal },
+    );
+    await expect(promise).rejects.toBeInstanceOf(UnsupportedConversionError);
   });
 
   it("converts xlsx to pdf", async () => {
@@ -666,6 +701,13 @@ describe("createLocalDocumentConverter: convert", () => {
     expect(result.diagnostics.some((d) => d.code === "char/substituted")).toBe(
       true,
     );
+    expect(result.diagnostics).toContainEqual({
+      severity: "info",
+      code: "char/substituted",
+      message:
+        '"中" is not representable in a standard-14 font; substituted "?"',
+      pageIndex: 0,
+    });
   });
 
   it("collects PDF read diagnostics on the pdf->docx path", async () => {
@@ -743,6 +785,30 @@ describe("createLocalDocumentConverter: fonts", () => {
       code: "font/substituted",
       message:
         '"Calibri" is not available; substituted the metric-compatible "carlito"',
+    });
+  });
+
+  it("names the requested weight and style in the substitution message for a bold italic run", async () => {
+    const editor = createDocx();
+    editor.body.appendParagraph().appendRun({
+      text: "Bold italic Calibri",
+      bold: true,
+      italic: true,
+      fontFamily: "Calibri",
+    });
+    const converter = createLocalDocumentConverter();
+    const result = await converter.convert(
+      {
+        source: { format: "docx", bytes: editor.toBytes() },
+        targetFormat: "pdf",
+      },
+      { signal: new AbortController().signal },
+    );
+    expect(result.diagnostics).toContainEqual({
+      severity: "info",
+      code: "font/substituted",
+      message:
+        '"Calibri bold italic" is not available; substituted the metric-compatible "carlito"',
     });
   });
 
