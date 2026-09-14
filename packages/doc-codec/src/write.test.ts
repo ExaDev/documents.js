@@ -16,9 +16,11 @@ import { PropertyBinTable } from "./prop/fkp";
 import { readGrpprl } from "./prop/sprm";
 import { readDocContent, readDocStreams } from "./read";
 import { applyTableSprms, VERT_MERGE_RESTART } from "./table/tap";
+import { MAX_TABLE_ROW_CELLS } from "./table/tap-write";
 import {
   DISTRIBUTE_LOST_BOUNDARIES_FEWER_BUCKETS_MESSAGE,
   EMPTY_COLUMN_BOUNDARY_ARRAY_MESSAGE,
+  exceedsMaxTableRowCells,
   flattenSectionBlocks,
   LOST_BOUNDARIES_FEWER_ROW_BUCKETS_MESSAGE,
 } from "./table/write";
@@ -2094,6 +2096,60 @@ describe("writeDocContent tables", () => {
     expect(definition?.cells[1]?.horzMerge).toBe(0);
   });
 
+  it("writes TCGRF.horzMerge plain 0 on a vertical-merge continuation cell that never needed a lost-boundary split either", () => {
+    // The mirror image of the plain-0 test just above, but for isContinuation's own TRUE branch specifically (flattenRow's own OTHER subSpans.length > 1 site): a mutant collapsing that branch's ternary to always 2, or its >= 1 near-miss, has nothing to disagree with in the earlier "whether or not that cell is also a vertical-merge continuation" test, since the continuation cell asserted on there genuinely IS split. A single-column table can never lose a boundary at all -- there is only ever one physical cell per row, nothing for a boundary to fall between -- so its continuation row's own inherited span is always subSpans.length === 1.
+    const input: readonly ContentBlock[] = [
+      {
+        kind: "table",
+        columnWidthsPt: [80],
+        rows: [
+          {
+            cells: [{ blocks: [paragraph([{ text: "anchor" }])], rowSpan: 2 }],
+          },
+          { cells: [{ blocks: [] }] },
+        ],
+      },
+    ];
+    const paragraphs = flattenSectionBlocks(input, new DataStreamBuilder());
+    // Row 0's single cell paragraph (index 0) then its own row mark (index 1); row 1 (the continuation) follows the identical shape at indices 2-3.
+    const continuationRowMark = paragraphs[3];
+    if (continuationRowMark === undefined) {
+      throw new Error(
+        "expected the continuation row's own row-mark paragraph at index 3",
+      );
+    }
+    const continuationDefinition = applyTableSprms(
+      readGrpprl(new Uint8Array(continuationRowMark.extraGrpprl)),
+      {},
+    ).definition;
+    expect(continuationDefinition?.cells[0]?.horzMerge).toBe(0);
+  });
+
+  it("writes a lost-boundary split's own real content on only the first sub-cell, leaving every later one empty", () => {
+    // logicalCellsForRow (table/read.ts) never surfaces a continuation sub-cell's own blocks regardless (it skips a horzMerge === HORZ_MERGE_CONTINUATION physical cell entirely, so a round-trip test cannot pin this the way flattenTable's own top-of-file note already states), so this is asserted directly against the written WriteParagraph runs rather than through readDocContent. A single-row table leaves both of its wide cell's own internal boundaries lost, splitting it into three physical sub-cells (content, continuation, continuation); a mutant writing the real content on every sub-cell instead of only the first has nothing else in this suite to disagree with it.
+    const input: readonly ContentBlock[] = [
+      {
+        kind: "table",
+        columnWidthsPt: [50, 50, 50, 50],
+        rows: [
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "wide" }])], colSpan: 3 },
+              { blocks: [paragraph([{ text: "narrow" }])] },
+            ],
+          },
+        ],
+      },
+    ];
+    const paragraphs = flattenSectionBlocks(input, new DataStreamBuilder());
+    // The wide cell's own three sub-cells at indices 0-2, then the narrow cell at index 3, then the row's own row mark at index 4.
+    expect(paragraphs[0]?.runs).toEqual([
+      { run: { text: "wide" }, extraGrpprl: [] },
+    ]);
+    expect(paragraphs[1]?.runs).toEqual([]);
+    expect(paragraphs[2]?.runs).toEqual([]);
+  });
+
   it("throws when a row's own cells cover more columns than the table declares", () => {
     const input = document([
       {
@@ -2794,6 +2850,12 @@ describe("writeDocContent's own internal-defect messages", () => {
     expect(LOST_BOUNDARIES_FEWER_ROW_BUCKETS_MESSAGE).toBe(
       "internal defect: distributeLostBoundaries returned fewer buckets than the table has rows",
     );
+  });
+
+  it("treats exactly MAX_TABLE_ROW_CELLS as still fitting, one cell more as exceeding it", () => {
+    // rowSplitFits' own note explains why no real trial from flattenTable's own splitting search ever reaches this ceiling in practice; exercised directly here so the boundary itself (63 fits, 64 does not) stays pinned regardless.
+    expect(exceedsMaxTableRowCells(MAX_TABLE_ROW_CELLS)).toBe(false);
+    expect(exceedsMaxTableRowCells(MAX_TABLE_ROW_CELLS + 1)).toBe(true);
   });
 });
 

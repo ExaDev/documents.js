@@ -352,7 +352,12 @@ function rowMarkParagraph(
   };
 }
 
-// Whether a candidate lost-boundary split -- a subset of a row's own assigned boundaries, tried on a throwaway clone of `active` so a rejected candidate cannot leak its placeCell mutations anywhere -- can actually be written for this row: both the format's own hard ceiling on physical cells per row (MAX_TABLE_ROW_CELLS, [MS-DOC] 2.4.3's "between 1 and 63 table cells") and the row-ending mark's own PapxInFkp byte budget (fitsAloneOnPapxPage). The cell-count check runs first and returns false directly, entirely so this never calls rowMarkExtraGrpprl (and, through it, encodeTableRowGrpprl) with a cell count past that ceiling: that function throws unconditionally there for every OTHER caller, since the row actually committed has a genuine internal defect if it ever produces one, but a split this wide is only ever a spending trial here and must be treated as "doesn't fit" so the caller can keep trimming, not crash (ExaDev/documents.js#992). A split that clears the cell-count check almost always still has to clear the byte budget too -- 63 physical cells alone costs far more than any row-ending mark's own ~487-byte allowance -- so the two checks are cheap-first, not redundant.
+/** Whether a trial cell count already exceeds the format's own hard per-row ceiling (MAX_TABLE_ROW_CELLS, [MS-DOC] 2.4.3's "between 1 and 63 table cells"): exported so its own boundary (63 itself still fits, 64 does not) is directly testable, since no real trial from flattenTable's own splitting search ever reaches this ceiling in the first place -- rowSplitFits' own note explains why -- so nothing in a round-trip test ever observes `>` swapped for `>=` here. */
+export function exceedsMaxTableRowCells(cellCount: number): boolean {
+  return cellCount > MAX_TABLE_ROW_CELLS;
+}
+
+// Whether a candidate lost-boundary split -- a subset of a row's own assigned boundaries, tried on a throwaway clone of `active` so a rejected candidate cannot leak its placeCell mutations anywhere -- can actually be written for this row: both the format's own hard ceiling on physical cells per row (exceedsMaxTableRowCells) and the row-ending mark's own PapxInFkp byte budget (fitsAloneOnPapxPage). The cell-count check runs first and returns false directly, entirely so this never calls rowMarkExtraGrpprl (and, through it, encodeTableRowGrpprl) with a cell count past that ceiling: that function throws unconditionally there for every OTHER caller, since the row actually committed has a genuine internal defect if it ever produces one, but a split this wide is only ever a spending trial here and must be treated as "doesn't fit" so the caller can keep trimming, not crash (ExaDev/documents.js#992). A split that clears the cell-count check almost always still has to clear the byte budget too -- 63 physical cells alone costs far more than any row-ending mark's own ~487-byte allowance -- so the two checks are cheap-first, not redundant. (every physical cell costs a fixed 22 bytes, tap-write.ts's own rgdxaCenter-boundary-plus-TC80 figure, never lower whatever a cell's own decoration is, against fitsAloneOnPapxPage's 487-byte ceiling, so a trial ever reaching the 63-cell ceiling already costs 15 + 22 x 63 = 1401 bytes -- and the smallest cell count the byte budget alone rejects, 23 (15 + 22 x 23 = 521), is already far below 63.)
 function rowSplitFits(
   row: ContentTableRow,
   columnCount: number,
@@ -368,8 +373,7 @@ function rowSplitFits(
     cloneActive(active),
     candidateBoundaries,
   );
-  // The exact comparator here (> versus >=) can never affect the boolean this function returns for any real trial: every physical cell costs a fixed 22 bytes (tap-write.ts's own rgdxaCenter-boundary-plus-TC80 figure, never lower whatever a cell's own decoration is) against fitsAloneOnPapxPage's 487-byte ceiling, so a trial ever reaching MAX_TABLE_ROW_CELLS (63) cells already costs 15 + 22 x 63 = 1401 bytes -- and the smallest cell count the byte budget alone rejects, 23 (15 + 22 x 23 = 521), is already far below 63. This check exists purely so a trial this wide is never handed to rowMarkExtraGrpprl (and, through it, encodeTableRowGrpprl's own unconditional throw above this same ceiling) at all, not because whether it fires at exactly 63 or 62 could ever change which trials this function calls "fits": the byte-budget check a few lines below already answers false for every one of them regardless.
-  if (trial.cellsToWrite.length > MAX_TABLE_ROW_CELLS) return false;
+  if (exceedsMaxTableRowCells(trial.cellsToWrite.length)) return false;
   const trialGrpprl = rowMarkExtraGrpprl(
     trial.rowBoundariesTwips,
     trial.cellsToWrite,
