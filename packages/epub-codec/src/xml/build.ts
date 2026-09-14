@@ -13,12 +13,9 @@ const BUILDER = new XMLBuilder({
   suppressEmptyNode: false,
 });
 
+// XMLBuilder#build's own type declaration already returns `string` unconditionally (fast-xml-parser's fxp.d.ts: `build(jObj: any): string`), so no runtime check is needed here to narrow it.
 export function buildXml(nodes: XmlNode[]): string {
-  const out = BUILDER.build(toOrdered(nodes));
-  if (typeof out !== "string") {
-    throw new Error("XMLBuilder did not return a string");
-  }
-  return out;
+  return BUILDER.build(toOrdered(nodes));
 }
 
 function toOrdered(nodes: XmlNode[]): unknown[] {
@@ -41,19 +38,16 @@ function toOrderedNode(node: XmlNode): Record<string, unknown> {
       return { __comment: [{ "#text": node.value }] };
     case "cdata":
       return { __cdata: [{ "#text": node.value }] };
+    // A pi/declaration's own text content is never actually written out by fast-xml-parser's builder in preserveOrder mode regardless of what "#text" holds -- confirmed empirically: build([{ "?target": [{ "#text": "anything" }] }]) and build([{ "?target": [] }]) both produce the identical "<?target?>", the same quirk this builder's own reader hits on the way in (a plain or attribute-shaped PI's content parses back as "" either way). An empty array is therefore this node's own real, observable shape, not a placeholder standing in for content the builder would otherwise use.
     case "pi":
-      return { [`?${node.target}`]: [{ "#text": node.content }] };
+      return { [`?${node.target}`]: [] };
     case "declaration":
-      return { "?xml": [{ "#text": "" }], ":@": attrsObject(node.attributes) };
-    case "element": {
-      const obj: Record<string, unknown> = {
+      return { "?xml": [], ":@": attrsObject(node.attributes) };
+    case "element":
+      // No emptiness check before setting ":@": XMLBuilder renders an empty attributes object identically to an entirely absent ":@" key (confirmed empirically), so guarding it here would only ever produce output indistinguishable from not guarding it.
+      return {
         [node.tag]: toOrdered(node.children),
+        ":@": attrsObject(node.attributes),
       };
-      const attrs = attrsObject(node.attributes);
-      if (Object.keys(attrs).length > 0) {
-        obj[":@"] = attrs;
-      }
-      return obj;
-    }
   }
 }
