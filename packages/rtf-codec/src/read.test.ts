@@ -489,6 +489,14 @@ describe("lists", () => {
     expect(paragraph?.list?.level).toBe(2);
   });
 
+  it("falls back to the list's own level 0 when \\ilvlN names a depth the \\listsimple table never defined", () => {
+    // LIST_TABLES's own list 101 (bound to \ls1) is \listsimple, carrying exactly one \listlevel at index 0 -- \ilvl2 names a depth with no definition of its own, so the level's numberFormat (bullet, here) must be read from level 0's definition rather than from an undefined level.
+    const paragraph = paragraphsOf(
+      `${HEADER}${LIST_TABLES}\\pard\\ls1\\ilvl2 Deep item\\par}`,
+    )[0];
+    expect(paragraph?.list?.numId).toBe("rtf1:bullet");
+  });
+
   it("carries a \\lfolevel start-at override through to the paragraph's own numId", () => {
     // The same \list102 both overrides name, restarted at 5 by \ls3's own \lfolevel while \ls2 leaves it at 1 -- so the override table, not the list table, is what tells the two apart.
     const tables =
@@ -2543,6 +2551,24 @@ describe("unicode fallback skip", () => {
     expect(text).not.toContain("abc");
     expect(text).toContain("real");
   });
+
+  it("counts a two-byte text run as fully consumed only once its own last byte is reached, then genuinely skips the control word right after it", () => {
+    // \uc3 with a two-byte fallback ("ab", its own complete token) plus \i (a control word, "considered a single character" per the spec) makes exactly 3 -- the skip must fully exhaust "ab" AND advance past \i, so \i's own formatting effect never reaches "real". A reader that stopped one byte short of "ab" (leaving its own token index unmoved) would leave \i unskipped, letting it toggle italics on for real.
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\uc3\\u9731 ab\\i real\\par}`)[0]?.runs ??
+      [];
+    const text = runs.map((run) => run.text).join("");
+    expect(text).toBe("☃real");
+    expect(runs.some((run) => run.italic === true)).toBe(false);
+  });
+
+  it("leaves a text token's own trailing bytes visible when the fallback count is smaller than the whole token", () => {
+    // \uc2 skips only the first two bytes of the SEVEN-byte token "abcreal" -- the reader must resume from that exact byte offset within the SAME token, not skip the whole token or stop reading it altogether.
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\uc2\\u9731 abcreal\\par}`)[0]?.runs ?? [];
+    const text = runs.map((run) => run.text).join("");
+    expect(text).toBe("☃creal");
+  });
 });
 
 describe("block-scoped construct extent ordering", () => {
@@ -2685,6 +2711,22 @@ describe("bookmark bookkeeping", () => {
     const [firstExtent, secondExtent] = paragraph?.constructs ?? [];
     expect(firstExtent?.startRun).not.toBe(secondExtent?.startRun);
   });
+
+  it("genuinely deletes a resolved bookmark from the open set, so a second \\bkmkend for the same name reports it as unpaired rather than resolving twice", () => {
+    // If endBookmark's own delete call were a no-op, 'dup' would still be sitting in openBookmarks when the second bkmkend arrives, and it would be silently (and wrongly) treated as still open instead of triggering BOOKMARK_UNPAIRED.
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard {\\*\\bkmkstart dup}one{\\*\\bkmkend dup}{\\*\\bkmkend dup}\\par}`,
+      ),
+    );
+    expect(
+      diagnostics.filter(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.BOOKMARK_UNPAIRED &&
+          diagnostic.message.includes("dup"),
+      ),
+    ).toHaveLength(1);
+  });
 });
 
 describe("run and paragraph accumulation", () => {
@@ -2712,6 +2754,21 @@ describe("run and paragraph accumulation", () => {
     );
     expect(starts).toEqual([...starts].sort((a, b) => a - b));
     expect(paragraph?.constructs).toHaveLength(2);
+  });
+
+  it("resolves a bookmark's own block index to the paragraph it actually opened in, not to whichever later paragraph happens to close while it is still open", () => {
+    // "far" opens in "One" and stays open across two further paragraphs before its own \bkmkend. A guard that kept re-resolving blockIndex on every subsequent paragraph close (rather than only once, at "far"'s own opening paragraph) would leave it pointing at "Three" instead.
+    const blocks = blocksOf(
+      `${HEADER}\\pard{\\*\\bkmkstart far}One\\par\\pard Two\\par\\pard Three\\par\\pard Four{\\*\\bkmkend far}\\par}`,
+    );
+    expect(blocks.map((block) => block.kind)).toEqual([
+      "constructStart",
+      "paragraph",
+      "paragraph",
+      "paragraph",
+      "paragraph",
+      "constructEnd",
+    ]);
   });
 });
 
@@ -2787,6 +2844,28 @@ describe("table row and column derivation", () => {
     );
     expect(table.rows[0]?.cells).toHaveLength(1);
     expect(table.rows[0]?.cells[0]?.blocks[0]?.kind).toBe("image");
+  });
+
+  it("produces a genuinely empty cell (no blocks at all) for a cell with no content, rather than a phantom empty paragraph", () => {
+    // endCell's own endParagraph(para, false) must NOT force-close: an empty, never-typed-in cell has zero runs, and force=false is exactly what lets that produce no block at all.
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\cellx1440\\pard\\intbl\\cell\\row\\pard x\\par}`,
+    );
+    expect(table.rows[0]?.cells[0]?.blocks).toEqual([]);
+  });
+
+  it("splices a bookmark closed inside a cell into that cell's own blocks, not the section's", () => {
+    // 'inCell' opens in the cell's first paragraph and closes in its second, still inside the same cell -- endCell's own flushClosingBookmarks call must target inTable=true (the cell's own cellBlockExtents), not the section's, or the marker pair ends up missing from the cell entirely.
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\cellx1440\\pard\\intbl{\\*\\bkmkstart inCell}One\\par\\pard\\intbl Two{\\*\\bkmkend inCell}\\cell\\row\\pard x\\par}`,
+    );
+    const kinds = table.rows[0]?.cells[0]?.blocks.map((block) => block.kind);
+    expect(kinds).toEqual([
+      "constructStart",
+      "paragraph",
+      "paragraph",
+      "constructEnd",
+    ]);
   });
 
   it("reports the exact TABLE_ROW_WITHOUT_DEFINITION message text", () => {
@@ -3561,6 +3640,17 @@ describe("control word dispatch order", () => {
     expect(paragraphs[0]?.constructs?.[0]?.descriptor).toMatchObject({
       name: "Named",
     });
+  });
+
+  it("never lets a stray \\par inside a \\*\\ffname destination actually close a paragraph", () => {
+    // Mirrors the bookmarkStart/bookmarkEnd fixtures above: \*\ffname's own content is a name, not formatted text, so applyControlWord's own formField-family guard must discard \par here too, rather than letting it fall through to builder.endParagraph and split the surrounding text across two real paragraphs.
+    const paragraphs = paragraphsOf(
+      `${HEADER}\\pard before{\\field{\\*\\fldinst FORMTEXT }{\\*\\formfield{\\fftype0{\\*\\ffname\\par Name}}}}after\\par}`,
+    );
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.runs.map((run) => run.text).join("")).toContain(
+      "beforeafter",
+    );
   });
 
   it("never lets a stray \\par inside a bookmark end destination actually close a paragraph", () => {
