@@ -220,6 +220,23 @@ describe("readDrawFrame: content dispatch", () => {
     ]);
   });
 
+  it("does not mint a spurious list numId for a draw:text-box child that is neither text:p nor text:list -- only a genuine text:list consumes the numId counter", () => {
+    const list = el("text:list", {}, [
+      el("text:list-item", {}, [el("text:p", {}, [txt("item")])]),
+    ]);
+    const frame = el("draw:frame", box, [
+      el("draw:text-box", {}, [
+        el("text:p", {}, [txt("Hello")]),
+        el("draw:custom-shape", {}),
+        list,
+      ]),
+    ]);
+    const shape = readDrawFrame(frame, [], { parts: {} });
+    expect(
+      shape?.blocks.map((b) => (b.kind === "paragraph" ? b.list : undefined)),
+    ).toEqual([undefined, { numId: "list1", level: 0 }]);
+  });
+
   it("reads a draw:image's referenced media part, sniffed and sized to the frame's own resolved box", () => {
     const pkg: Package = {
       parts: {
@@ -288,6 +305,75 @@ describe("readDrawFrame: content dispatch", () => {
     );
   });
 
+  it("falls back to svg:desc when svg:title is present but empty -- an empty title carries no real alt text", () => {
+    const pkg: Package = {
+      parts: {
+        "Pictures/img1.png": { kind: "binary", base64: tinyPngBase64() },
+      },
+    };
+    const frame = el("draw:frame", box, [
+      el("draw:image", { "xlink:href": "Pictures/img1.png" }),
+      el("svg:title", {}, []),
+      el("svg:desc", {}, [txt("A longer description")]),
+    ]);
+    expect(readDrawFrame(frame, [], pkg)?.blocks[0]).toMatchObject({
+      kind: "image",
+      altText: "A longer description",
+    });
+  });
+
+  it("leaves altText undefined when both svg:title and svg:desc are present but empty", () => {
+    const pkg: Package = {
+      parts: {
+        "Pictures/img1.png": { kind: "binary", base64: tinyPngBase64() },
+      },
+    };
+    const frame = el("draw:frame", box, [
+      el("draw:image", { "xlink:href": "Pictures/img1.png" }),
+      el("svg:title", {}, []),
+      el("svg:desc", {}, []),
+    ]);
+    expect(readDrawFrame(frame, [], pkg)?.blocks[0]).not.toHaveProperty(
+      "altText",
+    );
+  });
+
+  it("reads a positioned frame's own text:anchor-type into a floatPosition relative to the resolved origin", () => {
+    const pkg: Package = {
+      parts: {
+        "Pictures/img1.png": { kind: "binary", base64: tinyPngBase64() },
+      },
+    };
+    const frame = el("draw:frame", { ...box, "text:anchor-type": "page" }, [
+      el("draw:image", { "xlink:href": "Pictures/img1.png" }),
+    ]);
+    expect(readDrawFrame(frame, [], pkg)?.blocks[0]).toEqual({
+      kind: "image",
+      format: "png",
+      base64: tinyPngBase64(),
+      widthPt: 100,
+      heightPt: 50,
+      floatPosition: {
+        horizontal: { relativeTo: "page", offsetPt: 0 },
+        vertical: { relativeTo: "page", offsetPt: 0 },
+      },
+    });
+  });
+
+  it("leaves floatPosition absent for a frame with no text:anchor-type at all", () => {
+    const pkg: Package = {
+      parts: {
+        "Pictures/img1.png": { kind: "binary", base64: tinyPngBase64() },
+      },
+    };
+    const frame = el("draw:frame", box, [
+      el("draw:image", { "xlink:href": "Pictures/img1.png" }),
+    ]);
+    expect(readDrawFrame(frame, [], pkg)?.blocks[0]).not.toHaveProperty(
+      "floatPosition",
+    );
+  });
+
   it("returns no blocks (not a thrown error) for a draw:image whose referenced part is missing", () => {
     const frame = el("draw:frame", box, [
       el("draw:image", { "xlink:href": "Pictures/missing.png" }),
@@ -325,6 +411,100 @@ describe("readDrawFrame: content dispatch", () => {
   it("reads an empty frame (no text-box/image/table child at all) as an empty blocks array", () => {
     const frame = el("draw:frame", box);
     expect(readDrawFrame(frame, [], { parts: {} })?.blocks).toEqual([]);
+  });
+});
+
+describe("readDrawFrame: embedded objects (embeddedFormat opt-in)", () => {
+  const box = {
+    "svg:x": "0pt",
+    "svg:y": "0pt",
+    "svg:width": "100pt",
+    "svg:height": "50pt",
+  };
+
+  it("attaches a chart embedded object's own residue as the block's source -- the one embedded kind whose sub-reader quarantines presentation-specific XML", () => {
+    const chartElement = el("chart:chart", {}, [
+      el("table:table", {}, [el("table:table-row")]),
+    ]);
+    const pkg: Package = {
+      parts: {
+        "Object 1/content.xml": {
+          kind: "xml",
+          nodes: [
+            el("office:document-content", {}, [
+              el("office:body", {}, [el("office:chart", {}, [chartElement])]),
+            ]),
+          ],
+        },
+      },
+    };
+    const frame = el("draw:frame", box, [
+      el("draw:object", { "xlink:href": "./Object 1" }),
+    ]);
+    const shape = readDrawFrame(frame, [], pkg, undefined, false, "odp");
+    expect(shape?.blocks).toHaveLength(1);
+    const block = shape?.blocks[0];
+    expect(block).toMatchObject({
+      kind: "embeddedObject",
+      objectKind: "chart",
+    });
+    expect(block).toHaveProperty("source");
+    expect(
+      block?.kind === "embeddedObject" ? block.source : undefined,
+    ).not.toBeUndefined();
+  });
+
+  it("carries no source at all for an embedded kind other than chart -- residue is genuinely absent, not an empty placeholder", () => {
+    const pkg: Package = {
+      parts: {
+        "Object 1/content.xml": {
+          kind: "xml",
+          nodes: [
+            el("office:document-content", {}, [
+              el("office:body", {}, [el("office:drawing")]),
+            ]),
+          ],
+        },
+      },
+    };
+    const frame = el("draw:frame", box, [
+      el("draw:object", { "xlink:href": "./Object 1" }),
+    ]);
+    const shape = readDrawFrame(frame, [], pkg, undefined, false, "odp");
+    expect(shape?.blocks[0]).not.toHaveProperty("source");
+  });
+});
+
+describe("readDrawFrame: flowPositioning opt-in", () => {
+  const flowBox = { "svg:width": "40pt", "svg:height": "20pt" };
+
+  it("readDrawFrame's own flowPositioning parameter defaults to false: a frame with no svg:x/svg:y (only svg:width/svg:height) reads as undefined unless the caller opts in", () => {
+    const frame = el("draw:frame", flowBox, [
+      el("draw:text-box", {}, [el("text:p", {}, [txt("Hi")])]),
+    ]);
+    expect(readDrawFrame(frame, [], { parts: {} })).toBeUndefined();
+  });
+
+  it("resolves the same frame at the origin of its own box when flowPositioning is explicitly true", () => {
+    const frame = el("draw:frame", flowBox, [
+      el("draw:text-box", {}, [el("text:p", {}, [txt("Hi")])]),
+    ]);
+    const shape = readDrawFrame(frame, [], { parts: {} }, undefined, true);
+    expect(shape?.frame).toEqual({
+      xPt: 0,
+      yPt: 0,
+      widthPt: 40,
+      heightPt: 20,
+    });
+  });
+
+  it("walkDrawShapes never applies flow positioning: a frame with no svg:x/svg:y is dropped, not read at the origin of its own box", () => {
+    const frame = el("draw:frame", flowBox, [
+      el("draw:text-box", {}, [el("text:p", {}, [txt("Hi")])]),
+    ]);
+    const out: ContentShape[] = [];
+    walkDrawShapes([frame], [], { parts: {} }, out);
+    expect(out).toEqual([]);
   });
 });
 
@@ -728,6 +908,122 @@ describe("readDrawPageContent: non-flat fills (gradient/bitmap/hatch) and fill o
     expect(vector.fill).toBeUndefined();
   });
 
+  it("a resolved <draw:gradient> definition with a missing or unrecognised draw:style leaves fillPattern undefined, same as an unresolvable name", () => {
+    const gradient = el("draw:gradient", {
+      "draw:name": "grad1",
+      "draw:style": "not-a-real-style",
+      "draw:start-color": "#ff0000",
+      "draw:end-color": "#0000ff",
+    });
+    const gr1 = graphicStyle("gr1", {
+      "draw:fill": "gradient",
+      "draw:fill-gradient-name": "grad1",
+    });
+    const pkg: Package = {
+      parts: { "content.xml": contentPackageWithResources([gr1], [gradient]) },
+    };
+    const rect = el("draw:rect", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "rect") {
+      throw new Error("expected a rect vector");
+    }
+    expect(vector.fillPattern).toBeUndefined();
+  });
+
+  it("a resolved <draw:hatch> definition with a missing or unrecognised draw:style leaves fillPattern undefined, same as an unresolvable name", () => {
+    const hatch = el("draw:hatch", {
+      "draw:name": "hatch1",
+      "draw:style": "not-a-real-style",
+      "draw:color": "#123456",
+      "draw:distance": "0.1cm",
+    });
+    const gr1 = graphicStyle("gr1", {
+      "draw:fill": "hatch",
+      "draw:fill-hatch-name": "hatch1",
+    });
+    const pkg: Package = {
+      parts: { "content.xml": contentPackageWithResources([gr1], [hatch]) },
+    };
+    const rect = el("draw:rect", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "rect") {
+      throw new Error("expected a rect vector");
+    }
+    expect(vector.fillPattern).toBeUndefined();
+  });
+
+  it("omits angleDeg from the gradient fillPattern entirely (not a present-but-undefined key) when draw:angle is absent", () => {
+    const gradient = el("draw:gradient", {
+      "draw:name": "grad1",
+      "draw:style": "linear",
+      "draw:start-color": "#ff0000",
+      "draw:end-color": "#0000ff",
+    });
+    const gr1 = graphicStyle("gr1", {
+      "draw:fill": "gradient",
+      "draw:fill-gradient-name": "grad1",
+    });
+    const pkg: Package = {
+      parts: { "content.xml": contentPackageWithResources([gr1], [gradient]) },
+    };
+    const rect = el("draw:rect", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "rect") {
+      throw new Error("expected a rect vector");
+    }
+    expect(vector.fillPattern).not.toHaveProperty("angleDeg");
+  });
+
+  it("omits rotationDeg from the hatch fillPattern entirely (not a present-but-undefined key) when draw:rotation is absent", () => {
+    const hatch = el("draw:hatch", {
+      "draw:name": "hatch1",
+      "draw:style": "single",
+      "draw:color": "#123456",
+      "draw:distance": "0.1cm",
+    });
+    const gr1 = graphicStyle("gr1", {
+      "draw:fill": "hatch",
+      "draw:fill-hatch-name": "hatch1",
+    });
+    const pkg: Package = {
+      parts: { "content.xml": contentPackageWithResources([gr1], [hatch]) },
+    };
+    const rect = el("draw:rect", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "rect") {
+      throw new Error("expected a rect vector");
+    }
+    expect(vector.fillPattern).not.toHaveProperty("rotationDeg");
+  });
+
   it("reads draw:opacity into fillOpacity as a 0..1 fraction", () => {
     const gr1 = graphicStyle("gr1", {
       "draw:fill-color": "#ff0000",
@@ -913,6 +1209,143 @@ describe("readDrawPageContent: stroke opacity and the real dash run-length patte
     }
     expect(vector.stroke?.style).toBe("dashed");
     expect(vector.stroke?.dashPattern).toBeUndefined();
+  });
+
+  it("a resolved dash definition with a non-positive draw:dots1 leaves dashPattern undefined -- dots1/dots1-length/distance are jointly required", () => {
+    const dash = el("draw:stroke-dash", {
+      "draw:name": "dash1",
+      "draw:style": "rect",
+      "draw:dots1": "0",
+      "draw:dots1-length": "3pt",
+      "draw:distance": "2pt",
+    });
+    const gr1 = graphicStyle("gr1", {
+      "svg:stroke-color": "#000000",
+      "svg:stroke-width": "1pt",
+      "draw:stroke": "dash",
+      "draw:stroke-dash": "dash1",
+    });
+    const pkg: Package = {
+      parts: { "content.xml": contentPackageWithResources([gr1], [dash]) },
+    };
+    const rect = el("draw:rect", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "rect") {
+      throw new Error("expected a rect vector");
+    }
+    expect(vector.stroke?.style).toBe("dashed");
+    expect(vector.stroke?.dashPattern).toBeUndefined();
+  });
+
+  it("a resolved dash definition with a non-positive draw:dots1-length leaves dashPattern undefined", () => {
+    const dash = el("draw:stroke-dash", {
+      "draw:name": "dash1",
+      "draw:style": "rect",
+      "draw:dots1": "1",
+      "draw:dots1-length": "0pt",
+      "draw:distance": "2pt",
+    });
+    const gr1 = graphicStyle("gr1", {
+      "svg:stroke-color": "#000000",
+      "svg:stroke-width": "1pt",
+      "draw:stroke": "dash",
+      "draw:stroke-dash": "dash1",
+    });
+    const pkg: Package = {
+      parts: { "content.xml": contentPackageWithResources([gr1], [dash]) },
+    };
+    const rect = el("draw:rect", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "rect") {
+      throw new Error("expected a rect vector");
+    }
+    expect(vector.stroke?.style).toBe("dashed");
+    expect(vector.stroke?.dashPattern).toBeUndefined();
+  });
+
+  it("a resolved dash definition with a negative draw:distance leaves dashPattern undefined -- a zero distance is itself valid (dots touching)", () => {
+    const dash = el("draw:stroke-dash", {
+      "draw:name": "dash1",
+      "draw:style": "rect",
+      "draw:dots1": "1",
+      "draw:dots1-length": "3pt",
+      "draw:distance": "-1pt",
+    });
+    const gr1 = graphicStyle("gr1", {
+      "svg:stroke-color": "#000000",
+      "svg:stroke-width": "1pt",
+      "draw:stroke": "dash",
+      "draw:stroke-dash": "dash1",
+    });
+    const pkg: Package = {
+      parts: { "content.xml": contentPackageWithResources([gr1], [dash]) },
+    };
+    const rect = el("draw:rect", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "rect") {
+      throw new Error("expected a rect vector");
+    }
+    expect(vector.stroke?.style).toBe("dashed");
+    expect(vector.stroke?.dashPattern).toBeUndefined();
+  });
+
+  it("a resolved dash definition whose draw:dots2 is present but non-positive keeps the single-length pattern, with dots2/dots2LengthPt genuinely absent (not present-but-undefined)", () => {
+    const dash = el("draw:stroke-dash", {
+      "draw:name": "dash1",
+      "draw:style": "rect",
+      "draw:dots1": "4",
+      "draw:dots1-length": "3pt",
+      "draw:distance": "1pt",
+      "draw:dots2": "0",
+      "draw:dots2-length": "5pt",
+    });
+    const gr1 = graphicStyle("gr1", {
+      "svg:stroke-color": "#000000",
+      "svg:stroke-width": "1pt",
+      "draw:stroke": "dash",
+      "draw:stroke-dash": "dash1",
+    });
+    const pkg: Package = {
+      parts: { "content.xml": contentPackageWithResources([gr1], [dash]) },
+    };
+    const rect = el("draw:rect", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "rect") {
+      throw new Error("expected a rect vector");
+    }
+    expect(vector.stroke?.dashPattern).toStrictEqual({
+      dots1: 4,
+      dots1LengthPt: 3,
+      distancePt: 1,
+    });
   });
 });
 
