@@ -430,21 +430,21 @@ interface GroupState {
   para: ParagraphState;
   field: FieldState | undefined;
   picture: PictureState | undefined;
-  // The same ownership marker as objectDataOwner/objectOwner below, for {\pict ...} itself: `picture` is carried forward by reference so a \'hh/binary byte or a \picwN/\pichN control word inside a nested group still reaches the same PictureState, but the group-end handler that calls buildPicture must fire only once, when \pict's own group actually closes -- not on every plain sibling group nested directly inside it (a malformed producer can write one; RTF's own <pict> grammar has no legitimate use for one).
-  pictureOwner: boolean;
+  // The same ownership marker as objectDataOwner/objectOwner below, for {\pict ...} itself: `picture` is carried forward by reference so a \'hh/binary byte or a \picwN/\pichN control word inside a nested group still reaches the same PictureState, but the group-end handler that calls buildPicture must fire only once, when \pict's own group actually closes -- not on every plain sibling group nested directly inside it (a malformed producer can write one; RTF's own <pict> grammar has no legitimate use for one). Optional, not a plain `boolean`, so the root group below can simply omit it (leaving it genuinely absent) rather than state a `false` literal every reader of it already reads as paired with `picture` being undefined too -- see root's own comment.
+  pictureOwner?: boolean;
   objectData: ObjectDataState | undefined;
   object: ObjectState | undefined;
-  // True only on the one GroupState created directly for an {\*\objdata ...} destination's own group -- objectData itself is still carried forward BY REFERENCE across every descendant group (a stray \binN/\'hh byte inside a nested group must still land in the same accumulator the real \objdata group started), so the group-end handler that calls buildEmbeddedObject needs its own, non-inherited marker to fire exactly once per \objdata construct rather than once per descendant group that happens to close underneath it. Mirrors resultOf's own "set on the direct child, cleared by cloneGroupState" shape below, for the identical reason: a plain nested group inside \objdata's content (or a malformed one a hostile producer wrote) must not re-trigger this group's own finalisation when IT closes too.
-  objectDataOwner: boolean;
-  // The same ownership marker for {\object ...} itself: `object` is carried forward by reference so \objw/\objh control words and \objdata/\result's own group-open checks can reach the shared ObjectState from any depth inside \object's own group, but the group-end handler that splices \result's fallback in (or reports EMBEDDED_OBJECT_UNREADABLE) must fire only once, when \object's own group actually closes -- not on every plain sibling group nested directly inside it (RTF's own <obj> grammar allows only <objdata> and <result> there, but a malformed producer can write anything).
-  objectOwner: boolean;
+  // True only on the one GroupState created directly for an {\*\objdata ...} destination's own group -- objectData itself is still carried forward BY REFERENCE across every descendant group (a stray \binN/\'hh byte inside a nested group must still land in the same accumulator the real \objdata group started), so the group-end handler that calls buildEmbeddedObject needs its own, non-inherited marker to fire exactly once per \objdata construct rather than once per descendant group that happens to close underneath it. Mirrors resultOf's own "set on the direct child, cleared by cloneGroupState" shape below, for the identical reason: a plain nested group inside \objdata's content (or a malformed one a hostile producer wrote) must not re-trigger this group's own finalisation when IT closes too. Optional for the same reason pictureOwner above is.
+  objectDataOwner?: boolean;
+  // The same ownership marker for {\object ...} itself: `object` is carried forward by reference so \objw/\objh control words and \objdata/\result's own group-open checks can reach the shared ObjectState from any depth inside \object's own group, but the group-end handler that splices \result's fallback in (or reports EMBEDDED_OBJECT_UNREADABLE) must fire only once, when \object's own group actually closes -- not on every plain sibling group nested directly inside it (RTF's own <obj> grammar allows only <objdata> and <result> there, but a malformed producer can write anything). Optional for the same reason pictureOwner above is.
+  objectOwner?: boolean;
   // Set only on the one GroupState created directly for a \result destination's own group -- the enclosing \object's shared state to report the finished scratch blocks back to when this group closes. Deliberately NOT carried forward by cloneGroupState the way `object` is: a plain nested group inside \result's own content (every test fixture's `{\result{\pard\plain ...\par}}` has one) must not re-trigger this group's own finalisation a second time when IT closes, so only the direct child gets this field and every descendant clones it back to undefined.
   resultOf: ObjectState | undefined;
   bookmark: BookmarkState | undefined;
   // Whether this group is a \upr wrapper's own child that must be discarded (the ANSI half). Set on the wrapper; consulted when a child group opens.
   inUnicodeWrapper: boolean;
-  // Whether this group's own head is \field itself, set explicitly on every group open (never inherited) exactly like inUnicodeWrapper above -- state.field is shared by reference down through \field's own descendants, so this is the one flag that tells the group-close handler "this closing brace is the field's own, not one of its children's".
-  isFieldGroup: boolean;
+  // Whether this group's own head is \field itself, set explicitly on every group open (never inherited) exactly like inUnicodeWrapper above -- state.field is shared by reference down through \field's own descendants, so this is the one flag that tells the group-close handler "this closing brace is the field's own, not one of its children's". Optional for the same reason pictureOwner above is: the root group below omits it rather than stating a `false` literal every reader already reads as paired with `state.field` being undefined too.
+  isFieldGroup?: boolean;
 }
 
 function defaultCharacterState(): CharacterState {
@@ -580,23 +580,23 @@ function skipUnicodeFallback(
   return { index, textOffset };
 }
 
-// A \field group's own run range, open from its head brace to its closing one. paragraphSerial guards against a \par or \cell landing inside \fldrslt: RTF 1.9.1's own <fieldrslt> production ('{' \fldrslt <para>+ '}') is grammatical for a multi-paragraph result even though real producers keep form fields inline in practice, and without this check a stale runIndex captured before the paragraph reset could produce an inverted startRun/endRun pair. When it fires, endFormField below drops the contentControl and reports why through the sink, rather than mis-attaching it to whichever paragraph happens to be open once the field closes.
+// A \field group's own run range, open from its head brace to its closing one. paragraphSerial guards against a \par or \cell landing inside \fldrslt: RTF 1.9.1's own <fieldrslt> production ('{' \fldrslt <para>+ '}') is grammatical for a multi-paragraph result even though real producers keep form fields inline in practice, and without this check a stale runIndex captured before the paragraph reset could produce an inverted startRun/endRun pair. When it fires, endFormField below drops the contentControl and reports why through the sink, rather than mis-attaching it to whichever paragraph happens to be open once the field closes. A fresh `symbol` per paragraph rather than a counter: every reader of this field (endBookmark, resolveBookmarkPositions, endFormField) only ever tests it for identity against a value captured earlier from this identical field, never for ordering, so there is no "count" for a numeric serial to actually carry -- a symbol states that directly instead of leaving an unused ordering property for a mutation test to notice is never read.
 interface OpenFormField {
-  readonly paragraphSerial: number;
+  readonly paragraphSerial: symbol;
   readonly runIndex: number;
 }
 
 // A bookmark start held open until its end arrives, at which point the pair's own scope decides its encoding. `blockIndex` is filled in when the paragraph the start sits in takes its place in a block list, and stays undefined for a pair that opens and closes inside one paragraph.
-interface OpenBookmark {
+export interface OpenBookmark {
   readonly descriptor: AnchorDescriptor;
-  readonly paragraphSerial: number;
+  readonly paragraphSerial: symbol;
   readonly runIndex: number;
   readonly inTable: boolean;
   blockIndex: number | undefined;
 }
 
 // A construct spanning whole blocks of one list, before its marker pair is spliced in. Half-open, matching RunConstructExtent's own convention: blocks startIndex..endIndex-1 are the extent.
-interface BlockConstructExtent {
+export interface BlockConstructExtent {
   readonly descriptor: ConstructDescriptor;
   readonly startIndex: number;
   readonly endIndex: number;
@@ -661,7 +661,7 @@ function insertConstructMarkers(
 }
 
 // One row as read: its cells alongside the <celldef> run that preceded each \cellxN, kept together because a span is only derivable once every row of the table is known.
-interface RawTableRow {
+export interface RawTableRow {
   readonly cells: ContentTableCell[];
   readonly definitions: readonly PendingCell[];
   // The row-level scope of the four RTF states text direction at: "\rtlrow Cells in this table row will have right-to-left precedence" / "\ltrrow ... left-to-right precedence (the default)" (RTF 1.9.1, "Table Row Formatting"), a <rowwrite> member of the row's own <tbldef>.
@@ -683,6 +683,34 @@ function horizontalSpanAt(
   return span;
 }
 
+// The rowSpan a \clvmgf anchor at `column` reaches, scanning forward from `rowIndex + 1` through consecutive \clvmrg continuations at that same column. A standalone function, exported and taking `rows`/`columnIndices` as plain parameters rather than reading ContentBuilder's own private fields, so a mismatched pair (fewer columnIndices entries than rows, which resolveRows' own construction can never actually produce -- columnIndices is built by one rows.map(...) call over the identical `rows`) can be exercised directly by a unit test constructing one, rather than needing a non-null assertion to state that invariant with no test able to reach it.
+export function verticalMergeRowSpan(
+  rows: readonly RawTableRow[],
+  columnIndices: readonly (readonly number[])[],
+  rowIndex: number,
+  column: number,
+): number {
+  let rowSpan = 1;
+  // Bounded by the last real row index (`rows.length - 1`), not `rows.length` itself, so this scan never has an index one past the array's own end to consider in the first place.
+  for (let next = rowIndex + 1; next <= rows.length - 1; next += 1) {
+    const nextColumns = columnIndices[next];
+    const nextRow = rows[next];
+    if (nextColumns === undefined || nextRow === undefined) {
+      throw new Error(
+        "internal invariant violated: verticalMergeRowSpan's own row index scan reached an index with no corresponding columnIndices/rows entry",
+      );
+    }
+    const matchIndex = nextColumns.indexOf(column);
+    // No `matchIndex === -1 ? undefined : ...` guard: a plain array's own -1 index is never a real property on it, so `definitions[-1]` already evaluates to undefined on its own -- indexOf's own "not found" sentinel needs no special-casing here, since indexing by it produces the identical result the special case would.
+    const match = nextRow.definitions[matchIndex];
+    if (match?.verticalMergeContinuation !== true) {
+      break;
+    }
+    rowSpan += 1;
+  }
+  return rowSpan;
+}
+
 // Every piece of mutable state a ContentBuilder holds while it accumulates one document's worth of content -- deliberately excluding `sections` (already-finished sections, never touched mid-accumulation) and the constructor-injected `header`/`sink` (read-only for the whole read). Bundled here so beginResultScratch/endResultScratch can swap the whole thing out for a fresh instance and back, rather than special-casing each field: see those two methods for why \result's own fallback content needs this.
 interface BuilderAccumulatorState {
   blocks: ContentBlock[];
@@ -701,7 +729,7 @@ interface BuilderAccumulatorState {
   pendingCell: PendingCell;
   rowLeftTwips: number;
   rowDirection: TextDirection | undefined;
-  paragraphSerial: number;
+  paragraphSerial: symbol;
   openBookmarks: Map<string, OpenBookmark>;
   sectionBlockExtents: BlockConstructExtent[];
   cellBlockExtents: BlockConstructExtent[];
@@ -727,13 +755,44 @@ function freshAccumulatorState(): BuilderAccumulatorState {
     pendingCell: newPendingCell(),
     rowLeftTwips: 0,
     rowDirection: undefined,
-    paragraphSerial: 0,
+    paragraphSerial: Symbol("paragraph"),
     openBookmarks: new Map(),
     sectionBlockExtents: [],
     cellBlockExtents: [],
     pendingRunConstructs: [],
     closingBookmarks: [],
   };
+}
+
+// The block extent one already-resolved closing bookmark produces, ending at `endIndex`. A standalone function rather than inlined in ContentBuilder's own flushClosingBookmarks, so a still-unresolved `blockIndex` -- an invariant flushClosingBookmarks' own real caller can never actually violate, per the comment on its call site -- can still be exercised directly by a unit test constructing one, without reaching into ContentBuilder's own private state to do it.
+//
+// Provably unreachable in practice: reaching flushClosingBookmarks at all requires paragraphSerial to have changed away from a bookmark's own opening serial (endBookmark only pushes to closingBookmarks on a serial mismatch), and the only way paragraphSerial ever changes is a resolveBookmarkPositions call that runs first -- the very call that resolves blockIndex for every bookmark whose serial matches at that moment, this one included. blockIndex is therefore always already resolved by the time a real bookmark reaches this call, and this throws loudly rather than silently guessing a position for the invariant-violating case a hostile caller (or this function's own direct unit test) could still construct.
+export function closingBookmarkExtent(
+  closing: OpenBookmark,
+  endIndex: number,
+): BlockConstructExtent {
+  if (closing.blockIndex === undefined) {
+    throw new Error(
+      "internal invariant violated: a closing bookmark reached flushClosingBookmarks with no resolved blockIndex",
+    );
+  }
+  return {
+    descriptor: closing.descriptor,
+    startIndex: closing.blockIndex,
+    endIndex,
+  };
+}
+
+// Appends `text` to `items`' own last entry, in place. A standalone function rather than inlined at emitText's own formFieldListItem branch, so the invariant that entry always already exists (a fresh entry is pushed in the identical group-open branch that sets this destination, so by the time text can arrive there is always at least one) can be exercised directly by a unit test constructing a case that violates it, rather than needing a non-null assertion to state the same invariant with no test able to reach it.
+export function appendToLastListItem(items: string[], text: string): void {
+  const last = items.length - 1;
+  const current = items[last];
+  if (current === undefined) {
+    throw new Error(
+      "internal invariant violated: a form field list item's text arrived with no list item entry to append to",
+    );
+  }
+  items[last] = current + text;
 }
 
 class ContentBuilder {
@@ -758,7 +817,7 @@ class ContentBuilder {
   // The <rowwrite> member (\ltrrow | \rtlrow) of the row definition currently accumulating -- reset by startRowDefinition with the rest of the pending row state, so a \rtlrow anywhere between a \trowd and its \cellxN run (where the spec's own <tbldef> production places it) reaches the row it belongs to.
   private rowDirection: TextDirection | undefined;
   // Bookmark bookkeeping. A bookmark's two halves are matched by name and may bracket a sub-sequence of one paragraph's runs or a run of whole paragraphs, and document-schema.js gives those two scopes two different encodings -- a RunConstructExtent on the paragraph, or a constructStart/constructEnd marker pair in the block list. Which one applies is not knowable when the start is seen, only when its end arrives, so a start is held open here and resolved then.
-  private paragraphSerial = 0;
+  private paragraphSerial = Symbol("paragraph");
   private openBookmarks = new Map<string, OpenBookmark>();
   // Extents whose two halves landed in different paragraphs of the same block list, waiting for that list to be finalised. Two lists, because a table cell's blocks and a section's blocks are separate bracket scopes and a pair may not straddle them.
   private sectionBlockExtents: BlockConstructExtent[] = [];
@@ -919,8 +978,8 @@ class ContentBuilder {
     this.runs = [];
     this.runProvenance = [];
     this.resolveBookmarkPositions(para, blockIndex);
-    // Genuinely irreducible equivalent mutant: `+=` here versus `-=` produces a strictly decreasing rather than increasing sequence, but every one of paragraphSerial's own readers (endBookmark, resolveBookmarkPositions, endFormField) only ever tests it for EQUALITY against a value captured earlier from this identical field -- never for ordering, never against a literal, never as an index. A strictly monotonic sequence in either direction visits each value at most once, so "captured serial equals current serial" (same paragraph) versus "captured serial differs from current serial" (a different paragraph) is preserved regardless of which direction the sequence moves in. Left as `+=` because it is the natural reading (a forward-counting serial), not because `-=` would be wrong.
-    this.paragraphSerial += 1;
+    // A fresh symbol identifies this new paragraph uniquely against every other one, past or future -- see OpenFormField's own comment on why identity, not a counted ordering, is what every reader of this field actually needs.
+    this.paragraphSerial = Symbol("paragraph");
   }
 
   // Once a paragraph has taken its place in a block list, every bookmark that opened inside it learns that index (so a pair closing later knows where to bracket from), and every pair whose end landed in it becomes a block extent. Both are deferred to here rather than recorded at the marker, because closeTable() above can push a table between the marker and the paragraph and shift the index the marker would have guessed.
@@ -928,7 +987,7 @@ class ContentBuilder {
     para: ParagraphState,
     blockIndex: number,
   ): void {
-    // No `open.blockIndex === undefined` guard: a still-open bookmark's own paragraphSerial is fixed at the paragraph it opened in, and this reader's paragraphSerial only ever advances (never resets), so `open.paragraphSerial === this.paragraphSerial` can hold true for at most one resolveBookmarkPositions call per bookmark -- the very call for the paragraph it opened in. A defined blockIndex and a matching serial can therefore never coincide, making the guard permanently redundant rather than a real defensive check.
+    // No `open.blockIndex === undefined` guard: a still-open bookmark's own paragraphSerial is fixed at the paragraph it opened in, and this reader gives every closed paragraph a fresh symbol identity that is never reused, so `open.paragraphSerial === this.paragraphSerial` can hold true for at most one resolveBookmarkPositions call per bookmark -- the very call for the paragraph it opened in. A defined blockIndex and a matching serial can therefore never coincide, making the guard permanently redundant rather than a real defensive check.
     for (const open of this.openBookmarks.values()) {
       if (open.paragraphSerial === this.paragraphSerial) {
         open.blockIndex = blockIndex;
@@ -951,17 +1010,7 @@ class ContentBuilder {
         });
         continue;
       }
-      if (closing.blockIndex === undefined) {
-        // Provably unreachable: reaching closingBookmarks at all requires paragraphSerial to have moved past this bookmark's own opening serial (endBookmark only pushes here on a serial mismatch), and the only way paragraphSerial ever moves is a resolveBookmarkPositions call that runs before it -- the very call that resolves blockIndex for every bookmark whose serial matches at that moment, this one included. A still-undefined blockIndex here means that invariant broke, so this fails loudly rather than guessing a position with a numeric fallback.
-        throw new Error(
-          "internal invariant violated: a closing bookmark reached flushClosingBookmarks with no resolved blockIndex",
-        );
-      }
-      target.push({
-        descriptor: closing.descriptor,
-        startIndex: closing.blockIndex,
-        endIndex,
-      });
+      target.push(closingBookmarkExtent(closing, endIndex));
     }
     this.closingBookmarks = [];
   }
@@ -1152,11 +1201,14 @@ class ContentBuilder {
     // A cell's column position accounts for the horizontal spans before it, so a vertical merge below lines up with the column its anchor actually occupies rather than with an ordinal that shifts.
     const columnIndices = rows.map((row) => {
       const indices: number[] = [];
-      let column = 0;
+      // One placeholder slot per grid column already accounted for, so `slots.length` -- not a hand-accumulated running total -- is this cell's own column position: every consumer below only ever compares one row's own value against another row's own indices via indexOf equality, never against an absolute position or a literal, so the position only needs to count grid columns consistently, which pushing one slot per column already does on its own.
+      const slots: undefined[] = [];
       for (const [index] of row.cells.entries()) {
-        indices.push(column);
-        // Genuinely irreducible equivalent mutant: `+=` here versus `-=` produces numerically opposite (negated) column values, but every consumer of these indices (the rowSpan loop below) only ever compares one row's own value against another row's own indices via indexOf equality, never against an absolute position, a literal, or anything outside this same accumulation. Since every row runs through this identical accumulation, a uniform sign flip is a bijection that preserves which values coincide across rows and which do not -- the actual rowSpan/column-match OUTPUT this drives is provably identical under `+=` or `-=` for any input. Left as `+=` because it is the natural reading (a running total of widths), not because `-=` would be wrong.
-        column += horizontalSpanAt(row.definitions, index);
+        indices.push(slots.length);
+        const span = horizontalSpanAt(row.definitions, index);
+        for (let slot = 0; slot < span; slot += 1) {
+          slots.push(undefined);
+        }
       }
       return indices;
     });
@@ -1177,20 +1229,10 @@ class ContentBuilder {
           }
           const colSpan = horizontalSpanAt(row.definitions, cellIndex);
           const column = columnIndices[rowIndex]?.[cellIndex];
-          let rowSpan = 1;
-          if (definition?.verticalMergeFirst === true && column !== undefined) {
-            // Genuinely irreducible equivalent mutant on this bound (`<` versus `<=`): one extra pass with `next === rows.length` would index `columnIndices[next]`/`rows[next]` one past the end of both arrays, but a JavaScript array read past its own length is `undefined` rather than a thrown error, and `?.`/`?? -1` (below) already turn that `undefined` into matchIndex -1 -- the exact value that immediately breaks the loop on any ordinary out-of-range lookup too. The extra pass changes nothing observable for any input.
-            for (let next = rowIndex + 1; next < rows.length; next += 1) {
-              // Genuinely unreachable, not a real defensive fallback: columnIndices is built by rows.map(...) two lines above, so columnIndices.length === rows.length always, and the loop's own bound (next < rows.length) already guarantees columnIndices[next] is defined for every next this line ever sees. The `?.` and `?? -1` exist only because noUncheckedIndexedAccess types the access as number[] | undefined regardless -- the fallback keeps TypeScript satisfied for a branch that can never actually execute.
-              const matchIndex = columnIndices[next]?.indexOf(column) ?? -1;
-              // No `matchIndex === -1 ? undefined : ...` guard: a plain array's own -1 index is never a real property on it, so `definitions[-1]` already evaluates to undefined on its own -- indexOf's own "not found" sentinel needs no special-casing here, since indexing by it produces the identical result the special case would.
-              const match = rows[next]?.definitions[matchIndex];
-              if (match?.verticalMergeContinuation !== true) {
-                break;
-              }
-              rowSpan += 1;
-            }
-          }
+          const rowSpan =
+            definition?.verticalMergeFirst === true && column !== undefined
+              ? verticalMergeRowSpan(rows, columnIndices, rowIndex, column)
+              : 1;
           const borders = this.resolveBorders(definition);
           const background =
             definition === undefined
@@ -1635,7 +1677,7 @@ function readRtfDetail(
   const builder = new ContentBuilder(header, sink);
   const section = defaultSectionState(header);
 
-  // pictureOwner/objectDataOwner/objectOwner/isFieldGroup below are each genuinely irreducible equivalent mutants at `false`: every check that reads one of them (the groupEnd handler's own `state.picture !== undefined && state.pictureOwner`, `state.objectData !== undefined && state.objectDataOwner`, `state.object !== undefined && state.objectOwner`, `state.isFieldGroup && state.field?.formFieldStarted === true`) is a short-circuited `&&` whose OTHER operand -- picture/objectData/object/field -- is ALSO `undefined` on this root object and can only ever become defined on a freshly cloned CHILD, in the very same branch that also sets its own Owner/isFieldGroup flag true. Since root's own picture/objectData/object/field never change (nothing ever assigns to root directly; every mutation targets a `child` object instead), the paired `undefined` operand already makes each `&&` false regardless of what these four flags are set to here, for as long as `state` could ever actually be this root object at one of those check sites (including the state-still-root case of a stray extra closing brace after the document's own root group has already closed). Mutating any of the four to `true` therefore changes nothing observable for any input.
+  // pictureOwner/objectDataOwner/objectOwner/isFieldGroup are each omitted below rather than stated as `false`: every check that reads one of them (the groupEnd handler's own `state.picture !== undefined && state.pictureOwner`, `state.objectData !== undefined && state.objectDataOwner`, `state.object !== undefined && state.objectOwner`, `state.isFieldGroup && state.field?.formFieldStarted === true`) is a short-circuited `&&` whose OTHER operand -- picture/objectData/object/field -- is ALSO `undefined` on this root object and can only ever become defined on a freshly cloned CHILD, in the very same branch that also sets its own Owner/isFieldGroup flag true. Since root's own picture/objectData/object/field never change (nothing ever assigns to root directly; every mutation targets a `child` object instead), the paired `undefined` operand already makes each `&&` false regardless of these four fields' own value here, for as long as `state` could ever actually be this root object at one of those check sites (including the state-still-root case of a stray extra closing brace after the document's own root group has already closed) -- so there is no real `false` to state, only an absent field, which the optional typing above lets this literal say directly.
   const root: GroupState = {
     destination: "body",
     uc: 1, // "A default of 1 should be assumed if no \ucN keyword has been seen in the current or outer scopes."
@@ -1643,15 +1685,11 @@ function readRtfDetail(
     para: defaultParagraphState(),
     field: undefined,
     picture: undefined,
-    pictureOwner: false,
     objectData: undefined,
     object: undefined,
-    objectDataOwner: false,
-    objectOwner: false,
     resultOf: undefined,
     bookmark: undefined,
     inUnicodeWrapper: false,
-    isFieldGroup: false,
   };
   const stack: GroupState[] = [root];
   let state = root;
@@ -1718,13 +1756,7 @@ function readRtfDetail(
       state.field?.formField !== undefined
     ) {
       // Appends to the LAST item: a \*\ffl group's own open pushed one empty entry per occurrence, so several sibling \*\ffl groups (a dropdown's list) each accumulate into their own slot rather than one shared string.
-      const items = state.field.formField.listItems;
-      // Genuinely irreducible equivalent mutant if this guard is forced true: destination becomes "formFieldListItem" only when kind === "formFieldListItem", which is decided in the identical group-open branch that also pushes a fresh empty entry onto listItems whenever head.destination === "ffl" -- both happen together, so items.length is always at least 1 (and `current` therefore always defined) for as long as this destination could ever actually be reached.
-      const last = items.length - 1;
-      const current = items[last];
-      if (current !== undefined) {
-        items[last] = current + text;
-      }
+      appendToLastListItem(state.field.formField.listItems, text);
       return;
     }
     // "picture" text is handled directly at the token site (it is hex, not characters); "skip", "listText", "unicodeWrapper" and "formField" discard -- \*\ffdeftext (FFData.xstzTextDef) is one of these now, per SILENT_SKIP_DESTINATIONS above.
@@ -1732,8 +1764,8 @@ function readRtfDetail(
 
   let index = 0;
   let textOffset = 0;
-  // Genuinely irreducible equivalent mutant on this bound (`<` versus `<=`): one extra pass with `index === tokens.length` would read `tokens[index]` one past the array's own end, but that read is `undefined` rather than a thrown error, and the very next line's own `if (token === undefined) { break; }` already treats that as the loop's own termination condition -- the extra pass changes nothing observable for any input.
-  while (index < tokens.length) {
+  // No `index < tokens.length` bound: a read past the array's own end is `undefined` rather than a thrown error, and the very next line's own `if (token === undefined) { break; }` already terminates the loop on exactly that condition -- a separate length check here would only ever restate it.
+  while (true) {
     const token = tokens[index];
     if (token === undefined) {
       break;
@@ -1770,9 +1802,8 @@ function readRtfDetail(
             "an \\object destination has more than one \\result child, which RTF's own grammar does not allow; only the first is kept and this one is discarded",
         });
       }
-      // RTF's own <obj> grammar allows only one \objdata child, but a malformed producer can still write two -- recognised here (rather than left to decode twice into two identical embeddedObject blocks) by objectDataSeen already being true from the first one.
-      const isObjectDataDestination =
-        head.destination === "objdata" && known === "objectData";
+      // RTF's own <obj> grammar allows only one \objdata child, but a malformed producer can still write two -- recognised here (rather than left to decode twice into two identical embeddedObject blocks) by objectDataSeen already being true from the first one. No separate `head.destination === "objdata"` clause: DESTINATION_KINDS maps exactly one key ("objdata") to the "objectData" kind, so `known === "objectData"` alone already states it.
+      const isObjectDataDestination = known === "objectData";
       const isDuplicateObjectData =
         isObjectDataDestination && objectState?.objectDataSeen === true;
       if (isDuplicateObjectData) {
@@ -1873,14 +1904,12 @@ function readRtfDetail(
           };
           child.objectOwner = true;
         }
-        // Genuinely irreducible equivalent mutant if this whole condition were forced to `true`: state.bookmark, like pictureOwner/objectDataOwner/objectOwner on the root object earlier, is only ever acted on paired with a `state.destination === "bookmarkStart"`/`"bookmarkEnd"` check (both at group-end, below, and in emitText) -- never on its own definedness. A stray bookmark object on some OTHER recognised destination's own child (say \object) is read back at that child's own group-end (`state.bookmark !== undefined`), but neither the bookmarkStart nor the bookmarkEnd branch beneath it ever fires, since `child.destination` is set from `kind` independently of this block and was never "bookmarkStart"/"bookmarkEnd" to begin with.
-        if (kind === "bookmarkStart" || kind === "bookmarkEnd") {
-          child.bookmark = {
-            name: "",
-            columnFirst: undefined,
-            columnLast: undefined,
-          };
-        }
+        // No `kind === "bookmarkStart" || kind === "bookmarkEnd"` guard: state.bookmark, like pictureOwner/objectDataOwner/objectOwner on the root object earlier, is only ever acted on paired with a `state.destination === "bookmarkStart"`/`"bookmarkEnd"` check (both at group-end, below, and in emitText) -- never on its own definedness. A stray bookmark object on some OTHER recognised destination's own child (say \object) is read back at that child's own group-end (`state.bookmark !== undefined`), but neither the bookmarkStart nor the bookmarkEnd branch beneath it ever fires, since `child.destination` is set from `kind` independently of this block and was never "bookmarkStart"/"bookmarkEnd" to begin with -- so assigning a fresh (and, on any other destination, simply unread) bookmark here unconditionally changes nothing observable for any input.
+        child.bookmark = {
+          name: "",
+          columnFirst: undefined,
+          columnLast: undefined,
+        };
         index = head.contentStart;
       } else {
         index += 1;
@@ -1903,14 +1932,14 @@ function readRtfDetail(
     if (token.kind === "groupEnd") {
       flushBytes();
       // No `state.destination === "picture"` check here: pictureOwner is set true only at the same moment a group's own destination becomes "picture" (below, on group open), and cloneGroupState resets it to false on every child regardless of what destination that child inherits -- so pictureOwner true already implies this group's destination was "picture" for its own whole lifetime. The nested-plain-group case a malformed \pict can contain is exactly why the flag exists at all: that child inherits destination "picture" by reference but starts with its own fresh pictureOwner false, which is what pictureOwner (not destination) is the one actually gating here.
-      if (state.picture !== undefined && state.pictureOwner) {
+      if (state.picture !== undefined && state.pictureOwner === true) {
         const image = buildPicture(state.picture, sink);
         if (image !== undefined) {
           builder.addBlocks([image], state.para.inTable);
         }
       }
       // Same reasoning as pictureOwner above: objectDataOwner is set true only alongside destination "objectData" and reset false on every other child.
-      if (state.objectData !== undefined && state.objectDataOwner) {
+      if (state.objectData !== undefined && state.objectDataOwner === true) {
         const embedded = buildEmbeddedObject(
           state.objectData,
           state.object,
@@ -1929,7 +1958,7 @@ function readRtfDetail(
         state.resultOf.resultBlocks = builder.endResultScratch(state.para);
       }
       // Same reasoning again: objectOwner is set true only alongside destination "object" and reset false on every other child.
-      if (state.object !== undefined && state.objectOwner) {
+      if (state.object !== undefined && state.objectOwner === true) {
         // Every child \objdata/\result this \object's own group can legally contain has, by construction, already closed by the time \object's own closing brace is reached -- so `decoded`, `objectDataSeen` and `resultBlocks` are all final here, regardless of which sibling the source actually listed first.
         const objectState = state.object;
         if (!objectState.decoded && objectState.resultBlocks !== undefined) {
@@ -1969,7 +1998,10 @@ function readRtfDetail(
         builder.startFormField();
         state.field.formFieldStarted = true;
       }
-      if (state.isFieldGroup && state.field?.formFieldStarted === true) {
+      if (
+        state.isFieldGroup === true &&
+        state.field?.formFieldStarted === true
+      ) {
         // The whole field is read by now -- \*\fldinst and \*\formfield are this group's own earlier children, already closed -- so this is the one point that knows both the instruction and whatever form-field data it carried. Gated on formFieldStarted, not on `descriptor` being defined: startFormField above already opened this field's extent (an ordinary field, which never does, correctly never reaches endFormField either), and endFormField's own job is closing whatever startFormField opened -- not re-deciding whether it should have been opened from a second, independently re-derived read of the instruction, which is exactly what let open and close firing conditions drift apart (see endFormField's own comment on `descriptor` possibly being undefined here).
         const descriptor = formFieldContentControl(
           state.field.instruction,
