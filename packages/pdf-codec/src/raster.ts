@@ -224,11 +224,8 @@ export function renderPdfPage(
     cropBox = mediaBox;
   }
   const rotation = normalizeRotation(asNumber(dictGet(page, "Rotate")));
-  const rotationResult = pageRotationTransform(
-    rotation,
-    mediaBox.urx - mediaBox.llx,
-    mediaBox.ury - mediaBox.lly,
-  );
+  // Only rotationResult.matrix is used below, never its own widthPt/heightPt fields -- and the matrix's rotation/reflection component (a, b, c, d) never depends on the w/h arguments at all, only its translation component (e, f) does. That translation is provably canceled by the origin renormalization two lines down (translationMatrix(-visibleRect.minX, -visibleRect.minY) subtracts out exactly the offset any w/h value would have introduced), so the real mediaBox width/height computed here would produce a byte-identical pageMatrix and visibleRect to passing 0 for both -- confirmed directly against an asymmetric MediaBox/CropBox pair under every rotation, not merely the aligned case. Passing 0 rather than the real (but unobservable) mediaBox dimensions removes an arithmetic expression whose result genuinely never reaches any output.
+  const rotationResult = pageRotationTransform(rotation, 0, 0);
   const visibleRect = rotatedRectBounds(cropBox, rotationResult.matrix);
   const pageWidthPt = visibleRect.maxX - visibleRect.minX;
   const pageHeightPt = visibleRect.maxY - visibleRect.minY;
