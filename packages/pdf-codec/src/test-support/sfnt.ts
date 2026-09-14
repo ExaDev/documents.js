@@ -715,7 +715,6 @@ export function buildGdefTable(classes: {
   readonly markAttachClassDef?: Uint8Array;
   readonly markGlyphSets?: readonly Uint8Array[];
 }): Uint8Array<ArrayBuffer> {
-  const withSets = classes.markGlyphSets !== undefined;
   const markGlyphSetsDef = classes.markGlyphSets
     ? ((sets: readonly Uint8Array[]) => {
         const defSize =
@@ -735,7 +734,7 @@ export function buildGdefTable(classes: {
         return def.bytes;
       })(classes.markGlyphSets)
     : undefined;
-  const headerSize = withSets ? 14 : 12;
+  const headerSize = markGlyphSetsDef === undefined ? 12 : 14;
   const blobs = [
     classes.glyphClassDef,
     classes.markAttachClassDef,
@@ -744,7 +743,7 @@ export function buildGdefTable(classes: {
   const table = new TableBuilder(
     headerSize + blobs.reduce((n, blob) => n + blob.length, 0),
   );
-  table.setU16(0, 1).setU16(2, withSets ? 2 : 0);
+  table.setU16(0, 1).setU16(2, markGlyphSetsDef === undefined ? 0 : 2);
   let blobAt = headerSize;
   const offsetOf = (blob: Uint8Array): number => {
     const offset = blobAt;
@@ -760,11 +759,9 @@ export function buildGdefTable(classes: {
       : offsetOf(classes.markAttachClassDef);
   table.setU16(4, glyphClassOffset).setU16(6, 0).setU16(8, 0);
   table.setU16(10, markAttachOffset);
-  if (withSets) {
+  if (markGlyphSetsDef !== undefined) {
     // the MarkGlyphSetsDef offset slot arrives with minor version 2; its value was already placed by the blob walk above
-    const setsOffset =
-      markGlyphSetsDef === undefined ? 0 : offsetOf(markGlyphSetsDef);
-    table.setU16(12, setsOffset);
+    table.setU16(12, offsetOf(markGlyphSetsDef));
   }
   return table.bytes;
 }
