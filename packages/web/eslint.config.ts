@@ -69,6 +69,16 @@ export default tseslint.config(
     },
   },
   {
+    // doubleStrokeKeys is a pure helper exported alongside the SlidesPreview component purely so a test can pin its return value directly: the React `key` strings it computes never reach rendered DOM output at all (React keys are consumed internally, not written to markup), so a rendering-only test has no way to observe them -- the one case in this file where allowConstantExport's "still a component-shaped module" carve-out doesn't apply, since the export is a function, not a constant.
+    files: ["src/ui/SlidesPreview.tsx"],
+    rules: {
+      "react-refresh/only-export-components": [
+        "warn",
+        { allowConstantExport: true, allowExportNames: ["doubleStrokeKeys"] },
+      ],
+    },
+  },
+  {
     files: ["src/workers/**/*.ts"],
     languageOptions: { globals: { ...globals.worker } },
   },
