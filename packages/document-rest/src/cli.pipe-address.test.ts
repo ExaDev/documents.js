@@ -46,5 +46,5 @@ describe("main", () => {
     await expect(main()).rejects.toThrow(
       "Expected the HTTP server to bind a TCP address, not a pipe or Unix socket",
     );
-  }, 30_000); // This is the one test in the suite that binds a real, listening TCP socket rather than exercising pure in-process logic, so it is uniquely exposed to host scheduler contention -- the shared UNIT_TEST_TIMEOUT_MS budget in vitest.config.ts is tuned for logic-only tests and is too tight for it under heavy concurrent load.
+  }, 60_000); // This is the one test in the suite that binds a real, listening TCP socket rather than exercising pure in-process logic, so it is uniquely exposed to host scheduler contention -- the shared UNIT_TEST_TIMEOUT_MS budget in vitest.config.ts is tuned for logic-only tests and is too tight for it under heavy concurrent load. Raised from 30s to 60s after repeated observed failures at 23-27s wall time under sustained shared-machine load averages of 160-200+.
 });
