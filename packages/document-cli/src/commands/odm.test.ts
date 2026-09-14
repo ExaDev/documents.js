@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createOdt } from "documents.js";
+import { FIXTURE_FONT_FAMILY } from "../test-support/font-fixture";
 import {
   afterAll,
   afterEach,
@@ -69,6 +70,20 @@ beforeAll(async () => {
   const chapter = createOdt();
   chapter.body.appendParagraph().appendRun({ text: "Chapter content" });
   await writeFile(join(workspace, "chapter1.odt"), chapter.toBytes());
+
+  await writeFile(
+    join(workspace, "book-calibri.odm"),
+    singleChapterOdmBytes("calibri-chapter.odt"),
+  );
+  const calibriChapter = createOdt();
+  calibriChapter.body.appendParagraph().appendRun({
+    text: "A paragraph set in Calibri",
+    fontFamily: FIXTURE_FONT_FAMILY,
+  });
+  await writeFile(
+    join(workspace, "calibri-chapter.odt"),
+    calibriChapter.toBytes(),
+  );
 });
 
 afterAll(async () => {
@@ -179,6 +194,46 @@ describe("odm-to-pdf", () => {
       type: "result",
       output,
     });
+  });
+
+  it("writes to the path named by --out when no positional output is given", async () => {
+    const output = join(workspace, "via-out-flag.pdf");
+    const { exitCode } = await runCli([
+      "odm-to-pdf",
+      join(workspace, "book.odm"),
+      "--out",
+      output,
+      "--chapters-dir",
+      workspace,
+    ]);
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    const bytes = new Uint8Array(await readFile(output));
+    expect(bytes.byteLength).toBeGreaterThan(0);
+  });
+
+  it("prints a font-substitution event under --report-font-substitutions, and stays silent without it", async () => {
+    const reported = await runCli([
+      "odm-to-pdf",
+      join(workspace, "book-calibri.odm"),
+      join(workspace, "reported.pdf"),
+      "--chapters-dir",
+      workspace,
+      "--report-font-substitutions",
+    ]);
+    expect(reported.exitCode).toBe(EXIT_SUCCESS);
+    expect(reported.stderr).toContain(
+      '[odm-to-pdf] font substitution: "Calibri" -> "carlito" (vendored-substitute)',
+    );
+
+    const silent = await runCli([
+      "odm-to-pdf",
+      join(workspace, "book-calibri.odm"),
+      join(workspace, "silent.pdf"),
+      "--chapters-dir",
+      workspace,
+    ]);
+    expect(silent.exitCode).toBe(EXIT_SUCCESS);
+    expect(silent.stderr).not.toContain("font substitution");
   });
 
   it("registers odm-to-pdf with its own description and every conversion/font/chapter option", () => {
