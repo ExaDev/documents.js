@@ -130,6 +130,91 @@ describe("content.read / content.restore", () => {
     expect(read.content.kind).toBe("wordprocessing");
   });
 
+  it("resolves a docx list paragraph's opaque numId against its real numbering.xml definition", async () => {
+    // The tree-based docx writer (buildDocumentBytes) emits a real word/numbering.xml abstractNum/num pair for any list-membership paragraph -- built via the same public assembleTree/buildDocumentBytes pipeline the Package/JSON tool uses, not a hand-authored fixture, so router.ts's own normalizeDocxListKinds resolves against a real NumberingDefinitions map exactly as it would for a document Word itself produced. (ExaDev/documents.js#1273: this writer currently always synthesises numId "1" as a bullet list regardless of the source ContentListMembership's own numId/format, so this asserts the writer's real current output rather than the specific numId/format requested below.)
+    const bytes = buildDocumentBytes(
+      documentTreeWithSchema(
+        assembleTree({
+          kind: "wordprocessing",
+          metadata: {},
+          sections: [
+            {
+              pageSize: { widthPt: 595, heightPt: 842 },
+              margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+              blocks: [
+                {
+                  kind: "paragraph",
+                  runs: [{ text: "bullet item" }],
+                  list: { numId: "1", level: 0, format: "bullet" },
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+      "docx",
+    );
+    const read = await call(router.content.read, { format: "docx", bytes });
+    if (read.content.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const block = read.content.sections[0]?.blocks[0];
+    expect(block?.kind === "paragraph" ? block.list?.numId : undefined).toBe(
+      "bullet:1",
+    );
+  });
+
+  it("resolves a docx list paragraph's numId inside a table cell too, recursing into the cell's own blocks", async () => {
+    const bytes = buildDocumentBytes(
+      documentTreeWithSchema(
+        assembleTree({
+          kind: "wordprocessing",
+          metadata: {},
+          sections: [
+            {
+              pageSize: { widthPt: 595, heightPt: 842 },
+              margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+              blocks: [
+                {
+                  kind: "table",
+                  columnWidthsPt: [100],
+                  rows: [
+                    {
+                      cells: [
+                        {
+                          blocks: [
+                            {
+                              kind: "paragraph",
+                              runs: [{ text: "listed item" }],
+                              list: { numId: "1", level: 0, format: "bullet" },
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+      "docx",
+    );
+    const read = await call(router.content.read, { format: "docx", bytes });
+    if (read.content.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const tableBlock = read.content.sections[0]?.blocks[0];
+    const cellBlock =
+      tableBlock?.kind === "table"
+        ? tableBlock.rows[0]?.cells[0]?.blocks[0]
+        : undefined;
+    expect(
+      cellBlock?.kind === "paragraph" ? cellBlock.list?.numId : undefined,
+    ).toBe("bullet:1");
+  });
+
   it("reads pptx content via the OPC package path", async () => {
     const read = await call(router.content.read, {
       format: "pptx",
