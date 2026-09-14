@@ -9,6 +9,7 @@ import {
   mirrorIndex,
   subbandBounds,
   synthesiseLine,
+  times,
 } from "./jpeg2000-dwt";
 
 // Every buffer cell inverse53Filter/inverse97Filter actually write to gets a value distinguishable from this sentinel: the even step's own F-5 arithmetic maps a uniform 100 to 100 - floor((100 + 100 + 2) / 4) = 50, and every later lifting step further changes whatever it touches, so a sentinel-filled buffer's own untouched/touched split can be read straight off which cells still equal 100.
@@ -398,8 +399,9 @@ describe("synthesiseLine", () => {
   });
 
   it("reads each fill-loop sample from mirrorIndex(i0 + k, i0, i1), not mirrorIndex(i0 - k, i0, i1)", () => {
+    // Length 2 (period 2) would make this indistinguishable: mirrorIndex there collapses to a parity check on (position - i0), and parity(k) === parity(-k) for every k, so i0 + k and i0 - k would always mirror to the same result. Length 4 (period 6) breaks that symmetry.
     const i0 = 10;
-    const i1 = 12;
+    const i1 = 14;
     const fed: number[] = [];
     synthesiseLine(
       (index) => index, // echo: fed[] below ends up holding exactly what each fillScratch call's own source-index argument was
@@ -476,6 +478,45 @@ describe("inverse97Filter", () => {
     expect(touchedIndices(buffer)).toEqual(
       Array.from({ length: 18 }, (_, index) => index + 2),
     );
+  });
+
+  it("applies F-12's own beta step at n = last + 1, its outermost even index", () => {
+    // F-12's own range is a subset of F-8/F-9's, already touched either way, so only the exact value at its own outermost cell -- computed once, independently, straight from the same Float32Array/constants the production code uses -- can show whether F-12 actually ran there.
+    const buffer = new Float32Array(30).fill(SENTINEL);
+    inverse97Filter(buffer, 0, 4);
+    expect(buffer[12]).toBeCloseTo(54.763057708740234, 5);
+  });
+
+  it("applies F-13's own alpha step at n = last, its outermost odd index", () => {
+    const buffer = new Float32Array(30).fill(SENTINEL);
+    inverse97Filter(buffer, 0, 4);
+    expect(buffer[11]).toBeCloseTo(157.5548553466797, 3);
+  });
+});
+
+describe("times", () => {
+  it("calls fn exactly `count` times, with indices 0..count - 1 in order", () => {
+    const calls: number[] = [];
+    times(4, (index) => {
+      calls.push(index);
+    });
+    expect(calls).toEqual([0, 1, 2, 3]);
+  });
+
+  it("calls fn zero times for a count of zero", () => {
+    const calls: number[] = [];
+    times(0, (index) => {
+      calls.push(index);
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it("calls fn zero times for a negative count", () => {
+    const calls: number[] = [];
+    times(-3, (index) => {
+      calls.push(index);
+    });
+    expect(calls).toEqual([]);
   });
 });
 
