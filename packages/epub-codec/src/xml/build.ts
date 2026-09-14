@@ -38,11 +38,11 @@ function toOrderedNode(node: XmlNode): Record<string, unknown> {
       return { __comment: [{ "#text": node.value }] };
     case "cdata":
       return { __cdata: [{ "#text": node.value }] };
-    // A pi/declaration's own text content is never actually written out by fast-xml-parser's builder in preserveOrder mode regardless of what "#text" holds -- confirmed empirically: build([{ "?target": [{ "#text": "anything" }] }]) and build([{ "?target": [] }]) both produce the identical "<?target?>", the same quirk this builder's own reader hits on the way in (a plain or attribute-shaped PI's content parses back as "" either way). An empty array is therefore this node's own real, observable shape, not a placeholder standing in for content the builder would otherwise use.
+    // A pi/declaration node's own value is never read at all by fast-xml-parser's builder in preserveOrder mode -- confirmed empirically against every shape tried (an empty array, one holding a real "#text" entry, undefined, null, a plain object): build([{ "?target": <any of these> }]) always produces the identical "<?target?>", the same quirk this builder's own reader hits on the way in (a plain or attribute-shaped PI's content parses back as "" either way). undefined is therefore used here as the plainest spelling of "this value is never consulted", not a placeholder standing in for children data the builder would otherwise use.
     case "pi":
-      return { [`?${node.target}`]: [] };
+      return { [`?${node.target}`]: undefined };
     case "declaration":
-      return { "?xml": [], ":@": attrsObject(node.attributes) };
+      return { "?xml": undefined, ":@": attrsObject(node.attributes) };
     case "element":
       // No emptiness check before setting ":@": XMLBuilder renders an empty attributes object identically to an entirely absent ":@" key (confirmed empirically), so guarding it here would only ever produce output indistinguishable from not guarding it.
       return {
