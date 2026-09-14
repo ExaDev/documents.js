@@ -75,55 +75,59 @@ export function RecentFilesPanel() {
 
   return (
     <Stack gap={4}>
-      {files.map((record) => (
-        <Group
-          key={record.id}
-          justify="space-between"
-          wrap="nowrap"
-          py={6}
-          px="xs"
-        >
-          <Group gap="sm" wrap="nowrap" className={minWidthZero}>
-            <IconFile size={20} className={iconFlexShrink} />
-            <Stack gap={0} className={minWidthZero}>
-              <Text size="sm" fw={500} truncate>
-                {record.name}
-              </Text>
-              <Group gap={6}>
-                <Badge size="xs" variant="light">
-                  {record.format}
-                </Badge>
-                <Text size="xs" c="dimmed">
-                  {formatBytes(record.sizeBytes)} ·{" "}
-                  {relativeTime(record.lastOpenedAt)}
+      {files.map((record) => {
+        const hasHandle = record.handle !== undefined;
+        return (
+          <Group
+            key={record.id}
+            justify="space-between"
+            wrap="nowrap"
+            py={6}
+            px="xs"
+          >
+            <Group gap="sm" wrap="nowrap" className={minWidthZero}>
+              <IconFile size={20} className={iconFlexShrink} />
+              <Stack gap={0} className={minWidthZero}>
+                <Text size="sm" fw={500} truncate>
+                  {record.name}
                 </Text>
-              </Group>
-            </Stack>
+                <Group gap={6}>
+                  <Badge size="xs" variant="light">
+                    {record.format}
+                  </Badge>
+                  <Text size="xs" c="dimmed">
+                    {formatBytes(record.sizeBytes)} ·{" "}
+                    {relativeTime(record.lastOpenedAt)}
+                  </Text>
+                </Group>
+              </Stack>
+            </Group>
+            <Group gap={4} wrap="nowrap">
+              {/* One boolean feeds both the tooltip label and the disabled state -- the disabled assertions already covering both a handle-backed and a handle-less record are what makes this single check observable at all, since the tooltip's own label text never mounts in a render-only test (see reopenTooltipLabel's comment). */}
+              <Tooltip label={reopenTooltipLabel(hasHandle)}>
+                <ActionIcon
+                  variant="subtle"
+                  disabled={!hasHandle}
+                  onClick={() => void handleReopen(record)}
+                >
+                  <IconReload size={16} />
+                </ActionIcon>
+              </Tooltip>
+              <Tooltip label="Remove">
+                <ActionIcon
+                  variant="subtle"
+                  color="red"
+                  onClick={() => {
+                    handleRemove(record.id);
+                  }}
+                >
+                  <IconTrash size={16} />
+                </ActionIcon>
+              </Tooltip>
+            </Group>
           </Group>
-          <Group gap={4} wrap="nowrap">
-            <Tooltip label={reopenTooltipLabel(record.handle !== undefined)}>
-              <ActionIcon
-                variant="subtle"
-                disabled={record.handle === undefined}
-                onClick={() => void handleReopen(record)}
-              >
-                <IconReload size={16} />
-              </ActionIcon>
-            </Tooltip>
-            <Tooltip label="Remove">
-              <ActionIcon
-                variant="subtle"
-                color="red"
-                onClick={() => {
-                  handleRemove(record.id);
-                }}
-              >
-                <IconTrash size={16} />
-              </ActionIcon>
-            </Tooltip>
-          </Group>
-        </Group>
-      ))}
+        );
+      })}
     </Stack>
   );
 }
