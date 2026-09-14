@@ -13,21 +13,25 @@ export function skipExpression(
       return index;
     }
     if (ch === "(") {
-      index = skipExpression(text, index + 1, ")") + 1;
+      index = Math.min(skipExpression(text, index + 1, ")") + 1, text.length);
       continue;
     }
     if (ch === "{") {
-      index = skipExpression(text, index + 1, "}") + 1;
+      index = Math.min(skipExpression(text, index + 1, "}") + 1, text.length);
       continue;
     }
     if (ch === '"' || ch === "'") {
       const closeQuote = text.indexOf(ch, index + 1);
-      index = (closeQuote === -1 ? text.length : closeQuote) + 1;
+      index = Math.min(
+        (closeQuote === -1 ? text.length : closeQuote) + 1,
+        text.length,
+      );
       continue;
     }
     index += 1;
   }
-  return text.length;
+  // Every advance above is clamped to text.length, so a natural loop exit always leaves index exactly at text.length -- returning index rather than a hardcoded text.length keeps the loop's own boundary condition load-bearing (an off-by-one there would surface here as a wrong return value) instead of masked by a fallback that would produce the same answer either way.
+  return index;
 }
 
 // Extracts and trims one expression, advancing past its own terminator. Returns undefined (never an empty string) when the expression is empty, matching both source functions' own "empty means failure" contract for an operand.
