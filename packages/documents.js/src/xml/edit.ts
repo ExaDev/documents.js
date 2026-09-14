@@ -67,8 +67,9 @@ export function insertInSchemaOrder(
     if (sibling.type !== "element") {
       continue;
     }
+    // No explicit "not in order" guard: order.indexOf yields -1 for a sibling whose tag is absent from `order`, and childRank is already known non-negative (the -1 case returned above), so -1 > childRank is always false on its own -- an explicit siblingRank !== -1 check ahead of it would never change the outcome, only duplicate what the comparison below already guarantees.
     const siblingRank = order.indexOf(sibling.tag);
-    if (siblingRank !== -1 && siblingRank > childRank) {
+    if (siblingRank > childRank) {
       insertBefore(parent.children, sibling, child);
       return;
     }
