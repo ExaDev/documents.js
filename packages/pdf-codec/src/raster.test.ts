@@ -601,6 +601,33 @@ describe("renderPdfPage: geometry and clipPt", () => {
     ]);
   });
 
+  it("keeps the array's own two keyword tokens apart across the chunk boundary, not merged into one unrecognised keyword", () => {
+    // Unlike the sibling test above (whose split falls after a number, already a complete token on its own), this one splits directly between two bare keywords -- "re" ending one chunk, "f" starting the next. Without a separator the two concatenate into the single unrecognised keyword "ref", and the rect is never actually filled.
+    const b = new SmallFixture();
+    b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    b.object(
+      3,
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents [5 0 R 6 0 R] >>",
+    );
+    b.object(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+    b.stream(5, "<< >>", enc("1 0 0 rg 10 20 30 40 re"));
+    b.stream(6, "<< >>", enc("f"));
+    const bytes = b.classicXrefAndTrailer(6, "/Root 1 0 R");
+    const rasteriser = new RecordingRasteriser();
+    drive(bytes, 0, {}, rasteriser);
+    expect(rasteriser.ops.filter(isFillRect)).toEqual([
+      {
+        kind: "fillRect",
+        xPx: 10,
+        yPx: 40,
+        widthPx: 30,
+        heightPx: 40,
+        color: { r: 1, g: 0, b: 0 },
+      },
+    ]);
+  });
+
   it("returns whatever the rasteriser's finish produces", () => {
     const rasteriser = new RecordingRasteriser();
     const result = renderPdfPage(onePagePdf(content), 0, {}, rasteriser);
