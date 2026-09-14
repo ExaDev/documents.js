@@ -78,9 +78,9 @@ interface ParsedToken {
 
 // One token of the condition mini-language starting at `start`: an identifier, matched against CONDITION_INFOS, then whatever that identifier's own kind requires immediately after it (a comparison operator and one trailing expression, an empty ()) pair, or one/two parenthesised expressions). Returns undefined on anything this reader cannot make sense of -- a genuinely malformed or producer-extended condition degrades to no validation type/operator rather than a wrong one, mirroring readCellValue's own "an honest 'we don't have one' beats a fabricated value" convention elsewhere in this reader.
 function parseToken(text: string, start: number): ParsedToken | undefined {
-  // Skips leading whitespace before matching -- real ODF condition strings have a literal space either side of the 'and' keyword (lclSkipWhitespace's own call sites in XMLConverter.cxx), and this parser's own primary/secondary calls resume exactly where the previous token's endIndex left off, which is never itself past that space.
+  // Skips leading whitespace before matching -- real ODF condition strings have a literal space either side of the 'and' keyword (lclSkipWhitespace's own call sites in XMLConverter.cxx), and this parser's own primary/secondary calls resume exactly where the previous token's endIndex left off, which is never itself past that space. No separate `searchStart < text.length` bound: `text[searchStart]` for an out-of-range index is `undefined`, which is never `=== " "`, so the character check alone already stops the loop at the end of the string.
   let searchStart = start;
-  while (searchStart < text.length && text[searchStart] === " ") {
+  while (text[searchStart] === " ") {
     searchStart += 1;
   }
   const match = IDENTIFIER_PATTERN.exec(text.slice(searchStart));
@@ -390,21 +390,15 @@ function comparisonClause(
     : `cell-content()${operatorText}${formula1}`;
 }
 
+// Both call sites below already narrow `operator` to this pair before calling -- a between/notBetween clause is the only shape either the textLength or the default (whole/decimal/date/time) branch ever asks this helper to build, so the return type carries no undefined case for a third operator this helper is never actually invoked with.
 function betweenClause(
-  operator: SheetRuleOperator,
+  operator: "between" | "notBetween",
   stem: string,
   formula1: string,
   formula2: string,
-): string | undefined {
-  const suffix =
-    operator === "between"
-      ? "is-between"
-      : operator === "notBetween"
-        ? "is-not-between"
-        : undefined;
-  return suffix === undefined
-    ? undefined
-    : `${stem}-${suffix}(${formula1},${formula2})`;
+): string {
+  const suffix = operator === "between" ? "is-between" : "is-not-between";
+  return `${stem}-${suffix}(${formula1},${formula2})`;
 }
 
 /** The table:condition attribute value for one rule, "of:"-prefixed the way every real producer spells the OpenFormula namespace. Returns undefined when the rule carries no condition this grammar can state at all -- a custom rule with no formula, a list with no list body, or a textLength rule with no comparison -- in which case the writer emits no table:condition attribute, exactly the shape whose absence the read side itself degrades to a bare custom rule. An operator whose operand is missing degrades the same way rather than emitting a clause the read side would reject: the same partial-parse tolerance readContentValidation already shows in the other direction. */
