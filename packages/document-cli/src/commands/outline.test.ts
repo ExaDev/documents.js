@@ -278,6 +278,42 @@ describe("outline", () => {
     expect(stdout).toBe("");
   });
 
+  it("collapses runs of internal whitespace to one space and trims the ends", async () => {
+    const docPath = join(workspace, "whitespace.docx");
+    const editor = createDocx();
+    editor.body
+      .appendParagraph()
+      .appendRun({ text: "  leading and   trailing  " });
+    await writeFile(docPath, editor.toBytes());
+
+    const { exitCode, stdout, stderr } = await runCli(["outline", docPath]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    expect(stdout).toBe("leading and trailing\n");
+  });
+
+  it("renders a textless leaf (no alt text) as its own kind in brackets, not a blank line", async () => {
+    const docPath = join(workspace, "textless-image.docx");
+    const editor = createDocx();
+    editor.body.appendParagraph().insertImageAfter({
+      format: "png",
+      bytes: new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4,
+      ]),
+      widthPt: 10,
+      heightPt: 10,
+    });
+    await writeFile(docPath, editor.toBytes());
+
+    const { exitCode, stdout, stderr } = await runCli(["outline", docPath]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    // The image's own host paragraph carries no run text of its own, so it renders as its own bracketed "[paragraph]" leaf line too, ahead of the image leaf.
+    expect(stdout).toBe("[paragraph]\n[image]\n");
+  });
+
   it("--json still emits an empty array for the same empty document", async () => {
     const emptyPath = join(workspace, "empty-json.md");
     await writeFile(emptyPath, "");
