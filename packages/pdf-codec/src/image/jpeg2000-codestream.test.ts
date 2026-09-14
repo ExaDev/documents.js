@@ -569,9 +569,9 @@ describe("parseJpeg2000Codestream, header-segment guards a real encoder never tr
     const data = minimalCodestream({
       afterMainHeader: tilePart(0, [], []),
     });
-    const part = parseJpeg2000Codestream(data).tileParts[0];
-    expect(part?.header.cod).toBeUndefined();
-    expect(part?.header.qcd).toBeUndefined();
+    const header = parseJpeg2000Codestream(data).tileParts[0]?.header;
+    expect(header !== undefined && Object.hasOwn(header, "cod")).toBe(false);
+    expect(header !== undefined && Object.hasOwn(header, "qcd")).toBe(false);
   });
 
   it("lets a tile-part's own COD marker override just the coding defaults, leaving quantization to the main header", () => {
@@ -677,11 +677,38 @@ describe("parseJpeg2000Codestream, header-segment guards a real encoder never tr
   });
 
   it("skips a marker segment type this decoder has no other handling for, without recording anything", () => {
-    const tlm = segment(0xff55, [0, 0, 0, 0]); // TLM: positional/informational only
+    // The body deliberately looks like a registration-1 COM segment ("registration 1, text AB") -- if TLM were ever misread as COM this would show up as a spurious comment, not merely a silent no-op that happens to look the same either way.
+    const tlm = segment(0xff55, [0, 1, 0x41, 0x42]);
     const data = minimalCodestream({ afterMainHeader: tlm });
     const codestream = parseJpeg2000Codestream(data);
     expect(codestream.comments).toEqual([]);
     expect(codestream.main.hasProgressionChanges).toBe(false);
+  });
+
+  it("stops reading quantization step sizes exactly at its own segment boundary", () => {
+    // One entry, then a single trailing pad byte -- one byte short of a second entry, so a mutant that reads one iteration too many would either read past the segment into whatever follows or throw, rather than stopping here with exactly one.
+    const qcd = segment(MARKER_QCD, [
+      (0 << 5) | 1,
+      ...u16((5 << 11) | 1),
+      0xaa,
+    ]);
+    const data = minimalCodestream({ qcd });
+    expect(parseJpeg2000Codestream(data).main.qcd?.stepSizes).toHaveLength(1);
+  });
+
+  it("accepts a marker segment whose own declared length runs exactly to the end of the codestream", () => {
+    const com = segment(0xff64, [0, 0, 0x41]); // registration 0 (binary), one body byte, landing exactly on the codestream's own last byte
+    const data = minimalCodestream({ afterMainHeader: com, omitEoc: true });
+    expect(() => parseJpeg2000Codestream(data)).not.toThrow();
+  });
+
+  it("trims a trailing EOC from a tile-part whose data is exactly the 2-byte signature and nothing else", () => {
+    const data = minimalCodestream({
+      afterMainHeader: tilePart(0, [], [0xff, 0xd9]),
+      omitEoc: true,
+    });
+    const part = parseJpeg2000Codestream(data).tileParts[0];
+    expect(part?.dataStart).toBe(part?.dataEnd);
   });
 
   it("starts with no comments at all when the main header carries none", () => {
