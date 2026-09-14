@@ -364,13 +364,13 @@ function readContentForFormat(
   }
 }
 
-// Exported purely so router.test.ts can pin the exact byteLength arithmetic against a base64 string of a controlled length, rather than needing a real embedded image round-tripped through a full docx-to-PDF conversion just to exercise one estimate formula.
+// Exported purely so router.test.ts can pin the exact byteLength arithmetic against a base64 string of a controlled length, rather than needing a real embedded image round-tripped through a full docx-to-PDF conversion just to exercise one estimate formula. No Math.ceil around the division: asset.base64 is always produced by documents.js's own bytesToBase64 encoder (readPdf's own image extraction is the only producer of a LayoutImageAsset), which pads every output to a multiple of 4 characters -- a real base64 encoding's own length invariant, not an assumption about this one caller -- so `length * 3 / 4` is already exactly integral for every value this ever actually receives, and rounding it up could only ever be a no-op.
 export function sanitizeImageAsset(asset: LayoutImageAsset) {
   return {
     format: asset.format,
     widthPx: asset.widthPx,
     heightPx: asset.heightPx,
-    byteLength: Math.ceil((asset.base64.length * 3) / 4),
+    byteLength: (asset.base64.length * 3) / 4,
   };
 }
 
