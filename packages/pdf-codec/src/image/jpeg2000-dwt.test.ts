@@ -398,8 +398,7 @@ describe("synthesiseLine", () => {
     expect(filterCalls).toBe(1);
   });
 
-  it("reads each fill-loop sample from mirrorIndex(i0 + k, i0, i1), not mirrorIndex(i0 - k, i0, i1)", () => {
-    // Length 2 (period 2) would make this indistinguishable: mirrorIndex there collapses to a parity check on (position - i0), and parity(k) === parity(-k) for every k, so i0 + k and i0 - k would always mirror to the same result. Length 4 (period 6) breaks that symmetry.
+  it("reads each fill-loop sample from mirrorIndex(k, i0, i1), the same k the scratch offset is built from", () => {
     const i0 = 10;
     const i1 = 14;
     const fed: number[] = [];
@@ -422,7 +421,7 @@ describe("synthesiseLine", () => {
     // mirrorIndex itself is separately verified correct (see the describe block below), so it doubles here as ground truth for what synthesiseLine's fill loop ought to have fed it.
     const expected = [];
     for (let k = -6; k < i1 - i0 + 6; k++) {
-      expected.push(mirrorIndex(i0 + k, i0, i1));
+      expected.push(mirrorIndex(k, i0, i1));
     }
     expect(fed).toEqual(expected);
   });
@@ -521,7 +520,7 @@ describe("times", () => {
 });
 
 describe("mirrorIndex", () => {
-  it("returns the sole in-range index for a length-1 range, whatever position is asked for", () => {
+  it("returns the sole in-range index for a length-1 range, whatever offset is asked for", () => {
     expect(mirrorIndex(0, 5, 6)).toBe(5);
     expect(mirrorIndex(-3, 5, 6)).toBe(5);
     expect(mirrorIndex(9, 5, 6)).toBe(5);
@@ -531,16 +530,22 @@ describe("mirrorIndex", () => {
     expect(mirrorIndex(0, 3, 3)).toBe(3);
   });
 
-  it("mirrors a position before i0 about i0 itself", () => {
-    // [i0, i1) = [0, 4): position -1 mirrors to 1, matching F.3.4's own reflection about the first sample.
+  it("mirrors a negative offset about i0 itself", () => {
+    // [i0, i1) = [0, 4): offset -1 (position i0 - 1) mirrors to i0 + 1, matching F.3.4's own reflection about the first sample.
     expect(mirrorIndex(-1, 0, 4)).toBe(1);
   });
 
-  it("mirrors a position at or past i1 about the last in-range sample", () => {
+  it("mirrors an offset at or past i1 - i0 about the last in-range sample", () => {
     expect(mirrorIndex(4, 0, 4)).toBe(2);
   });
 
-  it("leaves a position already inside [i0, i1) unchanged", () => {
+  it("leaves an offset already inside [0, i1 - i0) unchanged", () => {
     expect(mirrorIndex(2, 0, 4)).toBe(2);
+  });
+
+  it("mirrors the same way regardless of i0, once the offset from it is the same", () => {
+    // A nonzero i0, unlike every case above, so offsetFromI0 and the absolute position genuinely differ.
+    expect(mirrorIndex(-1, 100, 104)).toBe(101);
+    expect(mirrorIndex(4, 100, 104)).toBe(102);
   });
 });
