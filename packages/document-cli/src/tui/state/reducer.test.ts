@@ -964,6 +964,69 @@ describe("appReducer SET_LIST_ITEM_TEXT on odt", () => {
   });
 });
 
+describe("appReducer ADD_LIST_ITEM on docx", () => {
+  // docx (and markdown) have no separate "list" object the way odt does -- list membership is flat per-paragraph metadata, so ADD_LIST_ITEM's own docx/markdown branch appends a brand-new paragraph and copies the anchor paragraph's own ContentListMembership onto it, rather than extending an OdtList (the odt branch this file's own "ADD_LIST on odt"/"INDENT_LIST_ITEM on odt" describe blocks already cover).
+  it("appends a new paragraph copying the anchor paragraph's own list membership", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const doc = docxDocument(created);
+    const anchor = doc.editor.body.appendParagraph({ text: "First item" });
+    anchor.list = { level: 0, numId: "7" };
+    const anchorIndex = doc.editor.paragraphs().length - 1;
+
+    const added = appReducer(created, {
+      type: "ADD_LIST_ITEM",
+      blockIndex: anchorIndex,
+      text: "Second item",
+    });
+
+    const paragraphs = docxDocument(added).editor.paragraphs();
+    const appended = paragraphs[paragraphs.length - 1];
+    expect(appended?.text).toBe("Second item");
+    expect(appended?.list).toStrictEqual({ level: 0, numId: "7" });
+    expect(added.hasUnsavedChanges).toBe(true);
+  });
+
+  it("warns rather than crashing when blockIndex names no paragraph", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+
+    const result = appReducer(created, {
+      type: "ADD_LIST_ITEM",
+      blockIndex: 999,
+      text: "x",
+    });
+
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toContain("no paragraph");
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+
+  it("warns rather than crashing when the anchor paragraph is not part of a list", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const doc = docxDocument(created);
+    doc.editor.body.appendParagraph({ text: "Not a list item" });
+    const anchorIndex = doc.editor.paragraphs().length - 1;
+
+    const result = appReducer(created, {
+      type: "ADD_LIST_ITEM",
+      blockIndex: anchorIndex,
+      text: "x",
+    });
+
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toContain("not part of a list");
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+});
+
 describe("appReducer ADD_LIST on odt", () => {
   it("creates a real, brand-new, empty list, navigable through the existing listEditor screen", () => {
     const created = appReducer(createInitialState(), {
