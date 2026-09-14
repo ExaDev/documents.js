@@ -13,7 +13,7 @@ import {
   embeddedSubsetTag,
 } from "./embedded-font-write";
 import { decodeStream } from "./filters";
-import type { PdfDict, PdfObject } from "./objects";
+import type { PdfDict } from "./objects";
 import {
   asArray,
   asName,
@@ -33,6 +33,8 @@ import type { SfntSubsetResult } from "./sfnt-subset";
 import { subsetSfnt } from "./sfnt-subset";
 import { parseSfnt } from "./sfnt";
 import { caladeaItalicBytes, carlitoRegularBytes } from "./test-support/fonts";
+import type { AllocatedObject } from "./test-support/write-pdf-fixture";
+import { assemblePdf } from "./test-support/write-pdf-fixture";
 
 // The end-to-end proof this module exists for: take a real vendored face, cut a real subset of it for a real string, build the whole PDF object group, assemble a genuine PDF file around it by hand, and read that file back with this package's own readPdf. Nothing here is a synthetic fixture -- the font is the checked-in Carlito Regular, the subset is sfnt-subset.ts's own output, and the file is a complete, well-formed PDF with a real cross-reference table.
 //
@@ -46,48 +48,6 @@ const TEXT_Y_PT = 700;
 const PAGE_WIDTH_PT = 612;
 const PAGE_HEIGHT_PT = 792;
 const FONT_RESOURCE_NAME = "F1";
-
-interface AllocatedObject {
-  readonly num: number;
-  readonly value: PdfObject;
-}
-
-// A complete classic-cross-reference PDF file around an already-built object list -- the same shape write.ts's own tail emits, written out here so this test owns every byte of the file it then reads back.
-function assemblePdf(
-  objects: readonly AllocatedObject[],
-  rootNum: number,
-): Uint8Array<ArrayBuffer> {
-  const writer = new ByteWriter();
-  writer.writeAscii("%PDF-1.7\n");
-  const offsets = new Map<number, number>();
-  for (const { num, value } of objects) {
-    offsets.set(num, writer.length);
-    writer.writeAscii(`${num} 0 obj\n`);
-    writeObject(writer, value);
-    writer.writeAscii("\nendobj\n");
-  }
-  const maxObjNum = Math.max(...objects.map((object) => object.num));
-  const xrefOffset = writer.length;
-  writer.writeAscii("xref\n");
-  writer.writeAscii(`0 ${maxObjNum + 1}\n`);
-  writer.writeAscii("0000000000 65535 f \n");
-  for (let num = 1; num <= maxObjNum; num++) {
-    const offset = offsets.get(num);
-    if (offset === undefined) {
-      throw new Error(`object ${String(num)} was never written`);
-    }
-    writer.writeAscii(`${offset.toString().padStart(10, "0")} 00000 n \n`);
-  }
-  writer.writeAscii("trailer\n");
-  writeObject(
-    writer,
-    pdfDict({ Size: pdfNum(maxObjNum + 1), Root: pdfRef(rootNum, 0) }),
-  );
-  writer.writeAscii("\nstartxref\n");
-  writer.writeAscii(`${xrefOffset}\n`);
-  writer.writeAscii("%%EOF");
-  return writer.toBytes();
-}
 
 // The one text-showing sequence the page draws: the string's CIDs, big-endian, as a hex-string Tj operand against the embedded composite font -- exactly what math-content-write.ts already emits for the math font, and the only content-stream shape an Identity-H font can be shown with.
 function buildContentStream(
@@ -293,6 +253,20 @@ describe("a real PDF carrying an embedded, subsetted Carlito, read back by this 
     const cidSystemInfo = document.resolveDict(
       dictGet(cidFont!, "CIDSystemInfo"),
     );
+    const registry = dictGet(cidSystemInfo!, "Registry");
+    const ordering = dictGet(cidSystemInfo!, "Ordering");
+    expect(registry?.kind).toBe("string");
+    expect(ordering?.kind).toBe("string");
+    expect(
+      registry?.kind === "string"
+        ? new TextDecoder().decode(registry.bytes)
+        : undefined,
+    ).toBe("Adobe");
+    expect(
+      ordering?.kind === "string"
+        ? new TextDecoder().decode(ordering.bytes)
+        : undefined,
+    ).toBe("Identity");
     expect(asNumber(dictGet(cidSystemInfo!, "Supplement"))).toBe(0);
 
     const descriptor = document.resolveDict(
