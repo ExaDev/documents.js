@@ -49,6 +49,35 @@ describe("createFallbackFileAccess", () => {
     expect(opened?.handle).toBeUndefined();
   });
 
+  it("creates a genuine file-type input element", async () => {
+    let capturedType = "";
+    vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(function (
+      this: HTMLInputElement,
+    ) {
+      capturedType = this.type;
+      Object.defineProperty(this, "files", {
+        value: fileList([]),
+        configurable: true,
+      });
+      this.dispatchEvent(new Event("change"));
+    });
+    await createFallbackFileAccess().openFile({});
+    expect(capturedType).toBe("file");
+  });
+
+  it("registers the change listener with once: true, so it never re-fires on a later change event", async () => {
+    const addEventListenerSpy = vi.spyOn(
+      HTMLInputElement.prototype,
+      "addEventListener",
+    );
+    stubPickedFiles([]);
+    await createFallbackFileAccess().openFile({});
+    const [, , options] = addEventListenerSpy.mock.calls.find(
+      ([type]) => type === "change",
+    )!;
+    expect(options).toEqual({ once: true });
+  });
+
   it("resolves undefined when the picker is dismissed with no file chosen", async () => {
     stubPickedFiles([]);
     const opened = await createFallbackFileAccess().openFile({});
@@ -114,6 +143,9 @@ describe("createFallbackFileAccess", () => {
     );
 
     expect(createObjectURLSpy).toHaveBeenCalledTimes(1);
+    const [blob] = createObjectURLSpy.mock.calls[0] as [Blob];
+    expect(blob.size).toBe(3);
+    expect(blob.type).toBe("application/pdf");
     expect(clickedHref).toBe("blob:mock-url");
     expect(clickedDownload).toBe("out.pdf");
     expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:mock-url");
