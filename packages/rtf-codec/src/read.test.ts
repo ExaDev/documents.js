@@ -1359,6 +1359,51 @@ describe("embedded objects", () => {
       ).toHaveLength(1);
     });
 
+    it("reports the exact duplicate-\\result diagnostic and keeps only the first one's own content, when a malformed \\object has two", () => {
+      const { document, diagnostics } = readRtfContent(
+        bytes(
+          `${HEADER}\\pard{\\object\\objemb{\\result{\\pard\\plain FIRST\\par}}{\\result{\\pard\\plain SECOND\\par}}}\\par}`,
+        ),
+      );
+      if (document.kind !== "wordprocessing") {
+        throw new Error(
+          `expected a wordprocessing document, got ${document.kind}`,
+        );
+      }
+      const found = diagnostics.find(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE &&
+          diagnostic.message.includes("more than one \\result"),
+      );
+      expect(found?.message).toBe(
+        "an \\object destination has more than one \\result child, which RTF's own grammar does not allow; only the first is kept and this one is discarded",
+      );
+      const text = document.sections[0]?.blocks
+        .filter(
+          (block): block is ContentParagraph => block.kind === "paragraph",
+        )
+        .flatMap((paragraph) => paragraph.runs.map((run) => run.text))
+        .join("|");
+      expect(text).toContain("FIRST");
+      expect(text).not.toContain("SECOND");
+    });
+
+    it("reports the exact duplicate-\\objdata diagnostic and decodes only the first one, when a malformed \\object has two", () => {
+      const { diagnostics } = readRtfContent(
+        bytes(
+          `${HEADER}\\pard{\\object\\objemb{\\*\\objdata ${OBJDATA_HEX}}{\\*\\objdata ${OBJDATA_HEX}}}\\par}`,
+        ),
+      );
+      const found = diagnostics.find(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE &&
+          diagnostic.message.includes("more than one \\objdata"),
+      );
+      expect(found?.message).toBe(
+        "an \\object destination has more than one \\objdata child, which RTF's own grammar does not allow; only the first is decoded and this one is discarded",
+      );
+    });
+
     it("does not splice \\result's fallback content in twice", () => {
       const { document } = readRtfContent(
         bytes(
@@ -1456,15 +1501,30 @@ describe("fields and destinations", () => {
     ).toBe(true);
   });
 
+  it("reports the exact UNKNOWN_DESTINATION_SKIPPED message text, naming the destination", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\*\\notarealdestination stray}kept\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.UNKNOWN_DESTINATION_SKIPPED,
+    );
+    expect(found?.message).toBe(
+      "the ignorable destination \\notarealdestination is not recognised and its content is discarded, as the specification requires",
+    );
+  });
+
   it("drops a footnote's body, which the flat ContentDocument has no definitions table to hold, and says so", () => {
     const source = `${HEADER}\\pard Body{\\super\\chftn}{\\footnote\\pard\\plain\\chftn The note.}.\\par}`;
     const runs = paragraphsOf(source)[0]?.runs ?? [];
     expect(runs.map((run) => run.text).join("")).toBe("Body.");
-    expect(
-      readRtfContent(bytes(source)).diagnostics.map(
-        (diagnostic) => diagnostic.code,
-      ),
-    ).toContain(RtfDiagnosticCodes.CONTENT_DESTINATION_SKIPPED);
+    const found = readRtfContent(bytes(source)).diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.CONTENT_DESTINATION_SKIPPED,
+    );
+    expect(found?.message).toBe(
+      "the \\footnote destination's content is discarded: no ContentDocument position carries it",
+    );
   });
 
   it("reports a discarded header or footer, which has no ContentSection field to land in", () => {
