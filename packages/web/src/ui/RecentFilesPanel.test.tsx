@@ -34,7 +34,9 @@ const { formatBytes, reopenTooltipLabel, RecentFilesPanel } =
 
 // handleReopen chains several real awaits (queryPermission, maybe requestPermission, getFile, arrayBuffer) before it calls setPendingReopen/navigate, so a fixed count of Promise.resolve() ticks is fragile against a chain this long -- flushing on a real macrotask boundary (setTimeout) guarantees every already-queued microtask has drained first, regardless of how many awaits the chain happens to have.
 function flushPromises(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
 }
 
 let unmount: (() => void) | undefined;
