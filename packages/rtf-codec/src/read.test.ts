@@ -2787,6 +2787,30 @@ describe("run and paragraph accumulation", () => {
     expect(paragraph?.constructs).toHaveLength(2);
   });
 
+  it("still tie-breaks two run-scoped constructs sharing a startRun by endRun, ascending, when a bookmark extent (pushed first, regardless of its own numeric range) shares its start with a shorter coalesced revision extent (pushed second)", () => {
+    // Both 'B' (a bookmark) and the revision mark on 'hi' start at run 0, but pendingRunConstructs entries are always spread into the pre-sort array BEFORE coalesceRunConstructs' own output, regardless of which one's numeric range is actually smaller -- so the pre-sort array here is [B(start=0,end=2), revision(start=0,end=1)], tied on the first comparator clause and wrong on the second. A second comparator clause that summed the two endRun values instead of subtracting them would return the same non-discriminating result regardless of argument order (both terms tied at zero on the first clause), never triggering the swap this reversed-by-numeric-value push order requires.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\*\\bkmkstart B}\\revised\\revauth1 hi\\revised0  more{\\*\\bkmkend B}\\par}`,
+    )[0];
+    const extents = paragraph?.constructs ?? [];
+    expect(extents).toHaveLength(2);
+    expect(extents[0]?.descriptor.kind).toBe("provenance");
+    expect(extents[0]?.endRun).toBe(1);
+    expect(extents[1]?.descriptor.kind).toBe("anchor");
+    expect(extents[1]?.endRun).toBe(2);
+  });
+
+  it("still sorts a nested bookmark pair into start order when the inner one's own endBookmark call -- and so its own push into pendingRunConstructs -- happens before the outer one's", () => {
+    // 'inner' opens after 'outer' (startRun 1, not 0) but closes first, so ITS OWN pendingRunConstructs.push happens before 'outer's -- the pre-sort array here is [inner(start=1), outer(start=0)], the reverse of correct start order, exactly mirroring the block-extent sort's own out-of-push-order case above. A sort comparator that summed instead of subtracted the two startRun values (or one whose "||" read "&&") would return the same, non-discriminating result regardless of which extent it was asked about first, and never trigger the swap this reversed push order requires.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\*\\bkmkstart outer}one {\\*\\bkmkstart inner}two{\\*\\bkmkend inner} three{\\*\\bkmkend outer}\\par}`,
+    )[0];
+    const names = (paragraph?.constructs ?? []).map((extent) =>
+      extent.descriptor.kind === "anchor" ? extent.descriptor.name : undefined,
+    );
+    expect(names).toEqual(["outer", "inner"]);
+  });
+
   it("resolves a bookmark's own block index to the paragraph it actually opened in, not to whichever later paragraph happens to close while it is still open", () => {
     // "far" opens in "One" and stays open across two further paragraphs before its own \bkmkend. A guard that kept re-resolving blockIndex on every subsequent paragraph close (rather than only once, at "far"'s own opening paragraph) would leave it pointing at "Three" instead.
     const blocks = blocksOf(
