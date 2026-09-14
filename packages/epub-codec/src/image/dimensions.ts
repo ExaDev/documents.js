@@ -25,10 +25,8 @@ const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 // signature(8) + IHDR chunk length(4) + 'IHDR'(4) + width(4) + height(4) -- the minimum a PNG needs before its own dimensions are readable.
 const PNG_HEADER_BYTES = 24;
 
+// No separate `bytes.length < PNG_SIGNATURE.length` guard: an index past the end of `bytes` reads as `undefined`, which can never equal one of the signature's own real byte values, so `.every()` already returns false on its own the moment a short array runs out of bytes to compare.
 function isPng(bytes: Uint8Array): boolean {
-  if (bytes.length < PNG_SIGNATURE.length) {
-    return false;
-  }
   return PNG_SIGNATURE.every((byte, index) => bytes[index] === byte);
 }
 
@@ -72,7 +70,8 @@ function hasNoLengthField(marker: number): boolean {
 
 // Walks JPEG marker segments from the SOI (0xFFD8) until a Start-Of-Frame marker's own segment: length(2, BE) + precision(1) + height(2, BE) + width(2, BE) -- height before width, unlike PNG. Every other marker segment is skipped by its own declared length (which includes the 2 length bytes themselves).
 function readJpegDimensions(bytes: Uint8Array): ImageDimensions | undefined {
-  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+  // No separate `bytes.length < 4` clause: bytes[0]/bytes[1] already read as undefined past the end of a shorter array, which can never equal 0xff/0xd8, and every later read in this function is equally undefined-safe (via ?? 0 or its own explicit bounds check), so a short array is already rejected, or the loop below already terminates cleanly, without this clause's help.
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8) {
     return undefined;
   }
   let offset = 2;
@@ -94,9 +93,7 @@ function readJpegDimensions(bytes: Uint8Array): ImageDimensions | undefined {
     if (hasNoLengthField(marker)) {
       continue;
     }
-    if (offset + 2 > bytes.length) {
-      return undefined;
-    }
+    // No separate `offset + 2 > bytes.length` guard here: for a Start-Of-Frame marker, the deeper `offset + 7 > bytes.length` check just below already rejects every truncation this one would (7 is always the larger bound), and for any other marker, readUint16BE's own ?? 0 fallback yields a length that only ever advances `offset` further past `bytes.length`, which the loop's own bound already terminates on.
     const length = readUint16BE(bytes, offset);
     if (isStartOfFrameMarker(marker)) {
       if (offset + 7 > bytes.length) {
@@ -115,8 +112,9 @@ function readJpegDimensions(bytes: Uint8Array): ImageDimensions | undefined {
   return undefined;
 }
 
+// No separate `bytes.length >= 2` guard: bytes[0]/bytes[1] already read as undefined past the end of a shorter array, which can never equal 0xff/0xd8, so the equality checks alone already reject a too-short array.
 function isJpeg(bytes: Uint8Array): boolean {
-  return bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xd8;
+  return bytes[0] === 0xff && bytes[1] === 0xd8;
 }
 
 // Exposed so a caller can pick ContentImageBlock's own `format` field from the identical bytes without a second, potentially-divergent sniff of its own. Returns undefined for anything that is neither a PNG nor a JPEG -- ContentImageBlockSchema's own `format` field has no third member to fall back to (a GIF or SVG manifest image, both legal in EPUB, has no representation there at all -- see the README's own documented gap).
