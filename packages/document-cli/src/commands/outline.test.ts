@@ -90,6 +90,8 @@ beforeEach(() => {
 
 afterEach(() => {
   process.exitCode = savedExitCode;
+  // Every real runOutline() call registers its own SIGINT listener via createRuntimeSignal and never removes it -- harmless for a real one-shot CLI process, but this file alone now drives enough real invocations in one vitest worker to cross Node's default MaxListeners (10) and print a warning straight to the captured stderr some of the tests above assert is empty.
+  process.removeAllListeners("SIGINT");
 });
 
 describe("outline", () => {
@@ -256,14 +258,77 @@ describe("outline", () => {
     expect(leaf.kind).toBe("paragraph");
   });
 
-  it("fails with a usage error naming the recognised extensions when the input has none", async () => {
+  it("fails with a usage error, prefixed under outline, naming the recognised extensions when the input has none", async () => {
     const barePath = join(workspace, "notes.txt");
     await writeFile(barePath, "no outline signal here\n");
 
     const { exitCode, stderr } = await runCli(["outline", barePath]);
 
     expect(exitCode).toBe(EXIT_USAGE_ERROR);
-    expect(stderr).toContain("cannot infer a source format");
+    expect(stderr).toBe(
+      `[outline] cannot infer a source format from '${barePath}'; rename the file with a recognised extension (docx, pptx, xlsx, odt, odp, ods, odg, svg, odf, csv, markdown, rtf, wpd, doc, xls, ppt, epub, pdf) or pass --from <format>\n`,
+    );
+  });
+
+  it("rejects an unrecognised --from format, naming it and every known format", async () => {
+    const docPath = join(workspace, "any.md");
+    await writeFile(docPath, "# Title\n");
+    const { exitCode, stderr } = await runCli([
+      "outline",
+      docPath,
+      "--from",
+      "not-a-format",
+    ]);
+    expect(exitCode).toBe(EXIT_USAGE_ERROR);
+    expect(stderr).toBe(
+      "[outline] unknown --from format 'not-a-format'; expected one of docx, pptx, xlsx, odt, odp, ods, odg, svg, odf, csv, markdown, rtf, wpd, doc, xls, ppt, epub, pdf\n",
+    );
+  });
+
+  it("fails naming stdin explicitly when reading from '-' with no --from given", async () => {
+    const { exitCode, stderr } = await runCli(["outline", "-"]);
+    expect(exitCode).toBe(EXIT_USAGE_ERROR);
+    expect(stderr).toBe(
+      "[outline] cannot infer a source format from stdin; pass --from <format> (docx, pptx, xlsx, odt, odp, ods, odg, svg, odf, csv, markdown, rtf, wpd, doc, xls, ppt, epub, pdf)\n",
+    );
+  });
+
+  it("reports a genuine read failure through the [outline]-prefixed catch, not the usage-error path", async () => {
+    const corruptPath = join(workspace, "corrupt.docx");
+    await writeFile(corruptPath, "this is not a real docx package");
+
+    const { exitCode, stderr } = await runCli(["outline", corruptPath]);
+
+    expect(exitCode).not.toBe(EXIT_SUCCESS);
+    expect(exitCode).not.toBe(EXIT_USAGE_ERROR);
+    expect(stderr).toMatch(/^\[outline\] error: /);
+  });
+
+  it("registers outline with its own description and every option's help text", () => {
+    const command = createProgram().commands.find(
+      (candidate) => candidate.name() === "outline",
+    );
+    expect(command?.description()).toBe(
+      "print a document's outline -- headings, list items, and slide/sheet/page groups as indented text (docx, pptx, xlsx, odt, odp, ods, odg, svg, odf, csv, markdown, rtf, wpd, doc, xls, ppt, epub, pdf)",
+    );
+    const descriptionOf = (long: string): string | undefined =>
+      command?.options.find((option) => option.long === long)?.description;
+    expect(descriptionOf("--json")).toBe(
+      "emit the outline tree as JSON instead of indented text (diagnostics as NDJSON on stderr)",
+    );
+    expect(descriptionOf("--from")).toBe(
+      "source format when it cannot be inferred from the input path, e.g. reading from stdin (docx, pptx, xlsx, odt, odp, ods, odg, svg, odf, csv, markdown, rtf, wpd, doc, xls, ppt, epub, pdf)",
+    );
+    const longs = (command?.options ?? []).map((option) => option.long);
+    expect(longs).toEqual(
+      expect.arrayContaining([
+        "--timeout",
+        "--json",
+        "--quiet",
+        "--verbose",
+        "--from",
+      ]),
+    );
   });
 
   it("prints nothing at all for a document with no outline content, rather than one stray blank line", async () => {
