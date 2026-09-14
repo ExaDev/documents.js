@@ -49,41 +49,79 @@ function minimalEpubEntries(
 }
 
 describe("every EpubDiagnosticCodes entry is reachable from real input", () => {
-  it("INVENTED_PAGE_GEOMETRY fires on every read", () => {
+  it("INVENTED_PAGE_GEOMETRY fires on every read, with a real, non-empty message", () => {
     const { sink, codes } = collect();
+    const seen: EpubDiagnostic[] = [];
     readEpubContent(
       zipPackage(minimalEpubEntries("<html><body><p>x</p></body></html>")),
-      { sink },
+      {
+        sink: (d) => {
+          sink(d);
+          seen.push(d);
+        },
+      },
     );
     expect(codes.has(EpubDiagnosticCodes.INVENTED_PAGE_GEOMETRY)).toBe(true);
+    const found = seen.find(
+      (d) => d.code === EpubDiagnosticCodes.INVENTED_PAGE_GEOMETRY,
+    );
+    expect(found?.message).toBe(
+      "EPUB has no page concept of its own; every section was given A4 + 1in default page geometry",
+    );
   });
 
-  it("SPINE_ITEMREF_UNRESOLVED fires when a spine itemref names no manifest item", () => {
+  it("SPINE_ITEMREF_UNRESOLVED fires when a spine itemref names no manifest item, naming that idref in its own message", () => {
     const { sink, codes } = collect();
+    const seen: EpubDiagnostic[] = [];
     readEpubContent(
       zipPackage(
         minimalEpubEntries("<html><body><p>x</p></body></html>", {
           opfExtra: '<itemref idref="ghost"/>',
         }),
       ),
-      { sink },
+      {
+        sink: (d) => {
+          sink(d);
+          seen.push(d);
+        },
+      },
     );
     expect(codes.has(EpubDiagnosticCodes.SPINE_ITEMREF_UNRESOLVED)).toBe(true);
+    const found = seen.find(
+      (d) => d.code === EpubDiagnosticCodes.SPINE_ITEMREF_UNRESOLVED,
+    );
+    expect(found?.message).toBe(
+      'spine itemref "ghost" names no manifest item; skipped',
+    );
   });
 
-  it("MANIFEST_ITEM_MISSING fires when a manifest item's own part is not in the zip", () => {
+  it("MANIFEST_ITEM_MISSING fires when a manifest item's own part is not in the zip, naming that item's id and href in its own message", () => {
     const { sink, codes } = collect();
+    const seen: EpubDiagnostic[] = [];
     const entries = minimalEpubEntries("<html><body><p>x</p></body></html>", {
       manifestExtra:
         '<item id="ghost" href="ghost.xhtml" media-type="application/xhtml+xml"/>',
       opfExtra: '<itemref idref="ghost"/>',
     });
-    readEpubContent(zipPackage(entries), { sink });
+    readEpubContent(zipPackage(entries), {
+      sink: (d) => {
+        sink(d);
+        seen.push(d);
+      },
+    });
     expect(codes.has(EpubDiagnosticCodes.MANIFEST_ITEM_MISSING)).toBe(true);
+    const found = seen.find(
+      (d) => d.code === EpubDiagnosticCodes.MANIFEST_ITEM_MISSING,
+    );
+    expect(found?.message).toBe(
+      'manifest item "ghost" names a part ("OEBPS/ghost.xhtml") the zip does not contain; skipped',
+    );
+    expect(found?.href).toBe("OEBPS/ghost.xhtml");
   });
 
-  it("NAV_DOCUMENT_MISSING fires when the nav-flagged manifest item carries no toc nav", () => {
+  it("NAV_DOCUMENT_MISSING fires when the nav-flagged manifest item carries no toc nav, naming its own path", () => {
     const { sink, codes } = collect();
+    const seen: EpubDiagnostic[] = [];
     const encoder = new TextEncoder();
     const entries = [
       ...minimalEpubEntries("<html><body><p>x</p></body></html>", {
@@ -97,12 +135,24 @@ describe("every EpubDiagnosticCodes entry is reachable from real input", () => {
         },
       ] as [string, { bytes: Uint8Array<ArrayBuffer> }],
     ];
-    readEpub(zipPackage(entries), { sink });
+    readEpub(zipPackage(entries), {
+      sink: (d) => {
+        sink(d);
+        seen.push(d);
+      },
+    });
     expect(codes.has(EpubDiagnosticCodes.NAV_DOCUMENT_MISSING)).toBe(true);
+    const found = seen.find(
+      (d) => d.code === EpubDiagnosticCodes.NAV_DOCUMENT_MISSING,
+    );
+    expect(found?.message).toBe(
+      'the nav document ("OEBPS/nav.xhtml") carries no <nav epub:type="toc">',
+    );
   });
 
-  it("NAV_SPINE_ORDER_MISMATCH fires when the nav's own toc order disagrees with the spine", () => {
+  it("NAV_SPINE_ORDER_MISMATCH fires when the nav's own toc order disagrees with the spine, with a real, non-empty message", () => {
     const { sink, codes } = collect();
+    const seen: EpubDiagnostic[] = [];
     const encoder = new TextEncoder();
     const entries = [
       ...minimalEpubEntries("<html><body><p>x</p></body></html>", {
@@ -118,22 +168,109 @@ describe("every EpubDiagnosticCodes entry is reachable from real input", () => {
         },
       ] as [string, { bytes: Uint8Array<ArrayBuffer> }],
     ];
-    const tree = readEpub(zipPackage(entries), { sink });
+    const tree = readEpub(zipPackage(entries), {
+      sink: (d) => {
+        sink(d);
+        seen.push(d);
+      },
+    });
     expect(codes.has(EpubDiagnosticCodes.NAV_SPINE_ORDER_MISMATCH)).toBe(true);
     expect(tree.source?.nav).toBeDefined();
+    const found = seen.find(
+      (d) => d.code === EpubDiagnosticCodes.NAV_SPINE_ORDER_MISMATCH,
+    );
+    expect(found?.message).toBe(
+      "the EPUB 3 navigation document's own toc order disagrees with the spine; the spine's reading order wins and the nav document is quarantined as residue",
+    );
   });
 
-  it("NCX_MISSING fires when the spine's toc attribute resolves to no real part", () => {
+  it("NCX_MISSING fires when the spine's toc attribute resolves to no real part, naming the unresolved id in its own message", () => {
     const { sink, codes } = collect();
+    const seen: EpubDiagnostic[] = [];
     readEpubContent(
       zipPackage(
         minimalEpubEntries("<html><body><p>x</p></body></html>", {
           ncxItem: true,
         }),
       ),
-      { sink },
+      {
+        sink: (d) => {
+          sink(d);
+          seen.push(d);
+        },
+      },
     );
     expect(codes.has(EpubDiagnosticCodes.NCX_MISSING)).toBe(true);
+    const found = seen.find((d) => d.code === EpubDiagnosticCodes.NCX_MISSING);
+    expect(found?.message).toBe(
+      'the spine names an NCX ("ncx") the manifest does not resolve to a real part',
+    );
+  });
+
+  it("NCX_MISSING does not fire when the spine carries no toc attribute at all", () => {
+    const { sink, codes } = collect();
+    readEpubContent(
+      zipPackage(
+        minimalEpubEntries("<html><body><p>x</p></body></html>", {
+          ncxItem: false,
+        }),
+      ),
+      { sink },
+    );
+    expect(codes.has(EpubDiagnosticCodes.NCX_MISSING)).toBe(false);
+  });
+
+  it("NCX_MISSING does not fire when the toc attribute resolves to a real manifest item", () => {
+    const { sink, codes } = collect();
+    const encoder = new TextEncoder();
+    const ncxXml =
+      '<?xml version="1.0" encoding="UTF-8"?><ncx xmlns="http://www.daisy.org/z3986/2005/ncx/"><navMap><navPoint><content src="chapter1.xhtml"/></navPoint></navMap></ncx>';
+    const entries = [
+      ...minimalEpubEntries("<html><body><p>x</p></body></html>", {
+        ncxItem: true,
+        manifestExtra:
+          '<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>',
+      }),
+      ["OEBPS/toc.ncx", { bytes: encoder.encode(ncxXml) }] as [
+        string,
+        { bytes: Uint8Array<ArrayBuffer> },
+      ],
+    ];
+    readEpub(zipPackage(entries), { sink });
+    expect(codes.has(EpubDiagnosticCodes.NCX_MISSING)).toBe(false);
+  });
+
+  it("NAV_SPINE_ORDER_MISMATCH fires when the EPUB 2 NCX's own navMap order disagrees with the spine, with a real, non-empty message", () => {
+    const { sink, codes } = collect();
+    const seen: EpubDiagnostic[] = [];
+    const encoder = new TextEncoder();
+    const ncxXml =
+      '<?xml version="1.0" encoding="UTF-8"?><ncx xmlns="http://www.daisy.org/z3986/2005/ncx/"><navMap><navPoint><content src="other.xhtml"/></navPoint></navMap></ncx>';
+    const entries = [
+      ...minimalEpubEntries("<html><body><p>x</p></body></html>", {
+        ncxItem: true,
+        manifestExtra:
+          '<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>',
+      }),
+      ["OEBPS/toc.ncx", { bytes: encoder.encode(ncxXml) }] as [
+        string,
+        { bytes: Uint8Array<ArrayBuffer> },
+      ],
+    ];
+    const tree = readEpub(zipPackage(entries), {
+      sink: (d) => {
+        sink(d);
+        seen.push(d);
+      },
+    });
+    expect(codes.has(EpubDiagnosticCodes.NAV_SPINE_ORDER_MISMATCH)).toBe(true);
+    expect(tree.source?.nav).toBeDefined();
+    const found = seen.find(
+      (d) => d.code === EpubDiagnosticCodes.NAV_SPINE_ORDER_MISMATCH,
+    );
+    expect(found?.message).toBe(
+      "the EPUB 2 NCX's own navMap order disagrees with the spine; the spine's reading order wins and the NCX is quarantined as residue",
+    );
   });
 
   it("METADATA_FIELD_UNMAPPED fires for dc:publisher/dc:contributor/dc:rights", () => {
