@@ -96,7 +96,10 @@ describe("readPdf: page-boundary residue", () => {
   });
 
   it("records nothing when the declared boxes carry no fact beyond the visible one", () => {
-    const doc = readPdf(equalCropBoxPdf());
+    const bytes = equalCropBoxPdf();
+    // An equal CropBox and no CropBox at all are indistinguishable through readPdf's own output (both leave the visible region at the MediaBox and generate no residue row), so this checks the fixture's own raw bytes genuinely declare one rather than merely omitting it -- the fixture's whole point is the equal-box case, not the no-box one.
+    expect(new TextDecoder().decode(bytes)).toContain("/CropBox [0 0 200 100]");
+    const doc = readPdf(bytes);
     expect(doc.pages[0]).toMatchObject({ widthPt: 200, heightPt: 100 });
     expect(textItems(doc.pages[0]!.items).length).toBeGreaterThan(0);
     expect(doc.source?.["page-boxes"]).toBeUndefined();
