@@ -1,8 +1,33 @@
+import type { ContentDocument } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { fixedClock } from "../../ports/clock";
-import { createXls, openXls } from "./editor";
+import { createXls, openXls, XlsEditor } from "./editor";
 
 const FIXED_ISO = "2026-01-01T00:00:00.000Z";
+
+describe("XlsEditor constructor guards", () => {
+  it("rejects a non-spreadsheet ContentDocument, naming the offending kind", () => {
+    const wordprocessing: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [],
+    };
+    expect(() => new XlsEditor(wordprocessing)).toThrow(
+      'XlsEditor requires a spreadsheet ContentDocument, got "wordprocessing"',
+    );
+  });
+
+  it("rejects a spreadsheet ContentDocument with no sheets at all", () => {
+    const empty: ContentDocument = {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [],
+    };
+    expect(() => new XlsEditor(empty)).toThrow(
+      "an xls workbook must carry at least one sheet",
+    );
+  });
+});
 
 describe("createXls", () => {
   it("builds a one-sheet workbook with real metadata timestamps", () => {
