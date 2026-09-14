@@ -29,11 +29,14 @@ function advisory(
   };
 }
 
+// The fixture's own minimumReleaseAge, named rather than repeated as a bare literal at every assertion that reads it back out of WORKSPACE below.
+const FIXTURE_MINIMUM_RELEASE_AGE_MINUTES = 60;
+
 // Shaped like this workspace's real pnpm-workspace.yaml: an explanatory comment attached to the `overrides` key itself, and a second comment attached to one entry inside the map. Those two comments live in different places and do not survive the same operations, which is the whole reason the fix path patches child keys.
 const WORKSPACE = `packages:
   - "packages/*"
 
-minimumReleaseAge: 60
+minimumReleaseAge: ${String(FIXTURE_MINIMUM_RELEASE_AGE_MINUTES)}
 
 # fast-uri < 3.1.5 is vulnerable to host confusion via a backslash authority introducer (GHSA-hht2-r2mx-9j9m). A transitive devDependency, so only an override can force a patched version.
 overrides:
@@ -92,7 +95,9 @@ describe("isAuditServiceError", () => {
 
 describe("minimumReleaseAgeMinutes", () => {
   it("reads the configured window as minutes, not days", () => {
-    expect(minimumReleaseAgeMinutes(WORKSPACE)).toBe(60);
+    expect(minimumReleaseAgeMinutes(WORKSPACE)).toBe(
+      FIXTURE_MINIMUM_RELEASE_AGE_MINUTES,
+    );
   });
 
   it("throws rather than defaulting when the key is absent", () => {
@@ -267,7 +272,7 @@ describe("classifyAdvisories", () => {
 });
 
 describe("override pruning", () => {
-  // Single-document, as this workspace's lockfile is, and with the multi-importer shape a thirteen-package workspace produces: `packages` is the union of every importer's resolutions, which is what an inertness check has to read.
+  // The project's own document within the real (multi-document, once pnpm pins its own binary through packageManagerDependencies) lockfile, with the multi-importer shape a many-package workspace produces: `packages` is the union of every importer's resolutions, which is what an inertness check has to read.
   const LOCKFILE = `lockfileVersion: '9.0'
 
 importers:
@@ -298,12 +303,13 @@ packages:
     expect(resolved.get("@scope/pkg")).toEqual(new Set(["1.0.0"]));
   });
 
-  it("throws on a multi-document lockfile rather than reading only the first document", () => {
-    expect(() =>
-      resolvedVersionsFromLockfileText(
-        `---\npackages:\n  pnpm@11.6.0: {}\n---\n${LOCKFILE}`,
-      ),
-    ).toThrow(/multiple documents/);
+  it("unions every document's packages map on a multi-document lockfile, not just the first", () => {
+    const resolved = resolvedVersionsFromLockfileText(
+      `packages:\n  pnpm@11.6.0: {}\n---\n${LOCKFILE}`,
+    );
+    expect(resolved.get("pnpm")).toEqual(new Set(["11.6.0"]));
+    expect(resolved.get("undici")).toEqual(new Set(["6.28.0", "7.29.0"]));
+    expect(resolved.get("@scope/pkg")).toEqual(new Set(["1.0.0"]));
   });
 
   it("throws when the lockfile has no packages map", () => {
