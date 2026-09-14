@@ -1625,6 +1625,40 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
     expect(minY).toBeCloseTo(100 - 50 - expectedInk.yMax * scale, 1);
   });
 
+  it("ignores a trailing unpaired byte in a /CIDToGIDMap stream rather than reading it as a further entry", () => {
+    // A 3-byte map declares exactly one 2-byte entry (CID 0 -> GID 15); the loop's own `i + 1 < length` bound must stop before the stray third byte, not read it paired with a phantom fourth. Were it read anyway, CID 1 would land on GID (0x00 << 8 | 0), i.e. GID 0 (.notdef) -- which Carlito's own .notdef genuinely draws (4 contours), so a wrongly-read entry paints a second, wrong path rather than silently doing nothing.
+    const cidToGidMapBytes = new Uint8Array([0x00, 0x0f, 0x00]);
+    const b = new SmallFixture();
+    const fontBytes = carlitoRegularBytes();
+    b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    b.object(
+      3,
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    );
+    b.object(
+      4,
+      "<< /Type /Font /Subtype /Type0 /BaseFont /Carlito /Encoding /Identity-H /DescendantFonts [7 0 R] >>",
+    );
+    b.object(
+      7,
+      "<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Carlito /FontDescriptor 8 0 R /CIDToGIDMap 10 0 R >>",
+    );
+    b.object(
+      8,
+      "<< /Type /FontDescriptor /FontName /Carlito /Flags 32 /FontFile2 9 0 R >>",
+    );
+    b.stream(9, `<< /Length1 ${fontBytes.length} >>`, fontBytes);
+    b.stream(10, "<< >>", cidToGidMapBytes);
+    // CID 0 (mapped, drawable) followed by CID 1 (past the map's one real entry).
+    b.stream(5, "<< >>", enc("BT /F1 24 Tf 20 50 Td <00000001> Tj ET"));
+    const mappedBytes = b.classicXrefAndTrailer(10, "/Root 1 0 R");
+
+    const rasteriser = new RecordingRasteriser();
+    drive(mappedBytes, 0, {}, rasteriser);
+    expect(rasteriser.ops.filter(isPath)).toHaveLength(1);
+  });
+
   it("refuses a Type1 font whose embedded program is not CFF outlines", () => {
     const { diagnostics, rasteriser } = refusalDiagnostics(
       onePagePdf("BT /F1 24 Tf 20 50 Td (H) Tj ET", {
