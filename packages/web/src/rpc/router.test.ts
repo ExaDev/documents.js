@@ -448,6 +448,62 @@ describe("normalizeContentForSource", () => {
       "ordered:1",
     );
   });
+
+  // A "none" numFmt is ECMA-376's own spelling for a list level with no visible marker at all -- still resolved as "bullet:" here (no visible marker reads the same as a bullet marker for buildListForest's own neutral-vs-ordered grouping), and distinct from every other non-bullet format, which is why this needs its own real numbering.xml rather than reusing the decimal fixture above.
+  it("resolves a docx list paragraph against a real none numFmt as bullet, not ordered", () => {
+    const bytes = encodePackage(
+      buildDocxPackageFromContent({
+        sections: [
+          {
+            pageSize: { widthPt: 595, heightPt: 842 },
+            margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+            blocks: [
+              {
+                kind: "paragraph",
+                runs: [{ text: "unmarked item" }],
+                list: { numId: "1", level: 0 },
+              },
+            ],
+          },
+        ],
+        numbering: {
+          "1": {
+            levels: { "0": { format: "none", text: "", startAt: 1 } },
+          },
+        },
+      }),
+    );
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [{ text: "unmarked item" }],
+      list: { numId: "1", level: 0 },
+    });
+    const result = normalizeContentForSource(content, "docx", bytes);
+    const block =
+      result.kind === "wordprocessing"
+        ? result.sections[0]?.blocks[0]
+        : undefined;
+    expect(block?.kind === "paragraph" ? block.list?.numId : undefined).toBe(
+      "bullet:1",
+    );
+  });
+
+  // markdown-codec's own writer only ever mints a numId matching its own md{N}:bullet|ordered grammar, so this fallback is unreachable through the real markdown pipeline -- exercised directly here the same way the docx/odt fallbacks above are, by handing normalizeContentForSource a numId no producer of markdown content would ever actually mint.
+  it("falls back to bullet for a markdown paragraph whose numId does not match markdown-codec's own grammar", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [{ text: "x" }],
+      list: { numId: "not-a-markdown-numid", level: 0 },
+    });
+    const result = normalizeContentForSource(content, "markdown");
+    const block =
+      result.kind === "wordprocessing"
+        ? result.sections[0]?.blocks[0]
+        : undefined;
+    expect(block?.kind === "paragraph" ? block.list?.numId : undefined).toBe(
+      "bullet:not-a-markdown-numid",
+    );
+  });
 });
 
 describe("the Package / JSON tool's dump-to-restore pipeline", () => {
