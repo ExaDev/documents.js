@@ -135,14 +135,12 @@ function setOverlay(
   }
 }
 
+// A negative slice bound is exactly as safe as the "if too long, slice; else return as-is" branch it replaces -- Array.prototype.slice(-N) on an array no longer than N returns every element, so this single expression covers both the truncating and non-truncating cases with no conditional to keep in sync with UNDO_STACK_LIMIT.
 function pushSnapshot(
   stack: readonly Uint8Array<ArrayBuffer>[],
   snapshot: Uint8Array<ArrayBuffer>,
 ): readonly Uint8Array<ArrayBuffer>[] {
-  const next = [...stack, snapshot];
-  return next.length > UNDO_STACK_LIMIT
-    ? next.slice(next.length - UNDO_STACK_LIMIT)
-    : next;
+  return [...stack, snapshot].slice(-UNDO_STACK_LIMIT);
 }
 
 function documentWithPath(doc: OpenDocument, path: string): OpenDocument {
