@@ -587,6 +587,65 @@ describe("tree-only carries: reference definitions and front-matter residue", ()
     ).toEqual(metadata);
   });
 
+  it("quotes and escapes a literal backslash inside a value that also needs quoting for its leading '-'", () => {
+    const base = readMarkdown("body").documentPackage;
+    const written = writeMarkdown(
+      { ...base, metadata: { ...base.metadata, title: "-\\" } },
+      { frontMatter: true },
+    );
+    expect(written).toBe('---\ntitle: "-\\\\"\n---\n\nbody');
+  });
+
+  it("quotes and escapes a literal double-quote inside a value that also needs quoting for its leading '-'", () => {
+    const base = readMarkdown("body").documentPackage;
+    const written = writeMarkdown(
+      { ...base, metadata: { ...base.metadata, title: '-"' } },
+      { frontMatter: true },
+    );
+    expect(written).toBe('---\ntitle: "-\\""\n---\n\nbody');
+  });
+
+  it("quotes a value that would otherwise be misread, for reasons NEEDS_QUOTING_PATTERN alone cannot catch: leading/trailing whitespace or an empty string", () => {
+    const base = readMarkdown("body").documentPackage;
+    expect(
+      writeMarkdown(
+        { ...base, metadata: { ...base.metadata, title: " leading space" } },
+        { frontMatter: true },
+      ),
+    ).toBe('---\ntitle: " leading space"\n---\n\nbody');
+    expect(
+      writeMarkdown(
+        { ...base, metadata: { ...base.metadata, title: "trailing space " } },
+        { frontMatter: true },
+      ),
+    ).toBe('---\ntitle: "trailing space "\n---\n\nbody');
+    expect(
+      writeMarkdown(
+        { ...base, metadata: { ...base.metadata, title: "" } },
+        { frontMatter: true },
+      ),
+    ).toBe('---\ntitle: ""\n---\n\nbody');
+  });
+
+  it("omits the keywords line entirely for an empty (but defined) keywords array, rather than emitting an empty flow sequence", () => {
+    const base = readMarkdown("body").documentPackage;
+    const written = writeMarkdown(
+      {
+        ...base,
+        metadata: { ...base.metadata, title: "x", keywords: [] },
+      },
+      { frontMatter: true },
+    );
+    expect(written).toBe("---\ntitle: x\n---\n\nbody");
+    expect(written).not.toContain("keywords");
+  });
+
+  it("emits no front-matter block at all (returns the body untouched) when the metadata carries none of the fields it maps", () => {
+    const base = readMarkdown("body").documentPackage;
+    // frontMatter: true with a metadata object none of STRING_FIELD_ENTRIES/keywords/direction can read anything from -- emitFrontMatter's own lines array stays empty, so it must return undefined (no block at all) rather than an empty "---\n---" shell.
+    expect(writeMarkdown(base, { frontMatter: true })).toBe("body");
+  });
+
   it("emits no front matter at all without the option, residue or not", () => {
     const { documentPackage } = readMarkdown("---\ntitle: x\n---\n\nbody", {
       frontMatter: true,
