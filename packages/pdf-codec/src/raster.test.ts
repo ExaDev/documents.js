@@ -16,6 +16,8 @@ import type {
 import { readPdf } from "./read";
 import { parseSfnt } from "./sfnt";
 import { ByteWriter } from "./bytes/writer";
+import { STIX_TWO_MATH_FONT_BASE64 } from "./assets/stix-two-math-font";
+import { base64ToBytes } from "./util/base64";
 import { carlitoRegularBytes } from "./test-support/fonts";
 import {
   cropBoxPdf,
@@ -672,6 +674,42 @@ describe("renderPdfPage: vector draw ops", () => {
     });
   });
 
+  it("scales a dashed stroke's own width by the render scale, not divides by it", () => {
+    // At scale 1, multiplying and dividing by pixelsPerPt are indistinguishable (x*1 === x/1); only a non-1 scale actually pins the operator.
+    const rasteriser = new RecordingRasteriser();
+    drive(
+      onePagePdf("[6 6] 0 d 2 w 0 0 0 RG 10 80 m 190 80 l S"),
+      0,
+      { scale: 3 },
+      rasteriser,
+    );
+    const stroke = rasteriser.ops.find(isPath);
+    expect(stroke?.stroke).toMatchObject({ widthPx: 6 });
+  });
+
+  it("scales a dotted line's own dot size by the render scale, not divides by it", () => {
+    const rasteriser = new RecordingRasteriser();
+    drive(
+      onePagePdf("[0 4] 0 d 1 J 2 w 0 0 0 RG 10 90 m 190 90 l S"),
+      0,
+      { scale: 3 },
+      rasteriser,
+    );
+    const squares = rasteriser.ops.filter(isFillRect);
+    expect(squares[0]).toMatchObject({ widthPx: 6, heightPx: 6 });
+  });
+
+  it("draws no dots at all for a dotted line whose two endpoints coincide", () => {
+    const rasteriser = new RecordingRasteriser();
+    drive(
+      onePagePdf("[0 4] 0 d 1 J 2 w 0 0 0 RG 50 50 m 50 50 l S"),
+      0,
+      {},
+      rasteriser,
+    );
+    expect(rasteriser.ops.filter(isFillRect)).toEqual([]);
+  });
+
   it("draws a dotted line as filled squares rather than a zero-length dash array", () => {
     const rasteriser = new RecordingRasteriser();
     drive(
@@ -961,6 +999,33 @@ function type0CarlitoPdf(
   return b.classicXrefAndTrailer(9, "/Root 1 0 R");
 }
 
+// A plain simple (non-Type0) /TrueType font resource: code -> Unicode through the PDF's own encoding (WinAnsi, since this face carries no Symbolic flag), then Unicode -> GID through the embedded program's own cmap -- the whole other half of buildTextOutlineFace's own branch, entirely separate from the Type0/CID path type0CarlitoPdf drives.
+function trueTypeCarlitoPdf(
+  text: string,
+  overrides: { readonly fontDescriptorBody?: string } = {},
+): Uint8Array<ArrayBuffer> {
+  const fontBytes = carlitoRegularBytes();
+  const b = new SmallFixture();
+  b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+  b.object(
+    3,
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+  );
+  b.object(
+    4,
+    "<< /Type /Font /Subtype /TrueType /BaseFont /Carlito /FirstChar 0 /LastChar 255 /FontDescriptor 8 0 R >>",
+  );
+  b.object(
+    8,
+    overrides.fontDescriptorBody ??
+      "<< /Type /FontDescriptor /FontName /Carlito /Flags 32 /FontFile2 9 0 R >>",
+  );
+  b.stream(9, `<< /Length1 ${fontBytes.length} >>`, fontBytes);
+  b.stream(5, "<< >>", enc(`BT /F1 24 Tf 20 50 Td (${text}) Tj ET`));
+  return b.classicXrefAndTrailer(9, "/Root 1 0 R");
+}
+
 describe("renderPdfPage: text through embedded sfnt outlines", () => {
   it("draws each shown glyph as a filled closed path placed at the run's own matrices", () => {
     const bytes = type0CarlitoPdf("HH");
@@ -1029,6 +1094,31 @@ describe("renderPdfPage: text through embedded sfnt outlines", () => {
       pathOpBounds(glyphOps[1]!).minX - pathOpBounds(glyphOps[0]!).minX,
     ).toBeCloseTo(scaledAdvancePt, 1);
   });
+
+  it("draws a simple TrueType font's own glyphs through WinAnsi code -> Unicode -> the program's own cmap", () => {
+    const rasteriser = new RecordingRasteriser();
+    drive(trueTypeCarlitoPdf("H"), 0, {}, rasteriser);
+    const glyphOps = rasteriser.ops.filter(isPath);
+    expect(glyphOps.length).toBe(1);
+    const sfnt = parseSfnt(carlitoRegularBytes())!;
+    const head = parseHead(sfnt)!;
+    const cmap = buildCmapLookup(sfnt)!;
+    const glyf = parseGlyf(sfnt, {
+      numGlyphs: parseMaxp(sfnt)!.numGlyphs,
+      indexToLocFormat: head.indexToLocFormat,
+    })!;
+    const ink = glyf.glyphInkBounds(cmap("H".codePointAt(0)!)!)!;
+    const sizePt = 24;
+    const bounds = pathOpBounds(glyphOps[0]!);
+    expect(bounds.minX).toBeCloseTo(
+      20 + (ink.xMin / head.unitsPerEm) * sizePt,
+      1,
+    );
+    expect(bounds.minY).toBeCloseTo(
+      100 - 50 - (ink.yMax / head.unitsPerEm) * sizePt,
+      1,
+    );
+  });
 });
 
 describe("renderPdfPage: text refusals are named, never approximated", () => {
@@ -1088,8 +1178,11 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
     readonly descendantExtra?: string;
     readonly cidToGidMap?: string;
     readonly fontDescriptorBody?: string;
+    readonly fontFileKey?: string;
+    readonly fontFileBytes?: Uint8Array<ArrayBuffer>;
   }): Uint8Array<ArrayBuffer> {
-    const fontBytes = carlitoRegularBytes();
+    const fontBytes = overrides.fontFileBytes ?? carlitoRegularBytes();
+    const fontFileKey = overrides.fontFileKey ?? "FontFile2";
     const b = new SmallFixture();
     b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
     b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
@@ -1108,7 +1201,7 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
     b.object(
       8,
       overrides.fontDescriptorBody ??
-        "<< /Type /FontDescriptor /FontName /Carlito /Flags 32 /FontFile2 9 0 R >>",
+        `<< /Type /FontDescriptor /FontName /Carlito /Flags 32 /${fontFileKey} 9 0 R >>`,
     );
     b.stream(9, `<< /Length1 ${fontBytes.length} >>`, fontBytes);
     b.stream(5, "<< >>", enc("BT /F1 24 Tf 20 50 Td <0000> Tj ET"));
@@ -1124,6 +1217,20 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
     drive(bytes, 0, { sink: (d) => diagnostics.push(d) }, rasteriser);
     return { diagnostics, rasteriser };
   }
+
+  it("refuses a simple TrueType font with no readable embedded program", () => {
+    const { diagnostics, rasteriser } = refusalDiagnostics(
+      trueTypeCarlitoPdf("H", {
+        fontDescriptorBody:
+          "<< /Type /FontDescriptor /FontName /Carlito /Flags 32 >>",
+      }),
+    );
+    expect(
+      diagnostics.find((d) => d.code === "raster/text-outlines-unavailable")
+        ?.message,
+    ).toContain("no /FontDescriptor or no readable embedded program");
+    expect(rasteriser.ops).toEqual([]);
+  });
 
   it("refuses a Type0 font whose /Encoding is not Identity-H", () => {
     const { diagnostics, rasteriser } = refusalDiagnostics(
@@ -1174,6 +1281,53 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
         ?.message,
     ).toContain("no readable /FontFile2");
     expect(rasteriser.ops).toEqual([]);
+  });
+
+  it("reads an embedded program from /FontFile3 when /FontFile2 is absent, not only from /FontFile2", () => {
+    // openEmbeddedProgram tries FontFile2 then FontFile3 in a loop -- a descriptor carrying only the latter is the only way to prove the loop actually reaches its second key rather than stopping after the first.
+    const { rasteriser } = refusalDiagnostics(
+      type0Skeleton({ fontFileKey: "FontFile3" }),
+    );
+    expect(rasteriser.ops.filter(isPath).length).toBeGreaterThan(0);
+  });
+
+  it("detects a bare CFF program in /FontFile3 by its exact 3-byte header, not a byte more or fewer", () => {
+    const cffHeader = (): PdfDiagnostic[] =>
+      refusalDiagnostics(
+        type0Skeleton({
+          fontFileKey: "FontFile3",
+          fontFileBytes: new Uint8Array([0x01, 0x00, 0x04]),
+        }),
+      ).diagnostics;
+    expect(
+      cffHeader().find((d) => d.code === "raster/text-cff-outlines"),
+    ).toBeDefined();
+  });
+
+  it("detects CFF outlines wrapped in an OTTO sfnt container by its 'CFF ' table, not only a bare CFF header", () => {
+    // The real, vendored STIX Two Math font is a genuine OTTO container carrying a 'CFF ' table -- an /OpenType-wrapped CFF program is a legal /FontFile3 value per ISO 32000-1, distinct from the bare-CFF-header case above.
+    const { diagnostics } = refusalDiagnostics(
+      type0Skeleton({
+        fontFileKey: "FontFile3",
+        fontFileBytes: base64ToBytes(STIX_TWO_MATH_FONT_BASE64),
+      }),
+    );
+    expect(
+      diagnostics.find((d) => d.code === "raster/text-cff-outlines"),
+    ).toBeDefined();
+  });
+
+  it("does not mistake a too-short FontFile3 stream, or one byte wrong in the header, for a CFF program", () => {
+    const isCff = (bytes: Uint8Array<ArrayBuffer>): boolean =>
+      refusalDiagnostics(
+        type0Skeleton({ fontFileKey: "FontFile3", fontFileBytes: bytes }),
+      ).diagnostics.some((d) => d.code === "raster/text-cff-outlines");
+    // Exactly 2 bytes: the length >= 3 guard alone must refuse this before any byte is even read.
+    expect(isCff(new Uint8Array([0x01, 0x00]))).toBe(false);
+    // Each byte individually wrong, otherwise a valid-looking header.
+    expect(isCff(new Uint8Array([0x02, 0x00, 0x04]))).toBe(false);
+    expect(isCff(new Uint8Array([0x01, 0x01, 0x04]))).toBe(false);
+    expect(isCff(new Uint8Array([0x01, 0x00, 0x05]))).toBe(false);
   });
 
   it("refuses a CIDFontType2 descendant whose /CIDToGIDMap is neither /Identity nor a readable stream", () => {
