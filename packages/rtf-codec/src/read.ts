@@ -1123,9 +1123,9 @@ class ContentBuilder {
     this.rowDirection = direction;
   }
 
-  // Every control word of the <celldef> currently accumulating. Returns whether it was one, so the caller falls through for everything else.
-  applyCellDefinition(name: string, param: number | undefined): boolean {
-    return applyCellDefinitionControlWord(name, param, this.pendingCell);
+  // Every control word of the <celldef> currently accumulating. Void: applyControlWord's own dispatch chain calls this unconditionally now (see its own comment on why that is safe), so the caller no longer needs this wrapper's own report of whether the word was one of the cell-definition's -- only applyCellDefinitionControlWord's own return value, which its own direct unit tests already exercise on its own terms.
+  applyCellDefinition(name: string, param: number | undefined): void {
+    applyCellDefinitionControlWord(name, param, this.pendingCell);
   }
 
   // "\cellxN Defines the right boundary of a cell" -- and, being the last member of <celldef>, closes the definition that preceded it.
@@ -2213,13 +2213,13 @@ function applyFormFieldControlWord(
   }
 }
 
+// Void, like applyStructureControlWord: applyControlWord's own dispatch chain calls every one of these five word-appliers unconditionally now (see its own comment on why that is safe), so none of them needs to report back whether a name was its own -- only to apply it when it was, and do nothing otherwise, which every one of them already does on its own account.
 function applyCharacterControlWord(
   name: string,
   param: number | undefined,
   state: GroupState,
   header: RtfHeader,
-): boolean {
-  // Each case falls through to the single return true below (see applyFormFieldControlWord's own identical comment for why): the return value's own truth is never independently observable per case, only "some case here matched".
+): void {
   switch (name) {
     case "plain":
       state.char = defaultCharacterState();
@@ -2338,24 +2338,23 @@ function applyCharacterControlWord(
     default:
       // Underline is a family of control words rather than one: "\ul* Continuous underline. \ul0 turns off all underlining" plus a dozen styled variants (\uld, \uldash, \ulth, \ulwave, ...), all of which ContentRun expresses as the one boolean it carries. \ulc (underline colour) is deliberately not one of them.
       if (!name.startsWith("ul") || name === "ulc") {
-        return false;
+        return;
       }
       state.char.underline = toggleValue(param);
   }
-  return true;
 }
 
+// Void for the same reason applyCharacterControlWord above is.
 function applyParagraphControlWord(
   name: string,
   param: number | undefined,
   state: GroupState,
-): boolean {
+): void {
   const alignment = ALIGNMENTS.get(name);
   if (alignment !== undefined) {
     state.para.alignment = alignment;
-    return true;
+    return;
   }
-  // Each case falls through to the single return true below (see applyFormFieldControlWord's own identical comment for why).
   switch (name) {
     case "pard":
       state.para = defaultParagraphState();
@@ -2406,23 +2405,21 @@ function applyParagraphControlWord(
     case "intbl":
       state.para.inTable = true;
       break;
-    default:
-      return false;
   }
-  return true;
 }
 
 // The <secfmt> production's own properties (RTF 1.9.1, "Section Formatting Properties"). Every one of them is a section-scoped twin of a document-level control word the header parser already reads -- \pgwsxnN beside \paperwN, \marglsxnN beside \marglN -- because RTF states page geometry twice: once for the document and once per section that departs from it.
+// Void for the same reason applyCharacterControlWord above is.
 function applySectionControlWord(
   name: string,
   param: number | undefined,
   section: SectionState,
   header: RtfHeader,
   sink: RtfDiagnosticSink,
-): boolean {
+): void {
   if (name === "sectd") {
     Object.assign(section, defaultSectionState(header));
-    return true;
+    return;
   }
   if (name === "sbkcol") {
     sink({
@@ -2432,16 +2429,16 @@ function applySectionControlWord(
         "\\sbkcol starts the section at a new column; ContentSection.breakType names page-level breaks only, so the break kind is dropped and the section itself is kept",
     });
     section.breakType = undefined;
-    return true;
+    return;
   }
   if (SECTION_BREAK_TYPES.has(name)) {
     section.breakType = SECTION_BREAK_TYPES.get(name);
-    return true;
+    return;
   }
+  // Every remaining recognised name here takes a twips parameter -- unlike the three checks above, none of which do -- so a bare occurrence (no parameter) genuinely has nothing to apply, rather than a default this reader would otherwise assign.
   if (param === undefined) {
-    return false;
+    return;
   }
-  // Each case falls through to the single return true below (see applyFormFieldControlWord's own identical comment for why).
   switch (name) {
     case "pgwsxn":
       section.paperWidthTwips = param;
@@ -2461,10 +2458,7 @@ function applySectionControlWord(
     case "margbsxn":
       section.marginBottomTwips = param;
       break;
-    default:
-      return false;
   }
-  return true;
 }
 
 function applyStructureControlWord(
@@ -2575,20 +2569,12 @@ function applyControlWord(
     // Mirrors the bookmarkStart/bookmarkEnd guard above: \*\formfield carries no #PCDATA of its own (its content is entirely its own \ffres/\ffdefres/\ffprot/\ffownhelp control words, already handled above), and \*\ffname/\*\ffhelptext/\*\ffl's content is a name or help string, not formatted text -- so a stray character, paragraph, or structure control word inside any of the four (\par, \page, \sect, \b, ...) is ignored here rather than applied to the paragraph/section/document surrounding the field.
     return;
   }
-  // Every `return` in this final four-way dispatch chain is a genuinely irreducible equivalent mutant if removed (leaving its own `if` block empty and falling through to the next dispatcher): applyCharacterControlWord's own recognised names (b/cf/crauth/crdate/deleted/dn/f/fs/i/ltrch/mvauth/mvdate/mvf/mvt/nosupersub/plain/revauth/revauthdel/revdttm/revdttmdel/revised/rtlch/strike/sub/super/uc/ulnone/up/v), applyCellDefinition's own (CELL_BORDER_SIDES' cl-prefixed side names, clvmgf/clvmrg/clmgf/clmrg/clcbpat/clcfpat/clshdng/clvertalc/clvertalb/clvertalt, every no-border/border-style keyword, brdrw/brdrcf, and anything else starting "brdr"/"brsp"), applyParagraphControlWord's own (ALIGNMENTS' ql/qc/qr/qj plus pard/s/rtlpar/ltrpar/outlinelevel/li/lin/fi/sb/sa/sl/slmult/pagebb/ls/ilvl/intbl), applySectionControlWord's own (sectd/sbkcol/SECTION_BREAK_TYPES' sbknone/sbkpage/sbkeven/sbkodd plus pgwsxn/pghsxn/marglsxn/margrsxn/margtsxn/margbsxn), and applyStructureControlWord's own (par/trowd/trleft/rtlrow/ltrrow/cellx/cell/row/nestcell/nestrow/page/sect) share not one single control-word name across all five sets -- so a name any earlier dispatcher already fully handled can never also match anything a later one would act on, making every fallthrough a genuine no-op for any input regardless of whether its own early return fires. (The cell-definition comment immediately below is about a different, RTF-spec-level ambiguity -- a paragraph-level \brdr* border this reader does not implement at all, not an actual collision between the two functions' own recognised name sets, which remain disjoint either way.)
-  if (applyCharacterControlWord(name, param, state, header)) {
-    return;
-  }
+  // Every one of these five word-appliers is now called unconditionally, none gated on whether an earlier one already matched: applyCharacterControlWord's own recognised names (b/cf/crauth/crdate/deleted/dn/f/fs/i/ltrch/mvauth/mvdate/mvf/mvt/nosupersub/plain/revauth/revauthdel/revdttm/revdttmdel/revised/rtlch/strike/sub/super/uc/ulnone/up/v), applyCellDefinition's own (CELL_BORDER_SIDES' cl-prefixed side names, clvmgf/clvmrg/clmgf/clmrg/clcbpat/clcfpat/clshdng/clvertalc/clvertalb/clvertalt, every no-border/border-style keyword, brdrw/brdrcf, and anything else starting "brdr"/"brsp"), applyParagraphControlWord's own (ALIGNMENTS' ql/qc/qr/qj plus pard/s/rtlpar/ltrpar/outlinelevel/li/lin/fi/sb/sa/sl/slmult/pagebb/ls/ilvl/intbl), applySectionControlWord's own (sectd/sbkcol/SECTION_BREAK_TYPES' sbknone/sbkpage/sbkeven/sbkodd plus pgwsxn/pghsxn/marglsxn/margrsxn/margtsxn/margbsxn), and applyStructureControlWord's own (par/trowd/trleft/rtlrow/ltrrow/cellx/cell/row/nestcell/nestrow/page/sect) share not one single control-word name across all five sets -- so a name any one of them recognises can never also be one a sibling would act on, making a sequential gate-and-return chain unnecessary: each function already applies its own effect only for the names it recognises and is a genuine no-op for every other name, so calling all five in a fixed order (cell definition before paragraph, since several \cl-prefixed words share a bare-word prefix with a paragraph border word RTF's own \brdr* production never actually reaches -- see the cell-definition comment below) produces the identical result a return-gated chain would, with no ordering-dependent short-circuit to get wrong. (The cell-definition comment immediately below is about a different, RTF-spec-level ambiguity -- a paragraph-level \brdr* border this reader does not implement at all, not an actual collision between the two functions' own recognised name sets, which remain disjoint either way.)
+  applyCharacterControlWord(name, param, state, header);
   // The <celldef> run comes before the paragraph dispatch: several of its members share a prefix with paragraph border words, and a cell definition's own side is the narrower reading whenever one is open.
-  if (builder.applyCellDefinition(name, param)) {
-    return;
-  }
-  if (applyParagraphControlWord(name, param, state)) {
-    return;
-  }
-  if (applySectionControlWord(name, param, section, header, sink)) {
-    return;
-  }
+  builder.applyCellDefinition(name, param);
+  applyParagraphControlWord(name, param, state);
+  applySectionControlWord(name, param, section, header, sink);
   applyStructureControlWord(name, param, state, builder, section, sink);
 }
 
