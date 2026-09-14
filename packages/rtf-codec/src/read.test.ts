@@ -3646,6 +3646,57 @@ describe("group-open dispatch", () => {
     });
   });
 
+  it("never routes a nested destination's own control word into the enclosing \\pict's own control-word handling", () => {
+    // A guard keyed on `state.destination === "picture"` alone (picture inherited by reference into every descendant, exactly as the hex-escape test above states) would misroute \bkmkcolf1 into applyPictureControlWord (a no-op for a name it does not recognise) instead of the bookmarkStart-specific handling that actually applies it -- silently dropping the column residue rather than quarantining it onto the anchor's own descriptor.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard{\\pict\\pngblip\\picwgoal720\\pichgoal720{\\*\\bkmkstart\\bkmkcolf1 name}}x{\\*\\bkmkend name}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      name: "name",
+      source: { xml: "\\bkmkcolf1" },
+    });
+  });
+
+  it("never routes a nested destination's own control word into the enclosing \\object's own \\objw/\\objh handling", () => {
+    // A guard keyed on `state.destination === "object"` alone (object inherited by reference into every descendant, exactly like picture above) would misroute \objw1440 into ContentBuilder's own object-scoped assignment even from a sibling destination that never stated it directly on \object itself -- surfacing a size-hint clause in the degrade diagnostic that the source never actually declared there.
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object{\\*\\bkmkstart\\objw1440 name}{\\*\\objdata }}{\\*\\bkmkend name}\\par}`,
+      ),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    );
+    expect(found?.message).toBe(
+      "an \\object destination's \\objdata carried no payload",
+    );
+  });
+
+  it("never lets an arbitrary control word inside a bookmarkStart destination masquerade as \\bkmkcoll", () => {
+    // A forced-true `name === "bkmkcoll"` check here would set columnLast for ANY control word carrying a numeric parameter that reaches a bookmarkStart destination once name !== "bkmkcolf" -- \b1 included -- rather than only for a genuine \bkmkcollN. \b1 rather than a bare \b specifically: a bare toggle word's own param is already undefined, indistinguishable from columnLast's own untouched default.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard{\\*\\bkmkstart\\b1 name}x{\\*\\bkmkend name}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "anchor",
+      anchorType: "bookmark",
+      name: "name",
+    });
+  });
+
+  it("never applies a genuine \\ffprot from a sibling formField-related destination other than \\*\\formfield itself", () => {
+    // A forced-true `state.destination === "formField"` check here would apply \ffprot1 even from \*\ffname's own destination, since formField is shared by reference across every sibling -- locking content the source never actually locked from \*\formfield's own scope.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffname\\ffprot1 Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "plainText",
+      tag: "Text1",
+    });
+  });
+
   it("never treats a plain nested group as a bookmark, so its own text is not swallowed as a bookmark name", () => {
     const runs =
       paragraphsOf(`${HEADER}\\pard before{\\b bold} after\\par}`)[0]?.runs ??
