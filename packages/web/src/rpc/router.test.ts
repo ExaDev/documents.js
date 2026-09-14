@@ -5,6 +5,7 @@ import {
   readMarkdownContent,
 } from "documents.js";
 import { assembleTree } from "document-schema.js";
+import { CODE_BLOCK_STYLE_ID, QUOTE_STYLE_ID } from "markdown-codec";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -345,6 +346,51 @@ describe("normalizeContentForSource", () => {
     );
     expect(firstStyleId(normalizeContentForSource(content, "docx"))).toBe(
       "HorizontalRule",
+    );
+  });
+
+  it("rewrites markdown-codec's own QUOTE_STYLE_ID constant into the quote convention", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [{ text: "x" }],
+      styleId: QUOTE_STYLE_ID,
+    });
+    expect(firstStyleId(normalizeContentForSource(content, "markdown"))).toBe(
+      "quote",
+    );
+  });
+
+  it("rewrites markdown-codec's own CODE_BLOCK_STYLE_ID constant into the code-block convention", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [{ text: "x" }],
+      styleId: CODE_BLOCK_STYLE_ID,
+    });
+    expect(firstStyleId(normalizeContentForSource(content, "markdown"))).toBe(
+      "code-block",
+    );
+  });
+
+  it("leaves an unrelated styleId untouched for a markdown source, rather than always treating it as a horizontal rule", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [{ text: "x" }],
+      styleId: "Normal",
+    });
+    expect(firstStyleId(normalizeContentForSource(content, "markdown"))).toBe(
+      "Normal",
+    );
+  });
+
+  it("leaves a wordprocessing-kind ContentDocument untouched for a source other than markdown/docx/odt", () => {
+    // A source that is neither markdown nor docx/odt hits the function's final fallthrough (`return content` unchanged) even when its own document happens to carry a wordprocessing ContentDocument -- distinguishing this from forcing the docx/odt normalizeWordprocessingSemantics branch to always run, which would incorrectly rewrite Heading1 into heading-1 here too.
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [{ text: "Title" }],
+      styleId: "Heading1",
+    });
+    expect(firstStyleId(normalizeContentForSource(content, "pptx"))).toBe(
+      "Heading1",
     );
   });
 
