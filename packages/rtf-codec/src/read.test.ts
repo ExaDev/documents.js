@@ -3499,9 +3499,38 @@ describe("group-open dispatch", () => {
     ).toBe(false);
   });
 
+  it("never initialises picture state for a RECOGNISED destination other than picture, either", () => {
+    // \b above has no recognised destination of its own at all (known === undefined), so it never reaches the `if (known !== undefined) { ... if (kind === "picture") ... }` branch this guards -- it exercises a DIFFERENT, earlier guard entirely. \*\bkmkstart IS a known, non-picture destination, so this is the one fixture that actually reaches the kind === "picture" check itself: a `true` in its place would still spuriously initialise picture state here too.
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\*\\bkmkstart name}plain{\\*\\bkmkend name}\\par}`,
+      ),
+    );
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.UNSUPPORTED_PICTURE_FORMAT,
+      ),
+    ).toBe(false);
+  });
+
   it("never initialises embedded-object state for a plain nested group with no \\*\\objdata destination of its own", () => {
     const { diagnostics } = readRtfContent(
       bytes(`${HEADER}\\pard{\\b bold} plain\\par}`),
+    );
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+      ),
+    ).toBe(false);
+  });
+
+  it("never initialises embedded-object state for a RECOGNISED destination other than objectData, either", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\*\\bkmkstart name}plain{\\*\\bkmkend name}\\par}`,
+      ),
     );
     expect(
       diagnostics.some(
