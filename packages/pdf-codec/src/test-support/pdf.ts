@@ -451,7 +451,7 @@ export function embeddedFilesPdf(): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header("1.7");
   b.object(
     1,
-    "<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles 6 0 R >> /AF [13 0 R] >>",
+    "<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles 6 0 R >> /AF [13 0 R 16 0 R] >>",
   );
   b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
   b.object(
@@ -497,7 +497,9 @@ export function embeddedFilesPdf(): Uint8Array<ArrayBuffer> {
     "<< /Type /EmbeddedFile /Filter /FlateDecode >>",
     zlibSync(enc("{}")),
   );
-  b.classicXrefAndTrailer(15, "/Root 1 0 R");
+  // A catalog /AF entry whose /EF resolves but carries neither an /F nor a /UF stream reference -- the one shape readAttachments contributes nothing for, and warns about, rather than an external/referenced filespec that never declares /EF at all.
+  b.object(16, "<< /Type /Filespec /F (broken.bin) /EF << >> >>");
+  b.classicXrefAndTrailer(16, "/Root 1 0 R");
   return b.bytes();
 }
 

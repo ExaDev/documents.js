@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { PdfDiagnostic } from "./diagnostics";
 import { readPdf } from "./read";
 import { embeddedFilesPdf } from "./test-support/pdf";
 import { bytesToBase64 } from "./util/base64";
@@ -29,5 +30,23 @@ describe("readPdf: embedded files", () => {
     expect(logo?.mimeType).toBeUndefined();
     const manifest = doc.attachments?.find((a) => a.name === "manifest.json");
     expect(manifest?.description).toBeUndefined();
+  });
+
+  it("warns on and drops a filespec whose /EF resolves but has neither an /F nor a /UF stream", () => {
+    const diagnostics: PdfDiagnostic[] = [];
+    const doc = readPdf(embeddedFilesPdf(), {
+      sink: (d) => diagnostics.push(d),
+    });
+    expect(
+      doc.attachments?.find((a) => a.name === "broken.bin"),
+    ).toBeUndefined();
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "pdf/embedded-file-missing-stream",
+        severity: "warning",
+        message:
+          "a filespec declares /EF but neither /F nor /UF resolves to an embedded stream",
+      }),
+    );
   });
 });
