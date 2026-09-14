@@ -3,9 +3,21 @@ import type { ContentBlock, ContentDocument } from "document-schema.js";
 import { MarkdownUnsupportedDocumentKindError } from "markdown-codec";
 import { describe, expect, it } from "vitest";
 import { MarkdownUnbalancedConstructMarkersError } from "markdown-codec";
+import { latexToFormula } from "../latex/lower";
+import { buildFormulaBlock } from "../model/formula";
 import { richMarkdownText } from "../test-support/markdown";
 import { readMarkdownContent } from "./read";
 import { buildMarkdownText } from "./write";
+
+const FORMULA_FRAME = { xPt: 0, yPt: 0, widthPt: 0, heightPt: 22 };
+
+function formulaBlock(latex: string, source: string): ContentBlock {
+  return buildFormulaBlock(
+    latexToFormula(latex, { source }).formula,
+    FORMULA_FRAME,
+    "test:formula",
+  );
+}
 
 const CONSTRUCT_START: ContentBlock = {
   kind: "constructStart",
@@ -58,6 +70,18 @@ describe("buildMarkdownText", () => {
       { kind: "paragraph", runs: [{ text: "Just one page" }] },
     ]);
     expect(buildMarkdownText(document)).not.toContain("<!-- page break -->");
+  });
+
+  it("renders a formula whose provenance source is markdown:math-inline as an inline \\( \\) span", () => {
+    const document = markerDocument([
+      formulaBlock("x+1", "markdown:math-inline"),
+    ]);
+    expect(buildMarkdownText(document)).toBe("\\(x+1\\)");
+  });
+
+  it("renders a formula from any other provenance source as a $$ display block, not the inline span", () => {
+    const document = markerDocument([formulaBlock("x+1", "docx:equation")]);
+    expect(buildMarkdownText(document)).toBe("$$\nx+1\n$$");
   });
 
   it("throws MarkdownUnsupportedDocumentKindError for a non-wordprocessing ContentDocument", () => {
