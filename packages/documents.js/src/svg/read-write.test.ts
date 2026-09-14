@@ -678,7 +678,7 @@ describe("buildSvgText", () => {
     buildSvgText(document, {
       onSvgDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
     });
-    expect(diagnostics[0]?.detail.startsWith("shape:")).toBe(true);
+    expect(diagnostics[0]?.detail).toMatch(/^shape:/);
   });
 
   it('writes a fill-rule="evenodd" attribute on a path vector whose own fillRule is evenodd', () => {
