@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDocx, openOdt } from "documents.js";
@@ -80,6 +80,225 @@ beforeEach(() => {
 
 afterEach(() => {
   process.exitCode = savedExitCode;
+  // Every real runOdb* call registers its own SIGINT listener via createRuntimeSignal and never removes it -- harmless for a real one-shot CLI process, but this file alone now drives enough real invocations in one vitest worker to cross Node's default MaxListeners (10) and print a warning straight to the captured stderr some of the tests above assert is empty (the same fix outline.test.ts already applies for the identical reason).
+  process.removeAllListeners("SIGINT");
+});
+
+describe("odb-to-xlsx", () => {
+  let workspace: string;
+
+  beforeAll(async () => {
+    workspace = await mkdtemp(join(tmpdir(), "document-cli-odb-to-xlsx-"));
+  });
+
+  afterAll(async () => {
+    await rm(workspace, { recursive: true, force: true });
+  });
+
+  it("extracts the fixture's own SALES table into one xlsx workbook sheet, at the default output path when neither a positional output nor --out is given", async () => {
+    const input = join(workspace, "default-name.odb");
+    await writeFile(input, await readFile(FORM_AND_REPORT_ODB_PATH));
+    const { exitCode, stderr } = await runCli(["odb-to-xlsx", input]);
+
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    expect(stderr).toContain("wrote");
+    const output = join(workspace, "default-name.xlsx");
+    const bytes = await readFile(output);
+    expect(bytes.byteLength).toBeGreaterThan(0);
+  });
+
+  it("writes to an explicit positional output path", async () => {
+    const output = join(workspace, "explicit.xlsx");
+    const { exitCode } = await runCli([
+      "odb-to-xlsx",
+      FORM_AND_REPORT_ODB_PATH,
+      output,
+    ]);
+
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    const bytes = await readFile(output);
+    expect(bytes.byteLength).toBeGreaterThan(0);
+  });
+
+  it("writes to the path named by --out when no positional output is given", async () => {
+    const output = join(workspace, "via-out-flag.xlsx");
+    const { exitCode } = await runCli([
+      "odb-to-xlsx",
+      FORM_AND_REPORT_ODB_PATH,
+      "--out",
+      output,
+    ]);
+
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    const bytes = await readFile(output);
+    expect(bytes.byteLength).toBeGreaterThan(0);
+  });
+
+  it("succeeds when the positional output and --out agree", async () => {
+    const output = join(workspace, "agreeing.xlsx");
+    const { exitCode, stderr } = await runCli([
+      "odb-to-xlsx",
+      FORM_AND_REPORT_ODB_PATH,
+      output,
+      "--out",
+      output,
+    ]);
+
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    expect(stderr).not.toContain("conflicting output destinations");
+  });
+
+  it("fails with a usage error when the positional output and --out disagree", async () => {
+    const { exitCode, stderr } = await runCli([
+      "odb-to-xlsx",
+      FORM_AND_REPORT_ODB_PATH,
+      join(workspace, "one.xlsx"),
+      "--out",
+      join(workspace, "other.xlsx"),
+    ]);
+
+    expect(exitCode).toBe(EXIT_USAGE_ERROR);
+    expect(stderr).toContain("conflicting output destinations");
+    expect(stderr).toContain("one.xlsx");
+    expect(stderr).toContain("other.xlsx");
+  });
+});
+
+describe("odb-to-csv", () => {
+  let workspace: string;
+
+  beforeAll(async () => {
+    workspace = await mkdtemp(join(tmpdir(), "document-cli-odb-to-csv-"));
+  });
+
+  afterAll(async () => {
+    await rm(workspace, { recursive: true, force: true });
+  });
+
+  it("exports the fixture's own sole table to CSV at the default output path derived from the input's own name", async () => {
+    const input = join(workspace, "sales.odb");
+    await writeFile(input, await readFile(FORM_AND_REPORT_ODB_PATH));
+    const { exitCode, stderr } = await runCli(["odb-to-csv", input]);
+
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    expect(stderr).toContain("wrote");
+    const csv = await readFile(join(workspace, "sales.csv"), "utf8");
+    expect(csv).toContain("Acme Ltd");
+  });
+
+  it("writes to an explicit positional output path", async () => {
+    const output = join(workspace, "explicit.csv");
+    const { exitCode } = await runCli([
+      "odb-to-csv",
+      FORM_AND_REPORT_ODB_PATH,
+      output,
+    ]);
+
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    const csv = await readFile(output, "utf8");
+    expect(csv).toContain("Acme Ltd");
+  });
+
+  it("writes to the path named by --out when no positional output is given", async () => {
+    const output = join(workspace, "via-out-flag.csv");
+    const { exitCode } = await runCli([
+      "odb-to-csv",
+      FORM_AND_REPORT_ODB_PATH,
+      "--out",
+      output,
+    ]);
+
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    const csv = await readFile(output, "utf8");
+    expect(csv).toContain("Acme Ltd");
+  });
+
+  it("succeeds when the positional output and --out agree", async () => {
+    const output = join(workspace, "agreeing.csv");
+    const { exitCode, stderr } = await runCli([
+      "odb-to-csv",
+      FORM_AND_REPORT_ODB_PATH,
+      output,
+      "--out",
+      output,
+    ]);
+
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    expect(stderr).not.toContain("conflicting output destinations");
+  });
+
+  it("fails with a usage error when the positional output and --out disagree", async () => {
+    const { exitCode, stderr } = await runCli([
+      "odb-to-csv",
+      FORM_AND_REPORT_ODB_PATH,
+      join(workspace, "one.csv"),
+      "--out",
+      join(workspace, "other.csv"),
+    ]);
+
+    expect(exitCode).toBe(EXIT_USAGE_ERROR);
+    expect(stderr).toContain("conflicting output destinations");
+  });
+
+  it("exports the table named by --table", async () => {
+    const output = join(workspace, "by-name.csv");
+    const { exitCode } = await runCli([
+      "odb-to-csv",
+      FORM_AND_REPORT_ODB_PATH,
+      output,
+      "--table",
+      "SALES",
+    ]);
+
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    const csv = await readFile(output, "utf8");
+    expect(csv).toContain("Acme Ltd");
+  });
+
+  it("fails naming the available tables when --table names one the .odb does not declare", async () => {
+    const { exitCode, stderr } = await runCli([
+      "odb-to-csv",
+      FORM_AND_REPORT_ODB_PATH,
+      join(workspace, "never-written.csv"),
+      "--table",
+      "NO_SUCH_TABLE",
+    ]);
+
+    expect(exitCode).not.toBe(EXIT_SUCCESS);
+    expect(stderr).toContain("NO_SUCH_TABLE");
+    expect(stderr).toContain(
+      "run 'odb-tables' first to see the available tables",
+    );
+  });
+});
+
+describe("odb-tables", () => {
+  it("prints the fixture's own table name, column names/types, and row count as a human-readable report", async () => {
+    const { exitCode, stdout, stderr } = await runCli([
+      "odb-tables",
+      FORM_AND_REPORT_ODB_PATH,
+    ]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    expect(stdout).toContain("SALES (6 rows)");
+    expect(stdout).toContain("AMOUNT:");
+    expect(stdout).toContain("CUSTOMER:");
+  });
+
+  it("emits the same structure as parseable JSON under --json", async () => {
+    const { exitCode, stdout } = await runCli([
+      "odb-tables",
+      FORM_AND_REPORT_ODB_PATH,
+      "--json",
+    ]);
+
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    const parsed: unknown = JSON.parse(stdout);
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(stdout).toContain('"tableName":"SALES"');
+    expect(stdout).toContain('"rowCount":6');
+  });
 });
 
 describe("odb-forms", () => {
