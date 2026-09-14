@@ -1,12 +1,16 @@
 import {
+  createDoc,
   createOdg,
   createOdp,
   createOds,
   createOdt,
   createPdf,
+  createPpt,
   createPptx,
+  createXls,
   drawingOfBlock,
   odsToXlsx,
+  openDoc,
   openDocx,
   openMarkdown,
   openOdg,
@@ -14,7 +18,9 @@ import {
   openOds,
   openOdt,
   openPdf,
+  openPpt,
   openPptx,
+  openXls,
   readDocxContent,
   readOdpContent,
   readOdsContent,
@@ -37,10 +43,21 @@ import type {
   PdfOpenDocument,
   PptxOpenDocument,
 } from "./types.js";
+import { isEditableDocument } from "./types.js";
 
 // A real, minimal PNG -- the signature bytes plus a few arbitrary trailing ones, matching docx/paragraph-detail.test.tsx's own fixture. ADD_SHEET_IMAGE only stores/embeds these bytes and declares the media part's type from the caller's own explicit `format`, so a genuine decodable pixel grid is not needed to prove the round trip.
 const PNG_BYTES = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4,
+]);
+
+// A genuinely decodable 1x1 red PNG (real IHDR/IDAT/IEND chunks, truecolor, no filter). Unlike PNG_BYTES above, PdfPage.appendImage -> registerImageBytes DOES decode the pixel grid (to size the image asset it registers), so a fake signature-only PNG throws "PNG file does not begin with an IHDR chunk" here.
+const REAL_PNG_BYTES = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49,
+  0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02,
+  0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44,
+  0x41, 0x54, 0x78, 0xda, 0x63, 0xf8, 0xcf, 0xc0, 0x00, 0x00, 0x03, 0x01, 0x01,
+  0x00, 0xf7, 0x03, 0x41, 0x43, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44,
+  0xae, 0x42, 0x60, 0x82,
 ]);
 
 function applyAll(
@@ -170,6 +187,39 @@ function openPdfDocument(
     type: "OPEN_FILE_SUCCESS",
     path,
     doc: { format: "pdf", editor, layout: editor.toLayoutDocument(), path },
+  });
+}
+
+function openDocDocument(
+  bytes: Uint8Array<ArrayBuffer>,
+  path = "/tmp/legacy.doc",
+): AppState {
+  return appReducer(createInitialState(), {
+    type: "OPEN_FILE_SUCCESS",
+    path,
+    doc: { format: "doc", editor: openDoc(bytes), path },
+  });
+}
+
+function openXlsDocument(
+  bytes: Uint8Array<ArrayBuffer>,
+  path = "/tmp/legacy.xls",
+): AppState {
+  return appReducer(createInitialState(), {
+    type: "OPEN_FILE_SUCCESS",
+    path,
+    doc: { format: "xls", editor: openXls(bytes), path },
+  });
+}
+
+function openPptDocument(
+  bytes: Uint8Array<ArrayBuffer>,
+  path = "/tmp/legacy.ppt",
+): AppState {
+  return appReducer(createInitialState(), {
+    type: "OPEN_FILE_SUCCESS",
+    path,
+    doc: { format: "ppt", editor: openPpt(bytes), path },
   });
 }
 
@@ -1579,6 +1629,46 @@ describe("appReducer undo", () => {
       ).editor.paragraphs().length + 5,
     );
   });
+
+  // reopenEditable's own switch has one case per EditableOpenDocument format -- docx and pdf are already exercised by the undo tests above, so this covers every remaining branch (pptx/odt/odp/ods/odg/doc/xls/ppt) the same way: mutate via SET_METADATA (the one action every editable format's own editor.metadata setter accepts identically), then undo, and prove the format survived the reopen and a genuinely fresh editor replaced the mutated one.
+  it.each([
+    ["pptx", () => openPptxDocument(createPptx().toBytes())],
+    ["odt", () => openOdtDocument(createOdt().toBytes())],
+    ["odp", () => openOdpDocument(createOdp().toBytes())],
+    ["ods", () => openOdsDocument(createOds().toBytes())],
+    ["odg", () => openOdgDocument(createOdg().toBytes())],
+    ["doc", () => openDocDocument(createDoc().toBytes())],
+    ["xls", () => openXlsDocument(createXls().toBytes())],
+    ["ppt", () => openPptDocument(createPpt().toBytes())],
+  ] as const)(
+    "reopens a %s document from its undo snapshot with a fresh editor",
+    (format, open) => {
+      const opened = open();
+      const mutated = appReducer(opened, {
+        type: "SET_METADATA",
+        overrides: { title: "Undo me" },
+      });
+      if (
+        mutated.openDocument === undefined ||
+        !isEditableDocument(mutated.openDocument)
+      ) {
+        throw new Error("expected an editable open document");
+      }
+      expect(mutated.openDocument.format).toBe(format);
+      const mutatedEditor = mutated.openDocument.editor;
+
+      const undone = appReducer(mutated, { type: "UNDO" });
+      expect(undone.undoStack).toHaveLength(0);
+      if (
+        undone.openDocument === undefined ||
+        !isEditableDocument(undone.openDocument)
+      ) {
+        throw new Error("expected an editable open document");
+      }
+      expect(undone.openDocument.format).toBe(format);
+      expect(undone.openDocument.editor).not.toBe(mutatedEditor);
+    },
+  );
 });
 
 describe("appReducer ADD_SLIDE_TABLE", () => {
@@ -2108,6 +2198,92 @@ describe("appReducer PDF item and page mutations", () => {
     expect(pdfDocument(undone).editor).not.toBe(pdfDocument(edited).editor);
   });
 
+  it("edits a text item's font, size, rotation, width, and toggles underline on then off", () => {
+    const opened = openPdfDocument(pdfTestBytes());
+    const withFont = appReducer(opened, {
+      type: "SET_PDF_TEXT_FONT",
+      pageIndex: 0,
+      itemIndex: 0,
+      font: { family: "Courier", weight: "bold", style: "italic" },
+    });
+    const withSize = appReducer(withFont, {
+      type: "SET_PDF_TEXT_SIZE",
+      pageIndex: 0,
+      itemIndex: 0,
+      sizePt: 24,
+    });
+    const withRotation = appReducer(withSize, {
+      type: "SET_PDF_TEXT_ROTATION",
+      pageIndex: 0,
+      itemIndex: 0,
+      rotationDeg: 45,
+    });
+    const withWidth = appReducer(withRotation, {
+      type: "SET_PDF_TEXT_WIDTH",
+      pageIndex: 0,
+      itemIndex: 0,
+      widthPt: 99,
+    });
+    const underlineOn = appReducer(withWidth, {
+      type: "TOGGLE_PDF_TEXT_UNDERLINE",
+      pageIndex: 0,
+      itemIndex: 0,
+    });
+    const onItem = pdfDocument(underlineOn).editor.page(0)?.items()[0];
+    if (onItem?.kind !== "text") {
+      throw new Error("expected a live text item");
+    }
+    expect(onItem.font).toStrictEqual({
+      family: "Courier",
+      weight: "bold",
+      style: "italic",
+    });
+    expect(onItem.sizePt).toBe(24);
+    expect(onItem.rotationDeg).toBe(45);
+    expect(onItem.widthPt).toBe(99);
+    expect(onItem.underline).toBe(true);
+
+    const underlineOff = appReducer(underlineOn, {
+      type: "TOGGLE_PDF_TEXT_UNDERLINE",
+      pageIndex: 0,
+      itemIndex: 0,
+    });
+    const offItem = pdfDocument(underlineOff).editor.page(0)?.items()[0];
+    expect(offItem?.kind === "text" ? offItem.underline : undefined).toBe(
+      false,
+    );
+  });
+
+  it("warns rather than crashing when SET_PDF_TEXT_FONT, SET_PDF_TEXT_SIZE, and SET_PDF_TEXT_ROTATION target an item of the wrong kind", () => {
+    const opened = openPdfDocument(pdfTestBytes());
+    const withRect = appReducer(opened, {
+      type: "ADD_PDF_RECT",
+      pageIndex: 0,
+      init: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+    });
+    const fontResult = appReducer(withRect, {
+      type: "SET_PDF_TEXT_FONT",
+      pageIndex: 0,
+      itemIndex: 1,
+      font: { family: "Helvetica", weight: "normal", style: "normal" },
+    });
+    expect(fontResult.status?.text).toContain("not text");
+    const sizeResult = appReducer(withRect, {
+      type: "SET_PDF_TEXT_SIZE",
+      pageIndex: 0,
+      itemIndex: 1,
+      sizePt: 10,
+    });
+    expect(sizeResult.status?.text).toContain("not text");
+    const rotationResult = appReducer(withRect, {
+      type: "SET_PDF_TEXT_ROTATION",
+      pageIndex: 0,
+      itemIndex: 1,
+      rotationDeg: 0,
+    });
+    expect(rotationResult.status?.text).toContain("not text");
+  });
+
   it("warns rather than crashing for a page index that does not exist", () => {
     const opened = openPdfDocument(pdfTestBytes());
     const result = appReducer(opened, {
@@ -2131,6 +2307,511 @@ describe("appReducer PDF item and page mutations", () => {
     expect(result.status?.severity).toBe("warning");
     expect(result.status?.text).toContain("not rect");
     expect(result.hasUnsavedChanges).toBe(false);
+  });
+
+  it("adds an ellipse via ADD_PDF_ELLIPSE, present after a toBytes()/openPdf() round trip", () => {
+    const opened = openPdfDocument(pdfTestBytes());
+    const withEllipse = appReducer(opened, {
+      type: "ADD_PDF_ELLIPSE",
+      pageIndex: 0,
+      init: {
+        xPt: 5,
+        yPt: 5,
+        widthPt: 20,
+        heightPt: 10,
+        fill: { r: 1, g: 0, b: 0 },
+      },
+    });
+    const reopened = openPdf(pdfDocument(withEllipse).editor.toBytes());
+    const ellipse = (reopened.page(0)?.items() ?? []).find(
+      (item) => item.kind === "ellipse",
+    );
+    expect(ellipse).toBeDefined();
+    if (ellipse?.kind !== "ellipse") {
+      throw new Error("expected a real ellipse item after re-parsing");
+    }
+    expect(ellipse.widthPt).toBeCloseTo(20, 0);
+    expect(ellipse.heightPt).toBeCloseTo(10, 0);
+  });
+
+  it("adds a line via ADD_PDF_LINE, present after a toBytes()/openPdf() round trip", () => {
+    const opened = openPdfDocument(pdfTestBytes());
+    const withLine = appReducer(opened, {
+      type: "ADD_PDF_LINE",
+      pageIndex: 0,
+      init: {
+        x1Pt: 1,
+        y1Pt: 2,
+        x2Pt: 30,
+        y2Pt: 40,
+        color: { r: 0, g: 0, b: 1 },
+        widthPt: 2,
+      },
+    });
+    const reopened = openPdf(pdfDocument(withLine).editor.toBytes());
+    const line = (reopened.page(0)?.items() ?? []).find(
+      (item) => item.kind === "line",
+    );
+    expect(line).toBeDefined();
+    if (line?.kind !== "line") {
+      throw new Error("expected a real line item after re-parsing");
+    }
+    expect(line.x2Pt).toBeCloseTo(30, 0);
+    expect(line.y2Pt).toBeCloseTo(40, 0);
+  });
+
+  it("adds a path via ADD_PDF_PATH, present after a toBytes()/openPdf() round trip", () => {
+    const opened = openPdfDocument(pdfTestBytes());
+    const withPath = appReducer(opened, {
+      type: "ADD_PDF_PATH",
+      pageIndex: 0,
+      init: {
+        subpaths: [
+          {
+            startXPt: 0,
+            startYPt: 0,
+            closed: true,
+            segments: [
+              { kind: "line", xPt: 10, yPt: 0 },
+              { kind: "line", xPt: 10, yPt: 10 },
+            ],
+          },
+        ],
+        fill: { r: 0, g: 1, b: 1 },
+      },
+    });
+    const reopened = openPdf(pdfDocument(withPath).editor.toBytes());
+    const path = (reopened.page(0)?.items() ?? []).find(
+      (item) => item.kind === "path",
+    );
+    expect(path).toBeDefined();
+  });
+
+  it("adds an image via ADD_PDF_IMAGE, present after a toBytes()/openPdf() round trip", () => {
+    const opened = openPdfDocument(pdfTestBytes());
+    const withImage = appReducer(opened, {
+      type: "ADD_PDF_IMAGE",
+      pageIndex: 0,
+      init: {
+        xPt: 5,
+        yPt: 5,
+        widthPt: 30,
+        heightPt: 20,
+        bytes: REAL_PNG_BYTES,
+        format: "png",
+      },
+    });
+    const reopened = openPdf(pdfDocument(withImage).editor.toBytes());
+    const image = (reopened.page(0)?.items() ?? []).find(
+      (item) => item.kind === "image",
+    );
+    expect(image).toBeDefined();
+    if (image?.kind !== "image") {
+      throw new Error("expected a real image item after re-parsing");
+    }
+    expect(image.widthPt).toBeCloseTo(30, 0);
+    expect(image.heightPt).toBeCloseTo(20, 0);
+  });
+
+  it("adds a link via ADD_PDF_LINK, present after a toBytes()/openPdf() round trip", () => {
+    const opened = openPdfDocument(pdfTestBytes());
+    const withLink = appReducer(opened, {
+      type: "ADD_PDF_LINK",
+      pageIndex: 0,
+      init: {
+        uri: "https://example.com",
+        xPt: 5,
+        yPt: 5,
+        widthPt: 40,
+        heightPt: 15,
+      },
+    });
+    const reopened = openPdf(pdfDocument(withLink).editor.toBytes());
+    const link = (reopened.page(0)?.items() ?? []).find(
+      (item) => item.kind === "link",
+    );
+    expect(link).toBeDefined();
+    if (link?.kind !== "link") {
+      throw new Error("expected a real link item after re-parsing");
+    }
+    expect(link.uri).toBe("https://example.com");
+  });
+
+  describe("field edits on non-text pdf item kinds", () => {
+    // One page carrying one of every editable non-text item kind, each added through the reducer's own ADD_PDF_* actions so tests below index into a document built the same way a real session would build one.
+    function pdfMultiItemState(): AppState {
+      const opened = openPdfDocument(pdfTestBytes());
+      const withRect = appReducer(opened, {
+        type: "ADD_PDF_RECT",
+        pageIndex: 0,
+        init: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      });
+      const withEllipse = appReducer(withRect, {
+        type: "ADD_PDF_ELLIPSE",
+        pageIndex: 0,
+        init: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      });
+      const withLine = appReducer(withEllipse, {
+        type: "ADD_PDF_LINE",
+        pageIndex: 0,
+        init: {
+          x1Pt: 0,
+          y1Pt: 0,
+          x2Pt: 10,
+          y2Pt: 10,
+          color: { r: 0, g: 0, b: 0 },
+          widthPt: 1,
+        },
+      });
+      const withPath = appReducer(withLine, {
+        type: "ADD_PDF_PATH",
+        pageIndex: 0,
+        init: {
+          subpaths: [
+            {
+              startXPt: 0,
+              startYPt: 0,
+              closed: false,
+              segments: [{ kind: "line", xPt: 5, yPt: 5 }],
+            },
+          ],
+        },
+      });
+      const withImage = appReducer(withPath, {
+        type: "ADD_PDF_IMAGE",
+        pageIndex: 0,
+        init: {
+          xPt: 0,
+          yPt: 0,
+          widthPt: 10,
+          heightPt: 10,
+          bytes: REAL_PNG_BYTES,
+          format: "png",
+        },
+      });
+      return appReducer(withImage, {
+        type: "ADD_PDF_LINK",
+        pageIndex: 0,
+        init: {
+          uri: "https://before.example",
+          xPt: 0,
+          yPt: 0,
+          widthPt: 10,
+          heightPt: 10,
+        },
+      });
+    }
+
+    // Item order matches pdfMultiItemState()'s own build sequence: 0 text, 1 rect, 2 ellipse, 3 line, 4 path, 5 image, 6 link.
+    const TEXT_INDEX = 0;
+    const RECT_INDEX = 1;
+    const ELLIPSE_INDEX = 2;
+    const LINE_INDEX = 3;
+    const PATH_INDEX = 4;
+    const IMAGE_INDEX = 5;
+    const LINK_INDEX = 6;
+
+    it("edits a rect's frame, fill, and stroke in place", () => {
+      const state = pdfMultiItemState();
+      const withFrame = appReducer(state, {
+        type: "SET_PDF_RECT_FRAME",
+        pageIndex: 0,
+        itemIndex: RECT_INDEX,
+        xPt: 1,
+        yPt: 2,
+        widthPt: 33,
+        heightPt: 44,
+      });
+      const withFill = appReducer(withFrame, {
+        type: "SET_PDF_RECT_FILL",
+        pageIndex: 0,
+        itemIndex: RECT_INDEX,
+        fill: { r: 1, g: 0.5, b: 0 },
+      });
+      const withStroke = appReducer(withFill, {
+        type: "SET_PDF_RECT_STROKE",
+        pageIndex: 0,
+        itemIndex: RECT_INDEX,
+        stroke: { color: { r: 0, g: 0, b: 1 }, widthPt: 3 },
+      });
+      const item = pdfDocument(withStroke).editor.page(0)?.items()[RECT_INDEX];
+      if (item?.kind !== "rect") {
+        throw new Error("expected a live rect item");
+      }
+      expect(item.xPt).toBe(1);
+      expect(item.yPt).toBe(2);
+      expect(item.widthPt).toBe(33);
+      expect(item.heightPt).toBe(44);
+      expect(item.fill).toStrictEqual({ r: 1, g: 0.5, b: 0 });
+      expect(item.stroke).toStrictEqual({
+        color: { r: 0, g: 0, b: 1 },
+        widthPt: 3,
+      });
+    });
+
+    it("warns rather than crashing when a rect field-edit targets an item of the wrong kind", () => {
+      const state = pdfMultiItemState();
+      const result = appReducer(state, {
+        type: "SET_PDF_RECT_FRAME",
+        pageIndex: 0,
+        itemIndex: ELLIPSE_INDEX,
+        xPt: 0,
+        yPt: 0,
+        widthPt: 1,
+        heightPt: 1,
+      });
+      expect(result.status?.severity).toBe("warning");
+      expect(result.status?.text).toContain("not rect");
+    });
+
+    it("edits an ellipse's frame, fill, and stroke in place", () => {
+      const state = pdfMultiItemState();
+      const withFrame = appReducer(state, {
+        type: "SET_PDF_ELLIPSE_FRAME",
+        pageIndex: 0,
+        itemIndex: ELLIPSE_INDEX,
+        xPt: 3,
+        yPt: 4,
+        widthPt: 22,
+        heightPt: 11,
+      });
+      const withFill = appReducer(withFrame, {
+        type: "SET_PDF_ELLIPSE_FILL",
+        pageIndex: 0,
+        itemIndex: ELLIPSE_INDEX,
+        fill: { r: 0, g: 1, b: 0 },
+      });
+      const withStroke = appReducer(withFill, {
+        type: "SET_PDF_ELLIPSE_STROKE",
+        pageIndex: 0,
+        itemIndex: ELLIPSE_INDEX,
+        stroke: { color: { r: 1, g: 1, b: 0 }, widthPt: 2 },
+      });
+      const item = pdfDocument(withStroke).editor.page(0)?.items()[
+        ELLIPSE_INDEX
+      ];
+      if (item?.kind !== "ellipse") {
+        throw new Error("expected a live ellipse item");
+      }
+      expect(item.widthPt).toBe(22);
+      expect(item.heightPt).toBe(11);
+      expect(item.fill).toStrictEqual({ r: 0, g: 1, b: 0 });
+      expect(item.stroke).toStrictEqual({
+        color: { r: 1, g: 1, b: 0 },
+        widthPt: 2,
+      });
+    });
+
+    it("warns rather than crashing when an ellipse field-edit targets an item of the wrong kind", () => {
+      const state = pdfMultiItemState();
+      const result = appReducer(state, {
+        type: "SET_PDF_ELLIPSE_FILL",
+        pageIndex: 0,
+        itemIndex: LINE_INDEX,
+        fill: { r: 0, g: 0, b: 0 },
+      });
+      expect(result.status?.severity).toBe("warning");
+      expect(result.status?.text).toContain("not ellipse");
+    });
+
+    it("edits a line's endpoints, color, and width in place", () => {
+      const state = pdfMultiItemState();
+      const withFrom = appReducer(state, {
+        type: "SET_PDF_LINE_FROM",
+        pageIndex: 0,
+        itemIndex: LINE_INDEX,
+        x1Pt: 7,
+        y1Pt: 8,
+      });
+      const withTo = appReducer(withFrom, {
+        type: "SET_PDF_LINE_TO",
+        pageIndex: 0,
+        itemIndex: LINE_INDEX,
+        x2Pt: 70,
+        y2Pt: 80,
+      });
+      const withColor = appReducer(withTo, {
+        type: "SET_PDF_LINE_COLOR",
+        pageIndex: 0,
+        itemIndex: LINE_INDEX,
+        color: { r: 0.2, g: 0.3, b: 0.4 },
+      });
+      const withWidth = appReducer(withColor, {
+        type: "SET_PDF_LINE_WIDTH",
+        pageIndex: 0,
+        itemIndex: LINE_INDEX,
+        widthPt: 5,
+      });
+      const item = pdfDocument(withWidth).editor.page(0)?.items()[LINE_INDEX];
+      if (item?.kind !== "line") {
+        throw new Error("expected a live line item");
+      }
+      expect(item.x1Pt).toBe(7);
+      expect(item.y1Pt).toBe(8);
+      expect(item.x2Pt).toBe(70);
+      expect(item.y2Pt).toBe(80);
+      expect(item.color).toStrictEqual({ r: 0.2, g: 0.3, b: 0.4 });
+      expect(item.widthPt).toBe(5);
+    });
+
+    it("warns rather than crashing when a line field-edit targets an item of the wrong kind", () => {
+      const state = pdfMultiItemState();
+      const result = appReducer(state, {
+        type: "SET_PDF_LINE_WIDTH",
+        pageIndex: 0,
+        itemIndex: PATH_INDEX,
+        widthPt: 1,
+      });
+      expect(result.status?.severity).toBe("warning");
+      expect(result.status?.text).toContain("not line");
+    });
+
+    it("edits a path's fill, fill rule, and stroke in place", () => {
+      const state = pdfMultiItemState();
+      const withFill = appReducer(state, {
+        type: "SET_PDF_PATH_FILL",
+        pageIndex: 0,
+        itemIndex: PATH_INDEX,
+        fill: { r: 1, g: 0, b: 1 },
+      });
+      const withRule = appReducer(withFill, {
+        type: "SET_PDF_PATH_FILL_RULE",
+        pageIndex: 0,
+        itemIndex: PATH_INDEX,
+        fillRule: "evenodd",
+      });
+      const withStroke = appReducer(withRule, {
+        type: "SET_PDF_PATH_STROKE",
+        pageIndex: 0,
+        itemIndex: PATH_INDEX,
+        stroke: { color: { r: 0, g: 0, b: 0 }, widthPt: 1.5 },
+      });
+      const item = pdfDocument(withStroke).editor.page(0)?.items()[PATH_INDEX];
+      if (item?.kind !== "path") {
+        throw new Error("expected a live path item");
+      }
+      expect(item.fill).toStrictEqual({ r: 1, g: 0, b: 1 });
+      expect(item.fillRule).toBe("evenodd");
+      expect(item.stroke).toStrictEqual({
+        color: { r: 0, g: 0, b: 0 },
+        widthPt: 1.5,
+      });
+    });
+
+    it("warns rather than crashing when a path field-edit targets an item of the wrong kind", () => {
+      const state = pdfMultiItemState();
+      const result = appReducer(state, {
+        type: "SET_PDF_PATH_FILL_RULE",
+        pageIndex: 0,
+        itemIndex: IMAGE_INDEX,
+        fillRule: "nonzero",
+      });
+      expect(result.status?.severity).toBe("warning");
+      expect(result.status?.text).toContain("not path");
+    });
+
+    it("edits an image's frame, rotation, and source in place", () => {
+      const state = pdfMultiItemState();
+      const withFrame = appReducer(state, {
+        type: "SET_PDF_IMAGE_FRAME",
+        pageIndex: 0,
+        itemIndex: IMAGE_INDEX,
+        xPt: 9,
+        yPt: 10,
+        widthPt: 15,
+        heightPt: 25,
+      });
+      const withRotation = appReducer(withFrame, {
+        type: "SET_PDF_IMAGE_ROTATION",
+        pageIndex: 0,
+        itemIndex: IMAGE_INDEX,
+        rotationDeg: 90,
+      });
+      const beforeItem = pdfDocument(withRotation).editor.page(0)?.items()[
+        IMAGE_INDEX
+      ];
+      if (beforeItem?.kind !== "image") {
+        throw new Error("expected a live image item");
+      }
+      // Read the string value now, before the mutation below: beforeItem is a live view over the same underlying node, so its own .imageId getter would report the POST-mutation value if read only after withSource exists.
+      const beforeImageIdValue = beforeItem.imageId;
+      const withSource = appReducer(withRotation, {
+        type: "SET_PDF_IMAGE_SOURCE",
+        pageIndex: 0,
+        itemIndex: IMAGE_INDEX,
+        // A different real, decodable PNG (1x1 blue rather than REAL_PNG_BYTES' red) -- distinct content, so registerImageBytes' own dedup-by-content assigns it a genuinely different imageId, proving setImage repointed the item rather than leaving it unchanged.
+        bytes: new Uint8Array([
+          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00,
+          0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
+          0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xde,
+          0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63,
+          0x60, 0x60, 0xf8, 0x0f, 0x00, 0x01, 0x03, 0x01, 0x00, 0x36, 0x74,
+          0x11, 0x40, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
+          0x42, 0x60, 0x82,
+        ]),
+        format: "png",
+      });
+      const item = pdfDocument(withSource).editor.page(0)?.items()[IMAGE_INDEX];
+      if (item?.kind !== "image") {
+        throw new Error("expected a live image item");
+      }
+      expect(item.widthPt).toBe(15);
+      expect(item.heightPt).toBe(25);
+      expect(item.rotationDeg).toBe(90);
+      expect(item.imageId).not.toBe(beforeImageIdValue);
+    });
+
+    it("warns rather than crashing when an image field-edit targets an item of the wrong kind", () => {
+      const state = pdfMultiItemState();
+      const result = appReducer(state, {
+        type: "SET_PDF_IMAGE_ROTATION",
+        pageIndex: 0,
+        itemIndex: LINK_INDEX,
+        rotationDeg: 0,
+      });
+      expect(result.status?.severity).toBe("warning");
+      expect(result.status?.text).toContain("not image");
+    });
+
+    it("edits a link's uri and frame in place", () => {
+      const state = pdfMultiItemState();
+      const withUri = appReducer(state, {
+        type: "SET_PDF_LINK_URI",
+        pageIndex: 0,
+        itemIndex: LINK_INDEX,
+        uri: "https://after.example",
+      });
+      const withFrame = appReducer(withUri, {
+        type: "SET_PDF_LINK_FRAME",
+        pageIndex: 0,
+        itemIndex: LINK_INDEX,
+        xPt: 11,
+        yPt: 12,
+        widthPt: 50,
+        heightPt: 20,
+      });
+      const item = pdfDocument(withFrame).editor.page(0)?.items()[LINK_INDEX];
+      if (item?.kind !== "link") {
+        throw new Error("expected a live link item");
+      }
+      expect(item.uri).toBe("https://after.example");
+      expect(item.xPt).toBe(11);
+      expect(item.yPt).toBe(12);
+      expect(item.widthPt).toBe(50);
+      expect(item.heightPt).toBe(20);
+    });
+
+    it("warns rather than crashing when a link field-edit targets an item of the wrong kind", () => {
+      const state = pdfMultiItemState();
+      const result = appReducer(state, {
+        type: "SET_PDF_LINK_URI",
+        pageIndex: 0,
+        itemIndex: TEXT_INDEX,
+        uri: "https://wrong.example",
+      });
+      expect(result.status?.severity).toBe("warning");
+      expect(result.status?.text).toContain("not link");
+    });
   });
 });
 
