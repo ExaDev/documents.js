@@ -98,11 +98,11 @@ describe("CFF programs probeCff refuses to read", () => {
   });
 
   it("refuses a too-small headerSize even when a valid Name INDEX and Top DICT sit exactly where that headerSize points", () => {
-    // Unlike the case above, this Name INDEX is placed at byte offset 2 -- exactly where headerSize's own (invalid) value of 2 would have readCffIndex start looking -- so the only thing standing between this input and a wrongly-defined probe result is the headerSize < CFF_HEADER_SIZE check itself.
+    // Unlike the case above (whose fixed 4-byte header, from cffFont's own CFF_HEADER default, leaves the Name INDEX sitting where a genuinely valid header would put it, not where the declared headerSize of 2 points), this fixture writes only 3 literal header bytes before the Name INDEX -- so headerSize's own declared value of 3 is exactly the byte offset readCffIndex(bytes, headerSize) actually starts reading from, and the Name INDEX and Top DICT both parse cleanly from there. The only thing standing between this input and a wrongly-defined probe result is the headerSize < CFF_HEADER_SIZE check itself.
     const bytes = new Uint8Array([
       1,
       0,
-      2, // majorVersion 1, minorVersion 0, headerSize 2 (invalid: less than the real 4-byte header)
+      3, // majorVersion 1, minorVersion 0, headerSize 3 (invalid: less than the real 4-byte header) -- and, not coincidentally, the exact byte offset the Name INDEX below starts at
       ...cffIndex([[...new TextEncoder().encode("TooShort")]]),
       ...cffIndex([[139, 0]]),
     ]);
