@@ -2,10 +2,20 @@ import { describe, expect, it } from "vitest";
 import type { ConstructDescriptor, ContentBlock } from "document-schema.js";
 import { findConstructMarkerImbalance } from "document-schema.js";
 import type { Package } from "../../model/package";
-import type { XmlNode } from "../../model/node";
+import type { XmlElement, XmlNode } from "../../model/node";
 import { el, txt } from "../../xml/fragment";
 import { readDocxContent } from "./read";
-import { insertConstructMarkers } from "./constructs";
+import {
+  bookmarkAnchorDescriptor,
+  indexParagraphContent,
+  insertConstructMarkers,
+  readContentControlDescriptor,
+  readFormControlDescriptor,
+  runInstructionText,
+  runRangeMarkerExtents,
+  type ParagraphContentIndex,
+  type ParagraphRangeMarkerHalf,
+} from "./constructs";
 
 // The block-scope rule in action: which real docx spellings of a structured document tag, field, bookmark, or tracked change become a constructStart/constructEnd pair, and which ones (the run-level occurrences, and the pairs whose extents cross) are deliberately not representable. Every fixture here is a whole word/document.xml body, so each case is read exactly as readDocxContent would read a real file.
 
@@ -49,6 +59,202 @@ function outline(
     return block.kind;
   });
 }
+
+describe("indexParagraphContent", () => {
+  it("indexes a non-run element as content-bearing unconditionally, and a run only when it carries non-inert content", () => {
+    // The hyperlink has no children at all, so it only counts as content-bearing via the "not a w:r" branch itself, never by inspecting children the way a run is inspected -- if that branch were skipped, an empty non-run element would wrongly fall through to the run-only children check and read as empty. The run mixes an inert w:rPr with a real w:t, which only reads as content-bearing under "some child is non-inert" (true here); "every child is non-inert" would read it as false, since w:rPr alone already fails that.
+    const paragraph = el("w:p", {}, [
+      el("w:pPr", {}, []),
+      el("w:hyperlink", {}, []),
+      el("w:r", {}, [el("w:rPr", {}, []), el("w:t", {}, [txt("x")])]),
+    ]);
+    const index = indexParagraphContent(paragraph);
+    expect(index.firstContentIndex).toBe(1);
+    expect(index.lastContentIndex).toBe(2);
+  });
+
+  it("leaves both indices at -1 when a paragraph has no content-bearing children at all", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:pPr", {}, []),
+      el("w:bookmarkStart", { "w:id": "1" }, []),
+    ]);
+    const index = indexParagraphContent(paragraph);
+    expect(index.firstContentIndex).toBe(-1);
+    expect(index.lastContentIndex).toBe(-1);
+  });
+});
+
+describe("runRangeMarkerExtents: isBlockScopedHalf", () => {
+  const half = (
+    element: ParagraphRangeMarkerHalf["element"],
+    kind: "start" | "end",
+    runPosition: number,
+  ): ParagraphRangeMarkerHalf => ({
+    element,
+    family: "bookmark",
+    id: "z",
+    name: kind === "start" ? "bm" : undefined,
+    kind,
+    runPosition,
+  });
+
+  it("treats a half nested inside a container -- not a direct paragraph child -- as run-scoped, not block-scoped", () => {
+    // Both halves sit inside the hyperlink rather than directly on the paragraph, so index.elements.indexOf never finds either: this is the "not found among the direct children" case the container comment describes, and it must resolve to run-scoped (kept) rather than silently falling through to the leading/trailing position math with a stray -1.
+    const startEl = el("w:bookmarkStart", { "w:id": "z", "w:name": "bm" }, []);
+    const endEl = el("w:bookmarkEnd", { "w:id": "z" }, []);
+    const paragraph = el("w:p", {}, [
+      el("w:hyperlink", {}, [
+        startEl,
+        el("w:r", {}, [el("w:t", {}, [txt("x")])]),
+        endEl,
+      ]),
+    ]);
+    const index = indexParagraphContent(paragraph);
+    const extents = runRangeMarkerExtents(
+      [half(startEl, "start", 0), half(endEl, "end", 1)],
+      index,
+    );
+    expect(extents).toEqual([
+      { descriptor: bookmarkAnchorDescriptor("bm"), startRun: 0, endRun: 1 },
+    ]);
+  });
+
+  it("treats a found half with no content at all as leading regardless of its own position", () => {
+    // A synthetic index whose firstContentIndex is -1 (no content-bearing children) while lastContentIndex is a real, larger value: leading's own "-1 means everything is leading" shortcut must fire for ANY position here, not just one smaller than some real firstContentIndex, and trailing must stay false since neither half's position exceeds lastContentIndex. Both halves land on the block-scoped path only through that shortcut, so the pair is dropped.
+    const startEl = el("w:bookmarkStart", { "w:id": "z", "w:name": "bm" }, []);
+    const endEl = el("w:bookmarkEnd", { "w:id": "z" }, []);
+    const index: ParagraphContentIndex = {
+      elements: [startEl, endEl],
+      firstContentIndex: -1,
+      lastContentIndex: 100,
+    };
+    const extents = runRangeMarkerExtents(
+      [half(startEl, "start", 0), half(endEl, "end", 5)],
+      index,
+    );
+    expect(extents).toEqual([]);
+  });
+
+  it("treats a found half sitting exactly at the first content-bearing position as NOT leading", () => {
+    // firstContentIndex is a real index equal to this half's own position, so leading must be false (strictly less than, not less-than-or-equal) -- and trailing is pinned false by a lastContentIndex far beyond both halves' positions, so the pair is kept only if leading is computed correctly.
+    const startEl = el("w:bookmarkStart", { "w:id": "z", "w:name": "bm" }, []);
+    const endEl = el("w:bookmarkEnd", { "w:id": "z" }, []);
+    const index: ParagraphContentIndex = {
+      elements: [startEl, endEl],
+      firstContentIndex: 0,
+      lastContentIndex: 100,
+    };
+    const extents = runRangeMarkerExtents(
+      [half(startEl, "start", 0), half(endEl, "end", 5)],
+      index,
+    );
+    expect(extents).toEqual([
+      { descriptor: bookmarkAnchorDescriptor("bm"), startRun: 0, endRun: 5 },
+    ]);
+  });
+});
+
+describe("runRangeMarkerExtents: malformed pairings", () => {
+  const flatIndex = (elements: XmlElement[]): ParagraphContentIndex => ({
+    elements,
+    firstContentIndex: 0,
+    lastContentIndex: elements.length - 1,
+  });
+
+  it("drops an id with two starts and one end, rather than pairing the end with an arbitrary start", () => {
+    const startA = el("w:bookmarkStart", { "w:id": "z", "w:name": "a" }, []);
+    const startB = el("w:bookmarkStart", { "w:id": "z", "w:name": "b" }, []);
+    const end = el("w:bookmarkEnd", { "w:id": "z" }, []);
+    const halves: ParagraphRangeMarkerHalf[] = [
+      {
+        element: startA,
+        family: "bookmark",
+        id: "z",
+        name: "a",
+        kind: "start",
+        runPosition: 0,
+      },
+      {
+        element: startB,
+        family: "bookmark",
+        id: "z",
+        name: "b",
+        kind: "start",
+        runPosition: 1,
+      },
+      {
+        element: end,
+        family: "bookmark",
+        id: "z",
+        name: undefined,
+        kind: "end",
+        runPosition: 2,
+      },
+    ];
+    expect(
+      runRangeMarkerExtents(halves, flatIndex([startA, startB, end])),
+    ).toEqual([]);
+  });
+
+  it("drops an id with one start and two ends, rather than pairing the start with an arbitrary end", () => {
+    const start = el("w:bookmarkStart", { "w:id": "z", "w:name": "a" }, []);
+    const endA = el("w:bookmarkEnd", { "w:id": "z" }, []);
+    const endB = el("w:bookmarkEnd", { "w:id": "z" }, []);
+    const halves: ParagraphRangeMarkerHalf[] = [
+      {
+        element: start,
+        family: "bookmark",
+        id: "z",
+        name: "a",
+        kind: "start",
+        runPosition: 0,
+      },
+      {
+        element: endA,
+        family: "bookmark",
+        id: "z",
+        name: undefined,
+        kind: "end",
+        runPosition: 1,
+      },
+      {
+        element: endB,
+        family: "bookmark",
+        id: "z",
+        name: undefined,
+        kind: "end",
+        runPosition: 2,
+      },
+    ];
+    expect(
+      runRangeMarkerExtents(halves, flatIndex([start, endA, endB])),
+    ).toEqual([]);
+  });
+
+  it("drops a pair whose end precedes its own start rather than emitting a negative-length extent", () => {
+    const start = el("w:bookmarkStart", { "w:id": "z", "w:name": "a" }, []);
+    const end = el("w:bookmarkEnd", { "w:id": "z" }, []);
+    const halves: ParagraphRangeMarkerHalf[] = [
+      {
+        element: start,
+        family: "bookmark",
+        id: "z",
+        name: "a",
+        kind: "start",
+        runPosition: 5,
+      },
+      {
+        element: end,
+        family: "bookmark",
+        id: "z",
+        name: undefined,
+        kind: "end",
+        runPosition: 2,
+      },
+    ];
+    expect(runRangeMarkerExtents(halves, flatIndex([start, end]))).toEqual([]);
+  });
+});
 
 describe("docx constructs: structured document tags", () => {
   it("reads a block-level w:sdt as a contentControl construct bracketing its own content", () => {
@@ -202,6 +408,171 @@ describe("docx constructs: structured document tags", () => {
       el("w:r", {}, [el("w:t", {}, [txt(" after")])]),
     ]);
     expect(outline(blocksOf([inlineSdt]))).toEqual(["before inside after"]);
+  });
+});
+
+describe("readContentControlDescriptor: internals", () => {
+  it("omits every optional field entirely, rather than setting it to undefined, when none of them apply", () => {
+    // toStrictEqual (unlike toEqual) fails on an extra key holding undefined, which is exactly what each of the four optional-field guards below would produce if its own "!== undefined" check were forced true regardless of the actual value.
+    const sdt = el("w:sdt", {}, [el("w:sdtPr", {}, [el("w:text")])]);
+    expect(readContentControlDescriptor(sdt)).toStrictEqual({
+      kind: "contentControl",
+      controlType: "plainText",
+    });
+  });
+
+  it("accepts a Table of Contents gallery spelled as w:docPartList, not only w:docPartObj", () => {
+    const sdt = el("w:sdt", {}, [
+      el("w:sdtPr", {}, [
+        el("w:docPartList", {}, [
+          el("w:docPartGallery", { "w:val": "Table of Contents" }),
+        ]),
+      ]),
+    ]);
+    expect(readContentControlDescriptor(sdt)).toStrictEqual({
+      kind: "contentControl",
+      controlType: "index",
+    });
+  });
+
+  it("reads a comboBox's own listItem entries the same way a dropDownList's are read", () => {
+    const sdt = el("w:sdt", {}, [
+      el("w:sdtPr", {}, [
+        el("w:comboBox", {}, [
+          el("w:listItem", { "w:displayText": "One", "w:value": "1" }),
+        ]),
+      ]),
+    ]);
+    expect(readContentControlDescriptor(sdt)).toStrictEqual({
+      kind: "contentControl",
+      controlType: "comboBox",
+      options: ["One"],
+    });
+  });
+
+  it("falls back to a listItem's own w:value when it carries no w:displayText", () => {
+    const sdt = el("w:sdt", {}, [
+      el("w:sdtPr", {}, [
+        el("w:dropDownList", {}, [el("w:listItem", { "w:value": "raw" })]),
+      ]),
+    ]);
+    expect(readContentControlDescriptor(sdt)).toStrictEqual({
+      kind: "contentControl",
+      controlType: "dropDown",
+      options: ["raw"],
+    });
+  });
+
+  it("reads a checkbox control from its plain w: spelling, not only the w14: forms", () => {
+    // w:checkbox (not w14:checkbox) and w:checked (not w14:checked): both fallbacks must actually be reachable, not merely declared. w14:val is used directly here so this stays independent of the w:val fallback, which gets its own test below.
+    const sdt = el("w:sdt", {}, [
+      el("w:sdtPr", {}, [
+        el("w:checkbox", {}, [el("w:checked", { "w14:val": "1" })]),
+      ]),
+    ]);
+    expect(readContentControlDescriptor(sdt)).toStrictEqual({
+      kind: "contentControl",
+      controlType: "checkbox",
+      checked: true,
+    });
+  });
+
+  it("reads a checkbox's own checked value from its plain w:val, not only w14:val", () => {
+    // "0" rather than some other value: a checked state read via a broken w:val fallback would come back undefined, which this toggle's own convention reads as checked (true) -- indistinguishable from a genuine "1" unless the real answer is false.
+    const sdt = el("w:sdt", {}, [
+      el("w:sdtPr", {}, [
+        el("w14:checkbox", {}, [el("w14:checked", { "w:val": "0" })]),
+      ]),
+    ]);
+    expect(readContentControlDescriptor(sdt)).toStrictEqual({
+      kind: "contentControl",
+      controlType: "checkbox",
+      checked: false,
+    });
+  });
+
+  it("treats a checkbox with no w:checked child at all as unchecked, not absent", () => {
+    const sdt = el("w:sdt", {}, [
+      el("w:sdtPr", {}, [el("w14:checkbox", {}, [])]),
+    ]);
+    expect(readContentControlDescriptor(sdt)).toStrictEqual({
+      kind: "contentControl",
+      controlType: "checkbox",
+      checked: false,
+    });
+  });
+
+  it("reads a checkbox's 'false' and 'off' values as unchecked, alongside '0'", () => {
+    const falseSdt = el("w:sdt", {}, [
+      el("w:sdtPr", {}, [
+        el("w14:checkbox", {}, [el("w14:checked", { "w14:val": "false" })]),
+      ]),
+    ]);
+    const offSdt = el("w:sdt", {}, [
+      el("w:sdtPr", {}, [
+        el("w14:checkbox", {}, [el("w14:checked", { "w14:val": "off" })]),
+      ]),
+    ]);
+    expect(readContentControlDescriptor(falseSdt)).toStrictEqual({
+      kind: "contentControl",
+      controlType: "checkbox",
+      checked: false,
+    });
+    expect(readContentControlDescriptor(offSdt)).toStrictEqual({
+      kind: "contentControl",
+      controlType: "checkbox",
+      checked: false,
+    });
+  });
+});
+
+describe("readFormControlDescriptor: internals", () => {
+  it("reads a legacy checkbox field's own checked value across '0', 'false', and 'off'", () => {
+    const beginRun = (val: string): XmlElement =>
+      el("w:r", {}, [
+        el("w:ffData", {}, [
+          el("w:checkBox", {}, [el("w:checked", { "w:val": val })]),
+        ]),
+      ]);
+    expect(readFormControlDescriptor(beginRun("0"))?.checked).toBe(false);
+    expect(readFormControlDescriptor(beginRun("false"))?.checked).toBe(false);
+    expect(readFormControlDescriptor(beginRun("off"))?.checked).toBe(false);
+  });
+
+  it("falls back to w:default when a legacy checkbox field carries no w:checked", () => {
+    const beginRun = el("w:r", {}, [
+      el("w:ffData", {}, [
+        el("w:checkBox", {}, [el("w:default", { "w:val": "0" })]),
+      ]),
+    ]);
+    expect(readFormControlDescriptor(beginRun)?.checked).toBe(false);
+  });
+
+  it("defaults a legacy checkbox field's checked state to false when neither w:checked nor w:default is present", () => {
+    const beginRun = el("w:r", {}, [
+      el("w:ffData", {}, [el("w:checkBox", {}, [])]),
+    ]);
+    expect(readFormControlDescriptor(beginRun)?.checked).toBe(false);
+  });
+
+  it("never mistakes a legacy text field for a drop-down list", () => {
+    const beginRun = el("w:r", {}, [
+      el("w:ffData", {}, [el("w:textInput", {}, [])]),
+    ]);
+    const descriptor = readFormControlDescriptor(beginRun);
+    expect(descriptor?.controlType).toBe("plainText");
+    expect(descriptor?.source?.format).toBe("docx");
+    expect(descriptor).not.toHaveProperty("options");
+  });
+});
+
+describe("runInstructionText", () => {
+  it("reads w:delInstrText the same way as w:instrText, and ignores unrelated run children", () => {
+    const run = el("w:r", {}, [
+      el("w:t", {}, [txt("not instruction")]),
+      el("w:delInstrText", {}, [txt(" DATE ")]),
+    ]);
+    expect(runInstructionText(run)).toBe(" DATE ");
   });
 });
 
@@ -737,5 +1108,14 @@ describe("insertConstructMarkers", () => {
 
   it("keeps the block list unchanged when there are no extents at all", () => {
     expect(insertConstructMarkers(blocks, [])).toEqual(blocks);
+  });
+
+  it("sorts crossing extents by their own startIndex, not by discovery order alone", () => {
+    // P starts before Q but ends before Q ends too -- a genuine crossing, which the extent-scope rule drops entirely (Q has no encoding). P and Q's `order` fields are deliberately the REVERSE of their startIndex order: if compareExtents fell back to comparing `order` alone without weighing startIndex first, it would process Q before P, and P (starting at 0, before Q's own already-open span) would then read as nested inside Q rather than the reverse -- both extents would wrongly survive instead of Q alone being dropped.
+    const marked = insertConstructMarkers(blocks, [
+      { startIndex: 0, endIndex: 2, order: 1, descriptor: anchor("p") },
+      { startIndex: 1, endIndex: 3, order: 0, descriptor: anchor("q") },
+    ]);
+    expect(outline(marked)).toEqual([anchor("p"), "a", "b", ")", "c"]);
   });
 });
