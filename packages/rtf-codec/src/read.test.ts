@@ -2982,6 +2982,21 @@ describe("table row and column derivation", () => {
     ).toBe(true);
   });
 
+  it("resets inTable to false once \\row closes, even with no \\pard afterward to do it instead", () => {
+    // Every other table fixture in this file follows its own \row with an explicit \pard, which resets para.inTable back to false on its own via defaultParagraphState() -- masking whether \row's OWN reset does anything at all. Typing text directly after \row, with no \pard in between, is the one shape that actually depends on \row's own case resetting inTable itself: without it, "after" would stay routed into the now-closed table's own cellBlocks instead of the section's real blocks.
+    const blocks = blocksOf(
+      `${HEADER}\\trowd\\trleft0\\cellx1440\\pard\\intbl cell\\cell\\row after\\par}`,
+    );
+    const paragraphs = blocks.filter(
+      (block): block is ContentParagraph => block.kind === "paragraph",
+    );
+    expect(
+      paragraphs.some((paragraph) =>
+        paragraph.runs.some((run) => run.text.includes("after")),
+      ),
+    ).toBe(true);
+  });
+
   it("still closes a dangling cell whose own \\cell mark is missing but a \\row follows it directly", () => {
     // Real producers occasionally omit the final \cell before \row; endRow's own guard must still call endCell for whatever text or blocks accumulated, rather than losing it because \row's own trigger conditions were read too narrowly.
     const table = firstTable(
