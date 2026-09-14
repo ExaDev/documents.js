@@ -117,4 +117,15 @@ describe("nextPictureIndex", () => {
     };
     expect(nextPictureIndex(pkg, "p.g")).toBe(1);
   });
+
+  // "Pictures0image5.png" is 9 characters ("Pictures0") ahead of a slice that -- once the leading "Pictures/" (also 9 characters) is stripped off a real Pictures/ path -- looks exactly like "image5.png". A path-prefix check that only LOOKED at whether the loop should skip a part, without actually gating the pattern match against it, would still slice this non-Pictures path at the same fixed offset and misread it as Pictures/image5.png -- this path is deliberately crafted so that coincidence is exercised, unlike a plain "Other/imageN.ext" path (whose own 9-character-in slice does not happen to spell a valid image filename).
+  it("ignores a same-named file outside Pictures/ even when slicing its path at the Pictures/ prefix length would coincidentally spell a valid image filename", () => {
+    const pkg: Package = {
+      parts: {
+        "Pictures/image1.png": { kind: "binary", base64: "" },
+        "Pictures0image5.png": { kind: "binary", base64: "" },
+      },
+    };
+    expect(nextPictureIndex(pkg, "png")).toBe(2);
+  });
 });
