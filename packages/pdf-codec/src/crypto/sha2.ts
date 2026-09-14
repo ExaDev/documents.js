@@ -167,9 +167,11 @@ export function sha256(
         );
       }),
     );
-    // Array.from's own length argument (SHA256_ROUNDS - WORDS_PER_BLOCK, an arithmetic value with no equivalent-mutant boundary the way a bare loop comparison would have) drives this expansion instead of a counted for-loop's own `t < SHA256_ROUNDS` -- the recurrence itself still runs index-by-index in order (Array.from's mapfn is called sequentially), since w[t] depends on entries this same expansion already wrote.
-    Array.from({ length: SHA256_ROUNDS - WORDS_PER_BLOCK }, (_, index) => {
-      const t = WORDS_PER_BLOCK + index;
+    // Array.from's own length argument is SHA256_ROUNDS itself (the full word count, not an arithmetic offset from it), with the already-filled first WORDS_PER_BLOCK entries skipped inside the mapfn -- a subtraction expressing the remaining count here would size a Uint32Array write that a wrong length silently drops (equally unobservable in either direction), whereas mutating this skip condition instead corrupts w[16] onward and is caught by every hash test below.
+    Array.from({ length: SHA256_ROUNDS }, (_, t) => {
+      if (t < WORDS_PER_BLOCK) {
+        return; // already filled directly from the block's own bytes above
+      }
       const x = w[t - 15]!;
       const y = w[t - 2]!;
       const s0 = rotr32(x, 7) ^ rotr32(x, 18) ^ (x >>> 3);
@@ -237,9 +239,11 @@ function sha512Core(
       }
       w[t] = word;
     });
-    // As sha256's own expansion above: Array.from's length argument (an arithmetic value, not a bare loop comparison) drives this instead of `t < SHA512_ROUNDS`, with the recurrence still running index-by-index in the mapfn's own call order.
-    Array.from({ length: SHA512_ROUNDS - WORDS_PER_BLOCK }, (_, index) => {
-      const t = WORDS_PER_BLOCK + index;
+    // As sha256's own expansion above: Array.from's own length is SHA512_ROUNDS itself, not an arithmetic offset from it, with the already-filled first WORDS_PER_BLOCK entries skipped inside the mapfn -- growing w by extra unread entries past SHA512_ROUNDS is equally unobservable in either direction, whereas mutating this skip condition corrupts w[16] onward and is caught by every hash test below.
+    Array.from({ length: SHA512_ROUNDS }, (_, t) => {
+      if (t < WORDS_PER_BLOCK) {
+        return; // already filled directly from the block's own bytes above
+      }
       const x = w[t - 15]!;
       const y = w[t - 2]!;
       const s0 = rotr64(x, 1n) ^ rotr64(x, 8n) ^ (x >> 7n);
