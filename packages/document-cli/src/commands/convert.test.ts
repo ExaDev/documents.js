@@ -142,3 +142,55 @@ describe("docx-to-pdf", () => {
     expect(exitCode).toBe(EXIT_SUCCESS);
   });
 });
+
+describe("registerConversionCommands option wiring", () => {
+  const program = createProgram();
+  const byName = (name: string) =>
+    program.commands.find((command) => command.name() === name);
+  const hasOption = (
+    command: ReturnType<typeof byName>,
+    long: string,
+  ): boolean => (command?.options ?? []).some((option) => option.long === long);
+
+  it("describes each explicit per-pair command by its own source and target", () => {
+    expect(byName("docx-to-pdf")?.description()).toBe(
+      "convert a docx document to pdf",
+    );
+    expect(byName("pdf-to-docx")?.description()).toBe(
+      "convert a pdf document to docx",
+    );
+  });
+
+  it("adds --delimiter only to a command whose source or target is csv", () => {
+    expect(hasOption(byName("docx-to-csv"), "--delimiter")).toBe(true);
+    expect(hasOption(byName("csv-to-docx"), "--delimiter")).toBe(true);
+    expect(hasOption(byName("docx-to-pdf"), "--delimiter")).toBe(false);
+  });
+
+  it("adds --sheet only to a command whose target is csv", () => {
+    expect(hasOption(byName("docx-to-csv"), "--sheet")).toBe(true);
+    expect(hasOption(byName("csv-to-docx"), "--sheet")).toBe(false);
+    expect(hasOption(byName("docx-to-pdf"), "--sheet")).toBe(false);
+  });
+
+  it("adds --page only to a command whose target is svg", () => {
+    expect(hasOption(byName("docx-to-svg"), "--page")).toBe(true);
+    expect(hasOption(byName("docx-to-csv"), "--page")).toBe(false);
+    expect(hasOption(byName("docx-to-pdf"), "--page")).toBe(false);
+  });
+
+  it("describes the generic convert command and registers its shared and --to options", () => {
+    const generic = byName("convert");
+    expect(generic?.description()).toBe(
+      "convert between any two supported document formats, inferring source/target from file extensions where possible",
+    );
+    expect(hasOption(generic, "--json")).toBe(true);
+    expect(hasOption(generic, "--dump-package")).toBe(true);
+    expect(hasOption(generic, "--sheet")).toBe(true);
+    expect(hasOption(generic, "--page")).toBe(true);
+    const toOption = generic?.options.find((option) => option.long === "--to");
+    expect(toOption?.description).toContain(
+      "target format when it cannot be inferred from the output path",
+    );
+  });
+});
