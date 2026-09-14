@@ -10,7 +10,7 @@ import type {
 import { ContentDocumentSchema } from "document-schema.js";
 import type { ContentEmbeddedObjectBlock } from "document-schema.js";
 import { RtfDiagnosticCodes, RtfNotAnRtfDocumentError } from "./diagnostics";
-import { bytesToHex } from "./base64";
+import { bytesToHex, hexToBytes } from "./base64";
 import { writeEmbeddedObjectData } from "./embedded-object";
 import { readRtf, readRtfContent } from "./read";
 import { bytes, text } from "./test-support/bytes";
@@ -2710,6 +2710,415 @@ describe("paragraph geometry derivation", () => {
   it("reads \\ls0 (no list override) as no list field at all, matching an absent \\ls", () => {
     const paragraph = paragraphsOf(`${HEADER}\\pard\\ls0 x\\par}`)[0];
     expect(paragraph?.list).toBeUndefined();
+  });
+});
+
+describe("table row and column derivation", () => {
+  it("does not open a synthetic empty cell when a \\row closes with no pending text and no cell already collected", () => {
+    // \row with genuinely nothing accumulated -- no \cell mark reached at all -- must not call endCell and manufacture a phantom cell from nothing; TABLE_ROW_WITHOUT_DEFINITION already covers that case on its own terms.
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\trowd\\trleft0\\cellx1440\\row\\pard x\\par}`),
+    );
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.TABLE_ROW_WITHOUT_DEFINITION,
+      ),
+    ).toBe(true);
+  });
+
+  it("still closes a dangling cell whose own \\cell mark is missing but a \\row follows it directly", () => {
+    // Real producers occasionally omit the final \cell before \row; endRow's own guard must still call endCell for whatever text or blocks accumulated, rather than losing it because \row's own trigger conditions were read too narrowly.
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\cellx1440\\pard\\intbl dangling\\row\\pard x\\par}`,
+    );
+    expect(table.rows[0]?.cells).toHaveLength(1);
+    const firstBlock = table.rows[0]?.cells[0]?.blocks[0];
+    expect(
+      firstBlock?.kind === "paragraph"
+        ? firstBlock.runs.map((run) => run.text).join("")
+        : undefined,
+    ).toBe("dangling");
+  });
+
+  it("reports the exact TABLE_ROW_WITHOUT_DEFINITION message text", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\trowd\\trleft0\\cellx1440\\row\\pard x\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.TABLE_ROW_WITHOUT_DEFINITION,
+    );
+    expect(found?.message).toBe(
+      "a \\row closed a table row that contained no \\cell marks",
+    );
+  });
+
+  it("takes column widths from the FIRST row's own \\cellxN boundaries, not a later row's", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\cellx1000\\cellx2000\\pard\\intbl A\\cell\\pard\\intbl B\\cell\\row` +
+        "\\trowd\\trleft0\\cellx5000\\cellx9000\\pard\\intbl C\\cell\\pard\\intbl D\\cell\\row\\pard x\\par}",
+    );
+    expect(table.columnWidthsPt).toEqual([50, 50]);
+  });
+
+  it("counts grid columns from a row's own cell spans when they exceed the \\cellxN boundary count", () => {
+    // \cellxN only ever names 2 boundaries here, but a horizontally merged anchor covering both plus a genuinely wider second row proves columnCount is derived from actual cell spans, not capped at the boundary count alone.
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\clmgf\\cellx2160\\clmrg\\cellx4320\\pard\\intbl wide\\cell\\pard\\intbl\\cell\\row` +
+        "\\trowd\\trleft0\\cellx1440\\cellx2880\\cellx4320\\pard\\intbl a\\cell\\pard\\intbl b\\cell\\pard\\intbl c\\cell\\row\\pard x\\par}",
+    );
+    expect(table.columnWidthsPt.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("filters a horizontally-merged continuation cell out of the row entirely, while a vertical continuation keeps its own empty slot", () => {
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\clmgf\\cellx1440\\clmrg\\cellx2880\\pard\\intbl merged\\cell\\pard\\intbl\\cell\\row" +
+        "\\trowd\\trleft0\\clvmgf\\cellx1440\\cellx2880\\pard\\intbl v\\cell\\pard\\intbl w\\cell\\row" +
+        "\\trowd\\trleft0\\clvmrg\\cellx1440\\cellx2880\\pard\\intbl\\cell\\pard\\intbl x\\cell\\row\\pard z\\par}",
+    );
+    // Row 0's horizontal continuation cell is dropped, leaving one cell.
+    expect(table.rows[0]?.cells).toHaveLength(1);
+    // Row 2's vertical continuation cell keeps its own slot (an empty one), so the row still reports two cells.
+    expect(table.rows[2]?.cells).toHaveLength(2);
+    expect(table.rows[2]?.cells[0]?.blocks).toEqual([]);
+  });
+
+  it("derives rowSpan of exactly two, not three, when the row after a merge run is a genuinely ordinary row", () => {
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\clvmgf\\cellx1440\\pard\\intbl A\\cell\\row" +
+        "\\trowd\\trleft0\\clvmrg\\cellx1440\\pard\\intbl\\cell\\row" +
+        "\\trowd\\trleft0\\cellx1440\\pard\\intbl B\\cell\\row\\pard x\\par}",
+    );
+    expect(table.rows[0]?.cells[0]?.rowSpan).toBe(2);
+    expect(table.rows[2]?.cells[0]?.rowSpan).toBeUndefined();
+  });
+
+  it("leaves rowSpan at one for a \\clvmgf anchor in the table's own last row, with no following row to continue into", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\clvmgf\\cellx1440\\pard\\intbl only\\cell\\row\\pard x\\par}`,
+    );
+    expect(table.rows[0]?.cells[0]?.rowSpan).toBeUndefined();
+  });
+
+  it("falls back to an even split when the \\cellxN boundaries describe fewer columns than the row actually has", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\trowd\\trleft0\\cellx4320\\pard\\intbl A\\cell\\pard\\intbl B\\cell\\row\\pard x\\par}`,
+      ),
+    );
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.TABLE_COLUMN_WIDTH_INVALID,
+      ),
+    ).toBe(true);
+  });
+
+  it("reports the exact TABLE_COLUMN_WIDTH_INVALID message text", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\trowd\\trleft0\\cellx4320\\cellx4320\\pard\\intbl A\\cell\\pard\\intbl B\\cell\\row\\pard x\\par}`,
+      ),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.TABLE_COLUMN_WIDTH_INVALID,
+    );
+    expect(found?.message).toBe(
+      "the row's \\cellxN boundaries do not describe increasing column widths for every column; falling back to an even split of the page's text width",
+    );
+  });
+
+  it("splits the even-split fallback width by dividing the usable width, not multiplying it, across the column count", () => {
+    const table = firstTable(
+      "{\\rtf1\\ansi\\ansicpg1252\\deff0" +
+        "{\\fonttbl{\\f0\\froman\\fcharset0 Times New Roman;}}{\\colortbl;}" +
+        "\\paperw12240\\paperh15840\\margl1440\\margr1440" +
+        "\\trowd\\trleft0\\cellx1440\\cellx1440\\pard\\intbl A\\cell\\pard\\intbl B\\cell\\row\\pard x\\par}",
+    );
+    // Usable width is 8.5in - 2in = 6.5in = 468pt, split across 2 columns.
+    expect(table.columnWidthsPt).toEqual([234, 234]);
+  });
+});
+
+describe("block accumulation across \\object/\\result scratch rendering", () => {
+  it("never appends an empty block list, so addBlocks is a true no-op rather than an empty-array push", () => {
+    // A picture that fails to decode (no format) produces nothing to add; the surrounding paragraph's own text must read as one unbroken run rather than being split by a flush that never needed to happen.
+    const runs =
+      paragraphsOf(
+        `${HEADER}\\pard before{\\pict\\wmetafile8 00}after\\par}`,
+      )[0]?.runs ?? [];
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.text).toBe("beforeafter");
+  });
+
+  it("flushes a run still pending when \\result's own scratch rendering begins, so it is not lost or merged into \\result's content", () => {
+    const OBJDATA_HEX_LOCAL = bytesToHex(
+      writeEmbeddedObjectData({
+        objectKind: "spreadsheet",
+        document: { kind: "spreadsheet", metadata: {}, sheets: [] },
+        frame: { xPt: 0, yPt: 0, widthPt: 1, heightPt: 1 },
+      }),
+    );
+    const paragraphs = paragraphsOf(
+      `${HEADER}\\pard pending text{\\object\\objemb{\\*\\objdata ${OBJDATA_HEX_LOCAL}}{\\result{\\pard\\plain fallback\\par}}}\\par}`,
+    );
+    const text = paragraphs
+      .map((p) => p.runs.map((r) => r.text).join(""))
+      .join("");
+    expect(text).toContain("pending text");
+  });
+
+  it("closes an open table before splicing \\result's own recovered blocks in, so a table inside \\result is not left dangling in tableRows", () => {
+    const paragraphs = paragraphsOf(
+      `${HEADER}\\pard{\\object\\objemb{\\*\\objdata 68656c6c6f}{\\result{\\trowd\\trleft0\\cellx1440\\pard\\intbl cell\\cell\\row\\pard done\\par}}}\\par}`,
+    );
+    const text = paragraphs
+      .map((p) => p.runs.map((r) => r.text).join(""))
+      .join("|");
+    expect(text).toContain("done");
+  });
+});
+
+describe("section finalisation", () => {
+  it("drops a genuinely empty trailing section rather than emitting a blank ContentSection after a real one", () => {
+    // \sectd alone, with no \par and no text at all, leaves nothing pending -- finish()'s own trailing endSection() call reaches this section with blocks.length actually 0 (unlike an explicit \sect, which always force-closes at least an empty paragraph first).
+    const sections = sectionsOf(
+      `${HEADER}\\sectd\\pard First.\\par\\sect\\sectd}`,
+    );
+    expect(sections).toHaveLength(1);
+    const text0 = sections[0]?.blocks
+      .filter((block): block is ContentParagraph => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs.map((run) => run.text))
+      .join("");
+    expect(text0).toBe("First.");
+  });
+
+  it("keeps the document's only section even when it has no blocks at all, rather than producing zero sections", () => {
+    const { document } = readRtfContent(bytes(`${HEADER}}`));
+    if (document.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing document");
+    }
+    expect(document.sections).toHaveLength(1);
+    expect(document.sections[0]?.blocks).toEqual([]);
+  });
+
+  it("carries a stated \\sbk* break type onto the section that is ENDING, not silently dropping it when the type is a real, non-default one", () => {
+    const sections = sectionsOf(
+      `${HEADER}\\sectd\\sbkeven\\pard A\\par\\sect\\sectd\\pard B\\par}`,
+    );
+    expect(sections[0]?.breakType).toBe("evenPage");
+  });
+
+  it("reports the exact unpaired-bookmark-at-end-of-block-flow message text", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\*\\bkmkstart lonely}text\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) => diagnostic.code === RtfDiagnosticCodes.BOOKMARK_UNPAIRED,
+    );
+    expect(found?.message).toBe(
+      "the bookmark 'lonely' has no matching \\bkmkend within its own block flow, so no anchor construct is produced for it",
+    );
+  });
+
+  it("actually clears the open-bookmark set at the end of a section's block flow, so it does not leak an unpaired report into the next section too", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\sectd\\pard{\\*\\bkmkstart leftover}A\\par\\sect\\sectd\\pard B\\par}`,
+      ),
+    );
+    expect(
+      diagnostics.filter(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.BOOKMARK_UNPAIRED,
+      ),
+    ).toHaveLength(1);
+  });
+});
+
+describe("run field derivation", () => {
+  it("treats an empty resolved font name the same as no font at all: no fontFamily field", () => {
+    const source =
+      "{\\rtf1\\ansi\\ansicpg1252\\deff0" +
+      "{\\fonttbl{\\f0 ;}}{\\colortbl;}" +
+      "\\pard\\f0 x\\par}";
+    const runs = paragraphsOf(source)[0]?.runs ?? [];
+    expect(runs[0]?.fontFamily).toBeUndefined();
+  });
+});
+
+describe("picture derivation", () => {
+  it("reports the exact metafile-format-declared message text, naming the specific unsupported control word", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\pict\\wmetafile8\\picwgoal1440\\pichgoal1440 ab}\\par}`,
+      ),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.UNSUPPORTED_PICTURE_FORMAT,
+    );
+    expect(found?.message).toBe(
+      "a \\pict destination declared \\wmetafile picture format; this reader recognises only \\pngblip and \\jpegblip, so this picture is dropped",
+    );
+  });
+
+  it('names "no" picture format in the diagnostic when the destination named no format control word at all', () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\pict\\picwgoal1440\\pichgoal1440 ab}\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.UNSUPPORTED_PICTURE_FORMAT,
+    );
+    expect(found?.message).toContain("declared no picture format");
+  });
+
+  it("reads binary picture payload (\\binN) in preference to any leftover hex text", () => {
+    const PNG_HEX =
+      "89504e470d0a1a0a0000000d494844520000000100000001080600000" +
+      "01f15c4890000000a49444154789c6300010000050001" +
+      "0d0a2db40000000049454e44ae426082";
+    const raw = hexToBytes(PNG_HEX);
+    const image = blocksOf(
+      `${HEADER}\\pard{\\pict\\pngblip\\picwgoal720\\pichgoal720\\bin${String(raw.length)} ${text(raw)}}\\par}`,
+    ).find((block): block is ContentImageBlock => block.kind === "image");
+    expect(image?.base64.startsWith("iVBORw0KGgo")).toBe(true);
+  });
+
+  it("reports the exact no-payload message text for a \\pict destination with neither hex nor binary content", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\pict\\pngblip\\picwgoal720\\pichgoal720 }\\par}`,
+      ),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.UNSUPPORTED_PICTURE_FORMAT,
+    );
+    expect(found?.message).toBe(
+      "a \\pict destination carried no picture payload",
+    );
+  });
+
+  it("reports the exact no-size-stated message text", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\pict\\pngblip 00}\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.PICTURE_SIZE_UNSTATED,
+    );
+    expect(found?.message).toContain(
+      "stated neither \\picwgoalN/\\pichgoalN nor \\picwN/\\pichN",
+    );
+  });
+
+  it("drops a picture whose scaled size collapses to zero or less and reports the exact message text", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\pict\\pngblip\\picwgoal1440\\pichgoal1440\\picscalex0\\picscaley100 00}\\par}`,
+      ),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.PICTURE_SIZE_UNSTATED,
+    );
+    expect(found?.message).toBe(
+      "a \\pict destination's stated size scaled to zero or less, which ContentImageBlock cannot express",
+    );
+  });
+
+  it("drops a picture whose height alone collapses to zero, even though its width is still positive", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\pict\\pngblip\\picwgoal1440\\pichgoal1440\\picscalex100\\picscaley0 00}\\par}`,
+      ),
+    );
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.PICTURE_SIZE_UNSTATED,
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("embedded object size hints", () => {
+  it("states both \\objw and \\objh in the degrade diagnostic when both are present", () => {
+    // The size-hint clause rides buildEmbeddedObject's OWN no-payload/undecodable messages, not the enclosing \object group's "no \objdata at all" message -- so a real (if empty) \objdata destination is what actually exercises it.
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb\\objw40\\objh20{\\*\\objdata }}\\par}`,
+      ),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    );
+    expect(found?.message).toContain("2.00pt x 1.00pt");
+  });
+
+  it("states only \\objw in the degrade diagnostic when \\objh is absent", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\object\\objemb\\objw40{\\*\\objdata }}\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    );
+    expect(found?.message).toContain("declared a 2.00pt width");
+    expect(found?.message).not.toContain("height");
+  });
+
+  it("states only \\objh in the degrade diagnostic when \\objw is absent", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\object\\objemb\\objh20{\\*\\objdata }}\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    );
+    expect(found?.message).toContain("declared a 1.00pt height");
+  });
+
+  it("adds no size-hint clause at all when an \\object states neither \\objw nor \\objh", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\object\\objemb}\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    );
+    expect(found?.message).toBe(
+      "an \\object destination has neither \\objdata nor \\result content; the whole construct is dropped",
+    );
+  });
+
+  it("reports the exact no-payload message for an \\objdata destination with no content at all", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\object\\objemb{\\*\\objdata }}\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    );
+    expect(found?.message).toContain("carried no payload");
+  });
+
+  it("reports the exact undecodable-payload message for \\objdata this reader cannot parse", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\object\\objemb{\\*\\objdata 68656c6c6f}}\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    );
+    expect(found?.message).toContain("is not a payload this reader produced");
   });
 });
 
