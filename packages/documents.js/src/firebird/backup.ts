@@ -163,7 +163,8 @@ export function readFirebirdBackup(
 
   let pageSizeBytes: number | undefined;
   const schema = new Map<string, FirebirdRelation>();
-  const tablesInOrder: string[] = [];
+  // The relation objects themselves, in creation order -- not just their names -- so the final table-building step below can read tableName/columns straight off each one rather than looking a name back up in `schema` (which would always succeed, since every name pushed here was set in `schema` in the same statement, but a lookup that can never fail is exactly the redundant guard this module's own equivalent-mutant policy requires eliminating rather than leaving untestable).
+  const relationsInOrder: FirebirdRelation[] = [];
   const rowsByRelation = new Map<
     string,
     ReturnType<typeof readRelationData>["rows"]
@@ -187,7 +188,7 @@ export function readFirebirdBackup(
         );
       });
       schema.set(relation.name, relation);
-      tablesInOrder.push(relation.name);
+      relationsInOrder.push(relation);
       continue;
     }
     if (recordType === REC_RELATION_DATA) {
@@ -208,14 +209,8 @@ export function readFirebirdBackup(
   // No check that reader.atEnd() here -- confirmed against a real fixture that rec_end is genuinely NOT the last byte of the stream: mvol.cpp writes backup volumes in fixed-size blocks (att_backup_blksize), zero-padding the final block out to that size, so real trailing bytes after rec_end are legitimate filler, not a sign of a mis-walked stream. restore.epp's own top-level loop (`while (get_record(&record, tdgbl) != rec_end)`) matches this exactly -- it stops at rec_end and never inspects what follows.
 
   // Only USER tables (schema.system_flag-free, which this reader never reads at all -- see the README's .odb Tier 3 Fidelity note) are reported: RDB$RELATIONS/RDB$RELATION_FIELDS/RDB$FIELDS and every other system table never appear as their own rec_relation records in a gbak backup at all -- gbak's own schema dump only ever emits user-created relations (plus any user-created VIEWs, which this reader throws on as an unsupported composite record -- see schema.ts's own onUnhandledNested). There is consequently no RDB$RELATIONS-bootstrap step in this reader at all: unlike raw ODS-page reading, gbak's own backup format has ALREADY resolved table/column definitions into rec_relation/rec_field records by the time this reader ever sees them -- see the README's own .odb Tier 3 Gotchas entry for why this is a genuine, load-bearing correction to the design plan's original raw-page-format premise.
-  const tables: HsqldbTable[] = tablesInOrder.map((name) => {
-    const relation = schema.get(name);
-    if (relation === undefined) {
-      throw new FirebirdBackupFormatError(
-        `internal error: relation "${name}" missing from its own schema map`,
-      );
-    }
-    const rows = rowsByRelation.get(name) ?? [];
+  const tables: HsqldbTable[] = relationsInOrder.map((relation) => {
+    const rows = rowsByRelation.get(relation.name) ?? [];
     return {
       tableName: relation.name,
       columns: relationToColumns(relation),
