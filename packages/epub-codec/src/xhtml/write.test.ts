@@ -17,6 +17,16 @@ function write(blocks: ContentBlock[]): string {
   return writeWithSink(blocks, () => undefined).xml;
 }
 
+// The raw XmlElement tree, for the handful of tests that need to inspect writer-internal node structure (e.g. whether a spurious empty text node exists between two sibling elements) directly -- a distinction the serialized XML string itself can lose, since an empty text node contributes zero characters to the output either way.
+function writeBody(blocks: ContentBlock[]) {
+  return writeXhtmlBody(blocks, {
+    registerImage: () => "images/img1.png",
+    sink: () => undefined,
+    sourceHref: "chapter1.xhtml",
+    resolveAnchorHref: (name) => `#${name}`,
+  });
+}
+
 function writeWithSink(
   blocks: ContentBlock[],
   sink: (d: EpubDiagnostic) => void,
@@ -172,6 +182,36 @@ describe("writeXhtmlBody", () => {
     expect(roundTrip(blocks)).toEqual(blocks);
   });
 
+  it("never groups two adjacent list items that both carry no itemId into a single <li>", () => {
+    const xml = write([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0 },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "b" }],
+        list: { numId: "epub1:bullet", level: 0 },
+      },
+    ]);
+    const liCount = xml.split("<li>").length - 1;
+    expect(liCount).toBe(2);
+  });
+
+  it("writes and re-reads an ordered list with the default start, carrying no explicit start attribute", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:ordered", level: 0, itemId: "item1" },
+      },
+    ];
+    const xml = write(blocks);
+    expect(xml).not.toContain("start=");
+    expect(roundTrip(blocks)).toEqual(blocks);
+  });
+
   it("writes and re-reads an ordered list with a non-default start", () => {
     const blocks: ContentBlock[] = [
       {
@@ -235,6 +275,45 @@ describe("writeXhtmlBody", () => {
     ]);
   });
 
+  it("writes and re-reads a table cell's own rowspan attribute", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [{ kind: "paragraph", runs: [{ text: "tall" }] }],
+                rowSpan: 3,
+              },
+            ],
+          },
+        ],
+        columnWidthsPt: [100],
+      },
+    ];
+    const xml = write(blocks);
+    expect(xml).toContain('rowspan="3"');
+  });
+
+  it("never reports ELEMENT_UNMAPPED for an ordinary table cell carrying only real leaf blocks", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [100],
+      },
+    ];
+    const { diagnostics } = writeWithSink(blocks, () => undefined);
+    expect(
+      diagnostics.some((d) => d.code === EpubDiagnosticCodes.ELEMENT_UNMAPPED),
+    ).toBe(false);
+  });
+
   // The comment above writeTable's own isTreeBlockLeaf filter used to claim this package's own reader never puts a construct-boundary marker inside a table cell's blocks -- it does, whenever read.ts's own flushStrayCell recovers a stray <blockquote> (or a footnote-target element) sitting directly inside a <tr>: readBlockquote wraps its recovered content in a division construct pair, and that recovered ContentBlock[] becomes the stray cell's own blocks. This exercises that exact path end to end.
   it("drops a construct-boundary marker recovered into a stray table cell, with a diagnostic", () => {
     const sink = () => undefined;
@@ -275,6 +354,152 @@ describe("writeXhtmlBody", () => {
       { kind: "paragraph", runs: [], styleId: "HorizontalRule" },
     ];
     expect(roundTrip(blocks)).toEqual(blocks);
+  });
+
+  it("never treats a paragraph carrying the horizontal-rule styleId but real runs as an <hr>", () => {
+    const xml = write([
+      {
+        kind: "paragraph",
+        runs: [{ text: "not empty" }],
+        styleId: "HorizontalRule",
+      },
+    ]);
+    expect(xml).not.toContain("<hr");
+    expect(xml).toContain("not empty");
+  });
+
+  it("writes a paragraph carrying only codeLanguage (no preformatted flag) as a <pre><code>", () => {
+    const xml = write([
+      {
+        kind: "paragraph",
+        runs: [{ text: "x = 1" }],
+        codeLanguage: "js",
+      },
+    ]);
+    expect(xml).toContain('<pre><code class="language-js">x = 1</code></pre>');
+  });
+
+  it("never treats a plain paragraph as preformatted just because it happens to have one monospace run without a newline", () => {
+    const xml = write([
+      {
+        kind: "paragraph",
+        runs: [{ text: "mono", fontFamily: "Courier New" }],
+      },
+    ]);
+    expect(xml).not.toContain("<pre>");
+    expect(xml).toContain("<p>");
+  });
+
+  it("never treats a plain paragraph as preformatted just because it has a newline in a non-monospace run", () => {
+    const xml = write([
+      { kind: "paragraph", runs: [{ text: "line one\nline two" }] },
+    ]);
+    expect(xml).not.toContain("<pre>");
+  });
+
+  it("never treats a plain paragraph as preformatted when the monospace-plus-newline run is not the only run", () => {
+    const xml = write([
+      {
+        kind: "paragraph",
+        runs: [
+          { text: "line one\nline two", fontFamily: "Courier New" },
+          { text: " and more" },
+        ],
+      },
+    ]);
+    expect(xml).not.toContain("<pre>");
+  });
+
+  it("drops a pageBreak block entirely, with no element and no diagnostic", () => {
+    const { xml, diagnostics } = writeWithSink(
+      [{ kind: "pageBreak" }],
+      () => undefined,
+    );
+    expect(xml).toBe(
+      '<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body></body></html>',
+    );
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it("never inserts a spurious empty text node between two <br/> elements for a run's own consecutive embedded newlines", () => {
+    const body = writeBody([{ kind: "paragraph", runs: [{ text: "a\n\nb" }] }]);
+    const [p] = body.children;
+    if (p?.type !== "element") {
+      throw new Error("expected a <p> element");
+    }
+    expect(
+      p.children.map((c) =>
+        c.type === "element" ? c.tag : c.type === "text" ? c.value : c.type,
+      ),
+    ).toEqual(["a", "br", "br", "b"]);
+  });
+
+  it("writes a wholly empty, unformatted run as exactly one empty text node, never zero and never placeholder text", () => {
+    const body = writeBody([{ kind: "paragraph", runs: [{ text: "" }] }]);
+    const [p] = body.children;
+    if (p?.type !== "element") {
+      throw new Error("expected a <p> element");
+    }
+    expect(p.children).toHaveLength(1);
+    expect(p.children[0]).toEqual({ type: "text", value: "" });
+  });
+
+  it("never emits a text node for an empty-text run inside a <pre>, unlike a non-empty sibling run", () => {
+    const body = writeBody([
+      {
+        kind: "paragraph",
+        preformatted: true,
+        runs: [{ text: "" }, { text: "b" }],
+      },
+    ]);
+    const [pre] = body.children;
+    if (pre?.type !== "element") {
+      throw new Error("expected a <pre> element");
+    }
+    const [code] = pre.children;
+    if (code?.type !== "element") {
+      throw new Error("expected a <code> element");
+    }
+    expect(code.children).toEqual([{ type: "text", value: "b" }]);
+  });
+
+  it("joins a multi-run footnote range's own text verbatim inside a <pre>, with no separator between runs", () => {
+    const xml = write([
+      {
+        kind: "paragraph",
+        preformatted: true,
+        runs: [{ text: "a" }, { text: "b" }],
+        constructs: [
+          {
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+            startRun: 0,
+            endRun: 2,
+          },
+        ],
+      },
+    ]);
+    expect(xml).toContain('epub:type="noteref" href="#fn1">ab</a>');
+  });
+
+  it("drops an embeddedObject block with the exact ELEMENT_UNMAPPED message naming the loss", () => {
+    const { diagnostics } = writeWithSink(
+      [
+        {
+          kind: "embeddedObject",
+          objectKind: "wordprocessing",
+          frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+          document: { kind: "wordprocessing", metadata: {}, sections: [] },
+        },
+      ],
+      () => undefined,
+    );
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: EpubDiagnosticCodes.ELEMENT_UNMAPPED,
+        message:
+          "an embedded object has no XHTML representation in this package's writer and was dropped",
+      }),
+    );
   });
 
   it("writes and re-reads a code block with a language", () => {
@@ -507,6 +732,51 @@ describe("writeXhtmlBody", () => {
     expect(roundTrip(blocks)).toEqual(blocks);
   });
 
+  it("never reports CONSTRUCT_UNREPRESENTED for a single, cleanly-written point-anchor footnote reference", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [],
+        constructs: [
+          {
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+            startRun: 0,
+            endRun: 0,
+          },
+        ],
+      },
+    ];
+    const { diagnostics } = writeWithSink(blocks, () => undefined);
+    expect(
+      diagnostics.some(
+        (d) => d.code === EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+      ),
+    ).toBe(false);
+  });
+
+  it("never reports CONSTRUCT_UNREPRESENTED for a single, cleanly-written range footnote reference", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [{ text: "See" }, { text: "1" }],
+        constructs: [
+          {
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+            startRun: 1,
+            endRun: 2,
+          },
+        ],
+      },
+    ];
+    const { xml, diagnostics } = writeWithSink(blocks, () => undefined);
+    expect(
+      diagnostics.some(
+        (d) => d.code === EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+      ),
+    ).toBe(false);
+    expect(xml).toContain('href="#fn1"');
+  });
+
   // The identical writer gap also orphaned a table caption whose only content is a footnote reference: readTableCaption's own construct check (src/xhtml/read.ts) recovers `<caption><a epub:type="noteref" href="#fn1"></a></caption>` as this same runs: [], construct-only shape, read immediately before the table -- the writer's bug was in the shared run-range walk, not anything caption-specific, so this proves the fix holds for that read shape too rather than only the bare-segment one above.
   it("writes and re-reads a bare footnote reference construct in a paragraph sitting immediately before a table, matching a caption's own read shape", () => {
     const blocks: ContentBlock[] = [
@@ -620,17 +890,52 @@ describe("writeXhtmlBody", () => {
       },
     ];
     const { xml, diagnostics } = writeWithSink(blocks, () => undefined);
-    expect(
-      diagnostics.some(
-        (d) => d.code === EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
-      ),
-    ).toBe(true);
+    const unrepresented = diagnostics.find(
+      (d) => d.code === EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+    );
+    expect(unrepresented?.message).toContain("footnote reference");
+    expect(unrepresented?.message).toContain(
+      "cannot be represented as its own <a> element",
+    );
     // No run text is lost: the winning extent (fn1) wraps the first two runs, and the third run -- past fn1's own endRun -- is still written on its own.
     expect(xml).toContain('href="#fn1"');
     expect(xml).not.toContain('href="#fn2"');
     expect(xml).toContain("See");
     expect(xml).toContain("this");
     expect(xml).toContain(".");
+  });
+
+  it("names an unrepresented internal-link extent as an 'internal link', not a footnote reference, in its CONSTRUCT_UNREPRESENTED message", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [{ text: "See" }, { text: "this" }],
+        constructs: [
+          {
+            descriptor: {
+              kind: "link",
+              target: { kind: "internal", anchor: "bm1" },
+            },
+            startRun: 0,
+            endRun: 2,
+          },
+          {
+            descriptor: {
+              kind: "link",
+              target: { kind: "internal", anchor: "bm2" },
+            },
+            startRun: 0,
+            endRun: 1,
+          },
+        ],
+      },
+    ];
+    const { diagnostics } = writeWithSink(blocks, () => undefined);
+    const unrepresented = diagnostics.find(
+      (d) => d.code === EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+    );
+    expect(unrepresented?.message).toContain("internal link");
+    expect(unrepresented?.message).not.toContain("footnote reference");
   });
 
   // ExaDev/documents.js#994's round-12 regression, one input shape past the same-startRun collision immediately above: two footnote extents that genuinely CROSS -- fn2's own startRun (1) falls strictly INSIDE fn1's already-winning range (runs 0-2), rather than sharing fn1's exact startRun. Because a winning range extent advances the write walk straight from its own startRun to its own endRun, index 1 is never visited at all, so the previous fix (which only looked for a collision among extents sharing the SAME startRun) never saw fn2 and dropped it with no diagnostic whatsoever -- the exact silent-drop class this whole diagnostic exists to close, just reached via a different input shape. document-schema.js's own RunConstructExtentSchema comment names this precise shape ("two entries may cross freely") as real, representable input.
@@ -694,11 +999,16 @@ describe("writeXhtmlBody", () => {
       },
     ];
     const { xml, diagnostics } = writeWithSink(blocks, () => undefined);
-    expect(
-      diagnostics.some(
-        (d) => d.code === EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
-      ),
-    ).toBe(true);
+    const unrepresented = diagnostics.find(
+      (d) => d.code === EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+    );
+    // A point anchor's own message names the boundary it marks, distinctly from a range extent's "cannot be represented as its own <a> element" wording.
+    expect(unrepresented?.message).toContain(
+      "marking the boundary before run 1",
+    );
+    expect(unrepresented?.message).toContain(
+      "a point anchor wraps no run text of its own",
+    );
     // fn1 wins and wraps every run; fn2's own anchor is not emitted, but no run text is lost -- a point anchor never wraps any of its own.
     expect(xml).toContain('href="#fn1"');
     expect(xml).not.toContain('href="#fn2"');
@@ -730,6 +1040,71 @@ describe("writeXhtmlBody", () => {
       ),
     ).toBe(true);
   });
+
+  it("restores a bookmark target as an id attribute on its single wrapped element, replacing any id the element already carries", () => {
+    // A nested bookmark: the inner one wraps the paragraph first and stamps its own id onto it; the outer one must overwrite that id with its own name, not leave the inner one in place alongside it.
+    const blocks: ContentBlock[] = [
+      {
+        kind: "constructStart",
+        descriptor: { kind: "anchor", anchorType: "bookmark", name: "outer" },
+      },
+      {
+        kind: "constructStart",
+        descriptor: { kind: "anchor", anchorType: "bookmark", name: "inner" },
+      },
+      { kind: "paragraph", runs: [{ text: "target" }] },
+      { kind: "constructEnd" },
+      { kind: "constructEnd" },
+    ];
+    const xml = write(blocks);
+    expect(xml).toContain('<p id="outer">target</p>');
+    expect(xml).not.toContain("inner");
+  });
+
+  it("reports CONSTRUCT_UNREPRESENTED with the exact message when a bookmark wraps more than one written element", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "constructStart",
+        descriptor: { kind: "anchor", anchorType: "bookmark", name: "bm1" },
+      },
+      { kind: "paragraph", runs: [{ text: "one" }] },
+      { kind: "paragraph", runs: [{ text: "two" }] },
+      { kind: "constructEnd" },
+    ];
+    const { xml, diagnostics } = writeWithSink(blocks, () => undefined);
+    expect(xml).toContain("one");
+    expect(xml).toContain("two");
+    expect(xml).not.toContain('id="bm1"');
+    const diagnostic = diagnostics.find(
+      (d) => d.code === EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+    );
+    expect(diagnostic?.message).toBe(
+      "a bookmark target ('bm1') wraps more than one written element (or none); this package's writer only restores an id attribute onto a single wrapped element, so the target's own addressability is dropped",
+    );
+  });
+
+  it.each(["endnote", "comment"] as const)(
+    "reports CONSTRUCT_UNREPRESENTED for a block-scoped '%s' anchor construct group, distinctly from a bookmark, while still writing its content",
+    (anchorType) => {
+      const blocks: ContentBlock[] = [
+        {
+          kind: "constructStart",
+          descriptor: { kind: "anchor", anchorType, name: "x1" },
+        },
+        { kind: "paragraph", runs: [{ text: "body" }] },
+        { kind: "constructEnd" },
+      ];
+      const { xml, diagnostics } = writeWithSink(blocks, () => undefined);
+      expect(xml).toContain("body");
+      expect(xml).not.toContain('id="x1"');
+      const diagnostic = diagnostics.find(
+        (d) => d.code === EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+      );
+      expect(diagnostic?.message).toBe(
+        "a 'anchor' construct has no XHTML spelling in this package's writer; its extent is written, the construct itself is not",
+      );
+    },
+  );
 
   // ExaDev/documents.js#1025: a run-level anchor extent whose anchorType is anything but "footnote" (a bookmark or comment range docx documents can and do carry at run scope, e.g. ooxml.js's own runRangeMarkerExtents) has no representable EPUB spelling this reader's own read side understands yet, so it is reported through the diagnostic sink rather than silently dropped with nothing in the output naming it ever happened. The run text it wraps is unaffected either way -- only the anchor's own marker goes unwritten.
   it.each(["bookmark", "endnote", "comment"] as const)(
@@ -772,5 +1147,18 @@ describe("writeXhtmlBody", () => {
     ]);
     expect(xml).toContain('src="images/img1.png"');
     expect(xml).toContain('alt="alt"');
+  });
+
+  it("writes an image with no altText as an empty alt attribute, never a placeholder", () => {
+    const xml = write([
+      {
+        kind: "image",
+        format: "png",
+        base64: "aGVsbG8=",
+        widthPt: 72,
+        heightPt: 72,
+      },
+    ]);
+    expect(xml).toContain('alt=""');
   });
 });
