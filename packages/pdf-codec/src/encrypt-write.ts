@@ -208,17 +208,15 @@ function encryptAes(
   return concatBytes([iv, aesCbcEncrypt(key, iv, padded)]);
 }
 
+// Narrowed to the two methods buildEncryptor itself is ever built for (every SCHEME_SPECS entry's own `method` is "rc4" or "aes") rather than the wider CipherMethod: an "identity" branch here would be dead code no real call path could ever reach, which is exactly the unreachable-branch shape a mutant survives untested.
 function applyEncryptMethod(
-  method: CipherMethod,
+  method: Extract<CipherMethod, "rc4" | "aes">,
   fileKey: Uint8Array<ArrayBuffer>,
   perObjectKeys: boolean,
   bytes: Uint8Array<ArrayBuffer>,
   num: number,
   gen: number,
 ): Uint8Array<ArrayBuffer> {
-  if (method === "identity") {
-    return bytes;
-  }
   const key = perObjectKeys ? objectKey(fileKey, num, gen, method) : fileKey;
   return method === "rc4" ? rc4(key, bytes) : encryptAes(key, bytes);
 }
