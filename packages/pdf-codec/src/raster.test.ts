@@ -637,6 +637,91 @@ describe("renderPdfPage: vector draw ops", () => {
     ]);
   });
 
+  it("strokes a recovered rect as a closed four-line path, not only fills it", () => {
+    // Every existing rect test only fills; drawRect's own stroke branch (a separate rasteriser.draw call building the same corners as a closed path) has no coverage at all otherwise.
+    const rasteriser = new RecordingRasteriser();
+    drive(onePagePdf("0.1 0.2 0.3 RG 2 w 10 20 30 40 re S"), 0, {}, rasteriser);
+    const stroke = rasteriser.ops.find(isPath);
+    expect(stroke?.fill).toBeUndefined();
+    expect(stroke?.stroke).toEqual({
+      color: { r: 0.1, g: 0.2, b: 0.3 },
+      widthPx: 2,
+    });
+    // Rect at page (10,20)-(40,60) -> device top-left (10, 100-60)=(10,40), bottom-right (40, 100-20)=(40,80).
+    expect(stroke?.subpaths).toEqual([
+      {
+        startXPx: 10,
+        startYPx: 40,
+        segments: [
+          { kind: "line", xPx: 40, yPx: 40 },
+          { kind: "line", xPx: 40, yPx: 80 },
+          { kind: "line", xPx: 10, yPx: 80 },
+        ],
+        closed: true,
+      },
+    ]);
+  });
+
+  it("strokes a recovered ellipse's own cubic outline, not only fills it", () => {
+    // drawEllipse's stroke spec is built via a spread on a SEPARATE code path from the fill spread above it; no existing ellipse test exercises it at all.
+    const rasteriser = new RecordingRasteriser();
+    const k = 0.5523;
+    const cy = 40;
+    const cx = 70;
+    const rx = 30;
+    const ry = 20;
+    const content = [
+      "0.4 0.5 0.6 RG 2 w",
+      `${cx + rx} ${cy} m`,
+      `${cx + rx} ${cy + ry * k} ${cx + rx * k} ${cy + ry} ${cx} ${cy + ry} c`,
+      `${cx - rx * k} ${cy + ry} ${cx - rx} ${cy + ry * k} ${cx - rx} ${cy} c`,
+      `${cx - rx} ${cy - ry * k} ${cx - rx * k} ${cy - ry} ${cx} ${cy - ry} c`,
+      `${cx + rx * k} ${cy - ry} ${cx + rx} ${cy - ry * k} ${cx + rx} ${cy} c`,
+      "h S",
+    ].join("\n");
+    drive(onePagePdf(content), 0, {}, rasteriser);
+    const stroke = rasteriser.ops.find(isPath);
+    expect(stroke?.fill).toBeUndefined();
+    expect(stroke?.stroke).toEqual({
+      color: { r: 0.4, g: 0.5, b: 0.6 },
+      widthPx: 2,
+    });
+  });
+
+  it("strokes a general (non-dotted, non-rect, non-line) path, not only fills it", () => {
+    // drawPath's non-dotted stroke spread (the sibling of the fill spread the earlier test above pins) is otherwise never reached.
+    const rasteriser = new RecordingRasteriser();
+    drive(
+      onePagePdf("0.7 0.8 0.9 RG 3 w 100 10 m 130 10 l 115 40 l h S"),
+      0,
+      {},
+      rasteriser,
+    );
+    const stroke = rasteriser.ops.find(isPath);
+    expect(stroke?.fill).toBeUndefined();
+    expect(stroke?.stroke).toEqual({
+      color: { r: 0.7, g: 0.8, b: 0.9 },
+      widthPx: 3,
+    });
+  });
+
+  it("draws a dotted general path (line and cubic segments alike) as dot trains, not a dash array", () => {
+    // drawPath's own dotted branch -- a for-loop over each subpath's line AND cubic segments, flattening cubics before dotting them -- has no coverage at all: every other dotted test in this file goes through drawLine's single two-point segment instead.
+    const rasteriser = new RecordingRasteriser();
+    drive(
+      onePagePdf(
+        "[0 4] 0 d 1 J 2 w 0 0 0 RG 20 20 m 80 20 l 80 60 40 80 20 60 c h S",
+      ),
+      0,
+      {},
+      rasteriser,
+    );
+    const squares = rasteriser.ops.filter(isFillRect);
+    expect(squares.length).toBeGreaterThan(2);
+    // The very first dot sits at the subpath's own start point: page (20, 20) -> device (20, 80).
+    expect(squares[0]).toMatchObject({ xPx: 19, yPx: 79 });
+  });
+
   it("fills a general path with the paint operator's own fill rule and carries strokes on the same op", () => {
     const rasteriser = new RecordingRasteriser();
     drive(
