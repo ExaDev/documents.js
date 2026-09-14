@@ -3,16 +3,13 @@ import { zipPackage } from "../zip";
 
 // A hand-authored, real EPUB 3 fixture -- built directly via zipPackage from literal XML strings, never through this package's own writer (writeEpubContent), so a bug in the writer cannot hide behind a fixture built with the same code (the identical convention documents.js's own test-support/docx.ts and odt.ts already state for their own hand-authored fixtures). Covers the EPUB 3-specific constructs this package's own hand-authored corpus needs: a real <nav epub:type="toc"> navigation document, and a footnote via the structured epub:type="footnote"/"noteref" idiom.
 
-// A PNG carrying only what src/image/dimensions.ts reads: the signature plus an IHDR chunk declaring 2x2 -- this package's own reader never walks past IHDR, so a real IDAT/IEND is not needed.
+// A PNG carrying only what src/image/dimensions.ts reads: the signature, then just enough of an IHDR chunk to declare 2x2 (width at byte offset 16, height at 20 -- PNG_HEADER_BYTES's own 24 bytes). Deliberately stops there: this package's own reader never looks past offset 24 for a PNG (no chunk-length or bit-depth/colour-type validation, no real IDAT/IEND), so writing bytes beyond it would carry no signal any reader here -- or any test of this fixture -- could ever observe.
 function fakePng2x2(): Uint8Array<ArrayBuffer> {
-  const bytes = new Uint8Array(33);
+  const bytes = new Uint8Array(24);
   bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
-  const view = new DataView(bytes.buffer);
-  view.setUint32(8, 13);
   bytes.set([0x49, 0x48, 0x44, 0x52], 12);
-  view.setUint32(16, 2);
-  view.setUint32(20, 2);
-  bytes.set([8, 6, 0, 0, 0], 24);
+  new DataView(bytes.buffer).setUint32(16, 2);
+  new DataView(bytes.buffer).setUint32(20, 2);
   return bytes;
 }
 
