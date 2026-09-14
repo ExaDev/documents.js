@@ -51,8 +51,9 @@ function readRepeatCount(element: XmlElement, attrName: string): number {
   if (raw === undefined) {
     return 1;
   }
+  // Number.parseInt always returns an integer or NaN, and NaN > 0 is false like every other NaN comparison, so a separate Number.isInteger guard adds nothing a plain > 0 check doesn't already cover on its own.
   const parsed = Number.parseInt(raw, 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+  return parsed > 0 ? parsed : 1;
 }
 
 // A column with no resolvable width (no table:style-name, no matching style, or a style with no style:table-column-properties/@style:column-width) defaults to 0pt, mirroring ooxml.js's own readTable (`emuToPt(Number(attr(col, 'w') ?? '0'))`) -- an established, deliberate sibling-reader convention, not a fallback invented here.
