@@ -83,6 +83,14 @@ describe("CFF programs probeCff refuses to read", () => {
     ).toBeUndefined();
   });
 
+  it("returns undefined for a major version other than 1 even when the rest of the program parses cleanly", () => {
+    // A header claiming major version 2 (CFF2's own major version) but otherwise laid out exactly like a valid CFF 1.0 program -- headerSize 4, a readable Name INDEX and a plain, non-CID Top DICT. Nothing past the header rejects this input, so the majorVersion check is the only thing standing between it and a wrongly-defined probe result.
+    const topDict = [139, 0, 250, 0x00, 12, 0, 29, 0x00, 0x00, 0x01, 0x00, 17];
+    expect(
+      probeCff(cffFont("WrongMajorVersion", topDict, [2, 0, 4, 1])),
+    ).toBeUndefined();
+  });
+
   it("returns undefined for a header declaring a size smaller than a header can be", () => {
     expect(
       probeCff(cffFont("ShortHeader", [139, 0], [1, 0, 2, 1])),
