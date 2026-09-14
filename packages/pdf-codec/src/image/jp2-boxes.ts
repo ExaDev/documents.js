@@ -53,16 +53,12 @@ export interface Jp2ChannelDefinition {
   readonly association: number;
 }
 
-// A bare codestream starts with SOC immediately followed by SIZ, which no JP2 file ever can (a JP2 file starts with the signature box's own length field, 0x0000000C).
+// A bare codestream starts with SOC immediately followed by SIZ, which no JP2 file ever can (a JP2 file starts with the signature box's own length field, 0x0000000C). No separate `data.length >= 4` guard is needed: with noUncheckedIndexedAccess, an out-of-bounds index below reads as `undefined`, and `undefined === 0xff` is already false, so a shorter input fails the very same chain of comparisons on its own.
 export function looksLikeBareCodestream(
   data: Uint8Array<ArrayBuffer>,
 ): boolean {
   return (
-    data.length >= 4 &&
-    data[0] === 0xff &&
-    data[1] === 0x4f &&
-    data[2] === 0xff &&
-    data[3] === 0x51
+    data[0] === 0xff && data[1] === 0x4f && data[2] === 0xff && data[3] === 0x51
   );
 }
 
@@ -158,9 +154,7 @@ function readChannelDefinitions(
   start: number,
   end: number,
 ): Jp2ChannelDefinition[] {
-  if (end - start < 2) {
-    return [];
-  }
+  // No separate "is there room for a count field" guard is needed: a payload under 2 bytes still computes some count value below (from whatever adjacent bytes or `?? 0` fallbacks lie at `start`/`start + 1`), but every entry needs 6 more bytes than the 2-byte count field leaves room for here, so the loop's own `entry + 6 > end` check breaks before pushing anything regardless of what that count came out to.
   const count = ((data[start] ?? 0) << 8) | (data[start + 1] ?? 0);
   const definitions: Jp2ChannelDefinition[] = [];
   for (let i = 0; i < count; i++) {
@@ -194,7 +188,8 @@ function readJp2HeaderBox(
   let offset = start;
   for (;;) {
     const box = readBox(data, offset, end);
-    if (box === undefined || box.nextBoxStart <= offset) {
+    // No separate "did this box actually advance" check is needed: readBox only ever returns a box whose own header fit before `end`, and it throws rather than returning one whose declared length undercuts that header -- so a returned box's nextBoxStart is always past the offset it started from.
+    if (box === undefined) {
       return;
     }
     if (box.type === BOX_IMAGE_HEADER) {
@@ -230,9 +225,7 @@ function readColourSpecification(
   end: number,
   into: HeaderBoxContents,
 ): void {
-  if (end - start < 3) {
-    return;
-  }
+  // No separate "is there room for a method byte" guard is needed: a payload under 3 bytes still computes some `method` value below, but both branches that act on it require at least 7 (method 1) or more than 3 (method 2) bytes, so neither can assign anything when `end - start` is already under 3.
   const method = data[start] ?? 0;
   if (method === 1) {
     if (end - start >= 7) {
@@ -271,7 +264,8 @@ export function parseJp2Container(data: Uint8Array<ArrayBuffer>): Jp2Container {
   let sawSignature = false;
   for (;;) {
     const box = readBox(data, offset, data.length);
-    if (box === undefined || box.nextBoxStart <= offset) {
+    // Same non-advancement case as readJp2HeaderBox's identical loop above: readBox never returns a box that fails to advance past its own offset.
+    if (box === undefined) {
       break;
     }
     if (box.type === BOX_SIGNATURE) {
