@@ -101,6 +101,7 @@ describe("createEmptyDocxPackage", () => {
     if (root === undefined) {
       throw new Error("expected a root element");
     }
+    expect(root.tag).toBe("Types");
     expect(attr(root, "xmlns")).toBe(
       "http://schemas.openxmlformats.org/package/2006/content-types",
     );
@@ -132,6 +133,7 @@ describe("createEmptyDocxPackage", () => {
     if (root === undefined) {
       throw new Error("expected a root element");
     }
+    expect(root.tag).toBe("Relationships");
     expect(attr(root, "xmlns")).toBe(
       "http://schemas.openxmlformats.org/package/2006/relationships",
     );
@@ -149,6 +151,7 @@ describe("createEmptyDocxPackage", () => {
     if (root === undefined) {
       throw new Error("expected a root element");
     }
+    expect(root.tag).toBe("Relationships");
     expect(attr(root, "xmlns")).toBe(
       "http://schemas.openxmlformats.org/package/2006/relationships",
     );
@@ -190,6 +193,7 @@ describe("createEmptyDocxPackage", () => {
     if (root === undefined) {
       throw new Error("expected a root element");
     }
+    expect(root.tag).toBe("w:styles");
     expect(attr(root, "xmlns:w")).toBe(
       "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
     );
