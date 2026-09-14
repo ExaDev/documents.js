@@ -6,6 +6,7 @@ import {
 } from "documents.js";
 import { assembleTree } from "document-schema.js";
 import { CODE_BLOCK_STYLE_ID, QUOTE_STYLE_ID } from "markdown-codec";
+import { buildDocxPackageFromContent, encodePackage } from "ooxml.js";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -407,6 +408,45 @@ describe("normalizeContentForSource", () => {
     expect(
       firstStyleId(normalizeContentForSource(content, "odt", notDocxBytes)),
     ).toBe("quote");
+  });
+
+  // buildDocumentBytes (documents.js's own tree-based docx writer, used everywhere else in this suite) always synthesises a bullet-format numFmt regardless of the source ContentListMembership's own format (ExaDev/documents.js#1273), so no real docx bytes it produces can ever exercise this function's ordered-list branch. Building genuine bytes directly through ooxml.js's own flat writer instead -- bypassing that bug rather than working around it -- gives a numbering.xml whose numId 1 is unambiguously "decimal", the actual thing this branch is resolving against.
+  it("resolves a docx list paragraph against a real, non-bullet numFmt as ordered", () => {
+    const bytes = encodePackage(
+      buildDocxPackageFromContent({
+        sections: [
+          {
+            pageSize: { widthPt: 595, heightPt: 842 },
+            margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+            blocks: [
+              {
+                kind: "paragraph",
+                runs: [{ text: "ordered item" }],
+                list: { numId: "1", level: 0 },
+              },
+            ],
+          },
+        ],
+        numbering: {
+          "1": {
+            levels: { "0": { format: "decimal", text: "%1.", startAt: 1 } },
+          },
+        },
+      }),
+    );
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [{ text: "ordered item" }],
+      list: { numId: "1", level: 0 },
+    });
+    const result = normalizeContentForSource(content, "docx", bytes);
+    const block =
+      result.kind === "wordprocessing"
+        ? result.sections[0]?.blocks[0]
+        : undefined;
+    expect(block?.kind === "paragraph" ? block.list?.numId : undefined).toBe(
+      "ordered:1",
+    );
   });
 });
 
