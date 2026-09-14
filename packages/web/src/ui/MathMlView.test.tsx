@@ -31,6 +31,8 @@ describe("MathMlView", () => {
     const mathElements = mounted.container.querySelectorAll("math");
     expect(mathElements.length).toBe(1);
     expect(mathElements[0]?.textContent).toBe("3");
+    // The math element's own parent (MathMlView's container div) must hold nothing else -- no leftover text node from a skipped or corrupted clear, which querySelectorAll("math") alone can't detect since it only ever matches real elements.
+    expect(mathElements[0]?.parentNode?.childNodes.length).toBe(1);
     mounted.unmount();
   });
 
