@@ -13,7 +13,8 @@ describe("window.matchMedia stub", () => {
     const list = window.matchMedia("(prefers-color-scheme: dark)");
     const listener = vi.fn();
     list.addEventListener("change", listener);
-    list.dispatchEvent({} as MediaQueryListEvent);
+    // dispatchEvent's own return value follows the real EventTarget contract: true means the event was not cancelled.
+    expect(list.dispatchEvent({} as MediaQueryListEvent)).toBe(true);
     expect(listener).toHaveBeenCalledTimes(1);
 
     list.removeEventListener("change", listener);

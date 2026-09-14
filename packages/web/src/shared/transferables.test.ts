@@ -79,4 +79,17 @@ describe("cloneAndCollectTransferableBuffers", () => {
       (message.chapters[1] as Uint8Array).buffer,
     ]);
   });
+
+  it("never reads past the array's own last index", () => {
+    const array = [new Uint8Array([1]), new Uint8Array([2])];
+    const accessedIndices: (string | symbol)[] = [];
+    const tracked = new Proxy(array, {
+      get(target, property, receiver) {
+        if (property !== "length") accessedIndices.push(property);
+        return Reflect.get(target, property, receiver) as unknown;
+      },
+    });
+    cloneAndCollectTransferableBuffers(tracked);
+    expect(accessedIndices).not.toContain("2");
+  });
 });
