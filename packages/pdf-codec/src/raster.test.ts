@@ -6,8 +6,10 @@ import { PdfParseError } from "./diagnostics";
 import { parseHead, parseMaxp } from "./font-tables";
 import { parseGlyf } from "./glyf";
 import { parseHmtx } from "./hmtx-table";
-import { applyMatrix, BEZIER_KAPPA } from "./matrix";
-import { flattenCubic, renderPdfPage } from "./raster";
+import type { GlyphContourPoint, GlyphOutline } from "./glyf-contours";
+import type { Matrix } from "./matrix";
+import { applyMatrix, BEZIER_KAPPA, IDENTITY_MATRIX } from "./matrix";
+import { flattenCubic, glyphOutlineSubpaths, renderPdfPage } from "./raster";
 import type {
   PageRasteriser,
   RasterDrawOp,
@@ -124,6 +126,24 @@ class SmallFixture {
     );
     return this.writer.toBytes();
   }
+}
+
+// Repoints a table record past the end of the file, the same technique embedded-font.test.ts's own dropTable uses -- parseSfnt drops that one table entirely, exactly as it would for a genuinely truncated font, while every other table (head/maxp/glyf included) stays intact and readable.
+function dropSfntTable(bytes: Uint8Array<ArrayBuffer>, tag: string): void {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const numTables = view.getUint16(4);
+  for (let i = 0; i < numTables; i++) {
+    const recordOffset = 12 + i * 16;
+    let found = "";
+    for (let c = 0; c < 4; c++) {
+      found += String.fromCharCode(view.getUint8(recordOffset + c));
+    }
+    if (found === tag) {
+      view.setUint32(recordOffset + 8, bytes.length + 4);
+      return;
+    }
+  }
+  throw new Error(`the vendored font has no "${tag}" table to patch`);
 }
 
 // One page, 200 x 100 pt, with the caller's content stream and optional extra entries on the page dict and catalog. Objects 1 (catalog), 2 (pages), 3 (page), 5 (contents) are wired; object 4 is a standard Helvetica font resource so text fixtures have a /Font to select.
@@ -567,6 +587,33 @@ describe("renderPdfPage: geometry and clipPt", () => {
     );
   });
 
+  it("reads a page whose /Contents is an array of streams, concatenated with a newline separator, not just a single stream", () => {
+    const b = new SmallFixture();
+    b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    b.object(
+      3,
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents [5 0 R 6 0 R] >>",
+    );
+    b.object(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+    // Split mid-operator-list, not mid-token: the first chunk's own final token ("40") is a complete number on its own, so the separator the reader inserts between chunks only ever falls on whitespace a content stream already treats as insignificant.
+    b.stream(5, "<< >>", enc("1 0 0 rg 10 20 30 40"));
+    b.stream(6, "<< >>", enc("re f"));
+    const bytes = b.classicXrefAndTrailer(6, "/Root 1 0 R");
+    const rasteriser = new RecordingRasteriser();
+    drive(bytes, 0, {}, rasteriser);
+    expect(rasteriser.ops.filter(isFillRect)).toEqual([
+      {
+        kind: "fillRect",
+        xPx: 10,
+        yPx: 40,
+        widthPx: 30,
+        heightPx: 40,
+        color: { r: 1, g: 0, b: 0 },
+      },
+    ]);
+  });
+
   it("returns whatever the rasteriser's finish produces", () => {
     const rasteriser = new RecordingRasteriser();
     const result = renderPdfPage(onePagePdf(content), 0, {}, rasteriser);
@@ -724,6 +771,189 @@ describe("flattenCubic", () => {
       { x: 10, y: 0 },
     );
     expect(points).toEqual([{ x: 10, y: 0 }]);
+  });
+});
+
+// glyphOutlineSubpaths exercised directly, the same reasoning as flattenCubic above: no vendored face's own contours ever start off-curve, or carry a contour with no on-curve point at all (every glyph probed across Carlito's whole repertoire starts on-curve), so pinning the rotation and no-on-curve branches needs hand-built contours, not a real font's glyphs.
+describe("glyphOutlineSubpaths", () => {
+  const pt = (x: number, y: number, onCurve: boolean): GlyphContourPoint => ({
+    x,
+    y,
+    onCurve,
+  });
+  const outlineOf = (contour: readonly GlyphContourPoint[]): GlyphOutline => ({
+    contours: [contour],
+  });
+
+  it("drops a contour of fewer than 3 points but keeps one of exactly 3, the boundary a <= in place of < would erase", () => {
+    const tooShort = outlineOf([pt(0, 0, true), pt(1, 0, true)]);
+    expect(glyphOutlineSubpaths(tooShort, IDENTITY_MATRIX)).toEqual([]);
+
+    const exactlyThree = outlineOf([
+      pt(0, 0, true),
+      pt(10, 0, true),
+      pt(10, 10, true),
+    ]);
+    expect(glyphOutlineSubpaths(exactlyThree, IDENTITY_MATRIX)).toHaveLength(1);
+  });
+
+  it("starts at the implied midpoint of the last and first points for a contour with no on-curve point at all, walking every consecutive off-curve pair through its own midpoint", () => {
+    // Three off-curve points, none on-curve: start = midpoint(P2, P0), then each consecutive pair (P0,P1) and (P1,P2) implies its own on-curve midpoint, and the walk closes with a final quad from the last implied point back through P2 to start.
+    const outline = outlineOf([
+      pt(3, 9, false),
+      pt(15, 3, false),
+      pt(21, 15, false),
+    ]);
+    expect(glyphOutlineSubpaths(outline, IDENTITY_MATRIX)).toEqual([
+      {
+        startXPx: 12,
+        startYPx: 12,
+        closed: true,
+        segments: [
+          {
+            kind: "cubic",
+            c1xPx: 6,
+            c1yPx: 10,
+            c2xPx: 5,
+            c2yPx: 8,
+            xPx: 9,
+            yPx: 6,
+          },
+          {
+            kind: "cubic",
+            c1xPx: 13,
+            c1yPx: 4,
+            c2xPx: 16,
+            c2yPx: 5,
+            xPx: 18,
+            yPx: 9,
+          },
+          {
+            kind: "cubic",
+            c1xPx: 20,
+            c1yPx: 13,
+            c2xPx: 18,
+            c2yPx: 14,
+            xPx: 12,
+            yPx: 12,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("needs no rotation when the contour already starts on-curve, and produces exactly two segments for a single on/off/on run", () => {
+    // On, off, on: the sole off-curve point never triggers the mid-pair emit (only one point in its run), so it folds into the following on-curve point's own quad -- exactly two segments (one line, one quad), the fewest a non-degenerate (length >= 3) contour can ever produce.
+    const outline = outlineOf([
+      pt(0, 0, true),
+      pt(6, 9, false),
+      pt(12, 0, true),
+    ]);
+    expect(glyphOutlineSubpaths(outline, IDENTITY_MATRIX)).toEqual([
+      {
+        startXPx: 0,
+        startYPx: 0,
+        closed: true,
+        segments: [
+          { kind: "line", xPx: 0, yPx: 0 },
+          {
+            kind: "cubic",
+            c1xPx: 4,
+            c1yPx: 6,
+            c2xPx: 8,
+            c2yPx: 6,
+            xPx: 12,
+            yPx: 0,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("rotates to start on the first on-curve point, walks a run of consecutive off-curve points through their implied midpoint, and closes a still-pending control point back to the start", () => {
+    // Stored order [A(off) B(on) C(off) D(off) E(on) F(off)]: firstOn = 1, so the walk starts at B, continues C, D, E, F, and wraps to A -- exercising the on-curve-with-pending quad (B->C->mid(C,D)), the consecutive-off-curve implied-midpoint quad (twice: C/D and F/A), and the final trailing quad closing a still-pending control point (A) back to the rotated start (B).
+    const a = pt(27, 15, false);
+    const b = pt(0, 0, true);
+    const c = pt(3, 6, false);
+    const d = pt(9, 12, false);
+    const e = pt(15, 3, true);
+    const f = pt(21, 9, false);
+    const outline = outlineOf([a, b, c, d, e, f]);
+    expect(glyphOutlineSubpaths(outline, IDENTITY_MATRIX)).toEqual([
+      {
+        startXPx: 0,
+        startYPx: 0,
+        closed: true,
+        segments: [
+          { kind: "line", xPx: 0, yPx: 0 },
+          {
+            kind: "cubic",
+            c1xPx: 2,
+            c1yPx: 4,
+            c2xPx: 4,
+            c2yPx: 7,
+            xPx: 6,
+            yPx: 9,
+          },
+          {
+            kind: "cubic",
+            c1xPx: 8,
+            c1yPx: 11,
+            c2xPx: 11,
+            c2yPx: 9,
+            xPx: 15,
+            yPx: 3,
+          },
+          {
+            kind: "cubic",
+            c1xPx: 19,
+            c1yPx: 7,
+            c2xPx: 22,
+            c2yPx: 10,
+            xPx: 24,
+            yPx: 12,
+          },
+          {
+            kind: "cubic",
+            c1xPx: 26,
+            c1yPx: 14,
+            c2xPx: 18,
+            c2yPx: 10,
+            xPx: 0,
+            yPx: 0,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("applies the caller's own matrix to every emitted point, not just the on-curve endpoints", () => {
+    // A pure translation confirms the matrix reaches the start point, the line endpoint, AND the quad's own control-derived points -- not only the segment's final on-curve xPx/yPx.
+    const outline = outlineOf([
+      pt(0, 0, true),
+      pt(6, 9, false),
+      pt(12, 0, true),
+    ]);
+    const translated: Matrix = [1, 0, 0, 1, 100, 200];
+    expect(glyphOutlineSubpaths(outline, translated)).toEqual([
+      {
+        startXPx: 100,
+        startYPx: 200,
+        closed: true,
+        segments: [
+          { kind: "line", xPx: 100, yPx: 200 },
+          {
+            kind: "cubic",
+            c1xPx: 104,
+            c1yPx: 206,
+            c2xPx: 108,
+            c2yPx: 206,
+            xPx: 112,
+            yPx: 200,
+          },
+        ],
+      },
+    ]);
   });
 });
 
@@ -1201,9 +1431,12 @@ function type0CarlitoPdf(
 // A plain simple (non-Type0) /TrueType font resource: code -> Unicode through the PDF's own encoding (WinAnsi, since this face carries no Symbolic flag), then Unicode -> GID through the embedded program's own cmap -- the whole other half of buildTextOutlineFace's own branch, entirely separate from the Type0/CID path type0CarlitoPdf drives.
 function trueTypeCarlitoPdf(
   text: string,
-  overrides: { readonly fontDescriptorBody?: string } = {},
+  overrides: {
+    readonly fontDescriptorBody?: string;
+    readonly fontBytes?: Uint8Array<ArrayBuffer>;
+  } = {},
 ): Uint8Array<ArrayBuffer> {
-  const fontBytes = carlitoRegularBytes();
+  const fontBytes = overrides.fontBytes ?? carlitoRegularBytes();
   const b = new SmallFixture();
   b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
   b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
@@ -1390,6 +1623,22 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
         ?.message.includes("Helvetica"),
     ).toBe(true);
     // The page carries text only, so nothing else paints.
+    expect(rasteriser.ops).toEqual([]);
+  });
+
+  it("resolves a font resource's outline face once per font dictionary, not once per run that references it", () => {
+    // Two separate text runs through the same /F1 resource (a standard-14 face with no embedded program): resolveTextOutlineFace's own cache means buildTextOutlineFace, and the diagnostic it emits, runs exactly once -- not once per run naming the same already-diagnosed font all over again.
+    const diagnostics: PdfDiagnostic[] = [];
+    const rasteriser = new RecordingRasteriser();
+    drive(
+      onePagePdf("BT /F1 24 Tf 20 60 Td (A) Tj 0 -20 Td (B) Tj ET"),
+      0,
+      { sink: (d) => diagnostics.push(d) },
+      rasteriser,
+    );
+    expect(
+      diagnostics.filter((d) => d.code === "raster/text-outlines-unavailable"),
+    ).toHaveLength(1);
     expect(rasteriser.ops).toEqual([]);
   });
 
@@ -1690,6 +1939,108 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
       diagnostics.find((d) => d.code === "raster/text-outlines-unavailable")
         ?.message,
     ).toContain("a font of subtype Type3");
+    expect(rasteriser.ops).toEqual([]);
+  });
+
+  it("refuses an /MMType1 font the same way as a plain /Type1, not falling through to the unrecognised-subtype branch", () => {
+    const { diagnostics, rasteriser } = refusalDiagnostics(
+      onePagePdf("BT /F1 24 Tf 20 50 Td (H) Tj ET", {
+        pageResources: "/Resources << /Font << /F1 4 0 R >> >>",
+        extraObjects: [
+          [
+            4,
+            "<< /Type /Font /Subtype /MMType1 /BaseFont /Custom /FirstChar 0 /LastChar 255 /FontDescriptor 6 0 R >>",
+          ],
+          [6, "<< /Type /FontDescriptor /FontName /Custom /Flags 4 >>"],
+        ],
+      }),
+    );
+    expect(
+      diagnostics.find((d) => d.code === "raster/text-outlines-unavailable")
+        ?.message,
+    ).toContain("PostScript program");
+    expect(rasteriser.ops).toEqual([]);
+  });
+
+  it("routes a Type1 font's own genuinely embedded CFF program through the shared CFF refusal, rather than assuming Type1 always means no outlines at all", () => {
+    const b = new SmallFixture();
+    b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    b.object(
+      3,
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    );
+    b.object(
+      4,
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Custom /FirstChar 0 /LastChar 255 /FontDescriptor 6 0 R >>",
+    );
+    b.object(
+      6,
+      "<< /Type /FontDescriptor /FontName /Custom /Flags 4 /FontFile3 7 0 R >>",
+    );
+    b.stream(7, "<< >>", new Uint8Array([0x01, 0x00, 0x04]));
+    b.stream(5, "<< >>", enc("BT /F1 24 Tf 20 50 Td (H) Tj ET"));
+    const { diagnostics, rasteriser } = refusalDiagnostics(
+      b.classicXrefAndTrailer(7, "/Root 1 0 R"),
+    );
+    expect(
+      diagnostics.find((d) => d.code === "raster/text-cff-outlines"),
+    ).toBeDefined();
+    expect(rasteriser.ops).toEqual([]);
+  });
+
+  it("names a font dictionary with no /Subtype at all as (none), the same fallback the descendant-subtype refusal uses", () => {
+    const { diagnostics, rasteriser } = refusalDiagnostics(
+      onePagePdf("BT /F1 24 Tf 20 50 Td (H) Tj ET", {
+        pageResources: "/Resources << /Font << /F1 4 0 R >> >>",
+        extraObjects: [[4, "<< /Type /Font /BaseFont /Custom >>"]],
+      }),
+    );
+    expect(
+      diagnostics.find((d) => d.code === "raster/text-outlines-unavailable")
+        ?.message,
+    ).toContain("a font of subtype (none)");
+    expect(rasteriser.ops).toEqual([]);
+  });
+
+  it("refuses a simple TrueType font whose embedded program is CFF outlines, not sfnt glyf", () => {
+    const b = new SmallFixture();
+    b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    b.object(
+      3,
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    );
+    b.object(
+      4,
+      "<< /Type /Font /Subtype /TrueType /BaseFont /Custom /FirstChar 0 /LastChar 255 /FontDescriptor 6 0 R >>",
+    );
+    b.object(
+      6,
+      "<< /Type /FontDescriptor /FontName /Custom /Flags 32 /FontFile2 7 0 R >>",
+    );
+    b.stream(7, "<< >>", new Uint8Array([0x01, 0x00, 0x04]));
+    b.stream(5, "<< >>", enc("BT /F1 24 Tf 20 50 Td (H) Tj ET"));
+    const { diagnostics, rasteriser } = refusalDiagnostics(
+      b.classicXrefAndTrailer(7, "/Root 1 0 R"),
+    );
+    expect(
+      diagnostics.find((d) => d.code === "raster/text-cff-outlines"),
+    ).toBeDefined();
+    expect(rasteriser.ops).toEqual([]);
+  });
+
+  it("refuses a simple TrueType font's embedded program when it carries no usable Unicode cmap subtable", () => {
+    // dropTable repoints the 'cmap' table record past the end of the file -- parseSfnt drops it, exactly as it would for a genuinely truncated font -- while head/maxp/glyf stay intact, so openEmbeddedProgram still classifies this as a fillable "glyf" program; only buildCmapLookup finds nothing to resolve a code point through.
+    const patched = new Uint8Array(carlitoRegularBytes());
+    dropSfntTable(patched, "cmap");
+    const { diagnostics, rasteriser } = refusalDiagnostics(
+      trueTypeCarlitoPdf("H", { fontBytes: patched }),
+    );
+    expect(
+      diagnostics.find((d) => d.code === "raster/text-outlines-unavailable")
+        ?.message,
+    ).toContain("no usable Unicode cmap subtable");
     expect(rasteriser.ops).toEqual([]);
   });
 });
