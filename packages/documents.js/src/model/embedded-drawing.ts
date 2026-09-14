@@ -63,10 +63,9 @@ function translateVector(
         from: shiftPoint(vector.from, dxPt, dyPt),
         to: shiftPoint(vector.to, dxPt, dyPt),
       };
+    // rect/ellipse/path all translate by shifting the frame alone and nothing else -- one shared body under three case labels, not three copies of the identical statement (which would leave rect's and ellipse's own bodies byte-identical and swappable with each other for no observable difference, an equivalent-mutant trap the earlier three-copy form fell into).
     case "rect":
-      return { ...vector, frame: shiftBox(vector.frame, dxPt, dyPt) };
     case "ellipse":
-      return { ...vector, frame: shiftBox(vector.frame, dxPt, dyPt) };
     case "path":
       return { ...vector, frame: shiftBox(vector.frame, dxPt, dyPt) };
   }
