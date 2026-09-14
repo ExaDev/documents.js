@@ -7,6 +7,7 @@ const NUMBER_DECIMAL_PLACES = 4;
 const NUMBER_EPSILON = 10 ** -NUMBER_DECIMAL_PLACES;
 
 export function formatNumber(n: number): string {
+  // Every magnitude that would ever round to "-0" at NUMBER_DECIMAL_PLACES (including -0 itself) already satisfies `abs(n) < NUMBER_EPSILON` above and returns "0" there, since NUMBER_EPSILON is exactly one unit in the last of those decimal places -- there is no reachable n for which toFixed still needs a separate "-0" normalisation below.
   if (Math.abs(n) < NUMBER_EPSILON) {
     return "0";
   }
@@ -14,7 +15,7 @@ export function formatNumber(n: number): string {
   if (formatted.includes(".")) {
     formatted = formatted.replace(/0+$/, "").replace(/\.$/, "");
   }
-  return formatted === "-0" ? "0" : formatted;
+  return formatted;
 }
 
 const NAME_ESCAPE_PATTERN = /[^!-~]|[#()<>[\]{}/%]/;
