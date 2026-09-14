@@ -2053,8 +2053,8 @@ function readRtfDetail(
       flushBytes();
       const code = token.param;
       if (code !== undefined) {
-        // "Unicode values greater than 32767 are expressed as negative numbers ... convert F020 to decimal (61472) and subtract 65536." A lone surrogate is emitted with fromCharCode so a surrogate pair written as two \uN keywords composes into one astral character.
-        emitText(String.fromCharCode(code < 0 ? code + 0x1_00_00 : code));
+        // "Unicode values greater than 32767 are expressed as negative numbers ... convert F020 to decimal (61472) and subtract 65536." No explicit "add 65536 back for a negative code" step is needed to undo that, though: String.fromCharCode's own ToUint16 argument coercion already reduces ANY integer modulo 2**16 before treating it as a UTF-16 code unit, so fromCharCode(-4064) and fromCharCode(-4064 + 65536) are the identical call -- the spec's own subtract-65536 encoding step is already exactly what fromCharCode's argument coercion undoes on its own, with no conditional needed on this side to reverse it. A lone surrogate is emitted with fromCharCode so a surrogate pair written as two \uN keywords composes into one astral character.
+        emitText(String.fromCharCode(code));
       }
       const skipped = skipUnicodeFallback(tokens, index + 1, state.uc);
       index = skipped.index;
@@ -2147,9 +2147,7 @@ function applyPictureControlWord(
     case "picscaley":
       if (param !== undefined) picture.scaleYPercent = param;
       return;
-    default:
-      // The trailing return statement other switches in this file give their own default case is omitted here on purpose: this is the function's own last statement, so falling out of the switch and falling out of this void function end in the identical place either way.
-      break;
+    // No `default: break;` clause: an unmatched name already falls out of the switch with no default present, landing in the identical place -- this function's own end -- that an explicit break in a default clause with no other statement would. Equivalent either way, so the redundant clause is omitted rather than left for a mutation tester to flag as unkillable.
   }
 }
 
@@ -2173,8 +2171,7 @@ function applyFormFieldControlWord(
     case "ffownhelp":
       formField.ownHelp = toggleValue(param);
       break;
-    default:
-      break;
+    // No `default: break;` clause: an unmatched name already falls out of the switch with no default present, landing in the identical place -- this function's own end -- that an explicit break in a default clause with no other statement would.
   }
 }
 
@@ -2488,8 +2485,7 @@ function applyStructureControlWord(
       builder.endParagraph(state.para, true);
       builder.endSection(section, state.para);
       break;
-    default:
-      break;
+    // No `default: break;` clause: an unmatched name already falls out of the switch with no default present, landing in the identical place -- this function's own end -- that an explicit break in a default clause with no other statement would.
   }
 }
 
