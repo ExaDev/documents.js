@@ -7,11 +7,10 @@ import { attrValue } from "../xml/query";
 
 const FOOTNOTE_CLASS_PATTERN = /footnote|noteref/i;
 
-function epubTypeValues(element: XmlElement): readonly string[] {
+// Whether the element's epub:type attribute contains a token matching the given pattern. Tests the raw attribute value directly rather than splitting on whitespace first: every caller's own pattern (`/noteref/i`, `/footnote|rearnote/i`) is an unanchored substring match with no word-boundary assertion of its own, so pre-splitting into tokens changes nothing a caller could observe -- a match inside one split token is exactly the substring match testing the whole value would also find, and an empty token from splitting never matches any of these patterns either way.
+function hasEpubType(element: XmlElement, pattern: RegExp): boolean {
   const value = attrValue(element, "epub:type");
-  return value === undefined
-    ? []
-    : value.split(/\s+/u).filter((v) => v.length > 0);
+  return value !== undefined && pattern.test(value);
 }
 
 function hasFootnoteClass(element: XmlElement): boolean {
@@ -34,10 +33,7 @@ export function isFootnoteReference(
   anchor: XmlElement,
   target: XmlElement,
 ): boolean {
-  const isStructuredNoteref = epubTypeValues(anchor).some((v) =>
-    /noteref/i.test(v),
-  );
-  if (isStructuredNoteref) {
+  if (hasEpubType(anchor, /noteref/i)) {
     return true;
   }
   return hasFootnoteClass(anchor) || hasFootnoteClass(target);
@@ -48,5 +44,5 @@ export function isFootnoteAside(element: XmlElement): boolean {
   if (element.tag !== "aside") {
     return false;
   }
-  return epubTypeValues(element).some((v) => /footnote|rearnote/i.test(v));
+  return hasEpubType(element, /footnote|rearnote/i);
 }
