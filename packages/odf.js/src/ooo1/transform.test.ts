@@ -96,11 +96,31 @@ describe("transformOoo1Package: namespaces", () => {
   it("normalises a non-conventional prefix binding onto the canonical prefix", () => {
     // Nothing forces a producer to use the conventional prefixes; the URI is what binds. A document binding the text vocabulary to "t:" must still read, because every reader in this package matches on the canonical prefix.
     const out = transformWhole(
-      `<o:document-content xmlns:o="http://openoffice.org/2000/office" xmlns:t="http://openoffice.org/2000/text" office:version="1.0" o:class="text"><o:body><t:p t:style-name="P1">hi</t:p></o:body></o:document-content>`,
+      `<o:document-content xmlns:o="http://openoffice.org/2000/office" xmlns:t="http://openoffice.org/2000/text" office:version="1.0" o:class="text"><o:body><t:p t:style-name="P1" tz="unchanged">hi</t:p></o:body></o:document-content>`,
     );
     expect(out).toContain("<office:document-content");
-    expect(out).toContain(`<text:p text:style-name="P1">`);
+    expect(out).toContain(`<text:p text:style-name="P1" tz="unchanged">`);
     expect(out).not.toContain("<t:p");
+    // office:class was resolved through the "o:" alias, not just the conventional literal -- proven by the genre wrapper it drives, not merely by the attribute renames above.
+    expect(out).toContain(`<office:body><office:text>`);
+    // "tz" carries no colon for renameQName to act on and must survive untouched -- chosen so that a broken "no colon" early-return would slice it down to "t" (a real prefix bound above to "text") and wrongly rewrite it to "text:tz".
+    expect(out).toContain(`tz="unchanged"`);
+  });
+
+  it("rewrites a default (unprefixed) xmlns declaration to its OASIS successor, keeping it unprefixed", () => {
+    const out = transformWhole(
+      `<office:document-content xmlns="http://openoffice.org/2000/office" ${OOO_XMLNS} office:version="1.0" office:class="text"><office:body><text:p>hi</text:p></office:body></office:document-content>`,
+    );
+    expect(out).toContain(`xmlns="${ODF_NAMESPACES.office}"`);
+  });
+
+  it("does not treat a non-xmlns attribute as a namespace declaration even when its value matches a known namespace URI", () => {
+    // "aaaaaatext" is deliberately not a namespace declaration (no "xmlns:" prefix) but is long enough that a broken skip-check would slice it down to "text" and, seeing its value resolve to the table URI, silently redirect every text:-prefixed name in the document onto table: instead.
+    const out = transformWhole(
+      `<office:document-content ${OOO_XMLNS} aaaaaatext="http://openoffice.org/2000/table" office:version="1.0" office:class="text"><office:body><text:p>hi</text:p></office:body></office:document-content>`,
+    );
+    expect(out).toContain(`<text:p>hi</text:p>`);
+    expect(out).not.toContain("table:p");
   });
 
   it("leaves a package that is not OpenOffice.org 1.x completely alone", () => {
@@ -147,6 +167,39 @@ describe("transformOoo1Package: document structure", () => {
       `<office:document-content ${OOO_XMLNS} office:class="text"><office:script/><office:body><text:p/></office:body></office:document-content>`,
     );
     expect(out).toContain("<office:scripts");
+  });
+
+  it("drops office:class only from a document root element, keeping any other root attribute and any office:class attribute elsewhere", () => {
+    const out = transformWhole(
+      `<office:document-content ${OOO_XMLNS} office:version="1.0" office:class="text"><office:body><text:p office:class="not-a-root">hi</text:p></office:body></office:document-content>`,
+    );
+    expect(out).toContain(`office:version="1.0"`);
+    expect(out).not.toMatch(/<office:document-content[^>]*office:class=/);
+    expect(out).toContain(`office:class="not-a-root"`);
+  });
+
+  it("leaves office:body unwrapped when there is no office:class to derive a genre from", () => {
+    const out = transformWhole(
+      `<office:document-content ${OOO_XMLNS} office:version="1.0"><office:body><text:p>hi</text:p></office:body></office:document-content>`,
+    );
+    expect(out).toContain(`<office:body><text:p>hi</text:p></office:body>`);
+  });
+
+  it("leaves an XML part with no root element completely alone", () => {
+    const pkg: Package = {
+      parts: {
+        "content.xml": {
+          kind: "xml",
+          nodes: parseXml(contentXml("<text:p/>")),
+        },
+        "stray.xml": { kind: "xml", nodes: [{ type: "text", value: "stray" }] },
+      },
+    };
+    const out = transformOoo1Package(pkg);
+    expect(out.parts["stray.xml"]).toEqual({
+      kind: "xml",
+      nodes: [{ type: "text", value: "stray" }],
+    });
   });
 });
 
@@ -248,6 +301,13 @@ describe("transformOoo1Package: style:properties splitting", () => {
     expect(out).toContain(`style:family="presentation"`);
     expect(out).toContain(`style:family="drawing-page"`);
   });
+
+  it("leaves a style's own style:properties unsplit when its family is not one this codec classifies", () => {
+    const out = automaticStyles(
+      `<style:style style:name="X1" style:family="weird-family"><style:properties draw:fill="none"/></style:style>`,
+    );
+    expect(out).toContain(`<style:properties draw:fill="none"/>`);
+  });
 });
 
 describe("transformOoo1Package: text vocabulary", () => {
@@ -257,6 +317,15 @@ describe("transformOoo1Package: text vocabulary", () => {
     );
     expect(out).toContain(
       `<text:h text:style-name="H1" text:outline-level="2">Title</text:h>`,
+    );
+  });
+
+  it("renames a paragraph's text:level to text:outline-level too, not only a heading's", () => {
+    const out = transformContent(
+      `<text:p text:style-name="P1" text:level="1">Body</text:p>`,
+    );
+    expect(out).toContain(
+      `<text:p text:style-name="P1" text:outline-level="1">Body</text:p>`,
     );
   });
 
@@ -321,6 +390,78 @@ describe("transformOoo1Package: table and drawing vocabulary", () => {
     expect(out).toContain(
       `<table:table-cell office:value-type="float" office:value="42" table:formula="=SUM(A1:A2)">`,
     );
+  });
+
+  it("renames a cell's own validation-name to the content-validation-name ODF spells it with", () => {
+    const out = transformContent(
+      `<table:table><table:table-row><table:table-cell table:validation-name="V1"><text:p/></table:table-cell></table:table-row></table:table>`,
+    );
+    expect(out).toContain(`table:content-validation-name="V1"`);
+    expect(out).not.toContain("table:validation-name");
+  });
+
+  it("leaves a table:value-type-shaped attribute alone outside a real cell element", () => {
+    const out = transformContent(
+      `<table:table table:value-type="float"><table:table-row><table:table-cell><text:p/></table:table-cell></table:table-row></table:table>`,
+    );
+    expect(out).toContain(`<table:table table:value-type="float">`);
+  });
+
+  it("moves a text field's value-carrying attributes to the office namespace", () => {
+    const out = transformContent(
+      `<text:variable-set text:name="v1" text:value-type="float" text:value="42">42</text:variable-set>`,
+    );
+    expect(out).toContain(
+      `<text:variable-set text:name="v1" office:value-type="float" office:value="42">42</text:variable-set>`,
+    );
+  });
+
+  it("leaves a text:value-type-shaped attribute alone outside a real text-value element", () => {
+    const out = transformContent(`<text:p text:value-type="float">hi</text:p>`);
+    expect(out).toContain(`<text:p text:value-type="float">hi</text:p>`);
+  });
+
+  it("renames a multi-column layout's own margin attributes to the indent pair, leaving any other attribute alone", () => {
+    const out = transformContent(
+      `<style:column fo:margin-left="1inch" fo:margin-right="2inch" fo:padding="3inch"/>`,
+    );
+    expect(out).toContain(
+      `<style:column fo:start-indent="1in" fo:end-indent="2in" fo:padding="3in"/>`,
+    );
+  });
+
+  it("renames table:sub-table to table:table with the sub-table flag", () => {
+    const out = transformContent(
+      `<table:table table:name="Outer"><table:table-row><table:table-cell><table:sub-table table:name="Inner"><table:table-row><table:table-cell><text:p/></table:table-cell></table:table-row></table:sub-table></table:table-cell></table:table-row></table:table>`,
+    );
+    expect(out).toContain(
+      `<table:table table:name="Inner" table:is-sub-table="true">`,
+    );
+    expect(out).not.toContain("table:sub-table");
+  });
+
+  it("drops the boolean form:property-is-list flag while keeping the property's own other attributes", () => {
+    const out = transformContent(
+      `<form:property form:property-name="P1" form:property-is-list="true"/>`,
+    );
+    expect(out).toContain(`<form:property form:property-name="P1"/>`);
+    expect(out).not.toContain("form:property-is-list");
+  });
+
+  it("never rewrites an inch-shaped token inside a name-suffixed or xlink:href attribute", () => {
+    const out = transformContent(
+      `<draw:image draw:name="Logo 2inch" xlink:href="#note 5inch"/>`,
+    );
+    expect(out).toContain(`draw:name="Logo 2inch"`);
+    expect(out).toContain(`xlink:href="note 5inch"`);
+  });
+
+  it("only rewrites a package-internal xlink:href with a leading '#' on a frame-eligible element, leaving other attributes and non-matching hrefs alone", () => {
+    const out = transformContent(
+      `<draw:image draw:name="#weird" xlink:href="Pictures/a.png"/>`,
+    );
+    expect(out).toContain(`draw:name="#weird"`);
+    expect(out).toContain(`xlink:href="Pictures/a.png"`);
   });
 
   it("wraps a bare drawing shape in the draw:frame ODF introduced, moving the frame-level attributes onto it", () => {
@@ -389,6 +530,101 @@ describe("transformOoo1Package: metadata and package parts", () => {
     expect(new TextDecoder().decode(base64ToBytes(mimetype.base64))).toBe(
       "application/vnd.oasis.opendocument.text",
     );
+    // The second, non-root entry's own media type is not a manifest concern of this rewrite -- it must survive untouched.
+    expect(xml).toContain(
+      `manifest:media-type="text/xml" manifest:full-path="content.xml"`,
+    );
+  });
+
+  it("resolves the manifest's own media type from its root entry alone, skipping a decoy element, a non-root entry, and a decoy attribute", () => {
+    const pkg: Package = {
+      parts: {
+        "META-INF/manifest.xml": {
+          kind: "xml",
+          nodes: parseXml(
+            `<manifest:manifest xmlns:manifest="http://openoffice.org/2001/manifest">` +
+              `<manifest:not-a-file-entry manifest:media-type="text/plain" manifest:full-path="/"/>` +
+              `<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>` +
+              `<manifest:file-entry manifest:decoy="nope" manifest:full-path="/" manifest:media-type="application/vnd.sun.xml.writer"/>` +
+              `</manifest:manifest>`,
+          ),
+        },
+      },
+    };
+    const out = transformOoo1Package(pkg);
+    const mimetype = out.parts.mimetype;
+    if (mimetype?.kind !== "binary") {
+      throw new Error("mimetype part was not written as a binary part");
+    }
+    expect(new TextDecoder().decode(base64ToBytes(mimetype.base64))).toBe(
+      "application/vnd.oasis.opendocument.text",
+    );
+  });
+
+  it("never treats a same-shaped element elsewhere in the package as a manifest entry, even when odfMediaType resolves", () => {
+    const pkg: Package = {
+      parts: {
+        "META-INF/manifest.xml": {
+          kind: "xml",
+          nodes: parseXml(
+            `<manifest:manifest xmlns:manifest="http://openoffice.org/2001/manifest"><manifest:file-entry manifest:media-type="application/vnd.sun.xml.writer" manifest:full-path="/"/></manifest:manifest>`,
+          ),
+        },
+        "content.xml": {
+          kind: "xml",
+          nodes: parseXml(
+            `<office:document-content ${OOO_XMLNS} office:version="1.0" office:class="text"><manifest:file-entry xmlns:manifest="http://openoffice.org/2001/manifest" manifest:full-path="/" manifest:media-type="application/vnd.sun.xml.writer"/><office:body><text:p/></office:body></office:document-content>`,
+          ),
+        },
+      },
+    };
+    const out = transformOoo1Package(pkg).parts["content.xml"];
+    if (out?.kind !== "xml") {
+      throw new Error("content.xml did not survive as an XML part");
+    }
+    const xml = selfCloseEmpty(buildXml(out.nodes));
+    expect(xml).toContain(
+      `manifest:media-type="application/vnd.sun.xml.writer"`,
+    );
+  });
+
+  it("synthesises no mimetype part when the manifest's own root media type can't be resolved", () => {
+    const pkg: Package = {
+      parts: {
+        "content.xml": {
+          kind: "xml",
+          nodes: parseXml(contentXml("<text:p/>")),
+        },
+      },
+    };
+    expect(transformOoo1Package(pkg).parts.mimetype).toBeUndefined();
+  });
+
+  it("never overwrites a mimetype part the package already carries", () => {
+    const pkg: Package = {
+      parts: {
+        "META-INF/manifest.xml": {
+          kind: "xml",
+          nodes: parseXml(
+            `<manifest:manifest xmlns:manifest="http://openoffice.org/2001/manifest"><manifest:file-entry manifest:media-type="application/vnd.sun.xml.writer" manifest:full-path="/"/></manifest:manifest>`,
+          ),
+        },
+        "content.xml": {
+          kind: "xml",
+          nodes: parseXml(contentXml("<text:p/>")),
+        },
+        mimetype: { kind: "binary", base64: "AAEC" },
+      },
+    };
+    expect(transformOoo1Package(pkg).parts.mimetype).toEqual({
+      kind: "binary",
+      base64: "AAEC",
+    });
+  });
+
+  it("does not restructure an already-ODF package even where its shapes overlap with an OpenOffice.org 1.x rewrite rule", () => {
+    const odf = `<office:document-content xmlns:office="${ODF_NAMESPACES.office}" xmlns:dc="${ODF_NAMESPACES.dc}"><office:body><office:text><office:annotation office:author="Ada" office:create-date="2003-10-16T09:22:13"></office:annotation></office:text></office:body></office:document-content>`;
+    expect(transformWhole(odf)).toBe(selfCloseEmpty(buildXml(parseXml(odf))));
   });
 
   it("carries binary parts through untouched", () => {
@@ -504,6 +740,53 @@ describe("transformToOoo1Package: namespaces and package identity", () => {
     expect(manifestXml).toContain(
       `manifest:full-path="/" manifest:version="1.3" manifest:media-type="application/vnd.sun.xml.writer"`,
     );
+    // The second, non-root entry's own media type is not this rewrite's concern -- it must survive untouched.
+    expect(manifestXml).toContain(
+      `manifest:full-path="content.xml" manifest:media-type="text/xml"`,
+    );
+  });
+
+  it("reverses a default (unprefixed) xmlns declaration back to its OpenOffice.org 1.x predecessor, keeping it unprefixed", () => {
+    const pkg = odfPackage(`<text:p>hi</text:p>`);
+    const contentPart = pkg.parts["content.xml"];
+    if (contentPart?.kind !== "xml") {
+      throw new Error("content.xml is not an xml part");
+    }
+    const root = rootElement(contentPart.nodes);
+    if (root === undefined) {
+      throw new Error("no root");
+    }
+    root.attributes.push({ name: "xmlns", value: ODF_NAMESPACES.office });
+    const out = reversePart(pkg, "content.xml");
+    expect(out).toContain(`xmlns="http://openoffice.org/2000/office"`);
+  });
+
+  it("never treats a same-shaped element elsewhere in the package as a manifest entry when reversing either", () => {
+    const pkg = odfPackage(`<text:p/>`, {
+      extraParts: {
+        "other.xml": {
+          kind: "xml",
+          nodes: parseXml(
+            `<office:document-content ${ODF_XMLNS} office:version="1.3"><manifest:file-entry xmlns:manifest="${ODF_NAMESPACES.manifest}" manifest:full-path="/" manifest:media-type="text/plain"/><office:body><office:text/></office:body></office:document-content>`,
+          ),
+        },
+      },
+    });
+    const out = reversePart(pkg, "other.xml");
+    expect(out).toContain(`manifest:media-type="text/plain"`);
+  });
+
+  it("leaves an XML part with no root element completely alone in reverse too", () => {
+    const pkg = odfPackage(`<text:p/>`, {
+      extraParts: {
+        "stray.xml": { kind: "xml", nodes: [{ type: "text", value: "stray" }] },
+      },
+    });
+    const out = transformToOoo1Package(pkg);
+    expect(out.parts["stray.xml"]).toEqual({
+      kind: "xml",
+      nodes: [{ type: "text", value: "stray" }],
+    });
   });
 
   it("leaves a package with no mimetype part -- already OpenOffice.org 1.x-shaped, or not a document this module can identify -- completely alone", () => {
@@ -535,6 +818,22 @@ describe("transformToOoo1Package: document structure", () => {
   ])("maps <%s> onto office:class=%s", (genre, documentClass) => {
     const out = reverseContent(`<text:p/>`, { genre });
     expect(out).toContain(`office:class="${documentClass}"`);
+  });
+
+  it("recurses into office:body's own children directly when they are not wrapped in a recognised genre element", () => {
+    const pkg: Package = {
+      parts: {
+        "content.xml": {
+          kind: "xml",
+          nodes: parseXml(
+            `<office:document-content ${ODF_XMLNS} office:version="1.3"><office:body><text:p>hi</text:p></office:body></office:document-content>`,
+          ),
+        },
+      },
+    };
+    writeMimetype(pkg, ODF_MEDIA_TYPES.odt);
+    const out = reversePart(pkg, "content.xml");
+    expect(out).toContain(`<office:body><text:p>hi</text:p></office:body>`);
   });
 
   it("renames the font declaration container and its entries", () => {
@@ -627,6 +926,13 @@ describe("transformToOoo1Package: style:*-properties merging", () => {
     expect(out).toContain(`fo:keep-with-next="false"`);
   });
 
+  it("leaves fo:keep-with-next alone when its value is neither always nor auto", () => {
+    const out = automaticStylesReverse(
+      `<style:style style:name="P1" style:family="paragraph"><style:paragraph-properties fo:keep-with-next="page"/></style:style>`,
+    );
+    expect(out).toContain(`fo:keep-with-next="page"`);
+  });
+
   // The forward rename's own inverse, and the one this direction cannot skip: a real consumer resolves a shape's draw:style-name against the plural spelling alone, so an OpenOffice.org 1.x package whose graphic styles still say "graphic" imports with every fill and stroke silently unbound (confirmed against LibreOffice 26.2 -- see the package README's own .sxd verification section).
   it("renames a drawing style's style:family back from graphic to graphics", () => {
     const out = automaticStylesReverse(
@@ -675,6 +981,62 @@ describe("transformToOoo1Package: text vocabulary", () => {
     expect(out).not.toContain("text:note-class");
   });
 
+  it("splits text:note-ref back into footnote-ref/endnote-ref by its own note-class", () => {
+    const out = reverseContent(
+      `<text:p><text:note-ref text:id="ftn1" text:note-class="footnote"/><text:note-ref text:id="edn1" text:note-class="endnote"/></text:p>`,
+    );
+    expect(out).toContain(`<text:footnote-ref text:id="ftn1"`);
+    expect(out).toContain(`<text:endnote-ref text:id="edn1"`);
+  });
+
+  it("splits text:notes-configuration back into footnotes/endnotes-configuration by its own note-class", () => {
+    const out = reverseContent(
+      `<text:notes-configuration text:note-class="footnote"/><text:notes-configuration text:note-class="endnote"/>`,
+    );
+    expect(out).toContain(`<text:footnotes-configuration`);
+    expect(out).toContain(`<text:endnotes-configuration`);
+  });
+
+  it("defaults a missing note-class to footnote when reversing the note family", () => {
+    const out = reverseContent(
+      `<text:p><text:note text:id="x"><text:note-citation>1</text:note-citation><text:note-body><text:p>n</text:p></text:note-body></text:note></text:p>`,
+    );
+    expect(out).toContain(`<text:footnote text:id="x">`);
+    expect(out).toContain(`<text:footnote-citation>1</text:footnote-citation>`);
+    expect(out).toContain(
+      `<text:footnote-body><text:p>n</text:p></text:footnote-body>`,
+    );
+  });
+
+  it("reverses the plain RENAMED_ATTRIBUTES table by explicit name", () => {
+    const out = reverseContent(
+      `<text:p style:page-layout-name="pm1" style:leader-text="." text:count-in-text-boxes="true">hi</text:p>`,
+    );
+    expect(out).toContain(`style:page-master-name="pm1"`);
+    expect(out).toContain(`style:leader-char="."`);
+    expect(out).toContain(`text:count-in-floating-frames="true"`);
+  });
+
+  it("reverses form:control-implementation and form:text-style-name by explicit name", () => {
+    const out = reverseContent(
+      `<form:property form:control-implementation="com.sun.star.form.control.TextField" form:text-style-name="S1"/>`,
+    );
+    expect(out).toContain(
+      `form:service-name="com.sun.star.form.control.TextField"`,
+    );
+    expect(out).toContain(`form:column-style-name="S1"`);
+  });
+
+  it("reverses office:value-type on a form:property back to form:property-type, but leaves it as office:value-type on an ordinary element", () => {
+    const out = reverseContent(
+      `<form:property office:value-type="float"/><style:style style:name="X" office:value-type="float"/>`,
+    );
+    expect(out).toContain(`<form:property form:property-type="float"`);
+    expect(out).toContain(
+      `<style:style style:name="X" office:value-type="float"`,
+    );
+  });
+
   it("pulls an annotation's dc:creator/dc:date children back into attributes", () => {
     const out = reverseContent(
       `<text:p><office:annotation><dc:creator>Ada</dc:creator><dc:date>2003-10-16T09:22:13</dc:date><text:p>comment</text:p></office:annotation></text:p>`,
@@ -719,6 +1081,48 @@ describe("transformToOoo1Package: table and drawing vocabulary", () => {
     expect(out).toContain(`<table:table table:name="T">`);
   });
 
+  it("reverses a cell's own content-validation-name back to validation-name", () => {
+    const out = reverseContent(
+      `<table:table><table:table-row><table:table-cell table:content-validation-name="V1"><text:p/></table:table-cell></table:table-row></table:table>`,
+    );
+    expect(out).toContain(`table:validation-name="V1"`);
+    expect(out).not.toContain("table:content-validation-name");
+  });
+
+  it("leaves an office:value-type-shaped attribute alone outside a real cell or text-value element in reverse too", () => {
+    const out = reverseContent(
+      `<table:table office:value-type="float"><table:table-row><table:table-cell><text:p/></table:table-cell></table:table-row></table:table>`,
+    );
+    expect(out).toContain(`<table:table office:value-type="float">`);
+  });
+
+  it("reverses a text field's value-carrying attributes back to the text namespace", () => {
+    const out = reverseContent(
+      `<text:variable-set office:value-type="float" office:value="42">42</text:variable-set>`,
+    );
+    expect(out).toContain(
+      `<text:variable-set text:value-type="float" text:value="42">42</text:variable-set>`,
+    );
+  });
+
+  it("reverses a multi-column layout's own indent attributes back to the margin pair, leaving any other attribute alone", () => {
+    const out = reverseContent(
+      `<style:column fo:start-indent="1in" fo:end-indent="2in" fo:padding="3in"/>`,
+    );
+    expect(out).toContain(
+      `<style:column fo:margin-left="1inch" fo:margin-right="2inch" fo:padding="3inch"/>`,
+    );
+  });
+
+  it("only unwraps the first frame-shaped child when a draw:frame somehow carries more than one, nesting the rest as the chosen shape's own trailing children", () => {
+    const out = reverseContent(
+      `<draw:frame svg:width="1in"><draw:image xlink:href="a.png"/><draw:text-box><text:p>t</text:p></draw:text-box></draw:frame>`,
+    );
+    expect(out).toContain(
+      `<draw:image xlink:href="#a.png" svg:width="1inch"><draw:text-box><text:p>t</text:p></draw:text-box></draw:image>`,
+    );
+  });
+
   it("unwraps a draw:frame back to the bare shape it wraps, moving the frame attributes onto it and reversing the inch unit", () => {
     const out = reverseContent(
       `<text:p><draw:frame draw:style-name="fr1" draw:name="Graphic1" text:anchor-type="paragraph" svg:width="1.9992in" svg:height="0.7228in" draw:z-index="0"><draw:image xlink:href="Pictures/a.png" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/></draw:frame></text:p>`,
@@ -744,6 +1148,12 @@ describe("transformToOoo1Package: table and drawing vocabulary", () => {
     expect(out).toContain(`xlink:href="#Pictures/a.png"`);
     expect(out).toContain(`xlink:href="http://example.invalid/a.png"`);
     expect(out).toContain(`xlink:href="#bookmark"`);
+  });
+
+  it("does not double-prefix a package-internal href that already starts with #", () => {
+    const out = reverseContent(`<draw:image xlink:href="#Pictures/a.png"/>`);
+    expect(out).toContain(`xlink:href="#Pictures/a.png"`);
+    expect(out).not.toContain(`xlink:href="##Pictures/a.png"`);
   });
 });
 
@@ -793,6 +1203,22 @@ describe("transformToOoo1Package: lists", () => {
     expect(out).not.toContain("<text:list ");
     expect(out).not.toContain("<text:list>");
   });
+
+  it("leaves a text:list unrenamed when its referenced list-style can't be resolved to ordered or bullet", () => {
+    const pkg: Package = {
+      parts: {
+        "content.xml": {
+          kind: "xml",
+          nodes: parseXml(
+            `<office:document-content ${ODF_XMLNS} office:version="1.3"><office:body><office:text><text:list text:style-name="Unknown"><text:list-item><text:p>one</text:p></text:list-item></text:list></office:text></office:body></office:document-content>`,
+          ),
+        },
+      },
+    };
+    writeMimetype(pkg, ODF_MEDIA_TYPES.odt);
+    const out = reversePart(pkg, "content.xml");
+    expect(out).toContain(`<text:list text:style-name="Unknown">`);
+  });
 });
 
 describe("transformToOoo1Package: metadata", () => {
@@ -816,5 +1242,25 @@ describe("transformToOoo1Package: metadata", () => {
     expect(out).toContain(
       `<office:meta><dc:title>T</dc:title><meta:keywords><meta:keyword>alpha</meta:keyword><meta:keyword>beta</meta:keyword></meta:keywords></office:meta>`,
     );
+  });
+
+  it("leaves office:meta's children alone when there are no meta:keyword siblings to rewrap", () => {
+    const pkg: Package = {
+      parts: {
+        "content.xml": {
+          kind: "xml",
+          nodes: parseXml(contentXml("<text:p/>")),
+        },
+        "meta.xml": {
+          kind: "xml",
+          nodes: parseXml(
+            `<office:document-meta ${ODF_XMLNS} office:version="1.3"><office:meta><dc:title>T</dc:title></office:meta></office:document-meta>`,
+          ),
+        },
+      },
+    };
+    writeMimetype(pkg, ODF_MEDIA_TYPES.odt);
+    const out = reversePart(pkg, "meta.xml");
+    expect(out).toContain(`<office:meta><dc:title>T</dc:title></office:meta>`);
   });
 });
