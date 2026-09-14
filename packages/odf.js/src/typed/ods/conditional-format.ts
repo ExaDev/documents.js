@@ -304,9 +304,7 @@ function readCondition(
     case "bottom-elements":
     case "top-percent":
     case "bottom-percent": {
-      if (parsed.expr1 === undefined) {
-        return undefined;
-      }
+      // No separate `parsed.expr1 === undefined` guard: Number(undefined) is NaN, which the Number.isFinite check right below already rejects -- a missing operand and a non-numeric one degrade to the identical "not a valid rank" outcome, so there is nothing this earlier check catches that the next line doesn't already catch on its own.
       const rank = Number(parsed.expr1);
       if (!Number.isFinite(rank) || rank <= 0) {
         return undefined;
