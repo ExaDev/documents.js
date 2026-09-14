@@ -2951,7 +2951,8 @@ describe("link and image titles (the `link` construct annotation)", () => {
   });
 
   it("throws for a paragraph whose run-level construct extent does not name real runs", () => {
-    expect(() => {
+    let beyondRuns: unknown;
+    try {
       emitMarkdown(
         doc([
           {
@@ -2971,8 +2972,21 @@ describe("link and image titles (the `link` construct annotation)", () => {
           },
         ]),
       );
-    }).toThrow(MarkdownInvalidRunConstructExtentError);
-    expect(() => {
+    } catch (error) {
+      beyondRuns = error;
+    }
+    expect(beyondRuns).toBeInstanceOf(MarkdownInvalidRunConstructExtentError);
+    const beyondRunsTyped =
+      beyondRuns as MarkdownInvalidRunConstructExtentError;
+    expect(beyondRunsTyped.faultKind).toBe("beyondRuns");
+    expect(beyondRunsTyped.entryIndex).toBe(0);
+    expect(beyondRunsTyped.code).toBe("md/run-construct-extent-invalid");
+    expect(beyondRunsTyped.message).toBe(
+      "a paragraph's run-level construct extent reaches outside the paragraph's own runs (constructs entry 0); a run extent must name real runs in 0..runs.length",
+    );
+
+    let invertedRange: unknown;
+    try {
       emitMarkdown(
         doc([
           {
@@ -2992,7 +3006,19 @@ describe("link and image titles (the `link` construct annotation)", () => {
           },
         ]),
       );
-    }).toThrow(/ends before it starts/);
+    } catch (error) {
+      invertedRange = error;
+    }
+    expect(invertedRange).toBeInstanceOf(
+      MarkdownInvalidRunConstructExtentError,
+    );
+    const invertedRangeTyped =
+      invertedRange as MarkdownInvalidRunConstructExtentError;
+    expect(invertedRangeTyped.faultKind).toBe("invertedRange");
+    expect(invertedRangeTyped.entryIndex).toBe(0);
+    expect(invertedRangeTyped.message).toBe(
+      "a paragraph's run-level construct extent ends before it starts (constructs entry 0); a run extent must name real runs in 0..runs.length",
+    );
   });
 });
 
