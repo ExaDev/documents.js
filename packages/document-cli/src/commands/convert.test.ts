@@ -160,6 +160,19 @@ describe("convert", () => {
     );
   });
 
+  it("accepts a positional output and --out when they name the identical destination, rather than treating agreement as a conflict", async () => {
+    const output = join(workspace, "same-destination.pdf");
+    const { exitCode, stderr } = await runCli([
+      "convert",
+      join(workspace, "input.docx"),
+      output,
+      "--out",
+      output,
+    ]);
+    expect(stderr).not.toContain("conflicting output destinations");
+    expect(exitCode).toBe(EXIT_SUCCESS);
+  });
+
   it("prefers --to over the output path's own extension for the target format", async () => {
     const output = join(workspace, "explicit-to.pdf");
     const { exitCode } = await runCli([
