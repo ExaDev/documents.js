@@ -1402,10 +1402,8 @@ class ContentBuilder {
     para: ParagraphState,
   ): ContentDocument {
     this.discardUnclosedResultScratches();
+    // No `if (this.sections.length === 0) { this.sections.push(...) }` fallback after this call: endSection's own drop condition (`blocks.length === 0 && this.sections.length > 0`) can only ever skip pushing when sections.length is ALREADY at least 1 -- its second operand is false whenever sections.length is 0, so THIS call, the one endSection call finish() ever makes, is unconditionally guaranteed to leave sections.length at least 1 regardless of what it was beforehand. A fallback guarding against a state this call can never produce would be genuinely unreachable, not defensive.
     this.endSection(section, para);
-    if (this.sections.length === 0) {
-      this.sections.push({ ...sectionGeometry(section), blocks: [] });
-    }
     return { kind: "wordprocessing", metadata, sections: this.sections };
   }
 }
