@@ -88,6 +88,15 @@ describe("odbTablesToSpreadsheetDocument", () => {
     ]);
   });
 
+  it("sizes one row entry per data row plus the header row", () => {
+    const content = odbTablesToSpreadsheetDocument([TABLE]);
+    if (content.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    // TABLE has 2 data rows, so the sizing array must cover row 0 (header) through row 2.
+    expect(content.sheets[0]?.rows.map((row) => row.index)).toEqual([0, 1, 2]);
+  });
+
   it("produces a real, non-empty printSettings for every sheet, so the xlsx builder has something to write", () => {
     const content = odbTablesToSpreadsheetDocument([TABLE]);
     if (content.kind !== "spreadsheet") {
