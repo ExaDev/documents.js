@@ -294,6 +294,30 @@ describe("renderPdfPage: geometry and clipPt", () => {
     ).toThrow(/positive widthPt and heightPt/);
   });
 
+  it("rejects a clipPt that just touches the page's right edge with zero overlap width, a positive-widthPt clip the earlier guard cannot catch", () => {
+    // clipLeft === clipRight exactly (200, the page's own right edge) -- a genuine intersection-width check at its own zero boundary, distinct from the requested-widthPt guard above (which never sees this clipPt at all, since its own widthPt is a positive 30).
+    expect(() =>
+      drive(
+        onePagePdf(content),
+        0,
+        { clipPt: { xPt: 200, yPt: 20, widthPt: 30, heightPt: 40 } },
+        new RecordingRasteriser(),
+      ),
+    ).toThrow(/does not intersect/);
+  });
+
+  it("rejects a clipPt that just touches the page's top edge with zero overlap height, the same boundary on the other axis", () => {
+    // clipBottom === clipTop exactly (100, the page's own top edge).
+    expect(() =>
+      drive(
+        onePagePdf(content),
+        0,
+        { clipPt: { xPt: 20, yPt: 100, widthPt: 30, heightPt: 40 } },
+        new RecordingRasteriser(),
+      ),
+    ).toThrow(/does not intersect/);
+  });
+
   it("throws the reader's own typed errors for a non-PDF input and an out-of-range page", () => {
     expect(() =>
       renderPdfPage(enc("not a pdf"), 0, {}, new RecordingRasteriser()),
@@ -334,6 +358,20 @@ describe("renderPdfPage: geometry and clipPt", () => {
     expect(() =>
       renderPdfPage(
         onePagePdf(content),
+        0,
+        { signal: controller.signal },
+        new RecordingRasteriser(),
+      ),
+    ).toThrow(/Aborted/);
+  });
+
+  it("checks an already-aborted signal at entry even for a page with no /Resources, whose walk never reaches the per-item abort check at all", () => {
+    // twoPagesFirstWithoutResourcesPdf's first page returns before interpretContentStream ever runs, so this is the ONLY throwIfAborted call reachable for it -- unlike the top-of-module test above, whose fixture always has at least one item and so could throw from the per-item check even were the entry check removed entirely.
+    const controller = new AbortController();
+    controller.abort();
+    expect(() =>
+      drive(
+        twoPagesFirstWithoutResourcesPdf(),
         0,
         { signal: controller.signal },
         new RecordingRasteriser(),
@@ -400,8 +438,57 @@ describe("renderPdfPage: geometry and clipPt", () => {
       expect.objectContaining({
         code: "pdf/invalid-crop-box",
         severity: "warning",
+        message:
+          "page /CropBox is degenerate (zero width or height); falling back to the /MediaBox as the visible region",
       }),
     );
+  });
+
+  it("does not fall back for a CropBox whose corners have a negative-but-non-degenerate origin, where a mutated urx+llx (or ury+lly) sum would wrongly read as degenerate", () => {
+    // llx = -20 and lly = -30 both make the sum urx+llx (or ury+lly) negative -- exactly the wrong-sign value a `+` in place of the real `-` would compute -- while the real width (30) and height (40) stay positive and non-degenerate.
+    const diagnostics: PdfDiagnostic[] = [];
+    const rasteriser = new RecordingRasteriser();
+    drive(
+      onePagePdf(content, { pageEntries: "/CropBox [-20 -30 10 10] " }),
+      0,
+      { sink: (d) => diagnostics.push(d) },
+      rasteriser,
+    );
+    expect(diagnostics.some((d) => d.code === "pdf/invalid-crop-box")).toBe(
+      false,
+    );
+    expect(rasteriser.geometry).toMatchObject({ widthPx: 30, heightPx: 40 });
+  });
+
+  it("translates by the visible region's own minY, not adds it, when the CropBox's own lower edge sits above the page's own origin", () => {
+    // With no rotation the rotation matrix is the identity, so visibleRect is exactly the CropBox itself and visibleRect.minY = cropBox.lly = 30 directly -- a clean, direct pin on the translation's own sign.
+    const rasteriser = new RecordingRasteriser();
+    drive(
+      onePagePdf("1 0 0 rg 10 40 30 10 re f", {
+        pageEntries: "/CropBox [0 30 200 100] ",
+      }),
+      0,
+      {},
+      rasteriser,
+    );
+    // Crop-relative y = 40 - 30 = 10, height 10, crop height = 100 - 30 = 70: device y = 70 - (10 + 10) = 50. A `+30` translation would instead place this well outside (or entirely off) the cropped region.
+    expect(rasteriser.ops.find(isFillRect)).toMatchObject({ xPx: 10, yPx: 50 });
+  });
+
+  it("falls back for a CropBox degenerate in height alone, its width perfectly healthy", () => {
+    // llx=0/urx=30 keeps the width check (urx - llx = 30 > 0) from ever triggering on its own, so a genuine crop is only forced by the height term (ury - lly = 0) being evaluated independently rather than the whole OR condition being pinned by the sibling test's width-only degeneracy.
+    const diagnostics: PdfDiagnostic[] = [];
+    const rasteriser = new RecordingRasteriser();
+    drive(
+      onePagePdf(content, { pageEntries: "/CropBox [0 100 30 100] " }),
+      0,
+      { sink: (d) => diagnostics.push(d) },
+      rasteriser,
+    );
+    expect(diagnostics.some((d) => d.code === "pdf/invalid-crop-box")).toBe(
+      true,
+    );
+    expect(rasteriser.geometry).toMatchObject({ widthPx: 200, heightPx: 100 });
   });
 
   it("computes page extent correctly for a MediaBox whose origin is not (0, 0)", () => {
@@ -419,6 +506,24 @@ describe("renderPdfPage: geometry and clipPt", () => {
     drive(bytes, 0, {}, rasteriser);
     // width = urx - llx = 200, height = ury - lly = 100 -- urx + llx (300) or ury + lly (200) would both be wrong here precisely because the origin is non-zero.
     expect(rasteriser.geometry).toMatchObject({ widthPx: 200, heightPx: 100 });
+  });
+
+  it("passes the MediaBox's own width and height, not the sum of its corners, into the rotation transform", () => {
+    // Unrotated, mediaBox.urx +/- llx never reaches the rendered geometry at all (pageRotationTransform's own Rotate-0 branch ignores both w and h), so the sibling test above cannot distinguish + from -- only a rotation whose matrix genuinely depends on w/h (90 here) can.
+    const b = new SmallFixture();
+    b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    b.object(
+      3,
+      "<< /Type /Page /Parent 2 0 R /MediaBox [50 50 250 150] /Rotate 90 /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    );
+    b.object(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+    b.stream(5, "<< >>", enc(content));
+    const bytes = b.classicXrefAndTrailer(5, "/Root 1 0 R");
+    const rasteriser = new RecordingRasteriser();
+    drive(bytes, 0, {}, rasteriser);
+    // Real w = urx - llx = 200, h = ury - lly = 100; Rotate 90 swaps them (widthPt = h, heightPt = w), so the rendered page is 100 x 200 -- not 300 x 200 (w mutated to a sum) or 100 x 300 (h mutated to a sum).
+    expect(rasteriser.geometry).toMatchObject({ widthPx: 100, heightPx: 200 });
   });
 
   it("reports a zero-height intersection distinctly from a zero-width one, with the exact requested and page ranges in the message", () => {
