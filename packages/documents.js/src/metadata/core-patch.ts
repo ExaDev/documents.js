@@ -32,7 +32,9 @@ export function mergeMetadata(
 }
 
 // Whether `overrides` would actually cause the addCoreProperties/writeOdfMetadata fallback below to write at least one element -- NOT merely whether a field is present in `overrides` at all. An empty keywords array is the gap this distinction closes: overrides.keywords !== undefined is true for `keywords: []`, but addCoreProperties/writeOdfMetadata themselves only ever emit a keywords element when the array's length is nonzero (mirroring how a from-scratch build never writes an empty keywords element), so treating "the key is present" as "something will be written" would create a real metadata part (plus, for OOXML, its Content_Types override and package-root relationship) out of an empty root element, on a document that had none -- contradicting patchOoxmlCorePropertiesOnPackage/patchOdfMetadataOnPackage's own contract that a document with no requested change stays byte-for-byte free of a part it never had. This predicate mirrors addCoreProperties'/buildOdfMetaNodes' own per-field write conditions exactly: title/author/subject count on mere presence, keywords counts only with at least one entry.
-function hasWritableMetadataOverride(overrides: MetadataOverrides): boolean {
+export function hasWritableMetadataOverride(
+  overrides: MetadataOverrides,
+): boolean {
   return (
     overrides.title !== undefined ||
     overrides.author !== undefined ||
