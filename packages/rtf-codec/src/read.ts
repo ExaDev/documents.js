@@ -1238,10 +1238,11 @@ class ContentBuilder {
 
   // \cellxN states "the right boundary of a cell, including its half of the space between cells" as a cumulative offset, so a column's width is the difference between consecutive boundaries, with the row's own \trleftN as the first left edge. A boundary sequence that is not increasing is malformed -- it would produce a zero or negative width, which ContentTable's own schema refuses -- so the whole derivation is replaced by an even split of the section's text width, reported rather than silently substituted.
   private columnWidths(columnCount: number): number[] {
+    // No `.slice(0, columnCount)` on this iteration: closeTable's own sole call site always derives columnCount as Math.max(this.tableColumnRights.length, ...), so columnCount can never be smaller than this.tableColumnRights.length itself -- a slice bounded by columnCount can therefore never actually truncate the array it is called on, making it equivalent to iterating the array bare.
     const rights = this.tableColumnRights;
     const widths: number[] = [];
     let previous = this.rowLeftTwips;
-    for (const right of rights.slice(0, columnCount)) {
+    for (const right of rights) {
       widths.push(twipsToPoints(right - previous));
       previous = right;
     }
