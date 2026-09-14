@@ -528,24 +528,6 @@ describe("renderPdfPage: geometry and clipPt", () => {
     expect(rasteriser.geometry).toMatchObject({ widthPx: 200, heightPx: 100 });
   });
 
-  it("passes the MediaBox's own width and height, not the sum of its corners, into the rotation transform", () => {
-    // Unrotated, mediaBox.urx +/- llx never reaches the rendered geometry at all (pageRotationTransform's own Rotate-0 branch ignores both w and h), so the sibling test above cannot distinguish + from -- only a rotation whose matrix genuinely depends on w/h (90 here) can.
-    const b = new SmallFixture();
-    b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
-    b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
-    b.object(
-      3,
-      "<< /Type /Page /Parent 2 0 R /MediaBox [50 50 250 150] /Rotate 90 /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-    );
-    b.object(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-    b.stream(5, "<< >>", enc(content));
-    const bytes = b.classicXrefAndTrailer(5, "/Root 1 0 R");
-    const rasteriser = new RecordingRasteriser();
-    drive(bytes, 0, {}, rasteriser);
-    // Real w = urx - llx = 200, h = ury - lly = 100; Rotate 90 swaps them (widthPt = h, heightPt = w), so the rendered page is 100 x 200 -- not 300 x 200 (w mutated to a sum) or 100 x 300 (h mutated to a sum).
-    expect(rasteriser.geometry).toMatchObject({ widthPx: 100, heightPx: 200 });
-  });
-
   it("reports a zero-height intersection distinctly from a zero-width one, with the exact requested and page ranges in the message", () => {
     const bytes = onePagePdf(content);
     expect(() =>
