@@ -8,6 +8,14 @@ import { packageLintConfig } from "../../eslint.shared.ts";
 export default tseslint.config(
   ...packageLintConfig({
     tsconfigRootDir: import.meta.dirname,
+    // Off: 781 sites across every package are debt from this same @exadev/eslint-config 2.1.2->2.12.1 bump (see PackageLintOptions.newRuleDebt in eslint.shared.ts), not something this bump's own PR fixes. This package's own measured subset:
+    newRuleDebt: [
+      "@typescript-eslint/consistent-return",
+      "@typescript-eslint/method-signature-style",
+      "@typescript-eslint/no-shadow",
+      "@typescript-eslint/promise-function-async",
+      "@typescript-eslint/strict-boolean-expressions",
+    ],
     // Off: with noUncheckedIndexedAccess on, every indexed read is typed as possibly-undefined, so this rule fires on array and byte-buffer indexing whose bound the surrounding code has already established -- a loop condition, a prior length check, or a fixture the test itself just built. None of the sites here is a value that can actually be absent. Tracked for a per-package decision on whether any of them is genuine; see the burn-down epic.
     nonNullAssertion: "off",
     // Three programs, not the usual two: the app, the browser Web Worker, and the Node-side config files.
@@ -23,6 +31,8 @@ export default tseslint.config(
     ],
     // Not Worker-isomorphic: this is a browser app, and its own RPC import boundary below is what keeps the conversion engine out of the main bundle.
     isomorphic: false,
+    // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why -- this app's own UI state/reducer helpers genuinely mutate a handful of array/object parameters in place. Tracked for burn-down.
+    preferReadonlyParams: "off",
     // No npm exports map and no public entry point, so the rule's default stays right rather than being relaxed to 'single'.
     barrelPolicy: "banned",
     // Globals are scoped per layer below instead. Node globals everywhere would let a `process.env` read in browser code lint clean.
