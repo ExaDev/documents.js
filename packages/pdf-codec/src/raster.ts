@@ -157,9 +157,6 @@ export interface RenderPdfPageOptions {
   readonly signal?: AbortSignal;
 }
 
-// Mirrors interpret.ts's own fallback width for a glyph whose advance cannot be resolved -- the interpreter's advance walk has already diagnosed the miss through the sink by the time the raster walk re-asks, and using the same constant keeps the two walks accumulating identical fallbacks rather than silently disagreeing about a run's internal placement.
-const FALLBACK_GLYPH_WIDTH_PER_1000 = 500;
-
 // Canvas dimensions round UP, so the region's whole point extent always covers its last pixel row/column (a round-half rule could drop a right-edge sliver), and a hairline-but-valid clip that scales below one pixel still yields a one-pixel canvas rather than a zero-sized PNG no encoder accepts. The epsilon absorbs float fuzz (an exact 100pt at scale 2 computing 200.00000000000003 must be 200, not 201).
 function regionPixels(extentPt: number, scale: number): number {
   return Math.max(1, Math.ceil(extentPt * scale - 1e-9));
@@ -766,8 +763,6 @@ export function flattenCubic(
 
 // Everything the glyph walk needs from one font resource: the parsed 'glyf', the design-grid size its coordinates live in, and the shown-code -> glyph-ID mapping the PDF's own font dictionary states (Identity-H's CID arithmetic, or a simple font's program cmap).
 interface TextOutlineFace {
-  // Whether shown codes are 2-byte CIDs (a Type0/Identity-H composite font) or 1-byte simple-font codes -- the fallback advance width the glyph walk consumes per code when the metrics port cannot resolve one.
-  readonly composite: boolean;
   readonly glyf: GlyfTable;
   readonly unitsPerEm: number;
   glyphIdOf(
@@ -961,7 +956,6 @@ function buildTextOutlineFace(
         entries.push((decodedBytes[i]! << 8) | decodedBytes[i + 1]!);
       }
       return {
-        composite: true,
         glyf: program.face.glyf,
         unitsPerEm: program.face.unitsPerEm,
         glyphIdOf: (codes, offset) => {
@@ -973,7 +967,6 @@ function buildTextOutlineFace(
     }
     // /Identity (or unstated, which defaults to Identity per 9.7.4.2): GID == CID.
     return {
-      composite: true,
       glyf: program.face.glyf,
       unitsPerEm: program.face.unitsPerEm,
       glyphIdOf: (codes, offset) => (codes[offset]! << 8) | codes[offset + 1]!,
@@ -999,7 +992,6 @@ function buildTextOutlineFace(
       return;
     }
     return {
-      composite: false,
       glyf: program.face.glyf,
       unitsPerEm: program.face.unitsPerEm,
       glyphIdOf: (codes, offset) => {
@@ -1049,8 +1041,7 @@ function drawTextRun(
   if (face === undefined) {
     return; // the diagnostic naming why has already gone to the sink
   }
-  const composite = face.composite;
-  // Per-glyph advances exactly as the interpreter accumulated them (same port, same fallback constants), without the Tc/Tw/Tz text-state adjustments that live inside the interpreter -- those are absorbed by the end-matrix correction below.
+  // Per-glyph advances exactly as the interpreter accumulated them (same port), without the Tc/Tw/Tz text-state adjustments that live inside the interpreter -- those are absorbed by the end-matrix correction below.
   const placements: {
     readonly glyphId: number | undefined;
     readonly advance: number;
@@ -1058,14 +1049,15 @@ function drawTextRun(
   let offset = 0;
   let cumulative = 0;
   while (offset < item.codes.length) {
+    // Never undefined: resolveTextOutlineFace above already resolved item.fontResourceName against item.resources to a real font dict (returning early otherwise), and fontResolver.metrics.glyphAdvance's own resolution does the identical dictGet(resources, "Font") -> dictGet(fontsDict, fontResourceName) lookup against the same two values, then always returns a populated result once that dict exists -- there is no way for this call to find no font once the one above already did.
     const advance = fontResolver.metrics.glyphAdvance(
       item.fontResourceName,
       item.resources,
       item.codes,
       offset,
-    );
-    const widthPer1000 = advance?.widthPer1000 ?? FALLBACK_GLYPH_WIDTH_PER_1000;
-    const byteLength = advance?.byteLengthConsumed ?? (composite ? 2 : 1);
+    )!;
+    const widthPer1000 = advance.widthPer1000;
+    const byteLength = advance.byteLengthConsumed;
     placements.push({
       glyphId: face.glyphIdOf(item.codes, offset),
       advance: cumulative,
