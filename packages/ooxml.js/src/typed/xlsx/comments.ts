@@ -51,7 +51,7 @@ function childrenWithLocalName(
   return out;
 }
 
-// ST_Guid as written in these parts is braced and upper case, but the brace spelling varies across producers, so both sides of every guid comparison (personId -> person/@id) go through this normaliser.
+// ST_Guid as written in these parts is braced and upper case, but the brace spelling varies across producers, so both sides of every guid comparison (personId -> person/@id) go through this normaliser. The specific choice of toLowerCase over toUpperCase here is a genuinely irreducible equivalent mutation opportunity, not merely an untested one: this normaliser's only observable effect anywhere in this file is whether two guid spellings compare equal (a Map key match in readPersons/readThreadedAuthor) -- and folding every input to the SAME case, in either direction, produces that identical equality relation for every possible pair of inputs. No test built on this function's own observable contract (guid equality, never the normalised string's own case) can ever tell toLowerCase and toUpperCase apart here, any more than a test could tell +180 from -180 apart in a value that is always later reduced modulo 360 (see canonicalizeGroupRotation's own doc comment in shared/drawingml.ts for the general shape of this argument).
 function normalizeGuid(value: string): string {
   return value.replaceAll("{", "").replaceAll("}", "").toLowerCase();
 }
