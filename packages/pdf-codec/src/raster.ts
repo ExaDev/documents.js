@@ -1096,9 +1096,10 @@ function drawTextRun(
       continue; // a code with no glyph in this face: no ink (the reader's own extraction diagnostics cover the mapping gap)
     }
     const outline = decodeGlyphOutline(face.glyf, placement.glyphId);
-    if (outline === undefined || outline.contours.length === 0) {
-      continue; // an empty glyph (a space) or an undecodable one: nothing to draw
+    if (outline === undefined) {
+      continue; // an undecodable glyph: nothing to draw
     }
+    // No separate outline.contours.length === 0 guard here: an empty glyph (a space) decodes to zero contours, and glyphOutlineSubpaths already turns zero contours into zero subpaths on its own (the same emptiness drawGlyphOutline's own subpaths.length === 0 check below catches), so a dedicated check for it here would only ever duplicate a skip that already happens one call downstream.
     const trm = multiplyMatrices(
       translationMatrix(placement.advance * correction, 0),
       item.startMatrix,
