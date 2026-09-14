@@ -2899,6 +2899,15 @@ describe("table row and column derivation", () => {
     ]);
   });
 
+  it("still resolves a bookmark whose own \\bkmkend lands in an otherwise-empty trailing paragraph right before \\cell, via endCell's own explicit flush rather than endParagraph's", () => {
+    // \bkmkend here is the ONLY thing in its paragraph -- no text follows it before \cell -- so endParagraph's own force=false early return (runs.length === 0) fires without ever calling resolveBookmarkPositions, leaving 'trailing' still sitting in closingBookmarks when endCell reaches its OWN explicit flushClosingBookmarks(true, ...) call two lines later. That explicit call is the only thing that still resolves it; if its own hardcoded inTable argument read false instead of true, closing.inTable (true, since the bookmark opened inside \intbl) would no longer match, and 'trailing' would be wrongly dropped as straddling a cell boundary it never actually crossed.
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\cellx1440\\pard\\intbl{\\*\\bkmkstart trailing}One\\par\\pard\\intbl{\\*\\bkmkend trailing}\\cell\\row\\pard x\\par}`,
+    );
+    const kinds = table.rows[0]?.cells[0]?.blocks.map((block) => block.kind);
+    expect(kinds).toEqual(["constructStart", "paragraph", "constructEnd"]);
+  });
+
   it("reports the exact TABLE_ROW_WITHOUT_DEFINITION message text", () => {
     const { diagnostics } = readRtfContent(
       bytes(`${HEADER}\\trowd\\trleft0\\cellx1440\\row\\pard x\\par}`),
