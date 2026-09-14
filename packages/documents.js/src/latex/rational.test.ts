@@ -34,6 +34,10 @@ describe("decimalToRational", () => {
   it("returns undefined for an empty literal", () => {
     expect(decimalToRational("")).toBeUndefined();
   });
+
+  it("returns undefined for a literal with a leading sign, even though its trailing characters are digits", () => {
+    expect(decimalToRational("-5")).toBeUndefined();
+  });
 });
 
 describe("reduceRational", () => {
@@ -55,6 +59,14 @@ describe("reduceRational", () => {
     expect(reduceRational(0n, 9n)).toEqual({
       numerator: "0",
       denominator: "1",
+    });
+  });
+
+  it("treats gcd(0, 0) as 1 rather than dividing by zero for a 0/0-shaped input", () => {
+    expect(() => reduceRational(0n, 0n)).not.toThrow();
+    expect(reduceRational(0n, 0n)).toEqual({
+      numerator: "0",
+      denominator: "0",
     });
   });
 });
