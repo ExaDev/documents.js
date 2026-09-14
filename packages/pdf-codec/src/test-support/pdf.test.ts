@@ -2,6 +2,7 @@ import { unzlibSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import {
   brokenStartxrefPdf,
+  FixtureBuilder,
   formXObjectPdf,
   incrementalUpdatePdf,
   inheritedPageAttributesPdf,
@@ -274,5 +275,48 @@ describe("inlineImagePdf", () => {
     expect(text).toContain("BI /W 2 /H 2");
     expect(text).toContain(" ID ");
     expect(text).toContain(" EI Q");
+  });
+});
+
+// FixtureBuilder itself, exercised directly: the exported fixture functions above only ever feed it well-formed dicts and object numbers that genuinely exist, so its own /Length-insertion regex, misuse guard, and xref-padding arithmetic have no route to coverage except a test that deliberately probes their edge cases.
+describe("FixtureBuilder", () => {
+  it("inserts /Length at the dict's own true end, not at the first nested '>>' it happens to find", () => {
+    const bytes = new FixtureBuilder()
+      .stream(1, "<< /Sub << /X 1 >> >>", new TextEncoder().encode("abc"))
+      .bytes();
+    const text = decode(bytes);
+    expect(text).toContain("<< /Sub << /X 1 >>  /Length 3 >>");
+  });
+
+  it("still inserts /Length when the dict's final '>>' has no whitespace before it", () => {
+    const bytes = new FixtureBuilder()
+      .stream(1, "<<>>", new TextEncoder().encode("ab"))
+      .bytes();
+    const text = decode(bytes);
+    expect(text).toContain("<< /Length 2 >>");
+  });
+
+  it("still inserts /Length when the dict has trailing whitespace after its final '>>'", () => {
+    const bytes = new FixtureBuilder()
+      .stream(1, "<<>> ", new TextEncoder().encode("a"))
+      .bytes();
+    const text = decode(bytes);
+    expect(text).toContain("<< /Length 1 >>");
+  });
+
+  it("throws a clear error rather than silently reading an unwritten object's offset", () => {
+    const b = new FixtureBuilder();
+    expect(() => b.offsetOf(1)).toThrow("fixture object 1 was never written");
+  });
+
+  it("writes the trailer's /Size and the xref subsection count as maxObjNum + 1, and pads every offset to exactly 10 digits", () => {
+    const b = new FixtureBuilder().header("1.4");
+    b.object(1, "<< >>");
+    b.classicXrefAndTrailer(1, "/Root 1 0 R");
+    const text = decode(b.bytes());
+    expect(text).toContain("xref\n0 2\n");
+    expect(text).toContain("trailer\n<< /Size 2 /Root 1 0 R >>");
+    // object 1 starts right after the 9-byte header ("%PDF-1.4\n"), a single-digit offset that must still occupy the full fixed 10-digit field.
+    expect(text).toContain("0000000009 00000 n \n");
   });
 });
