@@ -63,10 +63,8 @@ export function readOdpContent(pkg: Package): ContentDocument {
         };
       }
 
+      // No early return for an empty `groups`: the rebuild loop below already reduces to a no-op copy of the slide's existing shapes when there is nothing to insert (the inner insertion while-loop never runs, so every shapeIndex iteration just re-pushes the shape already at that index) -- an early-return guard here would only skip allocating an equivalent array, never change what gets assigned, making the guard a permanently equivalent mutation target rather than a real correctness branch.
       const groups = collectSlideVectorGroups(pageElement.children, pkg);
-      if (groups.length === 0) {
-        return;
-      }
       const shapes: ContentShape[] = [];
       let shapeIndex = 0;
       let groupIndex = 0;
