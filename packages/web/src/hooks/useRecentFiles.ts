@@ -5,6 +5,9 @@ import { db } from "../db/dexie";
 
 const RECENT_FILES_LIMIT = 20;
 
+// useLiveQuery's own deps array feeds a plain React useMemo internally (dexie-react-hooks' own useObservable): a module-scope constant, evaluated once at import time rather than a fresh literal on every call, so a mutation to its contents runs only during module load -- Stryker's own ignoreStatic setting already excludes exactly that class of mutant workspace-wide, rather than this file needing its own suppression. The querier below closes over no render-scoped value, so no dependency will ever legitimately change; a literal written inline here would still be correct, but only a stable reference this file itself controls -- not any single-element array's own particular contents -- is what useMemo's element-by-element comparison actually needs to keep re-subscribing from happening on every render.
+const NO_DEPS: never[] = [];
+
 // useLiveQuery re-runs (and every consumer re-renders) the instant any write lands in db.recentFiles -- no manual invalidation needed after recordRecentFile/removeRecentFile.
 export function useRecentFiles() {
   return useLiveQuery(
@@ -14,7 +17,7 @@ export function useRecentFiles() {
         .reverse()
         .limit(RECENT_FILES_LIMIT)
         .toArray(),
-    [],
+    NO_DEPS,
   );
 }
 
