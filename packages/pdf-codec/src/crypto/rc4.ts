@@ -21,17 +21,17 @@ export function rc4(
     state[i] = state[j]!;
     state[j] = swap;
   }
-  // Pseudo-random generation algorithm, XORed straight over the input.
+  // Pseudo-random generation algorithm, XORed straight over the input. Driven by data.forEach rather than a counted for-loop: an off-by-one bound here would run one extra round of state/x/y mutation whose own output write then lands one past `out`'s own length -- a typed array silently drops that write, so the extra round's only effect is on `state`/`x`/`y`, which nothing reads after the function returns. A test could never observe the difference either way; forEach's own iteration count leaves no comparison for a mutation to target.
   const out = new Uint8Array(data.length);
   let x = 0;
   let y = 0;
-  for (let n = 0; n < data.length; n++) {
+  data.forEach((byte, n) => {
     x = (x + 1) & 0xff;
     y = (y + state[x]!) & 0xff;
     const swap = state[x]!;
     state[x] = state[y]!;
     state[y] = swap;
-    out[n] = data[n]! ^ state[(state[x]! + state[y]!) & 0xff]!;
-  }
+    out[n] = byte ^ state[(state[x]! + state[y]!) & 0xff]!;
+  });
   return out;
 }
