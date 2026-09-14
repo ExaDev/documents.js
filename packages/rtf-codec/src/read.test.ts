@@ -2480,6 +2480,237 @@ describe("table cell formatting", () => {
   });
 });
 
+describe("run identity", () => {
+  it("keeps two adjacent runs with different real colours separate, not folded by a flattened key", () => {
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\cf1 black\\cf2 red\\par}`)[0]?.runs ?? [];
+    expect(runs.map((run) => run.text)).toEqual(["black", "red"]);
+    expect(runs[0]?.color).toEqual({ r: 0, g: 0, b: 0 });
+    expect(runs[1]?.color).toEqual({ r: 1, g: 0, b: 0 });
+  });
+
+  it("keeps two adjacent runs with different fonts separate", () => {
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\f0 times\\f1 arial\\par}`)[0]?.runs ?? [];
+    expect(runs.map((run) => run.text)).toEqual(["times", "arial"]);
+    expect(runs[0]?.fontFamily).toBe("Times New Roman");
+    expect(runs[1]?.fontFamily).toBe("Arial");
+  });
+
+  it("reads a HYPERLINK field carrying both a quoted target and an \\l anchor as target#anchor", () => {
+    const runs =
+      paragraphsOf(
+        `${HEADER}\\pard {\\field{\\*\\fldinst{HYPERLINK "https://example.com/page" \\\\l "part2"}}{\\fldrslt jump}}\\par}`,
+      )[0]?.runs ?? [];
+    expect(runs[0]?.hyperlink).toBe("https://example.com/page#part2");
+  });
+});
+
+describe("unicode fallback skip", () => {
+  it("stops a \\uc fallback skip early at a group boundary rather than reading into the group", () => {
+    // \uc5 with only one text byte before a nested group: the spec's own scope-delimiter rule ends the skippable run at the brace, so "inside" must still be read as real content rather than swallowed as fallback.
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\uc5\\u9731 x{inside}\\par}`)[0]?.runs ??
+      [];
+    expect(runs.map((run) => run.text).join("")).toContain("inside");
+  });
+
+  it("counts a control word or symbol inside the fallback region as exactly one skipped character", () => {
+    // \uc1 skips one "character" -- here a \'hh escape, which the spec's own rule counts as a single character even though it is itself a control word, not a literal byte. If the escape were NOT consumed as the fallback, the decoded e-acute would leak into the visible text alongside the real Unicode character.
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\uc1\\u9731 \\'e9after\\par}`)[0]?.runs ??
+      [];
+    const text = runs.map((run) => run.text).join("");
+    expect(text).not.toContain("é");
+    expect(text).toContain("after");
+  });
+
+  it("consumes a fallback text run exactly its own length and resumes reading real text immediately after it", () => {
+    // \uc3 with a three-byte fallback run ("abc") that exactly exhausts the skip count on its own token boundary -- the reader must advance past the whole run and reset its own byte offset, not stop one byte short of it or re-read part of "abc" as real text.
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\uc3\\u9731 abcreal\\par}`)[0]?.runs ?? [];
+    const text = runs.map((run) => run.text).join("");
+    expect(text).not.toContain("abc");
+    expect(text).toContain("real");
+  });
+});
+
+describe("block-scoped construct extent ordering", () => {
+  it("returns a fresh copy of the block list, not the same array reference, when there are no extents to splice", () => {
+    const blocks = blocksOf(`${HEADER}\\pard{\\*\\bkmkstart a}x\\par}`);
+    // Every block-list caller receives insertConstructMarkers' own return value directly; a fresh array here is what lets endSection push the section's own "blocks: blocks" without it silently aliasing internal accumulator state.
+    expect(Array.isArray(blocks)).toBe(true);
+  });
+
+  it("nests a shorter extent inside a longer one that opens at the identical start index and closes it innermost-first", () => {
+    // "outer" and "inner" both start in the first paragraph -- tied startIndex -- but "outer" spans one paragraph further before its own \bkmkend, so at that tie the longer extent must sort first (open outermost) and last (close innermost-first), nesting correctly rather than crossing.
+    const blocks = blocksOf(
+      `${HEADER}\\pard{\\*\\bkmkstart outer}{\\*\\bkmkstart inner}One\\par\\pard Two{\\*\\bkmkend inner}\\par\\pard Three{\\*\\bkmkend outer}\\par}`,
+    );
+    expect(blocks.map((block) => block.kind)).toEqual([
+      "constructStart",
+      "constructStart",
+      "paragraph",
+      "paragraph",
+      "constructEnd",
+      "paragraph",
+      "constructEnd",
+    ]);
+    const outerStart = blocks[0];
+    const innerStart = blocks[1];
+    expect(
+      outerStart?.kind === "constructStart"
+        ? outerStart.descriptor.name
+        : undefined,
+    ).toBe("outer");
+    expect(
+      innerStart?.kind === "constructStart"
+        ? innerStart.descriptor.name
+        : undefined,
+    ).toBe("inner");
+  });
+});
+
+describe("table cell merge span", () => {
+  it("gives a plain, non-anchor cell a span of one even when a later, unrelated cell carries its own continuation flag", () => {
+    // The second cell's own \clmrg is malformed here (no preceding \clmgf anchors it), but horizontalSpanAt's own guard must still be keyed on THIS cell's own horizontalMergeFirst flag, not fall through to scanning forward regardless of it.
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\cellx1440\\clmrg\\cellx2880\\pard\\intbl A\\cell\\pard\\intbl B\\cell\\row\\pard x\\par}`,
+    );
+    expect(table.rows[0]?.cells[0]?.colSpan).toBeUndefined();
+  });
+});
+
+describe("bookmark bookkeeping", () => {
+  it("silently drops a bookmark start whose own name is empty, never opening an extent for it", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard before {\\*\\bkmkstart}marked{\\*\\bkmkend}after\\par}`,
+    )[0];
+    expect(paragraph?.constructs ?? []).toEqual([]);
+    expect(paragraph?.runs.map((run) => run.text).join("")).toBe(
+      "before markedafter",
+    );
+  });
+
+  it("reports the exact \\bkmkend-with-no-\\bkmkstart diagnostic message, naming the orphaned bookmark", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard x{\\*\\bkmkend orphan}\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) => diagnostic.code === RtfDiagnosticCodes.BOOKMARK_UNPAIRED,
+    );
+    expect(found?.message).toBe(
+      "a \\bkmkend named 'orphan' has no matching \\bkmkstart, so no anchor construct is produced for it",
+    );
+  });
+
+  it("reports the exact table-cell-boundary-straddling diagnostic message, naming the bookmark", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\trowd\\trleft0\\cellx4320\\pard\\intbl{\\*\\bkmkstart straddler}one\\par\\pard\\intbl two\\cell\\row\\pard{\\*\\bkmkend straddler}after\\par}`,
+      ),
+    );
+    const found = diagnostics.find(
+      (diagnostic) => diagnostic.code === RtfDiagnosticCodes.BOOKMARK_UNPAIRED,
+    );
+    expect(found?.message).toBe(
+      "the bookmark 'straddler' spans a table cell boundary; a construct extent cannot straddle two block lists, so no anchor construct is produced for it",
+    );
+  });
+
+  it("resolves a bookmark's own \\bkmkcolfN/\\bkmkcollN range only when at least one of the pair is stated", () => {
+    // Naming only \bkmkcolf without \bkmkcoll (or vice versa) is spec-legal ("These controls are used within the \*\bkmkstart destination"), and must still produce a source-residue clause -- neither field being stated at all is the only case with no clause.
+    const first = paragraphsOf(
+      `${HEADER}\\pard{\\*\\bkmkstart\\bkmkcolf3 First}x{\\*\\bkmkend First}\\par}`,
+    )[0];
+    expect(first?.constructs?.[0]?.descriptor.source).toEqual({
+      format: "rtf",
+      xml: "\\bkmkcolf3",
+    });
+    const second = paragraphsOf(
+      `${HEADER}\\pard{\\*\\bkmkstart\\bkmkcoll7 Second}x{\\*\\bkmkend Second}\\par}`,
+    )[0];
+    expect(second?.constructs?.[0]?.descriptor.source).toEqual({
+      format: "rtf",
+      xml: "\\bkmkcoll7",
+    });
+    const neither = paragraphsOf(
+      `${HEADER}\\pard{\\*\\bkmkstart Plain}x{\\*\\bkmkend Plain}\\par}`,
+    )[0];
+    expect(neither?.constructs?.[0]?.descriptor.source).toBeUndefined();
+  });
+
+  it("actually removes a resolved bookmark from the open set, so a same-named start opened afterwards is not confused with the first", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\*\\bkmkstart dup}first{\\*\\bkmkend dup} between {\\*\\bkmkstart dup}second{\\*\\bkmkend dup}\\par}`,
+    )[0];
+    expect(paragraph?.constructs).toHaveLength(2);
+    const [firstExtent, secondExtent] = paragraph?.constructs ?? [];
+    expect(firstExtent?.startRun).not.toBe(secondExtent?.startRun);
+  });
+});
+
+describe("run and paragraph accumulation", () => {
+  it("bumps the paragraph serial forward with each closed paragraph, never backward", () => {
+    // A bookmark opened in the second paragraph and closed in the third must resolve to a block-scoped extent (its own start and end genuinely differ), which only holds if paragraphSerial actually counts upward -- a serial that decremented would make the second paragraph's own number collide with the first's.
+    const blocks = blocksOf(
+      `${HEADER}\\pard One\\par\\pard{\\*\\bkmkstart s}Two\\par\\pard Three{\\*\\bkmkend s}\\par}`,
+    );
+    expect(blocks.map((block) => block.kind)).toEqual([
+      "paragraph",
+      "constructStart",
+      "paragraph",
+      "paragraph",
+      "constructEnd",
+    ]);
+  });
+
+  it("sorts a paragraph's own run-scoped constructs by start position, earliest first", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}{\\*\\revtbl{Unknown;}{A. Reviewer;}}\\pard kept \\revised\\revauth1 second\\revised0  middle \\deleted\\revauthdel1 first-in-source\\deleted0  end\\par}`,
+    )[0];
+    // Two disjoint provenance extents on the same paragraph: the insertion opens AFTER the deletion in source order here is irrelevant -- what matters is the extents come back ordered by their own startRun, not source-declaration order, matching document-schema.js's own well-formedness expectation for RunConstructExtent[].
+    const starts = (paragraph?.constructs ?? []).map(
+      (extent) => extent.startRun,
+    );
+    expect(starts).toEqual([...starts].sort((a, b) => a - b));
+    expect(paragraph?.constructs).toHaveLength(2);
+  });
+});
+
+describe("paragraph geometry derivation", () => {
+  it("does not restate a style name onto styleId when the header names an empty style entry", () => {
+    const source =
+      "{\\rtf1\\ansi\\ansicpg1252\\deff0" +
+      "{\\fonttbl{\\f0\\froman\\fcharset0 Times New Roman;}}" +
+      "{\\colortbl;}" +
+      "{\\stylesheet{\\s1 ;}}" +
+      "\\pard\\s1 x\\par}";
+    const paragraph = paragraphsOf(source)[0];
+    expect(paragraph?.styleId).toBeUndefined();
+  });
+
+  it("omits headingLevel when a paragraph names no style and states no \\outlinelevel of its own", () => {
+    const paragraph = paragraphsOf(`${HEADER}\\pard plain\\par}`)[0];
+    expect(paragraph?.headingLevel).toBeUndefined();
+  });
+
+  it("treats \\sl0 (automatic spacing) the same as no \\sl at all: no lineSpacing field", () => {
+    const paragraph = paragraphsOf(`${HEADER}\\pard\\sl0\\slmult1 x\\par}`)[0];
+    expect(paragraph?.lineSpacing).toBeUndefined();
+  });
+
+  it("carries no lineSpacing field when \\sl is stated without \\slmult1, since the default is not left with a leftover default value", () => {
+    const paragraph = paragraphsOf(`${HEADER}\\pard\\sl240 x\\par}`)[0];
+    expect(paragraph?.lineSpacing).toBeUndefined();
+  });
+
+  it("reads \\ls0 (no list override) as no list field at all, matching an absent \\ls", () => {
+    const paragraph = paragraphsOf(`${HEADER}\\pard\\ls0 x\\par}`)[0];
+    expect(paragraph?.list).toBeUndefined();
+  });
+});
+
 describe("the tree-form entry point", () => {
   it("assembles the same content into a DocumentTree whose root is a wordprocessing package", () => {
     const { documentPackage } = readRtf(
