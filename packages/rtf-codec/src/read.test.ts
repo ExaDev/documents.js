@@ -9,7 +9,12 @@ import type {
 } from "document-schema.js";
 import { ContentDocumentSchema } from "document-schema.js";
 import type { ContentEmbeddedObjectBlock } from "document-schema.js";
-import { RtfDiagnosticCodes, RtfNotAnRtfDocumentError } from "./diagnostics";
+import {
+  RtfDiagnosticCodes,
+  RtfInputTooLargeError,
+  RtfNestingLimitExceededError,
+  RtfNotAnRtfDocumentError,
+} from "./diagnostics";
 import { bytesToHex, hexToBytes } from "./base64";
 import { writeEmbeddedObjectData } from "./embedded-object";
 import { readRtf, readRtfContent } from "./read";
@@ -3088,14 +3093,14 @@ describe("embedded object size hints", () => {
 
   it("adds no size-hint clause at all when an \\object states neither \\objw nor \\objh", () => {
     const { diagnostics } = readRtfContent(
-      bytes(`${HEADER}\\pard{\\object\\objemb}\\par}`),
+      bytes(`${HEADER}\\pard{\\object\\objemb{\\*\\objdata }}\\par}`),
     );
     const found = diagnostics.find(
       (diagnostic) =>
         diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
     );
     expect(found?.message).toBe(
-      "an \\object destination has neither \\objdata nor \\result content; the whole construct is dropped",
+      "an \\object destination's \\objdata carried no payload",
     );
   });
 
@@ -3119,6 +3124,372 @@ describe("embedded object size hints", () => {
         diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
     );
     expect(found?.message).toContain("is not a payload this reader produced");
+  });
+});
+
+describe("resource limits", () => {
+  it("accepts input exactly at maxInputBytes, and rejects one byte more", () => {
+    const source = `${HEADER}\\pard x\\par}`;
+    const exact = bytes(source);
+    expect(() =>
+      readRtfContent(exact, { maxInputBytes: exact.length }),
+    ).not.toThrow();
+    expect(() =>
+      readRtfContent(exact, { maxInputBytes: exact.length - 1 }),
+    ).toThrow(RtfInputTooLargeError);
+  });
+
+  it("accepts nesting exactly at maxGroupDepth, and rejects one level deeper", () => {
+    // The root group already occupies stack slot 1, so a document whose deepest group nests N levels needs maxGroupDepth to be at least N + 1.
+    const nested = `${HEADER}${"{".repeat(3)}x${"}".repeat(3)}\\par}`;
+    expect(() =>
+      readRtfContent(bytes(nested), { maxGroupDepth: 5 }),
+    ).not.toThrow();
+    expect(() => readRtfContent(bytes(nested), { maxGroupDepth: 4 })).toThrow(
+      RtfNestingLimitExceededError,
+    );
+  });
+});
+
+describe("group-open dispatch", () => {
+  it("skips a header table's own second occurrence rather than re-reading it as body content", () => {
+    // {\fonttbl ...} is already consumed by readRtfHeader; a SECOND, malformed occurrence later in the body must still be recognised as a header destination and skipped whole, not fall through to an unknown-destination diagnostic or leak its own text into the document.
+    const { document, diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\fonttbl{\\f9 Bogus;}}kept\\par}`),
+    );
+    const text0 =
+      document.kind === "wordprocessing"
+        ? document.sections[0]?.blocks
+            .filter(
+              (block): block is ContentParagraph => block.kind === "paragraph",
+            )
+            .flatMap((paragraph) => paragraph.runs.map((run) => run.text))
+            .join("")
+        : undefined;
+    expect(text0).toBe("kept");
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.UNKNOWN_DESTINATION_SKIPPED,
+      ),
+    ).toBe(false);
+  });
+
+  it("reads the \\*\\ud half of a \\upr wrapper and discards the ANSI half beside it", () => {
+    const runs =
+      paragraphsOf(
+        `${HEADER}\\pard {\\upr ansi-fallback{\\*\\ud unicode-real}}\\par}`,
+      )[0]?.runs ?? [];
+    const text0 = runs.map((run) => run.text).join("");
+    expect(text0).toContain("unicode-real");
+    expect(text0).not.toContain("ansi-fallback");
+  });
+
+  it("discards every plain group nested inside a \\upr wrapper's own ANSI half, not only its direct text", () => {
+    const runs =
+      paragraphsOf(
+        `${HEADER}\\pard {\\upr {\\b ansi in a group}{\\*\\ud kept}}\\par}`,
+      )[0]?.runs ?? [];
+    const text0 = runs.map((run) => run.text).join("");
+    expect(text0).toBe("kept");
+  });
+
+  it("discards a second, duplicate \\result child and reports it", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb{\\result{\\pard\\plain first\\par}}{\\result{\\pard\\plain second\\par}}}\\par}`,
+      ),
+    );
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE &&
+          diagnostic.message.includes("more than one \\result"),
+      ),
+    ).toBe(true);
+  });
+
+  it("discards a second, duplicate \\objdata child and decodes only the first", () => {
+    const OBJDATA_HEX_LOCAL = bytesToHex(
+      writeEmbeddedObjectData({
+        objectKind: "spreadsheet",
+        document: { kind: "spreadsheet", metadata: {}, sheets: [] },
+        frame: { xPt: 0, yPt: 0, widthPt: 1, heightPt: 1 },
+      }),
+    );
+    const { document, diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb{\\*\\objdata ${OBJDATA_HEX_LOCAL}}{\\*\\objdata ${OBJDATA_HEX_LOCAL}}}\\par}`,
+      ),
+    );
+    const objects =
+      document.kind === "wordprocessing"
+        ? document.sections[0]?.blocks.filter(
+            (block) => block.kind === "embeddedObject",
+          )
+        : undefined;
+    expect(objects).toHaveLength(1);
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE &&
+          diagnostic.message.includes("more than one \\objdata"),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("unbalanced groups", () => {
+  it("reports the exact still-open-at-end-of-input message, counting every group left open (the document's own root included)", () => {
+    // HEADER's own root {\rtf1 ... group is never closed by either fixture below -- neither ends with the document's own final "}" -- so the count always includes it alongside whatever else was left open.
+    const { diagnostics } = readRtfContent(bytes(`${HEADER}\\pard{\\b text`));
+    const found = diagnostics.find(
+      (diagnostic) => diagnostic.code === RtfDiagnosticCodes.UNBALANCED_GROUP,
+    );
+    expect(found?.message).toBe(
+      "2 group(s) were still open at the end of the input; each is treated as closing there",
+    );
+  });
+
+  it("counts every still-open group at the end of input, not one fewer or one more", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\b{\\i text`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) => diagnostic.code === RtfDiagnosticCodes.UNBALANCED_GROUP,
+    );
+    expect(found?.message).toBe(
+      "3 group(s) were still open at the end of the input; each is treated as closing there",
+    );
+  });
+
+  it("reports the exact extra-closing-brace message text", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard text\\par}}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) => diagnostic.code === RtfDiagnosticCodes.UNBALANCED_GROUP,
+    );
+    expect(found?.message).toBe(
+      "a closing brace appeared with no group open; the extra brace is ignored",
+    );
+  });
+});
+
+describe("\\uN surrogate arithmetic", () => {
+  it("converts a negative \\uN parameter into its true code point by adding 65536, not subtracting it", () => {
+    // A code point above 32767 is written as its own negative twin ("convert F020 to decimal (61472) and subtract 65536" gives -4064), so reading it back requires the inverse: -4064 + 65536 = 61472 = U+F020, a Private Use Area character.
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\u-4064 x\\par}`)[0]?.runs ?? [];
+    expect(runs[0]?.text.codePointAt(0)).toBe(0xf020);
+  });
+});
+
+describe("picture format control words", () => {
+  for (const [word, control] of [
+    ["emfblip", "\\emfblip"],
+    ["macpict", "\\macpict"],
+    ["wmetafile", "\\wmetafile"],
+    ["pmmetafile", "\\pmmetafile"],
+    ["dibitmap", "\\dibitmap"],
+    ["wbitmap", "\\wbitmap"],
+  ] as const) {
+    it(`names \\${word} itself, not a different metafile control word, in the unsupported-format diagnostic`, () => {
+      const { diagnostics } = readRtfContent(
+        bytes(
+          `${HEADER}\\pard{\\pict\\${word}\\picwgoal1440\\pichgoal1440 ab}\\par}`,
+        ),
+      );
+      const found = diagnostics.find(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.UNSUPPORTED_PICTURE_FORMAT,
+      );
+      expect(found?.message).toContain(`declared ${control} picture format`);
+    });
+  }
+
+  it("ignores an unrecognised picture control word rather than treating it as a format or size", () => {
+    const image = blocksOf(
+      `${HEADER}\\pard{\\pict\\pngblip\\picwgoal720\\pichgoal720\\picbogus5 00}\\par}`,
+    ).find((block): block is ContentImageBlock => block.kind === "image");
+    // Reaching a real image at all (not a dropped one, and not a thrown error) proves the unknown word fell through to the picture dispatcher's own default no-op rather than corrupting an existing field.
+    expect(image?.format).toBe("png");
+  });
+});
+
+describe("character control word edge cases", () => {
+  it("ignores a negative \\ucN, keeping the previously stated skip count rather than adopting a negative one", () => {
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\uc2\\uc-1\\u9731 XY\\par}`)[0]?.runs ??
+      [];
+    // \uc-1 must not overwrite the still-valid \uc2 from just before it, so 霱's own fallback still skips exactly 2 characters ("XY"), leaving nothing of the fallback in the visible text.
+    expect(runs.map((run) => run.text).join("")).not.toMatch(/[XY]/);
+  });
+
+  it("reads \\up with no parameter as the default six-half-point raise, not a no-op", () => {
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\up raised\\par}`)[0]?.runs ?? [];
+    expect(runs[0]?.verticalAlign).toBe("superscript");
+  });
+
+  it("reads a negative \\upN as lowering the text instead of raising it", () => {
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\up-3 lowered\\par}`)[0]?.runs ?? [];
+    expect(runs[0]?.verticalAlign).toBe("subscript");
+  });
+
+  it("reads \\up0 as restoring the baseline, distinct from both a positive and a negative offset", () => {
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\up0 base\\par}`)[0]?.runs ?? [];
+    expect(runs[0]?.verticalAlign).toBeUndefined();
+  });
+
+  it("reads \\nosupersub as clearing verticalAlign to undefined, the field's own real absent state", () => {
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\super up\\nosupersub  base\\par}`)[0]
+        ?.runs ?? [];
+    expect(runs[1]?.verticalAlign).toBeUndefined();
+  });
+
+  it("reads \\revdttmdel onto the deleted-half of a run's own revision state", () => {
+    const REVTBL = "{\\*\\revtbl{Unknown;}{A. Reviewer;}}";
+    const DTTM = 30 | (9 << 6) | (1 << 11) | (1 << 16) | (124 << 20);
+    const paragraph = paragraphsOf(
+      `${HEADER}${REVTBL}\\pard \\deleted\\revauthdel1\\revdttmdel${String(DTTM)} gone\\deleted0  kept\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      change: "deletion",
+      dateIso: "2024-01-01T09:30:00",
+    });
+  });
+
+  it("reads \\mvdate onto a moved run's own dateIso", () => {
+    const REVTBL = "{\\*\\revtbl{Unknown;}{A. Reviewer;}}";
+    const DTTM = 30 | (9 << 6) | (1 << 11) | (1 << 16) | (124 << 20);
+    const paragraph = paragraphsOf(
+      `${HEADER}${REVTBL}\\pard \\mvf\\mvauth1\\mvdate${String(DTTM)} moved\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      dateIso: "2024-01-01T09:30:00",
+    });
+  });
+
+  it("reads \\crdate onto a format-change run's own dateIso", () => {
+    const REVTBL = "{\\*\\revtbl{Unknown;}{A. Reviewer;}}";
+    const DTTM = 30 | (9 << 6) | (1 << 11) | (1 << 16) | (124 << 20);
+    const paragraph = paragraphsOf(
+      `${HEADER}${REVTBL}\\pard \\crauth1\\crdate${String(DTTM)}\\b restyled\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      dateIso: "2024-01-01T09:30:00",
+    });
+  });
+
+  it("does not read \\ulc (underline colour) as a generic \\ul* underline variant", () => {
+    // \ulc takes a colour-index parameter, not a toggle; treating it as an underline word would turn it on and misread its own parameter as a boolean toggle value.
+    const runs = paragraphsOf(`${HEADER}\\pard \\ulc2 x\\par}`)[0]?.runs ?? [];
+    expect(runs[0]?.underline).toBeUndefined();
+  });
+});
+
+describe("paragraph control word edge cases", () => {
+  it("reads \\outlinelevel9 (above the spec's own 0-8 range) as body text, clearing any level rather than adopting a tenth depth", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard\\outlinelevel0 zero\\par\\pard\\outlinelevel9 nine\\par}`,
+    );
+    expect(paragraph[0]?.headingLevel).toBe(1);
+    expect(paragraph[1]?.headingLevel).toBeUndefined();
+  });
+
+  it("reads \\lin as the same left-indent field \\li writes", () => {
+    const paragraph = paragraphsOf(`${HEADER}\\pard\\lin720 x\\par}`)[0];
+    expect(paragraph?.indentLeftPt).toBe(36);
+  });
+});
+
+describe("section control word edge cases", () => {
+  it("resets section geometry back to the document's own defaults on \\sectd, not leaving a prior section's stated values", () => {
+    const sections = sectionsOf(
+      "{\\rtf1\\ansi\\paperw12240\\paperh15840\\margl1440\\margr1440\\margt1440\\margb1440" +
+        "\\sectd\\pgwsxn15840\\pghsxn12240\\pard A\\par\\sect\\sectd\\pard B\\par}",
+    );
+    expect(sections[1]?.pageSize).toEqual({ widthPt: 612, heightPt: 792 });
+  });
+
+  it("clears the pending break type when \\sbkcol arrives, so no page-level break is mistakenly kept alongside the reported column break", () => {
+    const sections = sectionsOf(
+      `${HEADER}\\sectd\\sbkpage\\sbkcol\\pard A\\par\\sect\\sectd\\pard B\\par}`,
+    );
+    expect(sections[0]?.breakType).toBeUndefined();
+  });
+
+  it("reports the exact \\sbkcol message text", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\sectd\\pard A\\par\\sect\\sectd\\sbkcol\\pard B\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.SECTION_BREAK_UNREPRESENTED,
+    );
+    expect(found?.message).toBe(
+      "\\sbkcol starts the section at a new column; ContentSection.breakType names page-level breaks only, so the break kind is dropped and the section itself is kept",
+    );
+  });
+});
+
+describe("structure control word edge cases", () => {
+  it("reads \\trleft onto the row's own left edge, used as the first column boundary", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft720\\cellx1440\\pard\\intbl A\\cell\\row\\pard x\\par}`,
+    );
+    // 1440 - 720 = 720 twips = 36pt for the one column.
+    expect(table.columnWidthsPt).toEqual([36]);
+  });
+
+  it("reports the exact nested-table-flattened message text for \\nestrow, distinct from \\nestcell's own trigger", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\trowd\\trleft0\\cellx1440\\pard\\intbl{\\*\\nesttableprops}\\nestrow x\\cell\\row\\pard y\\par}`,
+      ),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.NESTED_TABLE_FLATTENED,
+    );
+    expect(found?.message).toBe(
+      "a nested table's cell/row marks are read as ordinary cell content; the inner table's own structure is not reconstructed",
+    );
+  });
+});
+
+describe("control word dispatch order", () => {
+  it("reads \\bkmkcolf/\\bkmkcoll inside a bookmark start, but ignores every other control word there", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard{\\*\\bkmkstart\\b\\pard\\sect Named}x{\\*\\bkmkend Named}\\par}`,
+    )[0];
+    // A stray \b/\pard/\sect inside the bookmark's own destination must not touch the surrounding character/paragraph/document state at all -- the bookmark still resolves normally and the run right after it is still unformatted.
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      name: "Named",
+    });
+    expect(
+      paragraph?.runs.find((run) => run.text === "x")?.bold,
+    ).toBeUndefined();
+  });
+
+  it("ignores every control word inside a bookmark end destination", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard{\\*\\bkmkstart Word}x{\\*\\bkmkend\\b Word}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      name: "Word",
+    });
+  });
+
+  it("reads a cell-definition word (\\clbrdrt) ahead of the identically-prefixed paragraph border reading, whenever a row definition is open", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\clbrdrt\\brdrs\\brdrw15\\cellx1440\\pard\\intbl A\\cell\\row\\pard x\\par}`,
+    );
+    expect(table.rows[0]?.cells[0]?.borders?.top).toBeDefined();
   });
 });
 
