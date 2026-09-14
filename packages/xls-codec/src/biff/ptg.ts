@@ -271,12 +271,11 @@ function readRelativeArea(
 /**
  * PtgExtraArray's own SerAr elements ([MS-XLS] 69ff31ac): every variant but SerStr is a fixed nine bytes -- a one-byte type tag plus eight bytes of payload/padding -- so only SerStr's own XLUnicodeString needs its length read from the data rather than assumed.
  */
-const SERAR_NIL = 0x00;
 const SERAR_NUM = 0x01;
 const SERAR_STR = 0x02;
 const SERAR_BOOL = 0x04;
 const SERAR_ERR = 0x10;
-/** The eight bytes of payload/padding following a SerAr element's own one-byte type tag ([MS-XLS] 69ff31ac): SerNil skips all eight as pure padding, while SerBool and SerErr each consume one real payload byte first and then skip the remaining seven (SERAR_FIXED_PAYLOAD_BYTES - 1). */
+/** The eight bytes of payload/padding following a SerAr element's own one-byte type tag ([MS-XLS] 69ff31ac): SerBool and SerErr each consume one real payload byte first and then skip the remaining seven (SERAR_FIXED_PAYLOAD_BYTES - 1). SerNil (type 0x00, all eight bytes padding) needs no dedicated case at all -- see the default branch below. */
 const SERAR_FIXED_PAYLOAD_BYTES = 8;
 
 /** One SerAr element ([MS-XLS] 69ff31ac) from a PtgExtraArray's `array` field, as the literal text an array-constant token in that position would show -- undefined for a type tag this reader does not recognise, an error code [MS-XLS] does not define, or a SerNil element, in which case the caller aborts the whole PtgArray rather than fabricating a placeholder value. SerNil joins those other two rather than rendering as an empty string: Excel's own array-constant grammar has no way to retype an empty position between two commas (`{1,,3}` is not valid input a spreadsheet application would accept back), and this reader never writes text into `formula` that Excel itself would reject -- see documents.js's own write paths, which take a formula as literal, verbatim text with no further validation. */
@@ -297,9 +296,7 @@ function readArrayElementText(cursor: BlockCursor): string | undefined {
       cursor.skip(SERAR_FIXED_PAYLOAD_BYTES - 1);
       return text;
     }
-    case SERAR_NIL:
-      cursor.skip(SERAR_FIXED_PAYLOAD_BYTES);
-      return undefined;
+    // No dedicated SERAR_NIL case: readArrayLiteralText's own caller aborts the whole array literal the instant any one element resolves to undefined (SERAR_NIL included), never reading a further element afterwards -- so whether this element's own 8 trailing bytes get skipped first is never actually observed, and SERAR_NIL falls to the identical `default: return undefined;` below with no behavioural difference.
     default:
       return undefined;
   }
@@ -415,11 +412,10 @@ const PTG_ARRAY_ARRAY = 0x60;
 /** The seven bytes of a PtgArray token besides its own opcode byte (already consumed as `opcode` by the caller) -- unused1 (1 byte) + unused2 (2 bytes) + unused3 (4 bytes), [MS-XLS] 61167ac8. */
 const PTG_ARRAY_TRAILING_BYTES = 7;
 
-// PtgAttr's own family ([MS-XLS] 2.5.198.25's 0x19 second-byte group): every one of these is a fixed four bytes (the shared 0x19 opcode, a one-byte subtype flag, then two more bytes -- an offset for Semi/If/Goto, unused for Sum/Baxcel/Space/SpaceSemi) EXCEPT PtgAttrChoose, whose trailing rgOffset array is variable-length and therefore unsupported here (see PTG_ATTR_CHOOSE below). None of the fixed four carries any text-relevant information for this module's purposes: PtgAttrIf/PtgAttrGoto/PtgAttrSemi/PtgAttrSpace/PtgAttrSpaceSemi/PtgAttrBaxcel are calculation-engine control/display framing this module discards as pure no-ops (their own "offset" fields describe evaluator jump distances, irrelevant to reconstructing text), and PtgAttrSum alone has a text effect, wrapping whatever operand already sits on top of the stack.
+// PtgAttr's own family ([MS-XLS] 2.5.198.25's 0x19 second-byte group): every one of these is a fixed four bytes (the shared 0x19 opcode, a one-byte subtype flag, then two more bytes -- an offset for Semi/If/Goto, unused for Sum/Baxcel/Space/SpaceSemi) EXCEPT PtgAttrChoose (subtype 0x04), whose trailing rgOffset array is variable-length and therefore unsupported here -- it falls through to the same "unrecognised subtype" undefined result as any other subtype this module doesn't name below, since a dedicated branch for it would only ever reach that identical undefined through a different route (see the PTG_ATTR_OPCODE case's own else-if chain). None of the fixed four carries any text-relevant information for this module's purposes: PtgAttrIf/PtgAttrGoto/PtgAttrSemi/PtgAttrSpace/PtgAttrSpaceSemi/PtgAttrBaxcel are calculation-engine control/display framing this module discards as pure no-ops (their own "offset" fields describe evaluator jump distances, irrelevant to reconstructing text), and PtgAttrSum alone has a text effect, wrapping whatever operand already sits on top of the stack.
 const PTG_ATTR_OPCODE = 0x19;
 const PTG_ATTR_SEMI = 0x01;
 const PTG_ATTR_IF = 0x02;
-const PTG_ATTR_CHOOSE = 0x04;
 const PTG_ATTR_GOTO = 0x08;
 const PTG_ATTR_SUM = 0x10;
 const PTG_ATTR_BAXCEL_A = 0x20;
@@ -619,10 +615,7 @@ export function parseFormulaText(
       }
       case PTG_ATTR_OPCODE: {
         const subtype = cursor.u8();
-        if (subtype === PTG_ATTR_CHOOSE) {
-          // Variable-length (a cOffset count then that many 2-byte jump offsets), and CHOOSE is not in this reader's supported vocabulary -- see the module comment.
-          return undefined;
-        }
+        // No dedicated PTG_ATTR_CHOOSE branch: CHOOSE's own trailer is variable-length (a cOffset count then that many 2-byte jump offsets), so skipping PTG_ATTR_TRAILING_BYTES's fixed 2 bytes below never lands the cursor anywhere meaningful for it -- but the else-if chain's own fallback already names every subtype this module DOES support and returns undefined for anything else, CHOOSE included, before that misaligned position is ever read from. A dedicated early return here would only ever reach that identical undefined through a different route.
         cursor.skip(PTG_ATTR_TRAILING_BYTES);
         if (subtype === PTG_ATTR_SUM) {
           if (!applySum(stack)) return undefined;
