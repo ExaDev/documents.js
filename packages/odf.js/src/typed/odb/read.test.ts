@@ -1,12 +1,13 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { Package } from "../../model/package";
 import type { XmlNode } from "../../model/node";
 import { el, txt } from "../../xml/fragment";
 import { parsePackage } from "../../package-io/read";
 import { readOdbInventory, resolveOdbComponent } from "./read";
+import type { OdbInventory } from "./read";
 
 // This suite reads TWO real, unmodified LibreOffice 26.2-generated .odb fixtures for its genuine-producer-shape assertions, mirroring readOdtContent's and readOdm's own established convention: src/typed/odb/fixtures/embedded-firebird.odb (an embedded-Firebird database document with two live SQL tables and one real query, and deliberately no forms or reports), and src/typed/odb/fixtures/form-and-report.odb (the same engine, plus a real bound form and a real Report Builder report -- see read.ts's own top-of-file note for how it was generated and for the two findings about real form/report registration it produced). A handful of synthetic, hand-built packages (via el/txt) cover shapes neither real fixture exercises -- an external connection, the two defensive db:database-description variants (never empirically observed), and the db:component-collection grouping and malformed-component paths.
 
@@ -51,7 +52,11 @@ const BASE_MANIFEST_ENTRIES = [
 ];
 
 describe("readOdbInventory: embedded-firebird.odb (real LibreOffice output)", () => {
-  const inventory = readOdbInventory(loadFixture("embedded-firebird.odb"));
+  // Recomputed in beforeEach, not read once at describe-body scope: a describe-body call runs exactly once during Vitest's collection phase, before any individual test executes, which makes Stryker's per-test coverage analysis treat readOdbInventory's own mutants as "static" (unkillable by any single it()) rather than attributing them to the test that actually exercises the resulting assertion.
+  let inventory: OdbInventory;
+  beforeEach(() => {
+    inventory = readOdbInventory(loadFixture("embedded-firebird.odb"));
+  });
 
   it('reads the real embedded connection info -- an "sdbc:embedded:" href classifies as embedded', () => {
     expect(inventory.connection).toEqual({
@@ -81,7 +86,11 @@ describe("readOdbInventory: embedded-firebird.odb (real LibreOffice output)", ()
 });
 
 describe("readOdbInventory: form-and-report.odb (real LibreOffice output)", () => {
-  const inventory = readOdbInventory(loadFixture("form-and-report.odb"));
+  // See the identical beforeEach note on the embedded-firebird.odb describe above.
+  let inventory: OdbInventory;
+  beforeEach(() => {
+    inventory = readOdbInventory(loadFixture("form-and-report.odb"));
+  });
 
   it("reads the form's real user-visible name alongside its opaque persistent storage path -- the two genuinely differ in real output", () => {
     expect(inventory.forms).toEqual([
@@ -145,6 +154,29 @@ describe("resolveOdbComponent", () => {
       /no form named "Anything" -- available: \(none\)/,
     );
   });
+
+  it("joins two or more available names with a comma and a space, not concatenated bare", () => {
+    const twoFormsPkg: Package = {
+      parts: {
+        "content.xml": databaseContentPart([
+          el("db:forms", {}, [
+            el("db:component", {
+              "db:name": "First",
+              "xlink:href": "forms/Obj1",
+            }),
+            el("db:component", {
+              "db:name": "Second",
+              "xlink:href": "forms/Obj2",
+            }),
+          ]),
+        ]),
+        "META-INF/manifest.xml": manifestPart(BASE_MANIFEST_ENTRIES),
+      },
+    };
+    expect(() => resolveOdbComponent(twoFormsPkg, "form", "Nope")).toThrow(
+      'no form named "Nope" -- available: First, Second',
+    );
+  });
 });
 
 describe("readOdbInventory: synthetic fully-populated embedded package", () => {
@@ -200,7 +232,11 @@ describe("readOdbInventory: synthetic fully-populated embedded package", () => {
       "META-INF/manifest.xml": manifestPart(BASE_MANIFEST_ENTRIES),
     },
   };
-  const inventory = readOdbInventory(pkg);
+  // See the identical beforeEach note on the embedded-firebird.odb describe above.
+  let inventory: OdbInventory;
+  beforeEach(() => {
+    inventory = readOdbInventory(pkg);
+  });
 
   it("reads db:connection-resource", () => {
     expect(inventory.connection).toEqual({
@@ -325,6 +361,25 @@ describe("readOdbInventory: query definitions", () => {
       parts: {
         "content.xml": databaseContentPart([
           el("db:queries", {}, [el("db:query", { "db:name": "Broken" })]),
+        ]),
+        "META-INF/manifest.xml": manifestPart(BASE_MANIFEST_ENTRIES),
+      },
+    };
+    expect(readOdbInventory(pkg).queries).toEqual([]);
+  });
+
+  it("never descends into a stray child that is neither db:query nor db:query-collection, even when it happens to carry a nested db:query of its own", () => {
+    const pkg: Package = {
+      parts: {
+        "content.xml": databaseContentPart([
+          el("db:queries", {}, [
+            el("db:not-a-collection", {}, [
+              el("db:query", {
+                "db:name": "Hidden",
+                "db:command": "SELECT 1",
+              }),
+            ]),
+          ]),
         ]),
         "META-INF/manifest.xml": manifestPart(BASE_MANIFEST_ENTRIES),
       },
@@ -645,6 +700,18 @@ describe("readOdbInventory: malformed db:component handling", () => {
         el("db:component", { "db:name": "Good", "xlink:href": "forms/Obj4" }),
       ]),
     ).toEqual([{ name: "Good", href: "forms/Obj4" }]);
+  });
+
+  it("skips a stray child tag even when it coincidentally carries a well-formed db:name and xlink:href of its own", () => {
+    expect(
+      formsInventory([
+        el("db:not-a-component", {
+          "db:name": "Sneaky",
+          "xlink:href": "forms/ObjSneaky",
+        }),
+        el("db:component", { "db:name": "Good", "xlink:href": "forms/Obj5" }),
+      ]),
+    ).toEqual([{ name: "Good", href: "forms/Obj5" }]);
   });
 });
 
