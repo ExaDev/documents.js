@@ -1,3 +1,19 @@
+## [1.11.4](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.3...archive-codec%401.11.4) (2026-09-14)
+
+### Documentation
+
+* reword stryker.config.ts comments to avoid the banned phrase ([1553892](https://github.com/ExaDev/documents.js/commit/1553892fb68ddce9bcb7eee7ebebc31e1f9cdc79))
+
+### Miscellaneous Chores
+
+* bump pinned pnpm to 12.4.1 across the workspace ([4e81c2d](https://github.com/ExaDev/documents.js/commit/4e81c2dfdb08fff226c20a0f267baffa87758e0f))
+* **lint:** except each package's own measured eslint-config 2.12.1 debt ([11c35bc](https://github.com/ExaDev/documents.js/commit/11c35bc61db74c68b4be725c34452509fba00c2a))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.3
+
 ## [1.11.3](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.2...archive-codec%401.11.3) (2026-09-13)
 
 ### Bug Fixes

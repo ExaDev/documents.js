@@ -1,3 +1,17 @@
+## [8.14.7](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.14.6...ooxml.js%408.14.7) (2026-09-14)
+
+### Miscellaneous Chores
+
+* bump pinned pnpm to 12.4.1 across the workspace ([4e81c2d](https://github.com/ExaDev/documents.js/commit/4e81c2dfdb08fff226c20a0f267baffa87758e0f))
+* **lint:** except each package's own measured eslint-config 2.12.1 debt ([11c35bc](https://github.com/ExaDev/documents.js/commit/11c35bc61db74c68b4be725c34452509fba00c2a))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.3
+- Updated excel-number-format to 1.2.4
+- Updated archive-codec to 1.11.4
+
 ## [8.14.6](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.14.5...ooxml.js%408.14.6) (2026-09-13)
 
 

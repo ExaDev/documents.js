@@ -1,3 +1,17 @@
+## [1.4.12](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.11...document-rest%401.4.12) (2026-09-14)
+
+### Miscellaneous Chores
+
+* bump pinned pnpm to 12.4.1 across the workspace ([4e81c2d](https://github.com/ExaDev/documents.js/commit/4e81c2dfdb08fff226c20a0f267baffa87758e0f))
+* **lint:** except each package's own measured eslint-config 2.12.1 debt ([11c35bc](https://github.com/ExaDev/documents.js/commit/11c35bc61db74c68b4be725c34452509fba00c2a))
+
+
+### Dependencies
+
+- Updated odf.js to 7.25.4
+- Updated documents.js to 7.20.11
+- Updated document-operations to 1.1.11
+
 ## [1.4.11](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.10...document-rest%401.4.11) (2026-09-14)
 
 ### Tests

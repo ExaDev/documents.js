@@ -1,3 +1,27 @@
+## [7.20.11](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.10...documents.js%407.20.11) (2026-09-14)
+
+### Miscellaneous Chores
+
+* bump pinned pnpm to 12.4.1 across the workspace ([4e81c2d](https://github.com/ExaDev/documents.js/commit/4e81c2dfdb08fff226c20a0f267baffa87758e0f))
+* **lint:** except each package's own measured eslint-config 2.12.1 debt ([11c35bc](https://github.com/ExaDev/documents.js/commit/11c35bc61db74c68b4be725c34452509fba00c2a))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.5.5
+- Updated document-schema.js to 7.11.3
+- Updated archive-codec to 1.11.4
+- Updated epub-codec to 1.5.4
+- Updated markdown-codec to 6.7.3
+- Updated odf.js to 7.25.4
+- Updated pdf-codec to 4.8.5
+- Updated doc-codec to 2.12.1
+- Updated ooxml.js to 8.14.7
+- Updated ppt-codec to 1.7.6
+- Updated rtf-codec to 4.4.4
+- Updated wpd-codec to 3.5.5
+- Updated xls-codec to 4.15.6
+
 ## [7.20.10](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.9...documents.js%407.20.10) (2026-09-14)
 
 
