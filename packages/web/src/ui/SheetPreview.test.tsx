@@ -342,7 +342,7 @@ describe("SheetPreview", () => {
             cell({
               row: 0,
               column: 2,
-              value: { kind: "text", value: "x" },
+              value: { kind: "string", value: "x" },
               displayText: "x",
             }),
             cell({
