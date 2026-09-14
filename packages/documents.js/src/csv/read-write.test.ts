@@ -107,7 +107,10 @@ describe("readCsvContent", () => {
 
   it("maps an empty data field to the empty cell and pads a short record to the grid width with empty cells", () => {
     // Row 2 has one field where the grid is three wide: columns 1 and 2 are genuine empty cells, not holes.
-    const document = readCsvContent("a,b,c\n1,,3\nsolo\n");
+    const events: CellTypeInference[] = [];
+    const document = readCsvContent("a,b,c\n1,,3\nsolo\n", {
+      onCellTypeInference: (event) => events.push(event),
+    });
     if (document.kind !== "spreadsheet") {
       throw new Error("expected a spreadsheet ContentDocument");
     }
@@ -119,6 +122,10 @@ describe("readCsvContent", () => {
     expect(valueAt(2, 0)).toEqual({ kind: "string", value: "solo" });
     expect(valueAt(2, 1)).toEqual({ kind: "empty" });
     expect(valueAt(2, 2)).toEqual({ kind: "empty" });
+    // The three empty fields (row 1 col 1, row 2 cols 1 and 2) never fire a type-inference event -- only the populated fields ("1" and "3", both plain numbers) do.
+    expect(
+      events.map((event) => `${String(event.row)},${String(event.column)}`),
+    ).toEqual(["1,0", "1,2"]);
   });
 
   it("names the lone sheet Sheet1 and emits exactly one sheet, since a csv file is one table by construction", () => {
@@ -314,6 +321,16 @@ describe("decodeCsvText / encodeCsvText", () => {
   it("throws CsvInvalidUtf8Error on malformed UTF-8 rather than producing U+FFFD replacement characters", () => {
     expect(() => decodeCsvText(new Uint8Array([0xff, 0xfe, 0x00]))).toThrow(
       CsvInvalidUtf8Error,
+    );
+    let caught: unknown;
+    try {
+      decodeCsvText(new Uint8Array([0xff, 0xfe, 0x00]));
+    } catch (error) {
+      caught = error;
+    }
+    expect((caught as Error).name).toBe("CsvInvalidUtf8Error");
+    expect((caught as Error).message).toBe(
+      "csv text must be well-formed UTF-8",
     );
   });
 });
