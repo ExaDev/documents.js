@@ -723,7 +723,8 @@ function drawDottedSegment(
 const STROKE_FLATTEN_TOLERANCE_PX = 0.05;
 const MAX_FLATTEN_DEPTH = 16;
 
-function flattenCubic(
+// Exported solely so raster.test.ts can drive its own subdivision arithmetic and depth cap directly with hand-computed control points -- every caller reaches it only through curves recovered from real PDF content streams, which offers no way to pin an exact subdivision count or force the depth cap deterministically.
+export function flattenCubic(
   p0: { x: number; y: number },
   c1: { x: number; y: number },
   c2: { x: number; y: number },

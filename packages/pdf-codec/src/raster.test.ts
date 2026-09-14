@@ -7,7 +7,7 @@ import { parseHead, parseMaxp } from "./font-tables";
 import { parseGlyf } from "./glyf";
 import { parseHmtx } from "./hmtx-table";
 import { applyMatrix } from "./matrix";
-import { renderPdfPage } from "./raster";
+import { flattenCubic, renderPdfPage } from "./raster";
 import type {
   PageRasteriser,
   RasterDrawOp,
@@ -382,6 +382,53 @@ describe("renderPdfPage: coordinate agreement with readPdf", () => {
 });
 
 // --- Vector items through the port. ---
+
+// flattenCubic exercised directly: every real caller reaches it only through curves recovered from actual PDF content streams, which are never carefully enough constructed to pin an exact subdivision count or force the recursion depth cap deterministically -- both properties this suite verifies directly against hand-computed control points.
+describe("flattenCubic", () => {
+  it("returns the endpoint alone for an already-flat (collinear) curve, with no subdivision", () => {
+    const points = flattenCubic(
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 2, y: 0 },
+      { x: 3, y: 0 },
+    );
+    expect(points).toEqual([{ x: 3, y: 0 }]);
+  });
+
+  it("subdivides a curved arc into the exact de Casteljau midpoint sequence", () => {
+    const points = flattenCubic(
+      { x: 0, y: 0 },
+      { x: 0, y: 1 },
+      { x: 10, y: 1 },
+      { x: 10, y: 0 },
+    );
+    expect(points).toHaveLength(10);
+    // The true, symmetric peak of this curve -- wrong chord/dist arithmetic or a wrong midpoint divisor shifts every one of these values.
+    expect(points[4]).toEqual({ x: 5, y: 0.75 });
+    expect(points[points.length - 1]).toEqual({ x: 10, y: 0 });
+  });
+
+  it("stops at exactly the depth cap for a curve whose flatness never converges, terminating rather than recursing forever", () => {
+    const points = flattenCubic(
+      { x: 0, y: 0 },
+      { x: 1e9, y: 1e9 },
+      { x: -1e9, y: 1e9 },
+      { x: 1e-12, y: 0 },
+    );
+    // Every leaf hits the depth cap, never the flatness check, so the tree is a perfectly balanced binary recursion of depth 16 -- exactly 2**16 leaves. A boundary of >16, <16, or an unconditional true/false all produce a different power of two (or an infinite loop for false).
+    expect(points).toHaveLength(65536);
+  });
+
+  it("falls back to a chord length of 1 rather than dividing by zero when the endpoints coincide", () => {
+    const points = flattenCubic(
+      { x: 5, y: 5 },
+      { x: 6, y: 5 },
+      { x: 4, y: 5 },
+      { x: 5, y: 5 },
+    );
+    expect(points).toEqual([{ x: 5, y: 5 }]);
+  });
+});
 
 describe("renderPdfPage: vector draw ops", () => {
   it("strokes a recovered line with its colour and width", () => {
