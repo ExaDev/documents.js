@@ -77,6 +77,12 @@ describe("inferFormatFromFilename", () => {
     expect(inferFormatFromFilename("C:\\Users\\me\\report.docx")).toBe("docx");
   });
 
+  it("still rejects a leading-dot final segment once a directory prefix is present, across either separator", () => {
+    // Distinguishes the last separator's index from the whole filename: taking the whole string instead (or picking the smaller of the two lastIndexOf results when only one separator type is present) shifts the leading dot's own index away from 0 within the wrongly-widened "final segment", so the dotIndex<=0 guard above would stop rejecting it and wrongly resolve "docx" from what is actually a dotfile with no directory-name-derived extension.
+    expect(inferFormatFromFilename("notes/.docx")).toBeUndefined();
+    expect(inferFormatFromFilename("notes\\.docx")).toBeUndefined();
+  });
+
   it("uses the last dot in the final segment when a filename itself contains more than one", () => {
     expect(inferFormatFromFilename("archive.tar.pdf")).toBe("pdf");
   });
