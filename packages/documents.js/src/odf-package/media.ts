@@ -14,7 +14,7 @@ function escapeRegExp(value: string): string {
 }
 
 // Mirrors src/opc/media.ts's own nextMediaIndex -- scans existing Pictures/ part paths for the given extension and returns one past the highest index found, so successive images never collide even if an earlier one was later removed.
-function nextPictureIndex(pkg: Package, extension: string): number {
+export function nextPictureIndex(pkg: Package, extension: string): number {
   const pattern = new RegExp(`^image(\\d+)\\.${escapeRegExp(extension)}$`);
   const prefix = `${PICTURES_DIR}/`;
   let max = 0;
@@ -31,9 +31,11 @@ function nextPictureIndex(pkg: Package, extension: string): number {
       continue;
     }
     const n = Number.parseInt(digits, 10);
-    if (n > max) {
-      max = n;
-    }
+    // Math.max, not an if/comparison: the two ever differ observably only on a tie, and every
+    // path here is keyed by its own literal numeric suffix, so no two iterations of this loop can
+    // ever see the same n twice -- a tie can only be n against its own already-recorded max, which
+    // assigns the identical value back, an if-based '>' vs '>=' comparison could never distinguish.
+    max = Math.max(max, n);
   }
   return max + 1;
 }
