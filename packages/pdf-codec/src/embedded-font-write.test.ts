@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ByteWriter } from "./bytes/writer";
+import { crc32 } from "./bytes/crc32";
 import { NOOP_DIAGNOSTIC_SINK } from "./diagnostics";
 import { openPdfDocument } from "./document";
 import {
@@ -32,7 +33,11 @@ import { writeObject } from "./serialize";
 import type { SfntSubsetResult } from "./sfnt-subset";
 import { subsetSfnt } from "./sfnt-subset";
 import { parseSfnt } from "./sfnt";
-import { caladeaItalicBytes, carlitoRegularBytes } from "./test-support/fonts";
+import {
+  caladeaItalicBytes,
+  caladeaRegularBytes,
+  carlitoRegularBytes,
+} from "./test-support/fonts";
 import type { AllocatedObject } from "./test-support/write-pdf-fixture";
 import { assemblePdf } from "./test-support/write-pdf-fixture";
 
@@ -382,18 +387,32 @@ describe("a real PDF carrying an embedded, subsetted Carlito, read back by this 
       4,
     );
     expect(asNumber(dictGet(descriptor!, "ItalicAngle"))).toBe(0);
+    expect(asNumber(dictGet(descriptor!, "StemV"))).toBe(80); // NOMINAL_STEM_V -- a nominal, spec-required value no conforming reader actually consults
+    expect(asName(dictGet(descriptor!, "Type"))).toBe("FontDescriptor");
     // Every geometry field is in 1000-unit glyph space, not Carlito's own 2048-unit design grid -- so the bounding box read back here is roughly half the raw head-table one.
-    asArray(dictGet(descriptor!, "FontBBox"))?.forEach((entry, index) => {
+    //
+    // A hard length assertion first, not just the forEach below: FontBBox is read through optional chaining because it's read from an already-round-tripped PDF dict (a genuinely absent key is a real, distinct outcome from an empty array), so a mutant blanking out the FontBBox key would otherwise leave the forEach body silently unrun and this test vacuously green.
+    const bbox = asArray(dictGet(descriptor!, "FontBBox"));
+    expect(bbox).toBeDefined();
+    expect(bbox).toHaveLength(4);
+    bbox?.forEach((entry, index) => {
       expect(asNumber(entry)).toBeCloseTo(
         face.metrics.bboxGlyphSpace[index]!,
         4,
       );
     });
-    expect(asNumber(asArray(dictGet(descriptor!, "FontBBox"))?.[2])).not.toBe(
-      2351,
-    );
+    expect(asNumber(bbox?.[2])).not.toBe(2351);
     // NONSYMBOLIC only: Carlito is a sans design (no SERIF bit) drawn upright (no ITALIC bit).
     expect(asNumber(dictGet(descriptor!, "Flags"))).toBe(32);
+  });
+
+  it("names the CIDFontType2 dict's own /Type as /Font, the same as the outer Type0", () => {
+    const { pdfBytes } = buildDocument();
+    const document = openPdfDocument(pdfBytes, NOOP_DIAGNOSTIC_SINK);
+    const cidFont = document.resolveDict(
+      asArray(dictGet(fontDictOf(pdfBytes), "DescendantFonts"))?.[0],
+    );
+    expect(asName(dictGet(cidFont!, "Type"))).toBe("Font");
   });
 });
 
@@ -451,6 +470,57 @@ describe("the subset tag", () => {
     expect(embeddedSubsetTag("Carlito-Regular", [0, 15])).not.toBe(
       embeddedSubsetTag("Carlito-Bold", [0, 15]),
     );
+  });
+
+  it("keeps glyph IDs comma-separated, rather than concatenating them into one ambiguous digit run", () => {
+    // Without a separator, [1, 23] and [12, 3] would both join to the identical digit string "123" and collide on the same tag.
+    expect(embeddedSubsetTag("Face", [1, 23])).not.toBe(
+      embeddedSubsetTag("Face", [12, 3]),
+    );
+  });
+
+  it("derives its six letters as a base-26, most-significant-letter-first encoding of the CRC32 hash", () => {
+    // Computed independently of embeddedSubsetTag's own implementation, using the package's own separately-tested crc32() as the trusted primitive -- proves the exact digit-extraction direction (most significant letter first, via repeated floor-division) rather than merely that some six letters come out.
+    const postScriptName = "Test-Face";
+    const glyphIds = [3, 90, 4000];
+    const codeSpace = 26 ** 6;
+    let value =
+      crc32(
+        new TextEncoder().encode(`${postScriptName} ${glyphIds.join(",")}`),
+      ) % codeSpace;
+    const expectedChars: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      expectedChars.unshift(String.fromCharCode(65 + (value % 26)));
+      value = Math.floor(value / 26);
+    }
+    expect(embeddedSubsetTag(postScriptName, glyphIds)).toBe(
+      expectedChars.join(""),
+    );
+  });
+});
+
+describe("buildEmbeddedFontObjects: FLAG_SERIF", () => {
+  it("sets the SERIF descriptor bit for a face whose own metrics declare it serif", () => {
+    const sfnt = parseSfnt(caladeaRegularBytes())!;
+    const face = loadEmbeddedFace(sfnt)!;
+    expect(face.metrics.serif).toBe(true); // real Caladea data, not a synthetic fixture -- confirms this test exercises the branch it claims to
+    const subset = subsetSfnt(sfnt, [0x41])!;
+    const usedGlyphs = collectEmbeddedGlyphs(["A"], face);
+    const { descriptor } = buildEmbeddedFontObjects(
+      face,
+      subset,
+      usedGlyphs,
+      {
+        cidFontRef: pdfRef(1, 0),
+        descriptorRef: pdfRef(2, 0),
+        fontFileRef: pdfRef(3, 0),
+        toUnicodeRef: pdfRef(4, 0),
+      },
+      false,
+    );
+    const flags = asNumber(dictGet(descriptor, "Flags"))!;
+    const FLAG_SERIF = 2;
+    expect(flags & FLAG_SERIF).toBe(FLAG_SERIF);
   });
 });
 
