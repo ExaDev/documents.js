@@ -557,7 +557,7 @@ function readTilePart(
     );
   }
   // A truncated final tile-part is the shape a clipped PDF stream takes; keeping whatever bytes did arrive lets the decoder report a partial image rather than nothing at all.
-  const trimmedEnd = trimTrailingEoc(cursor.data, dataStart, dataEnd);
+  const trimmedEnd = trimTrailingEoc(cursor.data, dataEnd);
   tileParts.push({
     tileIndex,
     partIndex,
@@ -568,13 +568,9 @@ function readTilePart(
   cursor.position = dataEnd;
 }
 
-// A Psot of 0 runs the tile-part to the end of the codestream, which includes the EOC marker; the packet decoder must not see those two bytes as coded data.
-function trimTrailingEoc(
-  data: Uint8Array<ArrayBuffer>,
-  start: number,
-  end: number,
-): number {
-  if (end - start >= 2 && data[end - 2] === 0xff && data[end - 1] === 0xd9) {
+// A Psot of 0 runs the tile-part to the end of the codestream, which includes the EOC marker; the packet decoder must not see those two bytes as coded data. Takes no separate start/length: readTilePart, this function's sole caller, always calls it with a range beginning immediately after a real SOD marker (0xFF 0x93), so whenever that range is under 2 bytes long, one of the two positions checked below falls on that marker's own fixed bytes rather than on data -- and 0x93 can never be mistaken for 0xD9 -- making the byte comparisons already refuse a too-short range on their own, with no need to measure it first.
+function trimTrailingEoc(data: Uint8Array<ArrayBuffer>, end: number): number {
+  if (data[end - 2] === 0xff && data[end - 1] === 0xd9) {
     return end - 2;
   }
   return end;
