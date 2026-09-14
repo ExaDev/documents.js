@@ -391,6 +391,56 @@ describe("writeContentStream: path -- double stroke style", () => {
     expect((text.match(/\nf\n/g) ?? []).length).toBe(1);
   });
 
+  it("emits f* for the fill, not f, when a filled double-stroke path declares fillRule evenodd", () => {
+    const filled: LayoutPath = {
+      kind: "path",
+      fill: BLUE,
+      fillRule: "evenodd",
+      stroke: STROKE_3PT,
+      style: "double",
+      subpaths: [
+        {
+          startXPt: 0,
+          startYPt: 0,
+          closed: true,
+          segments: [
+            { kind: "line", xPt: 10, yPt: 0 },
+            { kind: "line", xPt: 10, yPt: 10 },
+            { kind: "line", xPt: 0, yPt: 10 },
+          ],
+        },
+      ],
+    };
+    const text = decode(writeContentStream([filled], fakeContext()).bytes);
+    expect(
+      text.startsWith("0 0 1 rg\n0 0 m\n10 0 l\n10 10 l\n0 10 l\nh\nf*\n"),
+    ).toBe(true);
+  });
+
+  // The middle vertex of an open path that goes out and immediately reverses along the same line has two adjacent chords pointing in exactly opposite directions -- their normals cancel to the zero vector, which averageNormal reports as "no bisector" (undefined) rather than dividing by zero. That vertex is left un-offset at both ends' original coordinates while the two open ends still move along their own single chord's normal.
+  it("leaves a 180-degree reversal's shared vertex un-offset instead of dividing by a zero-length bisector", () => {
+    const reversal: LayoutPath = {
+      kind: "path",
+      stroke: STROKE_3PT,
+      style: "double",
+      subpaths: [
+        {
+          startXPt: 0,
+          startYPt: 0,
+          closed: false,
+          segments: [
+            { kind: "line", xPt: 10, yPt: 0 },
+            { kind: "line", xPt: 0, yPt: 0 },
+          ],
+        },
+      ],
+    };
+    const text = decode(writeContentStream([reversal], fakeContext()).bytes);
+    expect(text).toBe(
+      "0 0 0 RG\n1 w\n0 1 m\n10 0 l\n0 -1 l\nS\n0 -1 m\n10 0 l\n0 1 l\nS\n",
+    );
+  });
+
   // Nothing in the double path leaves a dash pattern or cap set, so a later item in the same stream sees the untouched graphics-state defaults -- verified by the absence of any 'd' or 'J' operator rather than by an explicit reset, since none was ever needed.
   it("emits no dash or cap operators at all, so there is nothing to reset", () => {
     const item: LayoutPath = {
