@@ -13,7 +13,11 @@ import {
   embeddedFontOdtPackage,
   embeddedFontPptxPackage,
 } from "../test-support/fonts";
-import { createDocumentFontRegistry, extractSourceFonts } from "./registry";
+import {
+  createDocumentFontRegistry,
+  extractSourceFonts,
+  treeEmbeddedFontsOf,
+} from "./registry";
 
 // A character no Latin-only face carries -- Caladea's cmap genuinely has no glyph for CJK, so a run containing this is the honest "the embedded face is right for the document but lacks this one synthesised character" case.
 const UNMAPPED_CHARACTER = "中";
@@ -267,5 +271,25 @@ describe("a cmap miss on a source-embedded face", () => {
         ? resolved.face.glyphId("A".codePointAt(0) ?? 0)
         : undefined,
     ).toBeGreaterThan(0);
+  });
+});
+
+describe("treeEmbeddedFontsOf", () => {
+  it("returns undefined, not an empty array, for a source package with no embedded fonts", () => {
+    expect(
+      treeEmbeddedFontsOf({ kind: "docx", package: minimalDocxPackage() }),
+    ).toBeUndefined();
+  });
+
+  it("returns the base64-encoded faces for a source package that embeds fonts", () => {
+    const faces = treeEmbeddedFontsOf({
+      kind: "docx",
+      package: embeddedFontDocxPackage(),
+    });
+    expect(faces).toBeDefined();
+    expect(faces?.length).toBeGreaterThan(0);
+    expect(faces?.[0]?.family).toBe("Caladea");
+    expect(typeof faces?.[0]?.base64).toBe("string");
+    expect(faces?.[0]?.base64.length).toBeGreaterThan(0);
   });
 });
