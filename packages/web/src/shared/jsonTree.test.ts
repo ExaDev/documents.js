@@ -80,4 +80,47 @@ describe("toTreeData", () => {
     // No more than key + space + cap + ellipsis.
     expect(label.length).toBeLessThanOrEqual("image: ".length + 100);
   });
+
+  it("does not truncate a string sitting exactly at the raw-string cap (102 characters, MAX_LEAF_LENGTH + 2 quotes)", () => {
+    const exact = "x".repeat(102);
+    const nodes = toTreeData({ s: exact });
+    const label = nodes[0]?.label as string;
+    expect(label).not.toContain("…");
+    expect(label).toBe(`s: ${JSON.stringify(exact)}`);
+  });
+
+  it("truncates a non-string leaf value (e.g. a bigint) longer than MAX_LEAF_LENGTH, one character shorter than the cap itself", () => {
+    const bigValue = 10n ** 150n; // a 151-digit bigint, well past the 100-character cap
+    const stringified = String(bigValue);
+    const nodes = toTreeData({ n: bigValue });
+    const label = nodes[0]?.label as string;
+    expect(label).toBe(`n: ${stringified.slice(0, 99)}…`);
+  });
+
+  it("does not truncate a non-string leaf value sitting exactly at MAX_LEAF_LENGTH (100 characters)", () => {
+    const exact = 10n ** 99n; // exactly 100 digits
+    const stringified = String(exact);
+    expect(stringified).toHaveLength(100);
+    const nodes = toTreeData({ n: exact });
+    const label = nodes[0]?.label as string;
+    expect(label).toBe(`n: ${stringified}`);
+  });
+
+  it("labels a nested array item (not a plain object) with no kind suffix at all", () => {
+    const nodes = toTreeData({ items: [["nested", "array"]] });
+    const itemNode = nodes[0]?.children?.[0];
+    expect(itemNode?.label).toBe("[0]");
+  });
+
+  it("labels an object array item whose own kind field isn't a string with no kind suffix", () => {
+    const nodes = toTreeData({ items: [{ kind: 42, text: "hi" }] });
+    const itemNode = nodes[0]?.children?.[0];
+    expect(itemNode?.label).toBe("[0]");
+  });
+
+  it("labels an object array item with no kind field at all with no kind suffix", () => {
+    const nodes = toTreeData({ items: [{ text: "hi" }] });
+    const itemNode = nodes[0]?.children?.[0];
+    expect(itemNode?.label).toBe("[0]");
+  });
 });
