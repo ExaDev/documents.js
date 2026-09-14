@@ -519,6 +519,18 @@ describe("list override levels", () => {
     );
     expect(lists.get(1)?.levels[0]?.startAt).toBe(99);
   });
+
+  it("stops reading the nested <listlevel> at its own closing brace, not the \\lfolevel's", () => {
+    // A direct \levelstartatN placed AFTER the <listlevel> group's own close, but still inside the \lfolevel, must never be folded into that <listlevel>'s own reading -- readListLevel's own \levelstartat is last-wins, so a boundary that ran past the true close would let this trailing 77 silently clobber the 99 stated inside the level itself.
+    const lists = listsFor(
+      "{\\listoverride\\listid101\\listoverridecount1" +
+        "{\\lfolevel\\listoverrideformat1" +
+        "{\\listlevel\\levelnfc23\\leveljc0\\levelstartat99{\\leveltext \\'01\\u183 ?;}{\\levelnumbers;}}" +
+        "\\levelstartat77}\\ls1}",
+    );
+    expect(lists.get(1)?.levels[0]?.startAt).toBe(99);
+    expect(lists.get(1)?.levels[0]?.numberFormat).toBe(23);
+  });
 });
 
 describe("document properties", () => {
