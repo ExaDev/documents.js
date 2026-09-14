@@ -1719,6 +1719,7 @@ function readRtfDetail(
     ) {
       // Appends to the LAST item: a \*\ffl group's own open pushed one empty entry per occurrence, so several sibling \*\ffl groups (a dropdown's list) each accumulate into their own slot rather than one shared string.
       const items = state.field.formField.listItems;
+      // Genuinely irreducible equivalent mutant if this guard is forced true: destination becomes "formFieldListItem" only when kind === "formFieldListItem", which is decided in the identical group-open branch that also pushes a fresh empty entry onto listItems whenever head.destination === "ffl" -- both happen together, so items.length is always at least 1 (and `current` therefore always defined) for as long as this destination could ever actually be reached.
       const last = items.length - 1;
       const current = items[last];
       if (current !== undefined) {
@@ -1731,6 +1732,7 @@ function readRtfDetail(
 
   let index = 0;
   let textOffset = 0;
+  // Genuinely irreducible equivalent mutant on this bound (`<` versus `<=`): one extra pass with `index === tokens.length` would read `tokens[index]` one past the array's own end, but that read is `undefined` rather than a thrown error, and the very next line's own `if (token === undefined) { break; }` already treats that as the loop's own termination condition -- the extra pass changes nothing observable for any input.
   while (index < tokens.length) {
     const token = tokens[index];
     if (token === undefined) {
