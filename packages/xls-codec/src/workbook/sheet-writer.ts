@@ -601,17 +601,12 @@ function formulaValueBytes(cell: ContentSheetCell): Uint8Array<ArrayBuffer> {
   }
 }
 
-/** Formula ([MS-XLS] 2.4.127): a Cell, the 8-byte FormulaValue above, a flags word and a 4-byte calculation cache this writer has no data for (both written zero -- see the module comment on RECORD_CALCCOUNT and friends for the same "nothing this schema models" reasoning), then a CellParsedFormula -- a two-byte cce and that many bytes of compiled Ptg tokens from biff/ptg-writer.ts's own compileFormulaText. Never carries an RgbExtra trailer: this writer's formula compiler refuses any construct (an array-constant literal, a shared/array formula) that would need one, so cce always accounts for the whole of rgce. A string-kind result is followed by a String record ([MS-XLS] 2.4.268) carrying the cached text, exactly as workbook/sheet.ts's own reader expects to find it. */
+/** Formula ([MS-XLS] 2.4.127): a Cell, the 8-byte FormulaValue above, a flags word and a 4-byte calculation cache this writer has no data for (both written zero -- see the module comment on RECORD_CALCCOUNT and friends for the same "nothing this schema models" reasoning), then a CellParsedFormula -- a two-byte cce and that many bytes of compiled Ptg tokens from biff/ptg-writer.ts's own compileFormulaText. Never carries an RgbExtra trailer: this writer's formula compiler refuses any construct (an array-constant literal, a shared/array formula) that would need one, so cce always accounts for the whole of rgce. A string-kind result is followed by a String record ([MS-XLS] 2.4.268) carrying the cached text, exactly as workbook/sheet.ts's own reader expects to find it. `formula` is the caller's own already-narrowed `cell.formula` (writeCellRecords' `cell.formula !== undefined` check), passed rather than re-read and re-checked here, so a cell with no formula can only ever reach writeCellValueRecord instead -- there is no second, unreachable "no formula" branch inside this function for a defensive message to rot behind. */
 function writeFormulaRecords(
   cell: ContentSheetCell,
+  formula: string,
   xfIndex: number,
 ): Uint8Array<ArrayBuffer>[] {
-  const formula = cell.formula;
-  if (formula === undefined) {
-    throw new BiffWriteError(
-      `internal error: writeFormulaRecords was called for the cell at row ${cell.row}, column ${cell.column}, which carries no formula`,
-    );
-  }
   const rgce = compileFormulaText(formula);
   const data = cellHeader(cell, xfIndex)
     .bytes(formulaValueBytes(cell))
@@ -636,7 +631,7 @@ function writeCellRecords(
   ctx: SheetWriteContext,
 ): Uint8Array<ArrayBuffer>[] {
   return cell.formula !== undefined
-    ? writeFormulaRecords(cell, xfIndex)
+    ? writeFormulaRecords(cell, cell.formula, xfIndex)
     : [writeCellValueRecord(cell, xfIndex, ctx)];
 }
 
