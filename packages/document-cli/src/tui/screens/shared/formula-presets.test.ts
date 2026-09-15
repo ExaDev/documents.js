@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { FORMULA_PRESETS } from "./formula-presets";
+import { getFormulaPresets } from "./formula-presets";
 
-describe("FORMULA_PRESETS", () => {
+describe("getFormulaPresets", () => {
   it("declares exactly six presets", () => {
-    expect(FORMULA_PRESETS).toHaveLength(6);
+    expect(getFormulaPresets()).toHaveLength(6);
   });
 
   it("gives every preset a non-empty label and at least one MathML node", () => {
-    for (const preset of FORMULA_PRESETS) {
+    for (const preset of getFormulaPresets()) {
       expect(preset.label.length).toBeGreaterThan(0);
       expect(preset.mathml.length).toBeGreaterThan(0);
     }
   });
 
   it("declares the exact labels, in order", () => {
-    expect(FORMULA_PRESETS.map((preset) => preset.label)).toEqual([
+    expect(getFormulaPresets().map((preset) => preset.label)).toEqual([
       "Fraction: x / 2",
       "Power: x^2",
       "Subscript: x_i",
@@ -25,7 +25,7 @@ describe("FORMULA_PRESETS", () => {
   });
 
   it("builds the fraction preset as mfrac(mi(x), mn(2))", () => {
-    expect(FORMULA_PRESETS[0]?.mathml).toEqual([
+    expect(getFormulaPresets()[0]?.mathml).toEqual([
       {
         type: "element",
         tag: "mfrac",
@@ -49,7 +49,7 @@ describe("FORMULA_PRESETS", () => {
   });
 
   it("builds the power preset as msup(mi(x), mn(2))", () => {
-    expect(FORMULA_PRESETS[1]?.mathml).toEqual([
+    expect(getFormulaPresets()[1]?.mathml).toEqual([
       {
         type: "element",
         tag: "msup",
@@ -73,7 +73,7 @@ describe("FORMULA_PRESETS", () => {
   });
 
   it("builds the subscript preset as msub(mi(x), mi(i))", () => {
-    expect(FORMULA_PRESETS[2]?.mathml).toEqual([
+    expect(getFormulaPresets()[2]?.mathml).toEqual([
       {
         type: "element",
         tag: "msub",
@@ -97,7 +97,7 @@ describe("FORMULA_PRESETS", () => {
   });
 
   it("builds the square-root preset as msqrt(mi(x))", () => {
-    expect(FORMULA_PRESETS[3]?.mathml).toEqual([
+    expect(getFormulaPresets()[3]?.mathml).toEqual([
       {
         type: "element",
         tag: "msqrt",
@@ -115,7 +115,7 @@ describe("FORMULA_PRESETS", () => {
   });
 
   it("builds the exact summation preset tree", () => {
-    expect(FORMULA_PRESETS[4]?.mathml).toEqual([
+    expect(getFormulaPresets()[4]?.mathml).toEqual([
       {
         type: "element",
         tag: "munderover",
@@ -173,7 +173,7 @@ describe("FORMULA_PRESETS", () => {
     const mn = (value: string): unknown => element("mn", [text(value)]);
     const mo = (operator: string): unknown => element("mo", [text(operator)]);
 
-    expect(FORMULA_PRESETS[5]?.mathml).toEqual([
+    expect(getFormulaPresets()[5]?.mathml).toEqual([
       element("mrow", [
         mi("x"),
         mo("="),
