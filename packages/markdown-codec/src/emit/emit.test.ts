@@ -1660,6 +1660,36 @@ describe("lists", () => {
     expect(markdown.split("\n")).toContain("");
   });
 
+  it("finds the REAL last styleId inside a construct that resumes a list item, not just undefined, so a following block's own blank-line decision reflects what that construct actually ends on", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division", name: "d1" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "mid" }],
+          styleId: "CodeBlock",
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        { kind: "constructEnd" },
+        {
+          kind: "paragraph",
+          runs: [{ text: "z" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+      ]),
+    );
+    // No forced blank line before "z": the construct's own last (and only) wrapped block is a CodeBlock, which terminates cleanly -- lastStyleIdOf must actually find that CodeBlock styleId through the construct's own children, not silently report undefined (which would wrongly force a blank line here).
+    expect(markdown).toBe("- a\n  ```\n  mid\n  ```\n  z");
+  });
+
   it("renders every block of one itemId as a single item -- a blank line and the continuation indent between blocks, one marker only", () => {
     const markdown = emitMarkdown(
       doc([
