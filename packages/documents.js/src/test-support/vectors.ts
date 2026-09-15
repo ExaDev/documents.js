@@ -80,11 +80,11 @@ export function withoutRotation(
   );
 }
 
-// The rotations withoutRotation drops, positionally. 'line' has no rotationDeg on ContentVectorSchema at all, so it always reports undefined here.
+// The rotations withoutRotation drops, positionally. A property-presence check ("rotationDeg" in vector), not a vector.kind === "line" comparison: 'line' is the only variant lacking rotationDeg, so the two guards narrow identically -- but a kind comparison here is a genuine equivalent-mutant trap TypeScript itself cannot rescue: forcing that comparison's own condition to always-true still type-narrows on the ORIGINAL condition text, so `vector.rotationDeg` stays valid in the branch reached, and a 'line' object with no such key simply reports undefined either way, indistinguishable from the correct branch's own explicit undefined. The `in` check has no such loophole -- Stryker's own typescript-checker rejects an always-true mutation of it outright (accessing rotationDeg on the still-fully-widened union fails to compile), leaving only an always-false mutation, which a real rotationDeg value on a non-line vector does kill.
 export function rotationsOf(
   vectors: readonly ContentVector[],
 ): (number | undefined)[] {
   return vectors.map((vector) =>
-    vector.kind === "line" ? undefined : vector.rotationDeg,
+    "rotationDeg" in vector ? vector.rotationDeg : undefined,
   );
 }
