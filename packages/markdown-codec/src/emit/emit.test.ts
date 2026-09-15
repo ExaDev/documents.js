@@ -1856,6 +1856,42 @@ describe("lists", () => {
     expect(markdown).toBe("- a\n  - ```\n    b\n    ```\n  z");
   });
 
+  it("needs no forced blank line between an open (styleId-less) paragraph and a following link-construct whose FIRST child is a non-paragraph IMAGE block, in the SAME list item -- a non-paragraph block always interrupts an open paragraph unconditionally, per emitItemCanInterrupt's non-construct fallback", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        {
+          kind: "constructStart",
+          descriptor: {
+            kind: "link",
+            target: { kind: "external", uri: "https://example.com/a.png" },
+          },
+        },
+        {
+          kind: "image",
+          format: "png",
+          base64: "AAAA",
+          widthPt: 1,
+          heightPt: 1,
+          altText: "img",
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "caption" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        { kind: "constructEnd" },
+      ]),
+    );
+    expect(markdown).toBe(
+      "- a\n  ![img](data:image/png;base64,AAAA)\n\n  caption",
+    );
+  });
+
   it("finds the REAL last styleId inside a construct that resumes a list item, not just undefined, so a following block's own blank-line decision reflects what that construct actually ends on", () => {
     const markdown = emitMarkdown(
       doc([
