@@ -117,10 +117,19 @@ const SETEXT_LEVEL_1_CHAR = "=";
 const SETEXT_LEVEL_2_CHAR = "-";
 const MIN_SETEXT_UNDERLINE_LENGTH = 1;
 
+// String.prototype.split never returns an empty array for any input, even the empty string ("".split(x) === [""]) -- so a split result's own first line is always genuinely present. Returning a tuple type here, rather than a plain string[], lets every call site destructure or index its own first element directly: TypeScript already knows a tuple's fixed leading position is defined regardless of noUncheckedIndexedAccess, so no call site needs a dead "?? ''"/"= ''" fallback for a branch this invariant guarantees it can never actually take. The non-null assertion below is the one place that invariant is asserted, rather than repeated at every call site.
+function splitLines(
+  text: string,
+  pattern: string | RegExp,
+): readonly [string, ...string[]] {
+  const [first, ...rest] = text.split(pattern);
+  return [first!, ...rest];
+}
+
 function renderSetextHeading(level: number, text: string): string {
   const underlineChar = level === 1 ? SETEXT_LEVEL_1_CHAR : SETEXT_LEVEL_2_CHAR;
   // A setext underline's own length has no semantic meaning beyond "one or more" -- matching the heading text's own rendered length keeps the output visually tidy without claiming any significance for the exact count, so a CR- or CRLF-delimited first line (LINE_ENDING_PATTERN, not a bare '\n' split) still measures the SAME first line the rest of this module's own line-ending-aware checks agree on, rather than treating the whole multi-line text as a single "line" whenever its own first break is not an LF.
-  const firstLine = text.split(LINE_ENDING_PATTERN)[0] ?? "";
+  const [firstLine] = splitLines(text, LINE_ENDING_PATTERN);
   const underline = underlineChar.repeat(
     Math.max(MIN_SETEXT_UNDERLINE_LENGTH, firstLine.length),
   );
@@ -904,12 +913,10 @@ function renderListRegion(
       }
       for (const block of segment.blocks) {
         if (!renderedFirstLine) {
-          const bodyLines = listRegionItemBody(
-            block,
-            context,
-            strippedFirstBlock,
-          ).split("\n");
-          const [firstLine = "", ...restLines] = bodyLines;
+          const [firstLine, ...restLines] = splitLines(
+            listRegionItemBody(block, context, strippedFirstBlock),
+            "\n",
+          );
           text = [
             `${marker.full}${firstLine}`,
             ...restLines.map((line) => `${indent}${line}`),
@@ -1018,7 +1025,7 @@ function renderFootnoteDefinition(name: string, body: string): string {
     return marker;
   }
   const indent = " ".repeat(FOOTNOTE_CONTINUATION_INDENT);
-  const [firstLine = "", ...restLines] = body.split("\n");
+  const [firstLine, ...restLines] = splitLines(body, "\n");
   return [
     `${marker} ${firstLine}`,
     ...restLines.map((line) => (line.length === 0 ? line : `${indent}${line}`)),
