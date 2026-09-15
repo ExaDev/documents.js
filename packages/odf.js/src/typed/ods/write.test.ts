@@ -392,6 +392,205 @@ describe("writeOdsContent XML shapes", () => {
     expect(attrValue(properties, "fo:background-color")).toBe("#ff0000");
   });
 
+  describe("used range: each independent source extends its own axis, never the other", () => {
+    it("a column past the last cell extends table:table-column but not table:table-row", () => {
+      const pkg = writeOdsContent(
+        documentOf([sheetOf([], { columns: [{ index: 3, hidden: false }] })]),
+      );
+      const table = firstTable(pkg);
+      expect(childrenWithTag(table, "table:table-column")).toHaveLength(4);
+      expect(childrenWithTag(table, "table:table-row")).toHaveLength(0);
+    });
+
+    it("a row past the last cell extends table:table-row but not table:table-column", () => {
+      const pkg = writeOdsContent(
+        documentOf([sheetOf([], { rows: [{ index: 2, hidden: false }] })]),
+      );
+      const table = firstTable(pkg);
+      expect(childrenWithTag(table, "table:table-row")).toHaveLength(3);
+      expect(childrenWithTag(table, "table:table-column")).toHaveLength(0);
+    });
+
+    it("an image past the last cell extends both axes to its own anchor position", () => {
+      const pkg = writeOdsContent(
+        documentOf([
+          sheetOf([], {
+            images: [
+              {
+                kind: "image",
+                format: "png",
+                base64:
+                  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+                widthPt: 30,
+                heightPt: 20,
+                anchorRow: 4,
+                anchorColumn: 2,
+                offsetXPt: 0,
+                offsetYPt: 0,
+              },
+            ],
+          }),
+        ]),
+      );
+      const table = firstTable(pkg);
+      expect(childrenWithTag(table, "table:table-row")).toHaveLength(5);
+      expect(childrenWithTag(table, "table:table-column")).toHaveLength(3);
+    });
+
+    it("an embedded object past the last cell extends both axes to its own anchor position", () => {
+      const pkg = writeOdsContent(
+        documentOf([
+          sheetOf([], {
+            embeddedObjects: [
+              {
+                objectKind: "wordprocessing",
+                frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+                anchorRow: 3,
+                anchorColumn: 1,
+                document: {
+                  kind: "wordprocessing",
+                  metadata: {},
+                  sections: [
+                    {
+                      pageSize: { widthPt: 612, heightPt: 792 },
+                      margins: {
+                        topPt: 72,
+                        rightPt: 72,
+                        bottomPt: 72,
+                        leftPt: 72,
+                      },
+                      blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }],
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+        ]),
+      );
+      const table = firstTable(pkg);
+      expect(childrenWithTag(table, "table:table-row")).toHaveLength(4);
+      expect(childrenWithTag(table, "table:table-column")).toHaveLength(2);
+    });
+
+    it("an embedded object with no anchorRow/anchorColumn defaults to position (0,0), not undefined-driven NaN cells", () => {
+      const pkg = writeOdsContent(
+        documentOf([
+          sheetOf([], {
+            embeddedObjects: [
+              {
+                objectKind: "wordprocessing",
+                frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+                document: {
+                  kind: "wordprocessing",
+                  metadata: {},
+                  sections: [
+                    {
+                      pageSize: { widthPt: 612, heightPt: 792 },
+                      margins: {
+                        topPt: 72,
+                        rightPt: 72,
+                        bottomPt: 72,
+                        leftPt: 72,
+                      },
+                      blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }],
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+        ]),
+      );
+      const table = firstTable(pkg);
+      expect(childrenWithTag(table, "table:table-row")).toHaveLength(1);
+      expect(childrenWithTag(table, "table:table-column")).toHaveLength(1);
+    });
+
+    it("a data-validation rule's range past the last cell extends the grid, unlike a conditional-format rule's range", () => {
+      const pkg = writeOdsContent(
+        documentOf([
+          sheetOf([], {
+            dataValidations: [
+              {
+                ranges: [
+                  { startRow: 0, startColumn: 0, endRow: 6, endColumn: 4 },
+                ],
+                type: "list",
+                formula1: '"a,b,c"',
+              },
+            ],
+          }),
+        ]),
+      );
+      const table = firstTable(pkg);
+      expect(childrenWithTag(table, "table:table-row")).toHaveLength(7);
+      expect(childrenWithTag(table, "table:table-column")).toHaveLength(5);
+    });
+
+    it("printSettings.repeatColumns/repeatRows each extend only their own axis (wrapped in their own table:table-header-columns/-rows)", () => {
+      const pkg = writeOdsContent(
+        documentOf([
+          sheetOf([], {
+            printSettings: {
+              ...DEFAULT_PRINT_SETTINGS,
+              repeatColumns: { start: 0, end: 2 },
+              repeatRows: { start: 0, end: 5 },
+            },
+          }),
+        ]),
+      );
+      const table = firstTable(pkg);
+      // repeatColumns/repeatRows wrap every column/row 0..end inside their own table:table-header-columns/-rows element (ODF's own repeated-header spelling), rather than leaving them as direct table:table children -- see wrapHeaderRange.
+      const columnHeader = childrenWithTag(
+        table,
+        "table:table-header-columns",
+      )[0]!;
+      const rowHeader = childrenWithTag(table, "table:table-header-rows")[0]!;
+      expect(childrenWithTag(columnHeader, "table:table-column")).toHaveLength(
+        3,
+      );
+      expect(childrenWithTag(rowHeader, "table:table-row")).toHaveLength(6);
+    });
+
+    it("printSettings.printRange extends both axes to its own end position", () => {
+      const pkg = writeOdsContent(
+        documentOf([
+          sheetOf([], {
+            printSettings: {
+              ...DEFAULT_PRINT_SETTINGS,
+              printRange: {
+                startRow: 0,
+                startColumn: 0,
+                endRow: 8,
+                endColumn: 3,
+              },
+            },
+          }),
+        ]),
+      );
+      const table = firstTable(pkg);
+      expect(childrenWithTag(table, "table:table-row")).toHaveLength(9);
+      expect(childrenWithTag(table, "table:table-column")).toHaveLength(4);
+    });
+
+    it("printSettings.manualBreaks rows/columns each extend only their own axis", () => {
+      const pkg = writeOdsContent(
+        documentOf([
+          sheetOf([], {
+            printSettings: {
+              ...DEFAULT_PRINT_SETTINGS,
+              manualBreaks: { rows: [7], columns: [3] },
+            },
+          }),
+        ]),
+      );
+      const table = firstTable(pkg);
+      expect(childrenWithTag(table, "table:table-row")).toHaveLength(8);
+      expect(childrenWithTag(table, "table:table-column")).toHaveLength(4);
+    });
+  });
+
   describe("data validation messages", () => {
     it("writes no table:help-message/table:error-message and no table:allow-empty-cell for a bare rule with no message fields and allowBlank left absent", () => {
       const pkg = writeOdsContent(
@@ -556,6 +755,154 @@ describe("writeOdsContent XML shapes", () => {
       };
       expect(nameOfRow(0)).not.toBe(nameOfRow(1));
       expect(nameOfRow(2)).not.toBe(nameOfRow(3));
+    });
+
+    it("interns two rules with identical written content to the SAME name, not a fresh one each time", () => {
+      const pkg = writeOdsContent(
+        documentOf([
+          sheetOf([], {
+            dataValidations: [
+              {
+                ranges: [
+                  { startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 },
+                ],
+                type: "list",
+                formula1: '"a,b,c"',
+              },
+              {
+                ranges: [
+                  { startRow: 1, startColumn: 0, endRow: 1, endColumn: 0 },
+                ],
+                type: "list",
+                formula1: '"a,b,c"',
+              },
+            ],
+          }),
+        ]),
+      );
+      expect(
+        childrenWithTag(contentValidations(pkg), "table:content-validation"),
+      ).toHaveLength(1);
+      const rows = childrenWithTag(firstTable(pkg), "table:table-row");
+      const nameOf = (row: number) =>
+        attrValue(
+          childrenWithTag(rows[row]!, "table:table-cell")[0]!,
+          "table:content-validation-name",
+        );
+      expect(nameOf(0)).toBe(nameOf(1));
+    });
+
+    it("mints names in first-encounter order across three genuinely distinct rules: val1, val2, val3", () => {
+      const rangeAt = (row: number) => ({
+        startRow: row,
+        startColumn: 0,
+        endRow: row,
+        endColumn: 0,
+      });
+      const pkg = writeOdsContent(
+        documentOf([
+          sheetOf([], {
+            dataValidations: [
+              { ranges: [rangeAt(0)], type: "list", formula1: '"a,b,c"' },
+              { ranges: [rangeAt(1)], type: "list", formula1: '"x,y,z"' },
+              { ranges: [rangeAt(2)], type: "list", formula1: '"p,q,r"' },
+            ],
+          }),
+        ]),
+      );
+      const names = childrenWithTag(
+        contentValidations(pkg),
+        "table:content-validation",
+      ).map((rule) => attrValue(rule, "table:name"));
+      expect(names).toEqual(["val1", "val2", "val3"]);
+    });
+
+    it("treats allowBlank left unset and allowBlank explicitly true as the same written content, deduping to one definition", () => {
+      const pkg = writeOdsContent(
+        documentOf([
+          sheetOf([], {
+            dataValidations: [
+              {
+                ranges: [
+                  { startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 },
+                ],
+                type: "list",
+                formula1: '"a,b,c"',
+              },
+              {
+                ranges: [
+                  { startRow: 1, startColumn: 0, endRow: 1, endColumn: 0 },
+                ],
+                type: "list",
+                formula1: '"a,b,c"',
+                allowBlank: true,
+              },
+            ],
+          }),
+        ]),
+      );
+      expect(
+        childrenWithTag(contentValidations(pkg), "table:content-validation"),
+      ).toHaveLength(1);
+    });
+
+    it("writes no table:help-message/table:error-message element at all when display, title, and body are all absent", () => {
+      const pkg = writeOdsContent(
+        documentOf([
+          sheetOf([], {
+            dataValidations: [
+              {
+                ranges: [
+                  { startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 },
+                ],
+                type: "list",
+                formula1: '"a,b,c"',
+              },
+            ],
+          }),
+        ]),
+      );
+      const rule = childrenWithTag(
+        contentValidations(pkg),
+        "table:content-validation",
+      )[0]!;
+      expect(childrenWithTag(rule, "table:help-message")).toHaveLength(0);
+      expect(childrenWithTag(rule, "table:error-message")).toHaveLength(0);
+    });
+
+    it("splits a multi-line help/error message body into one text:p per line", () => {
+      const pkg = writeOdsContent(
+        documentOf([
+          sheetOf([], {
+            dataValidations: [
+              {
+                ranges: [
+                  { startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 },
+                ],
+                type: "list",
+                formula1: '"a,b,c"',
+                showInputMessage: true,
+                prompt: "Line one\nLine two",
+              },
+            ],
+          }),
+        ]),
+      );
+      const rule = childrenWithTag(
+        contentValidations(pkg),
+        "table:content-validation",
+      )[0]!;
+      const help = childrenWithTag(rule, "table:help-message")[0]!;
+      const paragraphs = childrenWithTag(help, "text:p");
+      expect(paragraphs).toHaveLength(2);
+      expect(paragraphs[0]!.children[0]).toMatchObject({
+        type: "text",
+        value: "Line one",
+      });
+      expect(paragraphs[1]!.children[0]).toMatchObject({
+        type: "text",
+        value: "Line two",
+      });
     });
   });
 
