@@ -522,6 +522,15 @@ describe("buildGsubTable", () => {
     ]).toEqual([9, 9]);
   });
 
+  it("never writes a markFilteringSet slot for a lookup with no subtables at all", () => {
+    // A lookup with zero subtables leaves no trailing byte range for an eagerly-written markFilteringSet slot to be silently overwritten by afterwards (unlike every non-empty case, where the following subtable write clobbers it back) -- so a guard that fires unconditionally writes straight past the end of this lookup's own 6-byte header, which the reserved-width computation left with no extra room for.
+    const table = buildGsubTable([], [{ type: 1, subtables: [] }]);
+    const lookupListAt = u16(table, 8);
+    const lookupAt = lookupListAt + u16(table, lookupListAt + 2);
+    expect(u16(table, lookupAt + 4)).toBe(0); // subtableCount
+    expect(table.length - lookupAt).toBe(6);
+  });
+
   it("omits the markFilteringSet slot when the flag is set but does not select useMarkFilteringSet", () => {
     const table = buildGsubTable(
       [],
