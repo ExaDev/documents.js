@@ -1039,17 +1039,15 @@ function renderConstruct(item: ConstructItem, context: EmitContext): string {
     });
     return body;
   }
-  if (descriptor.kind === "division") {
-    // The blockquote spelling is gated on this package's own dual carry, not on the descriptor alone -- see isMaterialisedDivision above for exactly what that gate checks and why. A division whose paragraphs carry no such indent is a FOREIGN one -- an ODF text:section, a tagged-PDF /Sect -- and renders transparently below: a named section is not a markdown blockquote, and rendering it as one would invent a construct the source never had.
-    if (isMaterialisedDivision(item)) {
-      context.divisionDepth += 1;
-      const body = renderItems(item.children, context);
-      context.divisionDepth -= 1;
-      return body
-        .split("\n")
-        .map((line) => (line.length === 0 ? ">" : `> ${line}`))
-        .join("\n");
-    }
+  // The blockquote spelling is gated on this package's own dual carry, not on the descriptor kind alone -- see isMaterialisedDivision above for exactly what that gate checks and why. A division whose paragraphs carry no such indent is a FOREIGN one -- an ODF text:section, a tagged-PDF /Sect -- and renders transparently below: a named section is not a markdown blockquote, and rendering it as one would invent a construct the source never had. No separate `descriptor.kind === "division"` guard here: isMaterialisedDivision's own first check already tests that, so a non-division descriptor is refused there regardless, making an outer duplicate of the same check redundant.
+  if (isMaterialisedDivision(item)) {
+    context.divisionDepth += 1;
+    const body = renderItems(item.children, context);
+    context.divisionDepth -= 1;
+    return body
+      .split("\n")
+      .map((line) => (line.length === 0 ? ">" : `> ${line}`))
+      .join("\n");
   }
   if (descriptor.kind === "link" && descriptor.target.kind === "external") {
     // The mint condition is exact -- a pair around precisely one image block, the shape this package's own read side mints. A link construct of any other shape (an annotated block extent from another codec, a run-level pair flattened into a block list) renders transparently below rather than being guessed at.
