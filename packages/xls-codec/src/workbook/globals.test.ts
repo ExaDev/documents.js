@@ -195,6 +195,31 @@ describe("readWorkbookGlobals", () => {
     ).toThrow("SST declares a negative unique-string count (-1)");
   });
 
+  it("accepts an SST declaring exactly zero unique strings, a legitimate empty table rather than a negative one", () => {
+    const globals = readWorkbookGlobals(
+      groupsOf(record(RECORD_SST, [...u32(0), ...u32(0)])),
+    );
+    expect(globals.sharedStrings).toStrictEqual([]);
+  });
+
+  it("rejects an SST whose declared unique count could never fit, distinguishing genuine multiplication from a much weaker check", () => {
+    // 9 unique strings need at least 9 * 3 = 27 bytes beyond a plausible minimum-sized entry; this record's own total is only the 8-byte header, so only a true multiplication (not e.g. a division) puts the required count far enough past what is actually there to be refused at all.
+    expect(() =>
+      readWorkbookGlobals(groupsOf(record(RECORD_SST, [...u32(0), ...u32(9)]))),
+    ).toThrow(
+      "SST declares 9 unique strings, more than its 8 bytes could carry",
+    );
+  });
+
+  it("does not refuse an SST sitting exactly at its own declared-count-times-entry-width boundary, only genuinely past it", () => {
+    // 3 unique strings times MIN_SST_ENTRY_BYTES (3) is 9, exactly this record's own total byte length (the 8-byte header plus 1 padding byte) -- a strictly-greater-than check leaves this alone (whatever fails next fails somewhere else, reading real string entries from too few bytes), while a greater-than-or-equal check would refuse it right here, before ever attempting to read a single entry.
+    expect(() =>
+      readWorkbookGlobals(
+        groupsOf(record(RECORD_SST, [...u32(0), ...u32(3), 0x00])),
+      ),
+    ).not.toThrow(/more than its 9 bytes could carry/);
+  });
+
   it("reads a custom number format by its identifier", () => {
     const globals = readWorkbookGlobals(
       groupsOf(
@@ -770,7 +795,11 @@ describe("readSupBook", () => {
   it("resolves a same-sheet reference from its own exact single-character virtPath", () => {
     expect(
       readSupBook(
-        supBookGroup([...u16(0), ...u16(1), ...xlUnicodeStringNoCch(" ")]),
+        supBookGroup([
+          ...u16(0),
+          ...u16(1),
+          ...xlUnicodeStringNoCch(String.fromCharCode(0)),
+        ]),
       ),
     ).toStrictEqual({
       kind: "unresolvable",
@@ -792,15 +821,25 @@ describe("readSupBook", () => {
 
 describe("fileNameFromVirtPath", () => {
   it("declines a path that is empty once its own lone marker byte is stripped", () => {
-    expect(fileNameFromVirtPath("")).toBeUndefined();
+    expect(fileNameFromVirtPath(String.fromCharCode(1))).toBeUndefined();
   });
 
   it("isolates a plain trailing file name with no marker at all", () => {
-    expect(fileNameFromVirtPath("dirBook.xlsx")).toBe("Book.xlsx");
+    expect(fileNameFromVirtPath(`dir${String.fromCharCode(3)}Book.xlsx`)).toBe(
+      "Book.xlsx",
+    );
   });
 
   it("declines a final segment reached through a directory separator that itself carries a bracket", () => {
-    expect(fileNameFromVirtPath("sub[Book.xlsx]Sheet1")).toBeUndefined();
+    expect(
+      fileNameFromVirtPath(`sub${String.fromCharCode(3)}[Book.xlsx]Sheet1`),
+    ).toBeUndefined();
+  });
+
+  it("declines a path ending in a trailing directory separator, an empty-but-defined final segment rather than a missing one", () => {
+    expect(
+      fileNameFromVirtPath(`dir${String.fromCharCode(3)}`),
+    ).toBeUndefined();
   });
 });
 
