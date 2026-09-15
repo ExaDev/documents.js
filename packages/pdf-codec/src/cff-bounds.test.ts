@@ -496,24 +496,37 @@ describe("parseCffGlyphBounds's charstring interpreter: hmoveto/vmoveto, escaped
   });
 
   it("draws through exactly MAX_OPERAND_STACK operands cleared by one operator, one short of the overrun this module already refuses", () => {
-    // MAX_OPERAND_STACK single-byte zero operands, THEN a stack-clearing hstem: the stack never exceeds the limit because hstem clears it before another operand is pushed, unlike the StackOverflow fixture above, which never clears the stack at all.
+    // MAX_OPERAND_STACK single-byte zero operands, THEN a stack-clearing hstem: the stack never exceeds the limit because hstem clears it before another operand is pushed, unlike the StackOverflow fixture above, which never clears the stack at all. A trailing draw after the hstem makes the "succeeds" claim observable -- a glyph that draws nothing reports undefined regardless of whether it was rejected for overflowing or genuinely walked to completion, so only a real box proves the walk actually continued.
     const zeros = new Array<number>(MAX_OPERAND_STACK).fill(139);
     const bytes = cffFontWithCharstrings({
       name: "ExactOperandStack",
-      charStrings: [[...zeros, OP_HSTEM, OP_ENDCHAR]],
+      charStrings: [
+        [...zeros, OP_HSTEM, ...enc(5), ...enc(0), OP_HLINETO, OP_ENDCHAR],
+      ],
     });
-    expect(boundsOfOnlyGlyph(bytes)).toBeUndefined(); // draws nothing (only stems), but must not be REJECTED for overflowing
+    expect(boundsOfOnlyGlyph(bytes)).toEqual({
+      xMin: 0,
+      yMin: 0,
+      xMax: 5,
+      yMax: 0,
+    });
   });
 
   it("draws through exactly MAX_OPERATIONS_PER_GLYPH operators, one short of the ceiling this module already refuses", () => {
-    const exact = new Array<number>(MAX_OPERATIONS_PER_GLYPH - 1).fill(
+    // The ceiling counts every operand push and every operator dispatch as one operation each (execute's own per-iteration counter): MAX filler hstems, plus the trailing draw's own 2 operand pushes and 2 operators (hlineto, endchar), totals exactly MAX_OPERATIONS_PER_GLYPH.
+    const exact = new Array<number>(MAX_OPERATIONS_PER_GLYPH - 4).fill(
       OP_HSTEM,
     );
     const bytes = cffFontWithCharstrings({
       name: "ExactOperationCeiling",
-      charStrings: [[...exact, OP_ENDCHAR]], // the ceiling counts the endchar itself too
+      charStrings: [[...exact, ...enc(5), ...enc(0), OP_HLINETO, OP_ENDCHAR]],
     });
-    expect(boundsOfOnlyGlyph(bytes)).toBeUndefined();
+    expect(boundsOfOnlyGlyph(bytes)).toEqual({
+      xMin: 0,
+      yMin: 0,
+      xMax: 5,
+      yMax: 0,
+    });
   });
 
   it("decodes the 16.16 fixed-point operand form (TN 5177 section 3.2, operand 255)", () => {
@@ -764,6 +777,42 @@ describe("parseCffGlyphBounds's charstring interpreter: hmoveto/vmoveto, escaped
       charStrings: [[...drawFirst, RESERVED_OPERATOR]],
     });
     expect(boundsOfOnlyGlyph(reservedAfterDrawing)).toBeUndefined();
+
+    // The three interpreter ceilings, and the truncated-operand decode failure: each is itself only reachable/observable this way, since a charstring that fails before drawing anything is indistinguishable from one that "succeeds" while drawing nothing (both report undefined regardless of which is correct).
+    const operationCeilingAfterDrawing = cffFontWithCharstrings({
+      name: "DrawnThenOperationCeiling",
+      charStrings: [
+        [
+          ...drawFirst,
+          ...new Array<number>(MAX_OPERATIONS_PER_GLYPH).fill(OP_HSTEM),
+        ],
+      ],
+    });
+    expect(boundsOfOnlyGlyph(operationCeilingAfterDrawing)).toBeUndefined();
+
+    const operandStackOverflowAfterDrawing = cffFontWithCharstrings({
+      name: "DrawnThenOperandStackOverflow",
+      charStrings: [
+        [...drawFirst, ...new Array<number>(MAX_OPERAND_STACK + 1).fill(139)],
+      ],
+    });
+    expect(boundsOfOnlyGlyph(operandStackOverflowAfterDrawing)).toBeUndefined();
+
+    const subrDepthOverflowAfterDrawing = (() => {
+      const selfCall = [32, OP_CALLGSUBR]; // -107, this INDEX's own subroutine, recursing forever
+      return cffFontWithCharstrings({
+        name: "DrawnThenSubrDepthOverflow",
+        charStrings: [[...drawFirst, ...selfCall]],
+        globalSubrs: [selfCall],
+      });
+    })();
+    expect(boundsOfOnlyGlyph(subrDepthOverflowAfterDrawing)).toBeUndefined();
+
+    const truncatedOperandAfterDrawing = cffFontWithCharstrings({
+      name: "DrawnThenTruncatedOperand",
+      charStrings: [[...drawFirst, 247]], // medium-positive needs one more byte
+    });
+    expect(boundsOfOnlyGlyph(truncatedOperandAfterDrawing)).toBeUndefined();
   });
 
   it("refuses an escape operator with no following byte", () => {
