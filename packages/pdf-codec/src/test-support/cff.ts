@@ -4,19 +4,30 @@ import { base64ToBytes } from "../util/base64";
 
 // Fixtures for the two CFF readers (cff-probe.ts and cff-bounds.ts): the real vendored font's own 'CFF ' table, plus a builder for the small hand-made programs that font does not happen to contain (a CID-keyed Top DICT, and the malformed shapes).
 
-// The real, vendored STIX Two Math font's own 'CFF ' table -- 691 KB of genuine CFF data produced by a real font toolchain, not a fixture written to satisfy these parsers.
-export function stixMathCffBytes(): Uint8Array<ArrayBuffer> {
-  const font = parseSfnt(base64ToBytes(STIX_TWO_MATH_FONT_BASE64));
+// Extracted from stixMathCffBytes so a test can drive its two guards directly against a small synthetic sfnt, rather than only against the one real 691 KB vendored asset that never actually triggers either of them.
+export function cffTableFromSfnt(
+  sfntBytes: Uint8Array<ArrayBuffer>,
+  sourceDescription: string,
+): Uint8Array<ArrayBuffer> {
+  const font = parseSfnt(sfntBytes);
   if (font === undefined) {
     throw new Error(
-      "the vendored STIX Two Math font failed to parse as an sfnt container",
+      `${sourceDescription} failed to parse as an sfnt container`,
     );
   }
   const cff = sfntTableBytes(font, "CFF ");
   if (cff === undefined) {
-    throw new Error("the vendored STIX Two Math font has no CFF table");
+    throw new Error(`${sourceDescription} has no CFF table`);
   }
   return cff;
+}
+
+// The real, vendored STIX Two Math font's own 'CFF ' table -- 691 KB of genuine CFF data produced by a real font toolchain, not a fixture written to satisfy these parsers.
+export function stixMathCffBytes(): Uint8Array<ArrayBuffer> {
+  return cffTableFromSfnt(
+    base64ToBytes(STIX_TWO_MATH_FONT_BASE64),
+    "the vendored STIX Two Math font",
+  );
 }
 
 // A CFF INDEX (spec section 5). offSize is computed from the largest offset actually needed (spec Table 2: the smallest of 1/2/3/4 bytes that holds it), not hardcoded to 1 -- a fixture with enough entries or entry bytes to push the final offset past 255 (this package's own subrBias tests need a Local Subrs INDEX of over a thousand entries to reach the 1240-entry medium-bias threshold) still needs a spec-conformant INDEX, not a truncated one-byte offset that wraps.
@@ -181,7 +192,9 @@ export function cffFontWithCharstrings(options: {
 
   // A Private DICT holding only a Subrs operator (19), whose own offset is relative to the Private DICT's own start (spec Table 23) -- fixed at the Private DICT's own byte length, since the Local Subrs INDEX immediately follows it. The Private DICT itself starts right where the Global Subr INDEX ends.
   const privateDictBytes = [...dictInt32(6), 19];
-  const localSubrIndex = hasPrivate ? cffIndex(options.localSubrs ?? []) : [];
+  // Narrowed directly on options.localSubrs itself, not on the separately-computed hasPrivate boolean above -- hasPrivate is already defined as this exact check, so a `?? []` fallback here could never actually fire; checking the real value lets TypeScript rule that branch out entirely instead of leaving an always-unreachable default in the code.
+  const localSubrIndex =
+    options.localSubrs === undefined ? [] : cffIndex(options.localSubrs);
   const privateSize = privateDictBytes.length;
 
   const charStringsOffset = hasPrivate
