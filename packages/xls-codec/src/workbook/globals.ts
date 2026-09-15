@@ -295,9 +295,7 @@ export function fileNameFromVirtPath(virtPath: string): string | undefined {
         break;
     }
   }
-  if (path.length === 0) {
-    return undefined;
-  }
+  // No separate "is path itself empty" check: splitting an empty string on any separator always yields a single-element array holding that same empty string ([""]), so `last` below is already "" for a path emptied out by the marker-stripping above, and the length check right after this catches it exactly the same way the removed check did.
   const segments = path.split(VIRTPATH_DIRECTORY_SEPARATOR);
   const last = segments.at(-1);
   if (last === undefined || last.length === 0) {
@@ -342,8 +340,9 @@ export function resolveXti(
       ? { firstSheetIndex: itabFirst, lastSheetIndex: itabLast }
       : { label: diagnosticLabel("sheet not found"), diagnostic: true };
   }
-  const first = itabFirst >= 0 ? supBook.sheetNames[itabFirst] : undefined;
-  const last = itabLast >= 0 ? supBook.sheetNames[itabLast] : undefined;
+  // No itabFirst/itabLast >= 0 guard: a plain array index that is negative (the only other sentinel this can be here, having already ruled out -2 above) resolves to undefined on its own in JS, exactly like a genuinely out-of-range positive index does -- there is no negative-index behaviour on a real array for a guard to be protecting against.
+  const first = supBook.sheetNames[itabFirst];
+  const last = supBook.sheetNames[itabLast];
   if (first === undefined || last === undefined) {
     const bookLabel = supBook.fileName ?? "EXTERNAL";
     return {
