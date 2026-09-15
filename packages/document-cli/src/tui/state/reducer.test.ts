@@ -2133,7 +2133,7 @@ describe("appReducer SET_SHAPE_ROTATION on pptx", () => {
     expect(reopened.slides()[0]?.shapes()[0]?.rotationDeg).toBeCloseTo(30, 5);
   });
 
-  it("warns rather than crashing for a shape index that does not exist", () => {
+  it("warns rather than crashing for a shape index that does not exist, naming the slide it looked on", () => {
     const editor = createPptx();
     editor.addSlide();
     const opened = openPptxDocument(editor.toBytes());
@@ -2146,6 +2146,23 @@ describe("appReducer SET_SHAPE_ROTATION on pptx", () => {
     });
     expect(result.status?.severity).toBe("warning");
     expect(result.hasUnsavedChanges).toBe(false);
+    expect(result.status?.text).toBe("There is no shape 5 on slide 0");
+  });
+
+  // withShape's own missing-shape message says "page" for odg specifically, "slide" for every other shape-host format -- the pptx test above only ever exercises the "slide" branch of that ternary.
+  it("warns with 'page' rather than 'slide' when the missing shape is on an odg page", () => {
+    const editor = createOdg();
+    editor.addPage();
+    const opened = openOdgDocument(editor.toBytes());
+
+    const result = appReducer(opened, {
+      type: "SET_SHAPE_TEXT",
+      containerIndex: 0,
+      shapeIndex: 3,
+      text: "unreachable",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no shape 3 on page 0");
   });
 });
 
@@ -2173,6 +2190,67 @@ describe("appReducer xlsx (read-only PDF-preview) documents", () => {
     expect(undone.status?.severity).toBe("warning");
     expect(undone.status?.text).toContain("read-only");
     expect(undone.openDocument).toBe(opened.openDocument);
+  });
+});
+
+// OPEN_FILE_SUCCESS's own "opened as a read-only PDF preview" note names all nine of these formats individually in its own OR-chain (xlsx is exercised separately above, through its own dedicated describe block) -- each one needs its own dispatch to prove that exact branch, not just the shared behaviour the OR-chain produces once any one of them matches.
+describe("appReducer OPEN_FILE_SUCCESS's read-only-PDF-preview note names every one of its own nine formats", () => {
+  it.each([
+    ["csv", () => readOnlyOpenDocument("csv")],
+    ["svg", () => readOnlyOpenDocument("svg")],
+    ["rtf", () => readOnlyOpenDocument("rtf")],
+    ["wpd", () => readOnlyOpenDocument("wpd")],
+    [
+      "doc",
+      () => ({
+        format: "doc" as const,
+        editor: openDoc(createDoc().toBytes()),
+        path: "/tmp/legacy.doc",
+      }),
+    ],
+    [
+      "xls",
+      () => ({
+        format: "xls" as const,
+        editor: openXls(createXls().toBytes()),
+        path: "/tmp/legacy.xls",
+      }),
+    ],
+    [
+      "ppt",
+      () => ({
+        format: "ppt" as const,
+        editor: openPpt(createPpt().toBytes()),
+        path: "/tmp/legacy.ppt",
+      }),
+    ],
+    ["epub", () => readOnlyOpenDocument("epub")],
+  ] as const)(
+    "names %s specifically in the preview note",
+    (format, buildDoc) => {
+      const doc = buildDoc();
+      const opened = appReducer(createInitialState(), {
+        type: "OPEN_FILE_SUCCESS",
+        path: doc.path,
+        doc,
+      });
+      expect(opened.status?.text).toBe(
+        `Opened ${doc.path} as a read-only PDF preview -- press ':' then 'export pdf' to save it as a real PDF`,
+      );
+    },
+  );
+
+  it("does not add the preview note for a format with a real live-view editor of its own", () => {
+    const opened = appReducer(createInitialState(), {
+      type: "OPEN_FILE_SUCCESS",
+      path: "/tmp/notes.odt",
+      doc: {
+        format: "odt",
+        editor: openOdt(createOdt().toBytes()),
+        path: "/tmp/notes.odt",
+      },
+    });
+    expect(opened.status?.text).toBe("Opened /tmp/notes.odt");
   });
 });
 
@@ -2930,6 +3008,34 @@ describe("appReducer PDF item and page mutations", () => {
       });
       expect(result.status?.severity).toBe("warning");
       expect(result.status?.text).toContain("not link");
+    });
+
+    // internalLink items arise only from reading a real PDF's own GoTo/Dest annotations (PdfPage has no appendInternalLink -- unlike every other item kind, there is no way to add one fresh through the editor), so only the wrong-kind guard is reachable here; the success path is exercised at the pdf-codec layer instead (see its own navigation.test.ts).
+    it("warns rather than crashing when an internal-link destination edit targets an item of the wrong kind", () => {
+      const state = pdfMultiItemState();
+      const result = appReducer(state, {
+        type: "SET_PDF_INTERNAL_LINK_DESTINATION",
+        pageIndex: 0,
+        itemIndex: TEXT_INDEX,
+        destination: "dest1",
+      });
+      expect(result.status?.severity).toBe("warning");
+      expect(result.status?.text).toContain("not internalLink");
+    });
+
+    it("warns rather than crashing when an internal-link frame edit targets an item of the wrong kind", () => {
+      const state = pdfMultiItemState();
+      const result = appReducer(state, {
+        type: "SET_PDF_INTERNAL_LINK_FRAME",
+        pageIndex: 0,
+        itemIndex: TEXT_INDEX,
+        xPt: 1,
+        yPt: 2,
+        widthPt: 3,
+        heightPt: 4,
+      });
+      expect(result.status?.severity).toBe("warning");
+      expect(result.status?.text).toContain("not internalLink");
     });
   });
 });
