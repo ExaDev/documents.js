@@ -2319,6 +2319,46 @@ describe("lists", () => {
     expect(headingBlock.runs.map((run) => run.text).join("")).toBe("h");
   });
 
+  it("inserts a blank line between a paragraph and a following Heading2 rendered as setext too, not just Heading1 -- willRenderAsSetext's own level > MAX_SETEXT_LEVEL check must correctly admit level 2 AT the boundary, not treat it the same as a level that exceeds it", () => {
+    const written = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        {
+          kind: "paragraph",
+          styleId: "Heading2",
+          runs: [{ text: "h" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+      ]),
+      { headingStyle: "setext" },
+    );
+    expect(written).toBe("- a\n\n  h\n  -");
+  });
+
+  it("keeps a paragraph and a following Heading3 TIGHT even with headingStyle: 'setext' requested -- level 3 always renders as ATX regardless of the configured style (there is no setext spelling beyond level 2), so willRenderAsSetext must still refuse it rather than treating any level as eligible whenever setext is merely requested", () => {
+    const written = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        {
+          kind: "paragraph",
+          styleId: "Heading3",
+          runs: [{ text: "h" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+      ]),
+      { headingStyle: "setext" },
+    );
+    expect(written).toBe("- a\n  ### h");
+  });
+
   it("inserts a blank line between a paragraph and a following heading that is forced to setext by its OWN embedded line break, even with the default ATX headingStyle -- the interrupt guard must key off what the heading will actually render as, not the configured style, or the preceding paragraph is silently absorbed into it on reparse (ExaDev/documents.js#940)", () => {
     const softBreakRuns = [
       { text: "h1" },
