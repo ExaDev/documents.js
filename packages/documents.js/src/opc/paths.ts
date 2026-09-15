@@ -25,9 +25,11 @@ export function buildRelativeTarget(
   const toFileName = toPartPath.slice(toPartPath.lastIndexOf("/") + 1);
 
   let common = 0;
-  // A single combined bound, not two independently-ANDed length checks: with two separate `common < fromDirs.length && common < toDirs.length` clauses, relaxing (or dropping) either one in isolation never changes the loop's outcome on its own -- the OTHER, still-correct clause independently stops the loop at the same `common`, and wherever the two arrays' lengths genuinely differ, the fromDirs[common] === toDirs[common] comparison itself already fails once one side runs out (a real segment can never equal undefined). That made every mutation on either individual clause (and on the && joining them) permanently equivalent. A single combinedLimit bound has no sibling clause left to compensate, so a boundary mutation on it is only masked when the two paths share every directory segment all the way to a shared length -- covered by the identical-directories case below.
-  const combinedLimit = Math.min(fromDirs.length, toDirs.length);
-  while (common < combinedLimit && fromDirs[common] === toDirs[common]) {
+  // No explicit length bound at all -- once `common` reaches the end of the shorter array, indexing it yields `undefined`, which can never strictly equal a real path segment, so the loop already stops there on its own. An explicit bound (either two independently-ANDed length checks, or a single Math.min/Math.max of the two) is provably redundant for the same reason and, worse, is an equivalent mutant no test can ever kill: every mutation on such a bound is masked by the fromDirs[common] === toDirs[common] comparison already failing the instant one side runs out. Dropping the bound removes the mutation opportunity outright rather than leaving it unkillable.
+  while (
+    fromDirs[common] !== undefined &&
+    fromDirs[common] === toDirs[common]
+  ) {
     common++;
   }
 
