@@ -2389,6 +2389,22 @@ describe("appReducer SET_SHAPE_ROTATION on pptx", () => {
     expect(result.status?.severity).toBe("warning");
     expect(result.status?.text).toBe("There is no shape 3 on page 0");
   });
+
+  // SET_SHAPE_TEXT above resolves through withWideShape, a DIFFERENT function from withShape (used only by SET_SHAPE_ROTATION) -- each has its own copy of the identical "page"/"slide" ternary, so covering one says nothing about the other.
+  it("warns with 'page' rather than 'slide' when SET_SHAPE_ROTATION targets a missing shape on an odg page", () => {
+    const editor = createOdg();
+    editor.addPage();
+    const opened = openOdgDocument(editor.toBytes());
+
+    const result = appReducer(opened, {
+      type: "SET_SHAPE_ROTATION",
+      containerIndex: 0,
+      shapeIndex: 3,
+      rotationDeg: 10,
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no shape 3 on page 0");
+  });
 });
 
 describe("appReducer xlsx (read-only PDF-preview) documents", () => {
