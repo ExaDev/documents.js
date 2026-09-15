@@ -597,10 +597,10 @@ function toEmitItem(item: ListRegionItem): EmitItem {
   return item.kind === "paragraph" ? { block: item.block } : item.item;
 }
 
-// One item's first-block preparation: the checkbox text its marker line carries, and whether that block's own leading run is a legacy checkbox glyph that must be stripped from the body. The membership's own checked field is the current spelling and needs no task-flagged numId behind it; the glyph sniff is gated on the numId's task flag AND on the first block actually being a paragraph (a construct has no runs of its own to sniff a glyph from), so an ordinary item whose text happens to begin with a ballot-box glyph is never misread as a checkbox.
+// One item's first-block preparation: the checkbox text its marker line carries, and the SAME paragraph with any legacy checkbox glyph run already stripped out of it, when one was found. The membership's own checked field is the current spelling and needs no task-flagged numId behind it; the glyph sniff is gated on the numId's task flag AND on the first block actually being a paragraph (a construct has no runs of its own to sniff a glyph from), so an ordinary item whose text happens to begin with a ballot-box glyph is never misread as a checkbox. Doing the strip here, once, rather than returning a separate "please strip" boolean for listRegionItemBody to act on later, means no second site ever needs to re-derive from the run text whether stripping applies -- the one place that already found the glyph is the one place that removes it.
 interface FirstBlockCheckbox {
   readonly checkboxText: string;
-  readonly stripGlyph: boolean;
+  readonly strippedFirstBlock: ContentParagraph | undefined;
 }
 
 function firstBlockCheckbox(
@@ -610,20 +610,26 @@ function firstBlockCheckbox(
   if (first.list.checked !== undefined) {
     return {
       checkboxText: first.list.checked ? "[x] " : "[ ] ",
-      stripGlyph: false,
+      strippedFirstBlock: undefined,
     };
   }
   if (!taskNumId || first.kind !== "paragraph") {
-    return { checkboxText: "", stripGlyph: false };
+    return { checkboxText: "", strippedFirstBlock: undefined };
   }
   const leading = first.block.runs[0]?.text ?? "";
-  // No separate "found nothing" return with its own stripGlyph: false literal: stripCheckboxRun below already re-checks the identical two prefixes and no-ops when neither matches, so stripGlyph here can only ever be observed to equal whether checkboxText itself is non-empty.
-  const checkboxText = leading.startsWith(`${TASK_CHECKBOX_CHECKED} `)
-    ? "[x] "
-    : leading.startsWith(`${TASK_CHECKBOX_UNCHECKED} `)
-      ? "[ ] "
-      : "";
-  return { checkboxText, stripGlyph: checkboxText !== "" };
+  if (leading.startsWith(`${TASK_CHECKBOX_CHECKED} `)) {
+    return {
+      checkboxText: "[x] ",
+      strippedFirstBlock: stripCheckboxRun(first.block),
+    };
+  }
+  if (leading.startsWith(`${TASK_CHECKBOX_UNCHECKED} `)) {
+    return {
+      checkboxText: "[ ] ",
+      strippedFirstBlock: stripCheckboxRun(first.block),
+    };
+  }
+  return { checkboxText: "", strippedFirstBlock: undefined };
 }
 
 interface RenderedListMarker {
@@ -801,17 +807,14 @@ function lastStyleIdOfRegionItem(item: ListRegionItem): string | undefined {
   return lastStyleIdOf(toEmitItem(item));
 }
 
-// One list-region item's own rendered body, with no marker/indent applied yet. A plain paragraph renders through renderParagraphBody exactly as before (optionally with its checkbox glyph stripped); a construct renders through renderConstruct -- the SAME function renderItems reaches for a construct that is NOT part of any list region, so a construct's own markdown spelling never diverges depending on whether it happens to sit inside a list item, EXCEPT for context.enclosingItemId, set here for the duration of that one call: it is what lets renderItems' own recursive walk over the construct's children tell inherited pass-through membership (this exact item, see EmitContext's own field comment) apart from a genuinely fresh nested list.
+// One list-region item's own rendered body, with no marker/indent applied yet. A plain paragraph renders through renderParagraphBody exactly as before (using `overrideParagraph` in place of the item's own block when the caller already prepared a checkbox-glyph-stripped version, per firstBlockCheckbox above); a construct renders through renderConstruct -- the SAME function renderItems reaches for a construct that is NOT part of any list region, so a construct's own markdown spelling never diverges depending on whether it happens to sit inside a list item, EXCEPT for context.enclosingItemId, set here for the duration of that one call: it is what lets renderItems' own recursive walk over the construct's children tell inherited pass-through membership (this exact item, see EmitContext's own field comment) apart from a genuinely fresh nested list.
 function listRegionItemBody(
   item: ListRegionItem,
   context: EmitContext,
-  stripGlyph: boolean,
+  overrideParagraph: ContentParagraph | undefined,
 ): string {
   if (item.kind === "paragraph") {
-    return renderParagraphBody(
-      stripGlyph ? stripCheckboxRun(item.block) : item.block,
-      context,
-    );
+    return renderParagraphBody(overrideParagraph ?? item.block, context);
   }
   const previousEnclosingItemId = context.enclosingItemId;
   context.enclosingItemId = item.list.itemId;
@@ -868,7 +871,7 @@ function renderListRegion(
     if (first === undefined) {
       break;
     }
-    const { checkboxText, stripGlyph } = firstBlockCheckbox(
+    const { checkboxText, strippedFirstBlock } = firstBlockCheckbox(
       first,
       info?.task === true,
     );
@@ -904,7 +907,7 @@ function renderListRegion(
           const bodyLines = listRegionItemBody(
             block,
             context,
-            stripGlyph,
+            strippedFirstBlock,
           ).split("\n");
           const [firstLine = "", ...restLines] = bodyLines;
           text = [
@@ -915,7 +918,7 @@ function renderListRegion(
           previousStyleId = lastStyleIdOfRegionItem(block);
           continue;
         }
-        const rendered = listRegionItemBody(block, context, false)
+        const rendered = listRegionItemBody(block, context, undefined)
           .split("\n")
           .map((line) => (line.length === 0 ? line : `${indent}${line}`))
           .join("\n");
