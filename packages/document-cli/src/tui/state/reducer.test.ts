@@ -35,6 +35,7 @@ import { appReducer, createInitialState } from "./reducer.js";
 import type {
   AppState,
   CsvOpenDocument,
+  DocOpenDocument,
   DocxOpenDocument,
   EpubOpenDocument,
   MarkdownOpenDocument,
@@ -78,6 +79,14 @@ function docxDocument(state: AppState): DocxOpenDocument {
   const doc = state.openDocument;
   if (doc?.format !== "docx") {
     throw new Error("expected an open docx document");
+  }
+  return doc;
+}
+
+function docDocument(state: AppState): DocOpenDocument {
+  const doc = state.openDocument;
+  if (doc?.format !== "doc") {
+    throw new Error("expected an open doc document");
   }
   return doc;
 }
@@ -1641,6 +1650,47 @@ describe("appReducer markdown mutations", () => {
   });
 });
 
+describe("appReducer doc (legacy Word) mutations", () => {
+  // wordprocessingDocument's own format union admits doc alongside docx/odt/markdown -- covered here specifically because every other member is already exercised elsewhere by name, and a mutant collapsing this one arm of the union would only ever be caught by a doc-format dispatch.
+  it("appends a paragraph through the same generic action docx/odt/markdown already share", () => {
+    const opened = openDocDocument(createDoc().toBytes());
+    const before = docDocument(opened).editor.paragraphs().length;
+    const appended = appReducer(opened, {
+      type: "APPEND_PARAGRAPH",
+      text: "New paragraph",
+      styleId: undefined,
+      alignment: undefined,
+    });
+    expect(appended.status?.severity).not.toBe("warning");
+    expect(docDocument(appended).editor.paragraphs()).toHaveLength(before + 1);
+  });
+
+  // styledWordprocessingDocument's own format union admits doc alongside docx/odt (never markdown, which has no such fields at all -- see the markdown describe block above) -- covered here for the identical reason: doc is the one arm nothing else in this file dispatches through this specific function.
+  it("toggles bold on a run through the same generic action docx/odt already share", () => {
+    const withRun = applyAll(
+      [
+        {
+          type: "APPEND_PARAGRAPH",
+          text: undefined,
+          styleId: undefined,
+          alignment: undefined,
+        },
+        { type: "APPEND_RUN", blockIndex: 0, text: "Hello" },
+      ],
+      openDocDocument(createDoc().toBytes()),
+    );
+    const bolded = appReducer(withRun, {
+      type: "TOGGLE_RUN_BOLD",
+      blockIndex: 0,
+      runIndex: 0,
+    });
+    expect(bolded.status?.severity).not.toBe("warning");
+    expect(docDocument(bolded).editor.paragraphs()[0]?.runs()[0]?.bold).toBe(
+      true,
+    );
+  });
+});
+
 describe("appReducer undo", () => {
   // Proves undo generalises to markdown's own live-view MarkdownEditor with zero markdown-specific reducer code beyond toUndoSnapshot's own byte<->text branch -- the same encodeMarkdownText/decodeMarkdownText round trip through the shared undo stack every other mutating action already uses.
   it("restores a markdown document to its paragraphs before the last edit", () => {
@@ -2026,6 +2076,23 @@ describe("appReducer MERGE_SLIDE_TABLE_CELLS", () => {
     expect(result.status?.text).toContain("pptx or odp");
   });
 
+  // wrongDocument's own "actual" half names the real open format when there is one (covered just above), but falls back to the literal words "no document" when state.openDocument is undefined -- distinct from any real format string, so it must come from its own ternary branch rather than always compute an actual format.
+  it("says 'no document' rather than a format name when nothing is open at all", () => {
+    const result = appReducer(createInitialState(), {
+      type: "MERGE_SLIDE_TABLE_CELLS",
+      slideIndex: 0,
+      tableIndex: 0,
+      startRow: 0,
+      startColumn: 0,
+      rowSpan: 1,
+      colSpan: 1,
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe(
+      "That action needs a pptx or odp document; the open document is no document",
+    );
+  });
+
   it("rejects a non-integer or non-positive rowSpan/colSpan instead of merging anything", () => {
     const editor = createPptx();
     editor.addSlide();
@@ -2085,6 +2152,135 @@ describe("appReducer MERGE_SLIDE_TABLE_CELLS", () => {
     expect(result.status?.severity).toBe("warning");
     expect(result.status?.text).toContain("exceeds this table's own 2 columns");
     expect(result.openDocument).toBe(withTable.openDocument);
+  });
+
+  // mergePptxTableCells's own row/column bounds checks compare with a strict `>`, not `>=` -- a merge landing exactly on the table's own last row/column is valid, not an overrun. rowSpan=1/colSpan=1 here also proves the "must be positive integers" guard rejects only BELOW 1, not AT 1.
+  it("accepts a 1x1 merge landing exactly on the table's own last row and column", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withTable = appReducer(opened, {
+      type: "ADD_SLIDE_TABLE",
+      slideIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+      rows: 2,
+      columns: 2,
+    });
+
+    const result = appReducer(withTable, {
+      type: "MERGE_SLIDE_TABLE_CELLS",
+      slideIndex: 0,
+      tableIndex: 0,
+      startRow: 1,
+      startColumn: 1,
+      rowSpan: 1,
+      colSpan: 1,
+    });
+    expect(result.status?.severity).not.toBe("warning");
+    expect(result.hasUnsavedChanges).toBe(true);
+  });
+
+  // startRow=2/rowSpan=2 on a 3-row table overruns by exactly one row -- distinguishes the real check from a mutant that flips `+` to `-` (2-2=0, which would never exceed 3 and would fall through to a table access that is merely undefined rather than out of range) or drops the whole guard block outright, both of which would surface a DIFFERENT warning than this one.
+  it("names the exact rowSpan/startRow/row-count in the row-overrun message", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withTable = appReducer(opened, {
+      type: "ADD_SLIDE_TABLE",
+      slideIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+      rows: 3,
+      columns: 2,
+    });
+
+    const result = appReducer(withTable, {
+      type: "MERGE_SLIDE_TABLE_CELLS",
+      slideIndex: 0,
+      tableIndex: 0,
+      startRow: 2,
+      startColumn: 0,
+      rowSpan: 2,
+      colSpan: 1,
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe(
+      "mergeSlideTableCells: rowSpan 2 starting at row 2 exceeds this table's own 3 rows",
+    );
+    expect(result.openDocument).toBe(withTable.openDocument);
+  });
+
+  // A rectangle taller than 1 row but only 1 column wide: the covered cell directly below the anchor must carry verticalMerge alone, never horizontalMerge (columnOffset is always 0 in a 1-wide merge, so the "columnOffset > 0" branch must never fire), and the row just past rowSpan must be left completely untouched by the row loop.
+  it("sets only verticalMerge on the covered cell of a 1-column-wide, multi-row merge, and never touches the row past rowSpan", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withTable = appReducer(opened, {
+      type: "ADD_SLIDE_TABLE",
+      slideIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+      rows: 3,
+      columns: 2,
+    });
+
+    const merged = appReducer(withTable, {
+      type: "MERGE_SLIDE_TABLE_CELLS",
+      slideIndex: 0,
+      tableIndex: 0,
+      startRow: 0,
+      startColumn: 0,
+      rowSpan: 2,
+      colSpan: 1,
+    });
+    const rows = pptxDocument(merged).editor.slides()[0]?.tables()[0]?.rows();
+    const coveredBelow = rows?.[1]?.cells()[0];
+    const pastRowSpan = rows?.[2]?.cells()[0];
+    expect(coveredBelow?.element.attributes).toContainEqual({
+      name: "vMerge",
+      value: "1",
+    });
+    expect(
+      coveredBelow?.element.attributes.some((a) => a.name === "hMerge"),
+    ).toBe(false);
+    expect(pastRowSpan?.element.attributes).toEqual([]);
+  });
+
+  // The column-wide counterpart: a rectangle wider than 1 column but only 1 row tall must set horizontalMerge alone on its covered cell (rowOffset is always 0, so "rowOffset > 0" must never fire), and the column just past colSpan must be left completely untouched by the column loop.
+  it("sets only horizontalMerge on the covered cell of a 1-row-tall, multi-column merge, and never touches the column past colSpan", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withTable = appReducer(opened, {
+      type: "ADD_SLIDE_TABLE",
+      slideIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+      rows: 2,
+      columns: 3,
+    });
+
+    const merged = appReducer(withTable, {
+      type: "MERGE_SLIDE_TABLE_CELLS",
+      slideIndex: 0,
+      tableIndex: 0,
+      startRow: 0,
+      startColumn: 0,
+      rowSpan: 1,
+      colSpan: 2,
+    });
+    const firstRowCells = pptxDocument(merged)
+      .editor.slides()[0]
+      ?.tables()[0]
+      ?.rows()[0]
+      ?.cells();
+    const coveredRight = firstRowCells?.[1];
+    const pastColSpan = firstRowCells?.[2];
+    expect(coveredRight?.element.attributes).toContainEqual({
+      name: "hMerge",
+      value: "1",
+    });
+    expect(
+      coveredRight?.element.attributes.some((a) => a.name === "vMerge"),
+    ).toBe(false);
+    expect(pastColSpan?.element.attributes).toEqual([]);
   });
 });
 
