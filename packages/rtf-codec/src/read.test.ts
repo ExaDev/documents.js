@@ -9,10 +9,23 @@ import type {
 } from "document-schema.js";
 import { ContentDocumentSchema } from "document-schema.js";
 import type { ContentEmbeddedObjectBlock } from "document-schema.js";
-import { RtfDiagnosticCodes, RtfNotAnRtfDocumentError } from "./diagnostics";
-import { bytesToHex } from "./base64";
+import {
+  RtfDiagnosticCodes,
+  RtfInputTooLargeError,
+  RtfNestingLimitExceededError,
+  RtfNotAnRtfDocumentError,
+} from "./diagnostics";
+import { bytesToHex, hexToBytes } from "./base64";
+import { newPendingCell } from "./cell-format";
 import { writeEmbeddedObjectData } from "./embedded-object";
-import { readRtf, readRtfContent } from "./read";
+import {
+  appendToLastListItem,
+  closingBookmarkExtent,
+  readRtf,
+  readRtfContent,
+  verticalMergeRowSpan,
+} from "./read";
+import { bookmarkAnchorDescriptor } from "./constructs";
 import { bytes, text } from "./test-support/bytes";
 
 // Stands in for a hostile producer who writes the identical spec-conformant ObjectHeader/NativeDataSize/NativeData/Presentation envelope writeEmbeddedObjectData produces, but wraps an arbitrary JSON payload inside NativeData's own Package stream instead of a genuine ContentEmbeddedObject -- writeEmbeddedObjectData itself always rebuilds its payload object field-by-field from a real ContentEmbeddedObject, so it cannot be used to smuggle an extra key the way a raw \objdata forged by hand can. Reuses a real envelope's own ObjectHeader and Presentation bytes verbatim (both fixed, independent of the JSON payload) and only replaces NativeData, so the forged bytes are byte-identical to a real \objdata this codec produced except for the one field under test.
@@ -91,6 +104,20 @@ function firstTable(source: string): ContentTable {
 describe("document shape", () => {
   it("rejects input that does not open with the {\\rtfN the <File> production requires", () => {
     expect(() => readRtfContent(bytes("not rtf at all"))).toThrow(
+      RtfNotAnRtfDocumentError,
+    );
+  });
+
+  it("rejects a document whose very first token is not itself a group-opening brace, even when a later token happens to be a control word named rtf", () => {
+    // No leading "{" at all: the first token is the \rtf control word itself, so its own kind is "controlWord", not "groupStart". A second \rtf1 immediately after makes the SECOND and THIRD conditions of assertRtfHeaderPresent's own OR chain both individually false on this input -- the first condition (checking the very first token's kind) is the only one standing between this and being wrongly accepted as well-formed.
+    expect(() => readRtfContent(bytes("\\rtf1\\rtf1"))).toThrow(
+      RtfNotAnRtfDocumentError,
+    );
+  });
+
+  it("rejects a properly braced document whose first control word names a destination other than rtf", () => {
+    // The brace and the control-word shape are both correct here -- only the control word's own NAME is wrong (\ansi, not \rtf) -- so this is the one fixture that actually exercises assertRtfHeaderPresent's own third OR clause: the first two conditions are both false on this input, leaving the name check alone to reject it.
+    expect(() => readRtfContent(bytes("{\\ansi not rtf}"))).toThrow(
       RtfNotAnRtfDocumentError,
     );
   });
@@ -255,6 +282,8 @@ describe("character formatting", () => {
     const runs =
       paragraphsOf(`${HEADER}\\pard \\super up\\nosupersub  base\\par}`)[0]
         ?.runs ?? [];
+    // Asserted as its own length first: if \nosupersub failed to clear verticalAlign, "up" and "base" would carry the identical character state and coalesce into one run, making runs[1] undefined and the verticalAlign assertion below vacuously pass regardless of what actually happened.
+    expect(runs).toHaveLength(2);
     expect(runs[0]?.verticalAlign).toBe("superscript");
     expect(runs[1]?.verticalAlign).toBeUndefined();
   });
@@ -299,6 +328,15 @@ describe("character formatting", () => {
 });
 
 describe("text, escapes, and Unicode", () => {
+  it("merges text either side of an inert skipped destination into one run, not two", () => {
+    // \b turns bold on with nothing yet accumulated under it, {\footnote ...} is a "skip" destination whose own close never re-enters the token loop as a groupEnd, and \b0 turns bold back off before any real text has appeared under the bold key at all -- so the run key is genuinely unchanged (still the pre-\b key) by the time "B" arrives, and flushBytes' own pendingBytes.length===0 guard is what keeps a spurious empty flush from resetting the run accumulator at the \b/\b0 boundary in between. Without that guard, "A" and "B" would flush into two separate same-key runs instead of merging into one.
+    const runs =
+      paragraphsOf(`${HEADER}\\pard A\\b{\\footnote ignored}\\b0 B\\par}`)[0]
+        ?.runs ?? [];
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.text).toBe("AB");
+  });
+
   it("decodes \\'hh through the document's own code page", () => {
     // 0xE9 is e-acute in cp1252.
     const runs = paragraphsOf(`${HEADER}\\pard caf\\'e9\\par}`)[0]?.runs ?? [];
@@ -484,6 +522,14 @@ describe("lists", () => {
     expect(paragraph?.list?.level).toBe(2);
   });
 
+  it("falls back to the list's own level 0 when \\ilvlN names a depth the \\listsimple table never defined", () => {
+    // LIST_TABLES's own list 101 (bound to \ls1) is \listsimple, carrying exactly one \listlevel at index 0 -- \ilvl2 names a depth with no definition of its own, so the level's numberFormat (bullet, here) must be read from level 0's definition rather than from an undefined level.
+    const paragraph = paragraphsOf(
+      `${HEADER}${LIST_TABLES}\\pard\\ls1\\ilvl2 Deep item\\par}`,
+    )[0];
+    expect(paragraph?.list?.numId).toBe("rtf1:bullet");
+  });
+
   it("carries a \\lfolevel start-at override through to the paragraph's own numId", () => {
     // The same \list102 both overrides name, restarted at 5 by \ls3's own \lfolevel while \ls2 leaves it at 1 -- so the override table, not the list table, is what tells the two apart.
     const tables =
@@ -619,6 +665,28 @@ describe("pictures", () => {
     expect(image?.base64.startsWith("iVBORw0KGgo")).toBe(true);
   });
 
+  it("reads a \\pngblip picture whose entire payload arrives as \\'hh escapes rather than plain hex text", () => {
+    // Every other \pict fixture in this file states its payload as literal hex characters (a "text" token, state.picture.hex), never as \'hh escapes (a "hex" token, state.picture.binary) -- buildPicture prefers binary over hex when both are populated, so a picture destination that only ever sees \'hh escapes exercises a path nothing else here reaches.
+    const escaped =
+      PNG_HEX.match(/.{2}/g)
+        ?.map((pair) => `\\'${pair}`)
+        .join("") ?? "";
+    const image = blocksOf(
+      `${HEADER}\\pard{\\pict\\pngblip\\picwgoal1440\\pichgoal720 ${escaped}}\\par}`,
+    ).find((block): block is ContentImageBlock => block.kind === "image");
+    expect(image?.format).toBe("png");
+    expect(image?.base64.startsWith("iVBORw0KGgo")).toBe(true);
+  });
+
+  it("does not fold a \\binN token opened inside a bookmark nested in \\pict into the picture's own binary buffer", () => {
+    // \*\bkmkstart opens a genuine child group inside \pict, inheriting state.picture by reference the same way a nested group in the ANSI-half or \*\objdata fixtures elsewhere in this file do -- the \binN token sits INSIDE that bookmark's own group (not between its close and \*\bkmkend's open, which is still \pict's own direct scope and proves nothing). A binary token routed by destination alone would push the bookmark's own junk bytes into state.picture.binary, and buildPicture prefers ANY non-empty binary over the real, fully-formed hex payload sitting in state.picture.hex, so even three stray bytes there are enough to discard the real image entirely.
+    const image = blocksOf(
+      `${HEADER}\\pard{\\pict\\pngblip\\picwgoal1440\\pichgoal720{\\*\\bkmkstart \\bin3 JJJ}{\\*\\bkmkend x}${PNG_HEX}}\\par}`,
+    ).find((block): block is ContentImageBlock => block.kind === "image");
+    expect(image?.format).toBe("png");
+    expect(image?.base64.startsWith("iVBORw0KGgo")).toBe(true);
+  });
+
   it("applies \\picscalexN and \\picscaleyN to the goal size", () => {
     const image = blocksOf(
       `${HEADER}\\pard{\\pict\\pngblip\\picwgoal1440\\pichgoal1440\\picscalex50\\picscaley25 ${PNG_HEX}}\\par}`,
@@ -694,6 +762,19 @@ describe("embedded objects", () => {
       widthPt: 100,
       heightPt: 50,
     });
+    expect(object?.document).toEqual(embedded);
+  });
+
+  it("skips a non-hex, non-whitespace byte inside \\objdata's own #SDATA text rather than folding it into the nibble pairing", () => {
+    // Inserted at an even offset -- a real byte boundary -- so a reader that correctly discards the stray "g" decodes identically to the unmodified hex; a reader that instead treats it as a pairable nibble value corrupts every byte from this point on.
+    const poisoned = `${OBJDATA_HEX.slice(0, 10)}g${OBJDATA_HEX.slice(10)}`;
+    const object = blocksOf(
+      `${HEADER}\\pard{\\object\\objemb{\\*\\objdata ${poisoned}}}\\par}`,
+    ).find(
+      (block): block is ContentEmbeddedObjectBlock =>
+        block.kind === "embeddedObject",
+    );
+    expect(object?.objectKind).toBe("spreadsheet");
     expect(object?.document).toEqual(embedded);
   });
 
@@ -1118,6 +1199,25 @@ describe("embedded objects", () => {
     ).toBe(true);
   });
 
+  it("keeps a bare inline \\result paragraph ahead of an inTable one nested inside it, in splice order", () => {
+    // \result's own para starts inTable:false (a fresh reset at the group's own open, not inherited from wherever \object itself sits) -- the nested {\pard\intbl second\par} group sets only ITS OWN cloned para true and closes into cellBlocks directly, reverting to \result's own untouched para once it closes, so "first" (accumulated afterward with no further \pard) closes via \result's own group-end using that same untouched inTable:false, into `blocks`. endResultScratch concatenates blocks before cellBlocks, so a correct reset here keeps "first" ahead of "second" in the spliced order regardless of which one actually closed first chronologically; a stuck inTable:true would instead route "first" into cellBlocks too, behind "second" there (since it closes later), reversing the pair.
+    const { document } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb{\\result{\\pard\\intbl second\\par}first}}\\par}`,
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing document, got ${document.kind}`,
+      );
+    }
+    const texts = (document.sections[0]?.blocks ?? [])
+      .filter((block): block is ContentParagraph => block.kind === "paragraph")
+      .map((paragraph) => paragraph.runs.map((run) => run.text).join(""))
+      .filter((text) => text.length > 0);
+    expect(texts).toEqual(["first", "second"]);
+  });
+
   it("does not also report the no-\\objdata-at-all diagnostic when \\objdata genuinely exists but fails to decode instead", () => {
     const { diagnostics } = readRtfContent(
       bytes(
@@ -1141,6 +1241,22 @@ describe("embedded objects", () => {
     });
     const object = blocksOf(
       `${HEADER}\\pard{\\object\\objemb{\\*\\objdata\\bin${String(raw.length)} ${text(raw)}}}\\par}`,
+    ).find(
+      (block): block is ContentEmbeddedObjectBlock =>
+        block.kind === "embeddedObject",
+    );
+    expect(object?.document).toEqual(embedded);
+  });
+
+  it("does not fold a \\binN token opened inside a bookmark nested in \\*\\objdata into the object's own byte buffer", () => {
+    // \*\bkmkstart is a real, known destination that opens a genuine child group inside \*\objdata, inheriting state.objectData by reference exactly as the text/hex fixtures above prove -- the \binN token sits INSIDE that bookmark's own group (not between its close and \*\bkmkend's open, which is still \*\objdata's own direct scope and proves nothing). A binary token routed by destination alone would splice the bookmark's own junk bytes into the front of the real payload and corrupt it.
+    const raw = writeEmbeddedObjectData({
+      objectKind: "spreadsheet",
+      document: embedded,
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+    });
+    const object = blocksOf(
+      `${HEADER}\\pard{\\object\\objemb{\\*\\objdata{\\*\\bkmkstart \\bin3 JJJ}{\\*\\bkmkend x}${bytesToHex(raw)}}}\\par}`,
     ).find(
       (block): block is ContentEmbeddedObjectBlock =>
         block.kind === "embeddedObject",
@@ -1319,6 +1435,51 @@ describe("embedded objects", () => {
       ).toHaveLength(1);
     });
 
+    it("reports the exact duplicate-\\result diagnostic and keeps only the first one's own content, when a malformed \\object has two", () => {
+      const { document, diagnostics } = readRtfContent(
+        bytes(
+          `${HEADER}\\pard{\\object\\objemb{\\result{\\pard\\plain FIRST\\par}}{\\result{\\pard\\plain SECOND\\par}}}\\par}`,
+        ),
+      );
+      if (document.kind !== "wordprocessing") {
+        throw new Error(
+          `expected a wordprocessing document, got ${document.kind}`,
+        );
+      }
+      const found = diagnostics.find(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE &&
+          diagnostic.message.includes("more than one \\result"),
+      );
+      expect(found?.message).toBe(
+        "an \\object destination has more than one \\result child, which RTF's own grammar does not allow; only the first is kept and this one is discarded",
+      );
+      const text = document.sections[0]?.blocks
+        .filter(
+          (block): block is ContentParagraph => block.kind === "paragraph",
+        )
+        .flatMap((paragraph) => paragraph.runs.map((run) => run.text))
+        .join("|");
+      expect(text).toContain("FIRST");
+      expect(text).not.toContain("SECOND");
+    });
+
+    it("reports the exact duplicate-\\objdata diagnostic and decodes only the first one, when a malformed \\object has two", () => {
+      const { diagnostics } = readRtfContent(
+        bytes(
+          `${HEADER}\\pard{\\object\\objemb{\\*\\objdata ${OBJDATA_HEX}}{\\*\\objdata ${OBJDATA_HEX}}}\\par}`,
+        ),
+      );
+      const found = diagnostics.find(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE &&
+          diagnostic.message.includes("more than one \\objdata"),
+      );
+      expect(found?.message).toBe(
+        "an \\object destination has more than one \\objdata child, which RTF's own grammar does not allow; only the first is decoded and this one is discarded",
+      );
+    });
+
     it("does not splice \\result's fallback content in twice", () => {
       const { document } = readRtfContent(
         bytes(
@@ -1416,15 +1577,30 @@ describe("fields and destinations", () => {
     ).toBe(true);
   });
 
+  it("reports the exact UNKNOWN_DESTINATION_SKIPPED message text, naming the destination", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\*\\notarealdestination stray}kept\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.UNKNOWN_DESTINATION_SKIPPED,
+    );
+    expect(found?.message).toBe(
+      "the ignorable destination \\notarealdestination is not recognised and its content is discarded, as the specification requires",
+    );
+  });
+
   it("drops a footnote's body, which the flat ContentDocument has no definitions table to hold, and says so", () => {
     const source = `${HEADER}\\pard Body{\\super\\chftn}{\\footnote\\pard\\plain\\chftn The note.}.\\par}`;
     const runs = paragraphsOf(source)[0]?.runs ?? [];
     expect(runs.map((run) => run.text).join("")).toBe("Body.");
-    expect(
-      readRtfContent(bytes(source)).diagnostics.map(
-        (diagnostic) => diagnostic.code,
-      ),
-    ).toContain(RtfDiagnosticCodes.CONTENT_DESTINATION_SKIPPED);
+    const found = readRtfContent(bytes(source)).diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.CONTENT_DESTINATION_SKIPPED,
+    );
+    expect(found?.message).toBe(
+      "the \\footnote destination's content is discarded: no ContentDocument position carries it",
+    );
   });
 
   it("reports a discarded header or footer, which has no ContentSection field to land in", () => {
@@ -1571,6 +1747,17 @@ describe("form fields", () => {
     ).toBe("Guten Tag");
   });
 
+  it("never routes a nested destination's own text into a \\*\\ffl entry, even one sharing state.field.formField by reference", () => {
+    // \listtext nested directly inside the first \*\ffl group shares state.field.formField by reference (the same shape the bookmark and \*\fldinst fixtures elsewhere in this file exercise) but its own destination is "listText", not "formFieldListItem" -- a check keyed on state.field.formField's own definedness alone would let "stray" leak into the entry ahead of "Hello" itself.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMDROPDOWN  {\\*\\formfield{\\fftype2\\ffres0\\fftypetxt0\\ffhaslistbox\\ffdefres0{\\*\\ffl{\\listtext stray}Hello}{\\*\\ffl Guten Tag}}}}{\\fldrslt Hello}}\\par}`,
+    )[0];
+    const extent = paragraph?.constructs?.[0];
+    expect(extent?.descriptor).toMatchObject({
+      options: ["Hello", "Guten Tag"],
+    });
+  });
+
   // The same \ffres field FFDataBits gives a checkbox's own state carries, for iTypeDrop, a zero-based index into the \*\ffl list -- a genuinely real Word fixture rather than PHPRtfLite's own always-25 constant: unlike the "reads a FORMDROPDOWN..." test above, whose \ffres25 sentinel falls through to \ffdefres0 for its "Hello" value, this fixture's own \ffres1 already names a real (non-sentinel) selection directly, with no fallback involved.
   it("reads a FORMDROPDOWN field's \\ffres as a zero-based index selecting one of its own \\*\\ffl entries", () => {
     const paragraph = paragraphsOf(
@@ -1633,6 +1820,19 @@ describe("form fields", () => {
         .map((run) => run.text)
         .join(""),
     ).toBe("Lorem ipsum.");
+  });
+
+  it("ignores a stray \\par inside a \\*\\formfield destination rather than force-closing the surrounding paragraph", () => {
+    // \*\formfield carries no #PCDATA or real block structure of its own (its content is entirely its own \fftypeN/\ffname/... control words), so a structure word like \par landing inside it -- a malformed producer's mistake, not RTF's own grammar -- must be silently ignored, exactly like the analogous bookmark/fieldInstruction guards elsewhere in this file. A destination check that matched only formFieldName/formFieldHelpText/formFieldListItem, and missed formField itself, would let this \par force-close the paragraph the whole field is sitting in in the middle of the destination's own control words, splitting one paragraph into two.
+    const paragraphs = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\par\\fftypetxt0{\\*\\ffname Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
+    );
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.constructs?.[0]?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "plainText",
+      tag: "Text1",
+    });
   });
 
   // Regression guard: an earlier round of this reader promoted \ffdeftext (FFData.xstzTextDef, the field's DEFAULT/reset text) onto the descriptor's `value`, which document-schema.js's own ContentControlDescriptor defines as the control's CURRENT value -- for a text field, that current value is whatever text is actually wrapped in \fldrslt's own runs ("Lorem ipsum." here), never the default. `value` must stay unset even though a real \ffdeftext group is present, and the genuinely current text must still be readable from the wrapped runs, exactly as it is when no \ffdeftext exists at all (see "reads a FORMTEXT field's \*\ffname..." above).
@@ -1928,6 +2128,21 @@ describe("form fields", () => {
     });
   });
 
+  it("never opens a form field's own extent from a NESTED group's close whose destination isn't fieldInstruction, even one sharing state.field by reference", () => {
+    // \*\ud is a real, known destination in its own right ("body", not "fieldInstruction") -- \*\fldinst's own text "FORMTEXT" matches before this nested group even opens, but a check keyed on state.field's own definedness and formFieldControlType alone, without also requiring THIS group's own destination to genuinely be "fieldInstruction", would open the extent right here, at \*\ud's own premature close, rather than waiting for \*\fldinst's own real close. Appending "EXTRA" directly afterward (still within \*\fldinst's own outer scope) breaks the word-boundary match RTF's own control-word anchoring requires ("FORMTEXTEXTRA" no longer names any recognised keyword), so the CORRECT outcome is silence -- an ordinary, non-form field, never opened, never reported. Opening it early at \*\ud's own close instead forces formFieldStarted true before "EXTRA" is even read, so the field group's own later close reads the complete (now non-matching) instruction back, drops it, and reports FORM_FIELD_KEYWORD_LOST -- a diagnostic this input must never produce, since correct code never opens the extent in the first place.
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\field{\\*\\fldinst FORMTEXT{\\*\\ud MORE}EXTRA}{\\fldrslt result}}after\\par}`,
+      ),
+    );
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.FORM_FIELD_KEYWORD_LOST,
+      ),
+    ).toBe(false);
+  });
+
   it("swallows a stray \\par inside a \\*\\ffl entry instead of splitting the surrounding paragraph", () => {
     const blocks = blocksOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMDROPDOWN {\\*\\formfield{\\fftype2\\fftypetxt0\\ffhaslistbox{\\*\\ffl item1\\par item2}}}}{\\fldrslt X}}\\par}`,
@@ -1991,6 +2206,29 @@ describe("form fields", () => {
         "a form field's contentControl is dropped: its \\fldrslt content crossed a paragraph or table-cell boundary, and this reader's per-paragraph construct extent cannot span one",
     });
   });
+
+  it("does not crash on a bare \\*\\ffname outside any \\field group, where state.field is genuinely undefined", () => {
+    // \*\ffname is recognised (DESTINATION_KINDS maps it to "formFieldName") regardless of what encloses it, so a hostile or truncated producer's own stray occurrence outside \field reaches emitText with state.field inherited from the root -- undefined, never set by anything else. Without its own field?.formField !== undefined guard, `state.field.formField.name += text` would throw rather than silently discard, exactly as the trailing comment on this whole if-chain says every other unhandled destination already does.
+    expect(() =>
+      readRtfContent(bytes(`${HEADER}\\pard{\\*\\ffname stray}kept\\par}`)),
+    ).not.toThrow();
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard{\\*\\ffname stray}kept\\par}`,
+    )[0];
+    expect(paragraph?.runs.map((run) => run.text).join("")).toBe("kept");
+  });
+
+  it("does not crash on a bare \\*\\ffhelptext outside any \\field group, where state.field is genuinely undefined", () => {
+    expect(() =>
+      readRtfContent(bytes(`${HEADER}\\pard{\\*\\ffhelptext stray}kept\\par}`)),
+    ).not.toThrow();
+  });
+
+  it("does not crash on a bare \\*\\ffl outside any \\field group, where state.field is genuinely undefined", () => {
+    expect(() =>
+      readRtfContent(bytes(`${HEADER}\\pard{\\*\\ffl stray}kept\\par}`)),
+    ).not.toThrow();
+  });
 });
 
 describe("byte runs larger than an argument list", () => {
@@ -2032,6 +2270,17 @@ describe("sections", () => {
           .join(""),
       ),
     ).toEqual(["First.", "Second."]);
+  });
+
+  it("still produces an empty paragraph when \\sect arrives with nothing accumulated, exactly as \\par does", () => {
+    // \sect closes its own paragraph with force=true (see applyStructureControlWord's own "sect" case), matching \par's own always-produce-a-paragraph convention rather than \page/\cell's implicit force=false boundary, which produces nothing when empty. \pard here opens a paragraph that accumulates no text at all before \sect.
+    const sections = sectionsOf(
+      `${HEADER}\\sectd\\pard\\sect\\sectd\\pard After.\\par}`,
+    );
+    expect(sections).toHaveLength(2);
+    expect(sections[0]?.blocks).toEqual([
+      { kind: "paragraph", runs: [] } satisfies Partial<ContentParagraph>,
+    ]);
   });
 
   it("carries each section's own \\pgwsxnN/\\pghsxnN/\\marg*sxnN geometry rather than the document's", () => {
@@ -2102,6 +2351,36 @@ describe("bookmarks", () => {
     );
   });
 
+  it("trims a bookmark's own name, since it is stated as ordinary #PCDATA rather than a delimiter-stripped control-word parameter", () => {
+    // The lone space right after \bkmkstart itself is consumed as the control word's own terminating delimiter (RTF's own rule for a bare, unparameterised control word), but a SECOND space before the name -- or one before the group's own closing brace -- is ordinary #PCDATA and becomes part of bookmark.name verbatim unless explicitly trimmed.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\*\\bkmkstart  padded }marked{\\*\\bkmkend padded}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      name: "padded",
+    });
+  });
+
+  it("keeps a bookmark's own plain-text name intact when it opens nested inside a \\*\\objdata destination", () => {
+    // \*\bkmkstart is a real, known destination (not \*\objdata's own "skip" siblings \*\objalias/\*\objsect), so it opens a genuine child group here rather than being jumped over -- and that child inherits state.objectData BY REFERENCE from its \*\objdata parent, same as any other descendant, even though its own destination is "bookmarkStart", not "objectData". A text token routed by destination alone (never checking THIS group's own state.objectData against the group it actually belongs to) would fold the bookmark's own name into the object's hex payload instead of the bookmark, leaving the name empty.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard{\\object\\objemb{\\*\\objdata{\\*\\bkmkstart marker}x{\\*\\bkmkend marker}00}}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      name: "marker",
+    });
+  });
+
+  it("keeps a bookmark's own \\'hh-escaped name intact when it opens nested inside a \\*\\objdata destination", () => {
+    // The hex-escape counterpart of the fixture above: \'6d\'61\'72\'6b\'65\'72 spells "marker" one \'hh token at a time, each of which must still reach the bookmark's own name through pendingBytes/emitText rather than being diverted into the object's raw byte buffer by a destination check that never verifies THIS group is actually the \*\objdata one it inherited objectData from.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard{\\object\\objemb{\\*\\objdata{\\*\\bkmkstart \\'6d\\'61\\'72\\'6b\\'65\\'72}x{\\*\\bkmkend marker}00}}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      name: "marker",
+    });
+  });
+
   it("reads a bookmark with no text between its halves as a point anchor", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard here{\\*\\bkmkstart spot}{\\*\\bkmkend spot} and on\\par}`,
@@ -2167,8 +2446,12 @@ describe("bookmarks", () => {
     ]);
     // Adjacent runs, split apart only because startBookmark/endBookmark each flush the pending run at the marker's own position -- not two genuinely different formatting spans.
     expect(paragraphs[1]?.runs).toHaveLength(2);
-    expect(diagnostics.map((diagnostic) => diagnostic.code)).toContain(
-      RtfDiagnosticCodes.BLOCK_CONSTRUCT_EXTENTS_CROSSED,
+    const crossed = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.BLOCK_CONSTRUCT_EXTENTS_CROSSED,
+    );
+    expect(crossed?.message).toBe(
+      "a 'anchor' construct's own block extent crosses an already-open one instead of nesting inside or sitting disjoint from it -- both bookmarks likely closed and opened within the same paragraph, which this reader cannot express as two separate extents, so this one is dropped",
     );
   });
 
@@ -2467,6 +2750,1495 @@ describe("table cell formatting", () => {
   });
 });
 
+describe("run identity", () => {
+  it("keeps two adjacent runs with different real colours separate, not folded by a flattened key", () => {
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\cf1 black\\cf2 red\\par}`)[0]?.runs ?? [];
+    expect(runs.map((run) => run.text)).toEqual(["black", "red"]);
+    expect(runs[0]?.color).toEqual({ r: 0, g: 0, b: 0 });
+    expect(runs[1]?.color).toEqual({ r: 1, g: 0, b: 0 });
+  });
+
+  it("keeps two adjacent runs with different fonts separate", () => {
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\f0 times\\f1 arial\\par}`)[0]?.runs ?? [];
+    expect(runs.map((run) => run.text)).toEqual(["times", "arial"]);
+    expect(runs[0]?.fontFamily).toBe("Times New Roman");
+    expect(runs[1]?.fontFamily).toBe("Arial");
+  });
+
+  it("reads a HYPERLINK field carrying both a quoted target and an \\l anchor as target#anchor", () => {
+    const runs =
+      paragraphsOf(
+        `${HEADER}\\pard {\\field{\\*\\fldinst{HYPERLINK "https://example.com/page" \\\\l "part2"}}{\\fldrslt jump}}\\par}`,
+      )[0]?.runs ?? [];
+    expect(runs[0]?.hyperlink).toBe("https://example.com/page#part2");
+  });
+});
+
+describe("unicode fallback skip", () => {
+  it("stops a \\uc fallback skip early at a group boundary rather than reading into the group", () => {
+    // \uc5 with only one text byte before a nested group: the spec's own scope-delimiter rule ends the skippable run at the brace, so "inside" must still be read as real content rather than swallowed as fallback.
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\uc5\\u9731 x{inside}\\par}`)[0]?.runs ??
+      [];
+    expect(runs.map((run) => run.text).join("")).toContain("inside");
+  });
+
+  it("counts a control word or symbol inside the fallback region as exactly one skipped character", () => {
+    // \uc1 skips one "character" -- here a \'hh escape, which the spec's own rule counts as a single character even though it is itself a control word, not a literal byte. If the escape were NOT consumed as the fallback, the decoded e-acute would leak into the visible text alongside the real Unicode character.
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\uc1\\u9731 \\'e9after\\par}`)[0]?.runs ??
+      [];
+    const text = runs.map((run) => run.text).join("");
+    expect(text).not.toContain("é");
+    expect(text).toContain("after");
+  });
+
+  it("consumes a fallback text run exactly its own length and resumes reading real text immediately after it", () => {
+    // \uc3 with a three-byte fallback run ("abc") that is its OWN complete text token -- ended by \b0, a genuine token boundary, rather than continuing into "real" within the same token -- so the skip count exactly exhausts it. The reader must advance past the whole token and reset its own byte offset there, not stop one byte short of it (which would leak a trailing byte of "abc" into the visible text).
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\uc3\\u9731 abc\\b0 real\\par}`)[0]
+        ?.runs ?? [];
+    const text = runs.map((run) => run.text).join("");
+    expect(text).not.toContain("abc");
+    expect(text).toContain("real");
+  });
+
+  it("counts a two-byte text run as fully consumed only once its own last byte is reached, then genuinely skips the control word right after it", () => {
+    // \uc3 with a two-byte fallback ("ab", its own complete token) plus \i (a control word, "considered a single character" per the spec) makes exactly 3 -- the skip must fully exhaust "ab" AND advance past \i, so \i's own formatting effect never reaches "real". A reader that stopped one byte short of "ab" (leaving its own token index unmoved) would leave \i unskipped, letting it toggle italics on for real.
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\uc3\\u9731 ab\\i real\\par}`)[0]?.runs ??
+      [];
+    const text = runs.map((run) => run.text).join("");
+    expect(text).toBe("☃real");
+    expect(runs.some((run) => run.italic === true)).toBe(false);
+  });
+
+  it("leaves a text token's own trailing bytes visible when the fallback count is smaller than the whole token", () => {
+    // \uc2 skips only the first two bytes of the SEVEN-byte token "abcreal" -- the reader must resume from that exact byte offset within the SAME token, not skip the whole token or stop reading it altogether.
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\uc2\\u9731 abcreal\\par}`)[0]?.runs ?? [];
+    const text = runs.map((run) => run.text).join("");
+    expect(text).toBe("☃creal");
+  });
+});
+
+describe("block-scoped construct extent ordering", () => {
+  it("returns the block list itself, not undefined, when there are genuinely no extents to splice at all", () => {
+    // No bookmark anywhere in this document, so sectionBlockExtents is empty and insertConstructMarkers' own fast path is what actually produces the section's blocks -- an emptied fast path would hand endSection undefined instead of the real block list.
+    const blocks = blocksOf(`${HEADER}\\pard one\\par\\pard two\\par}`);
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "one", sizePt: 12 }] },
+      { kind: "paragraph", runs: [{ text: "two", sizePt: 12 }] },
+    ]);
+  });
+
+  function anchorNameOf(block: ContentBlock | undefined): string | undefined {
+    return block?.kind === "constructStart" &&
+      block.descriptor.kind === "anchor"
+      ? block.descriptor.name
+      : undefined;
+  }
+
+  it("nests a shorter extent inside a longer one that opens at the identical start index", () => {
+    // "outer" and "inner" both start in the first paragraph -- tied startIndex -- but "outer" spans one paragraph further before its own \bkmkend, so at that tie the longer extent must sort first (open outermost).
+    const blocks = blocksOf(
+      `${HEADER}\\pard{\\*\\bkmkstart outer}{\\*\\bkmkstart inner}One\\par\\pard Two{\\*\\bkmkend inner}\\par\\pard Three{\\*\\bkmkend outer}\\par}`,
+    );
+    expect(blocks.map((block) => block.kind)).toEqual([
+      "constructStart",
+      "constructStart",
+      "paragraph",
+      "paragraph",
+      "constructEnd",
+      "paragraph",
+      "constructEnd",
+    ]);
+    expect(anchorNameOf(blocks[0])).toBe("outer");
+    expect(anchorNameOf(blocks[1])).toBe("inner");
+  });
+
+  it("keeps two disjoint extents in their own start order, earlier-starting first, when their spans do not tie", () => {
+    // "first" and "second" open at genuinely different, non-tied start indices -- the sort's own first comparator clause (by startIndex) is what this fixture exercises, distinct from the tied-start case above.
+    const blocks = blocksOf(
+      `${HEADER}\\pard{\\*\\bkmkstart first}One\\par\\pard Two{\\*\\bkmkend first}\\par\\pard{\\*\\bkmkstart second}Three\\par\\pard Four{\\*\\bkmkend second}\\par}`,
+    );
+    const starts = blocks.filter((block) => block.kind === "constructStart");
+    expect(starts.map((block) => anchorNameOf(block))).toEqual([
+      "first",
+      "second",
+    ]);
+  });
+
+  it("keeps a shorter extent nested inside a longer one that shares its exact end index, rather than dropping it as crossing", () => {
+    // "inner" starts strictly after "outer" but closes at the SAME index "outer" does -- true nesting with a shared endpoint, not a crossing pair. If the crossing check's own end-side comparison read "greater than or equal to" instead of strictly "greater than", this exact tie would be misread as a cross and "inner" would be dropped.
+    const blocks = blocksOf(
+      `${HEADER}\\pard{\\*\\bkmkstart outer}Zero\\par\\pard{\\*\\bkmkstart inner}One\\par\\pard Two\\par\\pard Three{\\*\\bkmkend outer}{\\*\\bkmkend inner}\\par}`,
+    );
+    const starts = blocks.filter((block) => block.kind === "constructStart");
+    expect(starts.map((block) => anchorNameOf(block))).toEqual([
+      "outer",
+      "inner",
+    ]);
+    expect(
+      blocks.filter((block) => block.kind === "constructEnd"),
+    ).toHaveLength(2);
+  });
+
+  it("still sorts an inner extent's later start ahead of an outer one's earlier start when the inner extent closes -- and so is pushed into the pending list -- first", () => {
+    // "outer" opens before "inner" does but closes after it, so "inner" is the one whose \bkmkend is seen first and is therefore the one flushClosingBookmarks pushes into sectionBlockExtents first -- the pre-sort array order here is [inner, outer], the REVERSE of correct start order. If the sort's own first comparator clause summed the two startIndex values instead of subtracting them, the comparator would return the same (wrong-signed) result regardless of which extent it was asked about first -- since addition is commutative -- and never trigger the swap this out-of-order push requires, leaving "inner" sorted ahead of "outer". dropCrossingExtents would then see "outer" arrive after "inner" already claimed the first slot and misread the true nesting as a cross, dropping "outer" entirely.
+    const blocks = blocksOf(
+      `${HEADER}\\pard{\\*\\bkmkstart outer}Zero\\par\\pard{\\*\\bkmkstart inner}One\\par\\pard{\\*\\bkmkend inner}Two\\par\\pard{\\*\\bkmkend outer}Three\\par}`,
+    );
+    const starts = blocks.filter((block) => block.kind === "constructStart");
+    expect(starts.map((block) => anchorNameOf(block))).toEqual([
+      "outer",
+      "inner",
+    ]);
+    expect(
+      blocks.filter((block) => block.kind === "constructEnd"),
+    ).toHaveLength(2);
+  });
+});
+
+describe("table cell merge span", () => {
+  it("gives a plain, non-anchor cell a span of one even when a later, unrelated cell carries its own continuation flag", () => {
+    // The second cell's own \clmrg is malformed here (no preceding \clmgf anchors it), but horizontalSpanAt's own guard must still be keyed on THIS cell's own horizontalMergeFirst flag, not fall through to scanning forward regardless of it.
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\cellx1440\\clmrg\\cellx2880\\pard\\intbl A\\cell\\pard\\intbl B\\cell\\row\\pard x\\par}`,
+    );
+    expect(table.rows[0]?.cells[0]?.colSpan).toBeUndefined();
+  });
+});
+
+describe("bookmark bookkeeping", () => {
+  it("never routes a nested destination's own text into the enclosing bookmark's own name, even one sharing state.bookmark by reference", () => {
+    // \listtext is a real, known destination ("listText", not "body", not "fieldInstruction", not any of the formField* destinations already checked above) that can genuinely nest inside a \*\bkmkstart group while inheriting state.bookmark by reference -- the same shape the \*\ud-inside-\*\fldinst fixture elsewhere in this file exercises for state.field. A check keyed on state.bookmark's own definedness alone, without also requiring THIS group's own destination to genuinely be bookmarkStart/bookmarkEnd, would append "stray" straight into the bookmark's own name instead of silently discarding it (the trailing comment on this whole if-chain: "listText" ... discard).
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\*\\bkmkstart{\\listtext stray}name}marked{\\*\\bkmkend name}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      name: "name",
+    });
+  });
+
+  it("silently drops a bookmark start whose own name is empty, never opening an extent for it", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard before {\\*\\bkmkstart}marked{\\*\\bkmkend}after\\par}`,
+    )[0];
+    expect(paragraph?.constructs ?? []).toEqual([]);
+    expect(paragraph?.runs.map((run) => run.text).join("")).toBe(
+      "before markedafter",
+    );
+  });
+
+  it("reports the exact \\bkmkend-with-no-\\bkmkstart diagnostic message, naming the orphaned bookmark", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard x{\\*\\bkmkend orphan}\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) => diagnostic.code === RtfDiagnosticCodes.BOOKMARK_UNPAIRED,
+    );
+    expect(found?.message).toBe(
+      "a \\bkmkend named 'orphan' has no matching \\bkmkstart, so no anchor construct is produced for it",
+    );
+  });
+
+  it("reports the exact table-cell-boundary-straddling diagnostic message, naming the bookmark", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\trowd\\trleft0\\cellx4320\\pard\\intbl{\\*\\bkmkstart straddler}one\\par\\pard\\intbl two\\cell\\row\\pard{\\*\\bkmkend straddler}after\\par}`,
+      ),
+    );
+    const found = diagnostics.find(
+      (diagnostic) => diagnostic.code === RtfDiagnosticCodes.BOOKMARK_UNPAIRED,
+    );
+    expect(found?.message).toBe(
+      "the bookmark 'straddler' spans a table cell boundary; a construct extent cannot straddle two block lists, so no anchor construct is produced for it",
+    );
+  });
+
+  it("resolves a bookmark's own \\bkmkcolfN/\\bkmkcollN range only when at least one of the pair is stated", () => {
+    // Naming only \bkmkcolf without \bkmkcoll (or vice versa) is spec-legal ("These controls are used within the \*\bkmkstart destination"), and must still produce a source-residue clause -- neither field being stated at all is the only case with no clause.
+    const first = paragraphsOf(
+      `${HEADER}\\pard{\\*\\bkmkstart\\bkmkcolf3 First}x{\\*\\bkmkend First}\\par}`,
+    )[0];
+    expect(first?.constructs?.[0]?.descriptor.source).toEqual({
+      format: "rtf",
+      xml: "\\bkmkcolf3",
+    });
+    const second = paragraphsOf(
+      `${HEADER}\\pard{\\*\\bkmkstart\\bkmkcoll7 Second}x{\\*\\bkmkend Second}\\par}`,
+    )[0];
+    expect(second?.constructs?.[0]?.descriptor.source).toEqual({
+      format: "rtf",
+      xml: "\\bkmkcoll7",
+    });
+    const neither = paragraphsOf(
+      `${HEADER}\\pard{\\*\\bkmkstart Plain}x{\\*\\bkmkend Plain}\\par}`,
+    )[0];
+    expect(neither?.constructs?.[0]?.descriptor.source).toBeUndefined();
+  });
+
+  it("actually removes a resolved bookmark from the open set, so a same-named start opened afterwards is not confused with the first", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\*\\bkmkstart dup}first{\\*\\bkmkend dup} between {\\*\\bkmkstart dup}second{\\*\\bkmkend dup}\\par}`,
+    )[0];
+    expect(paragraph?.constructs).toHaveLength(2);
+    const [firstExtent, secondExtent] = paragraph?.constructs ?? [];
+    expect(firstExtent?.startRun).not.toBe(secondExtent?.startRun);
+  });
+
+  it("genuinely deletes a resolved bookmark from the open set, so a second \\bkmkend for the same name reports it as unpaired rather than resolving twice", () => {
+    // If endBookmark's own delete call were a no-op, 'dup' would still be sitting in openBookmarks when the second bkmkend arrives: it would be silently (and wrongly) treated as still open instead of triggering the bkmkend-with-no-bkmkstart diagnostic here, AND it would still be open at the document's own end, triggering reportUnclosedBookmarks' own "has no matching \\bkmkend" diagnostic instead -- a DIFFERENT diagnostic that also names 'dup' and would, wrongly, still leave the naive count-only assertion this replaced at exactly one match, masking the missing delete entirely. Asserting the exact message (not just a length-one count of anything mentioning 'dup') is what actually distinguishes the two.
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard {\\*\\bkmkstart dup}one{\\*\\bkmkend dup}{\\*\\bkmkend dup}\\par}`,
+      ),
+    );
+    const unpaired = diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.BOOKMARK_UNPAIRED &&
+        diagnostic.message.includes("dup"),
+    );
+    expect(unpaired).toHaveLength(1);
+    expect(unpaired[0]?.message).toBe(
+      "a \\bkmkend named 'dup' has no matching \\bkmkstart, so no anchor construct is produced for it",
+    );
+  });
+});
+
+describe("run and paragraph accumulation", () => {
+  it("gives each closed paragraph its own distinct serial identity", () => {
+    // A bookmark opened in the second paragraph and closed in the third must resolve to a block-scoped extent (its own start and end genuinely differ), which only holds if each closed paragraph actually gets a serial distinct from every other one -- a serial that collided across paragraphs would make the second paragraph's own identity indistinguishable from the first's.
+    const blocks = blocksOf(
+      `${HEADER}\\pard One\\par\\pard{\\*\\bkmkstart s}Two\\par\\pard Three{\\*\\bkmkend s}\\par}`,
+    );
+    expect(blocks.map((block) => block.kind)).toEqual([
+      "paragraph",
+      "constructStart",
+      "paragraph",
+      "paragraph",
+      "constructEnd",
+    ]);
+  });
+
+  it("sorts a paragraph's own run-scoped constructs by start position, earliest first", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}{\\*\\revtbl{Unknown;}{A. Reviewer;}}\\pard kept \\revised\\revauth1 second\\revised0  middle \\deleted\\revauthdel1 first-in-source\\deleted0  end\\par}`,
+    )[0];
+    // Two disjoint provenance extents on the same paragraph: the insertion opens AFTER the deletion in source order here is irrelevant -- what matters is the extents come back ordered by their own startRun, not source-declaration order, matching document-schema.js's own well-formedness expectation for RunConstructExtent[].
+    const starts = (paragraph?.constructs ?? []).map(
+      (extent) => extent.startRun,
+    );
+    expect(starts).toEqual([...starts].sort((a, b) => a - b));
+    expect(paragraph?.constructs).toHaveLength(2);
+  });
+
+  it("still tie-breaks two run-scoped constructs sharing a startRun by endRun, ascending, when a bookmark extent (pushed first, regardless of its own numeric range) shares its start with a shorter coalesced revision extent (pushed second)", () => {
+    // Both 'B' (a bookmark) and the revision mark on 'hi' start at run 0, but pendingRunConstructs entries are always spread into the pre-sort array BEFORE coalesceRunConstructs' own output, regardless of which one's numeric range is actually smaller -- so the pre-sort array here is [B(start=0,end=2), revision(start=0,end=1)], tied on the first comparator clause and wrong on the second. A second comparator clause that summed the two endRun values instead of subtracting them would return the same non-discriminating result regardless of argument order (both terms tied at zero on the first clause), never triggering the swap this reversed-by-numeric-value push order requires.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\*\\bkmkstart B}\\revised\\revauth1 hi\\revised0  more{\\*\\bkmkend B}\\par}`,
+    )[0];
+    const extents = paragraph?.constructs ?? [];
+    expect(extents).toHaveLength(2);
+    expect(extents[0]?.descriptor.kind).toBe("provenance");
+    expect(extents[0]?.endRun).toBe(1);
+    expect(extents[1]?.descriptor.kind).toBe("anchor");
+    expect(extents[1]?.endRun).toBe(2);
+  });
+
+  it("still sorts a nested bookmark pair into start order when the inner one's own endBookmark call -- and so its own push into pendingRunConstructs -- happens before the outer one's", () => {
+    // 'inner' opens after 'outer' (startRun 1, not 0) but closes first, so ITS OWN pendingRunConstructs.push happens before 'outer's -- the pre-sort array here is [inner(start=1), outer(start=0)], the reverse of correct start order, exactly mirroring the block-extent sort's own out-of-push-order case above. A sort comparator that summed instead of subtracted the two startRun values (or one whose "||" read "&&") would return the same, non-discriminating result regardless of which extent it was asked about first, and never trigger the swap this reversed push order requires.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\*\\bkmkstart outer}one {\\*\\bkmkstart inner}two{\\*\\bkmkend inner} three{\\*\\bkmkend outer}\\par}`,
+    )[0];
+    const names = (paragraph?.constructs ?? []).map((extent) =>
+      extent.descriptor.kind === "anchor" ? extent.descriptor.name : undefined,
+    );
+    expect(names).toEqual(["outer", "inner"]);
+  });
+
+  it("resolves a bookmark's own block index to the paragraph it actually opened in, not to whichever later paragraph happens to close while it is still open", () => {
+    // "far" opens in "One" and stays open across two further paragraphs before its own \bkmkend. A guard that kept re-resolving blockIndex on every subsequent paragraph close (rather than only once, at "far"'s own opening paragraph) would leave it pointing at "Three" instead.
+    const blocks = blocksOf(
+      `${HEADER}\\pard{\\*\\bkmkstart far}One\\par\\pard Two\\par\\pard Three\\par\\pard Four{\\*\\bkmkend far}\\par}`,
+    );
+    expect(blocks.map((block) => block.kind)).toEqual([
+      "constructStart",
+      "paragraph",
+      "paragraph",
+      "paragraph",
+      "paragraph",
+      "constructEnd",
+    ]);
+  });
+});
+
+describe("paragraph geometry derivation", () => {
+  it("does not restate a style name onto styleId when the header names an empty style entry", () => {
+    const source =
+      "{\\rtf1\\ansi\\ansicpg1252\\deff0" +
+      "{\\fonttbl{\\f0\\froman\\fcharset0 Times New Roman;}}" +
+      "{\\colortbl;}" +
+      "{\\stylesheet{\\s1 ;}}" +
+      "\\pard\\s1 x\\par}";
+    const paragraph = paragraphsOf(source)[0];
+    expect(paragraph?.styleId).toBeUndefined();
+  });
+
+  it("omits headingLevel when a paragraph names no style and states no \\outlinelevel of its own", () => {
+    const paragraph = paragraphsOf(`${HEADER}\\pard plain\\par}`)[0];
+    expect(paragraph?.headingLevel).toBeUndefined();
+  });
+
+  it("treats \\sl0 (automatic spacing) the same as no \\sl at all: no lineSpacing field", () => {
+    const paragraph = paragraphsOf(`${HEADER}\\pard\\sl0\\slmult1 x\\par}`)[0];
+    expect(paragraph?.lineSpacing).toBeUndefined();
+  });
+
+  it("carries no lineSpacing field when \\sl is stated without \\slmult1, since the default is not left with a leftover default value", () => {
+    const paragraph = paragraphsOf(`${HEADER}\\pard\\sl240 x\\par}`)[0];
+    expect(paragraph?.lineSpacing).toBeUndefined();
+  });
+
+  it("reads \\ls0 (no list override) as no list field at all, matching an absent \\ls", () => {
+    const paragraph = paragraphsOf(`${HEADER}\\pard\\ls0 x\\par}`)[0];
+    expect(paragraph?.list).toBeUndefined();
+  });
+});
+
+describe("table row and column derivation", () => {
+  it("does not open a synthetic empty cell when a \\row closes with no pending text and no cell already collected", () => {
+    // \row with genuinely nothing accumulated -- no \cell mark reached at all -- must not call endCell and manufacture a phantom cell from nothing; TABLE_ROW_WITHOUT_DEFINITION already covers that case on its own terms.
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\trowd\\trleft0\\cellx1440\\row\\pard x\\par}`),
+    );
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.TABLE_ROW_WITHOUT_DEFINITION,
+      ),
+    ).toBe(true);
+  });
+
+  it("resets inTable to false once \\row closes, even with no \\pard afterward to do it instead", () => {
+    // Every other table fixture in this file follows its own \row with an explicit \pard, which resets para.inTable back to false on its own via defaultParagraphState() -- masking whether \row's OWN reset does anything at all. Typing text directly after \row, with no \pard in between, is the one shape that actually depends on \row's own case resetting inTable itself: without it, "after" would stay routed into the now-closed table's own cellBlocks instead of the section's real blocks.
+    const blocks = blocksOf(
+      `${HEADER}\\trowd\\trleft0\\cellx1440\\pard\\intbl cell\\cell\\row after\\par}`,
+    );
+    const paragraphs = blocks.filter(
+      (block): block is ContentParagraph => block.kind === "paragraph",
+    );
+    expect(
+      paragraphs.some((paragraph) =>
+        paragraph.runs.some((run) => run.text.includes("after")),
+      ),
+    ).toBe(true);
+  });
+
+  it("still closes a dangling cell whose own \\cell mark is missing but a \\row follows it directly", () => {
+    // Real producers occasionally omit the final \cell before \row; endRow's own guard must still call endCell for whatever text or blocks accumulated, rather than losing it because \row's own trigger conditions were read too narrowly.
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\cellx1440\\pard\\intbl dangling\\row\\pard x\\par}`,
+    );
+    expect(table.rows[0]?.cells).toHaveLength(1);
+    const firstBlock = table.rows[0]?.cells[0]?.blocks[0];
+    expect(
+      firstBlock?.kind === "paragraph"
+        ? firstBlock.runs.map((run) => run.text).join("")
+        : undefined,
+    ).toBe("dangling");
+  });
+
+  it("still closes a dangling cell holding only an already-flushed block (no pending text at all) when \\row follows directly", () => {
+    // A picture already pushed into cellBlocks via addBlocks, with nothing typed after it -- pendingRunText is genuinely empty here, so this exercises endRow's own cellBlocks.length check specifically, not the pendingRunText half of its guard.
+    const PNG_HEX =
+      "89504e470d0a1a0a0000000d494844520000000100000001080600000" +
+      "01f15c4890000000a49444154789c6300010000050001" +
+      "0d0a2db40000000049454e44ae426082";
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\cellx1440\\pard\\intbl{\\pict\\pngblip\\picwgoal720\\pichgoal720 ${PNG_HEX}}\\row\\pard x\\par}`,
+    );
+    expect(table.rows[0]?.cells).toHaveLength(1);
+    expect(table.rows[0]?.cells[0]?.blocks[0]?.kind).toBe("image");
+  });
+
+  it("produces a genuinely empty cell (no blocks at all) for a cell with no content, rather than a phantom empty paragraph", () => {
+    // endCell's own endParagraph(para, false) must NOT force-close: an empty, never-typed-in cell has zero runs, and force=false is exactly what lets that produce no block at all.
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\cellx1440\\pard\\intbl\\cell\\row\\pard x\\par}`,
+    );
+    expect(table.rows[0]?.cells[0]?.blocks).toEqual([]);
+  });
+
+  it("splices a bookmark closed inside a cell into that cell's own blocks, not the section's", () => {
+    // 'inCell' opens in the cell's first paragraph and closes in its second, still inside the same cell -- endCell's own flushClosingBookmarks call must target inTable=true (the cell's own cellBlockExtents), not the section's, or the marker pair ends up missing from the cell entirely.
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\cellx1440\\pard\\intbl{\\*\\bkmkstart inCell}One\\par\\pard\\intbl Two{\\*\\bkmkend inCell}\\cell\\row\\pard x\\par}`,
+    );
+    const kinds = table.rows[0]?.cells[0]?.blocks.map((block) => block.kind);
+    expect(kinds).toEqual([
+      "constructStart",
+      "paragraph",
+      "paragraph",
+      "constructEnd",
+    ]);
+  });
+
+  it("still resolves a bookmark whose own \\bkmkend lands in an otherwise-empty trailing paragraph right before \\cell, via endCell's own explicit flush rather than endParagraph's", () => {
+    // \bkmkend here is the ONLY thing in its paragraph -- no text follows it before \cell -- so endParagraph's own force=false early return (runs.length === 0) fires without ever calling resolveBookmarkPositions, leaving 'trailing' still sitting in closingBookmarks when endCell reaches its OWN explicit flushClosingBookmarks(true, ...) call two lines later. That explicit call is the only thing that still resolves it; if its own hardcoded inTable argument read false instead of true, closing.inTable (true, since the bookmark opened inside \intbl) would no longer match, and 'trailing' would be wrongly dropped as straddling a cell boundary it never actually crossed.
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\cellx1440\\pard\\intbl{\\*\\bkmkstart trailing}One\\par\\pard\\intbl{\\*\\bkmkend trailing}\\cell\\row\\pard x\\par}`,
+    );
+    const kinds = table.rows[0]?.cells[0]?.blocks.map((block) => block.kind);
+    expect(kinds).toEqual(["constructStart", "paragraph", "constructEnd"]);
+  });
+
+  it("reports the exact TABLE_ROW_WITHOUT_DEFINITION message text", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\trowd\\trleft0\\cellx1440\\row\\pard x\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.TABLE_ROW_WITHOUT_DEFINITION,
+    );
+    expect(found?.message).toBe(
+      "a \\row closed a table row that contained no \\cell marks",
+    );
+  });
+
+  it("takes column widths from the FIRST row's own \\cellxN boundaries, not a later row's", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\cellx1000\\cellx2000\\pard\\intbl A\\cell\\pard\\intbl B\\cell\\row` +
+        "\\trowd\\trleft0\\cellx5000\\cellx9000\\pard\\intbl C\\cell\\pard\\intbl D\\cell\\row\\pard x\\par}",
+    );
+    expect(table.columnWidthsPt).toEqual([50, 50]);
+  });
+
+  it("counts grid columns from a row's own cell spans when they exceed the \\cellxN boundary count", () => {
+    // \cellxN only ever names 2 boundaries here, but a horizontally merged anchor covering both plus a genuinely wider second row proves columnCount is derived from actual cell spans, not capped at the boundary count alone.
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\clmgf\\cellx2160\\clmrg\\cellx4320\\pard\\intbl wide\\cell\\pard\\intbl\\cell\\row` +
+        "\\trowd\\trleft0\\cellx1440\\cellx2880\\cellx4320\\pard\\intbl a\\cell\\pard\\intbl b\\cell\\pard\\intbl c\\cell\\row\\pard x\\par}",
+    );
+    expect(table.columnWidthsPt.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("filters a horizontally-merged continuation cell out of the row entirely, while a vertical continuation keeps its own empty slot", () => {
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\clmgf\\cellx1440\\clmrg\\cellx2880\\pard\\intbl merged\\cell\\pard\\intbl\\cell\\row" +
+        "\\trowd\\trleft0\\clvmgf\\cellx1440\\cellx2880\\pard\\intbl v\\cell\\pard\\intbl w\\cell\\row" +
+        "\\trowd\\trleft0\\clvmrg\\cellx1440\\cellx2880\\pard\\intbl stray\\cell\\pard\\intbl x\\cell\\row\\pard z\\par}",
+    );
+    // Row 0's horizontal continuation cell is dropped, leaving one cell.
+    expect(table.rows[0]?.cells).toHaveLength(1);
+    // Row 2's vertical continuation cell keeps its own slot (an empty one), so the row still reports two cells. Its own cell carries a "stray" run in the source (a real producer's own vertically-merged continuation cell does sometimes still write placeholder text, even though the spec's own merge model says only the anchor's content is real) -- a genuinely early-returned `{ blocks: [] }` discards it regardless; a fallen-through cell would keep `cell.blocks` (the stray paragraph) instead.
+    expect(table.rows[2]?.cells).toHaveLength(2);
+    expect(table.rows[2]?.cells[0]?.blocks).toEqual([]);
+  });
+
+  it("derives rowSpan of exactly two, not three, when the row after a merge run is a genuinely ordinary row", () => {
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\clvmgf\\cellx1440\\pard\\intbl A\\cell\\row" +
+        "\\trowd\\trleft0\\clvmrg\\cellx1440\\pard\\intbl\\cell\\row" +
+        "\\trowd\\trleft0\\cellx1440\\pard\\intbl B\\cell\\row\\pard x\\par}",
+    );
+    expect(table.rows[0]?.cells[0]?.rowSpan).toBe(2);
+    expect(table.rows[2]?.cells[0]?.rowSpan).toBeUndefined();
+  });
+
+  it("never scans for a continuation at all under a genuinely ordinary cell that carries no \\clvmgf anchor of its own", () => {
+    // Row 0's cell is a plain, unmerged cell -- no \clvmgf -- while row 1's cell at the identical column IS a \clvmrg continuation (malformed on its own, since nothing anchors it, but the reader's own rowSpan derivation must still be gated on THIS cell's own verticalMergeFirst flag, not on whether a match happens to exist somewhere later). A guard that entered the scanning loop unconditionally would find row 1's continuation anyway and wrongly extend row 0's plain cell to rowSpan 2.
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\cellx1440\\pard\\intbl A\\cell\\row" +
+        "\\trowd\\trleft0\\clvmrg\\cellx1440\\pard\\intbl\\cell\\row\\pard x\\par}",
+    );
+    expect(table.rows[0]?.cells[0]?.rowSpan).toBeUndefined();
+  });
+
+  it("derives rowSpan of exactly three when a merge run spans two genuine continuation rows, not one", () => {
+    // Two REAL \clvmrg continuation rows after the anchor, not one: a scan loop that stepped backwards instead of forwards would revisit the anchor's own row on its second iteration (rowIndex itself is never a verticalMergeContinuation, so that immediately breaks the loop) and stop after counting only the FIRST continuation -- rowSpan 2 -- indistinguishable from the existing "exactly two, not three" fixture above, which only ever has one continuation row to begin with and so cannot tell a reversed loop direction apart from a correct one.
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\clvmgf\\cellx1440\\pard\\intbl A\\cell\\row" +
+        "\\trowd\\trleft0\\clvmrg\\cellx1440\\pard\\intbl\\cell\\row" +
+        "\\trowd\\trleft0\\clvmrg\\cellx1440\\pard\\intbl\\cell\\row" +
+        "\\trowd\\trleft0\\cellx1440\\pard\\intbl B\\cell\\row\\pard x\\par}",
+    );
+    expect(table.rows[0]?.cells[0]?.rowSpan).toBe(3);
+  });
+
+  it("still matches a continuation whose own row places it at cell position one, not only at position zero", () => {
+    // The anchor is the SECOND cell of its own row here (a plain first cell precedes it), so its own resolved column value is 1, not 0 -- and the continuation row below it also places its own \clvmrg continuation as its second cell, so indexOf(column) resolves to matchIndex 1 too. A check that mistook a real matchIndex of 1 for the sentinel "not found" value (rather than genuinely comparing it against -1) would wrongly treat this real match as absent and stop the scan immediately, every existing fixture only ever has its own match at position 0.
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\cellx1440\\clvmgf\\cellx2880\\pard\\intbl first\\cell\\pard\\intbl anchor\\cell\\row" +
+        "\\trowd\\trleft0\\cellx1440\\clvmrg\\cellx2880\\pard\\intbl x\\cell\\pard\\intbl\\cell\\row\\pard z\\par}",
+    );
+    expect(table.rows[0]?.cells[1]?.rowSpan).toBe(2);
+  });
+
+  it("leaves rowSpan at one for a \\clvmgf anchor in the table's own last row, with no following row to continue into", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\clvmgf\\cellx1440\\pard\\intbl only\\cell\\row\\pard x\\par}`,
+    );
+    expect(table.rows[0]?.cells[0]?.rowSpan).toBeUndefined();
+  });
+
+  it("matches a \\clvmgf anchor sitting after a real \\clmgf/\\clmrg column span against a continuation row with no span of its own", () => {
+    // The anchor row's own grid-column position (3) is reached after only two of its own cell entries (a colSpan-2 pair, then the anchor itself at local index 2), while the continuation row reaches the identical grid column via four entirely plain cells (local index 3) -- so the two rows' own column values only agree because resolveRows' own per-cell slot count is exactly `span`, not `span + 1`. A test built from two same-shaped rows (as the existing \\clvmgf fixtures above all are) shifts both rows' own columns by the identical amount and can never tell `slot < span` apart from `slot <= span`; this fixture's asymmetric cell counts can.
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\clmgf\\cellx1440\\clmrg\\cellx2880\\clvmgf\\cellx4320" +
+        "\\pard\\intbl first\\cell\\pard\\intbl\\cell\\pard\\intbl anchor\\cell\\row" +
+        "\\trowd\\trleft0\\cellx1440\\cellx2880\\cellx4320\\clvmrg\\cellx5760" +
+        "\\pard\\intbl\\cell\\pard\\intbl\\cell\\pard\\intbl\\cell\\pard\\intbl\\cell\\row" +
+        "\\pard z\\par}",
+    );
+    expect(table.rows[0]?.cells[0]?.colSpan).toBe(2);
+    expect(table.rows[0]?.cells[1]?.blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "anchor", sizePt: 12 }] },
+    ]);
+    expect(table.rows[0]?.cells[1]?.rowSpan).toBe(2);
+    expect(table.rows[1]?.cells[3]?.blocks).toEqual([]);
+  });
+
+  it("falls back to an even split when the \\cellxN boundaries describe fewer columns than the row actually has", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\trowd\\trleft0\\cellx4320\\pard\\intbl A\\cell\\pard\\intbl B\\cell\\row\\pard x\\par}`,
+      ),
+    );
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.TABLE_COLUMN_WIDTH_INVALID,
+      ),
+    ).toBe(true);
+  });
+
+  it("reports the exact TABLE_COLUMN_WIDTH_INVALID message text", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\trowd\\trleft0\\cellx4320\\cellx4320\\pard\\intbl A\\cell\\pard\\intbl B\\cell\\row\\pard x\\par}`,
+      ),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.TABLE_COLUMN_WIDTH_INVALID,
+    );
+    expect(found?.message).toBe(
+      "the row's \\cellxN boundaries do not describe increasing column widths for every column; falling back to an even split of the page's text width",
+    );
+  });
+
+  it("splits the even-split fallback width by dividing the usable width, not multiplying it, across the column count", () => {
+    const table = firstTable(
+      "{\\rtf1\\ansi\\ansicpg1252\\deff0" +
+        "{\\fonttbl{\\f0\\froman\\fcharset0 Times New Roman;}}{\\colortbl;}" +
+        "\\paperw12240\\paperh15840\\margl1440\\margr1440" +
+        "\\trowd\\trleft0\\cellx1440\\cellx1440\\pard\\intbl A\\cell\\pard\\intbl B\\cell\\row\\pard x\\par}",
+    );
+    // Usable width is 8.5in - 2in = 6.5in = 468pt, split across 2 columns.
+    expect(table.columnWidthsPt).toEqual([234, 234]);
+  });
+});
+
+describe("block accumulation across \\object/\\result scratch rendering", () => {
+  it("never appends an empty block list, so addBlocks is a true no-op rather than an empty-array push", () => {
+    // A picture that fails to decode (no format) produces nothing to add; the surrounding paragraph's own text must read as one unbroken run rather than being split by a flush that never needed to happen.
+    const runs =
+      paragraphsOf(
+        `${HEADER}\\pard before{\\pict\\wmetafile8 00}after\\par}`,
+      )[0]?.runs ?? [];
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.text).toBe("beforeafter");
+  });
+
+  it("flushes a run still pending before a genuinely non-empty addBlocks call, keeping it a separate run from identically-formatted text typed after", () => {
+    // A successfully-decoded picture is the ordinary non-empty case addBlocks' own flushRun call exists for: without it, "before" would stay pending across the image insertion and silently merge with "after" into one run once the image block itself has already been spliced between them positionally -- the two texts would still end up in the same final paragraph (addBlocks does not close the paragraph, only flushes and splices), so only the RUN boundary between them reveals a missing flush.
+    const PNG_HEX =
+      "89504e470d0a1a0a0000000d494844520000000100000001080600000" +
+      "01f15c4890000000a49444154789c6300010000050001" +
+      "0d0a2db40000000049454e44ae426082";
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard before{\\pict\\pngblip\\picwgoal720\\pichgoal720 ${PNG_HEX}}after\\par}`,
+    )[0];
+    const texts = paragraph?.runs.map((run) => run.text) ?? [];
+    expect(texts).toEqual(["before", "after"]);
+  });
+
+  it("never flushes a run still pending when addBlocks is called with a genuinely empty list, so it stays merged with identically-formatted text typed after the call", () => {
+    // A failed-picture-decode addBlocks call (the fixture above) never even reaches addBlocks' own emptiness check: buildPicture returning undefined is guarded by its OWN `if (image !== undefined)` at the call site, so addBlocks is never called there at all. objectState.resultBlocks is the one real call site that can genuinely pass an empty array -- an \object whose \result had no content of its own. \shppict (a "body"-kind destination, not a fresh \result scratch) types "blah" directly into the OUTER paragraph's own pendingRunText AFTER \result has already closed and restored state, so it is still genuinely pending -- unflushed -- at the exact moment \object's own close calls addBlocks(resultBlocks=[], ...). A guard-less addBlocks would flush it regardless of its own list being empty, splitting it from the identically-formatted text typed after \object closes.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\object{\\result}{\\shppict blah}} more\\par}`,
+    )[0];
+    const texts = paragraph?.runs.map((run) => run.text) ?? [];
+    expect(texts).toEqual(["blah more"]);
+  });
+
+  it("flushes a run still pending when \\result's own scratch rendering begins, so it is not lost or merged into \\result's content", () => {
+    const OBJDATA_HEX_LOCAL = bytesToHex(
+      writeEmbeddedObjectData({
+        objectKind: "spreadsheet",
+        document: { kind: "spreadsheet", metadata: {}, sheets: [] },
+        frame: { xPt: 0, yPt: 0, widthPt: 1, heightPt: 1 },
+      }),
+    );
+    const paragraphs = paragraphsOf(
+      `${HEADER}\\pard pending text{\\object\\objemb{\\*\\objdata ${OBJDATA_HEX_LOCAL}}{\\result{\\pard\\plain fallback\\par}}}\\par}`,
+    );
+    const text = paragraphs
+      .map((p) => p.runs.map((r) => r.text).join(""))
+      .join("");
+    expect(text).toContain("pending text");
+  });
+
+  it("keeps a run pending before \\result as its own separate run, not merged with identically-formatted text typed after \\object closes", () => {
+    // \result here is genuinely EMPTY and \objdata is absent entirely, so nothing else along the way ever calls addBlocks with a non-empty list -- not \objdata's own decode (there is none), not \object's own close splicing resultBlocks in (endResultScratch returns [] for an empty scratch, and addBlocks' own length===0 guard makes that call a no-op too). beginResultScratch's own flushRun call is therefore the ONLY thing that can push "pending " into a real run before \object's group closes. captureAccumulatorState/restoreAccumulatorState round-trip the raw pendingRunText/pendingRunKey either way, so a MISSING flushRun call is invisible to a plain "is the text still there" check -- it only shows up as pendingRunKey surviving the round trip unflushed, which then lets "pending " silently merge with " more" into ONE run instead of staying two, since " more" shares the identical (plain) formatting key and appendText only flushes on a key CHANGE.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard pending {\\object{\\result}} more\\par}`,
+    )[0];
+    const texts = paragraph?.runs.map((run) => run.text) ?? [];
+    expect(texts).toEqual(["pending ", " more"]);
+  });
+
+  it("closes an open table before splicing \\result's own recovered blocks in, so a table inside \\result is not left dangling in tableRows", () => {
+    const paragraphs = paragraphsOf(
+      `${HEADER}\\pard{\\object\\objemb{\\*\\objdata 68656c6c6f}{\\result{\\trowd\\trleft0\\cellx1440\\pard\\intbl cell\\cell\\row\\pard done\\par}}}\\par}`,
+    );
+    const text = paragraphs
+      .map((p) => p.runs.map((r) => r.text).join(""))
+      .join("|");
+    expect(text).toContain("done");
+  });
+
+  it("closes a table whose \\row is the very last thing in \\result's own content, with no \\par after it to trigger endParagraph's own closeTable call", () => {
+    // \result's content ends on \row with para.inTable still true -- endParagraph(para, false)'s own internal closeTable() call is gated on `!para.inTable`, so it does NOT fire here (unlike the fixture above, where \result's content ends on an explicit \par OUTSIDE the table, and THAT closeTable call is what actually closes it, leaving endResultScratch's own trailing call redundant for that case). endResultScratch's own explicit closeTable() call is the only thing that can still turn tableRows into a real block here.
+    const blocks = blocksOf(
+      `${HEADER}\\pard{\\object\\objemb{\\*\\objdata 00}{\\result{\\trowd\\trleft0\\cellx1440\\pard\\intbl cell\\cell\\row}}}\\par}`,
+    );
+    expect(blocks.some((block) => block.kind === "table")).toBe(true);
+  });
+});
+
+describe("section finalisation", () => {
+  it("drops a genuinely empty trailing section rather than emitting a blank ContentSection after a real one", () => {
+    // \sectd alone, with no \par and no text at all, leaves nothing pending -- finish()'s own trailing endSection() call reaches this section with blocks.length actually 0 (unlike an explicit \sect, which always force-closes at least an empty paragraph first).
+    const sections = sectionsOf(
+      `${HEADER}\\sectd\\pard First.\\par\\sect\\sectd}`,
+    );
+    expect(sections).toHaveLength(1);
+    const text0 = sections[0]?.blocks
+      .filter((block): block is ContentParagraph => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs.map((run) => run.text))
+      .join("");
+    expect(text0).toBe("First.");
+  });
+
+  it("keeps the document's only section even when it has no blocks at all, rather than producing zero sections", () => {
+    const { document } = readRtfContent(bytes(`${HEADER}}`));
+    if (document.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing document");
+    }
+    expect(document.sections).toHaveLength(1);
+    expect(document.sections[0]?.blocks).toEqual([]);
+  });
+
+  it("still pushes the document's only section through endSection itself when it is genuinely empty, not finish()'s own generic fallback -- observable via breakType surviving", () => {
+    // The "sections.length > 0" half of endSection's own drop condition matters specifically because it is FALSE for this, the very first section -- so an empty-but-first section is still pushed HERE, with its own real geometry and breakType, rather than silently skipped and left for finish()'s own fallback (which pushes only bare geometry and blocks: [], no breakType field at all) to paper over. A ">= 0" in place of "> 0" is always true regardless of section count, so it would wrongly skip this push too, and the sole difference an all-empty document can reveal is exactly the breakType finish()'s own fallback never carries.
+    const { document } = readRtfContent(bytes(`${HEADER}\\sectd\\sbknone}`));
+    if (document.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing document");
+    }
+    expect(document.sections).toHaveLength(1);
+    expect(document.sections[0]?.breakType).toBe("continuous");
+  });
+
+  it("carries a stated \\sbk* break type onto the section that is ENDING, not silently dropping it when the type is a real, non-default one", () => {
+    const sections = sectionsOf(
+      `${HEADER}\\sectd\\sbkeven\\pard A\\par\\sect\\sectd\\pard B\\par}`,
+    );
+    expect(sections[0]?.breakType).toBe("evenPage");
+  });
+
+  it("omits the breakType key entirely from a section that stated no \\sbk* of its own, rather than an explicit key holding undefined", () => {
+    // A plain toEqual (or any check that only reads section.breakType) cannot tell "the key is absent" apart from "the key is present with value undefined" -- both compare equal. Object.hasOwn is what actually distinguishes an unconditionally-spread { breakType: section.breakType } (present, undefined) from the real conditional spread this line performs.
+    const sections = sectionsOf(`${HEADER}\\pard x\\par}`);
+    expect(sections[0]).toBeDefined();
+    expect(Object.hasOwn(sections[0] ?? {}, "breakType")).toBe(false);
+  });
+
+  it("reports the exact unpaired-bookmark-at-end-of-block-flow message text", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\*\\bkmkstart lonely}text\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) => diagnostic.code === RtfDiagnosticCodes.BOOKMARK_UNPAIRED,
+    );
+    expect(found?.message).toBe(
+      "the bookmark 'lonely' has no matching \\bkmkend within its own block flow, so no anchor construct is produced for it",
+    );
+  });
+
+  it("actually clears the open-bookmark set at the end of a section's block flow, so it does not leak an unpaired report into the next section too", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\sectd\\pard{\\*\\bkmkstart leftover}A\\par\\sect\\sectd\\pard B\\par}`,
+      ),
+    );
+    expect(
+      diagnostics.filter(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.BOOKMARK_UNPAIRED,
+      ),
+    ).toHaveLength(1);
+  });
+});
+
+describe("run field derivation", () => {
+  it("treats an empty resolved font name the same as no font at all: no fontFamily field", () => {
+    const source =
+      "{\\rtf1\\ansi\\ansicpg1252\\deff0" +
+      "{\\fonttbl{\\f0 ;}}{\\colortbl;}" +
+      "\\pard\\f0 x\\par}";
+    const runs = paragraphsOf(source)[0]?.runs ?? [];
+    expect(runs[0]?.fontFamily).toBeUndefined();
+  });
+});
+
+describe("picture derivation", () => {
+  it("reports the exact metafile-format-declared message text, naming the specific unsupported control word", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\pict\\wmetafile8\\picwgoal1440\\pichgoal1440 ab}\\par}`,
+      ),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.UNSUPPORTED_PICTURE_FORMAT,
+    );
+    expect(found?.message).toBe(
+      "a \\pict destination declared \\wmetafile picture format; this reader recognises only \\pngblip and \\jpegblip, so this picture is dropped",
+    );
+  });
+
+  it('names "no" picture format in the diagnostic when the destination named no format control word at all', () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\pict\\picwgoal1440\\pichgoal1440 ab}\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.UNSUPPORTED_PICTURE_FORMAT,
+    );
+    expect(found?.message).toContain("declared no picture format");
+  });
+
+  it("reads binary picture payload (\\binN) in preference to any leftover hex text", () => {
+    const PNG_HEX =
+      "89504e470d0a1a0a0000000d494844520000000100000001080600000" +
+      "01f15c4890000000a49444154789c6300010000050001" +
+      "0d0a2db40000000049454e44ae426082";
+    const raw = hexToBytes(PNG_HEX);
+    const image = blocksOf(
+      `${HEADER}\\pard{\\pict\\pngblip\\picwgoal720\\pichgoal720\\bin${String(raw.length)} ${text(raw)}}\\par}`,
+    ).find((block): block is ContentImageBlock => block.kind === "image");
+    expect(image?.base64.startsWith("iVBORw0KGgo")).toBe(true);
+  });
+
+  it("reports the exact no-payload message text for a \\pict destination with neither hex nor binary content", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\pict\\pngblip\\picwgoal720\\pichgoal720 }\\par}`,
+      ),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.UNSUPPORTED_PICTURE_FORMAT,
+    );
+    expect(found?.message).toBe(
+      "a \\pict destination carried no picture payload",
+    );
+  });
+
+  it("reports the exact no-size-stated message text", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\pict\\pngblip 00}\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.PICTURE_SIZE_UNSTATED,
+    );
+    expect(found?.message).toContain(
+      "stated neither \\picwgoalN/\\pichgoalN nor \\picwN/\\pichN",
+    );
+  });
+
+  it("drops a picture whose scaled size collapses to zero or less and reports the exact message text", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\pict\\pngblip\\picwgoal1440\\pichgoal1440\\picscalex0\\picscaley100 00}\\par}`,
+      ),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.PICTURE_SIZE_UNSTATED,
+    );
+    expect(found?.message).toBe(
+      "a \\pict destination's stated size scaled to zero or less, which ContentImageBlock cannot express",
+    );
+  });
+
+  it("drops a picture whose height alone collapses to zero, even though its width is still positive", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\pict\\pngblip\\picwgoal1440\\pichgoal1440\\picscalex100\\picscaley0 00}\\par}`,
+      ),
+    );
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.PICTURE_SIZE_UNSTATED,
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("embedded object size hints", () => {
+  it("states both \\objw and \\objh in the degrade diagnostic when both are present", () => {
+    // The size-hint clause rides buildEmbeddedObject's OWN no-payload/undecodable messages, not the enclosing \object group's "no \objdata at all" message -- so a real (if empty) \objdata destination is what actually exercises it.
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb\\objw40\\objh20{\\*\\objdata }}\\par}`,
+      ),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    );
+    expect(found?.message).toContain("2.00pt x 1.00pt");
+  });
+
+  it("states only \\objw in the degrade diagnostic when \\objh is absent", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\object\\objemb\\objw40{\\*\\objdata }}\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    );
+    expect(found?.message).toContain("declared a 2.00pt width");
+    expect(found?.message).not.toContain("height");
+  });
+
+  it("states only \\objh in the degrade diagnostic when \\objw is absent", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\object\\objemb\\objh20{\\*\\objdata }}\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    );
+    expect(found?.message).toContain("declared a 1.00pt height");
+  });
+
+  it("does not let an unrelated \\object-scope word overwrite \\objh's own recorded height", () => {
+    // \objcropl is a real \object-scope word carrying its own numeric parameter (a crop amount, RTF 1.9.1 "Objects"), not \objw -- the only other name applyControlWord's own \object dispatch ever checks for. A dispatch that falls through to the \objh assignment for any name other than \objw, rather than genuinely matching "objh", would let this later, unrelated word silently overwrite the height \objh20 already recorded.
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb\\objh20\\objcropl999{\\*\\objdata }}\\par}`,
+      ),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    );
+    expect(found?.message).toContain("declared a 1.00pt height");
+  });
+
+  it("adds no size-hint clause at all when an \\object states neither \\objw nor \\objh", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\object\\objemb{\\*\\objdata }}\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    );
+    expect(found?.message).toBe(
+      "an \\object destination's \\objdata carried no payload",
+    );
+  });
+
+  it("reports the exact no-payload message for an \\objdata destination with no content at all", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\object\\objemb{\\*\\objdata }}\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    );
+    expect(found?.message).toContain("carried no payload");
+  });
+
+  it("reports the exact undecodable-payload message for \\objdata this reader cannot parse", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\object\\objemb{\\*\\objdata 68656c6c6f}}\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    );
+    expect(found?.message).toContain("is not a payload this reader produced");
+  });
+});
+
+describe("resource limits", () => {
+  it("accepts input exactly at maxInputBytes, and rejects one byte more", () => {
+    const source = `${HEADER}\\pard x\\par}`;
+    const exact = bytes(source);
+    expect(() =>
+      readRtfContent(exact, { maxInputBytes: exact.length }),
+    ).not.toThrow();
+    expect(() =>
+      readRtfContent(exact, { maxInputBytes: exact.length - 1 }),
+    ).toThrow(RtfInputTooLargeError);
+  });
+
+  it("accepts nesting exactly at maxGroupDepth, and rejects one level deeper", () => {
+    // The root group already occupies stack slot 1, so a document whose deepest group nests N levels needs maxGroupDepth to be at least N + 1.
+    const nested = `${HEADER}${"{".repeat(3)}x${"}".repeat(3)}\\par}`;
+    expect(() =>
+      readRtfContent(bytes(nested), { maxGroupDepth: 5 }),
+    ).not.toThrow();
+    expect(() => readRtfContent(bytes(nested), { maxGroupDepth: 4 })).toThrow(
+      RtfNestingLimitExceededError,
+    );
+  });
+});
+
+describe("group-open dispatch", () => {
+  it("never initialises picture state for a plain nested group with no \\pict destination of its own", () => {
+    // If every group open unconditionally began collecting picture state, an ordinary formatting group's own close would spuriously run buildPicture against an empty PictureState and report UNSUPPORTED_PICTURE_FORMAT for content that was never a picture at all.
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\b bold} plain\\par}`),
+    );
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.UNSUPPORTED_PICTURE_FORMAT,
+      ),
+    ).toBe(false);
+  });
+
+  it("never initialises picture state for a RECOGNISED destination other than picture, either", () => {
+    // \b above has no recognised destination of its own at all (known === undefined), so it never reaches the `if (known !== undefined) { ... if (kind === "picture") ... }` branch this guards -- it exercises a DIFFERENT, earlier guard entirely. \*\bkmkstart IS a known, non-picture destination, so this is the one fixture that actually reaches the kind === "picture" check itself: a `true` in its place would still spuriously initialise picture state here too.
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\*\\bkmkstart name}plain{\\*\\bkmkend name}\\par}`,
+      ),
+    );
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.UNSUPPORTED_PICTURE_FORMAT,
+      ),
+    ).toBe(false);
+  });
+
+  it("never initialises embedded-object state for a plain nested group with no \\*\\objdata destination of its own", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\b bold} plain\\par}`),
+    );
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+      ),
+    ).toBe(false);
+  });
+
+  it("never initialises embedded-object state for a RECOGNISED destination other than objectData, either", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\*\\bkmkstart name}plain{\\*\\bkmkend name}\\par}`,
+      ),
+    );
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+      ),
+    ).toBe(false);
+  });
+
+  it("never routes a nested destination's own hex escape into the enclosing \\pict's own binary payload", () => {
+    // \*\bkmkstart is a real, known destination -- a child group nested inside \pict -- so state.picture is inherited by reference (unlike destination, which the child correctly switches to "bookmarkStart"). A guard keyed on destination alone, forced true, would misroute the hex escape into the picture's own binary buffer instead of the bookmark's name.
+    const PNG_HEX =
+      "89504e470d0a1a0a0000000d494844520000000100000001080600000" +
+      "01f15c4890000000a49444154789c6300010000050001" +
+      "0d0a2db40000000049454e44ae426082";
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard{\\pict\\pngblip\\picwgoal720\\pichgoal720{\\*\\bkmkstart\\'41}${PNG_HEX}}{\\*\\bkmkend\\'41}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      name: "A",
+    });
+  });
+
+  it("never routes a nested destination's own control word into the enclosing \\pict's own control-word handling", () => {
+    // A guard keyed on `state.destination === "picture"` alone (picture inherited by reference into every descendant, exactly as the hex-escape test above states) would misroute \bkmkcolf1 into applyPictureControlWord (a no-op for a name it does not recognise) instead of the bookmarkStart-specific handling that actually applies it -- silently dropping the column residue rather than quarantining it onto the anchor's own descriptor.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard{\\pict\\pngblip\\picwgoal720\\pichgoal720{\\*\\bkmkstart\\bkmkcolf1 name}}x{\\*\\bkmkend name}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      name: "name",
+      source: { xml: "\\bkmkcolf1" },
+    });
+  });
+
+  it("never routes a nested destination's own control word into the enclosing \\object's own \\objw/\\objh handling", () => {
+    // A guard keyed on `state.destination === "object"` alone (object inherited by reference into every descendant, exactly like picture above) would misroute \objw1440 into ContentBuilder's own object-scoped assignment even from a sibling destination that never stated it directly on \object itself -- surfacing a size-hint clause in the degrade diagnostic that the source never actually declared there.
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object{\\*\\bkmkstart\\objw1440 name}{\\*\\objdata }}{\\*\\bkmkend name}\\par}`,
+      ),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    );
+    expect(found?.message).toBe(
+      "an \\object destination's \\objdata carried no payload",
+    );
+  });
+
+  it("never lets an arbitrary control word inside a bookmarkStart destination masquerade as \\bkmkcoll", () => {
+    // A forced-true `name === "bkmkcoll"` check here would set columnLast for ANY control word carrying a numeric parameter that reaches a bookmarkStart destination once name !== "bkmkcolf" -- \b1 included -- rather than only for a genuine \bkmkcollN. \b1 rather than a bare \b specifically: a bare toggle word's own param is already undefined, indistinguishable from columnLast's own untouched default.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard{\\*\\bkmkstart\\b1 name}x{\\*\\bkmkend name}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "anchor",
+      anchorType: "bookmark",
+      name: "name",
+    });
+  });
+
+  it("never applies a genuine \\ffprot from a sibling formField-related destination other than \\*\\formfield itself", () => {
+    // A forced-true `state.destination === "formField"` check here would apply \ffprot1 even from \*\ffname's own destination, since formField is shared by reference across every sibling -- locking content the source never actually locked from \*\formfield's own scope.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffname\\ffprot1 Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "plainText",
+      tag: "Text1",
+    });
+  });
+
+  it("never treats a plain nested group as a bookmark, so its own text is not swallowed as a bookmark name", () => {
+    const runs =
+      paragraphsOf(`${HEADER}\\pard before{\\b bold} after\\par}`)[0]?.runs ??
+      [];
+    expect(runs.map((run) => run.text).join("")).toContain("bold");
+  });
+
+  it("skips a header table's own second occurrence rather than re-reading it as body content", () => {
+    // {\fonttbl ...} is already consumed by readRtfHeader; a SECOND, malformed occurrence later in the body must still be recognised as a header destination and skipped whole, not fall through to an unknown-destination diagnostic or leak its own text into the document.
+    const { document, diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\fonttbl{\\f9 Bogus;}}kept\\par}`),
+    );
+    const text0 =
+      document.kind === "wordprocessing"
+        ? document.sections[0]?.blocks
+            .filter(
+              (block): block is ContentParagraph => block.kind === "paragraph",
+            )
+            .flatMap((paragraph) => paragraph.runs.map((run) => run.text))
+            .join("")
+        : undefined;
+    expect(text0).toBe("kept");
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.UNKNOWN_DESTINATION_SKIPPED,
+      ),
+    ).toBe(false);
+  });
+
+  it("reads the \\*\\ud half of a \\upr wrapper and discards the ANSI half beside it", () => {
+    const runs =
+      paragraphsOf(
+        `${HEADER}\\pard {\\upr ansi-fallback{\\*\\ud unicode-real}}\\par}`,
+      )[0]?.runs ?? [];
+    const text0 = runs.map((run) => run.text).join("");
+    expect(text0).toContain("unicode-real");
+    expect(text0).not.toContain("ansi-fallback");
+  });
+
+  it("discards every plain group nested inside a \\upr wrapper's own ANSI half, not only its direct text", () => {
+    const runs =
+      paragraphsOf(
+        `${HEADER}\\pard {\\upr {\\b ansi in a group}{\\*\\ud kept}}\\par}`,
+      )[0]?.runs ?? [];
+    const text0 = runs.map((run) => run.text).join("");
+    expect(text0).toBe("kept");
+  });
+
+  it("never registers a bookmark opened inside a \\upr wrapper's own ANSI half, not just its text", () => {
+    // A plain group nested in the ANSI half falls through to state.destination ("unicodeWrapper") if the wrapperChild skip is disabled, and "unicodeWrapper" already silently discards direct TEXT on its own -- so the previous fixture's "kept"-only assertion can pass whether the ANSI half is genuinely skipped or merely text-discarded. A recognised, known destination (bkmkstart/bkmkend) tells the two apart: skipped, it is never opened at all and registers no bookmark; merely text-discarded, it is opened, processed, and closed as a real bookmark like any other, regardless of what its own #PCDATA renders as.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\upr {\\*\\bkmkstart hidden}x{\\*\\bkmkend hidden}{\\*\\ud kept}}\\par}`,
+    )[0];
+    expect(paragraph?.constructs ?? []).toEqual([]);
+    expect(paragraph?.runs.map((run) => run.text).join("")).toBe("kept");
+  });
+
+  it("discards a second, duplicate \\result child and reports it", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb{\\result{\\pard\\plain first\\par}}{\\result{\\pard\\plain second\\par}}}\\par}`,
+      ),
+    );
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE &&
+          diagnostic.message.includes("more than one \\result"),
+      ),
+    ).toBe(true);
+  });
+
+  it("discards a second, duplicate \\objdata child and decodes only the first", () => {
+    const OBJDATA_HEX_LOCAL = bytesToHex(
+      writeEmbeddedObjectData({
+        objectKind: "spreadsheet",
+        document: { kind: "spreadsheet", metadata: {}, sheets: [] },
+        frame: { xPt: 0, yPt: 0, widthPt: 1, heightPt: 1 },
+      }),
+    );
+    const { document, diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb{\\*\\objdata ${OBJDATA_HEX_LOCAL}}{\\*\\objdata ${OBJDATA_HEX_LOCAL}}}\\par}`,
+      ),
+    );
+    const objects =
+      document.kind === "wordprocessing"
+        ? document.sections[0]?.blocks.filter(
+            (block) => block.kind === "embeddedObject",
+          )
+        : undefined;
+    expect(objects).toHaveLength(1);
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE &&
+          diagnostic.message.includes("more than one \\objdata"),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("unbalanced groups", () => {
+  it("reports the exact still-open-at-end-of-input message, counting every group left open (the document's own root included)", () => {
+    // HEADER's own root {\rtf1 ... group is never closed by either fixture below -- neither ends with the document's own final "}" -- so the count always includes it alongside whatever else was left open.
+    const { diagnostics } = readRtfContent(bytes(`${HEADER}\\pard{\\b text`));
+    const found = diagnostics.find(
+      (diagnostic) => diagnostic.code === RtfDiagnosticCodes.UNBALANCED_GROUP,
+    );
+    expect(found?.message).toBe(
+      "2 group(s) were still open at the end of the input; each is treated as closing there",
+    );
+  });
+
+  it("still flushes and keeps trailing ANSI text that reached input's end with no closing brace or other event to flush it itself", () => {
+    // "text" here is the very last thing the tokenizer produced: nothing after it (no control word, no brace, no hex byte) ever triggers flushBytes on its own, so only the main loop's own unconditional trailing flushBytes() call -- reached once the token stream itself is exhausted -- moves it out of the pending-bytes buffer and into a run finish() can still build a paragraph from. Without that call, "text" is silently dropped: emitText/appendText never runs for it, runs stays empty, and endParagraph's own force=false early return then produces no paragraph at all instead of one holding this trailing text.
+    const paragraph = paragraphsOf(`${HEADER}\\pard{\\b text`).at(-1);
+    expect(paragraph?.runs.map((run) => run.text).join("")).toBe("text");
+  });
+
+  it("counts every still-open group at the end of input, not one fewer or one more", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard{\\b{\\i text`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) => diagnostic.code === RtfDiagnosticCodes.UNBALANCED_GROUP,
+    );
+    expect(found?.message).toBe(
+      "3 group(s) were still open at the end of the input; each is treated as closing there",
+    );
+  });
+
+  it("reports the exact extra-closing-brace message text", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard text\\par}}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) => diagnostic.code === RtfDiagnosticCodes.UNBALANCED_GROUP,
+    );
+    expect(found?.message).toBe(
+      "a closing brace appeared with no group open; the extra brace is ignored",
+    );
+  });
+});
+
+describe("\\uN surrogate arithmetic", () => {
+  it("converts a negative \\uN parameter into its true code point by adding 65536, not subtracting it", () => {
+    // A code point above 32767 is written as its own negative twin ("convert F020 to decimal (61472) and subtract 65536" gives -4064), so reading it back requires the inverse: -4064 + 65536 = 61472 = U+F020, a Private Use Area character.
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\u-4064 x\\par}`)[0]?.runs ?? [];
+    expect(runs[0]?.text.codePointAt(0)).toBe(0xf020);
+  });
+
+  it("emits no character at all for a bare \\u with no numeric parameter", () => {
+    // A malformed \u with no digits after it has code === undefined; the code branch that calls emitText must be skipped entirely rather than calling String.fromCharCode(undefined), which coerces to U+0000 (NaN's own ToUint16 result) and would silently insert a stray NUL character into the run. skipUnicodeFallback still runs unconditionally either way, consuming the one ANSI fallback character \uN's own grammar always requires -- so "b" here is the fallback, never part of the emitted text, regardless of code's own definedness.
+    const runs = paragraphsOf(`${HEADER}\\pard a\\u b\\par}`)[0]?.runs ?? [];
+    expect(runs.map((run) => run.text).join("")).toBe("a");
+  });
+});
+
+describe("picture format control words", () => {
+  for (const [word, control] of [
+    ["emfblip", "\\emfblip"],
+    ["macpict", "\\macpict"],
+    ["wmetafile", "\\wmetafile"],
+    ["pmmetafile", "\\pmmetafile"],
+    ["dibitmap", "\\dibitmap"],
+    ["wbitmap", "\\wbitmap"],
+  ] as const) {
+    it(`names \\${word} itself, not a different metafile control word, in the unsupported-format diagnostic`, () => {
+      const { diagnostics } = readRtfContent(
+        bytes(
+          `${HEADER}\\pard{\\pict\\${word}\\picwgoal1440\\pichgoal1440 ab}\\par}`,
+        ),
+      );
+      const found = diagnostics.find(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.UNSUPPORTED_PICTURE_FORMAT,
+      );
+      expect(found?.message).toContain(`declared ${control} picture format`);
+    });
+  }
+
+  it("ignores an unrecognised picture control word rather than treating it as a format or size", () => {
+    const image = blocksOf(
+      `${HEADER}\\pard{\\pict\\pngblip\\picwgoal720\\pichgoal720\\picbogus5 00}\\par}`,
+    ).find((block): block is ContentImageBlock => block.kind === "image");
+    // Reaching a real image at all (not a dropped one, and not a thrown error) proves the unknown word fell through to the picture dispatcher's own default no-op rather than corrupting an existing field.
+    expect(image?.format).toBe("png");
+  });
+});
+
+describe("character control word edge cases", () => {
+  it("ignores a negative \\ucN, keeping the previously stated skip count rather than adopting a negative one", () => {
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\uc2\\uc-1\\u9731 XY\\par}`)[0]?.runs ??
+      [];
+    // \uc-1 must not overwrite the still-valid \uc2 from just before it, so 霱's own fallback still skips exactly 2 characters ("XY"), leaving nothing of the fallback in the visible text.
+    expect(runs.map((run) => run.text).join("")).not.toMatch(/[XY]/);
+  });
+
+  it("reads \\up with no parameter as the default six-half-point raise, not a no-op", () => {
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\up raised\\par}`)[0]?.runs ?? [];
+    expect(runs[0]?.verticalAlign).toBe("superscript");
+  });
+
+  it("reads a negative \\upN as lowering the text instead of raising it", () => {
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\up-3 lowered\\par}`)[0]?.runs ?? [];
+    expect(runs[0]?.verticalAlign).toBe("subscript");
+  });
+
+  it("reads an explicit positive \\upN as a genuine raise, not just the no-parameter default", () => {
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\up6 raised\\par}`)[0]?.runs ?? [];
+    expect(runs[0]?.verticalAlign).toBe("superscript");
+  });
+
+  it("reads exactly \\outlinelevel8, the spec's own upper bound, as a real heading level rather than clearing it", () => {
+    const paragraph = paragraphsOf(`${HEADER}\\pard\\outlinelevel8 x\\par}`)[0];
+    expect(paragraph?.headingLevel).toBe(9);
+  });
+
+  it("reads \\up0 as restoring the baseline, distinct from both a positive and a negative offset", () => {
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\up0 base\\par}`)[0]?.runs ?? [];
+    expect(runs[0]?.verticalAlign).toBeUndefined();
+  });
+
+  it("reads \\nosupersub as clearing verticalAlign to undefined, the field's own real absent state", () => {
+    const runs =
+      paragraphsOf(`${HEADER}\\pard \\super up\\nosupersub  base\\par}`)[0]
+        ?.runs ?? [];
+    // Asserted as its own length first: see the identical comment on "reads \nosupersub as the off-spelling for both families" above.
+    expect(runs).toHaveLength(2);
+    expect(runs[1]?.verticalAlign).toBeUndefined();
+  });
+
+  it("reads \\revdttmdel onto the deleted-half of a run's own revision state", () => {
+    const REVTBL = "{\\*\\revtbl{Unknown;}{A. Reviewer;}}";
+    const DTTM = 30 | (9 << 6) | (1 << 11) | (1 << 16) | (124 << 20);
+    const paragraph = paragraphsOf(
+      `${HEADER}${REVTBL}\\pard \\deleted\\revauthdel1\\revdttmdel${String(DTTM)} gone\\deleted0  kept\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      change: "deletion",
+      dateIso: "2024-01-01T09:30:00",
+    });
+  });
+
+  it("reads \\mvdate onto a moved run's own dateIso", () => {
+    const REVTBL = "{\\*\\revtbl{Unknown;}{A. Reviewer;}}";
+    const DTTM = 30 | (9 << 6) | (1 << 11) | (1 << 16) | (124 << 20);
+    const paragraph = paragraphsOf(
+      `${HEADER}${REVTBL}\\pard \\mvf\\mvauth1\\mvdate${String(DTTM)} moved\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      dateIso: "2024-01-01T09:30:00",
+    });
+  });
+
+  it("reads \\crdate onto a format-change run's own dateIso", () => {
+    const REVTBL = "{\\*\\revtbl{Unknown;}{A. Reviewer;}}";
+    const DTTM = 30 | (9 << 6) | (1 << 11) | (1 << 16) | (124 << 20);
+    const paragraph = paragraphsOf(
+      `${HEADER}${REVTBL}\\pard \\crauth1\\crdate${String(DTTM)}\\b restyled\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      dateIso: "2024-01-01T09:30:00",
+    });
+  });
+
+  it("does not read \\ulc (underline colour) as a generic \\ul* underline variant", () => {
+    // \ulc takes a colour-index parameter, not a toggle; treating it as an underline word would turn it on and misread its own parameter as a boolean toggle value.
+    const runs = paragraphsOf(`${HEADER}\\pard \\ulc2 x\\par}`)[0]?.runs ?? [];
+    expect(runs[0]?.underline).toBeUndefined();
+  });
+});
+
+describe("paragraph control word edge cases", () => {
+  it("reads \\outlinelevel9 (above the spec's own 0-8 range) as body text, clearing any level rather than adopting a tenth depth", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard\\outlinelevel0 zero\\par\\pard\\outlinelevel9 nine\\par}`,
+    );
+    expect(paragraph[0]?.headingLevel).toBe(1);
+    expect(paragraph[1]?.headingLevel).toBeUndefined();
+  });
+
+  it("reads \\lin as the same left-indent field \\li writes", () => {
+    const paragraph = paragraphsOf(`${HEADER}\\pard\\lin720 x\\par}`)[0];
+    expect(paragraph?.indentLeftPt).toBe(36);
+  });
+});
+
+describe("section control word edge cases", () => {
+  it("resets section geometry back to the document's own defaults on \\sectd, not leaving a prior section's stated values", () => {
+    const sections = sectionsOf(
+      "{\\rtf1\\ansi\\paperw12240\\paperh15840\\margl1440\\margr1440\\margt1440\\margb1440" +
+        "\\sectd\\pgwsxn15840\\pghsxn12240\\pard A\\par\\sect\\sectd\\pard B\\par}",
+    );
+    expect(sections[1]?.pageSize).toEqual({ widthPt: 612, heightPt: 792 });
+  });
+
+  it("clears the pending break type when \\sbkcol arrives, so no page-level break is mistakenly kept alongside the reported column break", () => {
+    const sections = sectionsOf(
+      `${HEADER}\\sectd\\sbkpage\\sbkcol\\pard A\\par\\sect\\sectd\\pard B\\par}`,
+    );
+    expect(sections[0]?.breakType).toBeUndefined();
+  });
+
+  it("reports the exact \\sbkcol message text", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\sectd\\pard A\\par\\sect\\sectd\\sbkcol\\pard B\\par}`),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.SECTION_BREAK_UNREPRESENTED,
+    );
+    expect(found?.message).toBe(
+      "\\sbkcol starts the section at a new column; ContentSection.breakType names page-level breaks only, so the break kind is dropped and the section itself is kept",
+    );
+  });
+});
+
+describe("structure control word edge cases", () => {
+  it("reads \\trleft onto the row's own left edge, used as the first column boundary", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft720\\cellx1440\\pard\\intbl A\\cell\\row\\pard x\\par}`,
+    );
+    // 1440 - 720 = 720 twips = 36pt for the one column.
+    expect(table.columnWidthsPt).toEqual([36]);
+  });
+
+  it("reports the exact nested-table-flattened message text for \\nestrow, distinct from \\nestcell's own trigger", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\trowd\\trleft0\\cellx1440\\pard\\intbl{\\*\\nesttableprops}\\nestrow x\\cell\\row\\pard y\\par}`,
+      ),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.NESTED_TABLE_FLATTENED,
+    );
+    expect(found?.message).toBe(
+      "a nested table's cell/row marks are read as ordinary cell content; the inner table's own structure is not reconstructed",
+    );
+  });
+});
+
+describe("control word dispatch order", () => {
+  it("reads \\bkmkcolf/\\bkmkcoll inside a bookmark start, but never lets a stray \\par there actually close a paragraph", () => {
+    // \par is a real structural word (builder.endParagraph), not merely a formatting flag, so a broken bookmarkStart guard that let it fall through would be directly observable as an extra paragraph -- unlike a stray \b, whose effect is confined to a group's own discarded char state either way.
+    const paragraphs = paragraphsOf(
+      `${HEADER}\\pard before{\\*\\bkmkstart\\par Named}after{\\*\\bkmkend Named}\\par}`,
+    );
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.runs.map((run) => run.text).join("")).toBe(
+      "beforeafter",
+    );
+    expect(paragraphs[0]?.constructs?.[0]?.descriptor).toMatchObject({
+      name: "Named",
+    });
+  });
+
+  it("never lets a stray \\par inside a \\*\\ffname destination actually close a paragraph", () => {
+    // Mirrors the bookmarkStart/bookmarkEnd fixtures above: \*\ffname's own content is a name, not formatted text, so applyControlWord's own formField-family guard must discard \par here too, rather than letting it fall through to builder.endParagraph and split the surrounding text across two real paragraphs.
+    const paragraphs = paragraphsOf(
+      `${HEADER}\\pard before{\\field{\\*\\fldinst FORMTEXT }{\\*\\formfield{\\fftype0{\\*\\ffname\\par Name}}}}after\\par}`,
+    );
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.runs.map((run) => run.text).join("")).toContain(
+      "beforeafter",
+    );
+  });
+
+  it("never lets a stray \\par inside a bookmark end destination actually close a paragraph", () => {
+    const paragraphs = paragraphsOf(
+      `${HEADER}\\pard before{\\*\\bkmkstart Word}mid{\\*\\bkmkend\\par Word}after\\par}`,
+    );
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.runs.map((run) => run.text).join("")).toBe(
+      "beforemidafter",
+    );
+    expect(paragraphs[0]?.constructs?.[0]?.descriptor).toMatchObject({
+      name: "Word",
+    });
+  });
+
+  it("reads a cell-definition word (\\clbrdrt) ahead of the identically-prefixed paragraph border reading, whenever a row definition is open", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\clbrdrt\\brdrs\\brdrw15\\cellx1440\\pard\\intbl A\\cell\\row\\pard x\\par}`,
+    );
+    expect(table.rows[0]?.cells[0]?.borders?.top).toBeDefined();
+  });
+});
+
 describe("the tree-form entry point", () => {
   it("assembles the same content into a DocumentTree whose root is a wordprocessing package", () => {
     const { documentPackage } = readRtf(
@@ -2474,5 +4246,77 @@ describe("the tree-form entry point", () => {
     );
     expect(documentPackage.kind).toBe("wordprocessing");
     expect(documentPackage.children.length).toBeGreaterThan(0);
+  });
+});
+
+describe("internal invariants exercised directly (no legitimate RTF input can reach these)", () => {
+  it("closingBookmarkExtent throws when a closing bookmark somehow reaches it with no resolved blockIndex", () => {
+    const closing = {
+      descriptor: bookmarkAnchorDescriptor("orphan", undefined),
+      paragraphSerial: Symbol("paragraph"),
+      runIndex: 0,
+      inTable: false,
+      blockIndex: undefined,
+    };
+    expect(() => closingBookmarkExtent(closing, 3)).toThrow(
+      "internal invariant violated: a closing bookmark reached flushClosingBookmarks with no resolved blockIndex",
+    );
+  });
+
+  it("closingBookmarkExtent returns the real extent once blockIndex is actually resolved", () => {
+    const closing = {
+      descriptor: bookmarkAnchorDescriptor("resolved", undefined),
+      paragraphSerial: Symbol("paragraph"),
+      runIndex: 0,
+      inTable: false,
+      blockIndex: 2,
+    };
+    expect(closingBookmarkExtent(closing, 5)).toEqual({
+      descriptor: closing.descriptor,
+      startIndex: 2,
+      endIndex: 5,
+    });
+  });
+
+  it("appendToLastListItem throws when the list has no entry to append to", () => {
+    expect(() => {
+      appendToLastListItem([], "text");
+    }).toThrow(
+      "internal invariant violated: a form field list item's text arrived with no list item entry to append to",
+    );
+  });
+
+  it("appendToLastListItem appends to the last entry, in place, leaving earlier entries untouched", () => {
+    const items = ["first", "second"];
+    appendToLastListItem(items, " more");
+    expect(items).toEqual(["first", "second more"]);
+  });
+
+  it("verticalMergeRowSpan throws when a row index in range has no corresponding columnIndices/rows entry", () => {
+    const rows = [
+      { cells: [], definitions: [], direction: undefined },
+      { cells: [], definitions: [], direction: undefined },
+    ];
+    // Mismatched on purpose: columnIndices has one fewer entry than rows, which resolveRows' own construction (one rows.map(...) call over the identical `rows`) can never actually produce.
+    const columnIndices = [[0]];
+    expect(() => verticalMergeRowSpan(rows, columnIndices, 0, 0)).toThrow(
+      "internal invariant violated: verticalMergeRowSpan's own row index scan reached an index with no corresponding columnIndices/rows entry",
+    );
+  });
+
+  it("verticalMergeRowSpan counts consecutive vertical-merge continuations forward from rowIndex + 1", () => {
+    const continuation = () => ({
+      ...newPendingCell(),
+      verticalMergeContinuation: true,
+    });
+    const ordinary = () => ({ ...newPendingCell() });
+    const rows = [
+      { cells: [], definitions: [ordinary()], direction: undefined },
+      { cells: [], definitions: [continuation()], direction: undefined },
+      { cells: [], definitions: [continuation()], direction: undefined },
+      { cells: [], definitions: [ordinary()], direction: undefined },
+    ];
+    const columnIndices = [[0], [0], [0], [0]];
+    expect(verticalMergeRowSpan(rows, columnIndices, 0, 0)).toBe(3);
   });
 });

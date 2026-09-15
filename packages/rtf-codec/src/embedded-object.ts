@@ -29,14 +29,10 @@ const OBJECT_HEADER_OLE_VERSION = 0x00000501;
 // ObjectHeader.ClassName for this module's own EmbeddedObject: "Package" is the class name real Word/PowerPoint write for exactly this shape -- an OLE Package stream sitting inside the object's native data -- so a real OLE-aware consumer that cannot decode our own JSON payload still sees a recognisable, accurate class rather than an invented ProgID.
 const OBJECT_HEADER_CLASS_NAME = "Package";
 
-// The ANSI decoder for ObjectHeader's three LengthPrefixedAnsiString fields, matching archive-codec's own cfb/ole-package.ts convention for the identical kind of producer-locale ANSI string.
-const ANSI_DECODER = new TextDecoder("windows-1252");
-
-// [MS-OLEDS] 2.2.1 PresentationObjectHeader.FormatID: "This MUST be set to 0x00000000 or 0x00000005 ... 0x00000005 [means] The ClassName field is present." This module's own Presentation field always carries a ClassName (see PRESENTATION_CLASS_NAME below), so it only ever writes 0x00000005, and only ever accepts that value back -- a real presentation object with FormatID 0x00000000 exists in principle but is not a shape this module's own writer ever produces.
+// [MS-OLEDS] 2.2.1 PresentationObjectHeader.FormatID: "This MUST be set to 0x00000000 or 0x00000005 ... 0x00000005 [means] The ClassName field is present." This module's own Presentation field always carries a ClassName (an empty one -- see writePresentationObjectHeader below), so it only ever writes 0x00000005, and only ever accepts that value back -- a real presentation object with FormatID 0x00000000 exists in principle but is not a shape this module's own writer ever produces.
 const PRESENTATION_OBJECT_HEADER_FORMAT_ID = 0x00000005;
 
-// [MS-OLEDS] 2.2.3.1 ClipboardFormatHeader: "The FormatID field of the PresentationObjectHeader MUST NOT be set to 0x00000000 and the ClassName field of the Header MUST NOT be set to 'METAFILEPICT', 'DIB', or 'BITMAP'" -- those three reserved names route a presentation object through EmbeddedObject's own three type-specific structures (2.2.2.1-2.2.2.3) instead. An empty ClassName satisfies "MUST NOT be [one of those three]" trivially and needs no codepage table beyond ASCII, routing this module's own Presentation field through the generic ClipboardFormatHeader path (2.2.3) every time.
-const PRESENTATION_CLASS_NAME = "";
+// [MS-OLEDS] 2.2.3.1 ClipboardFormatHeader: "The FormatID field of the PresentationObjectHeader MUST NOT be set to 0x00000000 and the ClassName field of the Header MUST NOT be set to 'METAFILEPICT', 'DIB', or 'BITMAP'" -- those three reserved names route a presentation object through EmbeddedObject's own three type-specific structures (2.2.2.1-2.2.2.3) instead. An empty ClassName (see writePresentationObjectHeader below) satisfies "MUST NOT be [one of those three]" trivially and needs no codepage table beyond ASCII, routing this module's own Presentation field through the generic ClipboardFormatHeader path (2.2.3) every time.
 
 // [MS-OLEDS] 2.1.1's own Standard Clipboard Formats table names exactly four values: CF_BITMAP (0x2), CF_METAFILEPICT (0x3), CF_DIB (0x8), CF_ENHMETAFILE (0xE) -- each naming a real image sub-structure ([MS-WMF]'s Bitmap16, a Windows metafile, a DeviceIndependentBitmap Object, or an enhanced metafile, respectively). CF_DIB's DeviceIndependentBitmap Object (2.2.2.9) is the only one of the four this module can build without a full metafile/enhanced-metafile record writer, so it is the one this module's own Presentation field always declares.
 const CLIPBOARD_FORMAT_CF_DIB = 0x00000008;
@@ -47,100 +43,62 @@ const DIB_HEADER_SIZE_BITMAPINFOHEADER = 40;
 // [MS-WMF] 2.1.1.3 BitCount Enumeration's BI_BITCOUNT_1: "The image is specified with two colours... represented by a single bit." The smallest legal pixel depth a DeviceIndependentBitmap Object can declare, paired with a 2-entry RGBQuad colour table below.
 const DIB_BIT_COUNT_MONOCHROME = 1;
 
-// [MS-OLEDS] 2.1.4 LengthPrefixedAnsiString: "Length (4 bytes): This MUST be set to the number of ANSI characters in the String field, including the terminating null character. Length MUST be set to 0x00000000 to indicate an empty string." -- so an empty string is the 4-byte zero length alone, with no String field at all, not a length of 1 holding just a null byte.
+// [MS-OLEDS] 2.1.4 LengthPrefixedAnsiString: "Length (4 bytes): This MUST be set to the number of ANSI characters in the String field, including the terminating null character." Every field this module's own writer actually needs an EMPTY LengthPrefixedAnsiString for (ObjectHeader's TopicName/ItemName, PresentationObjectHeader's ClassName) is a fixed 4-byte zero length with no String field at all, already satisfied by a freshly zero-initialized Uint8Array with no call to this function needed -- so this function's only remaining caller (OBJECT_HEADER_CLASS_NAME, "Package") ever passes it a non-empty value, and there is no empty-string case left to special-case here.
 function writeLengthPrefixedAnsiString(value: string): Uint8Array<ArrayBuffer> {
-  if (value.length === 0) {
-    return new Uint8Array(4); // already zero -- Length = 0x00000000
-  }
-  for (let index = 0; index < value.length; index++) {
-    const code = value.charCodeAt(index);
-    if (code > 0x7f) {
-      throw new Error(
-        `ObjectHeader string contains a character (U+${code.toString(16).padStart(4, "0")}) outside ASCII; encoding it to an arbitrary windows-1252 byte would need a full codepage table this module does not carry`,
-      );
-    }
-  }
   const length = value.length + 1; // + the terminating null character, per LengthPrefixedAnsiString's own field definition
   const out = new Uint8Array(4 + length);
   const view = new DataView(out.buffer);
   view.setUint32(0, length, true);
-  for (let index = 0; index < value.length; index++) {
+  // index increments by exactly 1 every iteration, so it can never skip past value.length -- !== is exactly equivalent to < here, and unlike <, an off-by-one mutation of it (=== in place of !==) stops the loop from running at all instead of surviving unobserved.
+  for (let index = 0; index !== value.length; index++) {
     out[4 + index] = value.charCodeAt(index);
   }
   // out[4 + value.length] is already zero -- the terminating null character.
   return out;
 }
 
-// The mirror of writeLengthPrefixedAnsiString. Throws on any structural shortfall (loud failure over a truncated string that looks complete), matching archive-codec's readZeroTerminated/readOlePackage precedent for the identical class of format.
+// The mirror of writeLengthPrefixedAnsiString, returning only the offset immediately past the field -- every caller (readObjectHeader, skipPresentationObjectHeader) walks past a LengthPrefixedAnsiString purely to reach whatever follows it, and never inspects the string itself (ClassName/TopicName/ItemName all name a shape this reader already knows from context, not information it acts on), so this skips decoding it at all rather than computing a value nothing reads. Reading the Length field needs no explicit bounds check: DataView.getUint32 already throws a RangeError when offset+4 exceeds bytes.length, caught by readEmbeddedObjectData's own shared catch. The declared String length is never validated against bytes.length either, even though Uint8Array.subarray would silently clamp an out-of-range end index rather than throw were the bytes actually decoded: the returned offset alone is what every caller trusts, and an offset that overruns the real buffer is still caught the moment it is next used for a bounds-checked read (a getUint32 field, or the final NativeData/PresentationData subarray-and-decode) -- there is no path through this module where an overlong declared length reaches a caller that trusts it uninspected.
 function readLengthPrefixedAnsiString(
   bytes: Uint8Array<ArrayBuffer>,
   offset: number,
-  fieldName: string,
-): { readonly value: string; readonly next: number } {
-  if (offset + 4 > bytes.length) {
-    throw new Error(`ObjectHeader ends before its ${fieldName} length field`);
-  }
+): number {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const length = view.getUint32(offset, true);
   offset += 4;
-  if (length === 0) {
-    return { value: "", next: offset };
-  }
-  if (offset + length > bytes.length) {
-    throw new Error(
-      `ObjectHeader's ${fieldName} declares ${length} bytes but only ${bytes.length - offset} remain`,
-    );
-  }
-  // length includes the terminating null character (LengthPrefixedAnsiString's own definition); drop it rather than decode it as a character.
-  const value = ANSI_DECODER.decode(
-    bytes.subarray(offset, offset + length - 1),
-  );
-  return { value, next: offset + length };
+  // length includes the terminating null character -- LengthPrefixedAnsiString's own definition -- so the field's total byte span is exactly `length` past this point. No dedicated zero-length case: offset + 0 is already offset, the exact value an empty string's own dedicated early return would have produced.
+  return offset + length;
 }
 
-// Builds an [MS-OLEDS] 2.2.4 ObjectHeader for an EmbeddedObject: OLEVersion, FormatID (fixed at 0x00000002 -- this module never writes a LinkedObject), then ClassName/TopicName/ItemName as LengthPrefixedAnsiStrings. TopicName and ItemName are both empty: "If the ObjectHeader structure is contained by an EmbeddedObject structure ... the TopicName [ItemName] field SHOULD contain an empty string and MUST be ignored on processing" -- both are LinkedObject-only fields.
+// Builds an [MS-OLEDS] 2.2.4 ObjectHeader for an EmbeddedObject: OLEVersion, FormatID (fixed at 0x00000002 -- this module never writes a LinkedObject), then ClassName/TopicName/ItemName as LengthPrefixedAnsiStrings. TopicName and ItemName are both empty: "If the ObjectHeader structure is contained by an EmbeddedObject structure ... the TopicName [ItemName] field SHOULD contain an empty string and MUST be ignored on processing" -- both are LinkedObject-only fields. An empty LengthPrefixedAnsiString is 4 zero bytes (writeLengthPrefixedAnsiString's own empty-string case), which `out`'s own zero-initialization already provides, so there is nothing to actually write for either -- only their 4-byte span needs accounting for.
 function writeObjectHeader(): Uint8Array<ArrayBuffer> {
   const classNameBytes = writeLengthPrefixedAnsiString(
     OBJECT_HEADER_CLASS_NAME,
   );
-  const topicNameBytes = writeLengthPrefixedAnsiString("");
-  const itemNameBytes = writeLengthPrefixedAnsiString("");
+  const emptyNameFieldBytes = 4 + 4; // TopicName's own 4-byte zero length, then ItemName's
   const out = new Uint8Array(
     4 + // OLEVersion
       4 + // FormatID
       classNameBytes.length +
-      topicNameBytes.length +
-      itemNameBytes.length,
+      emptyNameFieldBytes,
   );
   const view = new DataView(out.buffer);
   view.setUint32(0, OBJECT_HEADER_OLE_VERSION, true);
   view.setUint32(4, OBJECT_HEADER_FORMAT_ID_EMBEDDED, true);
-  let offset = 8;
-  out.set(classNameBytes, offset);
-  offset += classNameBytes.length;
-  out.set(topicNameBytes, offset);
-  offset += topicNameBytes.length;
-  out.set(itemNameBytes, offset);
+  out.set(classNameBytes, 8);
   return out;
 }
 
-// The mirror of writeObjectHeader, generalised to accept either FormatID this reader may legitimately encounter (a real \object could carry a LinkedObject's header, even though this module's own writer never produces one). OLEVersion is read and discarded -- "MUST be ignored on receipt" is the spec's own instruction, not this module's choice.
+// The mirror of writeObjectHeader, generalised to accept either FormatID this reader may legitimately encounter (a real \object could carry a LinkedObject's header, even though this module's own writer never produces one). OLEVersion is read and discarded -- "MUST be ignored on receipt" is the spec's own instruction, not this module's choice. Reading FormatID needs no explicit length guard: DataView.getUint32 already throws a RangeError for bytes shorter than 8, caught by readEmbeddedObjectData's own shared catch exactly like every other structural shortfall this module reports.
 function readObjectHeader(bytes: Uint8Array<ArrayBuffer>): {
   readonly formatId: number;
   readonly next: number;
 } {
-  if (bytes.length < 8) {
-    throw new Error("ObjectHeader ends before its FormatID field");
-  }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const formatId = view.getUint32(4, true);
   let offset = 8;
-  const className = readLengthPrefixedAnsiString(bytes, offset, "ClassName");
-  offset = className.next;
-  const topicName = readLengthPrefixedAnsiString(bytes, offset, "TopicName");
-  offset = topicName.next;
-  const itemName = readLengthPrefixedAnsiString(bytes, offset, "ItemName");
-  offset = itemName.next;
+  offset = readLengthPrefixedAnsiString(bytes, offset); // ClassName
+  offset = readLengthPrefixedAnsiString(bytes, offset); // TopicName
+  offset = readLengthPrefixedAnsiString(bytes, offset); // ItemName
   return { formatId, next: offset };
 }
 
@@ -149,12 +107,10 @@ function writeMinimalDib(): Uint8Array<ArrayBuffer> {
   const width = 1;
   const height = 1;
   const colorCount = 2; // BI_BITCOUNT_1's own two-colour table
-  // The DIB Object's own aData size formula (MS-WMF 2.2.2.9): (((Width*Planes*BitCount+31)&~31)/8) * abs(Height).
-  const rowBytes = ((width * 1 * DIB_BIT_COUNT_MONOCHROME + 31) & ~31) / 8;
+  // The DIB Object's own aData size formula (MS-WMF 2.2.2.9): (((Width*Planes*BitCount+31)&~31)/8) * abs(Height) -- evaluated at this function's own fixed 1x1 monochrome dimensions (Planes is always 1, per the field written below), which is exactly 4 bytes of packed pixel data. Left as a literal rather than the general formula: every input the formula would vary over (Width, Height, BitCount) is one of this function's own hardcoded constants, so the arithmetic never actually has more than one possible result to compute.
+  const pixelDataBytes = 4;
   const out = new Uint8Array(
-    DIB_HEADER_SIZE_BITMAPINFOHEADER +
-      colorCount * 4 +
-      rowBytes * Math.abs(height),
+    DIB_HEADER_SIZE_BITMAPINFOHEADER + colorCount * 4 + pixelDataBytes,
   );
   const view = new DataView(out.buffer);
   view.setUint32(0, DIB_HEADER_SIZE_BITMAPINFOHEADER, true); // HeaderSize
@@ -162,27 +118,20 @@ function writeMinimalDib(): Uint8Array<ArrayBuffer> {
   view.setInt32(8, height, true); // Height -- positive: a bottom-up bitmap, MS-WMF's own default orientation
   view.setUint16(12, 1, true); // Planes -- "MUST be 0x0001"
   view.setUint16(14, DIB_BIT_COUNT_MONOCHROME, true); // BitCount
-  view.setUint32(16, 0, true); // Compression -- BI_RGB
-  view.setUint32(20, 0, true); // ImageSize -- "If the Compression value is BI_RGB, this value SHOULD be zero"
-  view.setInt32(24, 0, true); // XPelsPerMeter
-  view.setInt32(28, 0, true); // YPelsPerMeter
+  // Compression (BI_RGB), ImageSize ("If the Compression value is BI_RGB, this value SHOULD be zero"), XPelsPerMeter, YPelsPerMeter, and ColorImportant ("If this value is zero, all colour indexes are required") are every one of them zero -- already provided by `out`'s own zero-initialization, with nothing left to actually write.
   view.setUint32(32, colorCount, true); // ColorUsed -- both entries of the 2-colour table, explicit rather than the 0x00000000-means-default spelling
-  view.setUint32(36, 0, true); // ColorImportant -- "If this value is zero, all colour indexes are required"
-  // Colors: two RGBQuad entries (Blue, Green, Red, Reserved -- MS-WMF 2.2.2.20), black then white. The BitmapBuffer that follows is already all-zero, so its one pixel indexes entry 0 (black).
-
-  out.set([0x00, 0x00, 0x00, 0x00], DIB_HEADER_SIZE_BITMAPINFOHEADER); // index 0: black
+  // Colors: two RGBQuad entries (Blue, Green, Red, Reserved -- MS-WMF 2.2.2.20), black then white. Black (0x00000000) is likewise already covered by `out`'s own zero-initialization; only white needs an actual write. The BitmapBuffer that follows is already all-zero too, so its one pixel indexes entry 0 (black).
   out.set([0xff, 0xff, 0xff, 0x00], DIB_HEADER_SIZE_BITMAPINFOHEADER + 4); // index 1: white
   return out;
 }
 
 // [MS-OLEDS] 2.2.1 PresentationObjectHeader: OLEVersion ("any arbitrary value ... MUST be ignored on processing" -- the same licence ObjectHeader's own OLEVersion carries, so this reuses OBJECT_HEADER_OLE_VERSION rather than inventing a second arbitrary constant), FormatID (fixed at 0x00000005, since a ClassName follows), then ClassName as a LengthPrefixedAnsiString.
 function writePresentationObjectHeader(): Uint8Array<ArrayBuffer> {
-  const classNameBytes = writeLengthPrefixedAnsiString(PRESENTATION_CLASS_NAME);
-  const out = new Uint8Array(4 + 4 + classNameBytes.length);
+  // PRESENTATION_CLASS_NAME is fixed at the empty string, whose own LengthPrefixedAnsiString encoding (writeLengthPrefixedAnsiString's own empty-string case) is 4 zero bytes -- already provided by `out`'s own zero-initialization below, with nothing left to actually copy in.
+  const out = new Uint8Array(4 + 4 + 4); // OLEVersion + FormatID + the empty ClassName's own 4-byte zero length prefix
   const view = new DataView(out.buffer);
   view.setUint32(0, OBJECT_HEADER_OLE_VERSION, true);
   view.setUint32(4, PRESENTATION_OBJECT_HEADER_FORMAT_ID, true);
-  out.set(classNameBytes, 8);
   return out;
 }
 
@@ -210,16 +159,11 @@ function writePresentationObject(): Uint8Array<ArrayBuffer> {
   return out;
 }
 
-// The mirror of writePresentationObjectHeader: validates and skips a PresentationObjectHeader, throwing when the bytes are not this module's own shape (a FormatID other than 0x00000005, or a truncated ClassName) -- readEmbeddedObjectData's shared catch treats that identically to every other reason a payload is not this package's own.
-function skipPresentationObjectHeader(
+// The mirror of writePresentationObjectHeader: validates and skips a PresentationObjectHeader, throwing when the bytes are not this module's own shape (a FormatID other than 0x00000005, or a truncated ClassName) -- readEmbeddedObjectData's shared catch treats that identically to every other reason a payload is not this package's own, discarding the thrown message along with it, so this (and skipClipboardFormatHeader/skipPresentationObject below) is exported for its own direct unit coverage rather than only ever being exercised through a caller that can never observe what it throws or returns.
+export function skipPresentationObjectHeader(
   bytes: Uint8Array<ArrayBuffer>,
   offset: number,
 ): number {
-  if (offset + 8 > bytes.length) {
-    throw new Error(
-      "the Presentation field ends before its PresentationObjectHeader's FormatID",
-    );
-  }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const formatId = view.getUint32(offset + 4, true);
   if (formatId !== PRESENTATION_OBJECT_HEADER_FORMAT_ID) {
@@ -227,25 +171,15 @@ function skipPresentationObjectHeader(
       `PresentationObjectHeader.FormatID is 0x${formatId.toString(16).padStart(8, "0")}, not the 0x00000005 this module's own Presentation field always writes`,
     );
   }
-  const className = readLengthPrefixedAnsiString(
-    bytes,
-    offset + 8,
-    "PresentationObjectHeader.ClassName",
-  );
-  return className.next;
+  return readLengthPrefixedAnsiString(bytes, offset + 8); // PresentationObjectHeader.ClassName
 }
 
-// The mirror of writeClipboardFormatHeader.
-function skipClipboardFormatHeader(
+// The mirror of writeClipboardFormatHeader. Reading ClipboardFormat needs no explicit length guard of its own, for the identical reason skipPresentationObjectHeader's own FormatID read doesn't.
+export function skipClipboardFormatHeader(
   bytes: Uint8Array<ArrayBuffer>,
   offset: number,
 ): number {
   const afterHeader = skipPresentationObjectHeader(bytes, offset);
-  if (afterHeader + 4 > bytes.length) {
-    throw new Error(
-      "ClipboardFormatHeader ends before its ClipboardFormat field",
-    );
-  }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const clipboardFormat = view.getUint32(afterHeader, true);
   if (clipboardFormat !== CLIPBOARD_FORMAT_CF_DIB) {
@@ -257,16 +191,12 @@ function skipClipboardFormatHeader(
 }
 
 // The mirror of writePresentationObject: validates and skips the whole Presentation field, returning the offset immediately past it (the end of the EmbeddedObject structure itself). readEmbeddedObjectData calls this purely to confirm the field this package's own writer always appends is genuinely present and well-formed -- it never reads PresentationData back into anything, since nothing in ContentEmbeddedObject has a position for a placeholder preview image, and a payload missing this mandatory field is not this package's own regardless of whether NativeData alone happened to decode.
-function skipPresentationObject(
+export function skipPresentationObject(
   bytes: Uint8Array<ArrayBuffer>,
   offset: number,
 ): number {
   const afterHeader = skipClipboardFormatHeader(bytes, offset);
-  if (afterHeader + 4 > bytes.length) {
-    throw new Error(
-      "StandardClipboardFormatPresentationObject ends before its PresentationDataSize field",
-    );
-  }
+  // PresentationDataSize itself needs no explicit length guard (DataView.getUint32 already throws for a truncated field), but the check below is genuinely load-bearing: the returned offset is never itself bounds-checked by any caller, so this is the only place a PresentationDataSize claiming more bytes than actually exist is ever caught.
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const presentationDataSize = view.getUint32(afterHeader, true);
   const dataStart = afterHeader + 4;
@@ -340,20 +270,16 @@ function knownContentEmbeddedObjectFields(
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 // A hostile or malformed \objdata JSON payload's own `source` value used to reach knownContentEmbeddedObjectFields untouched, because isContentEmbeddedObject's guard never inspected it -- that function validated and dropped it independently. Now that ContentEmbeddedObjectSchema validates `source` as a genuine field of its own (see that schema's own comment in document-schema.js's src/content.ts), a hostile source would instead fail the WHOLE object's validation at the safeParse call below, discarding an otherwise perfectly well-formed embedded object over one bad metadata field -- a real behavioural regression from the original, more lenient "drop the bad field, keep the rest" contract this reader has always offered. Stripping an invalid `source` key before that validation runs restores it: a payload whose `source` doesn't parse loses only that field, exactly as before, rather than the whole read.
+//
+// No narrowing of `value` at all before probing it, not even for whether it genuinely has a "source" key: this is only ever called on a JSON.parse result within readEmbeddedObjectData's own try block, and every shape lacking a real, schema-valid `source` -- a record with no "source" property, an array (whose numeric-index serialisation never carries one), or a bare primitive -- converges on the identical outcome regardless of which specific line notices. record.source reads back undefined for any of those (property access never throws for a missing key, only null/undefined themselves throw, landing in readEmbeddedObjectData's own shared catch exactly where a dedicated non-record check would have returned early instead), SourceResidueSchema.safeParse(undefined) always fails its own required-object shape, and the resulting strip loop then rebuilds a value equal in content to the original for anything that never had a "source" key to remove in the first place (a plain object gains no observable difference from being rebuilt key-for-key; an array becomes a numeric-keyed object, but ContentEmbeddedObjectSchema.safeParse rejects both shapes identically, since neither carries the fields it requires) -- so a dedicated "does this even have a source key" check would only rename which line reaches that same convergence, never change it. The cast is safe precisely because it is never trusted uninspected: every read from `record` below either degrades harmlessly (a missing property) or throws before anything built from it is used.
 function withoutInvalidSource(value: unknown): unknown {
-  if (!isRecord(value) || !("source" in value)) {
-    return value;
-  }
-  if (SourceResidueSchema.safeParse(value.source).success) {
+  const record = value as Record<string, unknown>;
+  if (SourceResidueSchema.safeParse(record.source).success) {
     return value;
   }
   const sanitized: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value)) {
+  for (const [key, entry] of Object.entries(record)) {
     if (key !== "source") {
       sanitized[key] = entry;
     }
@@ -373,15 +299,10 @@ export function readEmbeddedObjectData(
     ) {
       return undefined;
     }
-    if (header.next + 4 > bytes.length) {
-      return undefined;
-    }
+    // NativeDataSize itself needs no explicit length guard: DataView.getUint32 already throws a RangeError for a truncated field, caught by the shared catch below exactly like every other structural shortfall. NativeData's own bounds need no separate guard either, even though Uint8Array.subarray silently clamps an out-of-range end index rather than throwing: an oversized nativeDataSize hands readCompoundFile a silently truncated buffer, but every one of readCompoundFile's own internal checks (sector count, FAT/directory bounds, and the rest) is derived from that buffer's own real .length rather than from any size this reader declared, so a truncation genuinely inconsistent with the [MS-CFB] structure it claims to hold is still caught there -- confirmed directly against archive-codec's own cfb/read.ts, which throws CompoundFileFormatError from bytes.length-derived arithmetic at every structural boundary.
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const nativeDataSize = view.getUint32(header.next, true);
     const nativeDataStart = header.next + 4;
-    if (nativeDataStart + nativeDataSize > bytes.length) {
-      return undefined;
-    }
     const nativeData = bytes.subarray(
       nativeDataStart,
       nativeDataStart + nativeDataSize,

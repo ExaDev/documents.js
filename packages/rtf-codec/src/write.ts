@@ -7,6 +7,7 @@
 // EVERY NON-ASCII CHARACTER LEAVES AS \uN. RTF's own advice is to emit "\uN followed by the best ANSI representation it can manage. Often a question mark is used if no reasonable ANSI character exists", and that is exactly what this writer does, with \uc1 declared once so the fallback is one character. It deliberately does NOT try to find a code page that could carry a given character as a \'hh byte: the output is then pure 7-bit ASCII whatever the input contained, which is the property that makes it safe to transmit and trivially diffable, and it costs nothing a reader can see -- a conforming reader takes \uN and discards the fallback. A character outside the Basic Multilingual Plane is emitted as its two UTF-16 code units, which is what "\uN ... represents the Unicode character value expressed as a decimal number" means for a format whose parameter is a signed 16-bit integer, and matches the spec's own instruction that "Unicode values greater than 32767 are expressed as negative numbers".
 
 import {
+  type AnchorDescriptor,
   type ConstructDescriptor,
   type ContentBlock,
   type ContentControlDescriptor,
@@ -168,10 +169,8 @@ function collectTables(document: ContentDocument): DocumentTables {
       }
       if (block.headingLevel !== undefined) {
         const level = clampHeadingLevel(block.headingLevel);
-        if (!headingStyles.has(level)) {
-          // Style handle N for heading level N, matching the built-in numbering a consumer expects; handle 0 stays free for Normal.
-          headingStyles.set(level, level);
-        }
+        // Style handle N for heading level N, matching the built-in numbering a consumer expects; handle 0 stays free for Normal. No has() guard: the key and the value are the same level, so re-setting an already-recorded one is a genuine no-op, not a duplicate entry -- a guard here would be an equivalent-mutant magnet with no consumer that can tell the difference.
+        headingStyles.set(level, level);
       }
       const numId = block.list?.numId;
       if (numId !== undefined && !lists.has(numId)) {
@@ -238,8 +237,7 @@ function escapeText(text: string): string {
       case "\r":
         out += "\\line ";
         continue;
-      default:
-        break;
+      // No default case: a switch with no matching case already falls through to the code below on its own, exactly what `default: break;` here did.
     }
     const code = character.codePointAt(0) ?? 0;
     if (code >= 0x20 && code < 0x7f) {
@@ -256,11 +254,8 @@ function escapeText(text: string): string {
   return out;
 }
 
-// The <bookstart> group: `'{\*' \bkmkstart (\bkmkcolfN? & \bkmkcollN?) #PCDATA '}'`, with the column controls "used within the \*\bkmkstart destination following the \bkmkstart control" -- which is exactly where a restored rtf residue value's own control words go, and why they precede the space that delimits the name.
-function bookmarkStartGroup(descriptor: ConstructDescriptor): string {
-  if (!isBookmarkAnchor(descriptor)) {
-    return "";
-  }
+// The <bookstart> group: `'{\*' \bkmkstart (\bkmkcolfN? & \bkmkcollN?) #PCDATA '}'`, with the column controls "used within the \*\bkmkstart destination following the \bkmkstart control" -- which is exactly where a restored rtf residue value's own control words go, and why they precede the space that delimits the name. Takes an already-narrowed AnchorDescriptor rather than re-checking isBookmarkAnchor here: both call sites only ever reach this after their own isBookmarkAnchor guard has already passed, so a second check here would be an unreachable, equivalent-mutant-prone AST node with no caller that could ever take its "false" branch.
+function bookmarkStartGroup(descriptor: AnchorDescriptor): string {
   const residue = bookmarkResidueControlWords(descriptor);
   return `{\\*\\bkmkstart${residue} ${escapeText(descriptor.name)}}`;
 }
@@ -359,10 +354,8 @@ function formFieldPayload(
       controlTypeParams += `\\ffdefres${String(selectedIndex)}\\ffres${String(selectedIndex)}`;
     } else if (descriptor.value !== undefined && descriptor.value.length > 0) {
       // `value` was recorded but names none of the entries actually written -- real, signalable data loss, distinct from "no value was ever set" below. Substituting the nearest available index (e.g. 0) would silently write a DIFFERENT, wrong selection with no signal that the recorded value was never actually represented, so this writer mints neither \ffres nor \ffdefres and reports the drop through the same sink every other unrepresentable construct in this writer uses (see the "mints neither \ffres nor \ffdefres for a dropDown whose value names none of its own options" test). Two genuinely different reasons collapse into this one branch: `value` may never have matched any of `options` at all, or it may have matched one that the 25-entry truncation above then cut away -- distinguished here so the message names the real cause rather than always blaming a mismatch that, in the truncated case, never actually happened.
-      const truncatedAway =
-        allOptions !== undefined &&
-        options !== allOptions &&
-        allOptions.includes(descriptor.value);
+      // Not also gated on `options !== allOptions`: this branch is only ever reached with selectedIndex either undefined or -1, i.e. `descriptor.value` was not found in `options` -- and whenever options === allOptions (no truncation happened), options.indexOf/allOptions.indexOf are the identical lookup, so allOptions.includes(descriptor.value) is already false here regardless. The truncation check would only ever agree with what allOptions.includes(...) alone already decides, making it a redundant, equivalent-mutant-prone AST node with no reachable case where it changes the result.
+      const truncatedAway = allOptions?.includes(descriptor.value) ?? false;
       sink({
         code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
         severity: "warning",
@@ -385,8 +378,8 @@ function formFieldPayload(
         message: `a dropDown contentControl's checked state (${String(descriptor.checked)}) is dropped: a dropdown has no boolean checked state at all, in RTF or in the harmonised contentControl vocabulary itself`,
       });
     }
-  } else if (descriptor.controlType === "plainText") {
-    // [MS-DOC] 2.9.78 FFData.xstzTextDef, verbatim: "An optional Xstz that specifies the default text of this textbox. This structure MUST exist if and only if bits.iType is iTypeTxt (0)." RTF 1.9.1's own `\ffdeftext` ("Default text for text field. This is a destination control word.") is its serialisation. This is real, reachable data: documents.js's own PDF AcroForm-to-contentControl reconstruction hands a plainText control exactly `{controlType:'plainText', value, ...}` for a real `/V` string, so a plainText descriptor's `value` is not hypothetical input -- note that this is a WRITE-only use of `value`: the read side deliberately does not restore `\ffdeftext` back onto `value` (see constructs.ts's own formFieldContentControl), since a field's default/reset text is not its current value, so a document built from a descriptor carrying this `value` does not read back with that same `value` on a round trip. Minted only when the descriptor actually carries a non-empty one -- omitted, like the dropdown branch's own "nothing to name" cases above, when no value was ever recorded, rather than mint an empty `{\*\ffdeftext}` FFData.xstzTextDef's own presence rule would technically require: this writer already diverges from that binary-structure requirement for the identical round-trip-determinism reason the dropdown branch's own wDef note above explains. Gated on `.length > 0`, not merely `!== undefined`, for the same reason `alias`/`tag` are below: an empty string carries no distinguishable default text to preserve, so it is treated as "no value was ever recorded" rather than as a genuine, meaningful empty default -- consistent with how this function already treats an empty `alias`/`tag` as absent rather than minting an empty `{\*\ffhelptext}`/`{\*\ffname}` destination for it.
+  } else {
+    // formFieldPayload is only ever called for a controlType FORM_FIELD_SPEC covers (checkbox, dropDown, plainText -- see formFieldOpenGroup, its only caller), so having already ruled out checkbox and dropDown above, this is always plainText: no further name check is needed or safe to mutate away. [MS-DOC] 2.9.78 FFData.xstzTextDef, verbatim: "An optional Xstz that specifies the default text of this textbox. This structure MUST exist if and only if bits.iType is iTypeTxt (0)." RTF 1.9.1's own `\ffdeftext` ("Default text for text field. This is a destination control word.") is its serialisation. This is real, reachable data: documents.js's own PDF AcroForm-to-contentControl reconstruction hands a plainText control exactly `{controlType:'plainText', value, ...}` for a real `/V` string, so a plainText descriptor's `value` is not hypothetical input -- note that this is a WRITE-only use of `value`: the read side deliberately does not restore `\ffdeftext` back onto `value` (see constructs.ts's own formFieldContentControl), since a field's default/reset text is not its current value, so a document built from a descriptor carrying this `value` does not read back with that same `value` on a round trip. Minted only when the descriptor actually carries a non-empty one -- omitted, like the dropdown branch's own "nothing to name" cases above, when no value was ever recorded, rather than mint an empty `{\*\ffdeftext}` FFData.xstzTextDef's own presence rule would technically require: this writer already diverges from that binary-structure requirement for the identical round-trip-determinism reason the dropdown branch's own wDef note above explains. Gated on `.length > 0`, not merely `!== undefined`, for the same reason `alias`/`tag` are below: an empty string carries no distinguishable default text to preserve, so it is treated as "no value was ever recorded" rather than as a genuine, meaningful empty default -- consistent with how this function already treats an empty `alias`/`tag` as absent rather than minting an empty `{\*\ffhelptext}`/`{\*\ffname}` destination for it.
     if (descriptor.value !== undefined && descriptor.value.length > 0) {
       ffDefTextString = `{\\*\\ffdeftext ${escapeText(descriptor.value)}}`;
       // Reported through the same sink every other cross-field mis-slot in this function uses, for consistency: `value` names the control's CURRENT scalar value, and \ffdeftext names its DEFAULT/reset text -- a genuinely different fact, per xstzTextDef's own presence rule quoted above, not a spelling of the same one. The string itself is not dropped (it lands in the RTF byte stream), but this codec's own reader never restores \ffdeftext back onto `value` (see constructs.ts's own formFieldContentControl), so a document built from this descriptor does not read `value` back as `value` on a round trip -- the identical one-directional degradation shape as the checkbox branch's own dropped `value` above, just landing in a real destination instead of nowhere at all.
@@ -459,13 +452,9 @@ function revisionsCovering(
   extents: readonly RunConstructExtent[],
   index: number,
 ): ProvenanceDescriptor[] {
+  // The kind check lives only in the final type-guard filter below, not here too: this range filter runs before it regardless of an extent's own descriptor kind, and the type guard already narrows the result to ProvenanceDescriptor -- repeating the same check here first would be a redundant, equivalent-mutant-prone AST node with no effect on the final, narrowed result.
   return extents
-    .filter(
-      (extent) =>
-        extent.descriptor.kind === "provenance" &&
-        extent.startRun <= index &&
-        index < extent.endRun,
-    )
+    .filter((extent) => extent.startRun <= index && index < extent.endRun)
     .map((extent) => extent.descriptor)
     .filter(
       (descriptor): descriptor is ProvenanceDescriptor =>
@@ -484,7 +473,8 @@ function verticalMergeCoverage(table: ContentTable): boolean[][] {
       const rowSpan = cell.rowSpan ?? 1;
       for (let next = 1; next < rowSpan; next += 1) {
         const target = covered[rowIndex + next];
-        if (target !== undefined && cellIndex < target.length) {
+        // No cellIndex < target.length check: writeTable only ever reads covered[row]?.[cellIndex] for a cellIndex that row's own row.cells.entries() actually produced, so a phantom flag at an index beyond a shorter row's real cells is never read back either way -- a redundant, equivalent-mutant-prone bound with no consumer that can observe it.
+        if (target !== undefined) {
           target[cellIndex] = true;
         }
       }
@@ -493,8 +483,13 @@ function verticalMergeCoverage(table: ContentTable): boolean[][] {
   return covered;
 }
 
-function nameOf(descriptor: ConstructDescriptor): string {
-  return isBookmarkAnchor(descriptor) ? descriptor.name : "";
+// A properly bookmark-narrowed extent, so its own .descriptor.name is directly accessible with no runtime fallback needed for a case the type checker alone cannot rule out -- .filter() narrows the ARRAY's element type only when the predicate itself is passed directly (not wrapped in an arrow calling a separate helper on one of its properties), which is exactly why this exists instead of reusing isBookmarkAnchor as the filter predicate.
+type BookmarkExtent = RunConstructExtent & { descriptor: AnchorDescriptor };
+
+function isBookmarkExtent(
+  extent: RunConstructExtent,
+): extent is BookmarkExtent {
+  return isBookmarkAnchor(extent.descriptor);
 }
 
 type ContentControlExtent = RunConstructExtent & {
@@ -604,9 +599,8 @@ class RtfWriter {
 
   private writeFontTable(): void {
     this.raw("{\\fonttbl");
-    for (const [name, index] of [...this.tables.fonts].sort(
-      (left, right) => left[1] - right[1],
-    )) {
+    // No sort needed: noteRun assigns each font's own index as fonts.size at first sight, so the Map's own insertion order (which a for-of always iterates in) already IS ascending-index order.
+    for (const [name, index] of this.tables.fonts) {
       this.raw(`{\\f${String(index)}\\fnil\\fcharset0 ${escapeText(name)};}`);
     }
     this.raw("}");
@@ -618,9 +612,8 @@ class RtfWriter {
     }
     // The leading semicolon is the auto colour at index 0, exactly as the spec's own example writes it.
     this.raw("{\\colortbl;");
-    for (const [hex] of [...this.tables.colors].sort(
-      (left, right) => left[1] - right[1],
-    )) {
+    // No sort needed: noteColor assigns each colour's own index as colors.size + 1 at first sight, so the Map's own insertion order already IS ascending-index order -- see writeFontTable's identical reasoning.
+    for (const [hex] of this.tables.colors) {
       const red = Number.parseInt(hex.slice(0, 2), 16);
       const green = Number.parseInt(hex.slice(2, 4), 16);
       const blue = Number.parseInt(hex.slice(4, 6), 16);
@@ -651,9 +644,8 @@ class RtfWriter {
     if (this.tables.lists.size === 0) {
       return;
     }
-    const entries = [...this.tables.lists.values()].sort(
-      (left, right) => left.index - right.index,
-    );
+    // No sort needed: noteBlock assigns each list's own index as lists.size + 1 at first sight, so the Map's own insertion order already IS ascending-index order -- see writeFontTable's identical reasoning.
+    const entries = [...this.tables.lists.values()];
     this.raw("{\\*\\listtable");
     for (const entry of entries) {
       const bullet = entry.definition.type === "bullet";
@@ -690,9 +682,8 @@ class RtfWriter {
       return;
     }
     this.raw("{\\*\\revtbl");
-    for (const [author] of [...this.tables.revisionAuthors].sort(
-      (left, right) => left[1] - right[1],
-    )) {
+    // No sort needed: noteDescriptor assigns each author's own index as revisionAuthors.size at first sight (with "Unknown" pre-seeded at 0), so the Map's own insertion order already IS ascending-index order -- see writeFontTable's identical reasoning.
+    for (const [author] of this.tables.revisionAuthors) {
       this.raw(`{${escapeText(author)};}`);
     }
     this.raw("}");
@@ -734,8 +725,13 @@ class RtfWriter {
       // "\sect End of section and paragraph." The break kind belongs to the section it starts, so it is written after the \sect that opens it, alongside the rest of that section's <secfmt>.
       this.line("\\sect");
     }
+    // An absent breakType never reaches the map lookup at all -- it means the format's own default break (RTF's own "nextPage"), which is spelled by \sectd alone with no \sbk* suffix, the identical output "nextPage" itself produces below since RTF has no dedicated \sbk* word for it either.
+    const breakWord =
+      section.breakType === undefined
+        ? ""
+        : (SECTION_BREAK_CONTROL_WORDS.get(section.breakType) ?? "");
     this.line(
-      `\\sectd${SECTION_BREAK_CONTROL_WORDS.get(section.breakType ?? "") ?? ""}` +
+      `\\sectd${breakWord}` +
         `\\pgwsxn${String(pointsToTwips(section.pageSize.widthPt))}` +
         `\\pghsxn${String(pointsToTwips(section.pageSize.heightPt))}` +
         `\\marglsxn${String(pointsToTwips(section.margins.leftPt))}` +
@@ -775,8 +771,6 @@ class RtfWriter {
       case "constructEnd":
         this.closeConstruct();
         return;
-      default:
-        return;
     }
   }
 
@@ -811,12 +805,9 @@ class RtfWriter {
     this.raw(this.paragraphProperties(paragraph));
     this.raw(" ");
     // A run-scoped construct is a boundary between runs, not a property of one, so its two halves are emitted at the run positions its half-open range names. Closes at a position run before opens, matching the block-marker rule: an extent ending where another begins must not enclose it.
-    const bookmarks = (paragraph.constructs ?? []).filter((extent) =>
-      isBookmarkAnchor(extent.descriptor),
-    );
-    const revisions = (paragraph.constructs ?? []).filter(
-      (extent) => extent.descriptor.kind === "provenance",
-    );
+    const bookmarks = (paragraph.constructs ?? []).filter(isBookmarkExtent);
+    // Not pre-filtered to provenance extents here: revisionsCovering's own final type-guard filter already narrows to ProvenanceDescriptor, so filtering by kind twice would be a redundant, equivalent-mutant-prone AST node with no effect on the final result -- the identical reasoning revisionsCovering's own comment already gives for not repeating its range filter's job.
+    const constructs = paragraph.constructs ?? [];
     const formFields = selectNestableFormFields(
       (paragraph.constructs ?? []).filter(isContentControlExtent),
       this.sink,
@@ -826,7 +817,7 @@ class RtfWriter {
     for (const [index, run] of paragraph.runs.entries()) {
       this.writeRunBoundaries(bookmarks, index);
       this.writeFormFieldBoundaries(formFields, index, openedFormFields);
-      this.writeRun(run, revisionsCovering(revisions, index));
+      this.writeRun(run, revisionsCovering(constructs, index));
     }
     this.writeRunBoundaries(bookmarks, paragraph.runs.length);
     this.writeFormFieldBoundaries(
@@ -850,12 +841,12 @@ class RtfWriter {
   }
 
   private writeRunBoundaries(
-    extents: readonly RunConstructExtent[],
+    extents: readonly BookmarkExtent[],
     position: number,
   ): void {
     for (const extent of extents) {
       if (extent.endRun === position && extent.startRun !== position) {
-        this.raw(`{\\*\\bkmkend ${escapeText(nameOf(extent.descriptor))}}`);
+        this.raw(`{\\*\\bkmkend ${escapeText(extent.descriptor.name)}}`);
       }
     }
     for (const extent of extents) {
@@ -863,7 +854,7 @@ class RtfWriter {
         this.raw(bookmarkStartGroup(extent.descriptor));
         // A point anchor -- startRun === endRun -- opens and closes at the same boundary, so its end is written here rather than waiting for a later position that never differs.
         if (extent.endRun === position) {
-          this.raw(`{\\*\\bkmkend ${escapeText(nameOf(extent.descriptor))}}`);
+          this.raw(`{\\*\\bkmkend ${escapeText(extent.descriptor.name)}}`);
         }
       }
     }
@@ -911,10 +902,9 @@ class RtfWriter {
       paragraph.headingLevel === undefined
         ? undefined
         : clampHeadingLevel(paragraph.headingLevel);
-    const styleHandle =
-      level === undefined ? undefined : this.tables.headingStyles.get(level);
-    if (styleHandle !== undefined && level !== undefined) {
-      out += `\\s${String(styleHandle)}\\outlinelevel${String(level - 1)}`;
+    // Not gated on this.tables.headingStyles.get(level) !== undefined too: collectTables' own noteBlock walk sets headingStyles.set(level, level) -- handle N reserved for level N -- for every paragraph that carries a headingLevel at all, over the exact same document this method is called against, so a defined level is already guaranteed to have a matching entry (in fact the identical value, level itself) by the time any paragraph is written. Checking the Map here a second time would be a redundant, equivalent-mutant-prone AST node with no reachable case where it disagrees with `level !== undefined` alone.
+    if (level !== undefined) {
+      out += `\\s${String(level)}\\outlinelevel${String(level - 1)}`;
     }
     const alignment =
       paragraph.alignment === undefined
@@ -1302,11 +1292,11 @@ function wrapHex(hex: string, lineEnding: string): string {
 
 // The return type is the narrower Uint8Array<ArrayBuffer>, not the default Uint8Array<ArrayBufferLike>, matching document-schema.js's own ProvidedFont.bytes and documents.js's package codecs: a SharedArrayBuffer-backed view is not something this writer can produce, and z.instanceof(Uint8Array)'s own inferred output type is the narrow one, so widening here would make the z.codec() pair in src/codec.ts fail to typecheck.
 function encodeAscii(text: string): Uint8Array<ArrayBuffer> {
-  const out = new Uint8Array(text.length);
-  for (let index = 0; index < text.length; index += 1) {
-    out[index] = text.charCodeAt(index) & 0x7f;
-  }
-  return out;
+  // Uint8Array.from's own array-like traversal (length + per-index mapfn), not a hand-written index < text.length loop: a preallocated Uint8Array silently ignores an out-of-bounds index assignment rather than throwing or growing, so an off-by-one loop bound here is unobservable through `out` regardless of the comparison used -- Array.from removes the comparison as an AST node entirely rather than leaving an equivalent one standing.
+  return Uint8Array.from(
+    { length: text.length },
+    (_, index) => text.charCodeAt(index) & 0x7f,
+  );
 }
 
 export function writeRtfContent(
