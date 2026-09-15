@@ -837,6 +837,51 @@ describe("headings", () => {
       expect(headingBlock.runs.map((run) => run.text).join("")).toBe("foo");
     });
 
+    it("refuses to promote a break-free heading whose ENTIRE text is an ordered-list marker not starting at 1 -- interruptsSetextParagraph's first-line call must use the genuine block-start sense (any start number counts), not the paragraph-continuation sense (only start-at-1 counts)", () => {
+      const collector = createDiagnosticCollector();
+      const written = emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [
+              {
+                text: "2. foo",
+                source: { format: "markdown", xml: "2. foo" },
+              },
+            ],
+            styleId: "Heading1",
+          },
+        ]),
+        { headingStyle: "setext", sink: collector.sink },
+      );
+      expect(written).toBe("# 2. foo");
+      expect(
+        collector.has(
+          MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+        ),
+      ).toBe(true);
+    });
+
+    it("still safely promotes to setext when a NON-FIRST line is an ordered-list marker not starting at 1 -- interruptsSetextParagraph's non-first-line call must use the paragraph-continuation sense (CommonMark's own exception absorbs it as continuation text), not the block-start sense", () => {
+      const written = emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [
+              { text: "foo" },
+              { text: "\n" },
+              {
+                text: "2. bar",
+                source: { format: "markdown", xml: "2. bar" },
+              },
+            ],
+            styleId: "Heading1",
+          },
+        ]),
+      );
+      expect(written).toBe("foo\\\n2. bar\n====");
+    });
+
     it.each([
       { level: "Heading1" as const, underline: "=" },
       { level: "Heading2" as const, underline: "-" },
