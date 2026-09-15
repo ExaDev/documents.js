@@ -303,20 +303,13 @@ function writeCfMultistate(
   return out.build();
 }
 
-// CFFilter ([MS-XLS] 2.5.30), the rgbCT a ct 0x05 rule always carries: its own size in cbFilter (4, excluding cbFilter itself), then the same fTop/fPercent/iParam triple CFExFilterParams states for a top10 rule. Every non-top10 filter rule writes zeros here -- CFFilter is the top-N structure, and [MS-XLS] gives the other filter templates no rgbCT payload of their own.
-function writeCfFilter(
-  top10: Extract<ContentSheetConditionalFormat, { type: "top10" }> | undefined,
-): Uint8Array<ArrayBuffer> {
-  const flags =
-    top10 === undefined
-      ? 0
-      : (top10.bottom === true ? 0 : 1) | // fTop: 1 unless the rule selects from the bottom
-        (top10.percent === true ? 0b10 : 0); // fPercent
+// CFFilter ([MS-XLS] 2.5.30), the rgbCT a ct 0x05 rule always carries: its own size in cbFilter (4, excluding cbFilter itself), then the same fTop/fPercent/iParam triple CFExFilterParams states for a top10 rule -- flags and iParam are computed once by the "top10" case in writeCf12Record and passed straight through here, rather than recomputed from the rule a second time, so CFFilter's own copy can never silently diverge from the value CFExFilterParams actually carries (this package's own reader, conditional-format-12.ts, reads only the latter -- see that file's own top comment -- so a divergence here would be invisible to a self-written-and-read round trip, which is exactly the kind of unobservable duplication that must not exist as two separate computations). Every non-top10 filter rule calls this with flags 0 and iParam 0 -- CFFilter is the top-N structure, and [MS-XLS] gives the other filter templates no rgbCT payload of their own.
+function writeCfFilter(flags: number, iParam: number): Uint8Array<ArrayBuffer> {
   return new RecordBuilder()
     .u16(4) // cbFilter: the bytes after this field
     .u8(0) // reserved1
     .u8(flags)
-    .u16(top10?.rank ?? 0) // iParam
+    .u16(iParam)
     .build();
 }
 
@@ -388,7 +381,7 @@ function ctpOf(
 }
 
 // The formula a text-predicate rule carries as its ct 0x02 condition: neither CFExTextTemplateParams nor CFFilter has anywhere to state the literal search text, so it lives only as the PtgStr operand of the formula itself -- written in the shape Excel's own rule generator and LibreOffice's own GetFixedFormula both produce (sc/source/filter/excel/xestyle... and xcl97... confirmed shapes; see conditional-format-12.ts's own top comment for the reader-side citation), referencing the rule's own first anchor cell relatively. The first string literal of each shape is the search text, which is exactly what the reader's extractFirstStringLiteral recovers.
-function textRuleFormula(
+export function textRuleFormula(
   rule: Extract<
     ContentSheetConditionalFormat,
     { type: "containsText" | "notContainsText" | "beginsWith" | "endsWith" }
@@ -460,13 +453,18 @@ function writeCf12Record(
     case "top10": {
       ct = CT_FILTER;
       icfTemplate = ICF_TEMPLATE_FILTER;
-      // CFExFilterParams ([MS-XLS] 2.5.25): the flags byte (fTop/fPercent), iParam, then 13 reserved bytes.
-      templateParams = new RecordBuilder()
-        .u8((rule.bottom === true ? 0 : 1) | (rule.percent === true ? 0b10 : 0))
-        .u16(rule.rank)
-        .bytes(new Uint8Array(13))
-        .build();
-      rgbCt = writeCfFilter(rule);
+      {
+        // fTop (1 unless the rule selects from the bottom) and fPercent, shared verbatim between CFExFilterParams below and CFFilter's own copy inside rgbCt.
+        const filterFlags =
+          (rule.bottom === true ? 0 : 1) | (rule.percent === true ? 0b10 : 0);
+        // CFExFilterParams ([MS-XLS] 2.5.25): the flags byte (fTop/fPercent), iParam, then 13 reserved bytes.
+        templateParams = new RecordBuilder()
+          .u8(filterFlags)
+          .u16(rule.rank)
+          .bytes(new Uint8Array(13))
+          .build();
+        rgbCt = writeCfFilter(filterFlags, rule.rank);
+      }
       dxf = writeDxfn(rule.style, icvOf);
       break;
     }
@@ -490,7 +488,7 @@ function writeCf12Record(
         .u16(stdDev)
         .bytes(new Uint8Array(14))
         .build();
-      rgbCt = writeCfFilter(undefined);
+      rgbCt = writeCfFilter(0, 0);
       dxf = writeDxfn(rule.style, icvOf);
       break;
     }
@@ -508,7 +506,7 @@ function writeCf12Record(
         .u16(template)
         .bytes(new Uint8Array(14))
         .build();
-      rgbCt = writeCfFilter(undefined);
+      rgbCt = writeCfFilter(0, 0);
       dxf = writeDxfn(rule.style, icvOf);
       break;
     }
@@ -521,7 +519,7 @@ function writeCf12Record(
       ct = CT_FILTER;
       icfTemplate = simpleKindIcfTemplate(rule.type);
       templateParams = new Uint8Array(TEMPLATE_PARAMS_SIZE); // CFExDefaultTemplateParams: 16 reserved bytes
-      rgbCt = writeCfFilter(undefined);
+      rgbCt = writeCfFilter(0, 0);
       dxf = writeDxfn(rule.style, icvOf);
       break;
     }
@@ -697,9 +695,6 @@ export function writeSheetConditionalFormats(
   icvOf: (color: Color) => number,
 ): Uint8Array<ArrayBuffer>[] {
   const rules = sheet.conditionalFormats ?? [];
-  if (rules.length === 0) {
-    return [];
-  }
   const basePieces: Uint8Array<ArrayBuffer>[] = [];
   const cf12Pieces: Uint8Array<ArrayBuffer>[] = [];
   validateRuleCount(rules.length);
