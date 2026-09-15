@@ -4,7 +4,10 @@ import type { FontSubstitution } from "pdf-codec";
 import { createStandardFontMeasurer, loadMathFont, writePdf } from "pdf-codec";
 const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 import { decodePackage as decodeOdfPackage } from "odf.js";
-import { encodePackage as encodeOoxmlPackage } from "ooxml.js";
+import {
+  decodePackage as decodeOoxmlPackage,
+  encodePackage as encodeOoxmlPackage,
+} from "ooxml.js";
 import { openDocx } from "../edit/docx/editor";
 import { openPptx } from "../edit/pptx/editor";
 import { buildDocumentBytes } from "./from-package";
@@ -145,6 +148,21 @@ describe("X -> PDF: caller-supplied faces", () => {
       onFontSubstitution: (substitution) => substitutions.push(substitution),
     });
     expect(substitutions).toEqual([]);
+  });
+
+  it("standardFontDocxBytes genuinely requests Arial, not merely a request no vendored substitute happens to claim", () => {
+    const content = readDocxContent(
+      decodeOoxmlPackage(standardFontDocxBytes()),
+    );
+    if (content.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const paragraph = content.sections[0]?.blocks[0];
+    expect(
+      paragraph?.kind === "paragraph"
+        ? paragraph.runs[0]?.fontFamily
+        : undefined,
+    ).toBe("Arial");
   });
 });
 

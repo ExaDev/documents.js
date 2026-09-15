@@ -2,7 +2,8 @@
 export function relsPathFor(partPath: string): string {
   const lastSlash = partPath.lastIndexOf("/");
   const dir = lastSlash === -1 ? "" : partPath.slice(0, lastSlash);
-  const fileName = lastSlash === -1 ? partPath : partPath.slice(lastSlash + 1);
+  // No lastSlash === -1 ternary guard here (unlike dir above): slicing from lastSlash + 1 already returns the whole path when there is no slash at all (lastIndexOf yields -1, so the slice starts at 0), making a guard for that case redundant -- see src/mathml/nodes.ts's localName for the identical pattern and reasoning.
+  const fileName = partPath.slice(lastSlash + 1);
   return `${dir}/_rels/${fileName}.rels`;
 }
 
@@ -24,9 +25,9 @@ export function buildRelativeTarget(
   const toFileName = toPartPath.slice(toPartPath.lastIndexOf("/") + 1);
 
   let common = 0;
+  // No explicit length bound at all -- once `common` reaches the end of the shorter array, indexing it yields `undefined`, which can never strictly equal a real path segment, so the loop already stops there on its own. An explicit bound (either two independently-ANDed length checks, or a single Math.min/Math.max of the two) is provably redundant for the same reason and, worse, is an equivalent mutant no test can ever kill: every mutation on such a bound is masked by the fromDirs[common] === toDirs[common] comparison already failing the instant one side runs out. Dropping the bound removes the mutation opportunity outright rather than leaving it unkillable.
   while (
-    common < fromDirs.length &&
-    common < toDirs.length &&
+    fromDirs[common] !== undefined &&
     fromDirs[common] === toDirs[common]
   ) {
     common++;

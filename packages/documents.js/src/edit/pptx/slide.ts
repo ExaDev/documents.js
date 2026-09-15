@@ -16,6 +16,7 @@ import {
   ensureNotesMaster,
   NOTES_MASTER_REL_TYPE,
   PML_NS,
+  PRESENTATION_PART_PATH,
 } from "./scaffold";
 import { buildTextBoxShape, PptxShape } from "./shape";
 import type { PptxTableInit } from "./table";
@@ -40,6 +41,15 @@ export interface SlideTableInit {
   readonly frame: Box;
   readonly table: PptxTableInit;
   readonly rotationDeg?: number;
+}
+
+function attrValue(element: XmlElement, name: string): string | undefined {
+  for (const a of element.attributes) {
+    if (a.name === name) {
+      return a.value;
+    }
+  }
+  return undefined;
 }
 
 function directChild(parent: XmlElement, tag: string): XmlElement | undefined {
@@ -288,8 +298,24 @@ export class PptxSlide {
     });
   }
 
+  // Removes this slide from the presentation: the p:sldId entry in sldIdLst -- this.container -- references this slide's own part by r:id, not by the p:sld root element remove() previously (and wrongly) tried to splice out of that same array, so finding it means resolving each p:sldId's relationship and matching its target against this slide's own slidePartPath, exactly as PptxEditor.removeSlideAt does by index.
   remove(): void {
-    removeChild(this.container, this.live());
+    const { pkg, slidePartPath } = this.context;
+    const presentationRels = resolveRelationships(pkg, PRESENTATION_PART_PATH);
+    for (const child of this.container) {
+      if (child.type !== "element" || child.tag !== "p:sldId") {
+        continue;
+      }
+      const rId = attrValue(child, "r:id");
+      if (rId === undefined) {
+        continue;
+      }
+      if (presentationRels.get(rId)?.target === slidePartPath) {
+        removeChild(this.container, child);
+        break;
+      }
+    }
+    Reflect.deleteProperty(pkg.parts, slidePartPath);
     this.removed = true;
   }
 }

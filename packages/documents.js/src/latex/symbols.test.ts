@@ -2,7 +2,130 @@ import type { ContentDocument } from "document-schema.js";
 
 import { describe, expect, it } from "vitest";
 import type { LatexDiagnostic } from "./diagnostics";
-import { extractSymbolDefinitionsFromProse } from "./symbols";
+import {
+  extractSymbolDefinitionsFromProse,
+  glyphOfSymbolText,
+  mintedSymbolId,
+  SymbolResolver,
+} from "./symbols";
+
+// The full command -> glyph table glyphOfSymbolText resolves against, restated here (not imported -- COMMAND_GLYPHS is module-private) so every entry gets its own assertion pair and a mutated string literal anywhere in the table is caught by the one command that names it.
+const COMMAND_GLYPHS: Readonly<Record<string, string>> = {
+  "\\alpha": "α",
+  "\\beta": "β",
+  "\\gamma": "γ",
+  "\\delta": "δ",
+  "\\epsilon": "ε",
+  "\\varepsilon": "ε",
+  "\\zeta": "ζ",
+  "\\eta": "η",
+  "\\theta": "θ",
+  "\\vartheta": "ϑ",
+  "\\iota": "ι",
+  "\\kappa": "κ",
+  "\\lambda": "λ",
+  "\\mu": "μ",
+  "\\nu": "ν",
+  "\\xi": "ξ",
+  "\\pi": "π",
+  "\\varpi": "ϖ",
+  "\\rho": "ρ",
+  "\\varrho": "ϱ",
+  "\\sigma": "σ",
+  "\\varsigma": "ς",
+  "\\tau": "τ",
+  "\\upsilon": "υ",
+  "\\phi": "φ",
+  "\\varphi": "φ",
+  "\\chi": "χ",
+  "\\psi": "ψ",
+  "\\omega": "ω",
+  "\\Gamma": "Γ",
+  "\\Delta": "Δ",
+  "\\Theta": "Θ",
+  "\\Lambda": "Λ",
+  "\\Xi": "Ξ",
+  "\\Pi": "Π",
+  "\\Sigma": "Σ",
+  "\\Upsilon": "Υ",
+  "\\Phi": "Φ",
+  "\\Psi": "Ψ",
+  "\\Omega": "Ω",
+  "\\infty": "∞",
+  "\\partial": "∂",
+  "\\nabla": "∇",
+  "\\ell": "ℓ",
+  "\\hbar": "ℏ",
+  "\\Re": "ℜ",
+  "\\Im": "ℑ",
+  "\\aleph": "ℵ",
+};
+
+describe("glyphOfSymbolText", () => {
+  it.each(Object.entries(COMMAND_GLYPHS))(
+    "resolves %s to its own written glyph",
+    (command, glyph) => {
+      expect(glyphOfSymbolText(command)).toBe(glyph);
+    },
+  );
+
+  it("passes a plain (non-command) character through unchanged", () => {
+    expect(glyphOfSymbolText("x")).toBe("x");
+    expect(glyphOfSymbolText("R")).toBe("R");
+  });
+
+  it("returns undefined for a backslash command outside the map", () => {
+    expect(glyphOfSymbolText("\\notacommand")).toBeUndefined();
+  });
+});
+
+describe("mintedSymbolId", () => {
+  it("prefixes the glyph with the symbols: scheme", () => {
+    expect(mintedSymbolId("α")).toBe("symbols:α");
+    expect(mintedSymbolId("x")).toBe("symbols:x");
+  });
+});
+
+describe("SymbolResolver", () => {
+  it("resolves a curated glyph to its curated id without minting", () => {
+    const resolver = new SymbolResolver([
+      { glyph: "R", scope: "document", id: "quantities:resistance" },
+    ]);
+    expect(resolver.isCurated("R")).toBe(true);
+    expect(resolver.resolve("R")).toBe("quantities:resistance");
+    expect(resolver.mintedEntries()).toEqual([]);
+  });
+
+  it("takes the first entry for a glyph curated more than once", () => {
+    const resolver = new SymbolResolver([
+      { glyph: "R", scope: "document", id: "first" },
+      { glyph: "R", scope: "document", id: "second" },
+    ]);
+    expect(resolver.resolve("R")).toBe("first");
+  });
+
+  it("mints a fresh entry for an uncurated glyph and reuses it on repeat lookups", () => {
+    const resolver = new SymbolResolver([]);
+    expect(resolver.isCurated("x")).toBe(false);
+    const first = resolver.resolve("x");
+    expect(first).toBe("symbols:x");
+    expect(resolver.resolve("x")).toBe(first);
+    expect(resolver.mintedEntries()).toEqual([
+      { glyph: "x", scope: "document", id: "symbols:x" },
+    ]);
+  });
+
+  it("returns minted entries in first-mint order", () => {
+    const resolver = new SymbolResolver([]);
+    resolver.resolve("β");
+    resolver.resolve("α");
+    resolver.resolve("β");
+    expect(resolver.mintedEntries().map((entry) => entry.glyph)).toEqual([
+      "β",
+      "α",
+    ]);
+  });
+});
 
 // The prose scanner's conservatism is the point (precision over recall): every case below pins a boundary the matcher must respect -- the two where/let forms it reads, and the shapes it declines rather than mis-seeding the table.
 

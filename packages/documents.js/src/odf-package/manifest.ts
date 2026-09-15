@@ -47,7 +47,9 @@ function subDocumentMediaType(
 export function syncOdfManifest(pkg: Package): void {
   const mediaTypeOverrides: Record<string, string> = {};
   for (const path of Object.keys(pkg.parts)) {
-    if (!path.endsWith(CONTENT_PART_SUFFIX) || path === ROOT_CONTENT_PART) {
+    // No `|| path === ROOT_CONTENT_PART` check alongside this: the bare root content.xml can
+    // never itself end with "/content.xml" (it has no directory prefix to carry the slash), so that comparison could never be true for any path this `endsWith` check has already let through -- it restated the same exclusion a second, unreachable way.
+    if (!path.endsWith(CONTENT_PART_SUFFIX)) {
       continue;
     }
     const directory = path.slice(0, path.length - ROOT_CONTENT_PART.length);

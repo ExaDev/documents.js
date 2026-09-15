@@ -7,7 +7,7 @@ import {
 } from "ooxml.js";
 import { describe, expect, it } from "vitest";
 import { findChildElements } from "../xml/query";
-import { addImageMedia } from "./media";
+import { addImageMedia, nextMediaIndex } from "./media";
 
 function emptyPackage(): Package {
   return { parts: {} };
@@ -96,5 +96,56 @@ describe("addImageMedia", () => {
     expect(
       defaults.filter((d) => attr(d.node, "Extension") === "png"),
     ).toHaveLength(1);
+  });
+});
+
+describe("nextMediaIndex", () => {
+  it("ignores a same-named file outside the given media directory", () => {
+    const pkg: Package = {
+      parts: {
+        "ppt/media/image9.png": { kind: "binary", base64: "" },
+      },
+    };
+    expect(nextMediaIndex(pkg, "word/media", "image", "png")).toBe(1);
+  });
+
+  it("continues from a pre-existing higher index rather than starting from 1", () => {
+    const pkg: Package = {
+      parts: {
+        "word/media/image5.png": { kind: "binary", base64: "" },
+      },
+    };
+    expect(nextMediaIndex(pkg, "word/media", "image", "png")).toBe(6);
+  });
+
+  it("does not let an extension containing a regex-special character match unrelated files", () => {
+    // "p.g" contains a literal dot -- if escapeRegExp's own replacement text were dropped (turning the escape into a no-op deletion instead), the built pattern's dot would match ANY character, wrongly matching "pXg" too.
+    const pkg: Package = {
+      parts: {
+        "word/media/image1.pXg": { kind: "binary", base64: "" },
+      },
+    };
+    expect(nextMediaIndex(pkg, "word/media", "image", "p.g")).toBe(1);
+  });
+
+  it("still matches an extension containing a regex-special character against its own literal spelling", () => {
+    // "p+g" contains a literal plus -- if escapeRegExp deleted the special character instead of escaping it, the built pattern would require the literal text "pg" and this genuinely matching "p+g" part would be missed.
+    const pkg: Package = {
+      parts: {
+        "word/media/image1.p+g": { kind: "binary", base64: "" },
+      },
+    };
+    expect(nextMediaIndex(pkg, "word/media", "image", "p+g")).toBe(2);
+  });
+
+  // "word/mediaXimage5.png" is exactly as long as "word/media/" ("word/mediaX" is 11 characters, matching "word/media/"'s own 11), so slicing it at the media-directory-prefix length spells "image5.png" by coincidence -- deliberately exercising the same prefix-check coincidence as src/odf-package/media.test.ts's own nextPictureIndex case, for the sibling OOXML-side implementation.
+  it("ignores a same-named file outside the media directory even when slicing its path at the prefix length would coincidentally spell a valid image filename", () => {
+    const pkg: Package = {
+      parts: {
+        "word/media/image1.png": { kind: "binary", base64: "" },
+        "word/mediaXimage5.png": { kind: "binary", base64: "" },
+      },
+    };
+    expect(nextMediaIndex(pkg, "word/media", "image", "png")).toBe(2);
   });
 });

@@ -26,13 +26,15 @@ const RUNNERS: Readonly<Record<PackageManager, RunnerSpec>> = {
 };
 
 function detectPackageManager(userAgent: string | undefined): PackageManager {
-  const ua = userAgent ?? "";
-  if (ua.startsWith("yarn/")) {
+  // No npm_config_user_agent at all (Deno never sets it; running the bin via bare `node` sets nothing) falls back to npm exactly like every other unrecognised value below -- handled as its own branch, rather than defaulting `userAgent` to an empty string first, so there is no fallback string literal whose own value is unobservable (every one of the startsWith checks below is false for it) and therefore untestable.
+  if (userAgent === undefined) return "npm";
+
+  if (userAgent.startsWith("yarn/")) {
     // Yarn classic (1.x) has no `dlx` subcommand -- it is Yarn Berry (2+) only -- so classic is treated as npm and runs through npx rather than a command that fails.
-    return ua.startsWith("yarn/1.") ? "npm" : "yarn";
+    return userAgent.startsWith("yarn/1.") ? "npm" : "yarn";
   }
-  if (ua.startsWith("pnpm/")) return "pnpm";
-  if (ua.startsWith("bun/")) return "bun";
+  if (userAgent.startsWith("pnpm/")) return "pnpm";
+  if (userAgent.startsWith("bun/")) return "bun";
   // npm, and any agent that doesn't identify itself (Deno doesn't set this env var at all; running the bin via bare `node` sets nothing), falls back to npx.
   return "npm";
 }
