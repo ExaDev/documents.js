@@ -10,6 +10,7 @@ import { validateManifest } from "../../manifest";
 import { parsePackage } from "../../package-io/read";
 import { rootElement, childrenWithTag } from "../../xml/query";
 import { attrValue } from "../../xml/query";
+import { readManifest } from "../../manifest";
 import { readOdbInventory } from "./read";
 import type { OdbInventory } from "./read";
 import { writeOdb } from "./write";
@@ -224,5 +225,42 @@ describe("writeOdb", () => {
         ? undefined
         : childrenWithTag(connectionData, "db:connection-resource")[0];
     expect(attr(resource, "xlink:href")).toBe("sdbc:embedded:hsqldb");
+  });
+
+  it('writes xlink:type="simple" on both the connection resource and a component, not an empty string', () => {
+    const database = databaseElement(
+      writeOdb({
+        ...emptyInventory(),
+        connection: { type: "embedded", url: "sdbc:embedded:hsqldb" },
+        forms: [{ name: "Form1", href: "forms/Obj1" }],
+      }),
+    );
+    const dataSource = childrenWithTag(database, "db:data-source")[0];
+    const connectionData =
+      dataSource === undefined
+        ? undefined
+        : childrenWithTag(dataSource, "db:connection-data")[0];
+    const resource =
+      connectionData === undefined
+        ? undefined
+        : childrenWithTag(connectionData, "db:connection-resource")[0];
+    expect(attr(resource, "xlink:type")).toBe("simple");
+    const forms = childrenWithTag(database, "db:forms")[0];
+    const component =
+      forms === undefined
+        ? undefined
+        : childrenWithTag(forms, "db:component")[0];
+    expect(attr(component, "xlink:type")).toBe("simple");
+  });
+
+  it("stamps a caller-supplied non-default version onto both content.xml's office:version and the manifest's own manifest:version, not silently falling back to the default for either", () => {
+    const pkg = writeOdb(emptyInventory(), { version: "1.2" });
+    const part = pkg.parts["content.xml"];
+    if (part?.kind !== "xml") {
+      throw new Error("expected an xml content.xml part");
+    }
+    const root = rootElement(part.nodes);
+    expect(attr(root, "office:version")).toBe("1.2");
+    expect(readManifest(pkg).version).toBe("1.2");
   });
 });
