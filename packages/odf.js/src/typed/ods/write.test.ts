@@ -1765,7 +1765,7 @@ describe("writeOdsContent: boolean and currency cell value boundaries", () => {
 // normaliseOdsContent applies every canonical* helper below identically to BOTH sides of a round-trip equality check (write.test.ts / write-round-trip.test.ts's own expectRoundTrip: normalise(actual) vs. normalise(expected)), so a mutation confined to one of these helpers changes both sides in lockstep and is invisible to that comparison. Each is pinned here directly instead, against a literal expected return value.
 describe("canonical* helpers: direct unit coverage (see the note above on why)", () => {
   it("canonicalColor round-trips a colour through hex unchanged", () => {
-    expect(canonicalColor({ r: 0.2, g: 0.4, b: 0.6 })).toEqual({
+    expect(canonicalColor({ r: 0.2, g: 0.4, b: 0.6 })).toStrictEqual({
       r: 0.2,
       g: 0.4,
       b: 0.6,
@@ -1775,7 +1775,7 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
   it("canonicalCellFill: a solid fill's own colour", () => {
     expect(
       canonicalCellFill({ kind: "solid", color: { r: 1, g: 0, b: 0 } }),
-    ).toEqual({ kind: "solid", color: { r: 1, g: 0, b: 0 } });
+    ).toStrictEqual({ kind: "solid", color: { r: 1, g: 0, b: 0 } });
   });
 
   it("canonicalCellFill: a pattern's foreground colour, when present", () => {
@@ -1786,7 +1786,7 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
         foregroundColor: { r: 1, g: 0, b: 0 },
         backgroundColor: { r: 0, g: 0, b: 1 },
       }),
-    ).toEqual({ kind: "solid", color: { r: 1, g: 0, b: 0 } });
+    ).toStrictEqual({ kind: "solid", color: { r: 1, g: 0, b: 0 } });
   });
 
   it("canonicalCellFill: falls back to a pattern's background colour when foreground is absent", () => {
@@ -1796,7 +1796,7 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
         patternType: "mediumGray",
         backgroundColor: { r: 0, g: 0, b: 1 },
       }),
-    ).toEqual({ kind: "solid", color: { r: 0, g: 0, b: 1 } });
+    ).toStrictEqual({ kind: "solid", color: { r: 0, g: 0, b: 1 } });
   });
 
   it("canonicalCellFill: undefined when a pattern states neither colour", () => {
@@ -1845,39 +1845,51 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
   it("canonicalCellValue: every value kind", () => {
     expect(
       canonicalCellValue({ kind: "number", value: 1, exactValue: "1.0" }),
-    ).toEqual({ kind: "number", value: 1 });
-    expect(canonicalCellValue({ kind: "percentage", value: 0.5 })).toEqual({
+    ).toStrictEqual({ kind: "number", value: 1 });
+    expect(
+      canonicalCellValue({ kind: "percentage", value: 0.5 }),
+    ).toStrictEqual({
       kind: "percentage",
       value: 0.5,
     });
-    expect(canonicalCellValue({ kind: "currency", value: 9.99 })).toEqual({
-      kind: "currency",
-      value: 9.99,
-    });
+    expect(canonicalCellValue({ kind: "currency", value: 9.99 })).toStrictEqual(
+      {
+        kind: "currency",
+        value: 9.99,
+      },
+    );
     expect(
       canonicalCellValue({ kind: "currency", value: 9.99, currency: "GBP" }),
-    ).toEqual({ kind: "currency", value: 9.99, currency: "GBP" });
-    expect(canonicalCellValue({ kind: "boolean", value: true })).toEqual({
+    ).toStrictEqual({ kind: "currency", value: 9.99, currency: "GBP" });
+    expect(canonicalCellValue({ kind: "boolean", value: true })).toStrictEqual({
       kind: "boolean",
       value: true,
     });
-    expect(canonicalCellValue({ kind: "boolean", value: false })).toEqual({
-      kind: "boolean",
-      value: false,
-    });
-    expect(canonicalCellValue({ kind: "date", value: "2026-01-01" })).toEqual({
+    expect(canonicalCellValue({ kind: "boolean", value: false })).toStrictEqual(
+      {
+        kind: "boolean",
+        value: false,
+      },
+    );
+    expect(
+      canonicalCellValue({ kind: "date", value: "2026-01-01" }),
+    ).toStrictEqual({
       kind: "date",
       value: "2026-01-01",
     });
-    expect(canonicalCellValue({ kind: "time", value: "01:02:03" })).toEqual({
+    expect(
+      canonicalCellValue({ kind: "time", value: "01:02:03" }),
+    ).toStrictEqual({
       kind: "time",
       value: "PT1H2M3S",
     });
-    expect(canonicalCellValue({ kind: "string", value: "hi" })).toEqual({
+    expect(canonicalCellValue({ kind: "string", value: "hi" })).toStrictEqual({
       kind: "string",
       value: "hi",
     });
-    expect(canonicalCellValue({ kind: "empty" })).toEqual({ kind: "empty" });
+    expect(canonicalCellValue({ kind: "empty" })).toStrictEqual({
+      kind: "empty",
+    });
   });
 
   it("canonicalCell: a value-less, formula-less, text-less, comment-less cell vanishes entirely", () => {
@@ -1900,7 +1912,7 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
       comment: { text: "note" },
     });
     expect(cell).toBeDefined();
-    expect(cell?.comment).toEqual({ text: "note" });
+    expect(cell?.comment).toStrictEqual({ text: "note" });
   });
 
   it("canonicalCell: an otherwise-empty cell survives when it carries a formula", () => {
@@ -1974,11 +1986,13 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
         undefined,
         undefined,
       ),
-    ).toEqual([]);
+    ).toStrictEqual([]);
   });
 
   it("canonicalColumns/canonicalRows: hidden is exactly true or undefined, never a bare boolean carrying false", () => {
-    expect(canonicalColumns({ columns: [] } as never, undefined)).toEqual([]);
+    expect(canonicalColumns({ columns: [] } as never, undefined)).toStrictEqual(
+      [],
+    );
     const columns = canonicalColumns(
       {
         columns: [
@@ -1991,7 +2005,7 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
     expect(columns[0]?.hidden).toBe(true);
     expect(columns[1]?.hidden).toBeUndefined();
 
-    expect(canonicalRows({ rows: [] } as never, undefined)).toEqual([]);
+    expect(canonicalRows({ rows: [] } as never, undefined)).toStrictEqual([]);
     const rows = canonicalRows(
       {
         rows: [
@@ -2017,8 +2031,10 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
       offsetXPt: 0,
       offsetYPt: 0,
     };
-    expect(canonicalSheetImage(base)).toEqual(base);
-    expect(canonicalSheetImage({ ...base, altText: "a picture" })).toEqual({
+    expect(canonicalSheetImage(base)).toStrictEqual(base);
+    expect(
+      canonicalSheetImage({ ...base, altText: "a picture" }),
+    ).toStrictEqual({
       ...base,
       altText: "a picture",
     });
@@ -2042,7 +2058,7 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
     const result = canonicalImages({
       images: [second, third, first],
     } as never);
-    expect(result).toEqual([first, second, third]);
+    expect(result).toStrictEqual([first, second, third]);
   });
 
   it("canonicalPrintSettings: carries every optional field only when present", () => {
@@ -2053,7 +2069,7 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
       headers: false,
       pageOrder: "downThenOver" as const,
     };
-    expect(canonicalPrintSettings(required)).toEqual(required);
+    expect(canonicalPrintSettings(required)).toStrictEqual(required);
     expect(
       canonicalPrintSettings({
         ...required,
@@ -2064,7 +2080,7 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
         repeatColumns: { start: 0, end: 0 },
         manualBreaks: { rows: [1], columns: [1] },
       }),
-    ).toEqual({
+    ).toStrictEqual({
       ...required,
       printRange: { startRow: 0, startColumn: 0, endRow: 1, endColumn: 1 },
       scalePercent: 80,
@@ -2094,7 +2110,7 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
         },
       ],
     } as never);
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       {
         type: "custom",
         ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }],
@@ -2145,7 +2161,7 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
         },
       ],
     } as never);
-    expect(result).toEqual([]);
+    expect(result).toStrictEqual([]);
   });
 
   it("canonicalConditionalFormatStyle: textColor wins over background when both are present", () => {
@@ -2154,13 +2170,13 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
         textColor: { r: 1, g: 0, b: 0 },
         background: { r: 0, g: 0, b: 1 },
       }),
-    ).toEqual({ textColor: { r: 1, g: 0, b: 0 } });
+    ).toStrictEqual({ textColor: { r: 1, g: 0, b: 0 } });
   });
 
   it("canonicalConditionalFormatStyle: background alone, when textColor is absent", () => {
     expect(
       canonicalConditionalFormatStyle({ background: { r: 0, g: 0, b: 1 } }),
-    ).toEqual({ background: { r: 0, g: 0, b: 1 } });
+    ).toStrictEqual({ background: { r: 0, g: 0, b: 1 } });
   });
 
   it("canonicalConditionalFormatStyle: undefined for undefined input and for a style with neither colour", () => {
@@ -2187,7 +2203,7 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
         },
       ],
     } as never);
-    expect(bare?.[0]).toEqual({
+    expect(bare?.[0]).toStrictEqual({
       type: "cellIs",
       ranges: CF_RANGES,
       operator: "greaterThan",
@@ -2205,7 +2221,7 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
         },
       ],
     } as never);
-    expect(full?.[0]).toEqual({
+    expect(full?.[0]).toStrictEqual({
       type: "cellIs",
       ranges: CF_RANGES,
       operator: "between",
@@ -2227,7 +2243,7 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
         },
       ],
     } as never);
-    expect(result?.[0]).toEqual({
+    expect(result?.[0]).toStrictEqual({
       type: "top10",
       ranges: CF_RANGES,
       rank: 10,
@@ -2237,7 +2253,11 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
     const bare = canonicalConditionalFormats({
       conditionalFormats: [{ type: "top10", ranges: CF_RANGES, rank: 10 }],
     } as never);
-    expect(bare?.[0]).toEqual({ type: "top10", ranges: CF_RANGES, rank: 10 });
+    expect(bare?.[0]).toStrictEqual({
+      type: "top10",
+      ranges: CF_RANGES,
+      rank: 10,
+    });
   });
 
   it("canonicalConditionalFormats: 'aboveAverage' carries aboveAverage/equalAverage only when present", () => {
@@ -2251,7 +2271,7 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
         },
       ],
     } as never);
-    expect(result?.[0]).toEqual({
+    expect(result?.[0]).toStrictEqual({
       type: "aboveAverage",
       ranges: CF_RANGES,
       aboveAverage: false,
@@ -2260,7 +2280,10 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
     const bare = canonicalConditionalFormats({
       conditionalFormats: [{ type: "aboveAverage", ranges: CF_RANGES }],
     } as never);
-    expect(bare?.[0]).toEqual({ type: "aboveAverage", ranges: CF_RANGES });
+    expect(bare?.[0]).toStrictEqual({
+      type: "aboveAverage",
+      ranges: CF_RANGES,
+    });
   });
 
   it("canonicalConditionalFormats: 'dataBar'/'iconSet' carry showValue only when present", () => {
