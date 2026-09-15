@@ -123,6 +123,29 @@ describe("renderDocumentToHtml: table column alignment, only rendered when genui
     expect(html).toContain('<th align="right">h</th>');
     expect(html).toContain('<td align="right">b</td>');
   });
+
+  it("also omits the align attribute for a column with no alignment entry at all -- undefined, distinct from the explicit 'none'", () => {
+    const html = render([
+      {
+        type: "table",
+        // Only one alignment entry for a row of two cells, so the second column's own lookup is genuinely undefined rather than "none".
+        alignments: ["none"],
+        children: [
+          {
+            type: "tableRow",
+            header: true,
+            children: [
+              { type: "tableCell", children: [{ type: "text", value: "h1" }] },
+              { type: "tableCell", children: [{ type: "text", value: "h2" }] },
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(html).toContain("<th>h1</th>");
+    expect(html).toContain("<th>h2</th>");
+    expect(html).not.toContain("align=");
+  });
 });
 
 describe("renderDocumentToHtml: cr() only inserts a newline when the buffer genuinely lacks one", () => {
@@ -162,5 +185,105 @@ describe("renderDocumentToHtml: cr() only inserts a newline when the buffer genu
     ]);
     // A bare tight-paragraph "a" carries no trailing newline of its own -- the nested list's own leading cr() is what supplies the line break before its "<ul>".
     expect(html).toBe("<ul>\n<li>a\n<ul>\n<li>b</li>\n</ul>\n</li>\n</ul>\n");
+  });
+
+  it("inserts a newline between a tight list item's bare paragraph text and a thematic break that follows it in the same item", () => {
+    const html = render([
+      {
+        type: "list",
+        markerType: "bullet",
+        bulletMarker: "-",
+        tight: true,
+        children: [
+          {
+            type: "listItem",
+            children: [
+              { type: "paragraph", children: [{ type: "text", value: "a" }] },
+              { type: "thematicBreak" },
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(html).toBe("<ul>\n<li>a\n<hr />\n</li>\n</ul>\n");
+  });
+
+  it("inserts a newline between a tight list item's bare paragraph text and a table that follows it in the same item", () => {
+    const html = render([
+      {
+        type: "list",
+        markerType: "bullet",
+        bulletMarker: "-",
+        tight: true,
+        children: [
+          {
+            type: "listItem",
+            children: [
+              { type: "paragraph", children: [{ type: "text", value: "a" }] },
+              {
+                type: "table",
+                alignments: ["none"],
+                children: [
+                  {
+                    type: "tableRow",
+                    header: true,
+                    children: [
+                      {
+                        type: "tableCell",
+                        children: [{ type: "text", value: "h" }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(html).toBe(
+      "<ul>\n<li>a\n<table>\n<thead>\n<tr>\n<th>h</th>\n</tr>\n</thead>\n</table>\n</li>\n</ul>\n",
+    );
+  });
+});
+
+describe("renderInlines: image, the one leaf case none of block.test.ts/lower.test.ts/conformance corpora happen to reach through renderDocumentToHtml", () => {
+  it("renders src, alt, and (only when present) a title attribute", () => {
+    expect(
+      renderInlines([
+        { type: "image", destination: "/a.png", alt: "alt text" },
+      ]),
+    ).toBe('<img src="/a.png" alt="alt text" />');
+    expect(
+      renderInlines([
+        {
+          type: "image",
+          destination: "/a.png",
+          alt: "alt text",
+          title: "a title",
+        },
+      ]),
+    ).toBe('<img src="/a.png" alt="alt text" title="a title" />');
+  });
+});
+
+describe("renderDocumentToHtml: a code block's own info-string-to-language-class mapping", () => {
+  it("omits the class attribute entirely when there is no info string at all", () => {
+    expect(render([{ type: "codeBlock", fenced: true, literal: "x" }])).toBe(
+      "<pre><code>x</code></pre>\n",
+    );
+  });
+
+  it("derives the class from the info string's own first word, ignoring the rest", () => {
+    expect(
+      render([
+        {
+          type: "codeBlock",
+          fenced: true,
+          infoString: "js ignored",
+          literal: "x",
+        },
+      ]),
+    ).toBe('<pre><code class="language-js">x</code></pre>\n');
   });
 });
