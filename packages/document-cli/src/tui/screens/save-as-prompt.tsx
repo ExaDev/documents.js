@@ -13,14 +13,16 @@ import {
 
 // The suggested destination: the app's own current working directory (state.cwd, seeded from RunTuiOptions.cwd at startup) plus a sensible, extension-matched filename -- the document's own basename if it already has one (an `.odb`/`.pdf` document opened read-only always does; an editable one might not, if it was created fresh and never saved), otherwise "untitled" with the open document's own format extension.
 function defaultDestinationFor(document: OpenDocument, cwd: string): string {
-  const extension = isWritableDocument(document)
-    ? formatToExtension(document.format)
-    : "bin";
-  const suggestedName =
-    document.path === undefined
-      ? `untitled.${extension}`
-      : basename(document.path);
-  return join(cwd, suggestedName);
+  if (document.path !== undefined) {
+    return join(cwd, basename(document.path));
+  }
+  // Every OpenDocument variant whose path can be undefined is a WritableOpenDocument -- every non-writable variant (OdbOpenDocument, XlsxOpenDocument, CsvOpenDocument, SvgOpenDocument, RtfOpenDocument, WpdOpenDocument, EpubOpenDocument) requires path: string, per each one's own doc comment in types.ts. TypeScript's structural union can't express that cross-field invariant on its own, so isWritableDocument narrows document here purely so formatToExtension gets a format its own DocumentFormat parameter actually accepts (it has no "odb" entry) -- this guard is not reachable as false in practice, mirroring the identical situation this file already accepts for SaveAsPromptScreen's own `document === undefined` branch below.
+  if (!isWritableDocument(document)) {
+    throw new Error(
+      "A document with no path is always a WritableOpenDocument, per OpenDocument's own type structure -- this should be unreachable.",
+    );
+  }
+  return join(cwd, `untitled.${formatToExtension(document.format)}`);
 }
 
 export function SaveAsPromptScreen(): ReactElement {

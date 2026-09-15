@@ -15,7 +15,7 @@ import type {
 import { Box, Text, useInput } from "ink";
 import { useState, type Dispatch, type ReactElement } from "react";
 import { readInput } from "../../../../runtime/io.js";
-import { ListView } from "../../../components/list-view.js";
+import { ListView, selectedColor } from "../../../components/list-view.js";
 import { TextField } from "../../../components/text-field.js";
 import { describeError } from "../../../errors.js";
 import { useNavigationInput } from "../../../keybindings/use-navigation-input.js";
@@ -862,7 +862,7 @@ function EditableItemDetail(props: {
         selectedIndex={selectedIndex}
         reservedRows={5}
         renderItem={(row, isSelected) => (
-          <Text color={isSelected ? "cyan" : undefined} inverse={isSelected}>
+          <Text color={selectedColor(isSelected)} inverse={isSelected}>
             {row.label}
           </Text>
         )}

@@ -279,6 +279,135 @@ describe("set-metadata", () => {
     expect(stderr).toContain("does not convert format");
   });
 
+  it("rejects conflicting positional and --out destinations, naming both under the set-metadata command", async () => {
+    const { exitCode, stderr } = await runCli([
+      "set-metadata",
+      join(workspace, "source.docx"),
+      join(workspace, "positional.docx"),
+      "--out",
+      join(workspace, "flag.docx"),
+      "--set-title",
+      "x",
+    ]);
+    expect(exitCode).not.toBe(EXIT_SUCCESS);
+    expect(stderr).toBe(
+      `[set-metadata] conflicting output destinations: positional '${join(workspace, "positional.docx")}' and --out '${join(workspace, "flag.docx")}'\n`,
+    );
+  });
+
+  it("fails with a usage error, prefixed under set-metadata, when the target format cannot be resolved at all", async () => {
+    const { exitCode, stderr } = await runCli([
+      "set-metadata",
+      join(workspace, "source.docx"),
+      "--set-title",
+      "x",
+    ]);
+    expect(exitCode).not.toBe(EXIT_SUCCESS);
+    expect(stderr).toBe(
+      "[set-metadata] cannot infer a target format -- pass an output path with a recognised extension, --out with one, or --to <format>\n",
+    );
+  });
+
+  it("fails with a usage error, prefixed under set-metadata, when the source format cannot be inferred", async () => {
+    const unresolvedSource = join(workspace, "mystery.unknownext");
+    await writeFile(unresolvedSource, "irrelevant");
+    const { exitCode, stderr } = await runCli([
+      "set-metadata",
+      unresolvedSource,
+      join(workspace, "never.docx"),
+      "--set-title",
+      "x",
+    ]);
+    expect(exitCode).not.toBe(EXIT_SUCCESS);
+    expect(stderr).toBe(
+      `[set-metadata] cannot infer a source format from '${unresolvedSource}'; rename the file with a recognised extension (docx, pptx, xlsx, odt, odp, ods, odg, svg, odf, csv, markdown, rtf, wpd, doc, xls, ppt, epub, pdf)\n`,
+    );
+  });
+
+  it("registers set-metadata with its own description, help text, and every option", async () => {
+    const command = createProgram().commands.find(
+      (candidate) => candidate.name() === "set-metadata",
+    );
+    expect(command?.description()).toBe(
+      "patch a document's own title/author/subject/keywords, leaving every other field and every other flag as-is",
+    );
+
+    // addHelpText's own "after" content is combined into the output only by outputHelp() (invoked here via --help through the real, assembled program), not by Command#helpInformation(), which renders only the built-in usage/options block.
+    const { stdout } = await (async () => {
+      const stdoutChunks: string[] = [];
+      const stdoutSpy = vi
+        .spyOn(process.stdout, "write")
+        .mockImplementation((chunk) => {
+          stdoutChunks.push(
+            typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk),
+          );
+          return true;
+        });
+      try {
+        await createProgram().parseAsync([
+          "node",
+          "document-cli",
+          "set-metadata",
+          "--help",
+        ]);
+      } catch {
+        // exitOverride (program.ts) rethrows after writing help and setting process.exitCode -- the thrown CommanderError carries nothing this test needs.
+      } finally {
+        stdoutSpy.mockRestore();
+      }
+      return { stdout: stdoutChunks.join("") };
+    })();
+
+    expect(stdout).toContain(
+      "Three write paths: a pdf source/target patches the metadata directly on the parsed PDF (writePdf), and a docx source/target",
+    );
+    expect(stdout).toContain(
+      "patches docProps/core.xml directly on the decoded package -- both with no layout engine or ContentDocument rebuild involved",
+    );
+    expect(stdout).toContain(
+      "at all, so everything else on the page (pdf) or in the package (docx -- comments, footnotes, headers/footers, numbering",
+    );
+    expect(stdout).toContain(
+      "definitions included) survives byte-faithful. Every other supported format (pptx, xlsx, odt, odp, ods, odg, markdown, rtf)",
+    );
+    expect(stdout).toContain(
+      "rebuilds a fresh package from that format's own ContentDocument instead.",
+    );
+    expect(stdout).toContain(
+      "set-metadata does not convert format -- source and target must match. Run convert/from-package first, then",
+    );
+    expect(stdout).toContain(
+      "set-metadata on the result, if you need a different target format.",
+    );
+
+    const longs = (command?.options ?? []).map((option) => option.long);
+    expect(longs).toEqual(
+      expect.arrayContaining([
+        "--out",
+        "--timeout",
+        "--json",
+        "--quiet",
+        "--verbose",
+        "--to",
+        "--set-title",
+        "--set-author",
+        "--set-subject",
+        "--set-keywords",
+      ]),
+    );
+    const descriptionOf = (long: string): string | undefined =>
+      command?.options.find((option) => option.long === long)?.description;
+    expect(descriptionOf("--set-title")).toBe("set the title field");
+    expect(descriptionOf("--set-author")).toBe("set the author field");
+    expect(descriptionOf("--set-subject")).toBe("set the subject field");
+    expect(descriptionOf("--set-keywords")).toBe(
+      "set the keywords field, comma-separated (trimmed, empty entries dropped)",
+    );
+    expect(descriptionOf("--to")).toContain(
+      "target format when it cannot be inferred from the output path",
+    );
+  });
+
   it("leaves metadata entirely unchanged when no --set-* flag is given at all", async () => {
     const outputPath = join(workspace, "untouched.docx");
     const { exitCode } = await runCli([

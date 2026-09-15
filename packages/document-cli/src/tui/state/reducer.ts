@@ -135,14 +135,12 @@ function setOverlay(
   }
 }
 
+// A negative slice bound is exactly as safe as the "if too long, slice; else return as-is" branch it replaces -- Array.prototype.slice(-N) on an array no longer than N returns every element, so this single expression covers both the truncating and non-truncating cases with no conditional to keep in sync with UNDO_STACK_LIMIT.
 function pushSnapshot(
   stack: readonly Uint8Array<ArrayBuffer>[],
   snapshot: Uint8Array<ArrayBuffer>,
 ): readonly Uint8Array<ArrayBuffer>[] {
-  const next = [...stack, snapshot];
-  return next.length > UNDO_STACK_LIMIT
-    ? next.slice(next.length - UNDO_STACK_LIMIT)
-    : next;
+  return [...stack, snapshot].slice(-UNDO_STACK_LIMIT);
 }
 
 function documentWithPath(doc: OpenDocument, path: string): OpenDocument {
@@ -1014,20 +1012,13 @@ export function appReducer(state: AppState, action: Action): AppState {
         selection: { ...state.selection, [action.key]: action.index },
       };
 
-    // `alignment` is set through the shared body.appendParagraph call for docx/odt, but MarkdownParagraphInit has no alignment field at all (CommonMark/GFM has no per-paragraph alignment construct) -- so a markdown document drops it here rather than the wordprocessing union call silently disagreeing about which ParagraphInit shape it is.
+    // MarkdownParagraphInit has no alignment field at all (CommonMark/GFM has no per-paragraph alignment construct), but MarkdownEditor.body.appendParagraph accepts the identical wordprocessing ParagraphInit shape as docx/odt and simply ignores the field it does not model -- so one call, with `alignment` always present, covers every wordprocessingDocument format with no format-specific branch.
     case "APPEND_PARAGRAPH": {
       const doc = wordprocessingDocument(state);
       if (doc === undefined) {
         return wrongDocument(state, "a docx, odt or markdown document");
       }
       return mutate(state, doc, () => {
-        if (doc.format === "markdown") {
-          doc.editor.body.appendParagraph({
-            text: action.text,
-            styleId: action.styleId,
-          });
-          return;
-        }
         doc.editor.body.appendParagraph({
           text: action.text,
           styleId: action.styleId,
@@ -1360,12 +1351,12 @@ export function appReducer(state: AppState, action: Action): AppState {
           `There is no paragraph at index ${action.blockIndex}`,
         );
       }
-      // Same holder reason as `merge` above: the write happens inside the mutate callback.
-      const omml = { written: true };
+      // Unlike `merge` above, this assignment is unconditional -- mutate()'s own `apply` always runs synchronously before it returns, so `written` is always set by the time it is read below. A definite-assignment declaration (no initial value at all) says so directly, rather than giving it a placeholder literal that can never actually be observed.
+      let written!: boolean;
       const nextState = mutate(state, doc, () => {
-        omml.written = paragraph.appendOfficeMath(action.mathml).written;
+        written = paragraph.appendOfficeMath(action.mathml).written;
       });
-      return omml.written
+      return written
         ? nextState
         : withStatus(
             nextState,
@@ -2235,6 +2226,7 @@ export function appReducer(state: AppState, action: Action): AppState {
       if (doc === undefined) {
         return withStatus(state, "info", "There is nothing to undo");
       }
+      // doc/xls/ppt are deliberately absent from this list: they gained real live-view editors (DocEditor/XlsEditor/PptEditor) and a reopenEditable case of their own in the same change that widened EditableOpenDocument to include them, so -- like every other EditableOpenDocument format -- they push real undo snapshots via mutate() and must be able to pop them back off here too. Only the genuinely read-only, no-live-editor formats belong in this list.
       if (
         doc.format === "odb" ||
         doc.format === "xlsx" ||
@@ -2242,9 +2234,6 @@ export function appReducer(state: AppState, action: Action): AppState {
         doc.format === "svg" ||
         doc.format === "rtf" ||
         doc.format === "wpd" ||
-        doc.format === "doc" ||
-        doc.format === "xls" ||
-        doc.format === "ppt" ||
         doc.format === "epub"
       ) {
         return withStatus(

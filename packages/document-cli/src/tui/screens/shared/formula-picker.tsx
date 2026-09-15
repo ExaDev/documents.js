@@ -1,11 +1,11 @@
 import { Box, Text } from "ink";
 import { useState, type ReactElement } from "react";
 import { parseXml, type MathMlNode } from "documents.js";
-import { ListView } from "../../components/list-view.js";
+import { ListView, selectedColor } from "../../components/list-view.js";
 import { TextField } from "../../components/text-field.js";
 import { useNavigationInput } from "../../keybindings/use-navigation-input.js";
 import { describeError } from "../../errors.js";
-import { FORMULA_PRESETS } from "./formula-presets.js";
+import { getFormulaPresets } from "./formula-presets.js";
 
 const RAW_ENTRY_LABEL = "Raw MathML...";
 
@@ -16,7 +16,7 @@ interface PickerRow {
 }
 
 const PICKER_ROWS: readonly PickerRow[] = [
-  ...FORMULA_PRESETS.map((preset) => ({
+  ...getFormulaPresets().map((preset) => ({
     label: preset.label,
     mathml: preset.mathml,
   })),
@@ -89,7 +89,7 @@ export function FormulaPicker(props: FormulaPickerProps): ReactElement {
         selectedIndex={selectedIndex}
         reservedRows={PICKER_ROWS.length + 2}
         renderItem={(row, isSelected) => (
-          <Text color={isSelected ? "cyan" : undefined}>
+          <Text color={selectedColor(isSelected)}>
             {isSelected ? "> " : "  "}
             {row.label}
           </Text>

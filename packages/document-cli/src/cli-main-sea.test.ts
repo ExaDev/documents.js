@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EXIT_SUCCESS, EXIT_USAGE_ERROR } from "./runtime/exit-codes";
 import { main } from "./cli-main-sea";
+import * as programModule from "./program";
 
 // Only the TUI-free dispatch this module owns is exercised here -- every real command's own behaviour is already covered by document-cli's own command-level tests and its full test/smoke.test.mjs (spawning the real dist/cli.js), which src/cli-main.ts's identical `createProgram().parseAsync()` call already reaches. This file exists to prove the one thing genuinely different about the SEA dispatch: no TUI subcommand, and an explicit `tui` invocation refused with a clear message rather than silently doing nothing.
 describe("main", () => {
@@ -48,5 +49,16 @@ describe("main", () => {
     expect(stdoutSpy).toHaveBeenCalledWith(
       expect.stringContaining("Commands:"),
     );
+  });
+
+  it("propagates a non-CommanderError bug instead of swallowing it", async () => {
+    // Every registered action already catches and maps its own errors into a CommanderError (see this module's own comment); a plain Error surfacing here means a genuine, unexpected bug in an action, which must reach the caller rather than being silently absorbed alongside the expected --help/--version CommanderError case.
+    const brokenProgram = programModule.createProgram();
+    brokenProgram.command("boom").action(() => {
+      throw new Error("boom");
+    });
+    vi.spyOn(programModule, "createProgram").mockReturnValue(brokenProgram);
+    process.argv = ["node", "sea-entry.js", "boom"];
+    await expect(main()).rejects.toThrow("boom");
   });
 });

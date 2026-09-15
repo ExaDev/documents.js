@@ -1,12 +1,20 @@
 import {
+  createDoc,
   createOdg,
   createOdp,
   createOds,
   createOdt,
   createPdf,
+  createPpt,
   createPptx,
+  createXls,
   drawingOfBlock,
+  formulaOfBlock,
+  LAYOUT_FORMAT_VERSION,
+  type LayoutDocument,
+  type MathMlNode,
   odsToXlsx,
+  openDoc,
   openDocx,
   openMarkdown,
   openOdg,
@@ -14,13 +22,16 @@ import {
   openOds,
   openOdt,
   openPdf,
+  openPpt,
   openPptx,
+  openXls,
   readDocxContent,
   readOdpContent,
   readOdsContent,
   readOdtContent,
   readPdf,
   readPptxContent,
+  writePdf,
   xlsxToPdf,
 } from "documents.js";
 import { describe, expect, it } from "vitest";
@@ -28,19 +39,38 @@ import type { Action } from "./actions.js";
 import { appReducer, createInitialState } from "./reducer.js";
 import type {
   AppState,
+  CsvOpenDocument,
+  DocOpenDocument,
   DocxOpenDocument,
+  EpubOpenDocument,
   MarkdownOpenDocument,
+  OdbOpenDocument,
   OdgOpenDocument,
   OdpOpenDocument,
   OdsOpenDocument,
   OdtOpenDocument,
   PdfOpenDocument,
   PptxOpenDocument,
+  RtfOpenDocument,
+  SvgOpenDocument,
+  WpdOpenDocument,
+  XlsxOpenDocument,
 } from "./types.js";
+import { isEditableDocument } from "./types.js";
 
 // A real, minimal PNG -- the signature bytes plus a few arbitrary trailing ones, matching docx/paragraph-detail.test.tsx's own fixture. ADD_SHEET_IMAGE only stores/embeds these bytes and declares the media part's type from the caller's own explicit `format`, so a genuine decodable pixel grid is not needed to prove the round trip.
 const PNG_BYTES = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4,
+]);
+
+// A genuinely decodable 1x1 red PNG (real IHDR/IDAT/IEND chunks, truecolor, no filter). Unlike PNG_BYTES above, PdfPage.appendImage -> registerImageBytes DOES decode the pixel grid (to size the image asset it registers), so a fake signature-only PNG throws "PNG file does not begin with an IHDR chunk" here.
+const REAL_PNG_BYTES = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49,
+  0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02,
+  0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44,
+  0x41, 0x54, 0x78, 0xda, 0x63, 0xf8, 0xcf, 0xc0, 0x00, 0x00, 0x03, 0x01, 0x01,
+  0x00, 0xf7, 0x03, 0x41, 0x43, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44,
+  0xae, 0x42, 0x60, 0x82,
 ]);
 
 function applyAll(
@@ -54,6 +84,14 @@ function docxDocument(state: AppState): DocxOpenDocument {
   const doc = state.openDocument;
   if (doc?.format !== "docx") {
     throw new Error("expected an open docx document");
+  }
+  return doc;
+}
+
+function docDocument(state: AppState): DocOpenDocument {
+  const doc = state.openDocument;
+  if (doc?.format !== "doc") {
+    throw new Error("expected an open doc document");
   }
   return doc;
 }
@@ -173,6 +211,39 @@ function openPdfDocument(
   });
 }
 
+function openDocDocument(
+  bytes: Uint8Array<ArrayBuffer>,
+  path = "/tmp/legacy.doc",
+): AppState {
+  return appReducer(createInitialState(), {
+    type: "OPEN_FILE_SUCCESS",
+    path,
+    doc: { format: "doc", editor: openDoc(bytes), path },
+  });
+}
+
+function openXlsDocument(
+  bytes: Uint8Array<ArrayBuffer>,
+  path = "/tmp/legacy.xls",
+): AppState {
+  return appReducer(createInitialState(), {
+    type: "OPEN_FILE_SUCCESS",
+    path,
+    doc: { format: "xls", editor: openXls(bytes), path },
+  });
+}
+
+function openPptDocument(
+  bytes: Uint8Array<ArrayBuffer>,
+  path = "/tmp/legacy.ppt",
+): AppState {
+  return appReducer(createInitialState(), {
+    type: "OPEN_FILE_SUCCESS",
+    path,
+    doc: { format: "ppt", editor: openPpt(bytes), path },
+  });
+}
+
 // Real xlsx bytes with no XlsxEditor to build one directly: createOds() -> odsToXlsx() is documents.js's own PDF-bypassing bridge, reused here purely as a source of genuine xlsx bytes for the reducer tests below.
 function xlsxTestBytes(): Uint8Array<ArrayBuffer> {
   const editor = createOds();
@@ -191,6 +262,34 @@ function openXlsxDocument(
     path,
     doc: { format: "xlsx", layout: readPdf(xlsxToPdf(bytes)), bytes, path },
   });
+}
+
+// A minimal document for each of UNDO's own read-only formats: odb carries no layout/bytes at all (see OdbOpenDocument's own doc comment), the other six share the identical read-only-preview shape XlsxOpenDocument above already builds, populated through a real PdfEditor rather than a hand-authored LayoutDocument literal -- these tests only exercise UNDO's own per-format branch, never the layout content itself.
+function readOnlyOpenDocument(
+  format: "odb" | "xlsx" | "csv" | "svg" | "rtf" | "wpd" | "epub",
+):
+  | OdbOpenDocument
+  | XlsxOpenDocument
+  | CsvOpenDocument
+  | SvgOpenDocument
+  | RtfOpenDocument
+  | WpdOpenDocument
+  | EpubOpenDocument {
+  if (format === "odb") {
+    return {
+      format: "odb",
+      tables: [],
+      forms: [],
+      reports: [],
+      path: "/tmp/database.odb",
+    };
+  }
+  return {
+    format,
+    layout: createPdf().toLayoutDocument(),
+    bytes: createPdf().toBytes(),
+    path: `/tmp/source.${format}`,
+  };
 }
 
 function markdownDocument(state: AppState): MarkdownOpenDocument {
@@ -263,7 +362,13 @@ describe("appReducer navigation", () => {
     const asked = appReducer(dirty, { type: "REQUEST_QUIT" });
     expect(asked.overlays.confirmQuit).toBe(true);
     expect(asked.isExiting).toBe(false);
-    expect(appReducer(asked, { type: "CONFIRM_QUIT" }).isExiting).toBe(true);
+    const confirmed = appReducer(asked, { type: "CONFIRM_QUIT" });
+    expect(confirmed.isExiting).toBe(true);
+    expect(confirmed.overlays.confirmQuit).toBe(false);
+
+    const cancelled = appReducer(asked, { type: "CANCEL_QUIT" });
+    expect(cancelled.isExiting).toBe(false);
+    expect(cancelled.overlays.confirmQuit).toBe(false);
   });
 });
 
@@ -281,6 +386,7 @@ describe("appReducer document lifecycle", () => {
       expect(state.stack.map((screen) => screen.kind)).toEqual([expectedKind]);
       expect(state.openDocument?.format).toBe(action.format);
       expect(state.hasUnsavedChanges).toBe(false);
+      expect(state.status?.text).toBe(`New ${action.format} document`);
     }
   });
 
@@ -313,6 +419,217 @@ describe("appReducer document lifecycle", () => {
     expect(closed.undoStack).toEqual([]);
     expect(closed.hasUnsavedChanges).toBe(false);
     expect(closed.stack.map((screen) => screen.kind)).toEqual(["launcher"]);
+  });
+});
+
+describe("appReducer SAVE_SUCCESS", () => {
+  it("says so when there is no open document to record the path against", () => {
+    const result = appReducer(createInitialState(), {
+      type: "SAVE_SUCCESS",
+      path: "/tmp/orphan.docx",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe(
+      "Saved, but there is no open document to record the path against",
+    );
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+
+  // documentWithPath's own read-only-preview branches (xlsx/csv/svg/rtf) are otherwise never reached by any other action -- SAVE_AS on one of these formats is the only path that dispatches SAVE_SUCCESS against them, so this proves the layout/bytes pair survives the rewrite untouched alongside the new path.
+  it("updates a read-only preview document's own path while keeping its layout and bytes untouched", () => {
+    const bytes = xlsxTestBytes();
+    const layout = readPdf(xlsxToPdf(bytes));
+    const cases: readonly ["xlsx" | "csv" | "svg" | "rtf", string][] = [
+      ["xlsx", "/tmp/renamed.xlsx"],
+      ["csv", "/tmp/renamed.csv"],
+      ["svg", "/tmp/renamed.svg"],
+      ["rtf", "/tmp/renamed.rtf"],
+    ];
+    for (const [format, newPath] of cases) {
+      const opened = appReducer(createInitialState(), {
+        type: "OPEN_FILE_SUCCESS",
+        path: "/tmp/original",
+        doc: { format, layout, bytes, path: "/tmp/original" },
+      });
+      const saved = appReducer(opened, {
+        type: "SAVE_SUCCESS",
+        path: newPath,
+      });
+      const doc = saved.openDocument;
+      if (doc?.format !== format) {
+        throw new Error(`expected a ${format} document, got ${doc?.format}`);
+      }
+      expect(doc.path).toBe(newPath);
+      expect(doc.layout).toBe(layout);
+      expect(doc.bytes).toBe(bytes);
+      expect(saved.hasUnsavedChanges).toBe(false);
+    }
+  });
+});
+
+describe("appReducer SAVE_ERROR", () => {
+  it("surfaces the failure message as an error status, without touching hasUnsavedChanges", () => {
+    const dirty = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(dirty, {
+      type: "SAVE_ERROR",
+      message: "disk is full",
+    });
+    expect(result.status?.severity).toBe("error");
+    expect(result.status?.text).toBe("disk is full");
+    expect(result.hasUnsavedChanges).toBe(dirty.hasUnsavedChanges);
+  });
+});
+
+describe("appReducer OPEN_FILE_ERROR", () => {
+  it("records the failure as an error status and populates errorDetail", () => {
+    const result = appReducer(createInitialState(), {
+      type: "OPEN_FILE_ERROR",
+      message: "not a valid docx",
+      detail: "unexpected end of zip central directory",
+    });
+    expect(result.status?.severity).toBe("error");
+    expect(result.status?.text).toBe("not a valid docx");
+    expect(result.errorDetail).toStrictEqual({
+      message: "not a valid docx",
+      detail: "unexpected end of zip central directory",
+    });
+  });
+});
+
+describe("appReducer SAVE_AS_REQUEST / SET_SEARCH_QUERY / CLEAR_STATUS / DISMISS_ERROR_DETAIL", () => {
+  it("pushes the saveAsPrompt screen onto the stack", () => {
+    const result = appReducer(createInitialState(), {
+      type: "SAVE_AS_REQUEST",
+    });
+    expect(result.stack.map((screen) => screen.kind)).toEqual([
+      "launcher",
+      "saveAsPrompt",
+    ]);
+  });
+
+  it("replaces the search query verbatim", () => {
+    const result = appReducer(createInitialState(), {
+      type: "SET_SEARCH_QUERY",
+      query: "invoice",
+    });
+    expect(result.searchQuery).toBe("invoice");
+  });
+
+  it("clears an existing status message", () => {
+    const withStatus = appReducer(createInitialState(), {
+      type: "OPEN_FILE_ERROR",
+      message: "boom",
+      detail: undefined,
+    });
+    expect(withStatus.status).toBeDefined();
+    const cleared = appReducer(withStatus, { type: "CLEAR_STATUS" });
+    expect(cleared.status).toBeUndefined();
+  });
+
+  it("dismisses errorDetail without touching the status message", () => {
+    const withError = appReducer(createInitialState(), {
+      type: "OPEN_FILE_ERROR",
+      message: "boom",
+      detail: "trace",
+    });
+    const dismissed = appReducer(withError, { type: "DISMISS_ERROR_DETAIL" });
+    expect(dismissed.errorDetail).toBeUndefined();
+    expect(dismissed.status).toStrictEqual(withError.status);
+  });
+});
+
+describe("appReducer OPEN_OVERLAY / CLOSE_OVERLAY", () => {
+  it("opens and closes the confirmClose overlay without touching any other overlay", () => {
+    const opened = appReducer(createInitialState(), {
+      type: "OPEN_OVERLAY",
+      overlay: "confirmClose",
+    });
+    expect(opened.overlays.confirmClose).toBe(true);
+    expect(opened.overlays.confirmQuit).toBe(false);
+
+    const closed = appReducer(opened, {
+      type: "CLOSE_OVERLAY",
+      overlay: "confirmClose",
+    });
+    expect(closed.overlays.confirmClose).toBe(false);
+  });
+});
+
+describe("appReducer REQUEST_CLOSE / CONFIRM_CLOSE / CANCEL_CLOSE", () => {
+  it("says so when there is no open document to close", () => {
+    const result = appReducer(createInitialState(), { type: "REQUEST_CLOSE" });
+    expect(result.status?.severity).toBe("info");
+    expect(result.status?.text).toBe("There is no open document to close");
+  });
+
+  it("closes immediately, with no confirmation overlay, when there are no unsaved changes", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const withQuery = appReducer(created, {
+      type: "SET_SEARCH_QUERY",
+      query: "leftover search",
+    });
+    const requested = appReducer(withQuery, { type: "REQUEST_CLOSE" });
+    expect(requested.openDocument).toBeUndefined();
+    expect(requested.overlays.confirmClose).toBe(false);
+    // closeDocument resets searchQuery back to empty rather than carrying a stale search over into whatever gets opened next.
+    expect(requested.searchQuery).toBe("");
+  });
+
+  it("opens the confirmClose overlay instead of closing outright when there are unsaved changes", () => {
+    const edited = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      {
+        type: "APPEND_PARAGRAPH",
+        text: "x",
+        styleId: undefined,
+        alignment: undefined,
+      },
+    ]);
+    const requested = appReducer(edited, { type: "REQUEST_CLOSE" });
+    expect(requested.overlays.confirmClose).toBe(true);
+    expect(requested.openDocument).toBeDefined();
+  });
+
+  it("CONFIRM_CLOSE closes the document and its own confirmation overlay together", () => {
+    const edited = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      {
+        type: "APPEND_PARAGRAPH",
+        text: "x",
+        styleId: undefined,
+        alignment: undefined,
+      },
+      { type: "REQUEST_CLOSE" },
+    ]);
+    expect(edited.overlays.confirmClose).toBe(true);
+
+    const confirmed = appReducer(edited, { type: "CONFIRM_CLOSE" });
+    expect(confirmed.openDocument).toBeUndefined();
+    expect(confirmed.overlays.confirmClose).toBe(false);
+  });
+
+  it("CANCEL_CLOSE dismisses the overlay and keeps the document open with its edits intact", () => {
+    const edited = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      {
+        type: "APPEND_PARAGRAPH",
+        text: "x",
+        styleId: undefined,
+        alignment: undefined,
+      },
+      { type: "REQUEST_CLOSE" },
+    ]);
+
+    const cancelled = appReducer(edited, { type: "CANCEL_CLOSE" });
+    expect(cancelled.overlays.confirmClose).toBe(false);
+    expect(cancelled.openDocument).toBe(edited.openDocument);
+    expect(cancelled.hasUnsavedChanges).toBe(true);
   });
 });
 
@@ -367,6 +684,9 @@ describe("appReducer SET_METADATA", () => {
       overrides: { title: "x" },
     });
     expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe(
+      "That action needs an editable document; the open document is no document",
+    );
     expect(result.hasUnsavedChanges).toBe(false);
   });
 });
@@ -414,6 +734,29 @@ describe("appReducer docx mutations", () => {
     expect(unbolded.hasUnsavedChanges).toBe(true);
   });
 
+  it("replaces a run's text via SET_RUN_TEXT", () => {
+    const state = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      {
+        type: "APPEND_PARAGRAPH",
+        text: undefined,
+        styleId: undefined,
+        alignment: undefined,
+      },
+      { type: "APPEND_RUN", blockIndex: 0, text: "Hello" },
+    ]);
+    const retyped = appReducer(state, {
+      type: "SET_RUN_TEXT",
+      blockIndex: 0,
+      runIndex: 0,
+      text: "Goodbye",
+    });
+    expect(retyped.hasUnsavedChanges).toBe(true);
+    expect(docxDocument(retyped).editor.paragraphs()[0]?.runs()[0]?.text).toBe(
+      "Goodbye",
+    );
+  });
+
   it("reports a missing run rather than throwing", () => {
     const state = appReducer(createInitialState(), {
       type: "CREATE_DOCUMENT",
@@ -425,6 +768,7 @@ describe("appReducer docx mutations", () => {
       runIndex: 0,
     });
     expect(missed.status?.severity).toBe("warning");
+    expect(missed.status?.text).toBe("There is no paragraph at index 7");
     expect(missed.hasUnsavedChanges).toBe(false);
   });
 
@@ -441,6 +785,176 @@ describe("appReducer docx mutations", () => {
     });
     expect(warned.status?.severity).toBe("warning");
     expect(warned.hasUnsavedChanges).toBe(false);
+  });
+
+  // withRun's own wrongDocument path -- distinct from withStyledRun's (exercised elsewhere against markdown), since SET_RUN_TEXT/TOGGLE_RUN_BOLD/TOGGLE_RUN_ITALIC resolve through the wider wordprocessingDocument union, not styledWordprocessingDocument.
+  it("warns rather than mutating when SET_RUN_TEXT targets a non-wordprocessing document", () => {
+    const state = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "ods",
+    });
+    const result = appReducer(state, {
+      type: "SET_RUN_TEXT",
+      blockIndex: 0,
+      runIndex: 0,
+      text: "x",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe(
+      "That action needs a docx, odt or markdown document; the open document is ods",
+    );
+  });
+
+  // withRun's own "no run at index" path: the paragraph exists (created via APPEND_PARAGRAPH) but has no runs at all, unlike the "no paragraph" case already covered above.
+  it("reports a missing run, not a missing paragraph, when the paragraph exists but has no runs", () => {
+    const state = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      {
+        type: "APPEND_PARAGRAPH",
+        text: undefined,
+        styleId: undefined,
+        alignment: undefined,
+      },
+    ]);
+    const result = appReducer(state, {
+      type: "TOGGLE_RUN_ITALIC",
+      blockIndex: 0,
+      runIndex: 0,
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("Paragraph 0 has no run at index 0");
+    // The warning path returns the state unchanged rather than a new mutated copy.
+    expect(result.openDocument).toBe(state.openDocument);
+  });
+
+  // withStyledRun's own "no run at index" path (TOGGLE_RUN_UNDERLINE/SET_RUN_COLOR/etc resolve through styledWordprocessingDocument, not wordprocessingDocument, so this is a genuinely separate code path from the withRun test above).
+  it("reports a missing run for TOGGLE_RUN_UNDERLINE when the paragraph has no runs", () => {
+    const state = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      {
+        type: "APPEND_PARAGRAPH",
+        text: undefined,
+        styleId: undefined,
+        alignment: undefined,
+      },
+    ]);
+    const result = appReducer(state, {
+      type: "TOGGLE_RUN_UNDERLINE",
+      blockIndex: 0,
+      runIndex: 0,
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("Paragraph 0 has no run at index 0");
+    expect(result.openDocument).toBe(state.openDocument);
+  });
+
+  // TOGGLE_RUN_UNDERLINE and SET_RUN_COLOR have no real, positive test anywhere else -- the markdown describe below only exercises their wrongDocument branch.
+  it("toggles a real run's underline and sets its colour through the live editor", () => {
+    const state = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      {
+        type: "APPEND_PARAGRAPH",
+        text: undefined,
+        styleId: undefined,
+        alignment: undefined,
+      },
+      { type: "APPEND_RUN", blockIndex: 0, text: "Hello" },
+    ]);
+    const run = docxDocument(state).editor.paragraphs()[0]?.runs()[0];
+    if (run === undefined) {
+      throw new Error("expected an appended run");
+    }
+    expect(run.underline).toBe(false);
+
+    const underlined = appReducer(state, {
+      type: "TOGGLE_RUN_UNDERLINE",
+      blockIndex: 0,
+      runIndex: 0,
+    });
+    expect(underlined.hasUnsavedChanges).toBe(true);
+    expect(run.underline).toBe(true);
+
+    const coloured = appReducer(underlined, {
+      type: "SET_RUN_COLOR",
+      blockIndex: 0,
+      runIndex: 0,
+      color: { r: 1, g: 0, b: 0 },
+    });
+    expect(coloured.hasUnsavedChanges).toBe(true);
+    expect(run.color).toStrictEqual({ r: 1, g: 0, b: 0 });
+  });
+
+  // SET_PARAGRAPH_ALIGNMENT has no positive test anywhere else -- the markdown describe block only ever exercises its wrongDocument branch (MarkdownParagraph has no alignment field at all).
+  it("sets a real paragraph's alignment through the live editor", () => {
+    const state = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      {
+        type: "APPEND_PARAGRAPH",
+        text: "Hello",
+        styleId: undefined,
+        alignment: undefined,
+      },
+    ]);
+    const paragraph = docxDocument(state).editor.paragraphs()[0];
+    if (paragraph === undefined) {
+      throw new Error("expected an appended paragraph");
+    }
+    expect(paragraph.alignment).toBeUndefined();
+
+    const aligned = appReducer(state, {
+      type: "SET_PARAGRAPH_ALIGNMENT",
+      blockIndex: 0,
+      alignment: "center",
+    });
+    expect(aligned.hasUnsavedChanges).toBe(true);
+    expect(paragraph.alignment).toBe("center");
+  });
+
+  it("reports a missing paragraph for SET_PARAGRAPH_ALIGNMENT rather than throwing", () => {
+    const state = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(state, {
+      type: "SET_PARAGRAPH_ALIGNMENT",
+      blockIndex: 7,
+      alignment: "center",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no paragraph at index 7");
+    expect(result.openDocument).toBe(state.openDocument);
+  });
+
+  // APPEND_RUN's own wrongDocument/no-paragraph paths -- every other use of APPEND_RUN in this file is setup for a further action, never a direct assertion on its own warning paths.
+  it("warns rather than mutating when APPEND_RUN targets a non-wordprocessing document", () => {
+    const state = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "ods",
+    });
+    const result = appReducer(state, {
+      type: "APPEND_RUN",
+      blockIndex: 0,
+      text: "x",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe(
+      "That action needs a docx, odt or markdown document; the open document is ods",
+    );
+  });
+
+  it("reports a missing paragraph for APPEND_RUN rather than throwing", () => {
+    const state = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(state, {
+      type: "APPEND_RUN",
+      blockIndex: 7,
+      text: "x",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no paragraph at index 7");
+    expect(result.openDocument).toBe(state.openDocument);
   });
 });
 
@@ -506,6 +1020,7 @@ describe.each(["docx", "odt"] as const)(
         fontFamily: "Georgia",
       });
       expect(missed.status?.severity).toBe("warning");
+      expect(missed.status?.text).toBe("There is no paragraph at index 7");
       expect(missed.hasUnsavedChanges).toBe(false);
     });
   },
@@ -524,6 +1039,8 @@ describe("appReducer APPEND_TABLE and MERGE_TABLE_CELLS on docx/odt", () => {
       merge: { startRow: 0, startColumn: 0, rowSpan: 2, colSpan: 2 },
     });
     expect(withTable.hasUnsavedChanges).toBe(true);
+    // A docx table genuinely supports merging, unlike markdown's own -- this must not carry the "unsupported" warning markdown's APPEND_TABLE+merge gets below.
+    expect(withTable.status?.severity).not.toBe("warning");
 
     const content = readDocxContent(docxDocument(withTable).editor.toPackage());
     if (content.kind !== "wordprocessing") {
@@ -708,7 +1225,103 @@ describe("appReducer APPEND_TABLE and MERGE_TABLE_CELLS on docx/odt", () => {
       colSpan: 1,
     });
     expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no table at index 3");
     expect(result.hasUnsavedChanges).toBe(false);
+  });
+});
+
+describe("appReducer SET_TABLE_CELL_TEXT", () => {
+  it("replaces a real docx table cell's text in place", () => {
+    const state = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      { type: "APPEND_TABLE", rows: 2, columns: 2 },
+    ]);
+    const edited = appReducer(state, {
+      type: "SET_TABLE_CELL_TEXT",
+      tableIndex: 0,
+      row: 1,
+      column: 1,
+      text: "Total",
+    });
+    expect(edited.hasUnsavedChanges).toBe(true);
+    const content = readDocxContent(docxDocument(edited).editor.toPackage());
+    if (content.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing ContentDocument, got ${content.kind}`,
+      );
+    }
+    const tableBlock = content.sections[0]?.blocks[0];
+    if (tableBlock?.kind !== "table") {
+      throw new Error(`expected a table block, got ${tableBlock?.kind}`);
+    }
+    const cellText = tableBlock.rows[1]?.cells[1]?.blocks
+      .flatMap((block) => (block.kind === "paragraph" ? block.runs : []))
+      .map((run) => run.text)
+      .join("");
+    expect(cellText).toBe("Total");
+  });
+
+  it("warns rather than crashing for a table index that does not exist", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(created, {
+      type: "SET_TABLE_CELL_TEXT",
+      tableIndex: 0,
+      row: 0,
+      column: 0,
+      text: "x",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no table at index 0");
+  });
+
+  it("warns rather than crashing for a row/column that does not exist", () => {
+    const state = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      { type: "APPEND_TABLE", rows: 2, columns: 2 },
+    ]);
+    const result = appReducer(state, {
+      type: "SET_TABLE_CELL_TEXT",
+      tableIndex: 0,
+      row: 5,
+      column: 0,
+      text: "x",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe(
+      "There is no cell at row 5, column 0 of table 0",
+    );
+  });
+
+  // setTextContainerText's "already has a first run" branch: a freshly-appended table cell has zero runs, so the tests above only ever exercise the "no first run yet" branch (paragraph.appendRun). Giving the cell two runs up front proves the write path replaces the first run's text AND removes every extra run, rather than just setting the first and leaving the rest stale.
+  it("replaces the first run's text and removes every extra run when a cell already has more than one", () => {
+    const state = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      { type: "APPEND_TABLE", rows: 1, columns: 1 },
+    ]);
+    const table = docxDocument(state).editor.tables()[0];
+    const cell = table?.rows()[0]?.cells()[0];
+    if (cell === undefined) {
+      throw new Error("expected the appended cell");
+    }
+    const paragraph = cell.paragraphs()[0] ?? cell.appendParagraph();
+    paragraph.appendRun({ text: "one" });
+    paragraph.appendRun({ text: "two" });
+    paragraph.appendRun({ text: "three" });
+    expect(paragraph.runs()).toHaveLength(3);
+
+    const edited = appReducer(state, {
+      type: "SET_TABLE_CELL_TEXT",
+      tableIndex: 0,
+      row: 0,
+      column: 0,
+      text: "Replaced",
+    });
+    expect(edited.hasUnsavedChanges).toBe(true);
+    expect(paragraph.runs()).toHaveLength(1);
+    expect(paragraph.runs()[0]?.text).toBe("Replaced");
   });
 });
 
@@ -751,6 +1364,7 @@ describe("appReducer SET_LIST_ITEM_TEXT on odt", () => {
       text: "x",
     });
     expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no list at index 5");
     expect(result.hasUnsavedChanges).toBe(false);
   });
 
@@ -768,6 +1382,9 @@ describe("appReducer SET_LIST_ITEM_TEXT on odt", () => {
       text: "x",
     });
     expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe(
+      `List ${blockIndex} has no item at index 3`,
+    );
     expect(result.hasUnsavedChanges).toBe(false);
   });
 
@@ -783,7 +1400,139 @@ describe("appReducer SET_LIST_ITEM_TEXT on odt", () => {
       text: "x",
     });
     expect(warned.status?.severity).toBe("warning");
+    expect(warned.status?.text).toBe(
+      "That action needs an odt document (lists are an odt-only concept); the open document is docx",
+    );
     expect(warned.hasUnsavedChanges).toBe(false);
+  });
+
+  // The docx test above is wordprocessing but not odt, so it only ever reaches the SECOND, odt-only wrongDocument check. This one is not wordprocessing at all, reaching the FIRST, wider check instead.
+  it("warns instead of mutating when the open document is not a wordprocessing document at all", () => {
+    const state = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "ods",
+    });
+    const warned = appReducer(state, {
+      type: "SET_LIST_ITEM_TEXT",
+      blockIndex: 0,
+      itemIndex: 0,
+      text: "x",
+    });
+    expect(warned.status?.severity).toBe("warning");
+    expect(warned.status?.text).toBe(
+      "That action needs a docx, odt or markdown document; the open document is ods",
+    );
+  });
+});
+
+describe("appReducer ADD_LIST_ITEM on docx", () => {
+  // docx (and markdown) have no separate "list" object the way odt does -- list membership is flat per-paragraph metadata, so ADD_LIST_ITEM's own docx/markdown branch appends a brand-new paragraph and copies the anchor paragraph's own ContentListMembership onto it, rather than extending an OdtList (the odt branch this file's own "ADD_LIST on odt"/"INDENT_LIST_ITEM on odt" describe blocks already cover).
+  it("appends a new paragraph copying the anchor paragraph's own list membership", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const doc = docxDocument(created);
+    const anchor = doc.editor.body.appendParagraph({ text: "First item" });
+    anchor.list = { level: 0, numId: "7" };
+    const anchorIndex = doc.editor.paragraphs().length - 1;
+
+    const added = appReducer(created, {
+      type: "ADD_LIST_ITEM",
+      blockIndex: anchorIndex,
+      text: "Second item",
+    });
+
+    const paragraphs = docxDocument(added).editor.paragraphs();
+    const appended = paragraphs[paragraphs.length - 1];
+    expect(appended?.text).toBe("Second item");
+    expect(appended?.list).toStrictEqual({ level: 0, numId: "7" });
+    expect(added.hasUnsavedChanges).toBe(true);
+  });
+
+  it("warns rather than crashing when blockIndex names no paragraph", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+
+    const result = appReducer(created, {
+      type: "ADD_LIST_ITEM",
+      blockIndex: 999,
+      text: "x",
+    });
+
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toContain("no paragraph");
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+
+  it("warns rather than crashing when the anchor paragraph is not part of a list", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const doc = docxDocument(created);
+    doc.editor.body.appendParagraph({ text: "Not a list item" });
+    const anchorIndex = doc.editor.paragraphs().length - 1;
+
+    const result = appReducer(created, {
+      type: "ADD_LIST_ITEM",
+      blockIndex: anchorIndex,
+      text: "x",
+    });
+
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toContain("not part of a list");
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+
+  it("warns instead of mutating when the open document is not a wordprocessing document at all", () => {
+    const state = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "ods",
+    });
+    const result = appReducer(state, {
+      type: "ADD_LIST_ITEM",
+      blockIndex: 0,
+      text: "x",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe(
+      "That action needs a docx, odt or markdown document; the open document is ods",
+    );
+  });
+
+  // odt's own ADD_LIST_ITEM branch is genuinely separate code from the docx/markdown branch tested above (a real OdtList.addItem(), not a flat paragraph-copy) -- despite the docx describe block's own comment claiming the sibling ADD_LIST/INDENT_LIST_ITEM tests already cover it, neither of those ever dispatches ADD_LIST_ITEM itself.
+  it("appends a real item to an existing odt list", () => {
+    const editor = createOdt();
+    editor.body.appendList().addItem().appendParagraph({ text: "first" });
+    const opened = openOdtDocument(editor.toBytes());
+    const blockIndex = odtDocument(opened).editor.lists().length - 1;
+
+    const added = appReducer(opened, {
+      type: "ADD_LIST_ITEM",
+      blockIndex,
+      text: "second",
+    });
+    expect(added.hasUnsavedChanges).toBe(true);
+    const items = odtDocument(added).editor.lists()[blockIndex]?.items();
+    expect(items?.map((item) => item.text)).toEqual(["first", "second"]);
+  });
+
+  it("warns rather than crashing when ADD_LIST_ITEM targets an odt list index that does not exist", () => {
+    const editor = createOdt();
+    editor.body.appendList().addItem().appendParagraph({ text: "only" });
+    const opened = openOdtDocument(editor.toBytes());
+
+    const result = appReducer(opened, {
+      type: "ADD_LIST_ITEM",
+      blockIndex: 5,
+      text: "x",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no list at index 5");
+    expect(result.hasUnsavedChanges).toBe(false);
   });
 });
 
@@ -818,6 +1567,18 @@ describe("appReducer ADD_LIST on odt", () => {
     expect(result.status?.severity).toBe("warning");
     expect(result.status?.text).toContain("odt");
     expect(result.hasUnsavedChanges).toBe(false);
+  });
+
+  it("warns instead of mutating when the open document is not a wordprocessing document at all", () => {
+    const state = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "ods",
+    });
+    const result = appReducer(state, { type: "ADD_LIST" });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe(
+      "That action needs a docx, odt or markdown document; the open document is ods",
+    );
   });
 });
 
@@ -885,6 +1646,7 @@ describe("appReducer INDENT_LIST_ITEM on odt", () => {
       itemIndex: 0,
     });
     expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no list at index 5");
     expect(result.hasUnsavedChanges).toBe(false);
   });
 
@@ -899,7 +1661,26 @@ describe("appReducer INDENT_LIST_ITEM on odt", () => {
       itemIndex: 0,
     });
     expect(warned.status?.severity).toBe("warning");
+    expect(warned.status?.text).toBe(
+      "That action needs an odt document (lists are an odt-only concept); the open document is docx",
+    );
     expect(warned.hasUnsavedChanges).toBe(false);
+  });
+
+  it("warns instead of mutating when the open document is not a wordprocessing document at all", () => {
+    const state = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "ods",
+    });
+    const result = appReducer(state, {
+      type: "INDENT_LIST_ITEM",
+      blockIndex: 0,
+      itemIndex: 0,
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe(
+      "That action needs a docx, odt or markdown document; the open document is ods",
+    );
   });
 });
 
@@ -925,6 +1706,25 @@ describe("appReducer ods mutations", () => {
       throw new Error("expected the added sheet");
     }
     expect(sheet.cell(2, 3).value).toEqual({ kind: "string", value: "Total" });
+  });
+
+  // withSheet's own wrongDocument path -- every other withSheet test (SET_CELL_VALUE, SET_SHEET_PRINT_SETTINGS) only exercises the "no sheet at that index" branch against an already-open spreadsheet, never the "not a spreadsheet at all" branch.
+  it("warns rather than crashing when SET_CELL_VALUE targets a non-spreadsheet document", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(created, {
+      type: "SET_CELL_VALUE",
+      sheetIndex: 0,
+      row: 0,
+      column: 0,
+      value: { kind: "string", value: "x" },
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe(
+      "That action needs an ods or xls document; the open document is docx",
+    );
   });
 });
 
@@ -1002,6 +1802,7 @@ describe("appReducer SET_CELL_FORMULA on ods", () => {
       formula: "of:=1",
     });
     expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no sheet at index 4");
     expect(result.hasUnsavedChanges).toBe(false);
   });
 
@@ -1207,6 +2008,7 @@ describe("appReducer MERGE_CELLS on ods", () => {
       colSpan: 1,
     });
     expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no sheet at index 4");
     expect(result.hasUnsavedChanges).toBe(false);
   });
 
@@ -1291,6 +2093,9 @@ describe("appReducer markdown mutations", () => {
       runIndex: 0,
     });
     expect(underlineResult.status?.severity).toBe("warning");
+    expect(underlineResult.status?.text).toBe(
+      "That action needs a docx, odt or doc document; the open document is markdown",
+    );
     expect(underlineResult.hasUnsavedChanges).toBe(false);
 
     const colorResult = appReducer(opened, {
@@ -1323,6 +2128,9 @@ describe("appReducer markdown mutations", () => {
       alignment: "center",
     });
     expect(alignmentResult.status?.severity).toBe("warning");
+    expect(alignmentResult.status?.text).toBe(
+      "That action needs a docx or odt document; the open document is markdown",
+    );
 
     const imageResult = appReducer(opened, {
       type: "INSERT_PARAGRAPH_IMAGE",
@@ -1334,6 +2142,9 @@ describe("appReducer markdown mutations", () => {
       altText: undefined,
     });
     expect(imageResult.status?.severity).toBe("warning");
+    expect(imageResult.status?.text).toBe(
+      "That action needs a docx or odt document; the open document is markdown",
+    );
   });
 
   // GFM tables have no cell-merge concept at all -- MarkdownTable has no mergeCells -- so a merge requested alongside table creation still creates the (unmerged) table and reports why the merge didn't happen, rather than silently dropping the merge or refusing to create the table.
@@ -1362,7 +2173,51 @@ describe("appReducer markdown mutations", () => {
       alignment: undefined,
     });
     expect(warned.status?.severity).toBe("warning");
+    expect(warned.status?.text).toBe(
+      "That action needs a docx, odt or markdown document; the open document is ods",
+    );
     expect(warned.hasUnsavedChanges).toBe(false);
+  });
+});
+
+describe("appReducer doc (legacy Word) mutations", () => {
+  // wordprocessingDocument's own format union admits doc alongside docx/odt/markdown -- covered here specifically because every other member is already exercised elsewhere by name, and a mutant collapsing this one arm of the union would only ever be caught by a doc-format dispatch.
+  it("appends a paragraph through the same generic action docx/odt/markdown already share", () => {
+    const opened = openDocDocument(createDoc().toBytes());
+    const before = docDocument(opened).editor.paragraphs().length;
+    const appended = appReducer(opened, {
+      type: "APPEND_PARAGRAPH",
+      text: "New paragraph",
+      styleId: undefined,
+      alignment: undefined,
+    });
+    expect(appended.status?.severity).not.toBe("warning");
+    expect(docDocument(appended).editor.paragraphs()).toHaveLength(before + 1);
+  });
+
+  // styledWordprocessingDocument's own format union admits doc alongside docx/odt (never markdown, which has no such fields at all -- see the markdown describe block above) -- covered here for the identical reason: doc is the one arm nothing else in this file dispatches through this specific function.
+  it("toggles bold on a run through the same generic action docx/odt already share", () => {
+    const withRun = applyAll(
+      [
+        {
+          type: "APPEND_PARAGRAPH",
+          text: undefined,
+          styleId: undefined,
+          alignment: undefined,
+        },
+        { type: "APPEND_RUN", blockIndex: 0, text: "Hello" },
+      ],
+      openDocDocument(createDoc().toBytes()),
+    );
+    const bolded = appReducer(withRun, {
+      type: "TOGGLE_RUN_BOLD",
+      blockIndex: 0,
+      runIndex: 0,
+    });
+    expect(bolded.status?.severity).not.toBe("warning");
+    expect(docDocument(bolded).editor.paragraphs()[0]?.runs()[0]?.bold).toBe(
+      true,
+    );
   });
 });
 
@@ -1384,6 +2239,7 @@ describe("appReducer undo", () => {
     expect(undone.undoStack).toHaveLength(0);
     expect(markdownDocument(undone).editor.paragraphs()[1]?.text).toBe("Two");
     expect(undone.hasUnsavedChanges).toBe(true);
+    expect(undone.status?.text).toBe("Undone");
   });
 
   it("restores the snapshot taken before the last mutation", () => {
@@ -1420,8 +2276,107 @@ describe("appReducer undo", () => {
     });
     const undone = appReducer(created, { type: "UNDO" });
     expect(undone.status?.severity).toBe("info");
+    expect(undone.status?.text).toBe("There is nothing to undo");
     expect(undone.openDocument).toBe(created.openDocument);
   });
+
+  // A genuinely separate code path from the test above: that one has an open document with an empty undo stack (the `snapshot === undefined` branch); this one has no open document at all (the earlier `doc === undefined` branch), which produces the identical message through different code.
+  it("says there is nothing to undo when no document is open at all", () => {
+    const undone = appReducer(createInitialState(), { type: "UNDO" });
+    expect(undone.status?.severity).toBe("info");
+    expect(undone.status?.text).toBe("There is nothing to undo");
+  });
+
+  it("caps the undo stack at 20 snapshots, dropping the oldest ones first", () => {
+    let state = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    for (let i = 0; i < 25; i++) {
+      state = appReducer(state, {
+        type: "APPEND_PARAGRAPH",
+        text: `p${i}`,
+        styleId: undefined,
+        alignment: undefined,
+      });
+    }
+    expect(state.undoStack).toHaveLength(20);
+
+    // Undoing 20 times empties the capped stack exactly -- proving the retained entries are the 20 MOST RECENT snapshots (the tail), not an arbitrary 20, since undoing keeps peeling paragraphs off the end down to a stable, non-empty prefix rather than running out early or restoring past the true starting point.
+    for (let i = 0; i < 20; i++) {
+      state = appReducer(state, { type: "UNDO" });
+    }
+    expect(state.undoStack).toHaveLength(0);
+    expect(docxDocument(state).editor.paragraphs()).toHaveLength(
+      docxDocument(
+        appReducer(createInitialState(), {
+          type: "CREATE_DOCUMENT",
+          format: "docx",
+        }),
+      ).editor.paragraphs().length + 5,
+    );
+  });
+
+  // reopenEditable's own switch has one case per EditableOpenDocument format -- docx and pdf are already exercised by the undo tests above, so this covers every remaining branch (pptx/odt/odp/ods/odg/doc/xls/ppt) the same way: mutate via SET_METADATA (the one action every editable format's own editor.metadata setter accepts identically), then undo, and prove the format survived the reopen and a genuinely fresh editor replaced the mutated one.
+  it.each([
+    ["pptx", () => openPptxDocument(createPptx().toBytes())],
+    ["odt", () => openOdtDocument(createOdt().toBytes())],
+    ["odp", () => openOdpDocument(createOdp().toBytes())],
+    ["ods", () => openOdsDocument(createOds().toBytes())],
+    ["odg", () => openOdgDocument(createOdg().toBytes())],
+    ["doc", () => openDocDocument(createDoc().toBytes())],
+    ["xls", () => openXlsDocument(createXls().toBytes())],
+    ["ppt", () => openPptDocument(createPpt().toBytes())],
+  ] as const)(
+    "reopens a %s document from its undo snapshot with a fresh editor",
+    (format, open) => {
+      const opened = open();
+      const mutated = appReducer(opened, {
+        type: "SET_METADATA",
+        overrides: { title: "Undo me" },
+      });
+      if (
+        mutated.openDocument === undefined ||
+        !isEditableDocument(mutated.openDocument)
+      ) {
+        throw new Error("expected an editable open document");
+      }
+      expect(mutated.openDocument.format).toBe(format);
+      const mutatedEditor = mutated.openDocument.editor;
+
+      const undone = appReducer(mutated, { type: "UNDO" });
+      expect(undone.undoStack).toHaveLength(0);
+      if (
+        undone.openDocument === undefined ||
+        !isEditableDocument(undone.openDocument)
+      ) {
+        throw new Error("expected an editable open document");
+      }
+      expect(undone.openDocument.format).toBe(format);
+      expect(undone.openDocument.editor).not.toBe(mutatedEditor);
+    },
+  );
+
+  // The genuinely read-only formats (no live-view editor, so nothing ever pushes an undo snapshot for them) each get their own dedicated warning naming that exact format, rather than falling through to the "nothing to undo" info message every editable format's own empty undo stack produces above.
+  it.each(["odb", "xlsx", "csv", "svg", "rtf", "wpd", "epub"] as const)(
+    "says a %s document is read-only with nothing to undo",
+    (format) => {
+      const doc = readOnlyOpenDocument(format);
+      const opened = appReducer(createInitialState(), {
+        type: "OPEN_FILE_SUCCESS",
+        path: doc.path,
+        doc,
+      });
+
+      const undone = appReducer(opened, { type: "UNDO" });
+      expect(undone.status?.severity).toBe("warning");
+      expect(undone.status?.text).toBe(
+        `A ${format} document is read-only, so it has no history to undo`,
+      );
+      expect(undone.openDocument).toBe(opened.openDocument);
+      expect(undone.undoStack).toHaveLength(0);
+    },
+  );
 });
 
 describe("appReducer ADD_SLIDE_TABLE", () => {
@@ -1499,6 +2454,7 @@ describe("appReducer ADD_SLIDE_TABLE", () => {
       columns: 2,
     });
     expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no slide at index 5");
     expect(result.hasUnsavedChanges).toBe(false);
   });
 
@@ -1639,6 +2595,7 @@ describe("appReducer MERGE_SLIDE_TABLE_CELLS", () => {
       colSpan: 1,
     });
     expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no table at index 0 on slide 0");
     expect(result.hasUnsavedChanges).toBe(false);
   });
 
@@ -1658,6 +2615,213 @@ describe("appReducer MERGE_SLIDE_TABLE_CELLS", () => {
     });
     expect(result.status?.severity).toBe("warning");
     expect(result.status?.text).toContain("pptx or odp");
+  });
+
+  // wrongDocument's own "actual" half names the real open format when there is one (covered just above), but falls back to the literal words "no document" when state.openDocument is undefined -- distinct from any real format string, so it must come from its own ternary branch rather than always compute an actual format.
+  it("says 'no document' rather than a format name when nothing is open at all", () => {
+    const result = appReducer(createInitialState(), {
+      type: "MERGE_SLIDE_TABLE_CELLS",
+      slideIndex: 0,
+      tableIndex: 0,
+      startRow: 0,
+      startColumn: 0,
+      rowSpan: 1,
+      colSpan: 1,
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe(
+      "That action needs a pptx or odp document; the open document is no document",
+    );
+  });
+
+  it("rejects a non-integer or non-positive rowSpan/colSpan instead of merging anything", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withTable = appReducer(opened, {
+      type: "ADD_SLIDE_TABLE",
+      slideIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+      rows: 3,
+      columns: 3,
+    });
+
+    const cases: readonly [number, number][] = [
+      [0, 1], // rowSpan below 1
+      [1, 0], // colSpan below 1
+      [1.5, 1], // rowSpan not an integer
+      [1, 1.5], // colSpan not an integer
+    ];
+    for (const [rowSpan, colSpan] of cases) {
+      const result = appReducer(withTable, {
+        type: "MERGE_SLIDE_TABLE_CELLS",
+        slideIndex: 0,
+        tableIndex: 0,
+        startRow: 0,
+        startColumn: 0,
+        rowSpan,
+        colSpan,
+      });
+      expect(result.status?.severity).toBe("warning");
+      expect(result.status?.text).toContain("positive integers");
+      // Rejected outright, before any cell was ever touched -- the same open document object survives untouched, not a partially-applied merge.
+      expect(result.openDocument).toBe(withTable.openDocument);
+    }
+  });
+
+  it("rejects a colSpan that overruns the table's own column count", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withTable = appReducer(opened, {
+      type: "ADD_SLIDE_TABLE",
+      slideIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+      rows: 2,
+      columns: 2,
+    });
+
+    const result = appReducer(withTable, {
+      type: "MERGE_SLIDE_TABLE_CELLS",
+      slideIndex: 0,
+      tableIndex: 0,
+      startRow: 0,
+      startColumn: 0,
+      rowSpan: 1,
+      colSpan: 3,
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toContain("exceeds this table's own 2 columns");
+    expect(result.openDocument).toBe(withTable.openDocument);
+  });
+
+  // mergePptxTableCells's own row/column bounds checks compare with a strict `>`, not `>=` -- a merge landing exactly on the table's own last row/column is valid, not an overrun. rowSpan=1/colSpan=1 here also proves the "must be positive integers" guard rejects only BELOW 1, not AT 1.
+  it("accepts a 1x1 merge landing exactly on the table's own last row and column", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withTable = appReducer(opened, {
+      type: "ADD_SLIDE_TABLE",
+      slideIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+      rows: 2,
+      columns: 2,
+    });
+
+    const result = appReducer(withTable, {
+      type: "MERGE_SLIDE_TABLE_CELLS",
+      slideIndex: 0,
+      tableIndex: 0,
+      startRow: 1,
+      startColumn: 1,
+      rowSpan: 1,
+      colSpan: 1,
+    });
+    expect(result.status?.severity).not.toBe("warning");
+    expect(result.hasUnsavedChanges).toBe(true);
+  });
+
+  // startRow=2/rowSpan=2 on a 3-row table overruns by exactly one row -- distinguishes the real check from a mutant that flips `+` to `-` (2-2=0, which would never exceed 3 and would fall through to a table access that is merely undefined rather than out of range) or drops the whole guard block outright, both of which would surface a DIFFERENT warning than this one.
+  it("names the exact rowSpan/startRow/row-count in the row-overrun message", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withTable = appReducer(opened, {
+      type: "ADD_SLIDE_TABLE",
+      slideIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+      rows: 3,
+      columns: 2,
+    });
+
+    const result = appReducer(withTable, {
+      type: "MERGE_SLIDE_TABLE_CELLS",
+      slideIndex: 0,
+      tableIndex: 0,
+      startRow: 2,
+      startColumn: 0,
+      rowSpan: 2,
+      colSpan: 1,
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe(
+      "mergeSlideTableCells: rowSpan 2 starting at row 2 exceeds this table's own 3 rows",
+    );
+    expect(result.openDocument).toBe(withTable.openDocument);
+  });
+
+  // A rectangle taller than 1 row but only 1 column wide: the covered cell directly below the anchor must carry verticalMerge alone, never horizontalMerge (columnOffset is always 0 in a 1-wide merge, so the "columnOffset > 0" branch must never fire), and the row just past rowSpan must be left completely untouched by the row loop.
+  it("sets only verticalMerge on the covered cell of a 1-column-wide, multi-row merge, and never touches the row past rowSpan", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withTable = appReducer(opened, {
+      type: "ADD_SLIDE_TABLE",
+      slideIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+      rows: 3,
+      columns: 2,
+    });
+
+    const merged = appReducer(withTable, {
+      type: "MERGE_SLIDE_TABLE_CELLS",
+      slideIndex: 0,
+      tableIndex: 0,
+      startRow: 0,
+      startColumn: 0,
+      rowSpan: 2,
+      colSpan: 1,
+    });
+    const rows = pptxDocument(merged).editor.slides()[0]?.tables()[0]?.rows();
+    const coveredBelow = rows?.[1]?.cells()[0];
+    const pastRowSpan = rows?.[2]?.cells()[0];
+    expect(coveredBelow?.element.attributes).toContainEqual({
+      name: "vMerge",
+      value: "1",
+    });
+    expect(
+      coveredBelow?.element.attributes.some((a) => a.name === "hMerge"),
+    ).toBe(false);
+    expect(pastRowSpan?.element.attributes).toEqual([]);
+  });
+
+  // The column-wide counterpart: a rectangle wider than 1 column but only 1 row tall must set horizontalMerge alone on its covered cell (rowOffset is always 0, so "rowOffset > 0" must never fire), and the column just past colSpan must be left completely untouched by the column loop.
+  it("sets only horizontalMerge on the covered cell of a 1-row-tall, multi-column merge, and never touches the column past colSpan", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withTable = appReducer(opened, {
+      type: "ADD_SLIDE_TABLE",
+      slideIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+      rows: 2,
+      columns: 3,
+    });
+
+    const merged = appReducer(withTable, {
+      type: "MERGE_SLIDE_TABLE_CELLS",
+      slideIndex: 0,
+      tableIndex: 0,
+      startRow: 0,
+      startColumn: 0,
+      rowSpan: 1,
+      colSpan: 2,
+    });
+    const firstRowCells = pptxDocument(merged)
+      .editor.slides()[0]
+      ?.tables()[0]
+      ?.rows()[0]
+      ?.cells();
+    const coveredRight = firstRowCells?.[1];
+    const pastColSpan = firstRowCells?.[2];
+    expect(coveredRight?.element.attributes).toContainEqual({
+      name: "hMerge",
+      value: "1",
+    });
+    expect(
+      coveredRight?.element.attributes.some((a) => a.name === "vMerge"),
+    ).toBe(false);
+    expect(pastColSpan?.element.attributes).toEqual([]);
   });
 });
 
@@ -1706,7 +2870,7 @@ describe("appReducer SET_SHAPE_ROTATION on pptx", () => {
     expect(reopened.slides()[0]?.shapes()[0]?.rotationDeg).toBeCloseTo(30, 5);
   });
 
-  it("warns rather than crashing for a shape index that does not exist", () => {
+  it("warns rather than crashing for a shape index that does not exist, naming the slide it looked on", () => {
     const editor = createPptx();
     editor.addSlide();
     const opened = openPptxDocument(editor.toBytes());
@@ -1719,6 +2883,71 @@ describe("appReducer SET_SHAPE_ROTATION on pptx", () => {
     });
     expect(result.status?.severity).toBe("warning");
     expect(result.hasUnsavedChanges).toBe(false);
+    expect(result.status?.text).toBe("There is no shape 5 on slide 0");
+  });
+
+  // withShape's own missing-shape message says "page" for odg specifically, "slide" for every other shape-host format -- the pptx test above only ever exercises the "slide" branch of that ternary.
+  it("warns with 'page' rather than 'slide' when the missing shape is on an odg page", () => {
+    const editor = createOdg();
+    editor.addPage();
+    const opened = openOdgDocument(editor.toBytes());
+
+    const result = appReducer(opened, {
+      type: "SET_SHAPE_TEXT",
+      containerIndex: 0,
+      shapeIndex: 3,
+      text: "unreachable",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no shape 3 on page 0");
+  });
+
+  // SET_SHAPE_TEXT above resolves through withWideShape, a DIFFERENT function from withShape (used only by SET_SHAPE_ROTATION) -- each has its own copy of the identical "page"/"slide" ternary, so covering one says nothing about the other.
+  it("warns with 'page' rather than 'slide' when SET_SHAPE_ROTATION targets a missing shape on an odg page", () => {
+    const editor = createOdg();
+    editor.addPage();
+    const opened = openOdgDocument(editor.toBytes());
+
+    const result = appReducer(opened, {
+      type: "SET_SHAPE_ROTATION",
+      containerIndex: 0,
+      shapeIndex: 3,
+      rotationDeg: 10,
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no shape 3 on page 0");
+  });
+
+  // withShape's own wrongDocument path (used only by SET_SHAPE_ROTATION) -- distinct from withWideShape's own copy below, which SET_SHAPE_TEXT/SET_SHAPE_FRAME resolve through instead.
+  it("warns rather than crashing when SET_SHAPE_ROTATION targets a document with no shape host at all", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(created, {
+      type: "SET_SHAPE_ROTATION",
+      containerIndex: 0,
+      shapeIndex: 0,
+      rotationDeg: 10,
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toContain("a pptx, odp or odg document");
+  });
+
+  // withWideShape's own wrongDocument path -- SET_SHAPE_TEXT/SET_SHAPE_FRAME resolve through it, not withShape, so this is a genuinely separate code path from the SET_SHAPE_ROTATION test above.
+  it("warns rather than crashing when SET_SHAPE_TEXT targets a document with no shape host at all", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(created, {
+      type: "SET_SHAPE_TEXT",
+      containerIndex: 0,
+      shapeIndex: 0,
+      text: "x",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toContain("a pptx, odp, ppt or odg document");
   });
 });
 
@@ -1746,6 +2975,67 @@ describe("appReducer xlsx (read-only PDF-preview) documents", () => {
     expect(undone.status?.severity).toBe("warning");
     expect(undone.status?.text).toContain("read-only");
     expect(undone.openDocument).toBe(opened.openDocument);
+  });
+});
+
+// OPEN_FILE_SUCCESS's own "opened as a read-only PDF preview" note names all nine of these formats individually in its own OR-chain (xlsx is exercised separately above, through its own dedicated describe block) -- each one needs its own dispatch to prove that exact branch, not just the shared behaviour the OR-chain produces once any one of them matches.
+describe("appReducer OPEN_FILE_SUCCESS's read-only-PDF-preview note names every one of its own nine formats", () => {
+  it.each([
+    ["csv", () => readOnlyOpenDocument("csv")],
+    ["svg", () => readOnlyOpenDocument("svg")],
+    ["rtf", () => readOnlyOpenDocument("rtf")],
+    ["wpd", () => readOnlyOpenDocument("wpd")],
+    [
+      "doc",
+      () => ({
+        format: "doc" as const,
+        editor: openDoc(createDoc().toBytes()),
+        path: "/tmp/legacy.doc",
+      }),
+    ],
+    [
+      "xls",
+      () => ({
+        format: "xls" as const,
+        editor: openXls(createXls().toBytes()),
+        path: "/tmp/legacy.xls",
+      }),
+    ],
+    [
+      "ppt",
+      () => ({
+        format: "ppt" as const,
+        editor: openPpt(createPpt().toBytes()),
+        path: "/tmp/legacy.ppt",
+      }),
+    ],
+    ["epub", () => readOnlyOpenDocument("epub")],
+  ] as const)(
+    "names %s specifically in the preview note",
+    (format, buildDoc) => {
+      const doc = buildDoc();
+      const opened = appReducer(createInitialState(), {
+        type: "OPEN_FILE_SUCCESS",
+        path: doc.path,
+        doc,
+      });
+      expect(opened.status?.text).toBe(
+        `Opened ${doc.path} as a read-only PDF preview -- press ':' then 'export pdf' to save it as a real PDF`,
+      );
+    },
+  );
+
+  it("does not add the preview note for a format with a real live-view editor of its own", () => {
+    const opened = appReducer(createInitialState(), {
+      type: "OPEN_FILE_SUCCESS",
+      path: "/tmp/notes.odt",
+      doc: {
+        format: "odt",
+        editor: openOdt(createOdt().toBytes()),
+        path: "/tmp/notes.odt",
+      },
+    });
+    expect(opened.status?.text).toBe("Opened /tmp/notes.odt");
   });
 });
 
@@ -1815,6 +3105,31 @@ describe("appReducer PDF item and page mutations", () => {
     expect(reopenedItem.yPt).toBeCloseTo(60, 0);
   });
 
+  it("adds a text item via ADD_PDF_TEXT, present after a toBytes()/openPdf() round trip", () => {
+    const opened = openPdfDocument(pdfTestBytes());
+
+    const withText = appReducer(opened, {
+      type: "ADD_PDF_TEXT",
+      pageIndex: 0,
+      init: {
+        xPt: 15,
+        yPt: 25,
+        text: "Second",
+        font: { family: "Helvetica", weight: "normal", style: "normal" },
+        sizePt: 14,
+        color: { r: 0, g: 0, b: 0 },
+      },
+    });
+    expect(pdfDocument(withText).editor.page(0)?.items()).toHaveLength(2);
+
+    const reopened = openPdf(pdfDocument(withText).editor.toBytes());
+    const items = reopened.page(0)?.items() ?? [];
+    const second = items.find(
+      (item) => item.kind === "text" && item.text === "Second",
+    );
+    expect(second).toBeDefined();
+  });
+
   it("adds a rect via ADD_PDF_RECT, present after a toBytes()/openPdf() round trip", () => {
     const opened = openPdfDocument(pdfTestBytes());
 
@@ -1865,6 +3180,35 @@ describe("appReducer PDF item and page mutations", () => {
     expect(items[0]?.kind).toBe("text");
   });
 
+  // REMOVE_PDF_ITEM has its own inline wrongDocument/no-item checks, not shared with withPdfPage or withPdfItemMatching above.
+  it("warns rather than crashing when REMOVE_PDF_ITEM targets a non-PDF document", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(created, {
+      type: "REMOVE_PDF_ITEM",
+      pageIndex: 0,
+      itemIndex: 0,
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe(
+      "That action needs a pdf document; the open document is docx",
+    );
+  });
+
+  it("warns rather than crashing when REMOVE_PDF_ITEM targets an item index that does not exist", () => {
+    const opened = openPdfDocument(pdfTestBytes());
+    const result = appReducer(opened, {
+      type: "REMOVE_PDF_ITEM",
+      pageIndex: 0,
+      itemIndex: 9,
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("Page 0 has no item at index 9");
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+
   it("undoes a PDF text edit, restoring the snapshot taken before the mutation", () => {
     const opened = openPdfDocument(pdfTestBytes());
     const edited = appReducer(opened, {
@@ -1890,6 +3234,92 @@ describe("appReducer PDF item and page mutations", () => {
     expect(pdfDocument(undone).editor).not.toBe(pdfDocument(edited).editor);
   });
 
+  it("edits a text item's font, size, rotation, width, and toggles underline on then off", () => {
+    const opened = openPdfDocument(pdfTestBytes());
+    const withFont = appReducer(opened, {
+      type: "SET_PDF_TEXT_FONT",
+      pageIndex: 0,
+      itemIndex: 0,
+      font: { family: "Courier", weight: "bold", style: "italic" },
+    });
+    const withSize = appReducer(withFont, {
+      type: "SET_PDF_TEXT_SIZE",
+      pageIndex: 0,
+      itemIndex: 0,
+      sizePt: 24,
+    });
+    const withRotation = appReducer(withSize, {
+      type: "SET_PDF_TEXT_ROTATION",
+      pageIndex: 0,
+      itemIndex: 0,
+      rotationDeg: 45,
+    });
+    const withWidth = appReducer(withRotation, {
+      type: "SET_PDF_TEXT_WIDTH",
+      pageIndex: 0,
+      itemIndex: 0,
+      widthPt: 99,
+    });
+    const underlineOn = appReducer(withWidth, {
+      type: "TOGGLE_PDF_TEXT_UNDERLINE",
+      pageIndex: 0,
+      itemIndex: 0,
+    });
+    const onItem = pdfDocument(underlineOn).editor.page(0)?.items()[0];
+    if (onItem?.kind !== "text") {
+      throw new Error("expected a live text item");
+    }
+    expect(onItem.font).toStrictEqual({
+      family: "Courier",
+      weight: "bold",
+      style: "italic",
+    });
+    expect(onItem.sizePt).toBe(24);
+    expect(onItem.rotationDeg).toBe(45);
+    expect(onItem.widthPt).toBe(99);
+    expect(onItem.underline).toBe(true);
+
+    const underlineOff = appReducer(underlineOn, {
+      type: "TOGGLE_PDF_TEXT_UNDERLINE",
+      pageIndex: 0,
+      itemIndex: 0,
+    });
+    const offItem = pdfDocument(underlineOff).editor.page(0)?.items()[0];
+    expect(offItem?.kind === "text" ? offItem.underline : undefined).toBe(
+      false,
+    );
+  });
+
+  it("warns rather than crashing when SET_PDF_TEXT_FONT, SET_PDF_TEXT_SIZE, and SET_PDF_TEXT_ROTATION target an item of the wrong kind", () => {
+    const opened = openPdfDocument(pdfTestBytes());
+    const withRect = appReducer(opened, {
+      type: "ADD_PDF_RECT",
+      pageIndex: 0,
+      init: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+    });
+    const fontResult = appReducer(withRect, {
+      type: "SET_PDF_TEXT_FONT",
+      pageIndex: 0,
+      itemIndex: 1,
+      font: { family: "Helvetica", weight: "normal", style: "normal" },
+    });
+    expect(fontResult.status?.text).toContain("not text");
+    const sizeResult = appReducer(withRect, {
+      type: "SET_PDF_TEXT_SIZE",
+      pageIndex: 0,
+      itemIndex: 1,
+      sizePt: 10,
+    });
+    expect(sizeResult.status?.text).toContain("not text");
+    const rotationResult = appReducer(withRect, {
+      type: "SET_PDF_TEXT_ROTATION",
+      pageIndex: 0,
+      itemIndex: 1,
+      rotationDeg: 0,
+    });
+    expect(rotationResult.status?.text).toContain("not text");
+  });
+
   it("warns rather than crashing for a page index that does not exist", () => {
     const opened = openPdfDocument(pdfTestBytes());
     const result = appReducer(opened, {
@@ -1898,6 +3328,7 @@ describe("appReducer PDF item and page mutations", () => {
       init: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
     });
     expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no page at index 5");
     expect(result.hasUnsavedChanges).toBe(false);
   });
 
@@ -1913,6 +3344,1033 @@ describe("appReducer PDF item and page mutations", () => {
     expect(result.status?.severity).toBe("warning");
     expect(result.status?.text).toContain("not rect");
     expect(result.hasUnsavedChanges).toBe(false);
+  });
+
+  // withPdfPage's own wrongDocument path -- every ADD_PDF_* test above only exercises the "no page at that index" branch against an already-open PDF, never the "not a PDF at all" branch.
+  it("warns rather than crashing when ADD_PDF_RECT targets a non-PDF document", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(created, {
+      type: "ADD_PDF_RECT",
+      pageIndex: 0,
+      init: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe(
+      "That action needs a pdf document; the open document is docx",
+    );
+  });
+
+  // withPdfItemMatching's own wrongDocument path -- a genuinely separate function from withPdfPage above, so covering one says nothing about the other.
+  it("warns rather than crashing when SET_PDF_RECT_FILL targets a non-PDF document", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(created, {
+      type: "SET_PDF_RECT_FILL",
+      pageIndex: 0,
+      itemIndex: 0,
+      fill: { r: 1, g: 0, b: 0 },
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe(
+      "That action needs a pdf document; the open document is docx",
+    );
+  });
+
+  // withPdfItemMatching's own "no item at that index" path -- the wrong-kind test above needs a real item at itemIndex 0 to check its kind against, so it can never reach this branch; this needs a valid page with an item count too low for the requested index instead.
+  it("warns rather than crashing when SET_PDF_RECT_FILL targets an item index that does not exist", () => {
+    const opened = openPdfDocument(pdfTestBytes());
+    const result = appReducer(opened, {
+      type: "SET_PDF_RECT_FILL",
+      pageIndex: 0,
+      itemIndex: 9,
+      fill: { r: 1, g: 0, b: 0 },
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("Page 0 has no item at index 9");
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+
+  it("adds an ellipse via ADD_PDF_ELLIPSE, present after a toBytes()/openPdf() round trip", () => {
+    const opened = openPdfDocument(pdfTestBytes());
+    const withEllipse = appReducer(opened, {
+      type: "ADD_PDF_ELLIPSE",
+      pageIndex: 0,
+      init: {
+        xPt: 5,
+        yPt: 5,
+        widthPt: 20,
+        heightPt: 10,
+        fill: { r: 1, g: 0, b: 0 },
+      },
+    });
+    const reopened = openPdf(pdfDocument(withEllipse).editor.toBytes());
+    const ellipse = (reopened.page(0)?.items() ?? []).find(
+      (item) => item.kind === "ellipse",
+    );
+    expect(ellipse).toBeDefined();
+    if (ellipse?.kind !== "ellipse") {
+      throw new Error("expected a real ellipse item after re-parsing");
+    }
+    expect(ellipse.widthPt).toBeCloseTo(20, 0);
+    expect(ellipse.heightPt).toBeCloseTo(10, 0);
+  });
+
+  it("adds a line via ADD_PDF_LINE, present after a toBytes()/openPdf() round trip", () => {
+    const opened = openPdfDocument(pdfTestBytes());
+    const withLine = appReducer(opened, {
+      type: "ADD_PDF_LINE",
+      pageIndex: 0,
+      init: {
+        x1Pt: 1,
+        y1Pt: 2,
+        x2Pt: 30,
+        y2Pt: 40,
+        color: { r: 0, g: 0, b: 1 },
+        widthPt: 2,
+      },
+    });
+    const reopened = openPdf(pdfDocument(withLine).editor.toBytes());
+    const line = (reopened.page(0)?.items() ?? []).find(
+      (item) => item.kind === "line",
+    );
+    expect(line).toBeDefined();
+    if (line?.kind !== "line") {
+      throw new Error("expected a real line item after re-parsing");
+    }
+    expect(line.x2Pt).toBeCloseTo(30, 0);
+    expect(line.y2Pt).toBeCloseTo(40, 0);
+  });
+
+  it("adds a path via ADD_PDF_PATH, present after a toBytes()/openPdf() round trip", () => {
+    const opened = openPdfDocument(pdfTestBytes());
+    const withPath = appReducer(opened, {
+      type: "ADD_PDF_PATH",
+      pageIndex: 0,
+      init: {
+        subpaths: [
+          {
+            startXPt: 0,
+            startYPt: 0,
+            closed: true,
+            segments: [
+              { kind: "line", xPt: 10, yPt: 0 },
+              { kind: "line", xPt: 10, yPt: 10 },
+            ],
+          },
+        ],
+        fill: { r: 0, g: 1, b: 1 },
+      },
+    });
+    const reopened = openPdf(pdfDocument(withPath).editor.toBytes());
+    const path = (reopened.page(0)?.items() ?? []).find(
+      (item) => item.kind === "path",
+    );
+    expect(path).toBeDefined();
+  });
+
+  it("adds an image via ADD_PDF_IMAGE, present after a toBytes()/openPdf() round trip", () => {
+    const opened = openPdfDocument(pdfTestBytes());
+    const withImage = appReducer(opened, {
+      type: "ADD_PDF_IMAGE",
+      pageIndex: 0,
+      init: {
+        xPt: 5,
+        yPt: 5,
+        widthPt: 30,
+        heightPt: 20,
+        bytes: REAL_PNG_BYTES,
+        format: "png",
+      },
+    });
+    const reopened = openPdf(pdfDocument(withImage).editor.toBytes());
+    const image = (reopened.page(0)?.items() ?? []).find(
+      (item) => item.kind === "image",
+    );
+    expect(image).toBeDefined();
+    if (image?.kind !== "image") {
+      throw new Error("expected a real image item after re-parsing");
+    }
+    expect(image.widthPt).toBeCloseTo(30, 0);
+    expect(image.heightPt).toBeCloseTo(20, 0);
+  });
+
+  it("adds a link via ADD_PDF_LINK, present after a toBytes()/openPdf() round trip", () => {
+    const opened = openPdfDocument(pdfTestBytes());
+    const withLink = appReducer(opened, {
+      type: "ADD_PDF_LINK",
+      pageIndex: 0,
+      init: {
+        uri: "https://example.com",
+        xPt: 5,
+        yPt: 5,
+        widthPt: 40,
+        heightPt: 15,
+      },
+    });
+    const reopened = openPdf(pdfDocument(withLink).editor.toBytes());
+    const link = (reopened.page(0)?.items() ?? []).find(
+      (item) => item.kind === "link",
+    );
+    expect(link).toBeDefined();
+    if (link?.kind !== "link") {
+      throw new Error("expected a real link item after re-parsing");
+    }
+    expect(link.uri).toBe("https://example.com");
+  });
+
+  describe("field edits on non-text pdf item kinds", () => {
+    // One page carrying one of every editable non-text item kind, each added through the reducer's own ADD_PDF_* actions so tests below index into a document built the same way a real session would build one.
+    function pdfMultiItemState(): AppState {
+      const opened = openPdfDocument(pdfTestBytes());
+      const withRect = appReducer(opened, {
+        type: "ADD_PDF_RECT",
+        pageIndex: 0,
+        init: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      });
+      const withEllipse = appReducer(withRect, {
+        type: "ADD_PDF_ELLIPSE",
+        pageIndex: 0,
+        init: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      });
+      const withLine = appReducer(withEllipse, {
+        type: "ADD_PDF_LINE",
+        pageIndex: 0,
+        init: {
+          x1Pt: 0,
+          y1Pt: 0,
+          x2Pt: 10,
+          y2Pt: 10,
+          color: { r: 0, g: 0, b: 0 },
+          widthPt: 1,
+        },
+      });
+      const withPath = appReducer(withLine, {
+        type: "ADD_PDF_PATH",
+        pageIndex: 0,
+        init: {
+          subpaths: [
+            {
+              startXPt: 0,
+              startYPt: 0,
+              closed: false,
+              segments: [{ kind: "line", xPt: 5, yPt: 5 }],
+            },
+          ],
+        },
+      });
+      const withImage = appReducer(withPath, {
+        type: "ADD_PDF_IMAGE",
+        pageIndex: 0,
+        init: {
+          xPt: 0,
+          yPt: 0,
+          widthPt: 10,
+          heightPt: 10,
+          bytes: REAL_PNG_BYTES,
+          format: "png",
+        },
+      });
+      return appReducer(withImage, {
+        type: "ADD_PDF_LINK",
+        pageIndex: 0,
+        init: {
+          uri: "https://before.example",
+          xPt: 0,
+          yPt: 0,
+          widthPt: 10,
+          heightPt: 10,
+        },
+      });
+    }
+
+    // Item order matches pdfMultiItemState()'s own build sequence: 0 text, 1 rect, 2 ellipse, 3 line, 4 path, 5 image, 6 link.
+    const TEXT_INDEX = 0;
+    const RECT_INDEX = 1;
+    const ELLIPSE_INDEX = 2;
+    const LINE_INDEX = 3;
+    const PATH_INDEX = 4;
+    const IMAGE_INDEX = 5;
+    const LINK_INDEX = 6;
+
+    it("edits a rect's frame, fill, and stroke in place", () => {
+      const state = pdfMultiItemState();
+      const withFrame = appReducer(state, {
+        type: "SET_PDF_RECT_FRAME",
+        pageIndex: 0,
+        itemIndex: RECT_INDEX,
+        xPt: 1,
+        yPt: 2,
+        widthPt: 33,
+        heightPt: 44,
+      });
+      const withFill = appReducer(withFrame, {
+        type: "SET_PDF_RECT_FILL",
+        pageIndex: 0,
+        itemIndex: RECT_INDEX,
+        fill: { r: 1, g: 0.5, b: 0 },
+      });
+      const withStroke = appReducer(withFill, {
+        type: "SET_PDF_RECT_STROKE",
+        pageIndex: 0,
+        itemIndex: RECT_INDEX,
+        stroke: { color: { r: 0, g: 0, b: 1 }, widthPt: 3 },
+      });
+      const item = pdfDocument(withStroke).editor.page(0)?.items()[RECT_INDEX];
+      if (item?.kind !== "rect") {
+        throw new Error("expected a live rect item");
+      }
+      expect(item.xPt).toBe(1);
+      expect(item.yPt).toBe(2);
+      expect(item.widthPt).toBe(33);
+      expect(item.heightPt).toBe(44);
+      expect(item.fill).toStrictEqual({ r: 1, g: 0.5, b: 0 });
+      expect(item.stroke).toStrictEqual({
+        color: { r: 0, g: 0, b: 1 },
+        widthPt: 3,
+      });
+    });
+
+    it("warns rather than crashing when a rect field-edit targets an item of the wrong kind", () => {
+      const state = pdfMultiItemState();
+      const result = appReducer(state, {
+        type: "SET_PDF_RECT_FRAME",
+        pageIndex: 0,
+        itemIndex: ELLIPSE_INDEX,
+        xPt: 0,
+        yPt: 0,
+        widthPt: 1,
+        heightPt: 1,
+      });
+      expect(result.status?.severity).toBe("warning");
+      expect(result.status?.text).toContain("not rect");
+    });
+
+    it("edits an ellipse's frame, fill, and stroke in place", () => {
+      const state = pdfMultiItemState();
+      const withFrame = appReducer(state, {
+        type: "SET_PDF_ELLIPSE_FRAME",
+        pageIndex: 0,
+        itemIndex: ELLIPSE_INDEX,
+        xPt: 3,
+        yPt: 4,
+        widthPt: 22,
+        heightPt: 11,
+      });
+      const withFill = appReducer(withFrame, {
+        type: "SET_PDF_ELLIPSE_FILL",
+        pageIndex: 0,
+        itemIndex: ELLIPSE_INDEX,
+        fill: { r: 0, g: 1, b: 0 },
+      });
+      const withStroke = appReducer(withFill, {
+        type: "SET_PDF_ELLIPSE_STROKE",
+        pageIndex: 0,
+        itemIndex: ELLIPSE_INDEX,
+        stroke: { color: { r: 1, g: 1, b: 0 }, widthPt: 2 },
+      });
+      const item = pdfDocument(withStroke).editor.page(0)?.items()[
+        ELLIPSE_INDEX
+      ];
+      if (item?.kind !== "ellipse") {
+        throw new Error("expected a live ellipse item");
+      }
+      expect(item.widthPt).toBe(22);
+      expect(item.heightPt).toBe(11);
+      expect(item.fill).toStrictEqual({ r: 0, g: 1, b: 0 });
+      expect(item.stroke).toStrictEqual({
+        color: { r: 1, g: 1, b: 0 },
+        widthPt: 2,
+      });
+    });
+
+    it("warns rather than crashing when an ellipse field-edit targets an item of the wrong kind", () => {
+      const state = pdfMultiItemState();
+      const result = appReducer(state, {
+        type: "SET_PDF_ELLIPSE_FILL",
+        pageIndex: 0,
+        itemIndex: LINE_INDEX,
+        fill: { r: 0, g: 0, b: 0 },
+      });
+      expect(result.status?.severity).toBe("warning");
+      expect(result.status?.text).toContain("not ellipse");
+    });
+
+    it("edits a line's endpoints, color, and width in place", () => {
+      const state = pdfMultiItemState();
+      const withFrom = appReducer(state, {
+        type: "SET_PDF_LINE_FROM",
+        pageIndex: 0,
+        itemIndex: LINE_INDEX,
+        x1Pt: 7,
+        y1Pt: 8,
+      });
+      const withTo = appReducer(withFrom, {
+        type: "SET_PDF_LINE_TO",
+        pageIndex: 0,
+        itemIndex: LINE_INDEX,
+        x2Pt: 70,
+        y2Pt: 80,
+      });
+      const withColor = appReducer(withTo, {
+        type: "SET_PDF_LINE_COLOR",
+        pageIndex: 0,
+        itemIndex: LINE_INDEX,
+        color: { r: 0.2, g: 0.3, b: 0.4 },
+      });
+      const withWidth = appReducer(withColor, {
+        type: "SET_PDF_LINE_WIDTH",
+        pageIndex: 0,
+        itemIndex: LINE_INDEX,
+        widthPt: 5,
+      });
+      const item = pdfDocument(withWidth).editor.page(0)?.items()[LINE_INDEX];
+      if (item?.kind !== "line") {
+        throw new Error("expected a live line item");
+      }
+      expect(item.x1Pt).toBe(7);
+      expect(item.y1Pt).toBe(8);
+      expect(item.x2Pt).toBe(70);
+      expect(item.y2Pt).toBe(80);
+      expect(item.color).toStrictEqual({ r: 0.2, g: 0.3, b: 0.4 });
+      expect(item.widthPt).toBe(5);
+    });
+
+    it("warns rather than crashing when a line field-edit targets an item of the wrong kind", () => {
+      const state = pdfMultiItemState();
+      const result = appReducer(state, {
+        type: "SET_PDF_LINE_WIDTH",
+        pageIndex: 0,
+        itemIndex: PATH_INDEX,
+        widthPt: 1,
+      });
+      expect(result.status?.severity).toBe("warning");
+      expect(result.status?.text).toContain("not line");
+    });
+
+    it("edits a path's fill, fill rule, and stroke in place", () => {
+      const state = pdfMultiItemState();
+      const withFill = appReducer(state, {
+        type: "SET_PDF_PATH_FILL",
+        pageIndex: 0,
+        itemIndex: PATH_INDEX,
+        fill: { r: 1, g: 0, b: 1 },
+      });
+      const withRule = appReducer(withFill, {
+        type: "SET_PDF_PATH_FILL_RULE",
+        pageIndex: 0,
+        itemIndex: PATH_INDEX,
+        fillRule: "evenodd",
+      });
+      const withStroke = appReducer(withRule, {
+        type: "SET_PDF_PATH_STROKE",
+        pageIndex: 0,
+        itemIndex: PATH_INDEX,
+        stroke: { color: { r: 0, g: 0, b: 0 }, widthPt: 1.5 },
+      });
+      const item = pdfDocument(withStroke).editor.page(0)?.items()[PATH_INDEX];
+      if (item?.kind !== "path") {
+        throw new Error("expected a live path item");
+      }
+      expect(item.fill).toStrictEqual({ r: 1, g: 0, b: 1 });
+      expect(item.fillRule).toBe("evenodd");
+      expect(item.stroke).toStrictEqual({
+        color: { r: 0, g: 0, b: 0 },
+        widthPt: 1.5,
+      });
+    });
+
+    it("warns rather than crashing when a path field-edit targets an item of the wrong kind", () => {
+      const state = pdfMultiItemState();
+      const result = appReducer(state, {
+        type: "SET_PDF_PATH_FILL_RULE",
+        pageIndex: 0,
+        itemIndex: IMAGE_INDEX,
+        fillRule: "nonzero",
+      });
+      expect(result.status?.severity).toBe("warning");
+      expect(result.status?.text).toContain("not path");
+    });
+
+    it("edits an image's frame, rotation, and source in place", () => {
+      const state = pdfMultiItemState();
+      const withFrame = appReducer(state, {
+        type: "SET_PDF_IMAGE_FRAME",
+        pageIndex: 0,
+        itemIndex: IMAGE_INDEX,
+        xPt: 9,
+        yPt: 10,
+        widthPt: 15,
+        heightPt: 25,
+      });
+      const withRotation = appReducer(withFrame, {
+        type: "SET_PDF_IMAGE_ROTATION",
+        pageIndex: 0,
+        itemIndex: IMAGE_INDEX,
+        rotationDeg: 90,
+      });
+      const beforeItem = pdfDocument(withRotation).editor.page(0)?.items()[
+        IMAGE_INDEX
+      ];
+      if (beforeItem?.kind !== "image") {
+        throw new Error("expected a live image item");
+      }
+      // Read the string value now, before the mutation below: beforeItem is a live view over the same underlying node, so its own .imageId getter would report the POST-mutation value if read only after withSource exists.
+      const beforeImageIdValue = beforeItem.imageId;
+      const withSource = appReducer(withRotation, {
+        type: "SET_PDF_IMAGE_SOURCE",
+        pageIndex: 0,
+        itemIndex: IMAGE_INDEX,
+        // A different real, decodable PNG (1x1 blue rather than REAL_PNG_BYTES' red) -- distinct content, so registerImageBytes' own dedup-by-content assigns it a genuinely different imageId, proving setImage repointed the item rather than leaving it unchanged.
+        bytes: new Uint8Array([
+          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00,
+          0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
+          0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xde,
+          0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63,
+          0x60, 0x60, 0xf8, 0x0f, 0x00, 0x01, 0x03, 0x01, 0x00, 0x36, 0x74,
+          0x11, 0x40, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
+          0x42, 0x60, 0x82,
+        ]),
+        format: "png",
+      });
+      const item = pdfDocument(withSource).editor.page(0)?.items()[IMAGE_INDEX];
+      if (item?.kind !== "image") {
+        throw new Error("expected a live image item");
+      }
+      expect(item.widthPt).toBe(15);
+      expect(item.heightPt).toBe(25);
+      expect(item.rotationDeg).toBe(90);
+      expect(item.imageId).not.toBe(beforeImageIdValue);
+    });
+
+    it("warns rather than crashing when an image field-edit targets an item of the wrong kind", () => {
+      const state = pdfMultiItemState();
+      const result = appReducer(state, {
+        type: "SET_PDF_IMAGE_ROTATION",
+        pageIndex: 0,
+        itemIndex: LINK_INDEX,
+        rotationDeg: 0,
+      });
+      expect(result.status?.severity).toBe("warning");
+      expect(result.status?.text).toContain("not image");
+    });
+
+    it("edits a link's uri and frame in place", () => {
+      const state = pdfMultiItemState();
+      const withUri = appReducer(state, {
+        type: "SET_PDF_LINK_URI",
+        pageIndex: 0,
+        itemIndex: LINK_INDEX,
+        uri: "https://after.example",
+      });
+      const withFrame = appReducer(withUri, {
+        type: "SET_PDF_LINK_FRAME",
+        pageIndex: 0,
+        itemIndex: LINK_INDEX,
+        xPt: 11,
+        yPt: 12,
+        widthPt: 50,
+        heightPt: 20,
+      });
+      const item = pdfDocument(withFrame).editor.page(0)?.items()[LINK_INDEX];
+      if (item?.kind !== "link") {
+        throw new Error("expected a live link item");
+      }
+      expect(item.uri).toBe("https://after.example");
+      expect(item.xPt).toBe(11);
+      expect(item.yPt).toBe(12);
+      expect(item.widthPt).toBe(50);
+      expect(item.heightPt).toBe(20);
+    });
+
+    it("warns rather than crashing when a link field-edit targets an item of the wrong kind", () => {
+      const state = pdfMultiItemState();
+      const result = appReducer(state, {
+        type: "SET_PDF_LINK_URI",
+        pageIndex: 0,
+        itemIndex: TEXT_INDEX,
+        uri: "https://wrong.example",
+      });
+      expect(result.status?.severity).toBe("warning");
+      expect(result.status?.text).toContain("not link");
+    });
+
+    // internalLink items arise only from reading a real PDF's own GoTo/Dest annotations (PdfPage has no appendInternalLink -- unlike every other item kind, there is no way to add one fresh through the editor), so only the wrong-kind guard is reachable here; the success path is exercised at the pdf-codec layer instead (see its own navigation.test.ts).
+    it("warns rather than crashing when an internal-link destination edit targets an item of the wrong kind", () => {
+      const state = pdfMultiItemState();
+      const result = appReducer(state, {
+        type: "SET_PDF_INTERNAL_LINK_DESTINATION",
+        pageIndex: 0,
+        itemIndex: TEXT_INDEX,
+        destination: "dest1",
+      });
+      expect(result.status?.severity).toBe("warning");
+      expect(result.status?.text).toContain("not internalLink");
+    });
+
+    it("warns rather than crashing when an internal-link frame edit targets an item of the wrong kind", () => {
+      const state = pdfMultiItemState();
+      const result = appReducer(state, {
+        type: "SET_PDF_INTERNAL_LINK_FRAME",
+        pageIndex: 0,
+        itemIndex: TEXT_INDEX,
+        xPt: 1,
+        yPt: 2,
+        widthPt: 3,
+        heightPt: 4,
+      });
+      expect(result.status?.severity).toBe("warning");
+      expect(result.status?.text).toContain("not internalLink");
+    });
+
+    // A real internalLink item, unlike every other PDF item kind, cannot be created through PdfPage's own append* API (see the comment above) -- so this builds one the only other way a genuine internalLink ever arises: writing a LayoutDocument with a real internal-link annotation through pdf-codec's own writePdf, then re-reading it, proving the isPdfInternalLinkItem guard's TRUE branch (not just its wrong-kind rejection) actually matches a real internalLink item.
+    it("edits a real internal link's destination and frame through the live editor", () => {
+      const layoutDoc: LayoutDocument = {
+        formatVersion: LAYOUT_FORMAT_VERSION,
+        metadata: {},
+        images: {},
+        destinations: [
+          { name: "target", pageIndex: 0, target: { kind: "fit" } },
+          { name: "other", pageIndex: 0, target: { kind: "fit" } },
+        ],
+        pages: [
+          {
+            widthPt: 200,
+            heightPt: 200,
+            items: [
+              {
+                kind: "internalLink",
+                destination: "target",
+                xPt: 10,
+                yPt: 10,
+                widthPt: 50,
+                heightPt: 20,
+              },
+              // A second internalLink referencing the second destination: writePdf only carries a destination through into the saved document's own /Names tree when something actually references it, so an unreferenced destination is silently dropped on the way back in -- this one needs a real referrer to survive the round trip.
+              {
+                kind: "internalLink",
+                destination: "other",
+                xPt: 70,
+                yPt: 10,
+                widthPt: 50,
+                heightPt: 20,
+              },
+            ],
+          },
+        ],
+      };
+      const opened = openPdfDocument(writePdf(layoutDoc));
+
+      const item = pdfDocument(opened).editor.page(0)?.items()[0];
+      if (item?.kind !== "internalLink") {
+        throw new Error("expected a real internalLink item");
+      }
+      const otherItem = pdfDocument(opened).editor.page(0)?.items()[1];
+      if (otherItem?.kind !== "internalLink") {
+        throw new Error("expected a second real internalLink item");
+      }
+      // The reader mints its own destination names on the way back in rather than necessarily preserving the writer's own names verbatim, so the destination this edit switches to is read from the second item's own round-tripped destination rather than assumed.
+      const otherDestination = otherItem.destination;
+
+      const withDestination = appReducer(opened, {
+        type: "SET_PDF_INTERNAL_LINK_DESTINATION",
+        pageIndex: 0,
+        itemIndex: 0,
+        destination: otherDestination,
+      });
+      expect(withDestination.status?.severity).not.toBe("warning");
+      expect(withDestination.hasUnsavedChanges).toBe(true);
+      expect(item.destination).toBe(otherDestination);
+
+      const withFrame = appReducer(withDestination, {
+        type: "SET_PDF_INTERNAL_LINK_FRAME",
+        pageIndex: 0,
+        itemIndex: 0,
+        xPt: 1,
+        yPt: 2,
+        widthPt: 3,
+        heightPt: 4,
+      });
+      expect(withFrame.status?.severity).not.toBe("warning");
+      expect(item.xPt).toBe(1);
+      expect(item.yPt).toBe(2);
+      expect(item.widthPt).toBe(3);
+      expect(item.heightPt).toBe(4);
+    });
+
+    // Every other SET_PDF_*_* field-edit action routes through the identical withPdfItemMatching guard, but each call site carries its OWN copy of the kindLabel string literal -- exercising the wrong-kind path through the FRAME/FILL/one representative action per kind above does not cover the same literal at a sibling action's own call site (e.g. SET_PDF_RECT_FRAME's "rect" and SET_PDF_RECT_STROKE's "rect" are two distinct AST nodes). This table drives every remaining action through the wrong-kind branch once each.
+    const wrongKindCases: [string, Action, string][] = [
+      [
+        "SET_PDF_TEXT_TEXT",
+        {
+          type: "SET_PDF_TEXT_TEXT",
+          pageIndex: 0,
+          itemIndex: RECT_INDEX,
+          text: "x",
+        },
+        "not text",
+      ],
+      [
+        "SET_PDF_TEXT_POSITION",
+        {
+          type: "SET_PDF_TEXT_POSITION",
+          pageIndex: 0,
+          itemIndex: RECT_INDEX,
+          xPt: 0,
+          yPt: 0,
+        },
+        "not text",
+      ],
+      [
+        "SET_PDF_TEXT_COLOR",
+        {
+          type: "SET_PDF_TEXT_COLOR",
+          pageIndex: 0,
+          itemIndex: RECT_INDEX,
+          color: { r: 0, g: 0, b: 0 },
+        },
+        "not text",
+      ],
+      [
+        "SET_PDF_TEXT_WIDTH",
+        {
+          type: "SET_PDF_TEXT_WIDTH",
+          pageIndex: 0,
+          itemIndex: RECT_INDEX,
+          widthPt: 1,
+        },
+        "not text",
+      ],
+      [
+        "TOGGLE_PDF_TEXT_UNDERLINE",
+        {
+          type: "TOGGLE_PDF_TEXT_UNDERLINE",
+          pageIndex: 0,
+          itemIndex: RECT_INDEX,
+        },
+        "not text",
+      ],
+      [
+        "SET_PDF_RECT_STROKE",
+        {
+          type: "SET_PDF_RECT_STROKE",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          stroke: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
+        },
+        "not rect",
+      ],
+      [
+        "SET_PDF_ELLIPSE_FRAME",
+        {
+          type: "SET_PDF_ELLIPSE_FRAME",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          xPt: 0,
+          yPt: 0,
+          widthPt: 1,
+          heightPt: 1,
+        },
+        "not ellipse",
+      ],
+      [
+        "SET_PDF_ELLIPSE_STROKE",
+        {
+          type: "SET_PDF_ELLIPSE_STROKE",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          stroke: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
+        },
+        "not ellipse",
+      ],
+      [
+        "SET_PDF_LINE_FROM",
+        {
+          type: "SET_PDF_LINE_FROM",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          x1Pt: 0,
+          y1Pt: 0,
+        },
+        "not line",
+      ],
+      [
+        "SET_PDF_LINE_TO",
+        {
+          type: "SET_PDF_LINE_TO",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          x2Pt: 0,
+          y2Pt: 0,
+        },
+        "not line",
+      ],
+      [
+        "SET_PDF_LINE_COLOR",
+        {
+          type: "SET_PDF_LINE_COLOR",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          color: { r: 0, g: 0, b: 0 },
+        },
+        "not line",
+      ],
+      [
+        "SET_PDF_PATH_FILL",
+        {
+          type: "SET_PDF_PATH_FILL",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          fill: { r: 0, g: 0, b: 0 },
+        },
+        "not path",
+      ],
+      [
+        "SET_PDF_PATH_STROKE",
+        {
+          type: "SET_PDF_PATH_STROKE",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          stroke: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
+        },
+        "not path",
+      ],
+      [
+        "SET_PDF_IMAGE_FRAME",
+        {
+          type: "SET_PDF_IMAGE_FRAME",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          xPt: 0,
+          yPt: 0,
+          widthPt: 1,
+          heightPt: 1,
+        },
+        "not image",
+      ],
+      [
+        "SET_PDF_IMAGE_SOURCE",
+        {
+          type: "SET_PDF_IMAGE_SOURCE",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          format: "png",
+          bytes: REAL_PNG_BYTES,
+        },
+        "not image",
+      ],
+      [
+        "SET_PDF_LINK_FRAME",
+        {
+          type: "SET_PDF_LINK_FRAME",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          xPt: 0,
+          yPt: 0,
+          widthPt: 1,
+          heightPt: 1,
+        },
+        "not link",
+      ],
+    ];
+
+    it.each(wrongKindCases)(
+      "warns rather than crashing when %s targets an item of the wrong kind",
+      (_name, action, expectedFragment) => {
+        const state = pdfMultiItemState();
+        const result = appReducer(state, action);
+        expect(result.status?.severity).toBe("warning");
+        expect(result.status?.text).toContain(expectedFragment);
+      },
+    );
+  });
+});
+
+describe("appReducer INSERT_ODT_FORMULA", () => {
+  it("rebuilds an element/text tree as fresh mutable objects, and collapses cdata/comment/declaration/pi nodes to their documented empty stand-ins", () => {
+    const opened = openOdtDocument(createOdt().toBytes());
+    const mathml: MathMlNode[] = [
+      {
+        type: "element",
+        tag: "mrow",
+        attributes: [{ name: "class", value: "unit" }],
+        children: [
+          { type: "text", value: "a" },
+          { type: "cdata" },
+          { type: "comment" },
+          { type: "declaration" },
+          { type: "pi" },
+        ],
+      },
+    ];
+    const withFormula = appReducer(opened, {
+      type: "INSERT_ODT_FORMULA",
+      mathml,
+      frame: { xPt: 0, yPt: 0, widthPt: 20, heightPt: 10 },
+    });
+    expect(withFormula.hasUnsavedChanges).toBe(true);
+
+    const content = readOdtContent(odtDocument(withFormula).editor.toPackage());
+    if (content.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing ContentDocument, got ${content.kind}`,
+      );
+    }
+    const block = content.sections
+      .flatMap((section) => section.blocks)
+      .find((candidate) => candidate.kind === "embeddedObject");
+    if (block?.kind !== "embeddedObject") {
+      throw new Error("expected an embedded formula block");
+    }
+    const formula = formulaOfBlock(block);
+    if (formula === undefined) {
+      throw new Error("expected the embedded object to carry a formula");
+    }
+    const root = formula.mathml[0];
+    if (root?.type !== "element") {
+      throw new Error("expected the root node to survive as a real element");
+    }
+    expect(root.tag).toBe("mrow");
+    expect(root.attributes).toStrictEqual([{ name: "class", value: "unit" }]);
+    expect(root.children).toStrictEqual([
+      { type: "text", value: "a" },
+      { type: "cdata", value: "" },
+      { type: "comment", value: "" },
+      { type: "declaration", attributes: [] },
+      { type: "pi", target: "", content: "" },
+    ]);
+  });
+
+  it("warns rather than crashing when the open document is not odt", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(created, {
+      type: "INSERT_ODT_FORMULA",
+      mathml: [{ type: "element", tag: "mi", attributes: [], children: [] }],
+      frame: { xPt: 0, yPt: 0, widthPt: 20, heightPt: 10 },
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toContain("an odt document");
+  });
+});
+
+describe("appReducer INSERT_DOCX_FORMULA", () => {
+  it("writes a real OMML equation, read back as an embedded formula block through readDocxContent", () => {
+    const state = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      {
+        type: "APPEND_PARAGRAPH",
+        text: undefined,
+        styleId: undefined,
+        alignment: undefined,
+      },
+    ]);
+    const mathml: MathMlNode[] = [
+      {
+        type: "element",
+        tag: "mi",
+        attributes: [],
+        children: [{ type: "text", value: "x" }],
+      },
+    ];
+    const withFormula = appReducer(state, {
+      type: "INSERT_DOCX_FORMULA",
+      blockIndex: 0,
+      mathml,
+    });
+    expect(withFormula.hasUnsavedChanges).toBe(true);
+    expect(withFormula.status?.severity).not.toBe("warning");
+
+    const content = readDocxContent(
+      docxDocument(withFormula).editor.toPackage(),
+    );
+    if (content.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing ContentDocument, got ${content.kind}`,
+      );
+    }
+    const block = content.sections
+      .flatMap((section) => section.blocks)
+      .find((candidate) => candidate.kind === "embeddedObject");
+    if (block?.kind !== "embeddedObject") {
+      throw new Error("expected an embedded formula block");
+    }
+    const formula = formulaOfBlock(block);
+    expect(formula?.mathml[0]).toStrictEqual({
+      type: "element",
+      tag: "mi",
+      attributes: [],
+      children: [{ type: "text", value: "x" }],
+    });
+  });
+
+  it("warns instead of writing an empty paragraph when the formula produces no OMML content", () => {
+    const state = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      {
+        type: "APPEND_PARAGRAPH",
+        text: undefined,
+        styleId: undefined,
+        alignment: undefined,
+      },
+    ]);
+    const withFormula = appReducer(state, {
+      type: "INSERT_DOCX_FORMULA",
+      blockIndex: 0,
+      mathml: [],
+    });
+    expect(withFormula.status?.severity).toBe("warning");
+    expect(withFormula.status?.text).toBe(
+      "The formula produced no OMML content and was not written",
+    );
+
+    const content = readDocxContent(
+      docxDocument(withFormula).editor.toPackage(),
+    );
+    if (content.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing ContentDocument, got ${content.kind}`,
+      );
+    }
+    expect(
+      content.sections
+        .flatMap((section) => section.blocks)
+        .some((candidate) => candidate.kind === "embeddedObject"),
+    ).toBe(false);
+  });
+
+  it("warns rather than crashing for a paragraph index that does not exist", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(created, {
+      type: "INSERT_DOCX_FORMULA",
+      blockIndex: 7,
+      mathml: [{ type: "element", tag: "mi", attributes: [], children: [] }],
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no paragraph at index 7");
+  });
+
+  it("warns rather than crashing when the open document is not docx", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "odt",
+    });
+    const result = appReducer(created, {
+      type: "INSERT_DOCX_FORMULA",
+      blockIndex: 0,
+      mathml: [{ type: "element", tag: "mi", attributes: [], children: [] }],
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toContain("a docx document");
   });
 });
 
@@ -2001,6 +4459,7 @@ describe("appReducer ADD_RECT / ADD_ELLIPSE / ADD_LINE / ADD_PATH on odp", () =>
       init: { frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 } },
     });
     expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no slide at index 5");
     expect(result.hasUnsavedChanges).toBe(false);
   });
 
@@ -2030,7 +4489,53 @@ describe("appReducer ADD_RECT / ADD_ELLIPSE / ADD_LINE / ADD_PATH on odp", () =>
       init: { frame: { xPt: 10, yPt: 10, widthPt: 40, heightPt: 30 } },
     });
     expect(withRect.hasUnsavedChanges).toBe(true);
-    expect(odgDocument(withRect).editor.pages()[0]?.vectors()).toHaveLength(1);
+    const vectors = odgDocument(withRect).editor.pages()[0]?.vectors();
+    expect(vectors).toHaveLength(1);
+    // A rect and an ellipse share the identical OdgBoxVectorInit shape (frame/fill/stroke), so a mutation that lets ADD_RECT's own case fall through into ADD_ELLIPSE's addEllipse call would still add exactly one vector -- just the wrong kind. The length check above alone cannot catch that.
+    expect(vectors?.[0]?.kind).toBe("rect");
+  });
+
+  // The odg branch dispatches through its own inner switch (addRect/addEllipse/addLine/addPath), one case per real OdgPage method -- distinct from the ADD_RECT/ADD_ELLIPSE/ADD_LINE/ADD_PATH coverage above, which only ever reaches odg via ADD_RECT. Each case is its own switch-statement mutant, so proving the rect case works says nothing about whether removing the ellipse/line/path cases would still pass.
+  it("adds each real vector kind to an odg page via the page's own addEllipse/addLine/addPath", () => {
+    const editor = createOdg();
+    editor.addPage();
+    const opened = openOdgDocument(editor.toBytes());
+
+    const withEllipse = appReducer(opened, {
+      type: "ADD_ELLIPSE",
+      containerIndex: 0,
+      init: { frame: { xPt: 60, yPt: 10, widthPt: 40, heightPt: 30 } },
+    });
+    const withLine = appReducer(withEllipse, {
+      type: "ADD_LINE",
+      containerIndex: 0,
+      init: {
+        from: { xPt: 0, yPt: 100 },
+        to: { xPt: 100, yPt: 100 },
+        stroke: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
+      },
+    });
+    const withPath = appReducer(withLine, {
+      type: "ADD_PATH",
+      containerIndex: 0,
+      init: {
+        frame: { xPt: 0, yPt: 150, widthPt: 50, heightPt: 50 },
+        subpaths: [
+          {
+            start: { xPt: 0, yPt: 50 },
+            segments: [{ kind: "line", to: { xPt: 25, yPt: 0 } }],
+            closed: false,
+          },
+        ],
+      },
+    });
+    expect(withPath.hasUnsavedChanges).toBe(true);
+    const vectors = odgDocument(withPath).editor.pages()[0]?.vectors();
+    expect(vectors?.map((vector) => vector.kind)).toEqual([
+      "ellipse",
+      "line",
+      "path",
+    ]);
   });
 });
 
@@ -2099,7 +4604,22 @@ describe("appReducer SET_VECTOR_FILL / SET_VECTOR_STROKE on odg", () => {
       fill: { r: 1, g: 1, b: 1 },
     });
     expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe(
+      "That action needs an odg document; the open document is docx",
+    );
     expect(result.hasUnsavedChanges).toBe(false);
+
+    // SET_VECTOR_STROKE has its own, separate copy of the identical wrongDocument call -- covering SET_VECTOR_FILL's above says nothing about this one.
+    const strokeResult = appReducer(state, {
+      type: "SET_VECTOR_STROKE",
+      vector: rect,
+      stroke: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
+    });
+    expect(strokeResult.status?.severity).toBe("warning");
+    expect(strokeResult.status?.text).toBe(
+      "That action needs an odg document; the open document is docx",
+    );
+    expect(strokeResult.hasUnsavedChanges).toBe(false);
   });
 });
 
@@ -2135,5 +4655,267 @@ describe("appReducer diagnostics and selection", () => {
       { type: "SET_SELECTION", key: "slideDetail:2", index: 1 },
     ]);
     expect(state.selection).toEqual({ bodyList: 4, "slideDetail:2": 1 });
+  });
+});
+
+describe("appReducer ADD_SLIDE / ADD_PAGE", () => {
+  it("appends a real slide to a pptx presentation", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withSlide = appReducer(opened, { type: "ADD_SLIDE" });
+    expect(withSlide.hasUnsavedChanges).toBe(true);
+    expect(pptxDocument(withSlide).editor.slides()).toHaveLength(2);
+  });
+
+  it("warns rather than crashing when the open document is neither pptx, odp nor ppt", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(created, { type: "ADD_SLIDE" });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toContain("a pptx or odp document");
+  });
+
+  it("appends a real page to an odg drawing", () => {
+    const editor = createOdg();
+    editor.addPage();
+    const opened = openOdgDocument(editor.toBytes());
+    const withPage = appReducer(opened, { type: "ADD_PAGE" });
+    expect(withPage.hasUnsavedChanges).toBe(true);
+    expect(odgDocument(withPage).editor.pages()).toHaveLength(2);
+  });
+
+  it("warns rather than crashing when ADD_PAGE targets a non-odg document", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(created, { type: "ADD_PAGE" });
+    expect(result.status?.severity).toBe("warning");
+  });
+});
+
+describe("appReducer ADD_TEXTBOX / ADD_IMAGE / SET_SHAPE_FRAME on pptx and odg", () => {
+  it("adds a real text box to a pptx slide", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withBox = appReducer(opened, {
+      type: "ADD_TEXTBOX",
+      containerIndex: 0,
+      frame: { xPt: 10, yPt: 10, widthPt: 100, heightPt: 30 },
+      text: "Caption",
+    });
+    expect(withBox.hasUnsavedChanges).toBe(true);
+    const shape = pptxDocument(withBox).editor.slides()[0]?.shapes()[0];
+    expect(shape?.text).toBe("Caption");
+  });
+
+  it("adds a real text box to an odg page", () => {
+    const editor = createOdg();
+    editor.addPage();
+    const opened = openOdgDocument(editor.toBytes());
+    const withBox = appReducer(opened, {
+      type: "ADD_TEXTBOX",
+      containerIndex: 0,
+      frame: { xPt: 10, yPt: 10, widthPt: 100, heightPt: 30 },
+      text: "Caption",
+    });
+    expect(withBox.hasUnsavedChanges).toBe(true);
+    const shape = odgDocument(withBox).editor.pages()[0]?.shapes()[0];
+    expect(shape?.text).toBe("Caption");
+  });
+
+  it("warns rather than crashing when ADD_TEXTBOX targets a missing odg page", () => {
+    const editor = createOdg();
+    editor.addPage();
+    const opened = openOdgDocument(editor.toBytes());
+    const result = appReducer(opened, {
+      type: "ADD_TEXTBOX",
+      containerIndex: 4,
+      frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      text: "x",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no page at index 4");
+  });
+
+  it("warns rather than crashing when ADD_TEXTBOX targets a missing pptx slide", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const result = appReducer(opened, {
+      type: "ADD_TEXTBOX",
+      containerIndex: 4,
+      frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      text: "x",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no slide at index 4");
+  });
+
+  it("warns rather than crashing when ADD_TEXTBOX targets a document with no shape host at all", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(created, {
+      type: "ADD_TEXTBOX",
+      containerIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      text: "x",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toContain("a pptx, odp, ppt or odg document");
+  });
+
+  it("adds a real image to a pptx slide", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withImage = appReducer(opened, {
+      type: "ADD_IMAGE",
+      containerIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 20, heightPt: 20 },
+      format: "png",
+      bytes: PNG_BYTES,
+      altText: undefined,
+    });
+    expect(withImage.hasUnsavedChanges).toBe(true);
+    expect(pptxDocument(withImage).editor.slides()[0]?.shapes()).toHaveLength(
+      1,
+    );
+  });
+
+  it("adds a real image to an odg page", () => {
+    const editor = createOdg();
+    editor.addPage();
+    const opened = openOdgDocument(editor.toBytes());
+    const withImage = appReducer(opened, {
+      type: "ADD_IMAGE",
+      containerIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 20, heightPt: 20 },
+      format: "png",
+      bytes: PNG_BYTES,
+      altText: undefined,
+    });
+    expect(withImage.hasUnsavedChanges).toBe(true);
+    expect(odgDocument(withImage).editor.pages()[0]?.shapes()).toHaveLength(1);
+  });
+
+  it("warns rather than crashing when ADD_IMAGE targets a missing odg page", () => {
+    const editor = createOdg();
+    editor.addPage();
+    const opened = openOdgDocument(editor.toBytes());
+    const result = appReducer(opened, {
+      type: "ADD_IMAGE",
+      containerIndex: 4,
+      frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      format: "png",
+      bytes: PNG_BYTES,
+      altText: undefined,
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no page at index 4");
+  });
+
+  it("warns rather than crashing when ADD_IMAGE targets a document with no shape host at all", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(created, {
+      type: "ADD_IMAGE",
+      containerIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      format: "png",
+      bytes: PNG_BYTES,
+      altText: undefined,
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toContain("a pptx, odp or odg document");
+  });
+
+  it("moves a real pptx shape via SET_SHAPE_FRAME", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withBox = appReducer(opened, {
+      type: "ADD_TEXTBOX",
+      containerIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      text: "x",
+    });
+    const withFrame = appReducer(withBox, {
+      type: "SET_SHAPE_FRAME",
+      containerIndex: 0,
+      shapeIndex: 0,
+      frame: { xPt: 5, yPt: 6, widthPt: 20, heightPt: 30 },
+    });
+    expect(withFrame.hasUnsavedChanges).toBe(true);
+    const shape = pptxDocument(withFrame).editor.slides()[0]?.shapes()[0];
+    expect(shape?.frame).toStrictEqual({
+      xPt: 5,
+      yPt: 6,
+      widthPt: 20,
+      heightPt: 30,
+    });
+  });
+
+  // withWideShape's own "page"/"slide" ternary: the odg describe block elsewhere only ever exercises the "page" branch via SET_SHAPE_TEXT, so this proves the "slide" branch specifically, on a pptx document.
+  it("warns with 'slide' rather than 'page' when SET_SHAPE_FRAME targets a missing shape on a pptx slide", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+
+    const result = appReducer(opened, {
+      type: "SET_SHAPE_FRAME",
+      containerIndex: 0,
+      shapeIndex: 5,
+      frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no shape 5 on slide 0");
+  });
+});
+
+describe("appReducer SET_SHEET_PRINT_SETTINGS", () => {
+  it("sets a real sheet's print settings on an ods document", () => {
+    const opened = openOdsDocument(createOds().toBytes());
+    const settings = {
+      pageSize: { widthPt: 595, heightPt: 842 },
+      margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 },
+      gridlines: true,
+      headers: true,
+      pageOrder: "downThenOver" as const,
+    };
+    const withSettings = appReducer(opened, {
+      type: "SET_SHEET_PRINT_SETTINGS",
+      sheetIndex: 0,
+      printSettings: settings,
+    });
+    expect(withSettings.hasUnsavedChanges).toBe(true);
+    expect(
+      odsDocument(withSettings).editor.sheets()[0]?.printSettings,
+    ).toStrictEqual(settings);
+  });
+
+  it("warns rather than crashing for a sheet index that does not exist", () => {
+    const opened = openOdsDocument(createOds().toBytes());
+    const result = appReducer(opened, {
+      type: "SET_SHEET_PRINT_SETTINGS",
+      sheetIndex: 5,
+      printSettings: {
+        pageSize: { widthPt: 595, heightPt: 842 },
+        margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 },
+        gridlines: false,
+        headers: false,
+        pageOrder: "downThenOver",
+      },
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no sheet at index 5");
   });
 });
