@@ -9,7 +9,8 @@ import type { Package } from "../../model/package";
 import type { XmlElement, XmlNode } from "../../model/node";
 import { el, txt } from "../../xml/fragment";
 import { decodePackage, encodePackage } from "../../codec";
-import { attr, elementsWithTag, rootElement } from "../util";
+import { attr, childrenWithTag, elementsWithTag, rootElement } from "../util";
+import { ptToEmu } from "../shared/units";
 import type { DocxDocument } from "./read";
 import { readDocxContent } from "./read";
 import { buildDocxPackageFromContent } from "./write";
@@ -244,6 +245,319 @@ describe("buildDocxPackageFromContent: package scaffolding", () => {
         ],
       }),
     ).toThrow(/unclosedStart/);
+  });
+});
+
+// A minimal one-paragraph section, for the package-scaffolding tests below that only care about the parts every document carries regardless of content.
+function emptyBodySection(): ContentSection {
+  return {
+    pageSize: { widthPt: 612, heightPt: 792 },
+    margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+    blocks: [],
+  };
+}
+
+const DRAWINGML_MAIN_NS =
+  "http://schemas.openxmlformats.org/drawingml/2006/main";
+
+describe("buildDocxPackageFromContent: buildDrawing's fixed XML shape", () => {
+  it("writes the zero offset, rect preset, distT/B/L/R zeros, and docPr id/name exactly, with alt text as descr", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            {
+              kind: "image",
+              format: "png",
+              base64: TINY_PNG_BASE64,
+              widthPt: 100,
+              heightPt: 50,
+              altText: "a caption",
+            },
+          ],
+        },
+      ],
+    });
+    const documentRoot = rootElement(written.parts["word/document.xml"]);
+    const drawing = elementsWithTag(
+      documentRoot === undefined ? [] : [documentRoot],
+      "w:drawing",
+    )[0];
+    if (drawing === undefined) {
+      throw new Error("expected a w:drawing element");
+    }
+    const inline = childrenWithTag(drawing, "wp:inline")[0];
+    if (inline === undefined) {
+      throw new Error("expected a wp:inline element");
+    }
+    expect(attr(inline, "distT")).toBe("0");
+    expect(attr(inline, "distB")).toBe("0");
+    expect(attr(inline, "distL")).toBe("0");
+    expect(attr(inline, "distR")).toBe("0");
+
+    const cx = String(ptToEmu(100));
+    const cy = String(ptToEmu(50));
+    const extent = childrenWithTag(inline, "wp:extent")[0];
+    expect(extent === undefined ? undefined : attr(extent, "cx")).toBe(cx);
+    expect(extent === undefined ? undefined : attr(extent, "cy")).toBe(cy);
+
+    const docPr = childrenWithTag(inline, "wp:docPr")[0];
+    expect(docPr === undefined ? undefined : attr(docPr, "id")).toBe("1");
+    expect(docPr === undefined ? undefined : attr(docPr, "name")).toBe(
+      "Picture 1",
+    );
+    expect(docPr === undefined ? undefined : attr(docPr, "descr")).toBe(
+      "a caption",
+    );
+
+    const graphic = childrenWithTag(inline, "a:graphic")[0];
+    expect(graphic === undefined ? undefined : attr(graphic, "xmlns:a")).toBe(
+      DRAWINGML_MAIN_NS,
+    );
+    const graphicData =
+      graphic === undefined
+        ? undefined
+        : childrenWithTag(graphic, "a:graphicData")[0];
+    expect(
+      graphicData === undefined ? undefined : attr(graphicData, "uri"),
+    ).toBe(PICTURE_GRAPHIC_URI);
+
+    const pic =
+      graphicData === undefined
+        ? undefined
+        : childrenWithTag(graphicData, "pic:pic")[0];
+    expect(pic === undefined ? undefined : attr(pic, "xmlns:pic")).toBe(
+      PICTURE_GRAPHIC_URI,
+    );
+
+    const nvPicPr =
+      pic === undefined ? undefined : childrenWithTag(pic, "pic:nvPicPr")[0];
+    const cNvPr =
+      nvPicPr === undefined
+        ? undefined
+        : childrenWithTag(nvPicPr, "pic:cNvPr")[0];
+    expect(cNvPr === undefined ? undefined : attr(cNvPr, "id")).toBe("1");
+    expect(cNvPr === undefined ? undefined : attr(cNvPr, "name")).toBe(
+      "Picture 1",
+    );
+    const cNvPicPr =
+      nvPicPr === undefined
+        ? undefined
+        : childrenWithTag(nvPicPr, "pic:cNvPicPr")[0];
+    expect(cNvPicPr?.children).toEqual([]);
+
+    const blipFill =
+      pic === undefined ? undefined : childrenWithTag(pic, "pic:blipFill")[0];
+    const blip =
+      blipFill === undefined
+        ? undefined
+        : childrenWithTag(blipFill, "a:blip")[0];
+    expect(blip === undefined ? undefined : attr(blip, "r:embed")).toBe("rId1");
+    const stretch =
+      blipFill === undefined
+        ? undefined
+        : childrenWithTag(blipFill, "a:stretch")[0];
+    expect(
+      stretch === undefined
+        ? undefined
+        : childrenWithTag(stretch, "a:fillRect")[0],
+    ).toBeDefined();
+
+    const spPr =
+      pic === undefined ? undefined : childrenWithTag(pic, "pic:spPr")[0];
+    const xfrm =
+      spPr === undefined ? undefined : childrenWithTag(spPr, "a:xfrm")[0];
+    const off =
+      xfrm === undefined ? undefined : childrenWithTag(xfrm, "a:off")[0];
+    expect(off === undefined ? undefined : attr(off, "x")).toBe("0");
+    expect(off === undefined ? undefined : attr(off, "y")).toBe("0");
+    const ext =
+      xfrm === undefined ? undefined : childrenWithTag(xfrm, "a:ext")[0];
+    expect(ext === undefined ? undefined : attr(ext, "cx")).toBe(cx);
+    expect(ext === undefined ? undefined : attr(ext, "cy")).toBe(cy);
+    const prstGeom =
+      spPr === undefined ? undefined : childrenWithTag(spPr, "a:prstGeom")[0];
+    expect(prstGeom === undefined ? undefined : attr(prstGeom, "prst")).toBe(
+      "rect",
+    );
+    expect(
+      prstGeom === undefined
+        ? undefined
+        : childrenWithTag(prstGeom, "a:avLst")[0],
+    ).toBeDefined();
+  });
+
+  it("omits wp:docPr's descr attribute for an image with no alt text, and increments the drawing id for a second image", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            {
+              kind: "image",
+              format: "png",
+              base64: TINY_PNG_BASE64,
+              widthPt: 10,
+              heightPt: 10,
+            },
+            {
+              kind: "image",
+              format: "png",
+              base64: TINY_PNG_BASE64,
+              widthPt: 10,
+              heightPt: 10,
+            },
+          ],
+        },
+      ],
+    });
+    const documentRoot = rootElement(written.parts["word/document.xml"]);
+    const drawings = elementsWithTag(
+      documentRoot === undefined ? [] : [documentRoot],
+      "w:drawing",
+    );
+    expect(drawings).toHaveLength(2);
+    const docPrs = drawings.map((drawing) => {
+      const inline = childrenWithTag(drawing, "wp:inline")[0];
+      return inline === undefined
+        ? undefined
+        : childrenWithTag(inline, "wp:docPr")[0];
+    });
+    expect(docPrs[0] === undefined ? undefined : attr(docPrs[0], "id")).toBe(
+      "1",
+    );
+    expect(
+      docPrs[0] === undefined ? undefined : attr(docPrs[0], "descr"),
+    ).toBeUndefined();
+    expect(docPrs[1] === undefined ? undefined : attr(docPrs[1], "id")).toBe(
+      "2",
+    );
+    expect(docPrs[1] === undefined ? undefined : attr(docPrs[1], "name")).toBe(
+      "Picture 2",
+    );
+  });
+});
+
+describe("buildDocxPackageFromContent: fixed package-scaffolding parts", () => {
+  it("writes _rels/.rels with exactly the three fixed package relationships, in order", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [emptyBodySection()],
+    });
+    const root = rootElement(written.parts["_rels/.rels"]);
+    const rels =
+      root === undefined ? [] : childrenWithTag(root, "Relationship");
+    expect(
+      rels.map((rel) => ({
+        Id: attr(rel, "Id"),
+        Type: attr(rel, "Type"),
+        Target: attr(rel, "Target"),
+      })),
+    ).toEqual([
+      {
+        Id: "rId1",
+        Type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument",
+        Target: "word/document.xml",
+      },
+      {
+        Id: "rId2",
+        Type: "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties",
+        Target: "docProps/core.xml",
+      },
+      {
+        Id: "rId3",
+        Type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties",
+        Target: "docProps/app.xml",
+      },
+    ]);
+  });
+
+  it("writes [Content_Types].xml's fixed rels/xml Default entries and document/core/app Overrides", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [emptyBodySection()],
+    });
+    const root = rootElement(written.parts["[Content_Types].xml"]);
+    const defaults = root === undefined ? [] : childrenWithTag(root, "Default");
+    expect(
+      defaults.map((entry) => ({
+        Extension: attr(entry, "Extension"),
+        ContentType: attr(entry, "ContentType"),
+      })),
+    ).toEqual([
+      {
+        Extension: "rels",
+        ContentType: "application/vnd.openxmlformats-package.relationships+xml",
+      },
+      { Extension: "xml", ContentType: "application/xml" },
+    ]);
+
+    const overrides =
+      root === undefined ? [] : childrenWithTag(root, "Override");
+    const overrideFor = (partName: string): string | undefined => {
+      const found = overrides.find(
+        (entry) => attr(entry, "PartName") === partName,
+      );
+      return found === undefined ? undefined : attr(found, "ContentType");
+    };
+    expect(overrideFor("/word/document.xml")).toBe(
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
+    );
+    expect(overrideFor("/docProps/core.xml")).toBe(
+      "application/vnd.openxmlformats-package.core-properties+xml",
+    );
+    expect(overrideFor("/docProps/app.xml")).toBe(
+      "application/vnd.openxmlformats-officedocument.extended-properties+xml",
+    );
+    expect(overrideFor("/word/styles.xml")).toBe(
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml",
+    );
+  });
+
+  it("writes styles.xml's fixed docDefaults and Normal/DefaultParagraphFont scaffolding for a document with no named styles", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [emptyBodySection()],
+    });
+    const root = rootElement(written.parts["word/styles.xml"]);
+    const docDefaults =
+      root === undefined
+        ? undefined
+        : childrenWithTag(root, "w:docDefaults")[0];
+    expect(
+      docDefaults === undefined
+        ? undefined
+        : childrenWithTag(docDefaults, "w:rPrDefault")[0]?.children,
+    ).toEqual([]);
+    expect(
+      docDefaults === undefined
+        ? undefined
+        : childrenWithTag(docDefaults, "w:pPrDefault")[0]?.children,
+    ).toEqual([]);
+
+    const styles = root === undefined ? [] : childrenWithTag(root, "w:style");
+    expect(
+      styles.map((style) => {
+        const name = childrenWithTag(style, "w:name")[0];
+        return {
+          type: attr(style, "w:type"),
+          default: attr(style, "w:default"),
+          styleId: attr(style, "w:styleId"),
+          name: name === undefined ? undefined : attr(name, "w:val"),
+        };
+      }),
+    ).toEqual([
+      {
+        type: "paragraph",
+        default: "1",
+        styleId: "Normal",
+        name: "Normal",
+      },
+      {
+        type: "character",
+        default: "1",
+        styleId: "DefaultParagraphFont",
+        name: "Default Paragraph Font",
+      },
+    ]);
   });
 });
 
