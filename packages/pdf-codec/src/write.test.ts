@@ -1452,6 +1452,38 @@ describe("writePdf: AcroForm fields (#967)", () => {
     expect(plainLine).not.toContain("/Ff");
   });
 
+  it.each([
+    { checked: true, value: undefined, expected: "Yes" },
+    { checked: false, value: undefined, expected: "Off" },
+    { checked: undefined, value: undefined, expected: "Off" },
+    { checked: false, value: "onValue", expected: "onValue" }, // an explicit export value wins regardless of checked
+    { checked: true, value: "onValue", expected: "onValue" },
+  ] as const)(
+    "gives a checkbox its own /V export value for checked=$checked, value=$value",
+    ({ checked, value, expected }) => {
+      const doc: LayoutDocument = {
+        formatVersion: LAYOUT_FORMAT_VERSION,
+        metadata: {},
+        pages: [{ widthPt: 200, heightPt: 100, items: [] }],
+        images: {},
+        form: [
+          {
+            name: "box",
+            fieldType: "checkbox",
+            ...(checked === undefined ? {} : { checked }),
+            ...(value === undefined ? {} : { value }),
+            widgets: [
+              { pageIndex: 0, xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+            ],
+            children: [],
+          },
+        ],
+      };
+      const text = decode(writePdf(doc, { compress: false }));
+      expect(text).toContain(`/V /${expected}`);
+    },
+  );
+
   it("writes no /AcroForm for a document with no fields", () => {
     const bytes = writePdf({
       formatVersion: LAYOUT_FORMAT_VERSION,
