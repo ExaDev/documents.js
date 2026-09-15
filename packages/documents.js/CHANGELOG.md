@@ -1,3 +1,10 @@
+## [7.20.13](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.12...documents.js%407.20.13) (2026-09-15)
+
+
+### Dependencies
+
+- Updated rtf-codec to 4.4.5
+
 ## [7.20.12](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.11...documents.js%407.20.12) (2026-09-14)
 
 
