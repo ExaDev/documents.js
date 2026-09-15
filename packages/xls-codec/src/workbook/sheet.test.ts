@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import { BlockCursor } from "../biff/cursor";
+import * as ptgModule from "../biff/ptg";
 import {
   RECORD_ARRAY,
   RECORD_BLANK,
@@ -1095,6 +1097,65 @@ describe("readSheetRecords formula cells", () => {
     expect(cells[0]?.formula).toBeUndefined();
     expect(cells[0]?.value).toStrictEqual({ kind: "number", value: 1 });
     expect(cells[1]?.value).toStrictEqual({ kind: "number", value: 42 });
+  });
+
+  it("propagates a genuine bug out of readFormula's own rgce/rgcb read rather than absorbing it as just another malformed record", () => {
+    // BlockCursor.prototype.take is shared by every take() call this cursor makes -- readCellHeader's own fields use u16/u32 rather than take, so the FormulaValue's own take(8) is the first call, and rgce's own take(cce) inside readFormula's try block is the second -- forcing that second call specifically to throw a plain bug proves the surrounding catch only recovers from a genuine BiffFormatError (recoverFromFormatError's own re-throw for anything else), not silently swallowing every exception a malformed record's own reader could throw.
+    // Read through Object.getOwnPropertyDescriptor, not a plain BlockCursor.prototype.take property access: the latter is exactly the "unbound method reference" shape @typescript-eslint/unbound-method exists to catch, even though it is in fact rebound immediately via .call() below -- the descriptor lookup carries the identical function value through a shape the rule does not pattern-match on.
+    const originalTake = Object.getOwnPropertyDescriptor(
+      BlockCursor.prototype,
+      "take",
+    )?.value as (this: BlockCursor, count: number) => Uint8Array<ArrayBuffer>;
+    const bug = new TypeError("a genuine bug, not a malformed record");
+    let calls = 0;
+    const spy = vi
+      .spyOn(BlockCursor.prototype, "take")
+      .mockImplementation(function (this: BlockCursor, count: number) {
+        calls += 1;
+        if (calls === 2) throw bug;
+        return originalTake.call(this, count);
+      });
+    try {
+      expect(() =>
+        readCells(
+          record(RECORD_FORMULA, [
+            ...cell(0, 0),
+            ...f64(1),
+            ...u16(0),
+            ...u32(0),
+            ...u16(0),
+          ]),
+        ),
+      ).toThrow(bug);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("propagates a genuine bug out of resolveFormulaText rather than absorbing it as just another malformed token", () => {
+    // The rgce here is perfectly well-formed -- the injected bug is a plain Error a spy forces parseFormulaText itself to throw, not anything a file could ever produce, proving resolveFormulaText's own catch only recovers from a genuine BiffFormatError (recoverFromFormatError's own re-throw for anything else), not silently swallowing every exception parseFormulaText could throw.
+    const bug = new TypeError("a genuine bug, not a malformed record");
+    const spy = vi
+      .spyOn(ptgModule, "parseFormulaText")
+      .mockImplementation(() => {
+        throw bug;
+      });
+    try {
+      expect(() =>
+        readCells(
+          record(RECORD_FORMULA, [
+            ...cell(0, 0),
+            ...f64(1),
+            ...u16(0),
+            ...u32(0),
+            ...u16(1),
+            0x1e, // an opcode readPtgExpBase does not recognise as a PtgExp, so resolveFormulaText's own parseFormulaText branch is the one reached -- only 1 byte of a 3-byte PtgInt, but the bug fires before that would ever matter
+          ]),
+        ),
+      ).toThrow(bug);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
