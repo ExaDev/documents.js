@@ -11,28 +11,28 @@ import type { Matrix } from "./matrix";
 
 // Annotation reading (#721 phase 4): the /Annots walk for everything that is neither a link item (read.ts's own walk), a /FileAttachment (the attachments table owns its filespec), nor a /Widget (the AcroForm field tree owns it). The semantic set is the sticky note, FreeText, and the /QuadPoints markup family; every other kind degrades to its rect plus the raw annotation dictionary in the quarantined residue channel -- the verdict row's own split. Popup annotations are dropped outright as derivable (a popup's rect is the parent plus a fixed offset, and its contents ARE the parent's).
 
-const SEMANTIC_SUBTYPES = new Set([
-  "Text",
-  "FreeText",
-  "Highlight",
-  "Underline",
-  "StrikeOut",
-  "Squiggly",
-]);
-// Annotations another reader here already owns; listing them keeps this walk's skip set explicit rather than an else-shaped accident.
-const OWNED_ELSEWHERE_SUBTYPES = new Set([
-  "Link",
-  "FileAttachment",
-  "Widget",
-  "Popup",
-]);
-
 export function readPageAnnotations(
   page: PdfDict,
   pageMatrix: Matrix,
   resolver: PdfObjectResolver,
   sink: PdfDiagnosticSink,
 ): LayoutAnnotation[] {
+  // Both sets are scoped to this function, its only reader, rather than declared at module level: a module-level initializer runs exactly once per process, which puts every one of its literal entries permanently beyond the reach of Stryker's per-test mutation switch (see the memory note on this in the project's own notes) -- scoping them here re-evaluates them fresh on every call, where each entry is reachable again.
+  const semanticSubtypes = new Set([
+    "Text",
+    "FreeText",
+    "Highlight",
+    "Underline",
+    "StrikeOut",
+    "Squiggly",
+  ]);
+  // Annotations another reader here already owns; listing them keeps this walk's skip set explicit rather than an else-shaped accident.
+  const ownedElsewhereSubtypes = new Set([
+    "Link",
+    "FileAttachment",
+    "Widget",
+    "Popup",
+  ]);
   const annotsArr = asArray(dictGet(page, "Annots"));
   if (annotsArr === undefined) {
     return [];
@@ -44,7 +44,7 @@ export function readPageAnnotations(
       continue;
     }
     const subtype = asName(dictGet(annot, "Subtype"));
-    if (subtype === undefined || OWNED_ELSEWHERE_SUBTYPES.has(subtype)) {
+    if (subtype === undefined || ownedElsewhereSubtypes.has(subtype)) {
       continue;
     }
     // This package's own hidden presenter-notes annotation is a round-trip mechanism, not document content -- readPageNotes consumes it, and it must not also surface as a sticky note.
@@ -87,7 +87,7 @@ export function readPageAnnotations(
       ...(contents !== undefined ? { contents } : {}),
       ...(author !== undefined ? { author } : {}),
       ...(modifiedIso !== undefined ? { modifiedIso } : {}),
-      ...(SEMANTIC_SUBTYPES.has(subtype)
+      ...(semanticSubtypes.has(subtype)
         ? markupFields(annot, pageMatrix)
         : {
             source: {
