@@ -86,8 +86,8 @@ class SheetGridGeometry {
       for (const row of childrenWithTag(sheetData, "row")) {
         const r = parseIntAttr(row, "r");
         const ht = Number(attr(row, "ht"));
-        // Same redundant isInteger drop as the column read above: r is always Number.parseInt's own result (NaN or a genuine integer), and r >= 1 already rejects NaN unaided.
-        if (r >= 1 && Number.isFinite(ht)) {
+        // No "r >= 1" guard is needed, unlike the column read above's "min >= 1": rowHeightPt's own lookup is a direct Map.get(index) on the exact key a real anchor row supplies, never a range test, and every call site (xPt/yPt's own loops, locateRow) only ever queries a non-negative integer index. A malformed r below 1 (or the NaN parseIntAttr already returns for an unparseable one) still lands at some key <= -1 or NaN, which can never equal any index a legitimate query supplies -- so admitting it here is exactly as inert as rejecting it.
+        if (Number.isFinite(ht)) {
           this.rowHeights.set(r - 1, ht);
         }
       }
@@ -257,10 +257,11 @@ function readAnchorPlacement(
     }
     const xPt = geometry.xPt(from.column, from.colOffEmu);
     const yPt = geometry.yPt(from.row, from.rowOffEmu);
-    // editAs governs which size statement is the semantic one: "oneCell" means move-but-not-size-with-cells, so the shape's own transform extent is the frame (the to-marker is Calc's spelling habit for it and disagrees with the character-unit column widths underneath -- verified against real producer output); "twoCell" (also ECMA's default) means the frame IS the to-marker difference, resizing with the grid, so the grid rules; "absolute" sizes independently of both.
-    const editAs = attr(anchor, "editAs") ?? "twoCell";
+    // editAs governs which size statement is the semantic one: "oneCell" means move-but-not-size-with-cells, so the shape's own transform extent is the frame (the to-marker is Calc's spelling habit for it and disagrees with the character-unit column widths underneath -- verified against real producer output); an absent attribute or any other spelling ("twoCell", ECMA's own default, or "absolute") all fall to the same to-marker-difference sizing below, so the comparison reads the attribute directly rather than materialising a "twoCell" default nothing else ever observes.
     const childExt =
-      editAs === "oneCell" ? readChildTransformExtEmu(anchor) : undefined;
+      attr(anchor, "editAs") === "oneCell"
+        ? readChildTransformExtEmu(anchor)
+        : undefined;
     return {
       xPt,
       yPt,
@@ -317,12 +318,12 @@ function readAnchorPlacement(
   };
 }
 
-// A minimal, childless worksheet element for the payload sheet's own print settings -- the same all-defaults ContentSheetPrintSettings readPrintSettings produces for an empty worksheet, which is the honest spelling for a synthesized sheet that never had a page setup of its own.
+// A minimal, childless worksheet element for the payload sheet's own print settings -- the same all-defaults ContentSheetPrintSettings readPrintSettings produces for an empty worksheet, which is the honest spelling for a synthesized sheet that never had a page setup of its own. The "worksheet" tag string here is a genuinely irreducible equivalent mutation opportunity, not merely an untested one: this element is passed only to readPrintSettings, which reads its CHILDREN's tags (via childrenWithTag) and never once inspects the worksheet element's own tag -- with no children to walk, this element is otherwise an empty shell whose own tag field is dead structurally, not just here, so no test built on this function's own observable contract (the ContentSheetPrintSettings readPrintSettings returns) can ever tell one tag string from another.
 function emptyWorksheet(): XmlElement {
   return { type: "element", tag: "worksheet", attributes: [], children: [] };
 }
 
-// readChartTable's table laid out as the payload sheet's sparse cells: the header row's series names over the category column, one row per category, values verbatim c:v text -- chart caches carry no typed-cell concept to preserve beyond the string itself, which is why every populated cell is the string kind.
+// readChartTable's table laid out as the payload sheet's sparse cells: the header row's series names over the category column, one row per category, values verbatim c:v text -- chart caches carry no typed-cell concept to preserve beyond the string itself, which is why every populated cell is the string kind. Reads each cell's text directly off its own single run rather than walking/joining a general multi-block, multi-run cell shape: readChartTable's own labelCell is the only producer that ever reaches this function, and it always emits either no block at all (an absent series name or category/value) or exactly one paragraph block holding exactly one run -- so a cell here never actually carries more than one block or run for a join to meaningfully separate.
 function chartCells(
   chartRoot: XmlElement,
   frame: ContentEmbeddedObject["frame"],
@@ -334,13 +335,10 @@ function chartCells(
   const cells: ContentSheetCell[] = [];
   table.rows.forEach((row, rowIndex) => {
     row.cells.forEach((cell, columnIndex) => {
-      const text = cell.blocks
-        .map((block) =>
-          block.kind === "paragraph"
-            ? block.runs.map((run) => run.text).join("")
-            : "",
-        )
-        .join("");
+      const block = cell.blocks[0];
+      // block.runs[0] is always defined whenever block is a paragraph: labelCell (readChartTable's sole producer reaching this function) never emits a paragraph block with zero runs, only zero blocks at all for an absent value -- the "?? ''" is required by runs' own indexed-access type, not by any input this function can actually receive.
+      const text =
+        block?.kind === "paragraph" ? (block.runs[0]?.text ?? "") : "";
       if (text !== "") {
         cells.push({
           row: rowIndex,
