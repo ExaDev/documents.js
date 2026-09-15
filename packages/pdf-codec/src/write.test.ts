@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { openPdfDocument } from "./document";
 import type {
   LayoutDocument,
+  LayoutFormField,
   LayoutImageAsset,
   LayoutItem,
   LayoutPage,
@@ -1014,7 +1015,10 @@ describe("writePdf: embedded-file attachments (#967)", () => {
         },
       ],
     };
-    const bytes = writePdf(doc);
+    const bytes = writePdf(doc, { compress: false });
+    const rawText = new TextDecoder("latin1").decode(bytes);
+    expect(rawText).toContain("/Type /EmbeddedFile");
+    expect(rawText).toContain("/Type /Filespec");
     const { readPdf } = await import("./read");
     const reread = readPdf(bytes);
     expect(reread.attachments).toEqual([
@@ -1025,6 +1029,27 @@ describe("writePdf: embedded-file attachments (#967)", () => {
         base64: bytesToBase64(payload),
       },
     ]);
+  });
+
+  it("writes no /Desc entry for an attachment carrying no description", async () => {
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [],
+      images: {},
+      attachments: [
+        {
+          name: "plain.txt",
+          mimeType: "text/plain",
+          base64: bytesToBase64(new TextEncoder().encode("no description")),
+        },
+      ],
+    };
+    const bytes = writePdf(doc, { compress: false });
+    const rawText = new TextDecoder("latin1").decode(bytes);
+    expect(rawText).not.toContain("/Desc");
+    const { readPdf } = await import("./read");
+    expect(readPdf(bytes).attachments?.[0]?.description).toBeUndefined();
   });
 
   it("writes no /Names tree at all for a document with no attachments", () => {
@@ -1095,6 +1120,15 @@ describe("writePdf: the outline (#967)", () => {
       ],
     };
     const bytes = writePdf(doc);
+    const rawText = new TextDecoder("latin1").decode(bytes);
+    expect(rawText).toContain("/Type /Outlines");
+    // Chapter 1 is the sole top-level item and has two children: /Parent on each item, /Prev+/Next linking the two siblings, and /First+/Last+/Count on the parent that owns them.
+    expect(rawText).toContain("/Parent");
+    expect(rawText).toContain("/Prev");
+    expect(rawText).toContain("/Next");
+    expect(rawText).toContain("/First");
+    expect(rawText).toContain("/Last");
+    expect(rawText).toContain("/Count 2");
     const { readPdf } = await import("./read");
     const reread = readPdf(bytes);
     // Destinations are spelled as direct arrays (the identical convention the internal-link writer established: no /Dests tree is emitted), so the reader re-mints table names in read order -- "dest1", "dest2" -- while titles, nesting, and the TARGETS themselves round-trip exactly.
@@ -1341,6 +1375,81 @@ describe("writePdf: AcroForm fields (#967)", () => {
     const text = decode(writePdf(doc, { compress: false }));
     // Exactly 2 field objects (the group itself, plus its one terminal child) -- if the group's own 2 widgets were wrongly split into their own kid objects, a third and fourth "/Subtype /Widget" object would exist beyond the child's own.
     expect(text.match(/\/Subtype \/Widget/g)).toHaveLength(1);
+  });
+
+  it("maps radio, button, and signature field types to their own /FT value", () => {
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [{ widthPt: 200, heightPt: 100, items: [] }],
+      images: {},
+      form: [
+        {
+          name: "choice",
+          fieldType: "radio",
+          widgets: [
+            { pageIndex: 0, xPt: 10, yPt: 60, widthPt: 10, heightPt: 10 },
+          ],
+          children: [],
+        },
+        {
+          name: "submit",
+          fieldType: "button",
+          widgets: [
+            { pageIndex: 0, xPt: 10, yPt: 40, widthPt: 40, heightPt: 12 },
+          ],
+          children: [],
+        },
+        {
+          name: "sig",
+          fieldType: "signature",
+          widgets: [
+            { pageIndex: 0, xPt: 10, yPt: 20, widthPt: 40, heightPt: 12 },
+          ],
+          children: [],
+        },
+      ],
+    };
+    const text = decode(writePdf(doc, { compress: false }));
+    expect(text).toContain("/FT /Btn");
+    expect(text).toContain("/FT /Sig");
+    // radio and button both map to Btn, so distinguishing them isn't possible from /FT alone -- but exactly two Btn fields and one Sig field must exist.
+    expect(text.match(/\/FT \/Btn/g)).toHaveLength(2);
+  });
+
+  it("sets /Ff bits for read-only, pushbutton, radio, and combo, each independently and combined", () => {
+    const fieldFor = (
+      overrides: Partial<LayoutFormField> & { name: string },
+    ): LayoutFormField => ({
+      fieldType: "text",
+      widgets: [{ pageIndex: 0, xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }],
+      children: [],
+      ...overrides,
+    });
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [{ widthPt: 200, heightPt: 100, items: [] }],
+      images: {},
+      form: [
+        fieldFor({ name: "plain" }), // no flags at all -- no /Ff entry
+        fieldFor({ name: "locked", readOnly: true }), // 1
+        fieldFor({ name: "push", fieldType: "button" }), // 4
+        fieldFor({ name: "choice", fieldType: "radio" }), // 32768
+        fieldFor({ name: "combo", fieldType: "combobox" }), // 131072
+        fieldFor({ name: "lockedPush", fieldType: "button", readOnly: true }), // 1 | 4 = 5
+      ],
+    };
+    const text = decode(writePdf(doc, { compress: false }));
+    for (const ff of ["1", "4", "32768", "131072", "5"]) {
+      expect(text).toContain(`/Ff ${ff}`);
+    }
+    // "plain" carries no flag bits at all -- no /Ff entry for it, distinct from the others which each have their own combination. Field names are written as hex strings, so "plain" (0x706c61696e) identifies its own object's line.
+    const plainLine = text
+      .split("\n")
+      .find((line) => line.includes("<706c61696e>"));
+    expect(plainLine).toBeDefined();
+    expect(plainLine).not.toContain("/Ff");
   });
 
   it("writes no /AcroForm for a document with no fields", () => {
