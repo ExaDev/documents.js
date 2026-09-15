@@ -818,6 +818,7 @@ describe("headings", () => {
     ])(
       "still promotes $level to setext and round-trips the leading break losslessly",
       ({ level, underline }) => {
+        const collector = createDiagnosticCollector();
         const written = emitMarkdown(
           doc([
             {
@@ -826,8 +827,17 @@ describe("headings", () => {
               styleId: level,
             },
           ]),
+          { sink: collector.sink },
         );
         expect(written).toBe(`\\\nfoo\n${underline}`);
+        const diagnostic = collector.diagnostics.find(
+          (d) =>
+            d.code ===
+            MarkdownDiagnosticCodes.HEADING_STYLE_OVERRIDDEN_FOR_LINE_BREAK,
+        );
+        // Unlike the genuinely-absorbed leading-break case above, this break survives losslessly -- the diagnostic must say so, not claim it was absorbed.
+        expect(diagnostic?.message).toContain("so the break survives");
+        expect(diagnostic?.message).not.toContain("absorbed");
 
         const reparsed = lowerMarkdown(written);
         if (reparsed.kind !== "wordprocessing") {
@@ -3609,6 +3619,54 @@ describe("quoteDepthOf, longestRunLength, and leadingIndentColumns boundaries", 
         MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
       ),
     ).toBe(true);
+  });
+
+  it("stops counting leading indentation at the first non-space, non-tab character, rather than resuming the count at a LATER space in the same line as if it were still leading", () => {
+    // Correct: 'a' immediately stops the leading-indent scan at column 0 (well under the 4-column threshold), so this promotes safely to setext. A dropped `break` would instead skip over 'a' and keep scanning, picking up the run of 4 spaces that follows it as if it were still leading indentation, reaching column 4 and wrongly refusing the promotion.
+    const collector = createDiagnosticCollector();
+    const written = emitMarkdown(
+      doc([
+        { kind: "paragraph", runs: [{ text: "a    x" }], styleId: "Heading1" },
+      ]),
+      { headingStyle: "setext", sink: collector.sink },
+    );
+    expect(written).toBe("a    x\n======");
+    expect(
+      collector.has(
+        MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+      ),
+    ).toBe(false);
+  });
+
+  it("does not treat a heading's own SECOND line, indented 4+ columns, as an interrupting construct -- CommonMark absorbs indented content as ordinary paragraph continuation, exactly like its own indented-code paragraph-interruption exception requires", () => {
+    // "    - item" would itself match parseListMarker if the leading 4-column indent were not first exempted -- indented content is absorbed as continuation instead, so this must still promote safely to setext rather than being refused as an interrupting list marker.
+    const written = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [
+            { text: "foo" },
+            { text: "\n" },
+            {
+              text: "    - item",
+              source: { format: "markdown", xml: "    - item" },
+            },
+          ],
+          styleId: "Heading1",
+        },
+      ]),
+    );
+    expect(written).toBe("foo\\\n    - item\n====");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const [headingBlock] = reparsed.sections[0]?.blocks ?? [];
+    if (headingBlock?.kind !== "paragraph") {
+      throw new Error("expected a paragraph block");
+    }
+    expect(headingBlock.styleId).toBe("Heading1");
   });
 });
 
