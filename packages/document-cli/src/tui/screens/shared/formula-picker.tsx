@@ -5,7 +5,7 @@ import { ListView, selectedColor } from "../../components/list-view.js";
 import { TextField } from "../../components/text-field.js";
 import { useNavigationInput } from "../../keybindings/use-navigation-input.js";
 import { describeError } from "../../errors.js";
-import { FORMULA_PRESETS } from "./formula-presets.js";
+import { getFormulaPresets } from "./formula-presets.js";
 
 const RAW_ENTRY_LABEL = "Raw MathML...";
 
@@ -16,7 +16,7 @@ interface PickerRow {
 }
 
 const PICKER_ROWS: readonly PickerRow[] = [
-  ...FORMULA_PRESETS.map((preset) => ({
+  ...getFormulaPresets().map((preset) => ({
     label: preset.label,
     mathml: preset.mathml,
   })),
