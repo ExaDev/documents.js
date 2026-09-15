@@ -19,7 +19,7 @@ export function stixMathCffBytes(): Uint8Array<ArrayBuffer> {
   return cff;
 }
 
-// A CFF INDEX (spec section 5), with offSize 1 -- every fixture built here is small enough for one-byte offsets, and the real font above already covers a larger offSize (its own Top DICT INDEX uses 3).
+// A CFF INDEX (spec section 5). offSize is computed from the largest offset actually needed (spec Table 2: the smallest of 1/2/3/4 bytes that holds it), not hardcoded to 1 -- a fixture with enough entries or entry bytes to push the final offset past 255 (this package's own subrBias tests need a Local Subrs INDEX of over a thousand entries to reach the 1240-entry medium-bias threshold) still needs a spec-conformant INDEX, not a truncated one-byte offset that wraps.
 export function cffIndex(entries: readonly (readonly number[])[]): number[] {
   if (entries.length === 0) {
     return [0, 0];
@@ -28,11 +28,26 @@ export function cffIndex(entries: readonly (readonly number[])[]): number[] {
   for (const entry of entries) {
     offsets.push(offsets[offsets.length - 1]! + entry.length);
   }
+  const lastOffset = offsets[offsets.length - 1]!;
+  const offSize =
+    lastOffset <= 0xff
+      ? 1
+      : lastOffset <= 0xffff
+        ? 2
+        : lastOffset <= 0xffffff
+          ? 3
+          : 4;
+  const offsetBytes: number[] = [];
+  for (const offset of offsets) {
+    for (let byteIndex = offSize - 1; byteIndex >= 0; byteIndex--) {
+      offsetBytes.push((offset >>> (byteIndex * 8)) & 0xff);
+    }
+  }
   return [
     (entries.length >> 8) & 0xff,
     entries.length & 0xff,
-    1,
-    ...offsets,
+    offSize,
+    ...offsetBytes,
     ...entries.flat(),
   ];
 }
