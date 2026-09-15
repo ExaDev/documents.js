@@ -32,7 +32,12 @@ describe("isSpecExample", () => {
   });
 
   it('rejects a function even when it carries all four fields with the right types -- typeof a function is "function", never "object"', () => {
-    const fn = Object.assign(() => {}, VALID_EXAMPLE);
+    // Cast is unavoidable: TypeScript has no narrower type for "a function with these extra own properties attached" than a manual intersection, and Object.assign would build it unsoundly (banned by exadev/no-object-assign).
+    const fn = (() => {}) as (() => void) & typeof VALID_EXAMPLE;
+    fn.markdown = VALID_EXAMPLE.markdown;
+    fn.html = VALID_EXAMPLE.html;
+    fn.example = VALID_EXAMPLE.example;
+    fn.section = VALID_EXAMPLE.section;
     expect(isSpecExample(fn)).toBe(false);
   });
 
