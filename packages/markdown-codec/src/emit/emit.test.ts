@@ -2389,6 +2389,74 @@ describe("lists", () => {
     expect(mathBlock?.kind).toBe("embeddedObject");
   });
 
+  it("needs no forced blank line between a CodeBlock and a following plain paragraph in the SAME tight list item -- a fenced code block's own closing fence terminates cleanly, with nothing left open for the next line to lazily continue", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        styleId: "CodeBlock",
+        runs: [{ text: "x" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "y" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    expect(emitMarkdown(source)).toBe("- ```\n  x\n  ```\n  y");
+  });
+
+  it("needs no forced blank line between a MathBlock and a following plain paragraph in the SAME tight list item -- a $$ block's own closing delimiter terminates cleanly", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        styleId: "MathBlock",
+        runs: [{ text: "x" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "y" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    expect(emitMarkdown(source)).toBe("- $$\n  x\n  $$\n  y");
+  });
+
+  it("needs no forced blank line between a HorizontalRule and a following plain paragraph in the SAME tight list item -- a thematic break is a single complete line with nothing left open", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        styleId: "HorizontalRule",
+        runs: [],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "y" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    expect(emitMarkdown(source, { thematicBreakChar: "*" })).toBe("- ***\n  y");
+  });
+
+  it("DOES force a blank line between two plain paragraphs sharing an unrecognised, non-quotable, non-clean-terminating styleId in the same tight list item -- src/lower's own reader can only ever have produced this pair from a genuine source blank line, so the write side must reinsert it even though the list itself is tight", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        styleId: "SomeUnrecognisedStyle",
+        runs: [{ text: "a" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "b" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    expect(emitMarkdown(source)).toBe("- a\n\n  b");
+  });
+
   it("separates loose-list siblings with a blank line and tight-list siblings with none", () => {
     const tight = emitMarkdown(
       doc([
@@ -3155,6 +3223,26 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     ).toBe(true);
   });
 
+  it("PARAGRAPH_INDENT_DROPPED also fires for a DEFINED but unrecognised styleId carrying indentLeftPt, not only an absent styleId -- isQuotableStyle's own QUOTABLE_STYLE_IDS/heading check must actually run, not just its undefined short-circuit", () => {
+    const collector = createDiagnosticCollector();
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          styleId: "SomeUnrecognisedStyle",
+          indentLeftPt: 36,
+        },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(markdown).toBe("x");
+    expect(markdown).not.toContain(">");
+    expect(
+      collector.has(MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED),
+    ).toBe(true);
+  });
+
   it("LIST_NUMID_FALLBACK fires for a numId this package never minted, falling back to a plain bullet", () => {
     const collector = createDiagnosticCollector();
     const markdown = emitMarkdown(
@@ -3423,5 +3511,71 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
         ? cell.blocks[0].runs.map((run) => run.text).join("")
         : undefined;
     expect(text).toBe("one<br>two");
+  });
+});
+
+describe("emitMarkdown's own top-level assembly", () => {
+  it("joins multiple sections with a blank line, not concatenating them directly", () => {
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: PAGE_SIZE_A4,
+          margins: DEFAULT_MARGINS,
+          blocks: [{ kind: "paragraph", runs: [{ text: "first" }] }],
+        },
+        {
+          pageSize: PAGE_SIZE_A4,
+          margins: DEFAULT_MARGINS,
+          blocks: [{ kind: "paragraph", runs: [{ text: "second" }] }],
+        },
+      ],
+    };
+    expect(emitMarkdown(document)).toBe("first\n\nsecond");
+  });
+
+  it("prepends a YAML front matter block, separated from the body by a blank line, when frontMatter: true and the metadata carries a field it can emit", () => {
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: { title: "My Title" },
+      sections: [
+        {
+          pageSize: PAGE_SIZE_A4,
+          margins: DEFAULT_MARGINS,
+          blocks: [{ kind: "paragraph", runs: [{ text: "body" }] }],
+        },
+      ],
+    };
+    expect(emitMarkdown(document, { frontMatter: true })).toBe(
+      "---\ntitle: My Title\n---\n\nbody",
+    );
+  });
+
+  it("emits no front matter block at all when frontMatter is not requested, even though the metadata carries a field emitFrontMatter could have emitted", () => {
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: { title: "My Title" },
+      sections: [
+        {
+          pageSize: PAGE_SIZE_A4,
+          margins: DEFAULT_MARGINS,
+          blocks: [{ kind: "paragraph", runs: [{ text: "body" }] }],
+        },
+      ],
+    };
+    expect(emitMarkdown(document)).toBe("body");
+  });
+
+  it("rewrites every line ending to CRLF when lineEnding: 'crlf' is requested", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          { kind: "paragraph", runs: [{ text: "first" }] },
+          { kind: "paragraph", runs: [{ text: "second" }] },
+        ]),
+        { lineEnding: "crlf" },
+      ),
+    ).toBe("first\r\n\r\nsecond");
   });
 });
