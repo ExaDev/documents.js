@@ -118,7 +118,7 @@ describe("inferFormatFromExtension", () => {
 });
 
 describe("formatToExtension", () => {
-  // Not `formatToExtension(format) === format` any more: markdown breaks that identity (two extensions read as 'markdown', but only one -- 'md' -- is written), so this is an explicit lookup table instead, matching FORMAT_TO_EXTENSION's own canonical choice one entry at a time rather than asserting a shortcut that no longer holds for every format. A typed tuple array, not `Object.entries` over a Record, so each format literal narrows on its own -- no type assertion needed to hand it back to formatToExtension.
+  // Not `formatToExtension(format) === format` any more: markdown breaks that identity (two extensions read as 'markdown', but only one -- 'md' -- is written), so this is an explicit lookup table instead, matching getFormatToExtension's own canonical choice one entry at a time rather than asserting a shortcut that no longer holds for every format. A typed tuple array, not `Object.entries` over a Record, so each format literal narrows on its own -- no type assertion needed to hand it back to formatToExtension.
   it("maps every recognised format to its own canonical extension", () => {
     const cases: readonly (readonly [
       Parameters<typeof formatToExtension>[0],
