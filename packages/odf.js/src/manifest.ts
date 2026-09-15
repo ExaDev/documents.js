@@ -60,6 +60,38 @@ function attrValue(element: XmlElement, name: string): string | undefined {
   return element.attributes.find((attribute) => attribute.name === name)?.value;
 }
 
+// One parsed manifest:file-entry, still carrying its own source element -- so a caller that also needs the raw XML (validateManifest's own encryption-data scan, below) can inspect it without a second, independent full-path/media-type re-validation of the same element.
+interface ParsedFileEntry {
+  element: XmlElement;
+  fullPath: string;
+  mediaType: string;
+  version: string | undefined;
+}
+
+// The one place that walks a manifest:manifest root's manifest:file-entry children and enforces the ODF spec's required attributes on each -- both readManifest (which only needs the resulting ManifestEntry values) and validateManifest's own encryption-data scan (which additionally needs each element's own children) build on this single parse rather than repeating the required-attribute check a second time. Throws under the identical condition readManifest documents.
+function parseFileEntryElements(root: XmlElement): ParsedFileEntry[] {
+  const result: ParsedFileEntry[] = [];
+  for (const child of root.children) {
+    if (child.type !== "element" || child.tag !== "manifest:file-entry") {
+      continue;
+    }
+    const fullPath = attrValue(child, "manifest:full-path");
+    const mediaType = attrValue(child, "manifest:media-type");
+    if (fullPath === undefined || mediaType === undefined) {
+      throw new Error(
+        `${MANIFEST_PART} has a manifest:file-entry missing manifest:full-path or manifest:media-type`,
+      );
+    }
+    result.push({
+      element: child,
+      fullPath,
+      mediaType,
+      version: attrValue(child, "manifest:version"),
+    });
+  }
+  return result;
+}
+
 // Reads META-INF/manifest.xml into a structured Manifest. Throws for a package that has no manifest part, or one whose XML does not carry the elements/attributes the ODF spec requires (no manifest:manifest root, or a manifest:file-entry missing its required manifest:full-path/manifest:media-type) -- unlike validateManifest, this is a strict parse, not a diagnostics collector.
 export function readManifest(pkg: Package): Manifest {
   const part = pkg.parts[MANIFEST_PART];
@@ -77,25 +109,12 @@ export function readManifest(pkg: Package): Manifest {
     );
   }
 
-  const entries: ManifestEntry[] = [];
-  for (const child of root.children) {
-    if (child.type !== "element" || child.tag !== "manifest:file-entry") {
-      continue;
-    }
-    const fullPath = attrValue(child, "manifest:full-path");
-    const mediaType = attrValue(child, "manifest:media-type");
-    if (fullPath === undefined || mediaType === undefined) {
-      throw new Error(
-        `${MANIFEST_PART} has a manifest:file-entry missing manifest:full-path or manifest:media-type`,
-      );
-    }
-    const entryVersion = attrValue(child, "manifest:version");
-    entries.push(
+  const entries: ManifestEntry[] = parseFileEntryElements(root).map(
+    ({ fullPath, mediaType, version: entryVersion }) =>
       entryVersion === undefined
         ? { fullPath, mediaType }
         : { fullPath, mediaType, version: entryVersion },
-    );
-  }
+  );
   return { version, entries };
 }
 
@@ -126,9 +145,11 @@ function resolvePartMediaType(
   }
 
   const dotIndex = baseName.lastIndexOf(".");
-  const extension = dotIndex === -1 ? "" : baseName.slice(dotIndex + 1);
+  // No intermediate "extension === '' ? undefined : ..." fallback: mediaTypeForExtension("") already returns undefined on its own (the empty string is never a key in ODF_MEDIA_TYPES), so that check was always redundant. Skipping the lookup entirely when there is no dot at all -- rather than computing an empty-string placeholder and feeding it through the same lookup -- keeps a nameless part from ever being mistaken for one whose whole basename happens to spell a real ODF extension (e.g. a part literally named "odt" with no dot).
   const byExtension =
-    extension === "" ? undefined : mediaTypeForExtension(extension);
+    dotIndex === -1
+      ? undefined
+      : mediaTypeForExtension(baseName.slice(dotIndex + 1));
   if (byExtension !== undefined) {
     return byExtension;
   }
@@ -322,8 +343,8 @@ export function validateManifest(pkg: Package): ManifestProblem[] {
   );
 
   for (const entry of manifest.entries) {
-    // Root and directory entries have no literal corresponding zip part -- "/" is the package itself, and a directory entry describes a prefix, not a physical entry.
-    if (entry.fullPath === "/" || entry.fullPath.endsWith("/")) {
+    // Root and directory entries have no literal corresponding zip part -- "/" is the package itself (and, being a single "/" character, trivially satisfies endsWith("/") on its own, so it needs no separate check), and a directory entry describes a prefix, not a physical entry.
+    if (entry.fullPath.endsWith("/")) {
       continue;
     }
     if (!partPaths.has(entry.fullPath)) {
@@ -344,21 +365,15 @@ export function validateManifest(pkg: Package): ManifestProblem[] {
     }
   }
 
-  for (const child of root.children) {
-    if (child.type !== "element" || child.tag !== "manifest:file-entry") {
-      continue;
-    }
-    const hasEncryptionData = child.children.some(
+  // Reusing readManifest's own parseFileEntryElements rather than a second, independent full-path re-check: the try/catch above already proved every manifest:file-entry here has both required attributes, so this parse is guaranteed to succeed identically and each fullPath below is a plain string, not string | undefined.
+  for (const { element, fullPath } of parseFileEntryElements(root)) {
+    const hasEncryptionData = element.children.some(
       (grandchild) =>
         grandchild.type === "element" &&
         grandchild.tag === "manifest:encryption-data",
     );
     if (!hasEncryptionData) {
       continue;
-    }
-    const fullPath = attrValue(child, "manifest:full-path");
-    if (fullPath === undefined) {
-      continue; // already surfaced above by readManifest's own required-attribute check
     }
     problems.push({
       severity: "warning",
