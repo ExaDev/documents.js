@@ -12,11 +12,9 @@ export function parseSqref(sqref: string | undefined): ContentSheetRange[] {
   if (sqref === undefined) {
     return [];
   }
+  // Split on a single whitespace character rather than a run of them (`\s+`): splitting on each individual character instead only ever inserts extra EMPTY strings between adjacent whitespace characters -- which need no explicit skip of their own, since parseRangeReference("") always returns undefined (parseCellReference's own CELL_REFERENCE_RE requires at least one letter and one digit, which an empty string can never supply) and the `range !== undefined` check below already discards it. So the two split forms produce the identical final range list regardless of how many consecutive whitespace characters separate two ranges.
   const ranges: ContentSheetRange[] = [];
-  for (const token of sqref.split(/\s+/)) {
-    if (token === "") {
-      continue;
-    }
+  for (const token of sqref.split(/\s/)) {
     const range = parseRangeReference(token);
     if (range !== undefined) {
       ranges.push(range);

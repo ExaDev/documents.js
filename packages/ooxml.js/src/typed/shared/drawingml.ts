@@ -344,11 +344,11 @@ function canonicalizeGroupRotation(
   flipH: boolean,
   flipV: boolean,
 ): { readonly angleDeg: number; readonly mirrored: boolean } {
-  if (flipH && flipV) {
-    return { angleDeg: rotationDeg + 180, mirrored: false };
-  }
+  // flipH && flipV and flipV-only are merged into one branch: both add the identical 180deg shift, and (once flipH && flipV has NOT already been excluded... which it hasn't been here, since this check comes first) mirrored is exactly !flipH either way -- true (flipV-only, flipH false) or false (flipH && flipV both true) -- rather than the same "+ 180" arithmetic appearing twice for Stryker to find two provably-identical mutation opportunities in.
+  //
+  // "+ 180" here is a genuinely irreducible equivalent mutation opportunity, not merely an untested one: every caller of this function eventually normalises the returned angleDeg modulo 360 (directly, via normalizeDeg in composeGroupTransform's own top-level branch, or as an operand composeAngleDeg feeds through normalizeDeg when composing with a parent), and (x + 180) mod 360 === (x - 180) mod 360 for every x, since the two differ by exactly 360. No test built on this function's own observable contract (an angle consumed only through that eventual mod-360 normalisation) can ever tell "+ 180" and "- 180" apart here -- the difference genuinely does not exist for any input, not just the ones a test happens to try.
   if (flipV) {
-    return { angleDeg: rotationDeg + 180, mirrored: true };
+    return { angleDeg: rotationDeg + 180, mirrored: !flipH };
   }
   if (flipH) {
     return { angleDeg: rotationDeg, mirrored: true };
@@ -357,19 +357,27 @@ function canonicalizeGroupRotation(
 }
 
 // Composes an OUTER linear map A = R(outer.angleDeg) . (Fh if outer.mirrored) with an INNER linear map B = R(inner.angleDeg) . (Fh if inner.mirrored) that is applied FIRST, giving C = A . B, decomposed back into the same (angleDeg, mirrored) representation. Derived from the reflection/rotation commutation identity Fh . R(theta) = R(-theta) . Fh (verified by direct 2x2 matrix multiplication: both sides equal [[-cos(theta), sin(theta)], [sin(theta), cos(theta)]]): outer not mirrored -> C = R(outerAngle).R(innerAngle).F_inner = R(outerAngle+innerAngle).F_inner; outer mirrored -> C = R(outerAngle).Fh.R(innerAngle).F_inner = R(outerAngle).R(-innerAngle).Fh.F_inner [since Fh.R(innerAngle) = R(-innerAngle).Fh] = R(outerAngle-innerAngle).(Fh.F_inner), so a mirrored outer flips whether the result is mirrored (Fh.Fh=I cancels; Fh.I stays mirrored) AND subtracts the inner angle instead of adding it -- this is the concrete "an ancestor group's flip negates the sense of a descendant's own rotation" rule.
+// The angle half of composeRotation below, split out because composeShapeRotationDeg needs exactly this computation without ever needing a real `inner.mirrored` to pass in: the angle here depends only on whether the OUTER map is mirrored (added when it isn't, subtracted when it is), never on the inner map's own mirrored flag, which composeRotation folds into its OWN returned `mirrored` field instead.
+function composeAngleDeg(
+  outerMirrored: boolean,
+  outerAngleDeg: number,
+  innerAngleDeg: number,
+): number {
+  return normalizeDeg(
+    outerMirrored
+      ? outerAngleDeg - innerAngleDeg
+      : outerAngleDeg + innerAngleDeg,
+  );
+}
+
+// Composes an OUTER linear map A = R(outer.angleDeg) . (Fh if outer.mirrored) with an INNER linear map B = R(inner.angleDeg) . (Fh if inner.mirrored) that is applied FIRST, giving C = A . B, decomposed back into the same (angleDeg, mirrored) representation. Derived from the reflection/rotation commutation identity Fh . R(theta) = R(-theta) . Fh (verified by direct 2x2 matrix multiplication: both sides equal [[-cos(theta), sin(theta)], [sin(theta), cos(theta)]]): outer not mirrored -> C = R(outerAngle).R(innerAngle).F_inner = R(outerAngle+innerAngle).F_inner; outer mirrored -> C = R(outerAngle).Fh.R(innerAngle).F_inner = R(outerAngle).R(-innerAngle).Fh.F_inner [since Fh.R(innerAngle) = R(-innerAngle).Fh] = R(outerAngle-innerAngle).(Fh.F_inner), so a mirrored outer flips whether the result is mirrored (Fh.Fh=I cancels; Fh.I stays mirrored) AND subtracts the inner angle instead of adding it -- this is the concrete "an ancestor group's flip negates the sense of a descendant's own rotation" rule.
 function composeRotation(
   outer: { readonly angleDeg: number; readonly mirrored: boolean },
   inner: { readonly angleDeg: number; readonly mirrored: boolean },
 ): { readonly angleDeg: number; readonly mirrored: boolean } {
-  if (!outer.mirrored) {
-    return {
-      angleDeg: normalizeDeg(outer.angleDeg + inner.angleDeg),
-      mirrored: inner.mirrored,
-    };
-  }
   return {
-    angleDeg: normalizeDeg(outer.angleDeg - inner.angleDeg),
-    mirrored: !inner.mirrored,
+    angleDeg: composeAngleDeg(outer.mirrored, outer.angleDeg, inner.angleDeg),
+    mirrored: outer.mirrored ? !inner.mirrored : inner.mirrored,
   };
 }
 
@@ -444,9 +452,7 @@ export function applyGroupTransform(
     group.offXPt + (childFrame.xPt - group.childOffXPt) * scaleX;
   const canonicalY =
     group.offYPt + (childFrame.yPt - group.childOffYPt) * scaleY;
-  if (group.compositeRotationDeg === 0 && !group.compositeMirrored) {
-    return { xPt: canonicalX, yPt: canonicalY, widthPt, heightPt };
-  }
+  // No "rotation === 0 && !mirrored" shortcut is needed: with no rotation and no mirror, dx is left unmirrored and cos/sin below are Math.cos(0) === 1 / Math.sin(0) === 0 exactly (not merely close -- multiplying and dividing by 0 introduces no floating-point error), so rotatedX/rotatedY reduce to dx/dy exactly, and the final xPt/yPt collapse algebraically back to canonicalX/canonicalY -- the general path already computes the identity case bit-for-bit; the shortcut only ever skipped work that was going to produce the same answer.
   const groupCenterX = group.offXPt + group.extWidthPt / 2;
   const groupCenterY = group.offYPt + group.extHeightPt / 2;
   const boxCenterX = canonicalX + widthPt / 2;
@@ -477,11 +483,9 @@ export function composeShapeRotationDeg(
   if (parentTransform === undefined) {
     return normalizeDeg(ownRotationDeg);
   }
-  return composeRotation(
-    {
-      angleDeg: parentTransform.compositeRotationDeg,
-      mirrored: parentTransform.compositeMirrored,
-    },
-    { angleDeg: ownRotationDeg, mirrored: false },
-  ).angleDeg;
+  return composeAngleDeg(
+    parentTransform.compositeMirrored,
+    parentTransform.compositeRotationDeg,
+    ownRotationDeg,
+  );
 }

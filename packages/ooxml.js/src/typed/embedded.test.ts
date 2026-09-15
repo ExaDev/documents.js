@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { MAX_WALK_DEPTH } from "archive-codec";
+import {
+  MAX_WALK_DEPTH,
+  writeCompoundFile,
+  writeOlePackage,
+} from "archive-codec";
 import { unzipPackage, zipPackage } from "../zip";
 import { oleObjectBin } from "../test-support/cfb";
 import {
@@ -7,7 +11,13 @@ import {
   minimalPptxBytes,
   minimalXlsxBytes,
 } from "../test-support/embedded";
-import { readEmbeddedOoxmlPayload } from "./embedded";
+import {
+  detectFlavour,
+  hasDocxBody,
+  readEmbeddedOoxmlPayload,
+} from "./embedded";
+import { el } from "../xml/fragment";
+import { packageFromEntries } from "../package-io/read";
 
 // Coverage for the shared embedded-object decode (src/typed/embedded.ts): nested-ZIP payload bytes -> flavour detection -> the matching typed reader -> the ContentEmbeddedObject payload (objectKind + a genuinely recovered nested ContentDocument). Fixtures come from src/test-support/embedded.ts -- real minimal OOXML packages zipped inline, because the pipeline under test unzips actual bytes (a hand-built Package value would skip the parse step entirely).
 
@@ -71,6 +81,30 @@ describe("readEmbeddedOoxmlPayload", () => {
     });
   });
 
+  it("finds the 'Package' stream by its own name among several, not merely the first stream the compound file's directory tree visits", () => {
+    // The directory's sibling tree is name-sorted (see archive-codec's own README), so "Decoy" -- alphabetically before "Package" -- is genuinely visited first; only a check against the stream's own path, not "whichever comes first", can tell them apart.
+    const packageBytes = writeOlePackage({
+      label: "Book1.xlsx",
+      sourcePath: "",
+      tempPath: "",
+      fileBytes: minimalXlsxBytes(),
+    });
+    const bytes = writeCompoundFile([
+      { path: "Decoy", bytes: enc("not a Package stream at all") },
+      { path: "Package", bytes: packageBytes },
+    ]);
+    const payload = readEmbeddedOoxmlPayload(bytes);
+    expect(payload?.objectKind).toBe("spreadsheet");
+    const sheet =
+      payload?.document.kind === "spreadsheet"
+        ? payload.document.sheets[0]
+        : undefined;
+    expect(sheet?.cells[0]?.value).toEqual({
+      kind: "string",
+      value: "Recovered cell",
+    });
+  });
+
   it("returns undefined for a well-formed compound file carrying no Package stream (native legacy streams stay opaque)", () => {
     // A .bin whose CFB holds a native stream (BIFF Workbook, WordDocument, ...) rather than a Package stream: outside this recovery's scope by design, so the payload degrades to nothing without a throw.
     expect(
@@ -89,6 +123,13 @@ describe("readEmbeddedOoxmlPayload", () => {
         oleObjectBin(enc("just some packaged text, not a zip")),
       ),
     ).toBeUndefined();
+  });
+
+  it("returns undefined for bytes carrying neither the ZIP nor the compound-file magic at all", () => {
+    // Neither isZipArchive nor readCompoundFile's own magic check recognise this input -- the latter throws CompoundFileFormatError, which the surrounding catch degrades to undefined exactly like any other undecodable payload.
+    expect(readEmbeddedOoxmlPayload(enc("plain text, not an archive"))).toBe(
+      undefined,
+    );
   });
 
   it("returns undefined for a non-ZIP payload (the classic OLE compound file)", () => {
@@ -123,6 +164,29 @@ describe("readEmbeddedOoxmlPayload", () => {
     expect(readEmbeddedOoxmlPayload(bytes)).toBeUndefined();
   });
 
+  it("uses the genuine root-level part over a same-named entry nested inside a ZIP-within-the-payload, never letting the nested one overwrite it", () => {
+    // A nested archive's own entries are ancestors.length > 0 -- excluded from the flattened package the outer payload's own parts build from, exactly as the walk's own root-entry set is. A decoy nested zip carrying its own "xl/workbook.xml" must never be allowed to clobber the payload's genuine root-level one.
+    const basePkg = unzipPackage(minimalXlsxBytes());
+    const decoy = zipPackage({
+      "xl/workbook.xml": enc("this is not a real workbook part at all"),
+    });
+    const bombShaped = zipPackage({
+      ...basePkg,
+      "word/embeddings/decoy.zip": decoy,
+    });
+    const payload = readEmbeddedOoxmlPayload(bombShaped);
+    expect(payload?.objectKind).toBe("spreadsheet");
+    const sheet =
+      payload?.document.kind === "spreadsheet"
+        ? payload.document.sheets[0]
+        : undefined;
+    expect(sheet?.name).toBe("Embedded");
+    expect(sheet?.cells[0]?.value).toEqual({
+      kind: "string",
+      value: "Recovered cell",
+    });
+  });
+
   it("returns undefined for a payload whose entries nest ZIPs beyond archive-codec's walk depth, even when its root is a valid xlsx", () => {
     // The nested decode runs behind archive-codec's recursive-walk guards (a depth cap and one shared cumulative decompressed-bytes budget -- the bounded inflate this package's own fflate unzip has no equivalent of). This payload IS a valid xlsx at its root, but it also carries an entry that is a chain of ZIPs nested one level deeper than MAX_WALK_DEPTH -- the shape a decompression bomb's nesting leverage takes. A walk that hits a guard limit means the payload as a whole stands outside the guards' contract, so no embedded block is decoded from it at all; without the gateway the root flavour would decode fine and the deep chain would ride along as an inert binary part.
     let chain: Uint8Array<ArrayBuffer> = minimalXlsxBytes();
@@ -134,5 +198,51 @@ describe("readEmbeddedOoxmlPayload", () => {
       "word/embeddings/deep.bin": chain,
     });
     expect(readEmbeddedOoxmlPayload(bombShaped)).toBeUndefined();
+  });
+});
+
+describe("hasDocxBody", () => {
+  it("is true for a w:document root carrying a w:body child", () => {
+    expect(hasDocxBody(el("w:document", {}, [el("w:body")]))).toBe(true);
+  });
+
+  it("is false for a w:document root with no w:body child at all", () => {
+    expect(hasDocxBody(el("w:document"))).toBe(false);
+  });
+});
+
+describe("detectFlavour", () => {
+  it("detects a wordprocessing flavour only when word/document.xml genuinely carries a w:body", () => {
+    const nested = packageFromEntries({
+      "word/document.xml": new TextEncoder().encode(
+        "<w:document><w:body/></w:document>",
+      ),
+    });
+    expect(detectFlavour(nested)).toBe("wordprocessing");
+  });
+
+  it("detects no flavour for a word/document.xml with no w:body, rather than falling through to a wrong dispatch", () => {
+    const nested = packageFromEntries({
+      "word/document.xml": new TextEncoder().encode("<w:document/>"),
+    });
+    expect(detectFlavour(nested)).toBeUndefined();
+  });
+
+  it("detects a presentation flavour from ppt/presentation.xml alone (no precondition of its own)", () => {
+    const nested = packageFromEntries({
+      "ppt/presentation.xml": new TextEncoder().encode("<p:presentation/>"),
+    });
+    expect(detectFlavour(nested)).toBe("presentation");
+  });
+
+  it("detects a spreadsheet flavour from xl/workbook.xml alone (no precondition of its own)", () => {
+    const nested = packageFromEntries({
+      "xl/workbook.xml": new TextEncoder().encode("<workbook/>"),
+    });
+    expect(detectFlavour(nested)).toBe("spreadsheet");
+  });
+
+  it("detects no flavour when none of the three entry parts is present", () => {
+    expect(detectFlavour(packageFromEntries({}))).toBeUndefined();
   });
 });

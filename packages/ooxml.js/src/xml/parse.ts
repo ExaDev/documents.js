@@ -18,30 +18,31 @@ export function parseXml(xml: string): XmlNode[] {
   return parseNodes(PARSER.parse(xml));
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+// Exported for direct unit coverage of the four independent branch shapes (object/null/array/primitive) this guard's own conjunction distinguishes -- parseXml itself only ever hands it real fast-xml-parser output, which never exercises the null or primitive cases.
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // Array.isArray narrows unknown to any[], not unknown[] -- lib.es5.d.ts types its parameter as `any`, so TypeScript can't do better even after the check. This guard exists so indexing the result stays unknown rather than silently reintroducing any.
-function isUnknownArray(value: unknown): value is unknown[] {
+export function isUnknownArray(value: unknown): value is unknown[] {
   return Array.isArray(value);
 }
 
-function asString(value: unknown): string {
+export function asString(value: unknown): string {
   if (typeof value !== "string") {
     throw new Error(`expected string while parsing XML, got ${typeof value}`);
   }
   return value;
 }
 
-function parseNodes(raw: unknown): XmlNode[] {
+export function parseNodes(raw: unknown): XmlNode[] {
   if (!isUnknownArray(raw)) {
     throw new Error("fast-xml-parser output was not an ordered array");
   }
   return raw.map(parseNode);
 }
 
-function parseNode(raw: unknown): XmlNode {
+export function parseNode(raw: unknown): XmlNode {
   if (!isRecord(raw)) {
     throw new Error("fast-xml-parser node was not an object");
   }
@@ -86,7 +87,7 @@ function parseNode(raw: unknown): XmlNode {
   };
 }
 
-function parseAttributes(raw: unknown): Attribute[] {
+export function parseAttributes(raw: unknown): Attribute[] {
   if (raw === undefined) {
     return [];
   }
@@ -104,7 +105,7 @@ function parseAttributes(raw: unknown): Attribute[] {
 }
 
 // Comments, CDATA and PIs wrap their text as [{ '#text': string }].
-function scalarText(raw: unknown): string {
+export function scalarText(raw: unknown): string {
   if (!isUnknownArray(raw) || raw.length === 0) {
     throw new Error("expected a scalar-text wrapper array");
   }

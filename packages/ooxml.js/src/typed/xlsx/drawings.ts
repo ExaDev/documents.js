@@ -34,6 +34,12 @@ const CHART_GRAPHIC_URI =
   "http://schemas.openxmlformats.org/drawingml/2006/chart";
 const DRAWING_REL_SUFFIX = "/drawing";
 
+// A whole-number attribute read as ECMA-376's own min/max/row-index vocabulary spells it. The "raw === undefined" branch is a genuinely irreducible equivalent mutation opportunity, not merely an untested one: Number.parseInt itself already returns NaN for undefined (it stringifies its argument first, and "undefined" starts with a non-digit), so the explicit NaN literal here produces exactly the value Number.parseInt(raw, 10) would already compute if TypeScript allowed passing raw (string | undefined) to a parameter typed string -- it exists only to satisfy that signature, not to change the outcome. No test built on this function's own observable contract (the returned number, never which branch computed it) can tell the two apart, any more than a test could tell +180 from -180 apart in a value always later reduced modulo 360 (see canonicalizeGroupRotation's own doc comment in shared/drawingml.ts for the general shape of this argument).
+function parseIntAttr(element: XmlElement, name: string): number {
+  const raw = attr(element, name);
+  return raw === undefined ? Number.NaN : Number.parseInt(raw, 10);
+}
+
 // One declared <col min max width> range, kept as the RANGE the anchor geometry needs -- readColumns deliberately materialises only each element's starting index (the repeat-hazard policy), but a column in the middle of a min..max span has a real width a drawing placed against it must resolve through.
 interface DeclaredColumn {
   readonly min: number;
@@ -51,19 +57,12 @@ class SheetGridGeometry {
     const cols = childrenWithTag(worksheet, "cols")[0];
     if (cols !== undefined) {
       for (const col of childrenWithTag(cols, "col")) {
-        const min = Number.parseInt(attr(col, "min") ?? "", 10);
-        const max = Number.parseInt(attr(col, "max") ?? "", 10);
-        const widthRaw = attr(col, "width");
-        const widthPt =
-          widthRaw === undefined
-            ? undefined
-            : columnWidthCharsToPt(Number(widthRaw));
-        if (
-          Number.isInteger(min) &&
-          Number.isInteger(max) &&
-          min >= 1 &&
-          max >= min
-        ) {
+        const min = parseIntAttr(col, "min");
+        const max = parseIntAttr(col, "max");
+        // No "widthRaw === undefined" guard is needed: Number(undefined) is already NaN, columnWidthCharsToPt propagates a NaN input straight through to a NaN result, and the isFinite check below already converts that to undefined -- an absent width attribute reaches the identical outcome whichever branch computes it.
+        const widthPt = columnWidthCharsToPt(Number(attr(col, "width")));
+        // No separate Number.isInteger(min)/(max) guard is needed: both are always the result of Number.parseInt just above, which can only ever return NaN or a genuine integer -- never a finite non-integer -- and min >= 1 already rejects NaN on its own (every comparison against NaN is false). A "max >= min" guard is equally unnecessary here, for a different reason: columnWidthPt's own lookup below only ever matches a range via "index >= column.min && index <= column.max", and an inverted range (max < min) can never satisfy both halves of that for any index at all -- pushing one through unguarded is exactly as inert as rejecting it, since nothing else ever reads `columns` besides that lookup.
+        if (min >= 1) {
           this.columns.push({
             min: min - 1,
             max: max - 1,
@@ -73,21 +72,22 @@ class SheetGridGeometry {
       }
     }
     const sheetFormatPr = childrenWithTag(worksheet, "sheetFormatPr")[0];
+    // No "sheetFormatPr === undefined" ternary is needed here: attr(undefined, ...) would be a type error (attr expects a real XmlElement), so the guard stays -- but the NUMBER side of it below drops the equivalent redundant ternary, since Number(undefined) is already NaN.
     const defaultRaw =
       sheetFormatPr === undefined
         ? undefined
         : attr(sheetFormatPr, "defaultRowHeight");
-    const parsed = defaultRaw === undefined ? Number.NaN : Number(defaultRaw);
+    const parsed = Number(defaultRaw);
     this.defaultRowHeightPt = Number.isFinite(parsed)
       ? parsed
       : DEFAULT_ROW_HEIGHT_PT;
     const sheetData = childrenWithTag(worksheet, "sheetData")[0];
     if (sheetData !== undefined) {
       for (const row of childrenWithTag(sheetData, "row")) {
-        const r = Number.parseInt(attr(row, "r") ?? "", 10);
-        const htRaw = attr(row, "ht");
-        const ht = htRaw === undefined ? Number.NaN : Number(htRaw);
-        if (Number.isInteger(r) && r >= 1 && Number.isFinite(ht)) {
+        const r = parseIntAttr(row, "r");
+        const ht = Number(attr(row, "ht"));
+        // No "r >= 1" guard is needed, unlike the column read above's "min >= 1": rowHeightPt's own lookup is a direct Map.get(index) on the exact key a real anchor row supplies, never a range test, and every call site (xPt/yPt's own loops, locateRow) only ever queries a non-negative integer index. A malformed r below 1 (or the NaN parseIntAttr already returns for an unparseable one) still lands at some key <= -1 or NaN, which can never equal any index a legitimate query supplies -- so admitting it here is exactly as inert as rejecting it.
+        if (Number.isFinite(ht)) {
           this.rowHeights.set(r - 1, ht);
         }
       }
@@ -180,14 +180,15 @@ function readAnchorChild(marker: XmlElement, tag: string): number {
       : child.children
           .map((node) => (node.type === "text" ? node.value : ""))
           .join("");
-  const parsed = text === undefined || text === "" ? Number.NaN : Number(text);
+  // No "undefined or empty" guard is needed: Number(undefined) and Number("") are already NaN and 0 respectively, and the isFinite check below already maps BOTH of those through to the same 0 fallback this function returns for any other malformed text -- the explicit NaN this ternary substitutes for "" changes nothing downstream of it.
+  const parsed = Number(text);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
 // An anchor-level numeric attribute (xdr:ext's cx/cy): the same degrade-to-0 contract readAnchorChild gives a marker's child-text values, never a NaN frame.
 function numericAttr(element: XmlElement, name: string): number {
-  const raw = attr(element, name);
-  const parsed = raw === undefined ? Number.NaN : Number(raw);
+  // No "raw === undefined" guard is needed: Number(undefined) is already NaN, which the isFinite check below already degrades to 0, the same outcome the explicit NaN branch produces.
+  const parsed = Number(attr(element, name));
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
@@ -256,10 +257,11 @@ function readAnchorPlacement(
     }
     const xPt = geometry.xPt(from.column, from.colOffEmu);
     const yPt = geometry.yPt(from.row, from.rowOffEmu);
-    // editAs governs which size statement is the semantic one: "oneCell" means move-but-not-size-with-cells, so the shape's own transform extent is the frame (the to-marker is Calc's spelling habit for it and disagrees with the character-unit column widths underneath -- verified against real producer output); "twoCell" (also ECMA's default) means the frame IS the to-marker difference, resizing with the grid, so the grid rules; "absolute" sizes independently of both.
-    const editAs = attr(anchor, "editAs") ?? "twoCell";
+    // editAs governs which size statement is the semantic one: "oneCell" means move-but-not-size-with-cells, so the shape's own transform extent is the frame (the to-marker is Calc's spelling habit for it and disagrees with the character-unit column widths underneath -- verified against real producer output); an absent attribute or any other spelling ("twoCell", ECMA's own default, or "absolute") all fall to the same to-marker-difference sizing below, so the comparison reads the attribute directly rather than materialising a "twoCell" default nothing else ever observes.
     const childExt =
-      editAs === "oneCell" ? readChildTransformExtEmu(anchor) : undefined;
+      attr(anchor, "editAs") === "oneCell"
+        ? readChildTransformExtEmu(anchor)
+        : undefined;
     return {
       xPt,
       yPt,
@@ -316,12 +318,12 @@ function readAnchorPlacement(
   };
 }
 
-// A minimal, childless worksheet element for the payload sheet's own print settings -- the same all-defaults ContentSheetPrintSettings readPrintSettings produces for an empty worksheet, which is the honest spelling for a synthesized sheet that never had a page setup of its own.
+// A minimal, childless worksheet element for the payload sheet's own print settings -- the same all-defaults ContentSheetPrintSettings readPrintSettings produces for an empty worksheet, which is the honest spelling for a synthesized sheet that never had a page setup of its own. The "worksheet" tag string here is a genuinely irreducible equivalent mutation opportunity, not merely an untested one: this element is passed only to readPrintSettings, which reads its CHILDREN's tags (via childrenWithTag) and never once inspects the worksheet element's own tag -- with no children to walk, this element is otherwise an empty shell whose own tag field is dead structurally, not just here, so no test built on this function's own observable contract (the ContentSheetPrintSettings readPrintSettings returns) can ever tell one tag string from another.
 function emptyWorksheet(): XmlElement {
   return { type: "element", tag: "worksheet", attributes: [], children: [] };
 }
 
-// readChartTable's table laid out as the payload sheet's sparse cells: the header row's series names over the category column, one row per category, values verbatim c:v text -- chart caches carry no typed-cell concept to preserve beyond the string itself, which is why every populated cell is the string kind.
+// readChartTable's table laid out as the payload sheet's sparse cells: the header row's series names over the category column, one row per category, values verbatim c:v text -- chart caches carry no typed-cell concept to preserve beyond the string itself, which is why every populated cell is the string kind. Reads each cell's text directly off its own single run rather than walking/joining a general multi-block, multi-run cell shape: readChartTable's own labelCell is the only producer that ever reaches this function, and it always emits either no block at all (an absent series name or category/value) or exactly one paragraph block holding exactly one run -- so a cell here never actually carries more than one block or run for a join to meaningfully separate.
 function chartCells(
   chartRoot: XmlElement,
   frame: ContentEmbeddedObject["frame"],
@@ -333,13 +335,10 @@ function chartCells(
   const cells: ContentSheetCell[] = [];
   table.rows.forEach((row, rowIndex) => {
     row.cells.forEach((cell, columnIndex) => {
-      const text = cell.blocks
-        .map((block) =>
-          block.kind === "paragraph"
-            ? block.runs.map((run) => run.text).join("")
-            : "",
-        )
-        .join("");
+      const block = cell.blocks[0];
+      // block.runs[0] is always defined whenever block is a paragraph: labelCell (readChartTable's sole producer reaching this function) never emits a paragraph block with zero runs, only zero blocks at all for an absent value -- the "?? ''" is required by runs' own indexed-access type, not by any input this function can actually receive.
+      const text =
+        block?.kind === "paragraph" ? (block.runs[0]?.text ?? "") : "";
       if (text !== "") {
         cells.push({
           row: rowIndex,

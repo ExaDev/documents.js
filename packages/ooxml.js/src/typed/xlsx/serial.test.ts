@@ -9,6 +9,7 @@ import {
   serialToIsoDate,
   serialToIsoDateTime,
   serialToIsoTime,
+  utcMsOfCalendarDate,
 } from "./serial";
 
 function workbookPackage(workbookPr?: ReturnType<typeof el>): Package {
@@ -106,6 +107,15 @@ describe("serialToIsoTime", () => {
     expect(serialToIsoTime(0.9999999999)).toBe("00:00:00");
     expect(serialToIsoTime(0.99999999)).toBe("23:59:59");
   });
+
+  it("is undefined for a non-finite serial", () => {
+    expect(serialToIsoTime(Number.NaN)).toBeUndefined();
+    expect(serialToIsoTime(Number.POSITIVE_INFINITY)).toBeUndefined();
+  });
+
+  it("is undefined for a negative serial, which has no time-of-day fraction to render", () => {
+    expect(serialToIsoTime(-0.5)).toBeUndefined();
+  });
 });
 
 describe("serialToIsoDateTime", () => {
@@ -123,6 +133,10 @@ describe("serialToIsoDateTime", () => {
 
   it("is undefined wherever its own date half is", () => {
     expect(serialToIsoDateTime(60.5, false)).toBeUndefined();
+  });
+
+  it("is undefined for a non-finite serial", () => {
+    expect(serialToIsoDateTime(Number.NaN, false)).toBeUndefined();
   });
 });
 
@@ -221,5 +235,32 @@ describe("isoDateTimeToSerial: the two halves summed, each validated by its own 
     expect(isoDateTimeToSerial("2026-07-31T24:00:00")).toBeUndefined();
     expect(isoDateTimeToSerial("2026-07-31 14:30:00")).toBeUndefined();
     expect(isoDateTimeToSerial("2026-07-31")).toBeUndefined();
+  });
+});
+
+describe("utcMsOfCalendarDate: rejects a rollover in any one of year/month independently", () => {
+  it("accepts a genuine calendar date, returning its real UTC instant", () => {
+    expect(utcMsOfCalendarDate(2026, 7, 31)).toBe(Date.UTC(2026, 6, 31));
+  });
+
+  it("rejects a month rollover even when the resulting year happens to be unchanged (Feb 30 in a non-leap year lands on March 2, same year)", () => {
+    expect(utcMsOfCalendarDate(2026, 2, 30)).toBeUndefined();
+  });
+
+  it("rejects a month value that rolls the year forward (month 13 becomes January of the next year)", () => {
+    expect(utcMsOfCalendarDate(2026, 13, 1)).toBeUndefined();
+  });
+
+  it("rejects a year rollover even when the resulting month happens to read back unchanged -- a day large enough to cross an entire leap year lands back on the same month index, one year later", () => {
+    // 2024 was a leap year (366 days); day 367 of January 2024 is January 1, 2025 -- getUTCMonth() reads back 0 (January) either way, but getUTCFullYear() reads back 2025, not the requested 2024.
+    expect(Date.UTC(2024, 0, 367)).toBe(Date.UTC(2025, 0, 1));
+    expect(utcMsOfCalendarDate(2024, 1, 367)).toBeUndefined();
+  });
+
+  it("does not re-check the day component once year and month both already match: it cannot legitimately differ once they do", () => {
+    // Every real, in-range day for July (1-31) round-trips with year and month unchanged; there is no day value that changes only the day field while leaving year and month exactly as requested.
+    for (let day = 1; day <= 31; day++) {
+      expect(utcMsOfCalendarDate(2026, 7, day)).toBe(Date.UTC(2026, 6, day));
+    }
   });
 });
