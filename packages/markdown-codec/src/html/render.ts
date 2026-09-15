@@ -196,7 +196,7 @@ class HtmlRenderer {
         this.cr();
         this.out += "<blockquote>\n";
         this.render(node.children, false);
-        this.cr();
+        // No closing cr(): every reachable block type's own rendering already ends in "\n" as its own last action (directly, or via its own cr()), so the buffer is always already newline-terminated here regardless of what the last child was, or whether there was one at all.
         this.out += "</blockquote>\n";
         return;
       case "list":
@@ -206,17 +206,15 @@ class HtmlRenderer {
         this.renderTable(node);
         return;
       case "mathBlock":
-        // See renderInline's own mathInline case: the $$ delimiters are reconstructed around the escaped literal, matching src/emit/emit.ts's own real MATH_BLOCK_STYLE_ID branch.
+        // See renderInline's own mathInline case: the $$ delimiters are reconstructed around the escaped literal, matching src/emit/emit.ts's own real MATH_BLOCK_STYLE_ID branch. No closing cr(): the template itself always ends in a literal "\n".
         this.cr();
         this.out += `$$\n${escapeHtml(node.literal)}\n$$\n`;
-        this.cr();
         return;
       case "footnoteDefinition":
-        // See renderInline's own footnoteReference case: no fixture pins GitHub's own notes-section markup down, so the definition's source spelling is reconstructed around its rendered body, matching src/emit/emit.ts's own renderFootnoteDefinition. The body renders as ordinary blocks -- a definition holding several paragraphs shows all of them.
+        // See renderInline's own footnoteReference case: no fixture pins GitHub's own notes-section markup down, so the definition's source spelling is reconstructed around its rendered body, matching src/emit/emit.ts's own renderFootnoteDefinition. The body renders as ordinary blocks -- a definition holding several paragraphs shows all of them. No closing cr(), for the same reason blockquote's own closing tag needs none above.
         this.cr();
         this.out += `${escapeHtml(`[^${node.label}]:`)}\n`;
         this.render(node.children, false);
-        this.cr();
         return;
       // Each is rendered only through its own parent, which knows the surrounding markup it needs -- an empty case (no consequent at all, not even a bare `return;`) since the switch is this method's last statement and falling off it already returns.
       case "document":
@@ -232,8 +230,9 @@ class HtmlRenderer {
   ): void {
     this.cr();
     // cmark takes the info string's first word as the language class and ignores the rest.
+    // String.prototype.split on a non-empty separator regex always returns at least one element (even splitting "" itself yields [""]), so index 0 is never undefined -- the assertion states that, since noUncheckedIndexedAccess cannot infer it from the split call alone.
     const language =
-      infoString === undefined ? "" : (infoString.split(/[ \t]/)[0] ?? "");
+      infoString === undefined ? "" : infoString.split(/[ \t]/)[0]!;
     const attribute =
       language.length === 0 ? "" : ` class="language-${escapeHtml(language)}"`;
     this.out += `<pre><code${attribute}>${escapeHtml(literal)}</code></pre>\n`;
@@ -248,7 +247,7 @@ class HtmlRenderer {
         : `<ol start="${String(start)}">`;
     this.out += `${node.markerType === "bullet" ? "<ul>" : orderedOpenTag}\n`;
     for (const item of node.children) {
-      this.cr();
+      // No cr() here: the buffer always already ends in "\n" at this point, either from the list's own just-appended opening tag (first iteration) or the previous iteration's own closing "</li>\n" (every iteration after).
       this.out += "<li>";
       // A task-list item's checkbox is the first fragment of the item's own first block -- rendered here, immediately after `<li>` and before that block's own rendering, so it lands inside a tight item's bare inline content or (unverified against a real fixture, see this module's own top-of-file note) inside a loose item's `<p>` wrapper alike.
       if (item.checked !== undefined) {
