@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { ContentDefinedName } from "document-schema.js";
 
 import { RecordBuilder } from "../biff/builder";
+import { BlockCursor } from "../biff/cursor";
 import type { FormulaSheetContext } from "../biff/ptg";
 import { RECORD_LBL } from "../biff/record-types";
 import { writeRecord } from "../biff/record-writer";
@@ -138,6 +139,23 @@ describe("readDefinedNames", () => {
     const real = lblRecord({ name: "Real" });
     const names = readDefinedNames(groupsOf(truncated, real), ONE_SHEET);
     expect(names.map((entry) => entry.name)).toStrictEqual(["Real"]);
+  });
+
+  it("propagates a genuine bug rather than absorbing it as just another malformed record", () => {
+    // BlockCursor.prototype.u16 is what readLblRecord's very first field read (grbit) calls, so failing its first call fails before any real malformed-record condition could apply -- proving readDefinedNames' own catch only recovers from a genuine BiffFormatError (recoverFromFormatError's own re-throw for anything else), not silently swallowing every exception a malformed record's own reader could throw.
+    const bug = new TypeError("a genuine bug, not a malformed record");
+    const spy = vi
+      .spyOn(BlockCursor.prototype, "u16")
+      .mockImplementationOnce(() => {
+        throw bug;
+      });
+    try {
+      expect(() =>
+        readDefinedNames(groupsOf(lblRecord({ name: "Real" })), ONE_SHEET),
+      ).toThrow(bug);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("skips a built-in name whose Name field's own cch is not exactly 1", () => {
@@ -390,7 +408,9 @@ describe("requiredCaptureGroup", () => {
   });
 
   it("throws for an undefined group -- the one case this module's own regexes never actually produce, verified directly since none of its real callers can construct it", () => {
-    expect(() => requiredCaptureGroup(undefined)).toThrow(BiffWriteError);
+    expect(() => requiredCaptureGroup(undefined)).toThrow(
+      "internal error: a regex capture group this module's own callers already proved present was undefined",
+    );
   });
 });
 
