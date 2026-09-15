@@ -297,6 +297,25 @@ describe("readSheetRecords formula cells", () => {
     expect(cells[0]?.value).toStrictEqual({ kind: "boolean", value: true });
   });
 
+  it("reads a false boolean cached result from its tag byte, not just true", () => {
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 0),
+        0x01,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0xff,
+        0xff,
+        ...formulaTail,
+      ]),
+    );
+
+    expect(cells[0]?.value).toStrictEqual({ kind: "boolean", value: false });
+  });
+
   it("reads an error cached result from its tag byte", () => {
     const cells = readCells(
       record(RECORD_FORMULA, [
@@ -774,6 +793,24 @@ describe("readSheetRecords formula cells", () => {
     );
 
     expect(cells[0]?.formula).toBe("SUM({1;2;3})");
+  });
+
+  it("leaves formula absent for a PtgArray with genuinely zero trailing bytes, the record ending exactly at rgce's own end", () => {
+    const rgce = [0x40, 0, 0, 0, 0, 0, 0, 0]; // PtgArray, needing an rgcb this record carries none of
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 0),
+        ...f64(6),
+        ...u16(0),
+        ...u32(0),
+        ...u16(rgce.length),
+        ...rgce,
+        // no trailing bytes at all: rgcbLength is exactly 0
+      ]),
+    );
+
+    expect(cells[0]?.formula).toBeUndefined();
+    expect(cells[0]?.value).toStrictEqual({ kind: "number", value: 6 });
   });
 
   it("keeps the cell's cached value when its own rgcb trailer is too short for the PtgExtraArray it claims to hold", () => {
