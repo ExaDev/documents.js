@@ -549,6 +549,28 @@ describe("buildDrawingWritePlan", () => {
     expect(objectIds).toStrictEqual([3, 4]);
   });
 
+  it("continues each embedded object's own Obj object id sequentially, not just the first", () => {
+    const plan = buildDrawingWritePlan([
+      sheet([], {
+        embeddedObjects: [embeddedDrawing(), embeddedDrawing()],
+      }),
+    ]);
+    const objectIds = plan.sheetDrawings[0]?.objRecords.map((objRecord) => {
+      const record = readRecords(objRecord)[0];
+      if (record === undefined) {
+        throw new Error("expected a parsed Obj record");
+      }
+      const view = new DataView(
+        record.data.buffer,
+        record.data.byteOffset,
+        record.data.byteLength,
+      );
+      return view.getUint16(6, true);
+    });
+
+    expect(objectIds).toStrictEqual([1, 2]);
+  });
+
   it("assigns each embedded object its own sequential storage id, reaching past single digits into the hex alphabet's own letters, spelled uppercase", () => {
     const plan = buildDrawingWritePlan([
       sheet([], {

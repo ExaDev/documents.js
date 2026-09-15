@@ -283,8 +283,8 @@ export function bytesFromBase64(base64: string): Uint8Array<ArrayBuffer> {
       values[char.charCodeAt(0)] = index;
     });
   const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
-  // Trailing padding is sliced off up front rather than skipped inside the loop below: skipping it there was genuinely unobservable regardless, since `out`'s own length is already sized to exactly the real decoded bytes, so any value a padding character contributed could only ever land at or past that length -- a Uint8Array write past its own end is a silent no-op, never a real byte the caller could see.
-  const data = padding > 0 ? base64.slice(0, base64.length - padding) : base64;
+  // Trailing padding is sliced off up front rather than skipped inside the loop below: skipping it there was genuinely unobservable regardless, since `out`'s own length is already sized to exactly the real decoded bytes, so any value a padding character contributed could only ever land at or past that length -- a Uint8Array write past its own end is a silent no-op, never a real byte the caller could see. padding is always 0, 1, or 2, so slicing zero characters off when there is no padding at all is just the original string back -- no separate unpadded branch is needed.
+  const data = base64.slice(0, base64.length - padding);
   const out = new Uint8Array((base64.length / 4) * 3 - padding);
   let buffer = 0;
   let bits = 0;
