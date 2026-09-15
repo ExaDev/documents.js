@@ -324,6 +324,100 @@ describe("writeOdsContent XML shapes", () => {
     expect(pkg.parts["Pictures/image1.png"]?.kind).toBe("binary");
   });
 
+  it("mints sequential Pictures/imageN.png paths and sequential draw:z-index across multiple images", () => {
+    const png =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const imageAt = (anchorRow: number) => ({
+      kind: "image" as const,
+      format: "png" as const,
+      base64: png,
+      widthPt: 10,
+      heightPt: 10,
+      anchorRow,
+      anchorColumn: 0,
+      offsetXPt: 0,
+      offsetYPt: 0,
+    });
+    const pkg = writeOdsContent(
+      documentOf([sheetOf([], { images: [imageAt(0), imageAt(1)] })]),
+    );
+    expect(pkg.parts["Pictures/image1.png"]?.kind).toBe("binary");
+    expect(pkg.parts["Pictures/image2.png"]?.kind).toBe("binary");
+    const frames = childrenWithTag(firstTable(pkg), "table:table-row").flatMap(
+      (row) =>
+        childrenWithTag(row, "table:table-cell").flatMap((cell) =>
+          childrenWithTag(cell, "draw:frame"),
+        ),
+    );
+    expect(frames).toHaveLength(2);
+    const zIndexes = frames
+      .map((frame) => Number(attrValue(frame, "draw:z-index")))
+      .sort((a, b) => a - b);
+    expect(zIndexes).toStrictEqual([0, 1]);
+  });
+
+  it("mints sequential 'Object N' directories across multiple embedded objects", () => {
+    const embeddedDocOf = (text: string) => ({
+      kind: "wordprocessing" as const,
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [{ kind: "paragraph" as const, runs: [{ text }] }],
+        },
+      ],
+    });
+    const pkg = writeOdsContent(
+      documentOf([
+        sheetOf([], {
+          embeddedObjects: [
+            {
+              objectKind: "wordprocessing",
+              frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+              anchorRow: 0,
+              anchorColumn: 0,
+              document: embeddedDocOf("first"),
+            },
+            {
+              objectKind: "wordprocessing",
+              frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+              anchorRow: 1,
+              anchorColumn: 0,
+              document: embeddedDocOf("second"),
+            },
+          ],
+        }),
+      ]),
+    );
+    const objectParts = Object.keys(pkg.parts).filter((path) =>
+      path.startsWith("Object "),
+    );
+    expect(objectParts.some((path) => path.startsWith("Object 1/"))).toBe(true);
+    expect(objectParts.some((path) => path.startsWith("Object 2/"))).toBe(true);
+  });
+
+  it("mints a distinct SheetTableN style name per sheet, not one shared across all of them", () => {
+    const pkg = writeOdsContent(
+      documentOf([
+        sheetOf([], { name: "Sheet1" }),
+        sheetOf([], { name: "Sheet2" }),
+        sheetOf([], { name: "Sheet3" }),
+      ]),
+    );
+    const body = findChildElement(
+      partRoot(pkg, "content.xml").children,
+      "office:body",
+    )!;
+    const spreadsheet = findChildElement(body.children, "office:spreadsheet")!;
+    const tables = childrenWithTag(spreadsheet, "table:table");
+    expect(tables).toHaveLength(3);
+    const styleNames = tables.map((table) =>
+      attrValue(table, "table:style-name"),
+    );
+    expect(new Set(styleNames).size).toBe(3);
+  });
+
   it("writes table:table-column and table:table-row with no table:style-name when the column/row carries no width, height, or manual break", () => {
     const pkg = writeOdsContent(
       documentOf([
