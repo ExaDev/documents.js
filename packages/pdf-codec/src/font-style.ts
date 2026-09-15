@@ -13,21 +13,17 @@ export interface FontNameStyle {
   readonly italic: boolean;
 }
 
-// Exactly six uppercase letters followed by '+' (ISO 32000-1 9.6.4) marks a subsetted font's unique tag -- meaningless to a reader and never part of the real family name.
-const SUBSET_TAG_PATTERN = /^[A-Z]{6}\+/;
-
-// Longer, more specific suffixes are listed before the shorter suffixes they contain (BoldItalic before Bold), though the end-anchored regexes below make the order not strictly load-bearing -- "-Bold$" cannot match a string ending in "-BoldItalic".
-const KNOWN_STYLE_SUFFIXES = [
-  "BoldItalic",
-  "BoldOblique",
-  "Bold",
-  "Italic",
-  "Oblique",
-  "Regular",
-];
-
 function stripStyleSuffix(name: string): string {
-  for (const suffix of KNOWN_STYLE_SUFFIXES) {
+  // Longer, more specific suffixes are listed before the shorter suffixes they contain (BoldItalic before Bold), though the end-anchored regexes below make the order not strictly load-bearing -- "-Bold$" cannot match a string ending in "-BoldItalic". Declared inside this function, rather than as a module-level constant, so each element is evaluated fresh on every call: a top-level array literal is built exactly once at import time, which puts every one of its entries beyond the reach of Stryker's per-test mutation switch for the rest of the process's life (see the config comment on `ignoreStatic` in ../../stryker.shared.ts for the general shape of this limitation).
+  const knownStyleSuffixes = [
+    "BoldItalic",
+    "BoldOblique",
+    "Bold",
+    "Italic",
+    "Oblique",
+    "Regular",
+  ];
+  for (const suffix of knownStyleSuffixes) {
     const commaPattern = new RegExp(`,${suffix}$`, "i");
     const hyphenPattern = new RegExp(`-${suffix}$`, "i");
     if (commaPattern.test(name)) {
@@ -44,7 +40,9 @@ export function styleFromBaseFontName(
   baseFont: string,
   flags?: FontStyleFlags,
 ): FontNameStyle {
-  const withoutSubset = baseFont.replace(SUBSET_TAG_PATTERN, "");
+  // Exactly six uppercase letters followed by '+' (ISO 32000-1 9.6.4) marks a subsetted font's unique tag -- meaningless to a reader and never part of the real family name. Declared here rather than as a module-level constant for the same reachability reason as knownStyleSuffixes in stripStyleSuffix above.
+  const subsetTagPattern = /^[A-Z]{6}\+/;
+  const withoutSubset = baseFont.replace(subsetTagPattern, "");
   const lower = withoutSubset.toLowerCase();
   const nameBold = lower.includes("bold");
   const nameItalic = /italic|oblique/.test(lower);

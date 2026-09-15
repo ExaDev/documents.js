@@ -101,6 +101,11 @@ describe("styleFromBaseFontName", () => {
     ).toMatchObject({ italic: false });
   });
 
+  it("strips a hyphenated or comma-separated style suffix regardless of its letter case", () => {
+    expect(styleFromBaseFontName("Arial-bold").baseFamily).toBe("Arial");
+    expect(styleFromBaseFontName("Arial,BOLD").baseFamily).toBe("Arial");
+  });
+
   it("combines a name-based signal with flags rather than letting one override the other", () => {
     // The name alone says bold; flags alone say italic -- both should be honoured.
     expect(styleFromBaseFontName("Arial-Bold", { italicFlag: true })).toEqual({
