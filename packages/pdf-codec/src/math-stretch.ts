@@ -39,7 +39,7 @@ function sumBy<T>(items: readonly T[], value: (item: T) => number): number {
   return items.reduce((total, item) => total + value(item), 0);
 }
 
-// How many times each extender part must repeat for the assembly to reach `targetSize`, at the tightest packing the font permits (i.e. overlapping by exactly minConnectorOverlap, which is what makes the assembly as LARGE as it can be for a given repeat count). Solved directly rather than by growing a loop: with A/E the summed full advances of the fixed and extender parts, n/x their counts and m the minimum overlap, the assembly's own size at repeat count r is A + rE - (n + rx - 1)m, so the smallest r meeting the target is ceil((target - A + (n - 1)m) / (E - xm)). A non-positive denominator means every extra repetition costs at least as much overlap as it adds advance, so no repeat count reaches the target at all and the minimum is used.
+// How many times each extender part must repeat for the assembly to reach `targetSize`, at the tightest packing the font permits (i.e. overlapping by exactly minConnectorOverlap, which is what makes the assembly as LARGE as it can be for a given repeat count). Solved directly rather than by growing a loop: with A/E the summed full advances of the fixed and extender parts, n/x their counts and m the minimum overlap, the assembly's own size at repeat count r is A + rE - (n + rx - 1)m, so the smallest r meeting the target is ceil((target - A + (n - 1)m) / (E - xm)). A non-positive denominator means every extra repetition costs at least as much overlap as it adds advance, so no repeat count reaches the target at all and the minimum is used. An empty `extenders` is not special-cased separately: summing zero parts is exactly 0 and `extenders.length * minConnectorOverlap` is exactly 0 too, so `growthPerRepeat` is always exactly 0 in that case and the `growthPerRepeat <= 0` guard below already returns the same minimum on its own.
 function requiredRepeatCount(
   fixed: readonly MathGlyphPart[],
   extenders: readonly MathGlyphPart[],
@@ -48,9 +48,6 @@ function requiredRepeatCount(
 ): number {
   // A recipe made entirely of extenders has no fixed part to stand alone, so it needs at least one repetition to place anything at all; one that has fixed parts can legitimately use zero repetitions as its smallest form.
   const minimumRepeat = fixed.length === 0 ? 1 : 0;
-  if (extenders.length === 0) {
-    return minimumRepeat;
-  }
   const growthPerRepeat =
     sumBy(extenders, (part) => part.fullAdvance) -
     extenders.length * minConnectorOverlap;
