@@ -164,6 +164,16 @@ describe("wrapRunsToWidth: edge cases", () => {
     expect(lines[0]?.ascentPt).toBe(20 * 0.8);
     expect(lines[0]?.descentPt).toBe(-20 * 0.2);
   });
+
+  it("a run of pure whitespace produces an empty line with its glue stripped, not a phantom word", () => {
+    // Flushing a word with zero accumulated fragments must be a no-op: a whitespace-only run never accumulates wordFragments, so if flushWord ever pushed an atom here regardless, it would sit after the trailing glue and stop the trailing-glue trim from popping it, leaking the glue's width into the line.
+    const measurer = fakeMeasurer();
+    const lines = wrapRunsToWidth([run("   ")], measurer, 100);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]?.fragments).toHaveLength(0);
+    expect(lines[0]?.widthPt).toBe(0);
+    expect(lines[0]?.ascentPt).toBe(10 * 0.8); // derived from the run's own font/size via buildEmptyLine, not left at zero
+  });
 });
 
 describe("wrapTextToWidth", () => {
