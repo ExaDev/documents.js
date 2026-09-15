@@ -181,18 +181,14 @@ export function readSheetDrawing(
 
   const images: ContentSheetImage[] = [];
   const embeddedObjects: ContentEmbeddedObject[] = [];
-  // No explicit pair count: the loop stops once BOTH arrays are exhausted at an index (a real pair can only ever exist strictly before the shorter array's own end, and going one further index past that is safe -- shape or obj alone comes back undefined and the guard below skips it exactly like the note-type/no-shape/no-obj cases already do).
+  // No explicit pair count: since neither array has genuine holes, the index of the first missing shape or Obj record is also the index of every one after it, so the moment EITHER side runs out, no further real pair can ever exist and the loop is done -- there is nothing left to skip past.
   for (let index = 0; ; index += 1) {
     const shape = shapes[index];
     const obj = objEntries[index];
-    if (shape === undefined && obj === undefined) {
+    if (shape === undefined || obj === undefined) {
       break;
     }
-    if (
-      shape === undefined ||
-      obj === undefined ||
-      obj.ot === OBJECT_TYPE_NOTE
-    ) {
+    if (obj.ot === OBJECT_TYPE_NOTE) {
       continue;
     }
     if (
