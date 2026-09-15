@@ -48,10 +48,9 @@ const SIINDEX_CATEGORIES = 0x0002;
 
 type CacheRole = "values" | "categories";
 
-/** A single-cell or rectangular range this reader resolved from an AI's own PtgRef3d/PtgArea3d token, restricted to the OWN sheet a chart is embedded in -- see this module's own top comment for why a cross-sheet reference has no shortcut here and falls back to the on-disk cache instead. */
+/** A single-cell or rectangular range this reader resolved from an AI's own PtgRef3d/PtgArea3d token, restricted to the OWN sheet a chart is embedded in -- see this module's own top comment for why a cross-sheet reference has no shortcut here and falls back to the on-disk cache instead. No endRow field: pointInRange's own row-major walk (startRow plus however many whole rows the point's own index advances) never needs the range's last row at all -- a well-formed chart's own point count already stays within the range's real extent, so nothing here ever needs to check where the range stops. */
 interface OwnSheetRange {
   readonly startRow: number;
-  readonly endRow: number;
   readonly startColumn: number;
   readonly endColumn: number;
 }
@@ -343,7 +342,6 @@ function readRangeToken(
     }
     return {
       startRow: row,
-      endRow: row,
       startColumn: column,
       endColumn: column,
     };
@@ -360,7 +358,6 @@ function readRangeToken(
     }
     return {
       startRow: Math.min(rowFirst, rowLast),
-      endRow: Math.max(rowFirst, rowLast),
       startColumn: Math.min(columnFirst, columnLast),
       endColumn: Math.max(columnFirst, columnLast),
     };
