@@ -168,20 +168,13 @@ function isQuotableStyle(styleId: string | undefined): boolean {
   );
 }
 
-// Whether a rendered block of this styleId closes itself unambiguously -- so a non-blank line immediately following it is always scanned by a reparse as a FRESH block rather than being absorbed backward into this one as ordinary continuation text. This is the "safe as PREVIOUS" half of requiresBlankLineBefore's compound check below, and unlike canInterruptOpenParagraph it does not depend on any emit option: a fenced code block and a math block each close at their own explicit closing delimiter, a thematic break and an ATX heading are each a single complete line, and a SETEXT heading's own underline line closes it exactly as definitively -- nothing can lazily continue a heading once its underline has been read, so the setext spelling is only unsafe on the OTHER side, as something that ITSELF follows an open paragraph (see canInterruptOpenParagraph). Deliberately false for QUOTE_STYLE_ID (renders through the same prefix-free renderParagraphBody as a plain paragraph here, so carries no boundary of its own) and for HTML_PREFORMATTED_STYLE_ID (this package re-emits raw HTML as a bare literal with no record of which CommonMark HTML-block start condition produced it, and several of those seven conditions close only at a blank line -- with no closing condition of its own to fall back to, anything following without one keeps being read as more of the same literal HTML content).
+// Whether a rendered block of this styleId closes itself unambiguously -- so a non-blank line immediately following it is always scanned by a reparse as a FRESH block rather than being absorbed backward into this one as ordinary continuation text. This is the "safe as PREVIOUS" half of requiresBlankLineBefore's compound check below, and unlike canInterruptOpenParagraph it does not depend on any emit option: a fenced code block and a math block each close at their own explicit closing delimiter, a thematic break and an ATX heading are each a single complete line, and a SETEXT heading's own underline line closes it exactly as definitively -- nothing can lazily continue a heading once its underline has been read, so the setext spelling is only unsafe on the OTHER side, as something that ITSELF follows an open paragraph (see canInterruptOpenParagraph). False for QUOTE_STYLE_ID (renders through the same prefix-free renderParagraphBody as a plain paragraph here, so carries no boundary of its own) and for HTML_PREFORMATTED_STYLE_ID (this package re-emits raw HTML as a bare literal with no record of which CommonMark HTML-block start condition produced it, and several of those seven conditions close only at a blank line -- with no closing condition of its own to fall back to, anything following without one keeps being read as more of the same literal HTML content) -- neither needs its own explicit branch, since neither matches any of the four positive checks below either, so both already fall out to false on their own.
 function terminatesCleanly(styleId: string | undefined): boolean {
-  if (
-    styleId === undefined ||
-    styleId === QUOTE_STYLE_ID ||
-    styleId === HTML_PREFORMATTED_STYLE_ID
-  ) {
-    return false;
-  }
   return (
     styleId === CODE_BLOCK_STYLE_ID ||
     styleId === MATH_BLOCK_STYLE_ID ||
     styleId === HORIZONTAL_RULE_STYLE_ID ||
-    parseHeadingStyleId(styleId) !== undefined
+    (styleId !== undefined && parseHeadingStyleId(styleId) !== undefined)
   );
 }
 
@@ -349,11 +342,8 @@ function canInterruptOpenParagraph(
   context: EmitContext,
 ): boolean {
   const styleId = paragraph.styleId;
-  if (
-    styleId === undefined ||
-    styleId === QUOTE_STYLE_ID ||
-    styleId === HTML_PREFORMATTED_STYLE_ID
-  ) {
+  // Undefined needs its own early return purely so parseHeadingStyleId below gets a definite string -- QUOTE_STYLE_ID and HTML_PREFORMATTED_STYLE_ID need no explicit check of their own alongside it, since neither matches any of the positive branches below (parseHeadingStyleId included), so both already fall out to the final `return false` on their own.
+  if (styleId === undefined) {
     return false;
   }
   if (styleId === CODE_BLOCK_STYLE_ID || styleId === MATH_BLOCK_STYLE_ID) {
