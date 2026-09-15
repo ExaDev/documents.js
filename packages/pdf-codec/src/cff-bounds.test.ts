@@ -611,6 +611,141 @@ describe("parseCffGlyphBounds's charstring interpreter: hmoveto/vmoveto, escaped
     });
   });
 
+  it("moves the current point diagonally with a bare rmoveto, the minimal two-operand case", () => {
+    const OP_RMOVETO = 21;
+    const bytes = cffFontWithCharstrings({
+      name: "BareRmoveto",
+      charStrings: [
+        [...enc(5), ...enc(4), OP_RMOVETO, ...enc(1), ...enc(1), OP_RLINETO],
+      ],
+    });
+    expect(boundsOfOnlyGlyph(bytes)).toEqual({
+      xMin: 5,
+      yMin: 4,
+      xMax: 6,
+      yMax: 5,
+    });
+  });
+
+  it("discards rmoveto's own leading width operand, using only the last two operands as dx/dy", () => {
+    // 3 operands: a leading width the interpreter must shift off, then dx=5, dy=4. Using the wrong two (say, the first two, treating the width as dx) would move to a completely different point.
+    const OP_RMOVETO = 21;
+    const bytes = cffFontWithCharstrings({
+      name: "RmovetoWithWidth",
+      charStrings: [
+        [
+          ...enc(999),
+          ...enc(5),
+          ...enc(4),
+          OP_RMOVETO,
+          ...enc(1),
+          ...enc(1),
+          OP_RLINETO,
+        ],
+      ],
+    });
+    expect(boundsOfOnlyGlyph(bytes)).toEqual({
+      xMin: 5,
+      yMin: 4,
+      xMax: 6,
+      yMax: 5,
+    });
+  });
+
+  it("discards hmoveto's own leading width operand, using only the last operand as dx", () => {
+    const bytes = cffFontWithCharstrings({
+      name: "HmovetoWithWidth",
+      charStrings: [
+        [...enc(999), ...enc(5), OP_HMOVETO, ...enc(3), OP_HLINETO, OP_ENDCHAR],
+      ],
+    });
+    expect(boundsOfOnlyGlyph(bytes)).toEqual({
+      xMin: 5,
+      yMin: 0,
+      xMax: 8,
+      yMax: 0,
+    });
+  });
+
+  it("discards vmoveto's own leading width operand, using only the last operand as dy", () => {
+    const bytes = cffFontWithCharstrings({
+      name: "VmovetoWithWidth",
+      charStrings: [
+        [...enc(999), ...enc(4), OP_VMOVETO, ...enc(2), OP_VLINETO, OP_ENDCHAR],
+      ],
+    });
+    expect(boundsOfOnlyGlyph(bytes)).toEqual({
+      xMin: 0,
+      yMin: 4,
+      xMax: 0,
+      yMax: 6,
+    });
+  });
+
+  it("finds both of a cubic curve's own interior extrema when the derivative's quadratic has two distinct real roots", () => {
+    // Both axes share control points 0, 30, -30, 0 (an S-shaped overshoot: the curve swings past its own two endpoints in both directions before returning to 0). The derivative's quadratic (a=180, b=-180, c=30) has two real, distinct roots strictly inside (0,1) -- t=0.2113 and t=0.7887 -- giving an exact extremum of +-5*sqrt(3) on each axis, verified independently by dense sampling.
+    const OP_RRCURVETO = 8;
+    const bytes = cffFontWithCharstrings({
+      name: "CurveTwoRealRoots",
+      charStrings: [
+        [
+          ...enc(30),
+          ...enc(30),
+          ...enc(-60),
+          ...enc(-60),
+          ...enc(30),
+          ...enc(30),
+          OP_RRCURVETO,
+          OP_ENDCHAR,
+        ],
+      ],
+    });
+    const bounds = boundsOfOnlyGlyph(bytes);
+    if (bounds === undefined) {
+      throw new Error("fixture glyph unexpectedly drew nothing");
+    }
+    const extremum = 5 * Math.sqrt(3);
+    expect(bounds.xMin).toBeCloseTo(-extremum, 9);
+    expect(bounds.xMax).toBeCloseTo(extremum, 9);
+    expect(bounds.yMin).toBeCloseTo(-extremum, 9);
+    expect(bounds.yMax).toBeCloseTo(extremum, 9);
+  });
+
+  it("finds a cubic axis's own extremum through the degenerate (a === 0) linear derivative case, not just the quadratic formula", () => {
+    // x control points 0, 10, 5, -15: a = -0+30-15-15 = 0 exactly (the derivative's own leading term vanishes), so this axis's extremum can only come from includeCubicAxis's linear (b !== 0) fallback, never the quadratic formula the test above exercises. The true extremum (verified by dense sampling) is xMax=5 at t=1/3, past both endpoints 0 and -15; y stays flat at 0 throughout, so this isolates the x-axis's own degenerate branch from the y-axis's ordinary one.
+    const OP_RRCURVETO = 8;
+    const bytes = cffFontWithCharstrings({
+      name: "CurveDegenerateAxis",
+      charStrings: [
+        [
+          ...enc(10),
+          ...enc(0),
+          ...enc(-5),
+          ...enc(0),
+          ...enc(-20),
+          ...enc(0),
+          OP_RRCURVETO,
+          OP_ENDCHAR,
+        ],
+      ],
+    });
+    expect(boundsOfOnlyGlyph(bytes)).toEqual({
+      xMin: -15,
+      yMin: 0,
+      xMax: 5,
+      yMax: 0,
+    });
+  });
+
+  it("returns undefined for an rmoveto with fewer than 2 operands on the stack", () => {
+    const OP_RMOVETO = 21;
+    const bytes = cffFontWithCharstrings({
+      name: "RmovetoTooFewArgs",
+      charStrings: [[...enc(5), OP_RMOVETO]],
+    });
+    expect(boundsOfOnlyGlyph(bytes)).toBeUndefined();
+  });
+
   it("uses parity (evenArgs), not a fixed expected count, to detect a stack-clearing hint operator's own leading width", () => {
     // 9 zero-width stem pairs (18 operands, even -- no width to shift) registered via hstemhm, followed by a bare hintmask that must consume exactly ceil(9/8)=2 mask bytes. If the width-detection wrongly used "stack.length > 0" instead of parity, it would shift one operand off, leaving 17 (8 stems, ceil(8/8)=1 mask byte) -- desyncing the byte stream, so the hlineto that follows would be misread and the draw would fail instead of producing this exact box.
     const pairs18 = new Array<number>(18).fill(139); // 9 zero-width stem pairs
