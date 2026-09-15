@@ -165,9 +165,7 @@ const ROW_FLAG_UNSYNCED = 0x40;
 /** ColInfo flag bits ([MS-XLS] 2.4.53). */
 const COLINFO_FLAG_HIDDEN = 0x0001;
 
-/** A FormulaValue whose fExprO field is this is not an Xnum but a tagged non-numeric value ([MS-XLS] 2.5.133). */
-const FORMULA_VALUE_TAGGED = 0xffff;
-/** The tag byte's own vocabulary in that case. */
+/** A FormulaValue whose last two bytes are both 0xff means it is not an Xnum but a tagged non-numeric value ([MS-XLS] 2.5.133); the tag byte's own vocabulary in that case follows. */
 const FORMULA_VALUE_STRING = 0x00;
 const FORMULA_VALUE_BOOLEAN = 0x01;
 const FORMULA_VALUE_ERROR = 0x02;
@@ -782,7 +780,8 @@ function readFormula(
   const header = readCellHeader(cursor);
   const bytes = cursor.take(8);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const tagged = view.getUint16(6, true) === FORMULA_VALUE_TAGGED;
+  // A byte-for-byte comparison, not a getUint16 read against 0xffff: 0xffff's own two bytes are identical (0xff, 0xff), so which byte order getUint16 is asked to use can never change this specific comparison's outcome -- checking each byte directly removes the endianness argument's own unobservable boolean literal instead of leaving it in as dead configuration.
+  const tagged = view.getUint8(6) === 0xff && view.getUint8(7) === 0xff;
   const value = tagged
     ? taggedFormulaValue(view, next)
     : { kind: "number" as const, value: view.getFloat64(0, true) };
@@ -801,13 +800,12 @@ function readFormula(
     rgce = undefined;
     rgcb = undefined;
   }
+  // formula is spread in unconditionally, its own value undefined when nothing resolved: every real consumer (content.ts's own `cell.formula !== undefined` check) reads it by value, never by key presence, so a present-but-undefined field and an absent one are indistinguishable to anything that actually looks at this object -- an "is it undefined" branch deciding whether to include the key at all would be true by construction, never a fact a test could observe either way.
   const formula =
     rgce === undefined
       ? undefined
       : resolveFormulaText(rgce, rgcb, header, formulaSheets, formulaGroups);
-  return formula === undefined
-    ? { ...header, value, fromFormula: true }
-    : { ...header, value, fromFormula: true, formula };
+  return { ...header, value, fromFormula: true, formula };
 }
 
 /**
