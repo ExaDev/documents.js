@@ -3239,6 +3239,192 @@ describe("appReducer PDF item and page mutations", () => {
       expect(result.status?.severity).toBe("warning");
       expect(result.status?.text).toContain("not internalLink");
     });
+
+    // Every other SET_PDF_*_* field-edit action routes through the identical withPdfItemMatching guard, but each call site carries its OWN copy of the kindLabel string literal -- exercising the wrong-kind path through the FRAME/FILL/one representative action per kind above does not cover the same literal at a sibling action's own call site (e.g. SET_PDF_RECT_FRAME's "rect" and SET_PDF_RECT_STROKE's "rect" are two distinct AST nodes). This table drives every remaining action through the wrong-kind branch once each.
+    const wrongKindCases: [string, Action, string][] = [
+      [
+        "SET_PDF_TEXT_TEXT",
+        {
+          type: "SET_PDF_TEXT_TEXT",
+          pageIndex: 0,
+          itemIndex: RECT_INDEX,
+          text: "x",
+        },
+        "not text",
+      ],
+      [
+        "SET_PDF_TEXT_POSITION",
+        {
+          type: "SET_PDF_TEXT_POSITION",
+          pageIndex: 0,
+          itemIndex: RECT_INDEX,
+          xPt: 0,
+          yPt: 0,
+        },
+        "not text",
+      ],
+      [
+        "SET_PDF_TEXT_COLOR",
+        {
+          type: "SET_PDF_TEXT_COLOR",
+          pageIndex: 0,
+          itemIndex: RECT_INDEX,
+          color: { r: 0, g: 0, b: 0 },
+        },
+        "not text",
+      ],
+      [
+        "SET_PDF_TEXT_WIDTH",
+        {
+          type: "SET_PDF_TEXT_WIDTH",
+          pageIndex: 0,
+          itemIndex: RECT_INDEX,
+          widthPt: 1,
+        },
+        "not text",
+      ],
+      [
+        "TOGGLE_PDF_TEXT_UNDERLINE",
+        {
+          type: "TOGGLE_PDF_TEXT_UNDERLINE",
+          pageIndex: 0,
+          itemIndex: RECT_INDEX,
+        },
+        "not text",
+      ],
+      [
+        "SET_PDF_RECT_STROKE",
+        {
+          type: "SET_PDF_RECT_STROKE",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          stroke: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
+        },
+        "not rect",
+      ],
+      [
+        "SET_PDF_ELLIPSE_FRAME",
+        {
+          type: "SET_PDF_ELLIPSE_FRAME",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          xPt: 0,
+          yPt: 0,
+          widthPt: 1,
+          heightPt: 1,
+        },
+        "not ellipse",
+      ],
+      [
+        "SET_PDF_ELLIPSE_STROKE",
+        {
+          type: "SET_PDF_ELLIPSE_STROKE",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          stroke: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
+        },
+        "not ellipse",
+      ],
+      [
+        "SET_PDF_LINE_FROM",
+        {
+          type: "SET_PDF_LINE_FROM",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          x1Pt: 0,
+          y1Pt: 0,
+        },
+        "not line",
+      ],
+      [
+        "SET_PDF_LINE_TO",
+        {
+          type: "SET_PDF_LINE_TO",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          x2Pt: 0,
+          y2Pt: 0,
+        },
+        "not line",
+      ],
+      [
+        "SET_PDF_LINE_COLOR",
+        {
+          type: "SET_PDF_LINE_COLOR",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          color: { r: 0, g: 0, b: 0 },
+        },
+        "not line",
+      ],
+      [
+        "SET_PDF_PATH_FILL",
+        {
+          type: "SET_PDF_PATH_FILL",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          fill: { r: 0, g: 0, b: 0 },
+        },
+        "not path",
+      ],
+      [
+        "SET_PDF_PATH_STROKE",
+        {
+          type: "SET_PDF_PATH_STROKE",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          stroke: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
+        },
+        "not path",
+      ],
+      [
+        "SET_PDF_IMAGE_FRAME",
+        {
+          type: "SET_PDF_IMAGE_FRAME",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          xPt: 0,
+          yPt: 0,
+          widthPt: 1,
+          heightPt: 1,
+        },
+        "not image",
+      ],
+      [
+        "SET_PDF_IMAGE_SOURCE",
+        {
+          type: "SET_PDF_IMAGE_SOURCE",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          format: "png",
+          bytes: REAL_PNG_BYTES,
+        },
+        "not image",
+      ],
+      [
+        "SET_PDF_LINK_FRAME",
+        {
+          type: "SET_PDF_LINK_FRAME",
+          pageIndex: 0,
+          itemIndex: TEXT_INDEX,
+          xPt: 0,
+          yPt: 0,
+          widthPt: 1,
+          heightPt: 1,
+        },
+        "not link",
+      ],
+    ];
+
+    it.each(wrongKindCases)(
+      "warns rather than crashing when %s targets an item of the wrong kind",
+      (_name, action, expectedFragment) => {
+        const state = pdfMultiItemState();
+        const result = appReducer(state, action);
+        expect(result.status?.severity).toBe("warning");
+        expect(result.status?.text).toContain(expectedFragment);
+      },
+    );
   });
 });
 
