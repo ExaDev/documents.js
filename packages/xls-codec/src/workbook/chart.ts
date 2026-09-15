@@ -231,9 +231,8 @@ function addCacheEntry(
       text = isError ? errorTextOf(value) : value !== 0 ? "TRUE" : "FALSE";
       break;
     }
-    default:
-      return;
   }
+  // Anything else (a cached Blank, chiefly) leaves text at its own initial undefined -- the check right below already treats that identically to an explicit "this record type carries no value" return, so a default case restating the same return would say nothing this check doesn't already say on its own.
   if (text === undefined) {
     return;
   }
