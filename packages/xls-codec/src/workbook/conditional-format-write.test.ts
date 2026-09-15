@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { boundingBoxOf, relativeCellRef } from "./conditional-format-write";
+import {
+  boundingBoxOf,
+  relativeCellRef,
+  textRuleFormula,
+} from "./conditional-format-write";
+
+const ANCHOR = { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 };
 
 describe("relativeCellRef", () => {
   it("names a single-letter column for indices 0-25", () => {
@@ -39,5 +45,34 @@ describe("boundingBoxOf", () => {
       startColumn: 1,
       endColumn: 20,
     });
+  });
+});
+
+describe("textRuleFormula", () => {
+  it("states a distinct formula shape per rule kind, not a shape shared by falling through to the next case", () => {
+    expect(
+      textRuleFormula(
+        { type: "containsText", ranges: [ANCHOR], text: "needle" },
+        ANCHOR,
+      ),
+    ).toBe('NOT(ISERROR(SEARCH("needle",A1)))');
+    expect(
+      textRuleFormula(
+        { type: "notContainsText", ranges: [ANCHOR], text: "needle" },
+        ANCHOR,
+      ),
+    ).toBe('ISERROR(SEARCH("needle",A1))');
+    expect(
+      textRuleFormula(
+        { type: "beginsWith", ranges: [ANCHOR], text: "needle" },
+        ANCHOR,
+      ),
+    ).toBe('LEFT(A1,LEN("needle"))="needle"');
+    expect(
+      textRuleFormula(
+        { type: "endsWith", ranges: [ANCHOR], text: "needle" },
+        ANCHOR,
+      ),
+    ).toBe('RIGHT(A1,LEN("needle"))="needle"');
   });
 });
