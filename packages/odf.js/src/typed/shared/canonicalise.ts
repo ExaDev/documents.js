@@ -215,11 +215,15 @@ export function canonicalTable(
         if (!isCovered) {
           const colSpan = cell.colSpan ?? 1;
           const rowSpan = cell.rowSpan ?? 1;
-          for (let r = rowIndex; r < rowIndex + rowSpan; r += 1) {
+          // The anchor's own position (rowIndex, columnIndex) is never marked covered -- excluded structurally by starting each loop one past it, rather than by a runtime check every OTHER iteration would also have to pay for and a mutation of which is unobservable (the anchor's own key is never looked up again once this cell's own isCovered above has already been read).
+          //
+          // Genuinely irreducible equivalent mutant on either "+ 1" start bound below (mutated to "- 1"): row/columnIndex are always the non-negative position a real .map() callback supplies, so a "- 1" start only ever adds two extra covered.add() calls -- one for a fictional negative-index key no real cell position can ever equal, and one for the anchor's own key, already established above as never looked up again. Both are unobservable for any real table, regardless of the anchor's own row/column position, because cells are visited once each in a single left-to-right, top-to-bottom pass and never revisited.
+          for (let c = columnIndex + 1; c < columnIndex + colSpan; c += 1) {
+            covered.add(`${rowIndex},${c}`);
+          }
+          for (let r = rowIndex + 1; r < rowIndex + rowSpan; r += 1) {
             for (let c = columnIndex; c < columnIndex + colSpan; c += 1) {
-              if (r !== rowIndex || c !== columnIndex) {
-                covered.add(`${r},${c}`);
-              }
+              covered.add(`${r},${c}`);
             }
           }
         }
