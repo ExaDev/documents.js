@@ -25,6 +25,12 @@ const JPEG_BYTES: Uint8Array<ArrayBuffer> = new Uint8Array([
 const WMF_BYTES: Uint8Array<ArrayBuffer> = new Uint8Array([
   0xd7, 0xcd, 0xc6, 0x9a, 1, 2, 3,
 ]);
+const GIF_BYTES: Uint8Array<ArrayBuffer> = new Uint8Array([
+  0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 1, 2, 3,
+]);
+const SVG_BYTES: Uint8Array<ArrayBuffer> = new TextEncoder().encode(
+  '<?xml version="1.0"?><svg></svg>',
+);
 
 function binaryPart(bytes: Uint8Array<ArrayBuffer>): {
   kind: "binary";
@@ -104,6 +110,21 @@ describe("buildManifest", () => {
     ).toBe("image/jpeg");
   });
 
+  it("sniffs GIF/SVG bytes for a binary part with no recognised extension", () => {
+    const pkg = baseOdtPackage();
+    pkg.parts["Thumbnails/gifthumb"] = binaryPart(GIF_BYTES);
+    pkg.parts["Thumbnails/svgthumb"] = binaryPart(SVG_BYTES);
+    const manifest = buildManifest(pkg);
+    expect(
+      manifest.entries.find((e) => e.fullPath === "Thumbnails/gifthumb")
+        ?.mediaType,
+    ).toBe("image/gif");
+    expect(
+      manifest.entries.find((e) => e.fullPath === "Thumbnails/svgthumb")
+        ?.mediaType,
+    ).toBe("image/svg+xml");
+  });
+
   it('falls back to empty string -- not "application/octet-stream" -- for a part it cannot classify by name or by sniffing', () => {
     const manifest = buildManifest(baseOdtPackage());
     expect(
@@ -122,6 +143,17 @@ describe("buildManifest", () => {
       manifest.entries.find((e) => e.fullPath === "Object 1/replacement.odt")
         ?.mediaType,
     ).toBe(ODT_MEDIA_TYPE);
+  });
+
+  it("never treats a part with no dot at all as having an extension, even when its whole basename spells a real ODF extension", () => {
+    const pkg = baseOdtPackage();
+    pkg.parts.odt = binaryPart(
+      new TextEncoder().encode("not xml, not an image"),
+    );
+    const manifest = buildManifest(pkg);
+    expect(manifest.entries.find((e) => e.fullPath === "odt")?.mediaType).toBe(
+      "",
+    );
   });
 
   it("an explicit mediaTypeOverrides entry wins over every automatic resolution rule", () => {
@@ -174,6 +206,26 @@ describe("writeManifest / readManifest round trip", () => {
     expect(readManifest(pkg)).toEqual(manifest);
   });
 
+  it("omits the version property entirely (not just as undefined) for an entry whose file-entry element carries no manifest:version attribute", () => {
+    const pkg: Package = {
+      parts: {
+        [MANIFEST_PART]: {
+          kind: "xml",
+          nodes: [
+            el("manifest:manifest", { "manifest:version": "1.3" }, [
+              el("manifest:file-entry", {
+                "manifest:full-path": "content.xml",
+                "manifest:media-type": "text/xml",
+              }),
+            ]),
+          ],
+        },
+      },
+    };
+    const entry = readManifest(pkg).entries[0];
+    expect(entry && "version" in entry).toBe(false);
+  });
+
   it("serializes manifest:file-entry attributes in full-path, version, media-type order, matching real-world ODF output", () => {
     const pkg = baseOdtPackage();
     writeManifest(pkg, {
@@ -192,8 +244,48 @@ describe("writeManifest / readManifest round trip", () => {
     );
   });
 
-  it("readManifest throws for a package with no manifest part", () => {
-    expect(() => readManifest({ parts: {} })).toThrow();
+  it('opens with the standard <?xml version="1.0" encoding="UTF-8"?> declaration', () => {
+    const pkg = baseOdtPackage();
+    writeManifest(pkg, {
+      version: "1.3",
+      entries: [{ fullPath: "/", mediaType: ODT_MEDIA_TYPE, version: "1.3" }],
+    });
+    const part = pkg.parts[MANIFEST_PART];
+    if (part?.kind !== "xml") {
+      throw new Error("expected an xml part");
+    }
+    const xml = buildXml(part.nodes);
+    expect(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>')).toBe(true);
+  });
+
+  it("readManifest throws for a package with no manifest part, naming the missing part", () => {
+    expect(() => readManifest({ parts: {} })).toThrow(
+      new RegExp(MANIFEST_PART.replace(/\//g, "\\/")),
+    );
+  });
+
+  it("readManifest skips non-file-entry children (text nodes, other elements) while still reading real entries around them", () => {
+    const pkg: Package = {
+      parts: {
+        [MANIFEST_PART]: {
+          kind: "xml",
+          nodes: [
+            el("manifest:manifest", { "manifest:version": "1.3" }, [
+              txt("\n  "),
+              el("manifest:not-a-file-entry"),
+              el("manifest:file-entry", {
+                "manifest:full-path": "/",
+                "manifest:media-type": ODT_MEDIA_TYPE,
+              }),
+            ]),
+          ],
+        },
+      },
+    };
+    expect(readManifest(pkg)).toEqual({
+      version: "1.3",
+      entries: [{ fullPath: "/", mediaType: ODT_MEDIA_TYPE }],
+    });
   });
 
   it("readManifest throws when the manifest XML has no manifest:manifest root element", () => {
@@ -339,7 +431,7 @@ describe("validateManifest", () => {
     ).toBe(true);
   });
 
-  it("reports an error when the root entry media type disagrees with the mimetype part", () => {
+  it("reports an error when the root entry media type disagrees with the mimetype part, naming both media types in the message", () => {
     const pkg = baseOdtPackage();
     syncManifest(pkg);
     writeManifest(pkg, {
@@ -353,9 +445,29 @@ describe("validateManifest", () => {
       ],
     });
     const problems = validateManifest(pkg);
-    expect(problems.some((p) => p.severity === "error" && p.path === "/")).toBe(
-      true,
+    const problem = problems.find(
+      (p) => p.severity === "error" && p.path === "/",
     );
+    expect(problem?.message).toContain(
+      "application/vnd.oasis.opendocument.spreadsheet",
+    );
+    expect(problem?.message).toContain(ODT_MEDIA_TYPE);
+  });
+
+  it("does not report a media-type mismatch when the package has no mimetype part at all, regardless of the manifest root entry's own media type", () => {
+    const pkg: Package = { parts: {} };
+    writeManifest(pkg, {
+      version: "1.3",
+      entries: [
+        {
+          fullPath: "/",
+          mediaType: "application/vnd.oasis.opendocument.spreadsheet",
+          version: "1.3",
+        },
+      ],
+    });
+    const problems = validateManifest(pkg);
+    expect(problems.some((p) => p.path === "/")).toBe(false);
   });
 
   it("reports a warning for a manifest entry with no corresponding part", () => {
@@ -383,6 +495,62 @@ describe("validateManifest", () => {
     const problem = problems.find((p) => p.path === "settings.xml");
     expect(problem?.severity).toBe("warning");
     expect(problem?.message).toContain("settings.xml");
+  });
+
+  it('never flags a directory entry (fullPath ending in "/") as a ghost part, since a directory has no literal corresponding zip part', () => {
+    const pkg = baseOdtPackage();
+    syncManifest(pkg);
+    const manifest = readManifest(pkg);
+    writeManifest(pkg, {
+      ...manifest,
+      entries: [...manifest.entries, { fullPath: "Object 1/", mediaType: "" }],
+    });
+    const problems = validateManifest(pkg);
+    expect(problems.some((p) => p.path === "Object 1/")).toBe(false);
+  });
+
+  it("reports no problems for a manifest whose only non-file-entry content is an unrelated sibling element, proving that element is genuinely skipped rather than mistaken for a malformed file-entry", () => {
+    const pkg: Package = {
+      parts: {
+        [MANIFEST_PART]: {
+          kind: "xml",
+          nodes: [
+            el("manifest:manifest", { "manifest:version": "1.3" }, [
+              el("manifest:file-entry", {
+                "manifest:full-path": "/",
+                "manifest:media-type": ODT_MEDIA_TYPE,
+              }),
+              el("manifest:unrelated-sibling"),
+            ]),
+          ],
+        },
+      },
+    };
+    expect(validateManifest(pkg)).toEqual([]);
+  });
+
+  it("does not mistake an unrelated element sibling of manifest:file-entry, or an unrelated child of one, for manifest:encryption-data", () => {
+    const pkg = baseOdtPackage();
+    const root = el("manifest:manifest", { "manifest:version": "1.3" }, [
+      el("manifest:file-entry", {
+        "manifest:full-path": "/",
+        "manifest:media-type": ODT_MEDIA_TYPE,
+      }),
+      el(
+        "manifest:file-entry",
+        {
+          "manifest:full-path": "content.xml",
+          "manifest:media-type": "text/xml",
+        },
+        [el("manifest:not-encryption-data")],
+      ),
+      el("manifest:not-a-file-entry"),
+    ]);
+    pkg.parts[MANIFEST_PART] = { kind: "xml", nodes: [root] };
+    const problems = validateManifest(pkg);
+    expect(problems.some((p) => p.message.includes("encryption-data"))).toBe(
+      false,
+    );
   });
 
   it("detects manifest:encryption-data on a file-entry and reports it as a warning", () => {
@@ -435,6 +603,37 @@ describe("validateManifest", () => {
     expect(problem?.severity).toBe("warning");
     expect(problem?.message).toContain("manifest:encryption-data");
   });
+
+  it("skips a manifest:encryption-data entry with no manifest:full-path attribute, since readManifest's own required-attribute check already surfaces it", () => {
+    const pkg = baseOdtPackage();
+    const encryptedEntryMissingPath = el("manifest:file-entry", {}, [
+      el("manifest:encryption-data", {
+        "manifest:checksum-type": "SHA1/1K",
+        "manifest:checksum": "abc==",
+      }),
+    ]);
+    const root = el(
+      "manifest:manifest",
+      {
+        "xmlns:manifest": "urn:oasis:names:tc:opendocument:xmlns:manifest:1.0",
+        "manifest:version": "1.3",
+      },
+      [
+        el("manifest:file-entry", {
+          "manifest:full-path": "/",
+          "manifest:version": "1.3",
+          "manifest:media-type": ODT_MEDIA_TYPE,
+        }),
+        encryptedEntryMissingPath,
+      ],
+    );
+    pkg.parts[MANIFEST_PART] = { kind: "xml", nodes: [root] };
+
+    const problems = validateManifest(pkg);
+    expect(
+      problems.some((p) => p.message.includes("manifest:encryption-data")),
+    ).toBe(false);
+  });
 });
 
 describe("setDocumentMediaType", () => {
@@ -445,6 +644,19 @@ describe("setDocumentMediaType", () => {
       version: "1.3",
       entries: [{ fullPath: "/", mediaType: ODT_MEDIA_TYPE, version: "1.3" }],
     });
+  });
+
+  it("replaces the existing root entry in place rather than appending a second one, when a root entry already exists", () => {
+    const pkg = baseOdtPackage();
+    syncManifest(pkg);
+    setDocumentMediaType(
+      pkg,
+      "application/vnd.oasis.opendocument.text-template",
+    );
+    const rootEntries = readManifest(pkg).entries.filter(
+      (e) => e.fullPath === "/",
+    );
+    expect(rootEntries).toHaveLength(1);
   });
 
   it("atomically updates both the mimetype part and the manifest root entry", () => {
@@ -475,6 +687,20 @@ describe("setDocumentMediaType", () => {
     );
     const after = readManifest(pkg).entries.filter((e) => e.fullPath !== "/");
     expect(after).toEqual(before);
+  });
+
+  it("prepends a root entry when an existing manifest has none yet", () => {
+    const pkg: Package = { parts: {} };
+    writeManifest(pkg, {
+      version: "1.3",
+      entries: [{ fullPath: "content.xml", mediaType: "text/xml" }],
+    });
+    setDocumentMediaType(pkg, ODT_MEDIA_TYPE);
+    const manifest = readManifest(pkg);
+    expect(manifest.entries).toEqual([
+      { fullPath: "/", mediaType: ODT_MEDIA_TYPE, version: "1.3" },
+      { fullPath: "content.xml", mediaType: "text/xml" },
+    ]);
   });
 
   it("keeps manifest:manifest's own version and the root entry's version in step with the version argument", () => {
