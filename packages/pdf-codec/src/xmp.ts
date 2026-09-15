@@ -35,7 +35,8 @@ function xmpValue(
   if (match === null) {
     return undefined;
   }
-  const inner = match[1] ?? "";
+  // The capturing group is not itself optional, so a successful match always populates it (with the empty string in the degenerate zero-width case) -- there is no absent-group case to fall back for.
+  const inner = match[1]!;
   const items = listItems(inner);
   if (items.length > 0) {
     return items;
@@ -49,7 +50,8 @@ function listItems(inner: string): string[] {
   const pattern = /<rdf:li(?:\s[^>]*)?>([\s\S]*?)<\/rdf:li>/g;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(inner)) !== null) {
-    const text = (match[1] ?? "").trim();
+    // Same guaranteed-present capturing group as xmpValue above.
+    const text = match[1]!.trim();
     if (text.length > 0) {
       items.push(text);
     }
@@ -77,6 +79,7 @@ function keywordsOf(packet: string): { keywords?: string[] } {
   if (match === null) {
     return {};
   }
-  const items = listItems(match[1] ?? "");
+  // Same guaranteed-present capturing group as xmpValue above.
+  const items = listItems(match[1]!);
   return items.length > 0 ? { keywords: items } : {};
 }
