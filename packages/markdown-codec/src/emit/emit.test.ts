@@ -1597,6 +1597,44 @@ describe("lists", () => {
     expect(markdown).toBe("- ordinary");
   });
 
+  it("never misreads a ballot-box glyph as a checkbox for an ORDINARY (non-task-flagged) numId, even though its leading text happens to match the legacy glyph spelling exactly", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "☒ not a checkbox" }],
+          list: { numId: "md1:bullet", level: 0 },
+        },
+      ]),
+    );
+    expect(markdown).toBe("- ☒ not a checkbox");
+  });
+
+  it("does not pad a genuinely blank line inside a NESTED sub-list's own rendering with trailing indent whitespace once that rendering is indented under its parent item", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "b" }],
+          list: { numId: "md1:bullet+loose", level: 1 },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "c" }],
+          list: { numId: "md1:bullet+loose", level: 1 },
+        },
+      ]),
+    );
+    expect(markdown).toBe("- a\n  - b\n\n  - c");
+    // Split on "\n" and re-check the blank line specifically: exactly "", never "  " (indent with nothing on it).
+    expect(markdown.split("\n")).toContain("");
+  });
+
   it("renders every block of one itemId as a single item -- a blank line and the continuation indent between blocks, one marker only", () => {
     const markdown = emitMarkdown(
       doc([
