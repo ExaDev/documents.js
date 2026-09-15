@@ -703,7 +703,7 @@ describe("writePdf -> readPdf: structural round trip", () => {
       { name: "target", pageIndex: 5, target: { kind: "fit" } },
     ];
     expect(() => writePdf(doc, { compress: false })).toThrow(
-      /beyond the document/,
+      /target.*beyond the document/,
     );
   });
 
@@ -718,6 +718,56 @@ describe("writePdf -> readPdf: structural round trip", () => {
         heightPt: 14,
       },
     ]);
-    expect(() => writePdf(doc, { compress: false })).toThrow(/nowhere/);
+    expect(() => writePdf(doc, { compress: false })).toThrow(
+      /internal link.*nowhere/,
+    );
+  });
+
+  it("resolves a destination by its own name, not merely the first entry in the destinations table", () => {
+    const doc = docWithPages([
+      { widthPt: 300, heightPt: 200, items: [] },
+      { widthPt: 300, heightPt: 200, items: [] },
+      { widthPt: 300, heightPt: 200, items: [] },
+    ]);
+    doc.destinations = [
+      { name: "decoy", pageIndex: 0, target: { kind: "fit" } },
+      { name: "real-target", pageIndex: 2, target: { kind: "fit" } },
+    ];
+    doc.pages[0]!.items.push({
+      kind: "internalLink",
+      destination: "real-target",
+      xPt: 0,
+      yPt: 0,
+      widthPt: 10,
+      heightPt: 10,
+    });
+    const result = readPdf(writePdf(doc, { compress: false }));
+    const link = result.pages[0]!.items.find((i) => i.kind === "internalLink");
+    if (link?.kind !== "internalLink") {
+      throw new Error("expected an internalLink item");
+    }
+    // A wrongly permissive lookup (matching the first destination regardless of name) would resolve to page index 0 (decoy) instead of 2 (real-target).
+    const resolved = result.destinations?.find(
+      (d) => d.name === link.destination,
+    );
+    expect(resolved?.pageIndex).toBe(2);
+  });
+
+  it("writes an internal link's own /Type /Annot and zero-width /Border, matching an ordinary link's", () => {
+    const doc = docWithPages([{ widthPt: 300, heightPt: 200, items: [] }]);
+    doc.destinations = [
+      { name: "target", pageIndex: 0, target: { kind: "fit" } },
+    ];
+    doc.pages[0]!.items.push({
+      kind: "internalLink",
+      destination: "target",
+      xPt: 0,
+      yPt: 0,
+      widthPt: 10,
+      heightPt: 10,
+    });
+    const text = new TextDecoder().decode(writePdf(doc, { compress: false }));
+    expect(text).toContain("/Type /Annot");
+    expect(text).toContain("/Border [0 0 0]");
   });
 });
