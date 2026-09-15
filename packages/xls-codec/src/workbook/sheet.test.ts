@@ -7,6 +7,7 @@ import {
   RECORD_BOTTOMMARGIN,
   RECORD_CF,
   RECORD_CF12,
+  RECORD_CFEX,
   RECORD_COLINFO,
   RECORD_CONDFMT,
   RECORD_CONDFMT12,
@@ -29,11 +30,12 @@ import {
   RECORD_SETUP,
   RECORD_SHRFMLA,
   RECORD_STRING,
+  RECORD_TABLE,
   RECORD_TOPMARGIN,
   RECORD_VERTICALPAGEBREAKS,
   RECORD_WSBOOL,
 } from "../biff/record-types";
-import { BiffFormatError, readRecords } from "../biff/records";
+import { readRecords } from "../biff/records";
 import { groupRecords, type RecordGroup } from "../biff/substreams";
 import {
   cell,
@@ -42,6 +44,7 @@ import {
   record,
   rkDouble,
   rkInteger,
+  shortXlUnicodeString,
   u16,
   u32,
   xlUnicodeString,
@@ -132,12 +135,22 @@ describe("readSheetRecords cell records", () => {
     expect(cells.map((entry) => entry.xfIndex)).toStrictEqual([15, 16]);
   });
 
-  it("rejects a MulRk record whose length holds no whole number of entries", () => {
+  it("rejects a MulRk record whose length holds no whole number of entries, naming the exact byte counts", () => {
     expect(() =>
       readCells(
         record(RECORD_MULRK, [...u16(0), ...u16(0), 0x01, 0x02, ...u16(1)]),
       ),
-    ).toThrow(BiffFormatError);
+    ).toThrow(
+      "multiple-cell record of 8 bytes does not hold a whole number of 6-byte entries",
+    );
+  });
+
+  it("rejects a MulRk record shorter than its own fixed rw/colFirst/colLast fields, a genuinely negative payload rather than merely a non-multiple one", () => {
+    expect(() =>
+      readCells(record(RECORD_MULRK, [...u16(0), ...u16(0)])),
+    ).toThrow(
+      "multiple-cell record of 4 bytes does not hold a whole number of 6-byte entries",
+    );
   });
 
   it("reads a Blank cell", () => {
@@ -225,6 +238,27 @@ describe("readSheetRecords cell records", () => {
 
     expect(cells[0]?.value).toStrictEqual({ kind: "string", value: "Inline" });
   });
+
+  it("marks every non-formula cell record's own reading as fromFormula: false, not just Number's own", () => {
+    const cells = readCells(
+      record(RECORD_BLANK, cell(0, 0)),
+      record(RECORD_MULBLANK, [...u16(1), ...u16(0), ...u16(15), ...u16(1)]),
+      record(RECORD_RK, [...cell(2, 0), ...rkInteger(1)]),
+      record(RECORD_MULRK, [
+        ...u16(3),
+        ...u16(0),
+        ...u16(15),
+        ...rkInteger(1),
+        ...u16(1),
+      ]),
+      record(RECORD_BOOLERR, [...cell(4, 0), 0x01, 0x00]),
+      record(RECORD_BOOLERR, [...cell(5, 0), 0x07, 0x01]),
+      record(RECORD_LABELSST, [...cell(6, 0), ...u32(0)]),
+      record(RECORD_LABEL, [...cell(7, 0), ...xlUnicodeString("x")]),
+    );
+    expect(cells).toHaveLength(8);
+    expect(cells.every((entry) => !entry.fromFormula)).toBe(true);
+  });
 });
 
 describe("readSheetRecords formula cells", () => {
@@ -300,6 +334,78 @@ describe("readSheetRecords formula cells", () => {
     );
 
     expect(cells[0]?.value).toStrictEqual({ kind: "string", value: "Result" });
+  });
+
+  it("finds a string cached result past an Array record sitting between the Formula and its String, an array formula's own FORMULA production shape", () => {
+    const arrayFiller = record(RECORD_ARRAY, [
+      ...u16(0),
+      ...u16(0),
+      0,
+      0, // ref
+      ...u16(0), // flags
+      ...u32(0), // unused
+      ...u16(0), // cce
+    ]);
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 0),
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0xff,
+        0xff,
+        ...formulaTail,
+      ]),
+      arrayFiller,
+      record(RECORD_STRING, xlUnicodeString("Result")),
+    );
+
+    expect(cells[0]?.value).toStrictEqual({ kind: "string", value: "Result" });
+  });
+
+  it("finds a string cached result past a Table record sitting between the Formula and its String, a data table's own FORMULA production shape", () => {
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 0),
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0xff,
+        0xff,
+        ...formulaTail,
+      ]),
+      record(RECORD_TABLE, [...u16(0), ...u16(0)]),
+      record(RECORD_STRING, xlUnicodeString("Result")),
+    );
+
+    expect(cells[0]?.value).toStrictEqual({ kind: "string", value: "Result" });
+  });
+
+  it("stops the search and leaves the cached string empty when the record after the Formula is none of String/Array/Table/ShrFmla", () => {
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 0),
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0xff,
+        0xff,
+        ...formulaTail,
+      ]),
+      record(RECORD_NUMBER, [...cell(9, 9), ...f64(1)]),
+      record(RECORD_STRING, xlUnicodeString("Result")),
+    );
+
+    expect(cells[0]?.value).toStrictEqual({ kind: "string", value: "" });
   });
 
   it("finds a string cached result past the ShrFmla record of a shared formula", () => {
@@ -397,6 +503,7 @@ describe("readSheetRecords formula cells", () => {
     );
 
     expect(cells[0]?.formula).toBe("A1+B1");
+    expect(cells[0]?.fromFormula).toBe(true);
   });
 
   it("leaves formula absent for a token this reader does not resolve", () => {
@@ -478,6 +585,66 @@ describe("readSheetRecords formula cells", () => {
 
     expect(cells[0]?.formula).toBe("A1");
     expect(cells[1]?.formula).toBe("A2");
+  });
+
+  it("keys two distinct shared-formula groups by their own separate base cells, never resolving one cell's PtgExp against the other group", () => {
+    // Two independent shared-formula runs on the same sheet -- base (0,1) filled with the literal 100, base (5,7) with the literal 200 -- each referenced by its own cell via a PtgExp pointing back at its own base. If groupKey ever collapsed two different (row, column) pairs onto the same map key, the second group recorded would silently overwrite the first, and the cell referencing the first base would wrongly resolve to the second group's own text instead.
+    const ptgInt = (value: number) => [0x1e, ...u16(value)];
+    const ptgExpTo = (row: number, column: number) => [
+      0x01,
+      ...u16(row),
+      ...u16(column),
+    ];
+    const shrFmlaOf = (rwFirst: number, colFirst: number, rgce: number[]) =>
+      record(RECORD_SHRFMLA, [
+        ...u16(rwFirst),
+        ...u16(rwFirst),
+        colFirst,
+        colFirst,
+        0,
+        2,
+        ...u16(rgce.length),
+        ...rgce,
+      ]);
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 1),
+        ...f64(100),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpTo(0, 1).length),
+        ...ptgExpTo(0, 1),
+      ]),
+      shrFmlaOf(0, 1, ptgInt(100)),
+      record(RECORD_FORMULA, [
+        ...cell(5, 7),
+        ...f64(200),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpTo(5, 7).length),
+        ...ptgExpTo(5, 7),
+      ]),
+      shrFmlaOf(5, 7, ptgInt(200)),
+      record(RECORD_FORMULA, [
+        ...cell(2, 2),
+        ...f64(100),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpTo(0, 1).length),
+        ...ptgExpTo(0, 1),
+      ]),
+      record(RECORD_FORMULA, [
+        ...cell(8, 9),
+        ...f64(200),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpTo(5, 7).length),
+        ...ptgExpTo(5, 7),
+      ]),
+    );
+
+    expect(cells[2]?.formula).toBe("100");
+    expect(cells[3]?.formula).toBe("200");
   });
 
   it("expands a shared formula mixing an absolute PtgRef with a relative PtgRefN, a real on-disk shape per [MS-XLS]", () => {
@@ -728,6 +895,69 @@ describe("readSheetRecords formula cells", () => {
     expect(cells[1]?.value).toStrictEqual({ kind: "number", value: 99 });
   });
 
+  it("resolves an array-formula group's own PtgArray token against its Array record's real rgcb trailer", () => {
+    // The Array record's rgce is a bare PtgArray (needing an rgcb to resolve at all), and rgcb -- inferred from the record's own remaining byte length, never declared directly -- carries exactly the PtgExtraArray for a single-element array constant. If the byte arithmetic deriving rgcbLength were wrong, this either reads the wrong bytes as rgcb (a corrupted array constant) or fails to see any rgcb at all (formula absent), rather than resolving to the real "{5}" text.
+    const ptgArrayToken = [0x40, 0, 0, 0, 0, 0, 0, 0];
+    const ptgExtraArraySingleElement = [
+      0, // columns - 1 = 0
+      ...u16(0), // rows - 1 = 0
+      0x01,
+      ...f64(5), // SerNum 5
+    ];
+    const ptgExpToBase = [0x01, ...u16(3), ...u16(3)];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(3, 3),
+        ...f64(5),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToBase.length),
+        ...ptgExpToBase,
+      ]),
+      record(RECORD_ARRAY, [
+        ...u16(3),
+        ...u16(3),
+        3,
+        3, // ref: rwFirst=rwLast=colFirst=colLast=3
+        ...u16(0), // flags word
+        ...u32(0), // unused
+        ...u16(ptgArrayToken.length),
+        ...ptgArrayToken,
+        ...ptgExtraArraySingleElement,
+      ]),
+    );
+
+    expect(cells[0]?.formula).toBe("{5}");
+  });
+
+  it("resolves an array-formula group whose own rgce carries no PtgArray at all, needing no rgcb trailer -- the record ends exactly at rgce's own end, rgcbLength genuinely zero rather than negative or overrun", () => {
+    const rgce = [0x1e, ...u16(42)]; // PtgInt 42
+    const ptgExpToBase = [0x01, ...u16(4), ...u16(4)];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(4, 4),
+        ...f64(42),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToBase.length),
+        ...ptgExpToBase,
+      ]),
+      record(RECORD_ARRAY, [
+        ...u16(4),
+        ...u16(4),
+        4,
+        4,
+        ...u16(0),
+        ...u32(0),
+        ...u16(rgce.length),
+        ...rgce,
+        // no trailing bytes at all: rgcbLength is exactly 0, not merely small
+      ]),
+    );
+
+    expect(cells[0]?.formula).toBe("42");
+  });
+
   it("does not abort the whole sheet read when a shared group's own rgce carries a token with a lying embedded length", () => {
     // The ShrFmla record itself is perfectly well-formed here -- its own cce (4) correctly bounds the 4 bytes of rgce that follow, so collectFormulaGroup's cursor reads all succeed and a group IS recovered for this base cell. The malformed part is inside that already-correctly-bounded rgce: a PtgStr token (0x17) whose own ShortXLUnicodeString cch claims 200 characters when only one byte of character data actually follows. Joining this group against the base cell's PtgExp runs parseFormulaText's cursor past the end of that 4-byte buffer for reasons that are pure file-controlled malformed input (a lying token-internal length), not a bug in this reader's own token walking -- so it must degrade this one cell's formula to absent, not abort the whole sheet the way an uncaught BiffFormatError would.
     const shrFmlaRgce = [0x17, 200, 0, 0x41];
@@ -871,6 +1101,38 @@ describe("readSheetRecords grid geometry", () => {
     );
 
     expect(sheet.usedRange).toBeUndefined();
+    // Not merely undefined-valued but genuinely absent: readSheetRecords omits the key entirely rather than including it set to undefined, so a caller spreading the result (content.ts's own fallbacks) sees "this file states no used range" rather than a present-but-empty one.
+    expect("usedRange" in sheet).toBe(false);
+  });
+
+  it("includes a genuine usedRange key, not merely a truthy value, once a real Dimensions record is present", () => {
+    const sheet = readSheetRecords(
+      groupsOf(
+        record(RECORD_DIMENSIONS, [...u32(0), ...u32(5), ...u16(0), ...u16(3)]),
+      ),
+      [],
+    );
+    expect("usedRange" in sheet).toBe(true);
+  });
+
+  it("treats a zero rwMac alone, with a genuinely non-zero colMac, as no used range -- the OR is not an AND", () => {
+    const sheet = readSheetRecords(
+      groupsOf(
+        record(RECORD_DIMENSIONS, [...u32(0), ...u32(0), ...u16(0), ...u16(3)]),
+      ),
+      [],
+    );
+    expect("usedRange" in sheet).toBe(false);
+  });
+
+  it("treats a zero colMac alone, with a genuinely non-zero rwMac, as no used range too", () => {
+    const sheet = readSheetRecords(
+      groupsOf(
+        record(RECORD_DIMENSIONS, [...u32(0), ...u32(5), ...u16(0), ...u16(0)]),
+      ),
+      [],
+    );
+    expect("usedRange" in sheet).toBe(false);
   });
 
   it("reads a row's manually set height as points", () => {
@@ -909,6 +1171,27 @@ describe("readSheetRecords grid geometry", () => {
           ...u16(0),
           ...u16(0),
           0x00,
+          0x01,
+          ...u16(0),
+        ]),
+      ),
+      [],
+    );
+
+    expect(sheet.rows[0]).toStrictEqual({ index: 0, hidden: false });
+  });
+
+  it("omits a height of exactly zero twips even when the producer did mark it declared", () => {
+    const sheet = readSheetRecords(
+      groupsOf(
+        record(RECORD_ROW, [
+          ...u16(0),
+          ...u16(0),
+          ...u16(1),
+          ...u16(0), // miyRw: zero twips
+          ...u16(0),
+          ...u16(0),
+          0x40, // fUnsynced: declared
           0x01,
           ...u16(0),
         ]),
@@ -1175,6 +1458,61 @@ describe("readSheetRecords grid geometry", () => {
       startColumn: 0,
       endColumn: 1,
     });
+  });
+
+  it("resolves a CFEx record into conditionalFormats12, extending the CondFmt group it names by nID (conditional-format-ex.test.ts covers readCfEx/readCondFmtGroup's own composition in full; this proves the record dispatch actually reaches readCfEx at all)", () => {
+    const nID = 7;
+    const sheet = readSheetRecords(
+      groupsOf(
+        record(RECORD_CONDFMT, [
+          ...u16(1), // ccf -- one CF record follows
+          ...u16(nID << 1), // A-fToughRecalc(0) + nID
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0), // refBound (Ref8U), unused
+          ...u16(1), // one range
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+        ]),
+        record(RECORD_CF, [
+          0x02, // ct: formula
+          0x00, // cp
+          ...u16(9), // cce1
+          ...u16(0), // cce2
+          0x17,
+          ...shortXlUnicodeString("needle"), // PtgStr "needle"
+        ]),
+        record(RECORD_CFEX, [
+          ...new Array<number>(12).fill(0), // frtRefHeaderU
+          ...u32(0), // fIsCF12: 0, this is the legacy-CF-extending shape
+          ...u16(nID),
+          ...u16(0), // icf
+          0x00, // cp
+          0x08, // icfTemplate: containsText
+          ...u16(0), // ipriority
+          0x01, // flags: A-fActive set, B-fStopIfTrue clear
+          0x00, // fHasDXF: no DXF trailer
+          16, // cbTemplateParm
+          ...u16(0), // ctp
+          ...new Array<number>(14).fill(0), // reserved
+        ]),
+      ),
+      [],
+    );
+
+    expect(sheet.conditionalFormats12).toStrictEqual([
+      {
+        kind: "containsText",
+        text: "needle",
+        priority: 0,
+        stopIfTrue: false,
+        ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
+        style: undefined,
+      },
+    ]);
   });
 
   it("ignores records it has no use for", () => {
