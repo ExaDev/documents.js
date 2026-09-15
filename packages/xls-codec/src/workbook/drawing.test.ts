@@ -27,6 +27,7 @@ import {
 import { PAGE_SIZE_LETTER } from "document-schema.js";
 import type { BlipImage } from "../drawing/blips";
 import type { DrawingShape } from "../drawing/shapes";
+import { writeEmbeddedObjectPackage } from "./embedded-object";
 import {
   chartFromShape,
   chartTableCells,
@@ -476,9 +477,23 @@ describe("imageFromShape", () => {
 
 describe("embeddedObjectFromObjRecord", () => {
   const objGroup = pictureObjGroup(7);
+  // A genuinely valid Package stream (not arbitrary bytes) -- readEmbeddedObjectPackage's own foreign-payload degrade would otherwise return undefined regardless of the size guard below, making the guard's own removal invisible to these tests.
+  const packageBytes = writeEmbeddedObjectPackage({
+    objectKind: "drawing",
+    document: {
+      kind: "drawing",
+      metadata: {},
+      pages: [{ size: { widthPt: 10, heightPt: 10 }, shapes: [], vectors: [] }],
+    },
+    frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+    anchorRow: 0,
+    anchorColumn: 0,
+    offsetXPt: 0,
+    offsetYPt: 0,
+  });
   const context = baseContext({
     embeddingStreams: new Map<number, Uint8Array<ArrayBuffer>>([
-      [7, new Uint8Array([1, 2, 3])],
+      [7, packageBytes],
     ]),
   });
   const geometry = new SheetGridGeometry([], []);
