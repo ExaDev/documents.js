@@ -21,6 +21,7 @@ import {
   createEmptyPptxPackage,
   DML_NS,
   PML_NS,
+  PRESENTATION_PART_PATH,
   R_NS,
   SLIDE_LAYOUT_PART_PATH,
   SLIDE_LAYOUT_REL_TYPE,
@@ -28,7 +29,6 @@ import {
 import type { SlideContext } from "./slide";
 import { PptxSlide } from "./slide";
 
-const PRESENTATION_PART_PATH = "ppt/presentation.xml";
 const MEDIA_DIR = "ppt/media";
 const SLIDE_CONTENT_TYPE =
   "application/vnd.openxmlformats-officedocument.presentationml.slide+xml";
