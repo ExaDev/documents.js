@@ -17,10 +17,12 @@ import {
   buildDrawingWritePlan,
   placementOfEmbedded,
   placementOfImage,
+  writeEmbeddedObjRecord,
   writeFtCf,
   writeFtCmo,
   writeFtPictFmla,
   writeFtPioGrbit,
+  writePictureObjRecord,
   WriterGridGeometry,
 } from "./drawing-writer";
 
@@ -324,10 +326,50 @@ describe("writeFtPictFmla", () => {
   });
 });
 
+describe("writePictureObjRecord", () => {
+  it("states fAutoPict set, so a plain picture's own aspect ratio tracks the view", () => {
+    const bytes = writePictureObjRecord(5);
+    const record = readRecords(bytes)[0];
+    if (record === undefined) {
+      throw new Error("expected a record");
+    }
+    const view = new DataView(
+      record.data.buffer,
+      record.data.byteOffset,
+      record.data.byteLength,
+    );
+    // FtCmo(22) + FtCf(6) = 28 bytes before FtPioGrbit; its own ft(2) + cb(2) precede the grbit word itself.
+    expect(view.getUint16(28 + 4, true)).toBe(0x0001);
+  });
+});
+
+describe("writeEmbeddedObjRecord", () => {
+  it("states fAutoPict clear, the storage-based pair the Embedding Storage page requires", () => {
+    const bytes = writeEmbeddedObjRecord(5, 7);
+    const record = readRecords(bytes)[0];
+    if (record === undefined) {
+      throw new Error("expected a record");
+    }
+    const view = new DataView(
+      record.data.buffer,
+      record.data.byteOffset,
+      record.data.byteLength,
+    );
+    expect(view.getUint16(28 + 4, true)).toBe(0x0000);
+  });
+});
+
 describe("bytesFromBase64", () => {
   it("decodes a base64 string whose length forces two padding characters, without treating either as real data", () => {
     // "f" alone (length 1) encodes to "Zg==" -- two padding characters, and the ONLY way to exercise the padding-character skip at all, since every other fixture in this package's own test suite happens to use base64 with no padding at all.
     expect(bytesFromBase64("Zg==")).toStrictEqual(new Uint8Array([0x66]));
+  });
+
+  it("refuses a character that is not part of the base64 alphabet, naming it exactly, rather than silently skipping it", () => {
+    // "=" is only ever valid as genuine trailing padding, sliced off before this loop even runs -- one sitting anywhere else in the string is exactly as invalid as any other non-alphabet character.
+    expect(() => bytesFromBase64("AB=C")).toThrow(
+      'a sheet image\'s own base64 payload contains "=", which is not part of the base64 alphabet',
+    );
   });
 
   it("decodes a base64 string whose length forces exactly one padding character", () => {
@@ -362,6 +404,14 @@ describe("buildDrawingWritePlan", () => {
     ).toThrow(
       'xls-codec cannot write a sheet image of format "gif": [MS-ODRAW]\'s own MSOBLIPTYPE enumeration has no member for it, so no Blip Store entry can carry it',
     );
+  });
+
+  it("accepts a jpeg image, the second of the two formats this writer actually supports", () => {
+    expect(() =>
+      buildDrawingWritePlan([
+        sheet([], { images: [{ ...PNG_IMAGE, format: "jpeg" }] }),
+      ]),
+    ).not.toThrow();
   });
 
   it("refuses a 'chart' embedded object by name", () => {
@@ -454,7 +504,7 @@ describe("buildDrawingWritePlan", () => {
     expect(embeddedFlags & FSP_FLAG_OLE_SHAPE).toBe(FSP_FLAG_OLE_SHAPE);
   });
 
-  it("continues a sheet's own Obj object ids past its commented cells' ids, rather than starting at 1 and colliding with them", () => {
+  it("continues a sheet's own Obj object ids past its commented cells' ids, rather than starting at 1 and colliding with them, counting only the cells that actually carry a comment", () => {
     const plan = buildDrawingWritePlan([
       sheet(
         [
@@ -465,35 +515,63 @@ describe("buildDrawingWritePlan", () => {
             displayText: "x",
             comment: { text: "note" },
           },
+          {
+            row: 0,
+            column: 1,
+            value: { kind: "string", value: "y" },
+            displayText: "y",
+          },
+          {
+            row: 0,
+            column: 2,
+            value: { kind: "string", value: "z" },
+            displayText: "z",
+            comment: { text: "another" },
+          },
         ],
-        { images: [PNG_IMAGE] },
+        { images: [PNG_IMAGE, PNG_IMAGE] },
       ),
     ]);
-    const objRecord = plan.sheetDrawings[0]?.objRecords[0];
-    if (objRecord === undefined) {
-      throw new Error("expected an Obj record");
-    }
-    const record = readRecords(objRecord)[0];
-    if (record === undefined) {
-      throw new Error("expected a parsed Obj record");
-    }
-    const view = new DataView(
-      record.data.buffer,
-      record.data.byteOffset,
-      record.data.byteLength,
-    );
-    expect(view.getUint16(6, true)).toBe(2); // 1 comment + 1
+    const objectIds = plan.sheetDrawings[0]?.objRecords.map((objRecord) => {
+      const record = readRecords(objRecord)[0];
+      if (record === undefined) {
+        throw new Error("expected a parsed Obj record");
+      }
+      const view = new DataView(
+        record.data.buffer,
+        record.data.byteOffset,
+        record.data.byteLength,
+      );
+      return view.getUint16(6, true);
+    });
+
+    // 3 cells, 2 of which carry a comment -- ids start at 3 (2 comments + 1) and continue sequentially, not starting at 1 (which would collide with the comments' own ids) and not counting the third, comment-free cell.
+    expect(objectIds).toStrictEqual([3, 4]);
   });
 
-  it("names an Embedding Storage path by the storage id's own uppercase, zero-padded hex spelling, not lowercase", () => {
+  it("assigns each embedded object its own sequential storage id, reaching past single digits into the hex alphabet's own letters, spelled uppercase", () => {
     const plan = buildDrawingWritePlan([
-      sheet([], { embeddedObjects: [embeddedDrawing()] }),
+      sheet([], {
+        embeddedObjects: Array.from({ length: 11 }, () => embeddedDrawing()),
+      }),
     ]);
 
-    expect(plan.embeddingStreams[0]?.path).toBe("MBD00000001/Package");
+    expect(plan.embeddingStreams.map((stream) => stream.path)).toStrictEqual([
+      "MBD00000001/Package",
+      "MBD00000002/Package",
+      "MBD00000003/Package",
+      "MBD00000004/Package",
+      "MBD00000005/Package",
+      "MBD00000006/Package",
+      "MBD00000007/Package",
+      "MBD00000008/Package",
+      "MBD00000009/Package",
+      "MBD0000000A/Package",
+      "MBD0000000B/Package",
+    ]);
   });
 
-  it("reports the largest shape id and total shape count across every sheet's own drawing, not just the last one written", () => {
+  it("reports the largest shape id, total shape count, and each drawing's own sequential id across every sheet's own drawing, not just the last one written", () => {
     const plan = buildDrawingWritePlan([
       sheet([], { images: [PNG_IMAGE] }),
       sheet([], { images: [PNG_IMAGE, PNG_IMAGE] }),
@@ -514,5 +592,45 @@ describe("buildDrawingWritePlan", () => {
     expect(view.getUint32(0, true)).toBe(1028); // spidMax
     expect(view.getUint32(8, true)).toBe(5); // cspSaved
     expect(view.getUint32(12, true)).toBe(2); // cdgSaved
+    // One OfficeArtIDCL per drawing, right after the four header fields: drawingId(4) + lastSpid(4) each, in drawing order -- sheet A's own drawing is id 1, sheet B's is id 2, not the reverse and not both landing on the same id.
+    expect(view.getUint32(16, true)).toBe(1); // sheet A's own drawingId
+    expect(view.getUint32(24, true)).toBe(2); // sheet B's own drawingId
+  });
+
+  it("gives each sheet's own real shapes distinct, non-overlapping spids across the workbook, continuing from the previous sheet's own last one rather than restarting", () => {
+    const plan = buildDrawingWritePlan([
+      sheet([], { images: [PNG_IMAGE] }),
+      sheet([], { images: [PNG_IMAGE] }),
+    ]);
+    const sheetAEscher = escherBytesFromMsoDrawingRecords(
+      plan.sheetDrawings[0]?.msoDrawingRecords ?? [],
+    );
+    const sheetBEscher = escherBytesFromMsoDrawingRecords(
+      plan.sheetDrawings[1]?.msoDrawingRecords ?? [],
+    );
+    // Index 1: the patriarch's own Sp atom is always first, the real shape second.
+    const sheetAShape = findEscherRecords(
+      readEscherRecords(sheetAEscher),
+      ESCHER_SP,
+    )[1];
+    const sheetBShape = findEscherRecords(
+      readEscherRecords(sheetBEscher),
+      ESCHER_SP,
+    )[1];
+    if (sheetAShape?.kind !== "atom" || sheetBShape?.kind !== "atom") {
+      throw new Error("expected Sp atoms");
+    }
+    const sheetASpid = new DataView(
+      sheetAShape.data.buffer,
+      sheetAShape.data.byteOffset,
+      sheetAShape.data.byteLength,
+    ).getUint32(0, true);
+    const sheetBSpid = new DataView(
+      sheetBShape.data.buffer,
+      sheetBShape.data.byteOffset,
+      sheetBShape.data.byteLength,
+    ).getUint32(0, true);
+
+    expect(sheetBSpid).toBeGreaterThan(sheetASpid);
   });
 });
