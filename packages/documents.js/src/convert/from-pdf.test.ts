@@ -18,7 +18,8 @@ import {
   type LayoutDocument,
   writePdf,
 } from "pdf-codec";
-import { describe, expect, it } from "vitest";
+import * as pdfCodecRead from "pdf-codec/read";
+import { describe, expect, it, vi } from "vitest";
 import { docxToPdf, odsToXlsx } from "./convert";
 import { readCsvContent } from "../csv/read";
 import { decodeCsvText, encodeCsvText } from "../csv/text";
@@ -30,6 +31,7 @@ import { readOdgContent } from "../odf/odg/read";
 import { readOdpContent } from "../odf/odp/read";
 import { readOdsContent } from "../odf/ods/read";
 import { readOdtContent } from "../odf/odt/read";
+import * as reconstructModule from "../layout/reconstruct";
 import { readDocxContent } from "../ooxml/docx/read";
 import { readPptxContent } from "../ooxml/pptx/read";
 import { decodeDocumentPackage, encodeDocumentPackage } from "../package-codec";
@@ -294,6 +296,38 @@ describe("readNativeDocumentTree", () => {
       kind: "outline",
       title: "Chapter 1",
     });
+  });
+
+  // reconstructWordprocessing's own signal check independently throws AbortError for an already-aborted signal, so a test only asserting readNativeDocumentTree throws when aborted cannot tell whether readPdf itself genuinely received the signal (and sink) or was called with neither -- both produce the identical outer throw. Spying on the call is what makes the forwarding observable.
+  it("pdf: passes the given signal and sink through to readPdf itself, not just to reconstructWordprocessing", () => {
+    const pdfBytes = docxToPdf(minimalDocxBytes());
+    const controller = new AbortController();
+    const sink = (): void => {};
+    const readPdfSpy = vi.spyOn(pdfCodecRead, "readPdf");
+    readNativeDocumentTree("pdf", pdfBytes, {
+      signal: controller.signal,
+      sink,
+    });
+    expect(readPdfSpy).toHaveBeenCalledWith(pdfBytes, {
+      signal: controller.signal,
+      sink,
+    });
+    readPdfSpy.mockRestore();
+  });
+
+  it("pdf: passes the given signal through to reconstructWordprocessing", () => {
+    const pdfBytes = docxToPdf(minimalDocxBytes());
+    const controller = new AbortController();
+    const reconstructSpy = vi.spyOn(
+      reconstructModule,
+      "reconstructWordprocessing",
+    );
+    readNativeDocumentTree("pdf", pdfBytes, { signal: controller.signal });
+    expect(reconstructSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ signal: controller.signal }),
+    );
+    reconstructSpy.mockRestore();
   });
 
   it("pdf: forwards the abort signal to readPdf, which checks it before parsing", () => {
