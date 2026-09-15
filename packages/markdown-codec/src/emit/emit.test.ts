@@ -1681,6 +1681,31 @@ describe("lists", () => {
     expect(markdown.split("\n")).toContain("");
   });
 
+  it("recognises a construct as carrying an item's own itemId when ONLY ONE of its several children actually carries it, not requiring every child to -- constructCarriesListItemId is an ANY match, not an ALL match", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division", name: "d1" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "carries i1" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        { kind: "paragraph", runs: [{ text: "other" }] },
+        { kind: "constructEnd" },
+      ]),
+    );
+    // The construct is recognised as belonging to item i1 (one of its two children carries that itemId, and ANY match is enough) and stays absorbed into i1's own run, rather than fracturing out as an unrelated top-level construct.
+    expect(markdown).toBe("- a\n\n  carries i1\n\n  other");
+  });
+
   it("pops a SIBLING item's own membership off openMemberships before pushing the next one at the SAME level, not just a genuinely deeper one -- a stale sibling entry left on the stack could wrongly absorb a later construct that only carries THAT earlier sibling's own itemId", () => {
     const markdown = emitMarkdown(
       doc([
