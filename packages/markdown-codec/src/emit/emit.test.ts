@@ -103,6 +103,11 @@ describe("headings", () => {
     expect(
       collector.has(MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED),
     ).toBe(true);
+    const diagnostic = collector.diagnostics.find(
+      (d) => d.code === MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED,
+    );
+    expect(diagnostic?.message).toContain("3");
+    expect(diagnostic?.message).toContain("line break");
   });
 
   it("measures the setext underline's length against the CommonMark first line even when its own embedded break is a bare CR, not an LF", () => {
@@ -163,6 +168,13 @@ describe("headings", () => {
             MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
           ),
         ).toBe(true);
+        const diagnostic = collector.diagnostics.find(
+          (d) =>
+            d.code ===
+            MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+        );
+        expect(diagnostic?.message).toContain("no heading text");
+        expect(diagnostic?.message).toContain("attach to");
         expect(
           collector.has(MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED),
         ).toBe(false);
@@ -1569,6 +1581,19 @@ describe("lists", () => {
       ]),
     );
     expect(markdown).toBe("- [x] done");
+  });
+
+  it("recognises the pre-field UNCHECKED glyph spelling on its OWN, with no checked item preceding it in the same call", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "☐ " }, { text: "todo" }],
+          list: { numId: "md1:bullet+task", level: 0 },
+        },
+      ]),
+    );
+    expect(markdown).toBe("- [ ] todo");
   });
 
   it("strips a legacy checkbox glyph from a run that ALSO carries its own following text, not just when the glyph fills a whole separate run of its own", () => {
