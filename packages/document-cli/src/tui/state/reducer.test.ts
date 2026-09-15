@@ -359,7 +359,13 @@ describe("appReducer navigation", () => {
     const asked = appReducer(dirty, { type: "REQUEST_QUIT" });
     expect(asked.overlays.confirmQuit).toBe(true);
     expect(asked.isExiting).toBe(false);
-    expect(appReducer(asked, { type: "CONFIRM_QUIT" }).isExiting).toBe(true);
+    const confirmed = appReducer(asked, { type: "CONFIRM_QUIT" });
+    expect(confirmed.isExiting).toBe(true);
+    expect(confirmed.overlays.confirmQuit).toBe(false);
+
+    const cancelled = appReducer(asked, { type: "CANCEL_QUIT" });
+    expect(cancelled.isExiting).toBe(false);
+    expect(cancelled.overlays.confirmQuit).toBe(false);
   });
 });
 
@@ -451,6 +457,22 @@ describe("appReducer SAVE_SUCCESS", () => {
       expect(doc.bytes).toBe(bytes);
       expect(saved.hasUnsavedChanges).toBe(false);
     }
+  });
+});
+
+describe("appReducer SAVE_ERROR", () => {
+  it("surfaces the failure message as an error status, without touching hasUnsavedChanges", () => {
+    const dirty = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(dirty, {
+      type: "SAVE_ERROR",
+      message: "disk is full",
+    });
+    expect(result.status?.severity).toBe("error");
+    expect(result.status?.text).toBe("disk is full");
+    expect(result.hasUnsavedChanges).toBe(dirty.hasUnsavedChanges);
   });
 });
 
