@@ -1653,6 +1653,26 @@ describe("lists", () => {
     expect(markdown).toBe("- a\n\n  second block");
   });
 
+  it("does not pad a genuinely blank line inside a LATER (continuation) block's own body with trailing indent whitespace once that block is indented under the item's marker", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "md-i1" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "x\n\ny" }],
+          styleId: "CodeBlock",
+          list: { numId: "md1:bullet", level: 0, itemId: "md-i1" },
+        },
+      ]),
+    );
+    expect(markdown).toBe("- a\n  ```\n  x\n\n  y\n  ```");
+    expect(markdown.split("\n")).toContain("");
+  });
+
   it("renders same-level paragraphs with DIFFERENT itemIds as separate items even when they share a numId", () => {
     const markdown = emitMarkdown(
       doc([
