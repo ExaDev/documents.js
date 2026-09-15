@@ -683,6 +683,15 @@ function validateStopIfTrue(
   }
 }
 
+// nID ([MS-XLS] 2.5.56's CondFmtStructure): the group's own identifier, unique per worksheet, minted as a rule's own 1-based position in the sheet's full rule list -- base CondFmt and CondFmt12 groups draw from the one sequence, because a later CFEx record's own nID cross-references either kind. 15 bits is the field's whole width. A standalone function of the count alone, not inlined into writeSheetConditionalFormats' own body, so this one boundary is directly testable at its own exact edge (32767 accepted, 32768 refused) without constructing anywhere near that many real rule objects just to reach it.
+export function validateRuleCount(count: number): void {
+  if (count > 0x7fff) {
+    throw new BiffWriteError(
+      `this sheet's ${count} conditional-format rules exceed CondFmt's own 15-bit nID field`,
+    );
+  }
+}
+
 export function writeSheetConditionalFormats(
   sheet: ContentSheet,
   icvOf: (color: Color) => number,
@@ -693,12 +702,7 @@ export function writeSheetConditionalFormats(
   }
   const basePieces: Uint8Array<ArrayBuffer>[] = [];
   const cf12Pieces: Uint8Array<ArrayBuffer>[] = [];
-  // nID ([MS-XLS] 2.5.56's CondFmtStructure): the group's own identifier, unique per worksheet, minted as the rule's own 1-based position in the sheet's full rule list -- base CondFmt and CondFmt12 groups draw from the one sequence, because a later CFEx record's own nID cross-references either kind. 15 bits is the field's whole width.
-  if (rules.length > 0x7fff) {
-    throw new BiffWriteError(
-      `this sheet's ${rules.length} conditional-format rules exceed CondFmt's own 15-bit nID field`,
-    );
-  }
+  validateRuleCount(rules.length);
   const cf12Rules: Cf12RuleEntry[] = [];
   rules.forEach((rule, index) => {
     const [anchor] = validateRuleGrid(rule);
