@@ -67,11 +67,9 @@ export function escapeHref(href: string): string {
   const bytes = new TextEncoder().encode(href);
   let result = "";
   for (const byte of bytes) {
+    // No separate "is this byte even ASCII" guard: ALPHANUMERIC_PATTERN and HREF_SAFE_PUNCTUATION are both pure-ASCII vocabularies on their own, so a byte >= 0x80 -- reinterpreted here as the single Latin-1 codepoint of that value, not as part of whatever multi-byte UTF-8 sequence it actually belongs to -- can never match either and falls through to percent-encoding regardless.
     const char = String.fromCharCode(byte);
-    if (
-      byte < 0x80 &&
-      (ALPHANUMERIC_PATTERN.test(char) || HREF_SAFE_PUNCTUATION.has(char))
-    ) {
+    if (ALPHANUMERIC_PATTERN.test(char) || HREF_SAFE_PUNCTUATION.has(char)) {
       result += char;
       continue;
     }
@@ -109,8 +107,8 @@ function renderTaskCheckbox(checked: boolean): string {
 
 function renderInline(node: MarkdownInlineNode): string {
   switch (node.type) {
+    // text and entity both carry their materialised text in the same field, and render identically -- one shared body, rather than two separately-mutable cases whose bodies are textually forced to stay identical anyway.
     case "text":
-      return escapeHtml(node.value);
     case "entity":
       return escapeHtml(node.value);
     case "codeSpan":
@@ -220,12 +218,11 @@ class HtmlRenderer {
         this.render(node.children, false);
         this.cr();
         return;
+      // Each is rendered only through its own parent, which knows the surrounding markup it needs -- an empty case (no consequent at all, not even a bare `return;`) since the switch is this method's last statement and falling off it already returns.
       case "document":
       case "listItem":
       case "tableRow":
       case "tableCell":
-        // Each is rendered only through its own parent, which knows the surrounding markup it needs.
-        return;
     }
   }
 
