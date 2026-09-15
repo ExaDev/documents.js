@@ -1435,6 +1435,11 @@ describe("blockquotes", () => {
     expect(collector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(
       true,
     );
+    const diagnostic = collector.diagnostics.find(
+      (d) => d.code === MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+    );
+    expect(diagnostic?.message).toContain("division");
+    expect(diagnostic?.message).toContain("no markdown syntax");
   });
 
   it("round-trips blockquote shapes byte for byte through lower -> emit -> lower, including nesting and adjacency", () => {
@@ -3199,6 +3204,11 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     expect(collector.has(MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED)).toBe(
       true,
     );
+    const diagnostic = collector.diagnostics.find(
+      (d) => d.code === MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED,
+    );
+    expect(diagnostic?.message).toContain("9");
+    expect(diagnostic?.message).toContain("6");
   });
 
   it("ADJACENT_LINKS_MERGED fires when two consecutive runs share a hyperlink", () => {
@@ -3283,6 +3293,11 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     expect(collector.has(MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK)).toBe(
       true,
     );
+    const diagnostic = collector.diagnostics.find(
+      (d) => d.code === MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK,
+    );
+    expect(diagnostic?.message).toContain("list1");
+    expect(diagnostic?.message).toContain("not minted");
   });
 
   it("LIST_NUMID_FALLBACK fires once for depth-only memberships with no numId, falling back to one tight plain-bullet list", () => {
@@ -3295,12 +3310,12 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
       { sink: collector.sink },
     );
     expect(markdown).toBe("- x\n  - y");
-    expect(
-      collector.diagnostics.filter(
-        (diagnostic) =>
-          diagnostic.code === MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK,
-      ),
-    ).toHaveLength(1);
+    const fallbacks = collector.diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.code === MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK,
+    );
+    expect(fallbacks).toHaveLength(1);
+    expect(fallbacks[0]?.message).toContain("no numId");
   });
 
   it("TABLE_CELL_FORMATTING_DROPPED fires for a non-paragraph/non-image/non-lone-nested-table cell block even inside the HTML-table fallback, once colSpan already triggers it", () => {
