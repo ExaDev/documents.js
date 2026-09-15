@@ -168,8 +168,9 @@ export function writeOdfList(
     while (openLists.length - 1 < level) {
       const enclosing = openLists[openLists.length - 1]!;
       const lastChild = enclosing.children[enclosing.children.length - 1];
+      // No separate check that lastChild's own tag is "text:list-item": every element this function ever pushes onto an "enclosing" list's children is one, via the enclosing.children.push(host) call a few lines below, so an element found here already carries no other tag to distinguish from it.
       let host: XmlElement;
-      if (lastChild?.type === "element" && lastChild.tag === "text:list-item") {
+      if (lastChild?.type === "element") {
         host = lastChild;
       } else {
         host = el("text:list-item");

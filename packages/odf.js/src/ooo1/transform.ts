@@ -234,7 +234,7 @@ function renameQName(
   prefixes: ReadonlyMap<string, string>,
 ): string {
   const colon = qname.indexOf(":");
-  if (colon < 0) {
+  if (colon === -1) {
     return qname;
   }
   const canonical = prefixes.get(qname.slice(0, colon));
@@ -571,7 +571,8 @@ function prefixRenames(root: XmlElement): Map<string, string> {
     }
     const declared = attribute.name.slice("xmlns:".length);
     const canonical = CANONICAL_PREFIX_BY_URI.get(attribute.value);
-    if (canonical !== undefined && canonical !== declared) {
+    // No "canonical !== declared" guard: recording declared -> declared here is a genuine no-op (renameQName's own canonical === undefined check is the only branch that reads this map, and a self-mapped entry resolves identically to a missing one), so skipping it would only be an allocation micro-optimisation, not a behavioural difference worth a second condition.
+    if (canonical !== undefined) {
       renames.set(declared, canonical);
     }
   }
@@ -715,6 +716,16 @@ const CLASS_BY_GENRE_ELEMENT: ReadonlyMap<string, string> = new Map([
   ["office:chart", "chart"],
 ]);
 
+// The first child that is both an element and a recognised genre tag -- shared by reverseTransformElement's own office:body unwrap and documentClassOf below, the two places this package looks for office:body's genre child. A non-element child is never returned: CLASS_BY_GENRE_ELEMENT has no key for a non-element node's undefined tag, so the type check inside this one shared find() only ever needs proving once rather than twice.
+function firstGenreElement(
+  children: readonly XmlNode[],
+): XmlElement | undefined {
+  return children.find(
+    (child): child is XmlElement =>
+      child.type === "element" && CLASS_BY_GENRE_ELEMENT.has(child.tag),
+  );
+}
+
 // Simple, unambiguous element renames reversed by a straight lookup -- every RENAMED_ELEMENTS target EXCEPT the three whose forward mapping is many-to-one (text:list, from text:ordered-list AND text:unordered-list; text:note-body and text:note-citation, each from a footnote/endnote pair), which cannot be inverted by name alone and are handled below through the same context (a resolved list kind, an enclosing note's own class) their forward siblings in NOTE_ELEMENTS already need for the identical reason.
 const REVERSE_RENAMED_ELEMENTS: ReadonlyMap<string, string> = new Map([
   ["office:font-face-decls", "office:font-decls"],
@@ -729,11 +740,8 @@ const REVERSE_RENAMED_ELEMENTS: ReadonlyMap<string, string> = new Map([
   ["table:dependency", "table:dependence"],
 ]);
 
-// The text:note/text:note-ref/text:notes-configuration family's own reverse: each carries its own text:note-class attribute (added by the forward NOTE_ELEMENTS mapping), so -- unlike text:note-body/text:note-citation below -- this one needs no threaded context at all, just the element's own attribute. Defaults to "footnote" for a malformed/absent class, matching this package's general degrade-gracefully reading posture applied to writing.
-function reverseNoteTag(
-  tag: string,
-  noteClass: string | undefined,
-): string | undefined {
+// The text:note/text:note-ref/text:notes-configuration family's own reverse: each carries its own text:note-class attribute (added by the forward NOTE_ELEMENTS mapping), so -- unlike text:note-body/text:note-citation below -- this one needs no threaded context at all, just the element's own attribute. Defaults to "footnote" for a malformed/absent class, matching this package's general degrade-gracefully reading posture applied to writing. Only ever called (see reverseTransformElement below) with tag already narrowed to one of the three checked below, so the last of them needs no guard of its own -- by the time text:note and text:note-ref have both failed, tag can only be text:notes-configuration.
+function reverseNoteTag(tag: string, noteClass: string | undefined): string {
   const isEndnote = noteClass === "endnote";
   if (tag === "text:note") {
     return isEndnote ? "text:endnote" : "text:footnote";
@@ -741,27 +749,21 @@ function reverseNoteTag(
   if (tag === "text:note-ref") {
     return isEndnote ? "text:endnote-ref" : "text:footnote-ref";
   }
-  if (tag === "text:notes-configuration") {
-    return isEndnote
-      ? "text:endnotes-configuration"
-      : "text:footnotes-configuration";
-  }
-  return undefined;
+  return isEndnote
+    ? "text:endnotes-configuration"
+    : "text:footnotes-configuration";
 }
 
-// text:note-body and text:note-citation carry no note-class of their own in ODF -- only their ENCLOSING text:note does -- so reversing them needs the class threaded down through the recursion from the text:note that contains them (ReverseTransformContext.noteClass, set exactly once, the moment a text:note element is entered).
+// text:note-body and text:note-citation carry no note-class of their own in ODF -- only their ENCLOSING text:note does -- so reversing them needs the class threaded down through the recursion from the text:note that contains them (ReverseTransformContext.noteClass, set exactly once, the moment a text:note element is entered). Only ever called (see reverseTransformElement below) with tag already narrowed to one of the two checked below, so the second needs no guard of its own -- once text:note-body has failed, tag can only be text:note-citation.
 function reverseNoteBodyOrCitation(
   tag: string,
   noteClass: "footnote" | "endnote" | undefined,
-): string | undefined {
+): string {
   const isEndnote = noteClass === "endnote";
   if (tag === "text:note-body") {
     return isEndnote ? "text:endnote-body" : "text:footnote-body";
   }
-  if (tag === "text:note-citation") {
-    return isEndnote ? "text:endnote-citation" : "text:footnote-citation";
-  }
-  return undefined;
+  return isEndnote ? "text:endnote-citation" : "text:footnote-citation";
 }
 
 // A length written in ODF's "in" unit, reversed to OpenOffice.org 1.x's own "inch" spelling -- the exact inverse of INCH_TOKEN above, matched the same way (a whole whitespace-delimited token, so a compound value like a border shorthand keeps its structure).
@@ -961,13 +963,11 @@ function reverseMovedChildren(
 
 // meta:keywords was a wrapper ODF removed (see transformElement's own meta:keywords case); reversed here by re-wrapping every meta:keyword sibling office:meta carries into one meta:keywords element, positioned at the first keyword's own place among its siblings -- exactly the shape the forward direction unwraps. Safe to run unconditionally over any element's children (not scoped to office:meta specifically): meta:keyword has no legitimate ODF appearance anywhere else, so the check costs nothing when there is nothing to wrap.
 function wrapMetaKeywords(nodes: readonly XmlNode[]): XmlNode[] {
+  // No early return for an empty keywords list: the loop below already reproduces `nodes` unchanged in that case (every node fails the meta:keyword check below and is pushed through as-is), so a length-0 guard would only save the loop's own allocation, never change the result.
   const keywords = nodes.filter(
     (node): node is XmlElement =>
       node.type === "element" && node.tag === "meta:keyword",
   );
-  if (keywords.length === 0) {
-    return [...nodes];
-  }
   const out: XmlNode[] = [];
   let inserted = false;
   for (const node of nodes) {
@@ -1044,17 +1044,13 @@ function reverseTransformElement(
     context.prefixes,
   );
 
-  // office:body's genre child (buildBody's own construction) unwraps: recursing into the GENRE element's children rather than office:body's own single child reproduces the flat body OpenOffice.org 1.x wrote.
+  // office:body's genre child (buildBody's own construction) unwraps: recursing into the GENRE element's children rather than office:body's own single child reproduces the flat body OpenOffice.org 1.x wrote. office:body itself needs no special-cased return below (unlike draw:frame, the note family, and the rest) -- REVERSE_RENAMED_ELEMENTS has no entry for it and it is not a DOCUMENT_ROOT_ELEMENTS member, so the generic tag/attribute handling at the bottom of this function already reproduces element("office:body", attributes, children) exactly.
   const genreChild =
     renamedTag === "office:body"
-      ? source.children.find(
-          (child): child is XmlElement => child.type === "element",
-        )
+      ? firstGenreElement(source.children)
       : undefined;
   const recurseInto =
-    genreChild !== undefined && CLASS_BY_GENRE_ELEMENT.has(genreChild.tag)
-      ? genreChild.children
-      : source.children;
+    genreChild === undefined ? source.children : genreChild.children;
 
   let childContext = context;
   if (renamedTag === "text:note") {
@@ -1073,10 +1069,6 @@ function reverseTransformElement(
     reverseTransformNodes(recurseInto, childContext),
   );
 
-  if (renamedTag === "office:body") {
-    return [element("office:body", attributes, children)];
-  }
-
   if (renamedTag === "draw:frame") {
     return [
       unwrapFrame(attributes, children) ??
@@ -1093,13 +1085,12 @@ function reverseTransformElement(
     const withoutClass = attributes.filter(
       (attribute) => attribute.name !== "text:note-class",
     );
-    const tag = reverseNoteTag(renamedTag, noteClassRaw) ?? renamedTag;
+    const tag = reverseNoteTag(renamedTag, noteClassRaw);
     return [element(tag, withoutClass, children)];
   }
 
   if (renamedTag === "text:note-body" || renamedTag === "text:note-citation") {
-    const tag =
-      reverseNoteBodyOrCitation(renamedTag, context.noteClass) ?? renamedTag;
+    const tag = reverseNoteBodyOrCitation(renamedTag, context.noteClass);
     return [element(tag, attributes, children)];
   }
 
@@ -1169,9 +1160,8 @@ function documentClassOf(pkg: Package): string | undefined {
     root === undefined
       ? undefined
       : findChildElement(root.children, "office:body");
-  const genre = body?.children.find(
-    (child): child is XmlElement => child.type === "element",
-  );
+  const genre =
+    body === undefined ? undefined : firstGenreElement(body.children);
   return genre === undefined
     ? undefined
     : CLASS_BY_GENRE_ELEMENT.get(genre.tag);

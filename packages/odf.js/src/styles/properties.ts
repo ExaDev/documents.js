@@ -119,15 +119,11 @@ const PERCENTAGE_PATTERN = /^(-?(?:\d+(?:\.\d+)?|\.\d+))%$/;
 
 // fo:line-height as a percentage (e.g. "150%") maps to document-schema.js's ContentParagraph.lineSpacing, which is a multiplier (1.5), not a percentage (150) -- see ooxml.js's own docx/pptx line-spacing readers, which establish this convention (`expect(props.lineSpacing).toBe(1.5)` for what OOXML calls 360/240). An absolute-length fo:line-height (e.g. "12pt") or the literal value "normal" is valid ODF but outside this multiplier-only model, so it parses as undefined here (triggering the caller's hasUnknown, not a silent misinterpretation).
 function parsePercentageMultiplier(value: string): number | undefined {
-  const match = PERCENTAGE_PATTERN.exec(value);
-  if (match === null) {
+  // No capture-group extraction: the pattern anchors the numeric portion between ^ and a trailing "%$", so a successful match's numeric text is always exactly the input with its last character (the "%") removed -- reading it back out of a capture group would need a second, provably-always-true undefined check the type system can't see through on its own.
+  if (!PERCENTAGE_PATTERN.test(value)) {
     return undefined;
   }
-  const numeric = match[1];
-  if (numeric === undefined) {
-    return undefined;
-  }
-  return Number(numeric) / 100;
+  return Number(value.slice(0, -1)) / 100;
 }
 
 export function formatPercentageMultiplier(multiplier: number): string {
@@ -136,32 +132,32 @@ export function formatPercentageMultiplier(multiplier: number): string {
 
 // The canonical ODF colour parse/format pair now lives in ../typed/shared/color.ts, shared with every other reader in this package rather than duplicated here -- see that module's own top-of-file note on the text:color datatype. This module calls parseOdfColor/formatOdfColor directly (see parseTextProperties/textPropertiesToAttributes below) rather than through a local alias.
 
-// Reads a boolean tri-state (true/false/absent) plus an "unrecognised combination" outcome from ODF's compound line-decoration attributes (underline: style+width+color; strike: style+type). Ground truth (LibreOffice 26.2): underline "on" is `style:text-underline-style="solid" style:text-underline-width="auto" style:text-underline-color="font-color"`; strike "on" is `style:text-line-through-style="solid" style:text-line-through-type="single"`. Only that exact canonical "on" shape, or a plain "none" with no companion attributes, parses cleanly -- anything else (a custom underline colour, a dotted style, a companion attribute present alongside "none") is real formatting information this boolean model cannot represent, so it comes back as 'unknown' rather than being silently approximated.
+// Reads a boolean tri-state (true/false/absent) plus an "unrecognised combination" outcome from ODF's compound line-decoration attributes (underline: style+width+color; strike: style+type). Ground truth (LibreOffice 26.2): underline "on" is `style:text-underline-style="solid" style:text-underline-width="auto" style:text-underline-color="font-color"`; strike "on" is `style:text-line-through-style="solid" style:text-line-through-type="single"`. Only that exact canonical "on" shape, or a plain "none" with no companion attributes, parses cleanly -- anything else (a custom underline colour, a dotted style, a companion attribute present alongside "none") is real formatting information this boolean model cannot represent, so it comes back as 'unknown' rather than being silently approximated. companionB is genuinely optional at the type level, not just always undefined at runtime: strike has only one companion attribute (type), so its call site omits companionB entirely rather than passing a hardcoded "no on-value for the companion that doesn't exist" placeholder that no test could ever observe.
 function parseLineDecoration(
   style: string | undefined,
   companionA: string | undefined,
   companionAOnValue: string,
-  companionB: string | undefined,
-  companionBOnValue: string,
+  companionB?: { readonly value: string | undefined; readonly onValue: string },
 ): boolean | undefined | "unknown" {
+  const companionBValue = companionB?.value;
   if (
     style === undefined &&
     companionA === undefined &&
-    companionB === undefined
+    companionBValue === undefined
   ) {
     return undefined;
   }
   if (
     style === "solid" &&
     (companionA === undefined || companionA === companionAOnValue) &&
-    (companionB === undefined || companionB === companionBOnValue)
+    (companionBValue === undefined || companionBValue === companionB?.onValue)
   ) {
     return true;
   }
   if (
     style === "none" &&
     companionA === undefined &&
-    companionB === undefined
+    companionBValue === undefined
   ) {
     return false;
   }
@@ -207,8 +203,7 @@ export function parseTextProperties(element: XmlElement): ParsedProperties {
     attrs.get(ATTR.underlineStyle),
     attrs.get(ATTR.underlineWidth),
     "auto",
-    attrs.get(ATTR.underlineColor),
-    "font-color",
+    { value: attrs.get(ATTR.underlineColor), onValue: "font-color" },
   );
   if (underline === "unknown") {
     hasUnknown = true;
@@ -220,8 +215,6 @@ export function parseTextProperties(element: XmlElement): ParsedProperties {
     attrs.get(ATTR.lineThroughStyle),
     attrs.get(ATTR.lineThroughType),
     "single",
-    undefined,
-    "",
   );
   if (strike === "unknown") {
     hasUnknown = true;

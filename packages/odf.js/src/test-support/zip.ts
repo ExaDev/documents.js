@@ -2,32 +2,35 @@ import { expect } from "vitest";
 
 // Little-endian integer readers over raw zip bytes, shared by every test that walks a zip's physical local-file-header layout rather than trusting a round trip through unzipPackage's Record (which makes no ordering promise of its own to test against). Never imported by src/index.ts and never reaches dist/ -- test-only, mirroring the same test-only, never-exported convention as this package's other test-support helpers.
 
-export function readUint16LE(bytes: Uint8Array, offset: number): number {
-  const b0 = bytes[offset];
-  const b1 = bytes[offset + 1];
-  if (b0 === undefined || b1 === undefined) {
+// A single out-of-range check on the whole [offset, offset + byteCount) span, rather than one `bytes[i] === undefined` comparison per byte -- the per-byte form used to leave middle bytes (b1 of 4, say) impossible to isolate as the sole missing one, since a real Uint8Array's undefined region is always a contiguous prefix (negative indices) or suffix (indices past the end), never a single interior gap: no test input could ever tell "byte 1 alone is missing" apart from "the guard doesn't check byte 1 at all", so that mutation was unkillable by construction. A span check has no such interior case to isolate.
+function requireBytesInRange(
+  bytes: Uint8Array,
+  offset: number,
+  byteCount: number,
+  typeLabel: string,
+): void {
+  if (offset < 0 || offset + byteCount > bytes.length) {
     throw new Error(
-      `truncated zip bytes while reading a uint16 at offset ${offset}`,
+      `truncated zip bytes while reading a ${typeLabel} at offset ${offset}`,
     );
   }
+}
+
+export function readUint16LE(bytes: Uint8Array, offset: number): number {
+  requireBytesInRange(bytes, offset, 2, "uint16");
+  // Bounds already verified above, so both indices are in range -- this is the standard escape hatch for a typed-array read TypeScript otherwise types as `number | undefined` under noUncheckedIndexedAccess with no way to narrow it from a separately-expressed arithmetic guard.
+  const b0 = bytes[offset]!;
+  const b1 = bytes[offset + 1]!;
   return b0 | (b1 << 8);
 }
 
 export function readUint32LE(bytes: Uint8Array, offset: number): number {
-  const b0 = bytes[offset];
-  const b1 = bytes[offset + 1];
-  const b2 = bytes[offset + 2];
-  const b3 = bytes[offset + 3];
-  if (
-    b0 === undefined ||
-    b1 === undefined ||
-    b2 === undefined ||
-    b3 === undefined
-  ) {
-    throw new Error(
-      `truncated zip bytes while reading a uint32 at offset ${offset}`,
-    );
-  }
+  requireBytesInRange(bytes, offset, 4, "uint32");
+  // Bounds already verified above, so all four indices are in range -- see readUint16LE's identical comment.
+  const b0 = bytes[offset]!;
+  const b1 = bytes[offset + 1]!;
+  const b2 = bytes[offset + 2]!;
+  const b3 = bytes[offset + 3]!;
   return (b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)) >>> 0;
 }
 

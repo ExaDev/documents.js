@@ -253,6 +253,15 @@ describe("readOdgContent", () => {
     expect(pages).toHaveLength(2);
   });
 
+  it("omits the 'source' key entirely from a page with no residue, rather than carrying it set to undefined", () => {
+    const { pages } = readOdgContent(buildFixturePackage());
+    expect(Object.hasOwn(pages[0]!, "source")).toBe(false);
+  });
+
+  it("omits the package-level 'source' key entirely from readOdg when nothing was quarantined", () => {
+    expect(Object.hasOwn(readOdg(buildFixturePackage()), "source")).toBe(false);
+  });
+
   it("resolves page size from the master-page -> page-layout chain, identically to readOdpContent", () => {
     const { pages } = readOdgContent(buildFixturePackage());
     expect(pages[0]?.size.widthPt).toBeCloseTo((21 * 72) / 2.54, 6);

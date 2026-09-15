@@ -6,6 +6,9 @@ import {
   readOdfMetadata,
   hasOdfMetadata,
   patchOdfMetadata,
+  writeOdfMetadata,
+  buildOdfMetaNodes,
+  ensureNamespaceDeclared,
   META_PART,
 } from "./metadata";
 
@@ -78,7 +81,8 @@ describe("readOdfMetadata", () => {
   });
 
   it("returns an empty object for a well-formed but entirely empty office:meta -- an empty office:meta is valid ODF, not an error", () => {
-    expect(readOdfMetadata(metaPackage([]))).toEqual({});
+    // toStrictEqual, not toEqual: toEqual ignores explicit undefined-valued properties, so it can't tell a genuinely absent key apart from one of the six field guards below wrongly firing and setting metadata.<field> = undefined -- toStrictEqual treats that as a real, distinguishable difference from {}.
+    expect(readOdfMetadata(metaPackage([]))).toStrictEqual({});
   });
 
   // dc:title / meta:initial-creator / dc:subject / dc:date / meta:generator values below are copied verbatim (real LibreOffice 26.2.5.2 output) from Modern_business_letter_serif.ott and CV.ott, two of LibreOffice's own bundled templates under /Applications/LibreOffice.app/Contents/Resources/template/**; meta:creation-date's value is likewise a real LibreOffice-produced timestamp copied from the same template. See this module's own top-of-file note on how meta:initial-creator vs. dc:creator, and meta:keyword's one-element-per-keyword shape, were confirmed against those real files.
@@ -215,6 +219,109 @@ describe("readOdfMetadata", () => {
   });
 });
 
+describe("buildOdfMetaNodes / writeOdfMetadata", () => {
+  it("an entirely empty LayoutMetadata writes no field element at all", () => {
+    const nodes = buildOdfMetaNodes({}, "1.3");
+    const pkg: Package = { parts: { [META_PART]: { kind: "xml", nodes } } };
+    expect(officeMetaOf(pkg).children).toEqual([]);
+  });
+
+  it("writes exactly one element per stated field, one field at a time", () => {
+    const fields: [keyof Parameters<typeof buildOdfMetaNodes>[0], string][] = [
+      ["title", "dc:title"],
+      ["subject", "dc:subject"],
+      ["author", "meta:initial-creator"],
+      ["creator", "meta:generator"],
+      ["createdIso", "meta:creation-date"],
+      ["modifiedIso", "dc:date"],
+      ["language", "dc:language"],
+    ];
+    for (const [field, tag] of fields) {
+      const nodes = buildOdfMetaNodes({ [field]: "value" }, "1.3");
+      const pkg: Package = { parts: { [META_PART]: { kind: "xml", nodes } } };
+      expect(
+        officeMetaOf(pkg).children.map((c) =>
+          c.type === "element" ? c.tag : c.type,
+        ),
+      ).toEqual([tag]);
+    }
+  });
+
+  it("writes one meta:keyword element per keyword, in order", () => {
+    const nodes = buildOdfMetaNodes({ keywords: ["a", "b", "c"] }, "1.3");
+    const pkg: Package = { parts: { [META_PART]: { kind: "xml", nodes } } };
+    expect(readOdfMetadata(pkg).keywords).toEqual(["a", "b", "c"]);
+  });
+
+  it("the declaration node states XML 1.0 UTF-8, and the root is office:document-meta at the given version", () => {
+    const nodes = buildOdfMetaNodes({}, "1.3");
+    expect(nodes[0]).toEqual({
+      type: "declaration",
+      attributes: [
+        { name: "version", value: "1.0" },
+        { name: "encoding", value: "UTF-8" },
+      ],
+    });
+    const root = nodes.find(
+      (node): node is XmlElement => node.type === "element",
+    );
+    expect(root?.tag).toBe("office:document-meta");
+    expect(
+      root?.attributes.find((a) => a.name === "office:version")?.value,
+    ).toBe("1.3");
+  });
+
+  it("writeOdfMetadata sets the package's meta.xml part, readable back through readOdfMetadata", () => {
+    const pkg: Package = { parts: {} };
+    writeOdfMetadata(pkg, { title: "Written title" }, "1.3");
+    expect(readOdfMetadata(pkg).title).toBe("Written title");
+  });
+
+  it("writeOdfMetadata replaces an existing meta.xml part outright, rather than merging", () => {
+    const pkg = metaPackage([el("dc:title", {}, [txt("Stale title")])]);
+    writeOdfMetadata(pkg, { subject: "Fresh subject" }, "1.3");
+    const metadata = readOdfMetadata(pkg);
+    expect(metadata.title).toBeUndefined();
+    expect(metadata.subject).toBe("Fresh subject");
+  });
+});
+
+describe("ensureNamespaceDeclared", () => {
+  it("does nothing for a tag with no colon at all", () => {
+    // A colonless tag has no prefix to declare a namespace for at all -- this deliberately picks a tag ("dcX") whose LAST character, if the leading-colon guard were skipped, would slice down to the real prefix "dc" and wrongly declare xmlns:dc; the correct behaviour is to return before ever reaching that slice.
+    const root = el("office:document-meta");
+    ensureNamespaceDeclared(root, "dcX");
+    expect(root.attributes).toEqual([]);
+  });
+
+  it("does nothing for a recognised prefix's own namespace when it is already declared", () => {
+    const root = el("office:document-meta", {
+      "xmlns:dc": "http://purl.org/dc/elements/1.1/",
+    });
+    ensureNamespaceDeclared(root, "dc:title");
+    expect(root.attributes.filter((a) => a.name === "xmlns:dc")).toHaveLength(
+      1,
+    );
+  });
+
+  it("declares the namespace for a recognised prefix that is not yet declared", () => {
+    const root = el("office:document-meta");
+    ensureNamespaceDeclared(root, "meta:initial-creator");
+    expect(root.attributes).toEqual([
+      {
+        name: "xmlns:meta",
+        value: "urn:oasis:names:tc:opendocument:xmlns:meta:1.0",
+      },
+    ]);
+  });
+
+  it("does nothing for a prefix outside the dc:/meta: vocabulary this module can newly introduce", () => {
+    const root = el("office:document-meta");
+    ensureNamespaceDeclared(root, "office:unknown-field");
+    expect(root.attributes).toEqual([]);
+  });
+});
+
 describe("hasOdfMetadata", () => {
   it("is true for a package carrying a real meta.xml XML part", () => {
     expect(hasOdfMetadata(metaPackage())).toBe(true);
@@ -296,13 +403,15 @@ describe("patchOdfMetadata", () => {
     ]);
   });
 
-  it("removes every meta:keyword element when patched with an empty array, rather than leaving a stale one", () => {
+  it("removes every meta:keyword element when patched with an empty array, rather than leaving a stale one, and leaves every OTHER element in office:meta untouched", () => {
     const pkg = metaPackage([
+      el("dc:title", {}, [txt("Untouched title")]),
       el("meta:keyword", {}, [txt("alpha")]),
       el("meta:keyword", {}, [txt("beta")]),
     ]);
     patchOdfMetadata(pkg, { keywords: [] });
     expect(readOdfMetadata(pkg).keywords).toBeUndefined();
+    expect(readOdfMetadata(pkg).title).toBe("Untouched title");
     expect(
       officeMetaOf(pkg).children.some(
         (c) => c.type === "element" && c.tag === "meta:keyword",
@@ -329,6 +438,19 @@ describe("patchOdfMetadata", () => {
     expect(readOdfMetadata(pkg).author).toBe("New author");
   });
 
+  it("declares xmlns:meta on office:document-meta when patching keywords into a meta.xml that only ever declared dc:", () => {
+    // The keywords loop calls ensureNamespaceDeclared itself (unlike title/author/subject, whose declaration goes through setElementText), so this pins that call's own "meta:keyword" prefix argument directly, distinct from the author-path test above.
+    const pkg = metaPackage([el("dc:title", {}, [txt("Existing title")])], {
+      "xmlns:office": "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
+      "xmlns:dc": "http://purl.org/dc/elements/1.1/",
+    });
+    patchOdfMetadata(pkg, { keywords: ["alpha"] });
+    const root = documentMetaRootOf(pkg);
+    expect(root.attributes.find((a) => a.name === "xmlns:meta")?.value).toBe(
+      "urn:oasis:names:tc:opendocument:xmlns:meta:1.0",
+    );
+  });
+
   it("does not duplicate an xmlns declaration the root already carries", () => {
     const pkg = metaPackage([], {
       "xmlns:office": "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
@@ -345,6 +467,15 @@ describe("patchOdfMetadata", () => {
     expect(() => {
       patchOdfMetadata({ parts: {} }, { title: "x" });
     }).toThrow(/has no 'meta\.xml' XML part/);
+  });
+
+  it("throws when meta.xml is an XML part with no root element at all", () => {
+    const pkg: Package = {
+      parts: { [META_PART]: { kind: "xml", nodes: [] } },
+    };
+    expect(() => {
+      patchOdfMetadata(pkg, { title: "x" });
+    }).toThrow(/has no root element/);
   });
 
   it("throws when meta.xml has no office:meta element", () => {

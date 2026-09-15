@@ -88,6 +88,38 @@ describe("readOdm: scope boundaries and error paths (synthetic packages)", () =>
     expect(readOdm(pkg).sections).toEqual([]);
   });
 
+  it("ignores a non-element child and a differently-tagged element among office:text's children, rather than trying to read them as sections", () => {
+    const realSection = el("text:section", { "text:name": "ChapterOne" }, [
+      el("text:section-source", { "xlink:href": "chapter1.odt" }),
+    ]);
+    // A decoy carrying a genuine text:section-source child, deliberately shaped so readSection would succeed on it if this element's own tag check were ever skipped -- an ordinary tagless decoy (like the stray text:p below) can't tell "skipped by tag" apart from "reached readSection, which itself found nothing to read".
+    const decoy = el("text:p", { "text:name": "Decoy" }, [
+      el("text:section-source", { "xlink:href": "not-a-real-chapter.odt" }),
+    ]);
+    const pkg: Package = {
+      parts: {
+        "content.xml": {
+          kind: "xml",
+          nodes: [
+            el("office:document-content", {}, [
+              el("office:body", {}, [
+                el("office:text", {}, [
+                  txt("\n  "),
+                  decoy,
+                  el("text:p", {}, [txt("stray paragraph")]),
+                  realSection,
+                ]),
+              ]),
+            ]),
+          ],
+        },
+      },
+    };
+    expect(readOdm(pkg).sections).toEqual([
+      { name: "ChapterOne", href: "chapter1.odt" },
+    ]);
+  });
+
   it("skips a top-level text:section with no text:section-source child -- ODF's generic, non-master-document section (e.g. multi-column layout), not a chapter reference", () => {
     const plainSection = el(
       "text:section",

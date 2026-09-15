@@ -140,9 +140,8 @@ export function writeOdgContent(
     version,
   );
 
-  const registry = StyleRegistry.forPart(pkg, CONTENT_PART, {
-    otherPart: { pkg, partPath: STYLES_PART },
-  });
+  // No otherPart cross-check against styles.xml: createOdfPackage above just built this exact package from scratch, so styles.xml's own office:automatic-styles is always freshly empty at this point -- there is no pre-existing style:style anywhere in it for a scan to find, since nothing (this call included) has written to styles.xml yet.
+  const registry = StyleRegistry.forPart(pkg, CONTENT_PART);
   const contentAutomaticStyles = odfPartContainer(
     pkg,
     CONTENT_PART,

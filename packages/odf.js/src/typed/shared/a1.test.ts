@@ -1,5 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { columnIndexToLetters, cellReference, TableCursor } from "./a1";
+import {
+  columnIndexToLetters,
+  columnLettersToIndex,
+  cellReference,
+  TableCursor,
+} from "./a1";
+
+describe("columnLettersToIndex", () => {
+  it("converts uppercase column letters back to a 0-based index", () => {
+    expect(columnLettersToIndex("A")).toBe(0);
+    expect(columnLettersToIndex("Z")).toBe(25);
+    expect(columnLettersToIndex("AA")).toBe(26);
+  });
+
+  it("returns undefined for input containing anything but uppercase letters", () => {
+    expect(columnLettersToIndex("a")).toBeUndefined();
+    expect(columnLettersToIndex("A1")).toBeUndefined();
+    expect(columnLettersToIndex("")).toBeUndefined();
+  });
+
+  it("returns undefined for mixed-case input even though every character is a letter", () => {
+    // document-schema.js's own columnLettersToIndex uppercases its input before validating, so it alone can't distinguish "aA" or "Aa" from "AA" -- these two cases exist specifically to pin the ^ and $ anchors in this module's own uppercase-only guard, each anchor's removal otherwise lets exactly one of these two strings reach (and be silently accepted by) the schema helper.
+    expect(columnLettersToIndex("aA")).toBeUndefined();
+    expect(columnLettersToIndex("Aa")).toBeUndefined();
+  });
+});
 
 describe("columnIndexToLetters", () => {
   it("converts single-letter columns", () => {
@@ -92,13 +117,13 @@ describe("TableCursor", () => {
     expect(cursor.nextCell()).toBe("A31985");
   });
 
-  it("throws for a zero or negative repeat count on either advance method", () => {
+  it("throws for a zero or negative repeat count on either advance method, naming its own caller in the message", () => {
     const cursor = new TableCursor();
-    expect(() => cursor.nextCell(0)).toThrow(/positive integer/);
-    expect(() => cursor.nextCell(-1)).toThrow(/positive integer/);
+    expect(() => cursor.nextCell(0)).toThrow("TableCursor.nextCell:");
+    expect(() => cursor.nextCell(-1)).toThrow("TableCursor.nextCell:");
     expect(() => {
       cursor.nextRow(0);
-    }).toThrow(/positive integer/);
+    }).toThrow("TableCursor.nextRow:");
   });
 
   it("throws for a non-integer repeat count", () => {

@@ -359,7 +359,7 @@ export class StyleRegistry {
     this.automaticStyles.children.push(styleElement);
 
     this.knownStyles.set(name, styleElement);
-    this.reservedByFamily[request.family].add(name);
+    // No `reservedByFamily[family].add(name)` here for a freshly minted name: mintName's own counter for this family always advances past whatever it just minted (see mintName below), so no later mintName call for this same registry instance can ever re-derive this exact counter value and need to check it against `reserved` again -- and adoption (the only other place a name can become "taken") only ever runs once, before construction finishes, never interleaved with intern() calls. A name minted here therefore never needs its own registration in `reserved` to stay unique.
     this.fingerprintToName.set(fingerprint, name);
     this.nameToFingerprint.set(name, fingerprint);
     return name;
@@ -392,16 +392,17 @@ export class StyleRegistry {
       if (referenced.has(name)) {
         continue;
       }
-      const index = this.automaticStyles.children.indexOf(element);
-      if (index !== -1) {
-        this.automaticStyles.children.splice(index, 1);
-      }
+      // No `index !== -1` guard: `element` is the exact reference this same class itself put into `automaticStyles.children` -- either during forPart's own adoption scan of that very array, or via intern()'s own `.push(styleElement)` just before storing that same reference in knownStyles -- and nothing in this class ever replaces `.children` wholesale or removes a name from knownStyles without also splicing its element out in this same step, so a name still in knownStyles always has its element still present in the array, findable by indexOf.
+      this.automaticStyles.children.splice(
+        this.automaticStyles.children.indexOf(element),
+        1,
+      );
       this.knownStyles.delete(name);
       const fingerprint = this.nameToFingerprint.get(name);
       if (fingerprint !== undefined) {
         this.fingerprintToName.delete(fingerprint);
-        this.nameToFingerprint.delete(name);
       }
+      // No `this.nameToFingerprint.delete(name)` here: nameToFingerprint is only ever read (above) for a name still present in knownStyles, and this same iteration just removed `name` from knownStyles for good (a gc'd name is reserved forever and never re-adopted or re-minted -- see this method's own class-level comment), so no future gc() call can ever read this entry again. Deleting it would only ever tidy a map slot nothing will look at again, exactly like reservedByFamily's own already-documented "kept forever" bookkeeping above.
       removed += 1;
     }
     return removed;

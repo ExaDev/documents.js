@@ -39,9 +39,7 @@ const CFVO_TYPE_BY_CALCEXT_TYPE: ReadonlyMap<string, CfvoType> = new Map([
 export function readTargetRangeList(value: string): ContentSheetRange[] {
   const ranges: ContentSheetRange[] = [];
   for (const part of value.split(" ")) {
-    if (part.length === 0) {
-      continue;
-    }
+    // No separate `part.length === 0` guard: a genuinely empty part (from a run of consecutive spaces) has no ':' to find either, so it already falls through the very next check below -- an explicit length guard here would only ever fire on input the next line already handles identically.
     const separatorIndex = part.indexOf(":");
     if (separatorIndex === -1) {
       continue;
@@ -64,9 +62,9 @@ export function readTargetRangeList(value: string): ContentSheetRange[] {
 function parseA1WithOptionalSheetPrefix(
   cellPart: string,
 ): { column: number; row: number } | undefined {
+  // No separate "has a sheet prefix at all" branch: when there is no '.', lastIndexOf returns -1, and slice(-1 + 1) = slice(0) returns cellPart unchanged -- exactly what a bare reference needs, with no ternary required to state it.
   const dotIndex = cellPart.lastIndexOf(".");
-  const bareReference =
-    dotIndex === -1 ? cellPart : cellPart.slice(dotIndex + 1);
+  const bareReference = cellPart.slice(dotIndex + 1);
   return parseCellReference(bareReference);
 }
 
@@ -77,10 +75,8 @@ function readConditionalFormatStyle(
   if (styleName === undefined) {
     return undefined;
   }
+  // No separate "chain resolved to nothing" guard: readCellStyleDecoration and resolveStyle both fold over `elements` and yield undefined background/color for an empty chain exactly as they would for a chain that resolved but carried neither property, so an empty chain already falls through to the "genuinely no styling" check below with the identical result.
   const { elements } = resolveStyleElementChain(styleName, "table-cell", pkg);
-  if (elements.length === 0) {
-    return undefined;
-  }
   // ContentSheetConditionalFormatStyleSchema.background is a plain colour (the two properties actually observed on a real dxf, per that schema's own top comment); readCellStyleDecoration's own background is the richer solid/pattern ContentCellFill a regular cell can carry, so only the 'solid' case narrows down to a colour here -- a pattern fill on the referenced style has no representation in this narrower schema and is simply not carried through, matching the schema's own documented scope.
   const { background: fill } = readCellStyleDecoration(elements);
   const background = fill?.kind === "solid" ? fill.color : undefined;
@@ -308,9 +304,7 @@ function readCondition(
     case "bottom-elements":
     case "top-percent":
     case "bottom-percent": {
-      if (parsed.expr1 === undefined) {
-        return undefined;
-      }
+      // No separate `parsed.expr1 === undefined` guard: Number(undefined) is NaN, which the Number.isFinite check right below already rejects -- a missing operand and a non-numeric one degrade to the identical "not a valid rank" outcome, so there is nothing this earlier check catches that the next line doesn't already catch on its own.
       const rank = Number(parsed.expr1);
       if (!Number.isFinite(rank) || rank <= 0) {
         return undefined;
@@ -710,14 +704,13 @@ export function synthesiseConditionValue(
       return `contains-text(${format.text})`;
     case "notContainsText":
       return `not-contains-text(${format.text})`;
+    // containsBlanks/notContainsBlanks: calcext:condition's own grammar has no spelling for either (see this function's own top-of-file note). colorScale/dataBar/iconSet/timePeriod: not calcext:condition rules at all -- each is its own child element, built by the writer's own element builders. One shared return rather than two identical ones per group: a duplicate `return undefined` on its own case label is indistinguishable at runtime from falling through into the next label's identical return, so splitting them apart bought no real coverage.
     case "containsBlanks":
     case "notContainsBlanks":
-      return undefined;
     case "colorScale":
     case "dataBar":
     case "iconSet":
     case "timePeriod":
-      // Not calcext:condition rules at all -- each is its own child element, built by the writer's own element builders.
       return undefined;
   }
 }

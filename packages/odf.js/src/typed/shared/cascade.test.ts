@@ -5,6 +5,7 @@ import { el, txt } from "../../xml/fragment";
 import { childrenWithTag } from "../../xml/query";
 import {
   findStyleElement,
+  findNamedStylePartElement,
   resolveStyle,
   resolveStyleElementChain,
 } from "./cascade";
@@ -55,6 +56,57 @@ function textProps(attrs: Record<string, string>): XmlElement {
 function paragraphProps(attrs: Record<string, string>): XmlElement {
   return el("style:paragraph-properties", attrs);
 }
+
+describe("collectStyles: element dispatch (via resolveStyle)", () => {
+  it("ignores an element that is neither style:style nor style:default-style, even one carrying a real style:family attribute", () => {
+    const decoy = el("style:page-layout", { "style:family": "paragraph" }, [
+      textProps({ "fo:font-weight": "bold" }),
+    ]);
+    const pkg: Package = { parts: { "styles.xml": stylesPackage([decoy]) } };
+    expect(resolveStyle(undefined, "paragraph", pkg)).toEqual({
+      properties: {},
+      diagnostics: [],
+    });
+  });
+});
+
+describe("findNamedStylePartElement", () => {
+  function drawResource(
+    tag: string,
+    name: string,
+    extra: Record<string, string> = {},
+  ): XmlElement {
+    return el(tag, { "draw:name": name, ...extra });
+  }
+
+  it("finds a real draw resource by (tag, draw:name)", () => {
+    const gradient = drawResource("draw:gradient", "Gradient 1");
+    const pkg: Package = {
+      parts: { "styles.xml": stylesPackage([gradient]) },
+    };
+    expect(findNamedStylePartElement(pkg, "draw:gradient", "Gradient 1")).toBe(
+      gradient,
+    );
+  });
+
+  it("does not match a same-named resource of a different tag", () => {
+    const hatch = drawResource("draw:hatch", "Gradient 1");
+    const pkg: Package = { parts: { "styles.xml": stylesPackage([hatch]) } };
+    expect(
+      findNamedStylePartElement(pkg, "draw:gradient", "Gradient 1"),
+    ).toBeUndefined();
+  });
+
+  it("does not match a same-tag resource of a different name", () => {
+    const gradient = drawResource("draw:gradient", "Gradient 2");
+    const pkg: Package = {
+      parts: { "styles.xml": stylesPackage([gradient]) },
+    };
+    expect(
+      findNamedStylePartElement(pkg, "draw:gradient", "Gradient 1"),
+    ).toBeUndefined();
+  });
+});
 
 describe("resolveStyle: no styleName", () => {
   it("resolves to an empty bag when there is no default-style and no styleName", () => {
