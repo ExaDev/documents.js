@@ -758,10 +758,8 @@ function collectListItem(
     if (itemId === undefined) {
       break;
     }
+    // No separate "did anything actually resume?" check: when nothing does, resumedEnd stays equal to index, so this pushes a harmless empty "own" segment (segments.push/segment.blocks are never read for their COUNT, only segments[0] and each segment's own blocks) and the loop's own nested-run check above terminates it on the very next pass, since index is unchanged from this one.
     const resumedEnd = consumeSameItemRun(items, index, level, itemId);
-    if (resumedEnd === index) {
-      break;
-    }
     segments.push({ kind: "own", blocks: items.slice(index, resumedEnd) });
     index = resumedEnd;
   }
