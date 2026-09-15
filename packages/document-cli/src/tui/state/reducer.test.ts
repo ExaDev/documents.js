@@ -4088,3 +4088,249 @@ describe("appReducer diagnostics and selection", () => {
     expect(state.selection).toEqual({ bodyList: 4, "slideDetail:2": 1 });
   });
 });
+
+describe("appReducer ADD_SLIDE / ADD_PAGE", () => {
+  it("appends a real slide to a pptx presentation", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withSlide = appReducer(opened, { type: "ADD_SLIDE" });
+    expect(withSlide.hasUnsavedChanges).toBe(true);
+    expect(pptxDocument(withSlide).editor.slides()).toHaveLength(2);
+  });
+
+  it("warns rather than crashing when the open document is neither pptx, odp nor ppt", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(created, { type: "ADD_SLIDE" });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toContain("a pptx or odp document");
+  });
+
+  it("appends a real page to an odg drawing", () => {
+    const editor = createOdg();
+    editor.addPage();
+    const opened = openOdgDocument(editor.toBytes());
+    const withPage = appReducer(opened, { type: "ADD_PAGE" });
+    expect(withPage.hasUnsavedChanges).toBe(true);
+    expect(odgDocument(withPage).editor.pages()).toHaveLength(2);
+  });
+
+  it("warns rather than crashing when ADD_PAGE targets a non-odg document", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(created, { type: "ADD_PAGE" });
+    expect(result.status?.severity).toBe("warning");
+  });
+});
+
+describe("appReducer ADD_TEXTBOX / ADD_IMAGE / SET_SHAPE_FRAME on pptx and odg", () => {
+  it("adds a real text box to a pptx slide", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withBox = appReducer(opened, {
+      type: "ADD_TEXTBOX",
+      containerIndex: 0,
+      frame: { xPt: 10, yPt: 10, widthPt: 100, heightPt: 30 },
+      text: "Caption",
+    });
+    expect(withBox.hasUnsavedChanges).toBe(true);
+    const shape = pptxDocument(withBox).editor.slides()[0]?.shapes()[0];
+    expect(shape?.text).toBe("Caption");
+  });
+
+  it("adds a real text box to an odg page", () => {
+    const editor = createOdg();
+    editor.addPage();
+    const opened = openOdgDocument(editor.toBytes());
+    const withBox = appReducer(opened, {
+      type: "ADD_TEXTBOX",
+      containerIndex: 0,
+      frame: { xPt: 10, yPt: 10, widthPt: 100, heightPt: 30 },
+      text: "Caption",
+    });
+    expect(withBox.hasUnsavedChanges).toBe(true);
+    const shape = odgDocument(withBox).editor.pages()[0]?.shapes()[0];
+    expect(shape?.text).toBe("Caption");
+  });
+
+  it("warns rather than crashing when ADD_TEXTBOX targets a missing odg page", () => {
+    const editor = createOdg();
+    editor.addPage();
+    const opened = openOdgDocument(editor.toBytes());
+    const result = appReducer(opened, {
+      type: "ADD_TEXTBOX",
+      containerIndex: 4,
+      frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      text: "x",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no page at index 4");
+  });
+
+  it("warns rather than crashing when ADD_TEXTBOX targets a missing pptx slide", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const result = appReducer(opened, {
+      type: "ADD_TEXTBOX",
+      containerIndex: 4,
+      frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      text: "x",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no slide at index 4");
+  });
+
+  it("warns rather than crashing when ADD_TEXTBOX targets a document with no shape host at all", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(created, {
+      type: "ADD_TEXTBOX",
+      containerIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      text: "x",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toContain("a pptx, odp, ppt or odg document");
+  });
+
+  it("adds a real image to a pptx slide", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withImage = appReducer(opened, {
+      type: "ADD_IMAGE",
+      containerIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 20, heightPt: 20 },
+      format: "png",
+      bytes: PNG_BYTES,
+      altText: undefined,
+    });
+    expect(withImage.hasUnsavedChanges).toBe(true);
+    expect(pptxDocument(withImage).editor.slides()[0]?.shapes()).toHaveLength(
+      1,
+    );
+  });
+
+  it("adds a real image to an odg page", () => {
+    const editor = createOdg();
+    editor.addPage();
+    const opened = openOdgDocument(editor.toBytes());
+    const withImage = appReducer(opened, {
+      type: "ADD_IMAGE",
+      containerIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 20, heightPt: 20 },
+      format: "png",
+      bytes: PNG_BYTES,
+      altText: undefined,
+    });
+    expect(withImage.hasUnsavedChanges).toBe(true);
+    expect(odgDocument(withImage).editor.pages()[0]?.shapes()).toHaveLength(1);
+  });
+
+  it("warns rather than crashing when ADD_IMAGE targets a missing odg page", () => {
+    const editor = createOdg();
+    editor.addPage();
+    const opened = openOdgDocument(editor.toBytes());
+    const result = appReducer(opened, {
+      type: "ADD_IMAGE",
+      containerIndex: 4,
+      frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      format: "png",
+      bytes: PNG_BYTES,
+      altText: undefined,
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no page at index 4");
+  });
+
+  it("warns rather than crashing when ADD_IMAGE targets a document with no shape host at all", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(created, {
+      type: "ADD_IMAGE",
+      containerIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      format: "png",
+      bytes: PNG_BYTES,
+      altText: undefined,
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toContain("a pptx, odp or odg document");
+  });
+
+  it("moves a real pptx shape via SET_SHAPE_FRAME", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withBox = appReducer(opened, {
+      type: "ADD_TEXTBOX",
+      containerIndex: 0,
+      frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      text: "x",
+    });
+    const withFrame = appReducer(withBox, {
+      type: "SET_SHAPE_FRAME",
+      containerIndex: 0,
+      shapeIndex: 0,
+      frame: { xPt: 5, yPt: 6, widthPt: 20, heightPt: 30 },
+    });
+    expect(withFrame.hasUnsavedChanges).toBe(true);
+    const shape = pptxDocument(withFrame).editor.slides()[0]?.shapes()[0];
+    expect(shape?.frame).toStrictEqual({
+      xPt: 5,
+      yPt: 6,
+      widthPt: 20,
+      heightPt: 30,
+    });
+  });
+});
+
+describe("appReducer SET_SHEET_PRINT_SETTINGS", () => {
+  it("sets a real sheet's print settings on an ods document", () => {
+    const opened = openOdsDocument(createOds().toBytes());
+    const settings = {
+      pageSize: { widthPt: 595, heightPt: 842 },
+      margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 },
+      gridlines: true,
+      headers: true,
+      pageOrder: "downThenOver" as const,
+    };
+    const withSettings = appReducer(opened, {
+      type: "SET_SHEET_PRINT_SETTINGS",
+      sheetIndex: 0,
+      printSettings: settings,
+    });
+    expect(withSettings.hasUnsavedChanges).toBe(true);
+    expect(
+      odsDocument(withSettings).editor.sheets()[0]?.printSettings,
+    ).toStrictEqual(settings);
+  });
+
+  it("warns rather than crashing for a sheet index that does not exist", () => {
+    const opened = openOdsDocument(createOds().toBytes());
+    const result = appReducer(opened, {
+      type: "SET_SHEET_PRINT_SETTINGS",
+      sheetIndex: 5,
+      printSettings: {
+        pageSize: { widthPt: 595, heightPt: 842 },
+        margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 },
+        gridlines: false,
+        headers: false,
+        pageOrder: "downThenOver",
+      },
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no sheet at index 5");
+  });
+});
