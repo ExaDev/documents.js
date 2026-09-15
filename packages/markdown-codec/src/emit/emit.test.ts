@@ -3721,6 +3721,100 @@ describe("quoteDepthOf, longestRunLength, and leadingIndentColumns boundaries", 
   });
 });
 
+describe("renderConstruct's own unrepresentable shapes", () => {
+  it("reports CONSTRUCT_UNREPRESENTED, with the invalid label named, for a footnote anchor whose name cannot be spelled as a [^label]: marker", () => {
+    const collector = createDiagnosticCollector();
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "constructStart",
+          descriptor: {
+            kind: "anchor",
+            anchorType: "footnote",
+            name: "bad label",
+          },
+        },
+        { kind: "paragraph", runs: [{ text: "body" }] },
+        { kind: "constructEnd" },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(markdown).toBe("body");
+    const diagnostic = collector.diagnostics.find(
+      (d) => d.code === MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+    );
+    expect(diagnostic?.message).toContain("bad label");
+    expect(diagnostic?.message).toContain("footnote");
+  });
+
+  it("reports CONSTRUCT_UNREPRESENTED with 'anchor (bookmark)' as the detail for a non-footnote anchor, distinguishing it from a bare 'anchor'", () => {
+    const collector = createDiagnosticCollector();
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "anchor", anchorType: "bookmark", name: "b1" },
+        },
+        { kind: "paragraph", runs: [{ text: "body" }] },
+        { kind: "constructEnd" },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(markdown).toBe("body");
+    const diagnostic = collector.diagnostics.find(
+      (d) => d.code === MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+    );
+    expect(diagnostic?.message).toContain("anchor (bookmark)");
+  });
+
+  it("does not leave an extra blank-line gap for a CONSTRUCT that renders to nothing at all, such as a bodyless footnote anchor (a point anchor with an empty extent) sitting between two paragraphs", () => {
+    const markdown = emitMarkdown(
+      doc([
+        { kind: "paragraph", runs: [{ text: "a" }] },
+        {
+          kind: "constructStart",
+          descriptor: { kind: "anchor", anchorType: "bookmark", name: "empty" },
+        },
+        { kind: "constructEnd" },
+        { kind: "paragraph", runs: [{ text: "b" }] },
+      ]),
+    );
+    expect(markdown).toBe("a\n\nb");
+  });
+
+  it("does not leave an extra blank-line gap for a top-level block that renders to nothing at all, such as a page break sitting between two paragraphs", () => {
+    const markdown = emitMarkdown(
+      doc([
+        { kind: "paragraph", runs: [{ text: "a" }] },
+        { kind: "pageBreak" },
+        { kind: "paragraph", runs: [{ text: "b" }] },
+      ]),
+    );
+    // Exactly one blank line between "a" and "b" -- not two, which pushing the page break's own empty string into the joined parts array would produce.
+    expect(markdown).toBe("a\n\nb");
+  });
+
+  it("does not double-count a division-wrapped paragraph's own indentLeftPt as additional quote depth on top of the division's own '> ' wrapping", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division", name: "d1" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          styleId: "Quote",
+          indentLeftPt: 72,
+        },
+        { kind: "constructEnd" },
+      ]),
+    );
+    // Exactly one level of '> ' from the division itself -- NOT '> > x', which double-counting the paragraph's own indentLeftPt (72pt, two quote levels' worth) on top of the division's own wrapping would produce.
+    expect(markdown).toBe("> x");
+  });
+});
+
 describe("emitMarkdown's own top-level assembly", () => {
   it("joins multiple sections with a blank line, not concatenating them directly", () => {
     const document: ContentDocument = {
