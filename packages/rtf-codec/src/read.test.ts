@@ -328,6 +328,15 @@ describe("character formatting", () => {
 });
 
 describe("text, escapes, and Unicode", () => {
+  it("merges text either side of an inert skipped destination into one run, not two", () => {
+    // \b turns bold on with nothing yet accumulated under it, {\footnote ...} is a "skip" destination whose own close never re-enters the token loop as a groupEnd, and \b0 turns bold back off before any real text has appeared under the bold key at all -- so the run key is genuinely unchanged (still the pre-\b key) by the time "B" arrives, and flushBytes' own pendingBytes.length===0 guard is what keeps a spurious empty flush from resetting the run accumulator at the \b/\b0 boundary in between. Without that guard, "A" and "B" would flush into two separate same-key runs instead of merging into one.
+    const runs =
+      paragraphsOf(`${HEADER}\\pard A\\b{\\footnote ignored}\\b0 B\\par}`)[0]
+        ?.runs ?? [];
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.text).toBe("AB");
+  });
+
   it("decodes \\'hh through the document's own code page", () => {
     // 0xE9 is e-acute in cp1252.
     const runs = paragraphsOf(`${HEADER}\\pard caf\\'e9\\par}`)[0]?.runs ?? [];
@@ -653,6 +662,28 @@ describe("pictures", () => {
     expect(image?.format).toBe("png");
     expect(image?.widthPt).toBe(72);
     expect(image?.heightPt).toBe(36);
+    expect(image?.base64.startsWith("iVBORw0KGgo")).toBe(true);
+  });
+
+  it("reads a \\pngblip picture whose entire payload arrives as \\'hh escapes rather than plain hex text", () => {
+    // Every other \pict fixture in this file states its payload as literal hex characters (a "text" token, state.picture.hex), never as \'hh escapes (a "hex" token, state.picture.binary) -- buildPicture prefers binary over hex when both are populated, so a picture destination that only ever sees \'hh escapes exercises a path nothing else here reaches.
+    const escaped =
+      PNG_HEX.match(/.{2}/g)
+        ?.map((pair) => `\\'${pair}`)
+        .join("") ?? "";
+    const image = blocksOf(
+      `${HEADER}\\pard{\\pict\\pngblip\\picwgoal1440\\pichgoal720 ${escaped}}\\par}`,
+    ).find((block): block is ContentImageBlock => block.kind === "image");
+    expect(image?.format).toBe("png");
+    expect(image?.base64.startsWith("iVBORw0KGgo")).toBe(true);
+  });
+
+  it("does not fold a \\binN token opened inside a bookmark nested in \\pict into the picture's own binary buffer", () => {
+    // \*\bkmkstart opens a genuine child group inside \pict, inheriting state.picture by reference the same way a nested group in the ANSI-half or \*\objdata fixtures elsewhere in this file do -- the \binN token sits INSIDE that bookmark's own group (not between its close and \*\bkmkend's open, which is still \pict's own direct scope and proves nothing). A binary token routed by destination alone would push the bookmark's own junk bytes into state.picture.binary, and buildPicture prefers ANY non-empty binary over the real, fully-formed hex payload sitting in state.picture.hex, so even three stray bytes there are enough to discard the real image entirely.
+    const image = blocksOf(
+      `${HEADER}\\pard{\\pict\\pngblip\\picwgoal1440\\pichgoal720{\\*\\bkmkstart \\bin3 JJJ}{\\*\\bkmkend x}${PNG_HEX}}\\par}`,
+    ).find((block): block is ContentImageBlock => block.kind === "image");
+    expect(image?.format).toBe("png");
     expect(image?.base64.startsWith("iVBORw0KGgo")).toBe(true);
   });
 
@@ -1168,6 +1199,25 @@ describe("embedded objects", () => {
     ).toBe(true);
   });
 
+  it("keeps a bare inline \\result paragraph ahead of an inTable one nested inside it, in splice order", () => {
+    // \result's own para starts inTable:false (a fresh reset at the group's own open, not inherited from wherever \object itself sits) -- the nested {\pard\intbl second\par} group sets only ITS OWN cloned para true and closes into cellBlocks directly, reverting to \result's own untouched para once it closes, so "first" (accumulated afterward with no further \pard) closes via \result's own group-end using that same untouched inTable:false, into `blocks`. endResultScratch concatenates blocks before cellBlocks, so a correct reset here keeps "first" ahead of "second" in the spliced order regardless of which one actually closed first chronologically; a stuck inTable:true would instead route "first" into cellBlocks too, behind "second" there (since it closes later), reversing the pair.
+    const { document } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb{\\result{\\pard\\intbl second\\par}first}}\\par}`,
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing document, got ${document.kind}`,
+      );
+    }
+    const texts = (document.sections[0]?.blocks ?? [])
+      .filter((block): block is ContentParagraph => block.kind === "paragraph")
+      .map((paragraph) => paragraph.runs.map((run) => run.text).join(""))
+      .filter((text) => text.length > 0);
+    expect(texts).toEqual(["first", "second"]);
+  });
+
   it("does not also report the no-\\objdata-at-all diagnostic when \\objdata genuinely exists but fails to decode instead", () => {
     const { diagnostics } = readRtfContent(
       bytes(
@@ -1191,6 +1241,22 @@ describe("embedded objects", () => {
     });
     const object = blocksOf(
       `${HEADER}\\pard{\\object\\objemb{\\*\\objdata\\bin${String(raw.length)} ${text(raw)}}}\\par}`,
+    ).find(
+      (block): block is ContentEmbeddedObjectBlock =>
+        block.kind === "embeddedObject",
+    );
+    expect(object?.document).toEqual(embedded);
+  });
+
+  it("does not fold a \\binN token opened inside a bookmark nested in \\*\\objdata into the object's own byte buffer", () => {
+    // \*\bkmkstart is a real, known destination that opens a genuine child group inside \*\objdata, inheriting state.objectData by reference exactly as the text/hex fixtures above prove -- the \binN token sits INSIDE that bookmark's own group (not between its close and \*\bkmkend's open, which is still \*\objdata's own direct scope and proves nothing). A binary token routed by destination alone would splice the bookmark's own junk bytes into the front of the real payload and corrupt it.
+    const raw = writeEmbeddedObjectData({
+      objectKind: "spreadsheet",
+      document: embedded,
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+    });
+    const object = blocksOf(
+      `${HEADER}\\pard{\\object\\objemb{\\*\\objdata{\\*\\bkmkstart \\bin3 JJJ}{\\*\\bkmkend x}${bytesToHex(raw)}}}\\par}`,
     ).find(
       (block): block is ContentEmbeddedObjectBlock =>
         block.kind === "embeddedObject",
@@ -1756,6 +1822,19 @@ describe("form fields", () => {
     ).toBe("Lorem ipsum.");
   });
 
+  it("ignores a stray \\par inside a \\*\\formfield destination rather than force-closing the surrounding paragraph", () => {
+    // \*\formfield carries no #PCDATA or real block structure of its own (its content is entirely its own \fftypeN/\ffname/... control words), so a structure word like \par landing inside it -- a malformed producer's mistake, not RTF's own grammar -- must be silently ignored, exactly like the analogous bookmark/fieldInstruction guards elsewhere in this file. A destination check that matched only formFieldName/formFieldHelpText/formFieldListItem, and missed formField itself, would let this \par force-close the paragraph the whole field is sitting in in the middle of the destination's own control words, splitting one paragraph into two.
+    const paragraphs = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\par\\fftypetxt0{\\*\\ffname Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
+    );
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.constructs?.[0]?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "plainText",
+      tag: "Text1",
+    });
+  });
+
   // Regression guard: an earlier round of this reader promoted \ffdeftext (FFData.xstzTextDef, the field's DEFAULT/reset text) onto the descriptor's `value`, which document-schema.js's own ContentControlDescriptor defines as the control's CURRENT value -- for a text field, that current value is whatever text is actually wrapped in \fldrslt's own runs ("Lorem ipsum." here), never the default. `value` must stay unset even though a real \ffdeftext group is present, and the genuinely current text must still be readable from the wrapped runs, exactly as it is when no \ffdeftext exists at all (see "reads a FORMTEXT field's \*\ffname..." above).
   it("leaves a FORMTEXT field's value unset when \\*\\ffdeftext is present, reporting its default text nowhere while its \\fldrslt runs still carry the real current text", () => {
     const paragraph = paragraphsOf(
@@ -2279,6 +2358,26 @@ describe("bookmarks", () => {
     )[0];
     expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
       name: "padded",
+    });
+  });
+
+  it("keeps a bookmark's own plain-text name intact when it opens nested inside a \\*\\objdata destination", () => {
+    // \*\bkmkstart is a real, known destination (not \*\objdata's own "skip" siblings \*\objalias/\*\objsect), so it opens a genuine child group here rather than being jumped over -- and that child inherits state.objectData BY REFERENCE from its \*\objdata parent, same as any other descendant, even though its own destination is "bookmarkStart", not "objectData". A text token routed by destination alone (never checking THIS group's own state.objectData against the group it actually belongs to) would fold the bookmark's own name into the object's hex payload instead of the bookmark, leaving the name empty.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard{\\object\\objemb{\\*\\objdata{\\*\\bkmkstart marker}x{\\*\\bkmkend marker}00}}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      name: "marker",
+    });
+  });
+
+  it("keeps a bookmark's own \\'hh-escaped name intact when it opens nested inside a \\*\\objdata destination", () => {
+    // The hex-escape counterpart of the fixture above: \'6d\'61\'72\'6b\'65\'72 spells "marker" one \'hh token at a time, each of which must still reach the bookmark's own name through pendingBytes/emitText rather than being diverted into the object's raw byte buffer by a destination check that never verifies THIS group is actually the \*\objdata one it inherited objectData from.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard{\\object\\objemb{\\*\\objdata{\\*\\bkmkstart \\'6d\\'61\\'72\\'6b\\'65\\'72}x{\\*\\bkmkend marker}00}}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      name: "marker",
     });
   });
 
@@ -3191,6 +3290,24 @@ describe("table row and column derivation", () => {
     expect(table.rows[0]?.cells[0]?.rowSpan).toBeUndefined();
   });
 
+  it("matches a \\clvmgf anchor sitting after a real \\clmgf/\\clmrg column span against a continuation row with no span of its own", () => {
+    // The anchor row's own grid-column position (3) is reached after only two of its own cell entries (a colSpan-2 pair, then the anchor itself at local index 2), while the continuation row reaches the identical grid column via four entirely plain cells (local index 3) -- so the two rows' own column values only agree because resolveRows' own per-cell slot count is exactly `span`, not `span + 1`. A test built from two same-shaped rows (as the existing \\clvmgf fixtures above all are) shifts both rows' own columns by the identical amount and can never tell `slot < span` apart from `slot <= span`; this fixture's asymmetric cell counts can.
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\clmgf\\cellx1440\\clmrg\\cellx2880\\clvmgf\\cellx4320" +
+        "\\pard\\intbl first\\cell\\pard\\intbl\\cell\\pard\\intbl anchor\\cell\\row" +
+        "\\trowd\\trleft0\\cellx1440\\cellx2880\\cellx4320\\clvmrg\\cellx5760" +
+        "\\pard\\intbl\\cell\\pard\\intbl\\cell\\pard\\intbl\\cell\\pard\\intbl\\cell\\row" +
+        "\\pard z\\par}",
+    );
+    expect(table.rows[0]?.cells[0]?.colSpan).toBe(2);
+    expect(table.rows[0]?.cells[1]?.blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "anchor", sizePt: 12 }] },
+    ]);
+    expect(table.rows[0]?.cells[1]?.rowSpan).toBe(2);
+    expect(table.rows[1]?.cells[3]?.blocks).toEqual([]);
+  });
+
   it("falls back to an even split when the \\cellxN boundaries describe fewer columns than the row actually has", () => {
     const { diagnostics } = readRtfContent(
       bytes(
@@ -3530,6 +3647,20 @@ describe("embedded object size hints", () => {
     expect(found?.message).toContain("declared a 1.00pt height");
   });
 
+  it("does not let an unrelated \\object-scope word overwrite \\objh's own recorded height", () => {
+    // \objcropl is a real \object-scope word carrying its own numeric parameter (a crop amount, RTF 1.9.1 "Objects"), not \objw -- the only other name applyControlWord's own \object dispatch ever checks for. A dispatch that falls through to the \objh assignment for any name other than \objw, rather than genuinely matching "objh", would let this later, unrelated word silently overwrite the height \objh20 already recorded.
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb\\objh20\\objcropl999{\\*\\objdata }}\\par}`,
+      ),
+    );
+    const found = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    );
+    expect(found?.message).toContain("declared a 1.00pt height");
+  });
+
   it("adds no size-hint clause at all when an \\object states neither \\objw nor \\objh", () => {
     const { diagnostics } = readRtfContent(
       bytes(`${HEADER}\\pard{\\object\\objemb{\\*\\objdata }}\\par}`),
@@ -3757,6 +3888,15 @@ describe("group-open dispatch", () => {
       )[0]?.runs ?? [];
     const text0 = runs.map((run) => run.text).join("");
     expect(text0).toBe("kept");
+  });
+
+  it("never registers a bookmark opened inside a \\upr wrapper's own ANSI half, not just its text", () => {
+    // A plain group nested in the ANSI half falls through to state.destination ("unicodeWrapper") if the wrapperChild skip is disabled, and "unicodeWrapper" already silently discards direct TEXT on its own -- so the previous fixture's "kept"-only assertion can pass whether the ANSI half is genuinely skipped or merely text-discarded. A recognised, known destination (bkmkstart/bkmkend) tells the two apart: skipped, it is never opened at all and registers no bookmark; merely text-discarded, it is opened, processed, and closed as a real bookmark like any other, regardless of what its own #PCDATA renders as.
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\upr {\\*\\bkmkstart hidden}x{\\*\\bkmkend hidden}{\\*\\ud kept}}\\par}`,
+    )[0];
+    expect(paragraph?.constructs ?? []).toEqual([]);
+    expect(paragraph?.runs.map((run) => run.text).join("")).toBe("kept");
   });
 
   it("discards a second, duplicate \\result child and reports it", () => {
