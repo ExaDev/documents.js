@@ -135,6 +135,20 @@ describe("writeDrawVector: paint (vectorGraphicStyleName)", () => {
     expect(attr(props, "svg:stroke-width")).toBe("2pt");
   });
 
+  it('writes draw:stroke="solid" for an explicitly stated "solid" style, not only an absent one', () => {
+    const state = writeState();
+    const written = writeDrawVector(
+      {
+        ...RECT,
+        stroke: { color: { r: 0, g: 0, b: 0 }, widthPt: 1, style: "solid" },
+      },
+      state,
+      0,
+    );
+    const props = graphicPropsOf(written, state);
+    expect(attr(props, "draw:stroke")).toBe("solid");
+  });
+
   it('writes draw:stroke="dash" for a dashed stroke style', () => {
     const state = writeState();
     const written = writeDrawVector(
@@ -280,6 +294,28 @@ describe("writeDrawVector: per-kind element shape", () => {
       ),
     ).toThrow(/10pt x -1pt/);
   });
+
+  it("refuses a 'path' whose frame has a height of exactly zero, not only a negative one", () => {
+    const state = writeState();
+    const subpaths: Extract<ContentVector, { kind: "path" }>["subpaths"] = [
+      {
+        start: { xPt: 0, yPt: 0 },
+        segments: [{ kind: "line", to: { xPt: 1, yPt: 1 } }],
+        closed: false,
+      },
+    ];
+    expect(() =>
+      writeDrawVector(
+        {
+          kind: "path",
+          frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 0 },
+          subpaths,
+        },
+        state,
+        0,
+      ),
+    ).toThrow(/10pt x 0pt/);
+  });
 });
 
 describe("writeDrawVectors", () => {
@@ -315,6 +351,11 @@ describe("canonicalDrawVector", () => {
     }
     expect(zero.rotationDeg).toBeUndefined();
     expect(nonZero.rotationDeg).toBe(45);
+  });
+
+  it("omits the rotationDeg key entirely (not merely undefined) when the vector never stated one", () => {
+    const result = canonicalDrawVector(RECT, 0);
+    expect(result).not.toHaveProperty("rotationDeg");
   });
 
   it("quantises fill through canonicalColor and leaves an absent fill absent", () => {
