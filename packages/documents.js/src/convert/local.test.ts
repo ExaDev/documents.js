@@ -812,6 +812,40 @@ describe("createLocalDocumentConverter: fonts", () => {
     });
   });
 
+  // The "missing-face" reason (a caller-supplied family exists but not the exact bold/italic combination requested, so the family's regular face substitutes) reaches a message distinct from "vendored-substitute"'s -- "substituted another face of ..." rather than "substituted the metric-compatible ...". Requesting bold text while supplying only a regular caller face for the same family is what triggers it, rather than falling through to the vendored table.
+  it("names a caller-supplied family's own regular face, not the metric-compatible vendored table, when only the exact weight is missing", async () => {
+    const editor = createDocx();
+    editor.body.appendParagraph().appendRun({
+      text: "Bold Calibri",
+      bold: true,
+      fontFamily: "Calibri",
+    });
+    const converter = createLocalDocumentConverter();
+    const result = await converter.convert(
+      {
+        source: { format: "docx", bytes: editor.toBytes() },
+        targetFormat: "pdf",
+      },
+      {
+        signal: new AbortController().signal,
+        fonts: [
+          {
+            family: "Calibri",
+            bold: false,
+            italic: false,
+            bytes: caladeaRegularBytes(),
+          },
+        ],
+      },
+    );
+    expect(result.diagnostics).toContainEqual({
+      severity: "info",
+      code: "font/substituted",
+      message:
+        '"Calibri bold" is not available; substituted another face of "Calibri"',
+    });
+  });
+
   it("forwards the structured substitution to the caller own callback as well", async () => {
     const converter = createLocalDocumentConverter();
     const substitutions: FontSubstitution[] = [];
