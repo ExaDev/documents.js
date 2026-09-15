@@ -568,6 +568,8 @@ describe("writePdf -> readPdf: structural round trip", () => {
       kind: "text",
       text: "Visible",
     });
+    // Proves the hidden notes annotation is excluded from the annotations list itself, on its /T marker -- not merely that its kind never becomes a visible LayoutItem, which the assertion above already covers by a different mechanism.
+    expect(result.pages[0]!.annotations).toBeUndefined();
   });
 
   // Internal links and the destinations table they resolve against (#721): the writer emits each internalLink as a /Dest direct destination array naming the target page object, so the link and its table entry both survive -- the reader re-mints a fresh destN name for the array on the way back, which is the documented round-trip shape (names are the reader's minting, positions are the file's facts).
