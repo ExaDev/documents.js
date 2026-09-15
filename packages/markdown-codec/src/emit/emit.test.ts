@@ -680,6 +680,34 @@ describe("headings", () => {
 
   describe("an explicit headingStyle: 'setext' request against a break-free heading that is unsafe on its own terms is still refused, with a diagnostic (ExaDev/documents.js#940)", () => {
     // Every OTHER unsafe-for-setext test in this file exercises a heading whose text embeds an actual line break -- the break itself is what makes setext a candidate rendering at all when headingStyle is left at its 'atx' default. This heading has NO embedded break anywhere: headingStyle: 'setext' is the ONLY reason setext is even attempted, and unsafeSetextBreakReason's own first-line-indentation check applies exactly as much to a single-line heading as to a multi-line one. Pre-fix, every heading-related diagnostic sat behind an `embedsLineBreak` guard, so this exact shape silently fell through to a bare, unmarked ATX heading -- an explicit caller preference honoured in appearance (setext was refused, correctly) but with zero signal that it happened.
+    it("does NOT fire HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT for a break-free, 4+-column-indented level-3 heading even with headingStyle: 'setext' requested -- level <= MAX_SETEXT_LEVEL is its own genuine gate, not implied by setextRequested and unsafeForSetext alone", () => {
+      const collector = createDiagnosticCollector();
+      const written = emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [{ text: "    foo" }],
+            styleId: "Heading3",
+          },
+        ]),
+        { headingStyle: "setext", sink: collector.sink },
+      );
+      expect(written).toBe("###     foo");
+      expect(
+        collector.has(
+          MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+        ),
+      ).toBe(false);
+      expect(
+        collector.has(MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED),
+      ).toBe(false);
+      expect(
+        collector.has(
+          MarkdownDiagnosticCodes.HEADING_STYLE_OVERRIDDEN_FOR_LINE_BREAK,
+        ),
+      ).toBe(false);
+    });
+
     it("does NOT fire HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT for a break-free, 4+-column-indented level-1 heading when setext was never requested at all -- unsafeForSetext alone, with setextRequested false, must not enter the unsafe-diagnostic branch", () => {
       const collector = createDiagnosticCollector();
       const written = emitMarkdown(
