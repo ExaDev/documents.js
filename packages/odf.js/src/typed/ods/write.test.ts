@@ -395,6 +395,17 @@ describe("writeOdsContent XML shapes", () => {
     );
     expect(objectParts.some((path) => path.startsWith("Object 1/"))).toBe(true);
     expect(objectParts.some((path) => path.startsWith("Object 2/"))).toBe(true);
+    const frames = childrenWithTag(firstTable(pkg), "table:table-row").flatMap(
+      (row) =>
+        childrenWithTag(row, "table:table-cell").flatMap((cell) =>
+          childrenWithTag(cell, "draw:frame"),
+        ),
+    );
+    expect(frames).toHaveLength(2);
+    const zIndexes = frames
+      .map((frame) => Number(attrValue(frame, "draw:z-index")))
+      .sort((a, b) => a - b);
+    expect(zIndexes).toStrictEqual([0, 1]);
   });
 
   it("mints a distinct SheetTableN style name per sheet, not one shared across all of them", () => {
