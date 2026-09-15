@@ -20,6 +20,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   RECORD_CALCCOUNT,
   RECORD_CF12,
+  RECORD_CONDFMT,
+  RECORD_CONDFMT12,
   RECORD_CONTINUE,
   RECORD_DIMENSIONS,
   RECORD_EOF,
@@ -2634,6 +2636,27 @@ describe("writeXlsContent: conditional formats written (#971)", () => {
     }
   });
 
+  it("accepts a conditional-format range sitting exactly at each of BIFF8's own four grid edges, not one past it", () => {
+    const base = { type: "uniqueValues" as const };
+    const edges = [
+      { startRow: 0xffff, endRow: 0, startColumn: 0, endColumn: 0 },
+      { startRow: 0, endRow: 0xffff, startColumn: 0, endColumn: 0 },
+      { startRow: 0, endRow: 0, startColumn: 0xff, endColumn: 0 },
+      { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0xff },
+    ];
+    for (const range of edges) {
+      expect(() =>
+        writeXlsContent(
+          document([
+            sheet("S", [], {
+              conditionalFormats: [{ ...base, ranges: [range] }],
+            }),
+          ]),
+        ),
+      ).not.toThrow();
+    }
+  });
+
   it("writes no CondFmt/CondFmt12 records at all for a sheet stating an empty conditionalFormats array", () => {
     expect(
       writeSheetConditionalFormats(
@@ -2657,6 +2680,22 @@ describe("writeXlsContent: conditional formats written (#971)", () => {
     }).not.toThrow();
   });
 
+  it("refuses 32768 conditional-format rules before writing a single record, rather than silently accepting more than CondFmt's own 15-bit nID field allows", () => {
+    const range = { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 };
+    const rules: ContentSheetConditionalFormat[] = Array.from(
+      { length: 0x8000 },
+      () => ({ type: "uniqueValues", ranges: [range] }),
+    );
+    expect(() =>
+      writeSheetConditionalFormats(
+        sheet("S", [], { conditionalFormats: rules }),
+        () => 0,
+      ),
+    ).toThrow(
+      "this sheet's 32768 conditional-format rules exceed CondFmt's own 15-bit nID field",
+    );
+  });
+
   it("assigns each rule its own 1-based nID in declaration order across three rules, not just the two a smaller fixture cannot distinguish from an off-by-one", () => {
     const range = { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 };
     const rules: ContentSheetConditionalFormat[] = [
@@ -2674,6 +2713,72 @@ describe("writeXlsContent: conditional formats written (#971)", () => {
         rule.type === "containsText" ? rule.text : undefined,
       ),
     ).toStrictEqual(["a", "b", "c"]);
+  });
+
+  // nID only matters to a real consumer resolving a later CFEx record's own cross-reference (this package's own reader never emits or needs one on a self-written file, and explicitly skips CondFmt12's copy of the field as unused) -- so its correctness is invisible to every round-trip test above and has to be read directly out of the raw CondFmt/CondFmt12 bytes instead.
+  it("writes each base CondFmt group's own nID as its 1-based position among the sheet's rules, not the position minus one", () => {
+    const range = { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 };
+    const rules: ContentSheetConditionalFormat[] = [
+      { type: "cellIs", ranges: [range], operator: "equal", formula1: "1" },
+      { type: "cellIs", ranges: [range], operator: "equal", formula1: "2" },
+      { type: "cellIs", ranges: [range], operator: "equal", formula1: "3" },
+    ];
+    const pieces = writeSheetConditionalFormats(
+      sheet("S", [], { conditionalFormats: rules }),
+      () => 0,
+    );
+    const stream = new Uint8Array(
+      pieces.reduce((total, piece) => total + piece.length, 0),
+    );
+    let offset = 0;
+    for (const piece of pieces) {
+      stream.set(piece, offset);
+      offset += piece.length;
+    }
+    const nIDs = readRecords(stream)
+      .filter((record) => record.type === RECORD_CONDFMT)
+      .map((record) => {
+        const view = new DataView(
+          record.data.buffer,
+          record.data.byteOffset,
+          record.data.byteLength,
+        );
+        return (view.getUint16(2, true) >>> 1) & 0x7fff;
+      });
+    expect(nIDs).toStrictEqual([1, 2, 3]);
+  });
+
+  it("writes each CF12 group's own nID as its 1-based position among the sheet's rules, not the position minus one", () => {
+    const range = { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 };
+    const rules: ContentSheetConditionalFormat[] = [
+      { type: "uniqueValues", ranges: [range] },
+      { type: "duplicateValues", ranges: [range] },
+      { type: "containsBlanks", ranges: [range] },
+    ];
+    const pieces = writeSheetConditionalFormats(
+      sheet("S", [], { conditionalFormats: rules }),
+      () => 0,
+    );
+    const stream = new Uint8Array(
+      pieces.reduce((total, piece) => total + piece.length, 0),
+    );
+    let offset = 0;
+    for (const piece of pieces) {
+      stream.set(piece, offset);
+      offset += piece.length;
+    }
+    const nIDs = readRecords(stream)
+      .filter((record) => record.type === RECORD_CONDFMT12)
+      .map((record) => {
+        const view = new DataView(
+          record.data.buffer,
+          record.data.byteOffset,
+          record.data.byteLength,
+        );
+        // rt(2) + grbitFrt(2) + refBound's four u16s(8) + ccf(2) = 14 bytes before the fToughRecalc+nID word.
+        return (view.getUint16(14, true) >>> 1) & 0x7fff;
+      });
+    expect(nIDs).toStrictEqual([1, 2, 3]);
   });
 });
 
@@ -2820,6 +2925,33 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
         min: { type: "min" },
         max: { type: "max" },
         color: { r: 0, g: 0, b: 0 },
+        stopIfTrue: true,
+      }),
+    ).toThrow(/pins CF12's own fStopIfTrue bit to zero/);
+  });
+
+  it("refuses stopIfTrue on each of the other two visual-scale rule types on its own, not only dataBar", () => {
+    expect(() =>
+      roundTripped({
+        type: "colorScale",
+        ranges: [RANGE],
+        stops: [
+          { value: { type: "min" }, color: { r: 1, g: 0, b: 0 } },
+          { value: { type: "max" }, color: { r: 0, g: 1, b: 0 } },
+        ],
+        stopIfTrue: true,
+      }),
+    ).toThrow(/pins CF12's own fStopIfTrue bit to zero/);
+    expect(() =>
+      roundTripped({
+        type: "iconSet",
+        ranges: [RANGE],
+        iconSetType: "3Arrows",
+        thresholds: [
+          { type: "min" },
+          { type: "percent", value: "50" },
+          { type: "max" },
+        ],
         stopIfTrue: true,
       }),
     ).toThrow(/pins CF12's own fStopIfTrue bit to zero/);
