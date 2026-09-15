@@ -721,7 +721,8 @@ function consumeSameItemRun(
   itemId: string,
 ): number {
   let end = from;
-  while (end < items.length) {
+  // No separate `end < items.length` bound: `items[end]` running off the end already returns undefined, which the very next check below catches and breaks on -- an explicit length comparison here would be redundant with that undefined check on every real input, never independently true or false.
+  for (;;) {
     const candidate = items[end];
     if (candidate?.list.level !== level || candidate.list.itemId !== itemId) {
       break;
@@ -750,7 +751,8 @@ function collectListItem(
 
   for (;;) {
     let nestedEnd = index;
-    while (nestedEnd < items.length) {
+    // No separate `nestedEnd < items.length` bound: `items[nestedEnd]` running off the end already yields `candidateLevel === undefined`, which the check below already breaks on.
+    for (;;) {
       const candidateLevel = items[nestedEnd]?.list.level;
       if (candidateLevel === undefined || candidateLevel <= level) {
         break;
@@ -854,7 +856,8 @@ function renderListRegion(
   let index = 0;
   // The immediately preceding numId's own resolved type/glyph, local to this call (never read across a recursive call into a nested sub-list, or across a separate top-level renderListRegion call) -- exactly the scope resolveListGlyph's own collision check needs: two lists are only a genuine ADJACENCY risk when nothing else renders between them, which is precisely what "both sit in the SAME renderListRegion call's own items array" already guarantees. Left unset (and never consulted) for a depth-only membership (numId undefined, the cross-format shape LIST_NUMID_FALLBACK already documents) -- a rare cross-format edge case this glyph-alternation scheme does not extend to.
   let previousSibling: ListSiblingSignature | undefined;
-  while (index < items.length) {
+  // No separate `index < items.length` bound: `items[index]` running off the end already returns undefined, which the very next check breaks on.
+  for (;;) {
     const item = items[index];
     if (item === undefined) {
       break;
@@ -994,7 +997,8 @@ function groupConstructItems(
 ): { readonly items: EmitItem[]; readonly next: number } {
   const items: EmitItem[] = [];
   let index = start;
-  while (index < blocks.length) {
+  // No separate `index < blocks.length` bound: `blocks[index]` running off the end already returns undefined, which the very next check breaks on.
+  for (;;) {
     const block = blocks[index];
     if (block === undefined) {
       break;
@@ -1127,7 +1131,8 @@ function isInheritedListMembership(
 function renderItems(items: readonly EmitItem[], context: EmitContext): string {
   const parts: string[] = [];
   let index = 0;
-  while (index < items.length) {
+  // No separate `index < items.length` bound: `items[index]` running off the end already returns undefined, which the very next check breaks on.
+  for (;;) {
     const item = items[index];
     if (item === undefined) {
       break;
