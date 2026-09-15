@@ -370,8 +370,7 @@ export function compoundFile(
   put32(view, 0x3c, miniSectorCount === 0 ? ENDOFCHAIN : miniFatStart);
   put32(view, 0x40, miniFatSectorCount);
   put32(view, 0x44, ENDOFCHAIN); // first DIFAT sector: none, the DIFAT fits the header array
-  put32(view, 0x48, 0);
-  // The 109-entry DIFAT array is a fixed header field regardless of how many FAT sectors this file actually has -- 109 is [MS-CFB] 2.2's own header array width, not a value derived from fatSectors, so the two are independent constants that only happen to be compared here. fatSectors[i] already reads back undefined past its own real length on its own, exactly what the FREESECT fallback states, so nothing here needs to check that length a second time.
+  // Byte 0x48 (the DIFAT's own sector count) stays zero -- view is backed by a freshly-allocated, zero-initialised file buffer, so writing 0 there again would restate what is already true rather than change anything. The 109-entry DIFAT array is a fixed header field regardless of how many FAT sectors this file actually has -- 109 is [MS-CFB] 2.2's own header array width, not a value derived from fatSectors, so the two are independent constants that only happen to be compared here. fatSectors[i] already reads back undefined past its own real length on its own, exactly what the FREESECT fallback states, so nothing here needs to check that length a second time.
   for (const i of Array(109).keys()) {
     put32(view, 0x4c + i * 4, fatSectors[i] ?? FREESECT);
   }
