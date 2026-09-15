@@ -430,21 +430,21 @@ interface GroupState {
   para: ParagraphState;
   field: FieldState | undefined;
   picture: PictureState | undefined;
-  // The same ownership marker as objectDataOwner/objectOwner below, for {\pict ...} itself: `picture` is carried forward by reference so a \'hh/binary byte or a \picwN/\pichN control word inside a nested group still reaches the same PictureState, but the group-end handler that calls buildPicture must fire only once, when \pict's own group actually closes -- not on every plain sibling group nested directly inside it (a malformed producer can write one; RTF's own <pict> grammar has no legitimate use for one).
-  pictureOwner: boolean;
+  // The same ownership marker as objectDataOwner/objectOwner below, for {\pict ...} itself: `picture` is carried forward by reference so a \'hh/binary byte or a \picwN/\pichN control word inside a nested group still reaches the same PictureState, but the group-end handler that calls buildPicture must fire only once, when \pict's own group actually closes -- not on every plain sibling group nested directly inside it (a malformed producer can write one; RTF's own <pict> grammar has no legitimate use for one). Optional, not a plain `boolean`, so the root group below can simply omit it (leaving it genuinely absent) rather than state a `false` literal every reader of it already reads as paired with `picture` being undefined too -- see root's own comment.
+  pictureOwner?: boolean;
   objectData: ObjectDataState | undefined;
   object: ObjectState | undefined;
-  // True only on the one GroupState created directly for an {\*\objdata ...} destination's own group -- objectData itself is still carried forward BY REFERENCE across every descendant group (a stray \binN/\'hh byte inside a nested group must still land in the same accumulator the real \objdata group started), so the group-end handler that calls buildEmbeddedObject needs its own, non-inherited marker to fire exactly once per \objdata construct rather than once per descendant group that happens to close underneath it. Mirrors resultOf's own "set on the direct child, cleared by cloneGroupState" shape below, for the identical reason: a plain nested group inside \objdata's content (or a malformed one a hostile producer wrote) must not re-trigger this group's own finalisation when IT closes too.
-  objectDataOwner: boolean;
-  // The same ownership marker for {\object ...} itself: `object` is carried forward by reference so \objw/\objh control words and \objdata/\result's own group-open checks can reach the shared ObjectState from any depth inside \object's own group, but the group-end handler that splices \result's fallback in (or reports EMBEDDED_OBJECT_UNREADABLE) must fire only once, when \object's own group actually closes -- not on every plain sibling group nested directly inside it (RTF's own <obj> grammar allows only <objdata> and <result> there, but a malformed producer can write anything).
-  objectOwner: boolean;
+  // True only on the one GroupState created directly for an {\*\objdata ...} destination's own group -- objectData itself is still carried forward BY REFERENCE across every descendant group (a stray \binN/\'hh byte inside a nested group must still land in the same accumulator the real \objdata group started), so the group-end handler that calls buildEmbeddedObject needs its own, non-inherited marker to fire exactly once per \objdata construct rather than once per descendant group that happens to close underneath it. Mirrors resultOf's own "set on the direct child, cleared by cloneGroupState" shape below, for the identical reason: a plain nested group inside \objdata's content (or a malformed one a hostile producer wrote) must not re-trigger this group's own finalisation when IT closes too. Optional for the same reason pictureOwner above is.
+  objectDataOwner?: boolean;
+  // The same ownership marker for {\object ...} itself: `object` is carried forward by reference so \objw/\objh control words and \objdata/\result's own group-open checks can reach the shared ObjectState from any depth inside \object's own group, but the group-end handler that splices \result's fallback in (or reports EMBEDDED_OBJECT_UNREADABLE) must fire only once, when \object's own group actually closes -- not on every plain sibling group nested directly inside it (RTF's own <obj> grammar allows only <objdata> and <result> there, but a malformed producer can write anything). Optional for the same reason pictureOwner above is.
+  objectOwner?: boolean;
   // Set only on the one GroupState created directly for a \result destination's own group -- the enclosing \object's shared state to report the finished scratch blocks back to when this group closes. Deliberately NOT carried forward by cloneGroupState the way `object` is: a plain nested group inside \result's own content (every test fixture's `{\result{\pard\plain ...\par}}` has one) must not re-trigger this group's own finalisation a second time when IT closes, so only the direct child gets this field and every descendant clones it back to undefined.
   resultOf: ObjectState | undefined;
   bookmark: BookmarkState | undefined;
   // Whether this group is a \upr wrapper's own child that must be discarded (the ANSI half). Set on the wrapper; consulted when a child group opens.
   inUnicodeWrapper: boolean;
-  // Whether this group's own head is \field itself, set explicitly on every group open (never inherited) exactly like inUnicodeWrapper above -- state.field is shared by reference down through \field's own descendants, so this is the one flag that tells the group-close handler "this closing brace is the field's own, not one of its children's".
-  isFieldGroup: boolean;
+  // Whether this group's own head is \field itself, set explicitly on every group open (never inherited) exactly like inUnicodeWrapper above -- state.field is shared by reference down through \field's own descendants, so this is the one flag that tells the group-close handler "this closing brace is the field's own, not one of its children's". Optional for the same reason pictureOwner above is: the root group below omits it rather than stating a `false` literal every reader already reads as paired with `state.field` being undefined too.
+  isFieldGroup?: boolean;
 }
 
 function defaultCharacterState(): CharacterState {
@@ -502,29 +502,29 @@ function cloneGroupState(state: GroupState): GroupState {
   };
 }
 
-// A run's identity for the purpose of merging adjacent text: two stretches of text with the same answer here belong to one ContentRun.
+// A run's identity for the purpose of merging adjacent text: two stretches of text with the same answer here belong to one ContentRun. JSON.stringify of the whole tuple, rather than building each field into an "on"/"" flag string and joining with a separator, is deliberate: every field rides its own real value (or `undefined`, which JSON encodes as `null`) instead of a collapsed two-value ternary, so two genuinely different states can never produce the same key by accident -- unlike a hand-built delimited string, where an empty default for one field is indistinguishable from a real value that happens to also be empty, and removing the delimiter (or renaming a default) is invisible to every caller since nothing outside this function ever reads the key's own shape.
 function runKey(
   char: CharacterState,
   fontName: string | undefined,
   color: Color | undefined,
   hyperlink: string | undefined,
 ): string {
-  return [
-    char.bold ? "b" : "",
-    char.italic ? "i" : "",
-    char.underline ? "u" : "",
-    char.strike ? "s" : "",
-    fontName ?? "",
-    String(char.sizeHalfPoints),
+  return JSON.stringify([
+    char.bold,
+    char.italic,
+    char.underline,
+    char.strike,
+    fontName,
+    char.sizeHalfPoints,
     color === undefined
-      ? ""
+      ? undefined
       : `${String(color.r)},${String(color.g)},${String(color.b)}`,
-    hyperlink ?? "",
-    char.verticalAlign ?? "",
-    char.direction ?? "",
+    hyperlink,
+    char.verticalAlign,
+    char.direction,
     // A revision boundary is a run boundary: two stretches of text differing only in who inserted them are two runs, because the extent that names the insertion has to start and end somewhere.
-    JSON.stringify(char.revision),
-  ].join("|");
+    char.revision,
+  ]);
 }
 
 // "HYPERLINK "target"" is the <links> field type this reader maps onto ContentRun.hyperlink; the optional \\l switch names an in-document anchor rather than an external URI, which ContentRun states the only way it can -- as a fragment.
@@ -548,25 +548,25 @@ interface SkipPosition {
   readonly textOffset: number;
 }
 
-// The \uN fallback skip, implementing the spec's own rules verbatim: `count` characters are skipped, "any RTF control word or symbol is considered a single character", "a \binN keyword, its argument, and the binary data that follows are considered one character", and "if an RTF scope delimiter character ... is encountered while scanning skippable data, the skippable data is considered to end before the delimiter". A text run is consumed byte by byte, which is why the caller carries a byte offset alongside its token index.
+// The \uN fallback skip, implementing the spec's own rules verbatim: `count` characters are skipped, "any RTF control word or symbol is considered a single character", "a \binN keyword, its argument, and the binary data that follows are considered one character", and "if an RTF scope delimiter character ... is encountered while scanning skippable data, the skippable data is considered to end before the delimiter". A text run is consumed byte by byte, which is why the returned position carries a byte offset alongside its token index -- but the STARTING position never needs one: this reader's one call site always begins a fresh skip right after the \uN token that triggered it, never mid-token, so the parameter is a bare token index rather than a full SkipPosition. Every text token this loop touches is therefore entered at its own offset 0 (either the initial one, or a later one just reset by the full-consumption branch below), which is what lets `available` below be the token's own plain length rather than a length-minus-an-offset that is always zero in practice.
 function skipUnicodeFallback(
   tokens: readonly RtfToken[],
-  from: SkipPosition,
+  fromIndex: number,
   count: number,
 ): SkipPosition {
-  let { index, textOffset } = from;
+  let index = fromIndex;
+  let textOffset = 0;
   let remaining = count;
-  while (remaining > 0 && index < tokens.length) {
+  while (remaining > 0) {
     const token = tokens[index];
     if (token === undefined) break;
     if (token.kind === "groupStart" || token.kind === "groupEnd") {
       break;
     }
     if (token.kind === "text") {
-      const available = token.bytes.length - textOffset;
-      const consumed = Math.min(available, remaining);
+      const consumed = Math.min(token.bytes.length, remaining);
       remaining -= consumed;
-      textOffset += consumed;
+      textOffset = consumed;
       if (textOffset >= token.bytes.length) {
         index += 1;
         textOffset = 0;
@@ -580,23 +580,23 @@ function skipUnicodeFallback(
   return { index, textOffset };
 }
 
-// A \field group's own run range, open from its head brace to its closing one. paragraphSerial guards against a \par or \cell landing inside \fldrslt: RTF 1.9.1's own <fieldrslt> production ('{' \fldrslt <para>+ '}') is grammatical for a multi-paragraph result even though real producers keep form fields inline in practice, and without this check a stale runIndex captured before the paragraph reset could produce an inverted startRun/endRun pair. When it fires, endFormField below drops the contentControl and reports why through the sink, rather than mis-attaching it to whichever paragraph happens to be open once the field closes.
+// A \field group's own run range, open from its head brace to its closing one. paragraphSerial guards against a \par or \cell landing inside \fldrslt: RTF 1.9.1's own <fieldrslt> production ('{' \fldrslt <para>+ '}') is grammatical for a multi-paragraph result even though real producers keep form fields inline in practice, and without this check a stale runIndex captured before the paragraph reset could produce an inverted startRun/endRun pair. When it fires, endFormField below drops the contentControl and reports why through the sink, rather than mis-attaching it to whichever paragraph happens to be open once the field closes. A fresh `symbol` per paragraph rather than a counter: every reader of this field (endBookmark, resolveBookmarkPositions, endFormField) only ever tests it for identity against a value captured earlier from this identical field, never for ordering, so there is no "count" for a numeric serial to actually carry -- a symbol states that directly instead of leaving an unused ordering property for a mutation test to notice is never read.
 interface OpenFormField {
-  readonly paragraphSerial: number;
+  readonly paragraphSerial: symbol;
   readonly runIndex: number;
 }
 
 // A bookmark start held open until its end arrives, at which point the pair's own scope decides its encoding. `blockIndex` is filled in when the paragraph the start sits in takes its place in a block list, and stays undefined for a pair that opens and closes inside one paragraph.
-interface OpenBookmark {
+export interface OpenBookmark {
   readonly descriptor: AnchorDescriptor;
-  readonly paragraphSerial: number;
+  readonly paragraphSerial: symbol;
   readonly runIndex: number;
   readonly inTable: boolean;
   blockIndex: number | undefined;
 }
 
 // A construct spanning whole blocks of one list, before its marker pair is spliced in. Half-open, matching RunConstructExtent's own convention: blocks startIndex..endIndex-1 are the extent.
-interface BlockConstructExtent {
+export interface BlockConstructExtent {
   readonly descriptor: ConstructDescriptor;
   readonly startIndex: number;
   readonly endIndex: number;
@@ -633,19 +633,16 @@ function insertConstructMarkers(
   extents: readonly BlockConstructExtent[],
   sink: RtfDiagnosticSink,
 ): ContentBlock[] {
-  if (extents.length === 0) {
-    return [...blocks];
-  }
+  // No early return for an empty `extents`: the loop below already produces exactly `[...blocks]` when there is nothing to splice (both marker loops are no-ops against an empty `ordered`), so a dedicated fast path here would be a pure equivalent-mutant-prone optimisation with no observable difference.
   const sorted = [...extents].sort(
     (left, right) =>
       left.startIndex - right.startIndex || right.endIndex - left.endIndex,
   );
   const ordered = dropCrossingExtents(sorted, sink);
-  const closing = [...ordered].reverse();
   const out: ContentBlock[] = [];
   for (let index = 0; index <= blocks.length; index += 1) {
-    // Closes first, then opens, so an extent ending where another begins does not enclose it -- and closes run innermost-first (the reverse of the outermost-first open order), which is the only sequence that leaves the brackets balanced.
-    for (const extent of closing) {
+    // Closes first, then opens, so an extent ending where another begins does not enclose it. Each extent's own constructEnd marker is anonymous (it carries no descriptor to distinguish it from any other extent's), so the order this loop visits `ordered` in when several extents close at the same index is not itself observable in the output -- what makes the brackets balance is that every closing marker for a given index is pushed before that index's own opening ones, not which of several simultaneous closes came first.
+    for (const extent of ordered) {
       if (extent.endIndex === index) {
         out.push({ kind: "constructEnd" });
       }
@@ -664,7 +661,7 @@ function insertConstructMarkers(
 }
 
 // One row as read: its cells alongside the <celldef> run that preceded each \cellxN, kept together because a span is only derivable once every row of the table is known.
-interface RawTableRow {
+export interface RawTableRow {
   readonly cells: ContentTableCell[];
   readonly definitions: readonly PendingCell[];
   // The row-level scope of the four RTF states text direction at: "\rtlrow Cells in this table row will have right-to-left precedence" / "\ltrrow ... left-to-right precedence (the default)" (RTF 1.9.1, "Table Row Formatting"), a <rowwrite> member of the row's own <tbldef>.
@@ -686,6 +683,34 @@ function horizontalSpanAt(
   return span;
 }
 
+// The rowSpan a \clvmgf anchor at `column` reaches, scanning forward from `rowIndex + 1` through consecutive \clvmrg continuations at that same column. A standalone function, exported and taking `rows`/`columnIndices` as plain parameters rather than reading ContentBuilder's own private fields, so a mismatched pair (fewer columnIndices entries than rows, which resolveRows' own construction can never actually produce -- columnIndices is built by one rows.map(...) call over the identical `rows`) can be exercised directly by a unit test constructing one, rather than needing a non-null assertion to state that invariant with no test able to reach it.
+export function verticalMergeRowSpan(
+  rows: readonly RawTableRow[],
+  columnIndices: readonly (readonly number[])[],
+  rowIndex: number,
+  column: number,
+): number {
+  let rowSpan = 1;
+  // Bounded by the last real row index (`rows.length - 1`), not `rows.length` itself, so this scan never has an index one past the array's own end to consider in the first place.
+  for (let next = rowIndex + 1; next <= rows.length - 1; next += 1) {
+    const nextColumns = columnIndices[next];
+    const nextRow = rows[next];
+    if (nextColumns === undefined || nextRow === undefined) {
+      throw new Error(
+        "internal invariant violated: verticalMergeRowSpan's own row index scan reached an index with no corresponding columnIndices/rows entry",
+      );
+    }
+    const matchIndex = nextColumns.indexOf(column);
+    // No `matchIndex === -1 ? undefined : ...` guard: a plain array's own -1 index is never a real property on it, so `definitions[-1]` already evaluates to undefined on its own -- indexOf's own "not found" sentinel needs no special-casing here, since indexing by it produces the identical result the special case would.
+    const match = nextRow.definitions[matchIndex];
+    if (match?.verticalMergeContinuation !== true) {
+      break;
+    }
+    rowSpan += 1;
+  }
+  return rowSpan;
+}
+
 // Every piece of mutable state a ContentBuilder holds while it accumulates one document's worth of content -- deliberately excluding `sections` (already-finished sections, never touched mid-accumulation) and the constructor-injected `header`/`sink` (read-only for the whole read). Bundled here so beginResultScratch/endResultScratch can swap the whole thing out for a fresh instance and back, rather than special-casing each field: see those two methods for why \result's own fallback content needs this.
 interface BuilderAccumulatorState {
   blocks: ContentBlock[];
@@ -704,7 +729,7 @@ interface BuilderAccumulatorState {
   pendingCell: PendingCell;
   rowLeftTwips: number;
   rowDirection: TextDirection | undefined;
-  paragraphSerial: number;
+  paragraphSerial: symbol;
   openBookmarks: Map<string, OpenBookmark>;
   sectionBlockExtents: BlockConstructExtent[];
   cellBlockExtents: BlockConstructExtent[];
@@ -730,13 +755,44 @@ function freshAccumulatorState(): BuilderAccumulatorState {
     pendingCell: newPendingCell(),
     rowLeftTwips: 0,
     rowDirection: undefined,
-    paragraphSerial: 0,
+    paragraphSerial: Symbol("paragraph"),
     openBookmarks: new Map(),
     sectionBlockExtents: [],
     cellBlockExtents: [],
     pendingRunConstructs: [],
     closingBookmarks: [],
   };
+}
+
+// The block extent one already-resolved closing bookmark produces, ending at `endIndex`. A standalone function rather than inlined in ContentBuilder's own flushClosingBookmarks, so a still-unresolved `blockIndex` -- an invariant flushClosingBookmarks' own real caller can never actually violate, per the comment on its call site -- can still be exercised directly by a unit test constructing one, without reaching into ContentBuilder's own private state to do it.
+//
+// Provably unreachable in practice: reaching flushClosingBookmarks at all requires paragraphSerial to have changed away from a bookmark's own opening serial (endBookmark only pushes to closingBookmarks on a serial mismatch), and the only way paragraphSerial ever changes is a resolveBookmarkPositions call that runs first -- the very call that resolves blockIndex for every bookmark whose serial matches at that moment, this one included. blockIndex is therefore always already resolved by the time a real bookmark reaches this call, and this throws loudly rather than silently guessing a position for the invariant-violating case a hostile caller (or this function's own direct unit test) could still construct.
+export function closingBookmarkExtent(
+  closing: OpenBookmark,
+  endIndex: number,
+): BlockConstructExtent {
+  if (closing.blockIndex === undefined) {
+    throw new Error(
+      "internal invariant violated: a closing bookmark reached flushClosingBookmarks with no resolved blockIndex",
+    );
+  }
+  return {
+    descriptor: closing.descriptor,
+    startIndex: closing.blockIndex,
+    endIndex,
+  };
+}
+
+// Appends `text` to `items`' own last entry, in place. A standalone function rather than inlined at emitText's own formFieldListItem branch, so the invariant that entry always already exists (a fresh entry is pushed in the identical group-open branch that sets this destination, so by the time text can arrive there is always at least one) can be exercised directly by a unit test constructing a case that violates it, rather than needing a non-null assertion to state the same invariant with no test able to reach it.
+export function appendToLastListItem(items: string[], text: string): void {
+  const last = items.length - 1;
+  const current = items[last];
+  if (current === undefined) {
+    throw new Error(
+      "internal invariant violated: a form field list item's text arrived with no list item entry to append to",
+    );
+  }
+  items[last] = current + text;
 }
 
 class ContentBuilder {
@@ -761,7 +817,7 @@ class ContentBuilder {
   // The <rowwrite> member (\ltrrow | \rtlrow) of the row definition currently accumulating -- reset by startRowDefinition with the rest of the pending row state, so a \rtlrow anywhere between a \trowd and its \cellxN run (where the spec's own <tbldef> production places it) reaches the row it belongs to.
   private rowDirection: TextDirection | undefined;
   // Bookmark bookkeeping. A bookmark's two halves are matched by name and may bracket a sub-sequence of one paragraph's runs or a run of whole paragraphs, and document-schema.js gives those two scopes two different encodings -- a RunConstructExtent on the paragraph, or a constructStart/constructEnd marker pair in the block list. Which one applies is not knowable when the start is seen, only when its end arrives, so a start is held open here and resolved then.
-  private paragraphSerial = 0;
+  private paragraphSerial = Symbol("paragraph");
   private openBookmarks = new Map<string, OpenBookmark>();
   // Extents whose two halves landed in different paragraphs of the same block list, waiting for that list to be finalised. Two lists, because a table cell's blocks and a section's blocks are separate bracket scopes and a pair may not straddle them.
   private sectionBlockExtents: BlockConstructExtent[] = [];
@@ -787,12 +843,11 @@ class ContentBuilder {
       return;
     }
     this.openBookmarks.set(name, {
-      descriptor: bookmarkAnchorDescriptor(
-        name,
-        bookmark.columnFirst === undefined && bookmark.columnLast === undefined
-          ? undefined
-          : { first: bookmark.columnFirst, last: bookmark.columnLast },
-      ),
+      // bookmarkAnchorDescriptor's own bookmarkColumnResidue already treats {first: undefined, last: undefined} identically to undefined itself (both fields absent means no residue either way), so there is no need to pre-collapse the two here -- the object is always the same shape, and the callee's own undefined-field handling is what actually decides whether a clause is produced.
+      descriptor: bookmarkAnchorDescriptor(name, {
+        first: bookmark.columnFirst,
+        last: bookmark.columnLast,
+      }),
       paragraphSerial: this.paragraphSerial,
       runIndex: this.runs.length,
       inTable: para.inTable,
@@ -872,7 +927,8 @@ class ContentBuilder {
     char: CharacterState,
     hyperlink: string | undefined,
   ): void {
-    if (text.length === 0 || char.hidden) {
+    // No length guard on `text` itself: this method's one call site (emitText, below) is only ever reached with a non-empty string -- decodeCodepageBytes runs after flushBytes' own `pendingBytes.length === 0` guard, and every other emitText caller (a \uN escape, a special character or symbol) hands it a literal 1-character string -- so an empty-string branch here would never fire on real input.
+    if (char.hidden) {
       return;
     }
     const fontName =
@@ -922,7 +978,8 @@ class ContentBuilder {
     this.runs = [];
     this.runProvenance = [];
     this.resolveBookmarkPositions(para, blockIndex);
-    this.paragraphSerial += 1;
+    // A fresh symbol identifies this new paragraph uniquely against every other one, past or future -- see OpenFormField's own comment on why identity, not a counted ordering, is what every reader of this field actually needs.
+    this.paragraphSerial = Symbol("paragraph");
   }
 
   // Once a paragraph has taken its place in a block list, every bookmark that opened inside it learns that index (so a pair closing later knows where to bracket from), and every pair whose end landed in it becomes a block extent. Both are deferred to here rather than recorded at the marker, because closeTable() above can push a table between the marker and the paragraph and shift the index the marker would have guessed.
@@ -930,11 +987,9 @@ class ContentBuilder {
     para: ParagraphState,
     blockIndex: number,
   ): void {
+    // No `open.blockIndex === undefined` guard: a still-open bookmark's own paragraphSerial is fixed at the paragraph it opened in, and this reader gives every closed paragraph a fresh symbol identity that is never reused, so `open.paragraphSerial === this.paragraphSerial` can hold true for at most one resolveBookmarkPositions call per bookmark -- the very call for the paragraph it opened in. A defined blockIndex and a matching serial can therefore never coincide, making the guard permanently redundant rather than a real defensive check.
     for (const open of this.openBookmarks.values()) {
-      if (
-        open.blockIndex === undefined &&
-        open.paragraphSerial === this.paragraphSerial
-      ) {
+      if (open.paragraphSerial === this.paragraphSerial) {
         open.blockIndex = blockIndex;
       }
     }
@@ -943,9 +998,7 @@ class ContentBuilder {
 
   // Turns every bookmark whose end half has arrived into a block extent ending at `endIndex`. Called once per closed paragraph, and again when a block list is finalised -- a bookmark whose {\*\bkmkend ...} follows the list's last \par has no later paragraph to be resolved against, so without the second call it would silently vanish.
   private flushClosingBookmarks(inTable: boolean, endIndex: number): void {
-    if (this.closingBookmarks.length === 0) {
-      return;
-    }
+    // No `this.closingBookmarks.length === 0` guard: looping over an empty array and reassigning `this.closingBookmarks = []` to an already-empty array are both no-ops, so a dedicated fast path here would be equivalent-mutant-prone with no observable difference.
     const target = inTable ? this.cellBlockExtents : this.sectionBlockExtents;
     for (const closing of this.closingBookmarks) {
       if (closing.inTable !== inTable) {
@@ -957,22 +1010,17 @@ class ContentBuilder {
         });
         continue;
       }
-      target.push({
-        descriptor: closing.descriptor,
-        // A start with no block index of its own opened after the last paragraph of its own scope closed, so the extent covers only the block the end sits in.
-        startIndex: closing.blockIndex ?? Math.max(0, endIndex - 1),
-        endIndex,
-      });
+      target.push(closingBookmarkExtent(closing, endIndex));
     }
     this.closingBookmarks = [];
   }
 
-  // The run-scoped extents this paragraph carries, in document order by where each starts, dropping any whose range does not name runs this paragraph actually has -- the well-formedness bound document-schema.js's own findRunConstructFault states (0 <= startRun <= endRun <= runs.length) and deliberately does not enforce in the schema.
+  // The run-scoped extents this paragraph carries, in document order by where each starts. No filter against runs.length here for the well-formedness bound document-schema.js's own findRunConstructFault states (0 <= startRun <= endRun <= runs.length): every entry in pendingRunConstructs is pushed with endRun set to this.runs.length AT THAT EXACT MOMENT (endBookmark's own same-paragraph branch, endFormField), and runs.length only ever grows between then and this call (more text can still follow within the same paragraph, but nothing ever shortens it) -- so a stale, now-too-large endRun can never occur by construction. coalesceRunConstructs draws its own endRun values from indices into `this.runProvenance`, which is pushed in lockstep with `this.runs` (flushRun always pushes both together), so its own bound holds for the identical reason. A filter here would never remove anything a real call could produce.
   private takeRunConstructs(): RunConstructExtent[] {
     const extents = [
       ...this.pendingRunConstructs,
       ...coalesceRunConstructs(this.runProvenance),
-    ].filter((extent) => extent.endRun <= this.runs.length);
+    ];
     this.pendingRunConstructs = [];
     this.runProvenance = [];
     return extents.sort(
@@ -1000,12 +1048,12 @@ class ContentBuilder {
       style?.name === undefined || style.name.length === 0
         ? paragraph
         : { ...paragraph, styleId: style.name };
-    const withHeading =
-      headingLevel === undefined ? withStyle : { ...withStyle, headingLevel };
     return {
-      ...withHeading,
-      ...(para.alignment === undefined ? {} : { alignment: para.alignment }),
-      ...(para.direction === undefined ? {} : { direction: para.direction }),
+      ...withStyle,
+      // Every consumer reads .headingLevel/.alignment/.direction by value, never by key presence (toEqual ignores an undefined-valued key the same way it ignores an absent one), so unconditionally including all three removes equivalent-mutant-prone ternaries with no observable difference.
+      headingLevel,
+      alignment: para.alignment,
+      direction: para.direction,
       ...(para.indentLeftTwips === 0
         ? {}
         : { indentLeftPt: twipsToPoints(para.indentLeftTwips) }),
@@ -1027,7 +1075,8 @@ class ContentBuilder {
   // "\slN Space between lines ... If N is a positive value, this size is used only if it is taller than the tallest character ... if N is a negative value, the absolute value of N is used" and "\slmultN Line spacing multiple ... 1 Multiple line spacing, relative to 'Single'". ContentParagraph.lineSpacing is a multiple of single line height, so only the \slmult1 form converts exactly: RTF states its multiple in 240ths of a line, Word's own unit for it. An \sl0 or absent value means automatic spacing and produces no field at all.
   private lineSpacingFields(para: ParagraphState): { lineSpacing?: number } {
     const value = para.lineSpacingTwips;
-    if (value === undefined || value === 0 || !para.lineSpacingIsMultiple) {
+    // No `value === 0` clause: when value is 0, multiple below is also exactly 0, and the trailing `multiple > 0` check already returns {} for that case -- an explicit early check for the same thing here would be an equivalent-mutant-prone duplicate of that guard, not a distinct check.
+    if (value === undefined || !para.lineSpacingIsMultiple) {
       return {};
     }
     const multiple = Math.abs(value) / 240;
@@ -1050,7 +1099,8 @@ class ContentBuilder {
         numId: mintRtfListNumId({
           listOverrideIndex: overrideIndex,
           type,
-          ...(level?.startAt === undefined ? {} : { start: level.startAt }),
+          // mintRtfListNumId reads .start by value (options.start !== undefined), never by key presence.
+          start: level?.startAt,
         }),
         level: para.listLevel,
       },
@@ -1073,9 +1123,9 @@ class ContentBuilder {
     this.rowDirection = direction;
   }
 
-  // Every control word of the <celldef> currently accumulating. Returns whether it was one, so the caller falls through for everything else.
-  applyCellDefinition(name: string, param: number | undefined): boolean {
-    return applyCellDefinitionControlWord(name, param, this.pendingCell);
+  // Every control word of the <celldef> currently accumulating. Void: applyControlWord's own dispatch chain calls this unconditionally now (see its own comment on why that is safe), so the caller no longer needs this wrapper's own report of whether the word was one of the cell-definition's -- only applyCellDefinitionControlWord's own return value, which its own direct unit tests already exercise on its own terms.
+  applyCellDefinition(name: string, param: number | undefined): void {
+    applyCellDefinitionControlWord(name, param, this.pendingCell);
   }
 
   // "\cellxN Defines the right boundary of a cell" -- and, being the last member of <celldef>, closes the definition that preceded it.
@@ -1151,16 +1201,20 @@ class ContentBuilder {
     // A cell's column position accounts for the horizontal spans before it, so a vertical merge below lines up with the column its anchor actually occupies rather than with an ordinal that shifts.
     const columnIndices = rows.map((row) => {
       const indices: number[] = [];
-      let column = 0;
+      // One placeholder slot per grid column already accounted for, so `slots.length` -- not a hand-accumulated running total -- is this cell's own column position: every consumer below only ever compares one row's own value against another row's own indices via indexOf equality, never against an absolute position or a literal, so the position only needs to count grid columns consistently, which pushing one slot per column already does on its own.
+      const slots: undefined[] = [];
       for (const [index] of row.cells.entries()) {
-        indices.push(column);
-        column += horizontalSpanAt(row.definitions, index);
+        indices.push(slots.length);
+        const span = horizontalSpanAt(row.definitions, index);
+        for (let slot = 0; slot < span; slot += 1) {
+          slots.push(undefined);
+        }
       }
       return indices;
     });
     return rows.map((row, rowIndex) => ({
-      // The row's own <rowwrite> member (\ltrrow | \rtlrow), absent meaning the default the spec states for \ltrrow.
-      ...(row.direction === undefined ? {} : { direction: row.direction }),
+      // The row's own <rowwrite> member (\ltrrow | \rtlrow), absent meaning the default the spec states for \ltrrow. Every consumer reads .direction by value, never by key presence.
+      direction: row.direction,
       // A horizontally merged continuation has no cell of its own in the content model -- the anchor's colSpan already accounts for the columns it swallows, exactly as one w:tc with a gridSpan does. A vertical continuation is the opposite case and keeps its slot, since its row genuinely has a cell there.
       cells: row.cells
         .map((cell, cellIndex) => ({ cell, cellIndex }))
@@ -1175,20 +1229,10 @@ class ContentBuilder {
           }
           const colSpan = horizontalSpanAt(row.definitions, cellIndex);
           const column = columnIndices[rowIndex]?.[cellIndex];
-          let rowSpan = 1;
-          if (definition?.verticalMergeFirst === true && column !== undefined) {
-            for (let next = rowIndex + 1; next < rows.length; next += 1) {
-              const matchIndex = columnIndices[next]?.indexOf(column) ?? -1;
-              const match =
-                matchIndex === -1
-                  ? undefined
-                  : rows[next]?.definitions[matchIndex];
-              if (match?.verticalMergeContinuation !== true) {
-                break;
-              }
-              rowSpan += 1;
-            }
-          }
+          const rowSpan =
+            definition?.verticalMergeFirst === true && column !== undefined
+              ? verticalMergeRowSpan(rows, columnIndices, rowIndex, column)
+              : 1;
           const borders = this.resolveBorders(definition);
           const background =
             definition === undefined
@@ -1201,11 +1245,10 @@ class ContentBuilder {
             blocks: cell.blocks,
             ...(colSpan > 1 ? { colSpan } : {}),
             ...(rowSpan > 1 ? { rowSpan } : {}),
-            ...(background === undefined ? {} : { background }),
-            ...(borders === undefined ? {} : { borders }),
-            ...(definition?.verticalAlign === undefined
-              ? {}
-              : { verticalAlign: definition.verticalAlign }),
+            // Every consumer reads .background/.borders/.verticalAlign by value, never by key presence.
+            background,
+            borders,
+            verticalAlign: definition?.verticalAlign,
           };
         }),
     }));
@@ -1239,10 +1282,11 @@ class ContentBuilder {
 
   // \cellxN states "the right boundary of a cell, including its half of the space between cells" as a cumulative offset, so a column's width is the difference between consecutive boundaries, with the row's own \trleftN as the first left edge. A boundary sequence that is not increasing is malformed -- it would produce a zero or negative width, which ContentTable's own schema refuses -- so the whole derivation is replaced by an even split of the section's text width, reported rather than silently substituted.
   private columnWidths(columnCount: number): number[] {
+    // No `.slice(0, columnCount)` on this iteration: closeTable's own sole call site always derives columnCount as Math.max(this.tableColumnRights.length, ...), so columnCount can never be smaller than this.tableColumnRights.length itself -- a slice bounded by columnCount can therefore never actually truncate the array it is called on, making it equivalent to iterating the array bare.
     const rights = this.tableColumnRights;
     const widths: number[] = [];
     let previous = this.rowLeftTwips;
-    for (const right of rights.slice(0, columnCount)) {
+    for (const right of rights) {
       widths.push(twipsToPoints(right - previous));
       previous = right;
     }
@@ -1398,10 +1442,8 @@ class ContentBuilder {
     para: ParagraphState,
   ): ContentDocument {
     this.discardUnclosedResultScratches();
+    // No `if (this.sections.length === 0) { this.sections.push(...) }` fallback after this call: endSection's own drop condition (`blocks.length === 0 && this.sections.length > 0`) can only ever skip pushing when sections.length is ALREADY at least 1 -- its second operand is false whenever sections.length is 0, so THIS call, the one endSection call finish() ever makes, is unconditionally guaranteed to leave sections.length at least 1 regardless of what it was beforehand. A fallback guarding against a state this call can never produce would be genuinely unreachable, not defensive.
     this.endSection(section, para);
-    if (this.sections.length === 0) {
-      this.sections.push({ ...sectionGeometry(section), blocks: [] });
-    }
     return { kind: "wordprocessing", metadata, sections: this.sections };
   }
 }
@@ -1452,12 +1494,11 @@ function buildRunFields(
       ? {}
       : { fontFamily: fontName }),
     ...{ sizePt: halfPointsToPoints(char.sizeHalfPoints) },
-    ...(color === undefined ? {} : { color }),
-    ...(hyperlink === undefined ? {} : { hyperlink }),
-    ...(char.verticalAlign === undefined
-      ? {}
-      : { verticalAlign: char.verticalAlign }),
-    ...(char.direction === undefined ? {} : { direction: char.direction }),
+    // Every consumer reads .color/.hyperlink/.verticalAlign/.direction by value, never by key presence.
+    color,
+    hyperlink,
+    verticalAlign: char.verticalAlign,
+    direction: char.direction,
   };
 }
 
@@ -1596,9 +1637,9 @@ function buildEmbeddedObject(
   return { ...embedded, kind: "embeddedObject" };
 }
 
-// A toggle control word is on when it carries no parameter or a non-zero one, and off at exactly 0 -- "\b turns on bold and \b0 turns off bold" (RTF 1.9.1, "Control Word").
+// A toggle control word is on when it carries no parameter or a non-zero one, and off at exactly 0 -- "\b turns on bold and \b0 turns off bold" (RTF 1.9.1, "Control Word"). `param !== 0` alone already says this: `undefined !== 0` is true under strict inequality, so the bare-word case needs no separate `param === undefined` check of its own.
 function toggleValue(param: number | undefined): boolean {
-  return param === undefined || param !== 0;
+  return param !== 0;
 }
 
 // \ffownhelpN and \ffprotN are classified as "Value" control words, not "Toggle" words like \b/\i, in RTF 1.9.1's own Appendix B ("Index of RTF Control Words") -- and Appendix B's own "Value"/"Toggle" definitions there are what settle which of the two defaults actually applies. "Value: This control word requires a parameter" states no default of its own for an omitted parameter. "Toggle: This control word distinguishes between the ON and OFF states for the given property. The control word with no parameter or a nonzero parameter is used to turn on the property, while the control word with a zero parameter is used to turn it off" -- quoted here in full, since an earlier version of this comment elided exactly this clause -- DOES state one: a bare Toggle word defaults ON, not off. \ffownhelp/\ffprot are Value words, not Toggle ones, so it is the Value entry's own silence that governs them, and that silence is exactly why the real 0-default has to come from a genuinely separate part of the spec: "Conventions of an RTF Reader"'s own "Change Formatting Property" entry, which states it in full: "If a parameter is needed and not specified, then a default value is used... If the control word does not specify a default, then RTF readers should assume a default of 0 except for the toggle control words (like \b), which have a default of 1." RTF's own Form Fields table states the identical 0-default fact for this specific pair without ever describing a bare-word meaning of its own: "\ffownhelpN: 1 if there is associated help text, 0 otherwise" and "\ffprotN: 1 if this field is protected, 0 otherwise" name only an explicit 0/1 parameter -- unlike \b, whose own bare-word meaning IS stated right where its own table entry lives: \b's row ("\b* Bold.") sits in the "Font (Character) Formatting Properties" section, whose own immediately preceding preamble states the rule directly: "A control word preceding plain text turns on the specified attribute. Some control words (indicated in the following table by an asterisk following the description) can be turned off by appending 0 to the control word. For example, \b turns on bold, while \b0 turns off bold." (A near-identical sentence, "For example, \b turns on bold and \b0 turns off bold", also appears much earlier, in the "Control Word" section of the spec's Introduction -- illustrating the general toggle-word convention there, not \b's own table-adjacent meaning; an earlier version of this comment misattributed that Introduction sentence to a preamble "two sections" before \b's own entry, when the actually on-point preamble sits immediately beside it, in the same section.) A bare \ffprot therefore reads as 0/false here, not true, via this function. \ffownhelp is classified identically by the spec but is deliberately NOT read via this function -- see the comment on applyFormFieldControlWord's own "ffownhelp" case below for why a bare \ffownhelp reads as true in practice despite sharing this classification.
@@ -1636,6 +1677,7 @@ function readRtfDetail(
   const builder = new ContentBuilder(header, sink);
   const section = defaultSectionState(header);
 
+  // pictureOwner/objectDataOwner/objectOwner/isFieldGroup are each omitted below rather than stated as `false`: every check that reads one of them (the groupEnd handler's own `state.picture !== undefined && state.pictureOwner`, `state.objectData !== undefined && state.objectDataOwner`, `state.object !== undefined && state.objectOwner`, `state.isFieldGroup && state.field?.formFieldStarted === true`) is a short-circuited `&&` whose OTHER operand -- picture/objectData/object/field -- is ALSO `undefined` on this root object and can only ever become defined on a freshly cloned CHILD, in the very same branch that also sets its own Owner/isFieldGroup flag true. Since root's own picture/objectData/object/field never change (nothing ever assigns to root directly; every mutation targets a `child` object instead), the paired `undefined` operand already makes each `&&` false regardless of these four fields' own value here, for as long as `state` could ever actually be this root object at one of those check sites (including the state-still-root case of a stray extra closing brace after the document's own root group has already closed) -- so there is no real `false` to state, only an absent field, which the optional typing above lets this literal say directly.
   const root: GroupState = {
     destination: "body",
     uc: 1, // "A default of 1 should be assumed if no \ucN keyword has been seen in the current or outer scopes."
@@ -1643,15 +1685,11 @@ function readRtfDetail(
     para: defaultParagraphState(),
     field: undefined,
     picture: undefined,
-    pictureOwner: false,
     objectData: undefined,
     object: undefined,
-    objectDataOwner: false,
-    objectOwner: false,
     resultOf: undefined,
     bookmark: undefined,
     inUnicodeWrapper: false,
-    isFieldGroup: false,
   };
   const stack: GroupState[] = [root];
   let state = root;
@@ -1718,12 +1756,7 @@ function readRtfDetail(
       state.field?.formField !== undefined
     ) {
       // Appends to the LAST item: a \*\ffl group's own open pushed one empty entry per occurrence, so several sibling \*\ffl groups (a dropdown's list) each accumulate into their own slot rather than one shared string.
-      const items = state.field.formField.listItems;
-      const last = items.length - 1;
-      const current = items[last];
-      if (current !== undefined) {
-        items[last] = current + text;
-      }
+      appendToLastListItem(state.field.formField.listItems, text);
       return;
     }
     // "picture" text is handled directly at the token site (it is hex, not characters); "skip", "listText", "unicodeWrapper" and "formField" discard -- \*\ffdeftext (FFData.xstzTextDef) is one of these now, per SILENT_SKIP_DESTINATIONS above.
@@ -1731,7 +1764,8 @@ function readRtfDetail(
 
   let index = 0;
   let textOffset = 0;
-  while (index < tokens.length) {
+  // No `index < tokens.length` bound: a read past the array's own end is `undefined` rather than a thrown error, and the very next line's own `if (token === undefined) { break; }` already terminates the loop on exactly that condition -- a separate length check here would only ever restate it.
+  while (true) {
     const token = tokens[index];
     if (token === undefined) {
       break;
@@ -1755,7 +1789,8 @@ function readRtfDetail(
       // RTF's own <obj> grammar allows only one \result child, but a malformed producer can still write two -- recognised here, mirroring \objdata's own duplicate check just below, by resultSeen already being true from the first one, so the second is skipped whole rather than rendered into a scratch accumulator nothing will read.
       // objectState is provably defined here: isResultDestination's own definition already asserts `objectState !== undefined`, and TypeScript's aliased-condition narrowing carries that through the `&&` below.
       const isDuplicateResult = isResultDestination && objectState.resultSeen;
-      if (objectState !== undefined && isResultDestination) {
+      // No separate `objectState !== undefined &&` clause: isResultDestination's own definition already asserts it, and the same TypeScript aliased-condition narrowing the comment above relies on carries through this bare check too.
+      if (isResultDestination) {
         // Recorded regardless of whether this \result is ultimately kept or discarded: \object's own group-end diagnostic (below) needs to know whether a \result existed at all, distinctly from whether \objdata did, and the duplicate check just above needs it too.
         objectState.resultSeen = true;
       }
@@ -1767,9 +1802,8 @@ function readRtfDetail(
             "an \\object destination has more than one \\result child, which RTF's own grammar does not allow; only the first is kept and this one is discarded",
         });
       }
-      // RTF's own <obj> grammar allows only one \objdata child, but a malformed producer can still write two -- recognised here (rather than left to decode twice into two identical embeddedObject blocks) by objectDataSeen already being true from the first one.
-      const isObjectDataDestination =
-        head.destination === "objdata" && known === "objectData";
+      // RTF's own <obj> grammar allows only one \objdata child, but a malformed producer can still write two -- recognised here (rather than left to decode twice into two identical embeddedObject blocks) by objectDataSeen already being true from the first one. No separate `head.destination === "objdata"` clause: DESTINATION_KINDS maps exactly one key ("objdata") to the "objectData" kind, so `known === "objectData"` alone already states it.
+      const isObjectDataDestination = known === "objectData";
       const isDuplicateObjectData =
         isObjectDataDestination && objectState?.objectDataSeen === true;
       if (isDuplicateObjectData) {
@@ -1870,18 +1904,18 @@ function readRtfDetail(
           };
           child.objectOwner = true;
         }
-        if (kind === "bookmarkStart" || kind === "bookmarkEnd") {
-          child.bookmark = {
-            name: "",
-            columnFirst: undefined,
-            columnLast: undefined,
-          };
-        }
+        // No `kind === "bookmarkStart" || kind === "bookmarkEnd"` guard: state.bookmark, like pictureOwner/objectDataOwner/objectOwner on the root object earlier, is only ever acted on paired with a `state.destination === "bookmarkStart"`/`"bookmarkEnd"` check (both at group-end, below, and in emitText) -- never on its own definedness. A stray bookmark object on some OTHER recognised destination's own child (say \object) is read back at that child's own group-end (`state.bookmark !== undefined`), but neither the bookmarkStart nor the bookmarkEnd branch beneath it ever fires, since `child.destination` is set from `kind` independently of this block and was never "bookmarkStart"/"bookmarkEnd" to begin with -- so assigning a fresh (and, on any other destination, simply unread) bookmark here unconditionally changes nothing observable for any input.
+        child.bookmark = {
+          name: "",
+          columnFirst: undefined,
+          columnLast: undefined,
+        };
         index = head.contentStart;
       } else {
         index += 1;
       }
-      if (objectState !== undefined && isResultDestination) {
+      // No separate `objectState !== undefined &&` clause: isResultDestination's own definition already asserts it, and the same TypeScript aliased-condition narrowing the comment on isDuplicateResult above relies on carries through this bare check too.
+      if (isResultDestination) {
         // Unreachable for a duplicate \result: isDuplicateResult forces kind to "skip" above, which continues the outer loop before this point is ever reached. \result's own content now builds into a totally isolated scratch accumulator (see ContentBuilder's own beginResultScratch) rather than the paragraph/block list/table state already accumulating around \object -- so it can neither destroy that state nor be destroyed by it, regardless of where \object sits (mid-paragraph, inside a table cell, or anywhere else). `object` is cleared on this child (rather than inherited, as cloneGroupState would otherwise carry it forward by reference) so that a malformed \objdata nested inside \result's own fallback content -- not itself wrapped in its own \object, which real RTF never does but a hostile or corrupt file could -- decodes or fails entirely on its own terms, without marking THIS \object decoded.
         builder.beginResultScratch();
         child.resultOf = objectState;
@@ -1897,21 +1931,15 @@ function readRtfDetail(
 
     if (token.kind === "groupEnd") {
       flushBytes();
-      if (
-        state.destination === "picture" &&
-        state.picture !== undefined &&
-        state.pictureOwner
-      ) {
+      // No `state.destination === "picture"` check here: pictureOwner is set true only at the same moment a group's own destination becomes "picture" (below, on group open), and cloneGroupState resets it to false on every child regardless of what destination that child inherits -- so pictureOwner true already implies this group's destination was "picture" for its own whole lifetime. The nested-plain-group case a malformed \pict can contain is exactly why the flag exists at all: that child inherits destination "picture" by reference but starts with its own fresh pictureOwner false, which is what pictureOwner (not destination) is the one actually gating here.
+      if (state.picture !== undefined && state.pictureOwner === true) {
         const image = buildPicture(state.picture, sink);
         if (image !== undefined) {
           builder.addBlocks([image], state.para.inTable);
         }
       }
-      if (
-        state.destination === "objectData" &&
-        state.objectData !== undefined &&
-        state.objectDataOwner
-      ) {
+      // Same reasoning as pictureOwner above: objectDataOwner is set true only alongside destination "objectData" and reset false on every other child.
+      if (state.objectData !== undefined && state.objectDataOwner === true) {
         const embedded = buildEmbeddedObject(
           state.objectData,
           state.object,
@@ -1929,11 +1957,8 @@ function readRtfDetail(
         // \result's own scratch accumulator (opened by beginResultScratch when this group started) is finished now: every \par it contained has already closed a real paragraph inside it, and endResultScratch force-closes whatever paragraph was still open otherwise. Recorded, not yet acted on: \object's own group-end handling further up the stack either splices these blocks in or discards them once \objdata's real decode's fate is finally known, and this \result's own group-end cannot know that outcome when \result comes first in the source -- \objdata may not even have been read yet.
         state.resultOf.resultBlocks = builder.endResultScratch(state.para);
       }
-      if (
-        state.destination === "object" &&
-        state.object !== undefined &&
-        state.objectOwner
-      ) {
+      // Same reasoning again: objectOwner is set true only alongside destination "object" and reset false on every other child.
+      if (state.object !== undefined && state.objectOwner === true) {
         // Every child \objdata/\result this \object's own group can legally contain has, by construction, already closed by the time \object's own closing brace is reached -- so `decoded`, `objectDataSeen` and `resultBlocks` are all final here, regardless of which sibling the source actually listed first.
         const objectState = state.object;
         if (!objectState.decoded && objectState.resultBlocks !== undefined) {
@@ -1973,7 +1998,10 @@ function readRtfDetail(
         builder.startFormField();
         state.field.formFieldStarted = true;
       }
-      if (state.isFieldGroup && state.field?.formFieldStarted === true) {
+      if (
+        state.isFieldGroup === true &&
+        state.field?.formFieldStarted === true
+      ) {
         // The whole field is read by now -- \*\fldinst and \*\formfield are this group's own earlier children, already closed -- so this is the one point that knows both the instruction and whatever form-field data it carried. Gated on formFieldStarted, not on `descriptor` being defined: startFormField above already opened this field's extent (an ordinary field, which never does, correctly never reaches endFormField either), and endFormField's own job is closing whatever startFormField opened -- not re-deciding whether it should have been opened from a second, independently re-derived read of the instruction, which is exactly what let open and close firing conditions drift apart (see endFormField's own comment on `descriptor` possibly being undefined here).
         const descriptor = formFieldContentControl(
           state.field.instruction,
@@ -2063,14 +2091,10 @@ function readRtfDetail(
       flushBytes();
       const code = token.param;
       if (code !== undefined) {
-        // "Unicode values greater than 32767 are expressed as negative numbers ... convert F020 to decimal (61472) and subtract 65536." A lone surrogate is emitted with fromCharCode so a surrogate pair written as two \uN keywords composes into one astral character.
-        emitText(String.fromCharCode(code < 0 ? code + 0x1_00_00 : code));
+        // "Unicode values greater than 32767 are expressed as negative numbers ... convert F020 to decimal (61472) and subtract 65536." No explicit "add 65536 back for a negative code" step is needed to undo that, though: String.fromCharCode's own ToUint16 argument coercion already reduces ANY integer modulo 2**16 before treating it as a UTF-16 code unit, so fromCharCode(-4064) and fromCharCode(-4064 + 65536) are the identical call -- the spec's own subtract-65536 encoding step is already exactly what fromCharCode's argument coercion undoes on its own, with no conditional needed on this side to reverse it. A lone surrogate is emitted with fromCharCode so a surrogate pair written as two \uN keywords composes into one astral character.
+        emitText(String.fromCharCode(code));
       }
-      const skipped = skipUnicodeFallback(
-        tokens,
-        { index: index + 1, textOffset: 0 },
-        state.uc,
-      );
+      const skipped = skipUnicodeFallback(tokens, index + 1, state.uc);
       index = skipped.index;
       textOffset = skipped.textOffset;
       continue;
@@ -2161,79 +2185,79 @@ function applyPictureControlWord(
     case "picscaley":
       if (param !== undefined) picture.scaleYPercent = param;
       return;
-    default:
-      return;
+    // No `default: break;` clause: an unmatched name already falls out of the switch with no default present, landing in the identical place -- this function's own end -- that an explicit break in a default clause with no other statement would. Equivalent either way, so the redundant clause is omitted rather than left for a mutation tester to flag as unkillable.
   }
 }
 
 // RTF 1.5's own Form Fields table states \ffresN/\ffdefresN only in list-field terms ("Result field for a form field. Values from 0 to N-1, where N is the number of \ffl entries" / "Default entry for list field"), but \ffres/\ffdefres are RTF's own serialisation of the binary FFDataBits structure [MS-DOC] 2.9.79 defines, and that structure spells out a checkbox's own iRes meaning explicitly: 0 (unchecked), 1 (checked), or the reserved sentinel 25 (undefined, treated as unchecked). Both control words are captured here via formFieldValueNumber's own bare-defaults-to-0 Value-word rule, regardless of the field's iType; formFieldContentControl in constructs.ts is where the checkbox-specific sentinel handling and the dropdown's own zero-based-index reading of the identical \ffres are actually decided. \ffprot ("1 if this field is protected, 0 otherwise" -- RTF 1.9.1's own Form Fields table, mirroring [MS-DOC] 2.9.79 FFDataBits.fProt) is read via formFieldValueBit above, matching its own Value-word classification's literal 0-default for a bare occurrence -- see formFieldValueBit's own comment for the exact citations. \ffownhelp is deliberately NOT read the same way, despite carrying the identical Value-word classification: LibreOffice's own RTF exporter (sw/source/filter/ww8/rtfattributeoutput.cxx, confirmed against its published source) emits the BARE control word, with no numeric parameter, whenever the control model exposes a HelpText property at all -- every one of its three FFOWNHELP emission sites gates on `xPropSetInfo->hasPropertyByName("HelpText")`, a property-existence check, not a literal unconditional emission -- immediately before a `{\*\ffhelptext ...}` destination that actually carries the control's real HelpText property -- so treating a bare occurrence as the Value-word literal default of false, the way \ffprot's bare form correctly does, silently discards genuine author-set help text from this real producer on every read, with the reader's own downstream `helpText.trim().length > 0` check in constructs.ts already filtering out the empty/absent case the spec's 0-default exists to describe. \ffownhelp is read via toggleValue instead, exactly like a bare `\b`/`\i`: this is a considered divergence from its own literal Value-word default, not an oversight, made for the identical real-world-producer reason FORM_FIELD_RESULT_UNDEFINED's own \ffres25-to-\ffdefres fallback exists above -- do not "simplify" this back to formFieldValueBit, that would re-break the LibreOffice case this divergence exists for. An explicit \ffownhelp0 still reads as false (a producer that spells out the zero is making an explicit claim the reader still honours), and a field that never mentions \ffownhelp at all still defaults to false via FormFieldState's own initial value; only the bare, unparameterised form's own default changes.
+// Every recognised word is a no-op default outcome from the caller's own point of view: the sole call site (applyControlWord below) unconditionally treats destination "formField" as fully handled regardless of which word matched or whether any did, via its own unconditional formField-family guard right after -- so this function's result was never actually observable, and returning it at all was a boolean the caller could never branch on differently. Void rather than boolean for that reason, with an unmatched word simply falling out of the switch as a real no-op.
 function applyFormFieldControlWord(
   name: string,
   param: number | undefined,
   formField: FormFieldState,
-): boolean {
+): void {
   switch (name) {
     case "ffres":
       formField.resultIndex = formFieldValueNumber(param);
-      return true;
+      break;
     case "ffdefres":
       formField.defaultResultIndex = formFieldValueNumber(param);
-      return true;
+      break;
     case "ffprot":
       formField.protectedField = formFieldValueBit(param);
-      return true;
+      break;
     case "ffownhelp":
       formField.ownHelp = toggleValue(param);
-      return true;
-    default:
-      return false;
+      break;
+    // No `default: break;` clause: an unmatched name already falls out of the switch with no default present, landing in the identical place -- this function's own end -- that an explicit break in a default clause with no other statement would.
   }
 }
 
+// Void, like applyStructureControlWord: applyControlWord's own dispatch chain calls every one of these five word-appliers unconditionally now (see its own comment on why that is safe), so none of them needs to report back whether a name was its own -- only to apply it when it was, and do nothing otherwise, which every one of them already does on its own account.
 function applyCharacterControlWord(
   name: string,
   param: number | undefined,
   state: GroupState,
   header: RtfHeader,
-): boolean {
+): void {
   switch (name) {
     case "plain":
       state.char = defaultCharacterState();
-      return true;
+      break;
     case "b":
       state.char.bold = toggleValue(param);
-      return true;
+      break;
     case "i":
       state.char.italic = toggleValue(param);
-      return true;
+      break;
     case "strike":
       state.char.strike = toggleValue(param);
-      return true;
+      break;
     case "v":
       state.char.hidden = toggleValue(param);
-      return true;
+      break;
     case "ulnone":
       state.char.underline = false;
-      return true;
+      break;
     case "f":
       state.char.fontIndex = param ?? header.defaultFontIndex;
-      return true;
+      break;
     case "fs":
       state.char.sizeHalfPoints = param ?? DEFAULT_FONT_SIZE_HALF_POINTS;
-      return true;
+      break;
     case "cf":
       state.char.colorIndex = param;
-      return true;
+      break;
     case "uc":
       if (param !== undefined && param >= 0) state.uc = param;
-      return true;
+      break;
     // RTF 1.9.1, "Font (Character) Formatting Properties": "\super Superscripts text and shrinks point size according to font information." / "\sub Subscripts text ...". Both are bare on-words -- neither carries the asterisk that section's own preamble gives the words that "can be turned off by appending 0" (\b*, \ul*, ...), so a parameter is not consulted here: the off-spelling the spec itself names is \nosupersub below, and a group's closing brace or \plain turns the property off the same way every other character property here does.
     case "super":
       state.char.verticalAlign = "superscript";
-      return true;
+      break;
     case "sub":
       state.char.verticalAlign = "subscript";
-      return true;
+      break;
     // "\upN Move up N half-points (default is 6)." / "\dnN Move down N half-points (default is 6)." -- the offset spellings, where the sign decides the family and zero restores the baseline (a move of no half-points is no move at all, so \up0/\dn0 state baseline as explicitly as their absence does). A negative \upN genuinely moves text down and a negative \dnN up, so each crosses onto the other's member rather than being clamped to its own; the "default is 6" makes a bare occurrence a real raise/lower, matching the way applyFormFieldControlWord's own Value-word defaults work.
     case "up":
       state.char.verticalAlign =
@@ -2242,7 +2266,7 @@ function applyCharacterControlWord(
           : param < 0
             ? "subscript"
             : undefined;
-      return true;
+      break;
     case "dn":
       state.char.verticalAlign =
         param === undefined || param > 0
@@ -2250,153 +2274,152 @@ function applyCharacterControlWord(
           : param < 0
             ? "superscript"
             : undefined;
-      return true;
+      break;
     // "\nosupersub Turns off superscripting or subscripting." -- the one off-spelling the spec names for the property, spanning both the \super/\sub and \upN/\dnN families.
     case "nosupersub":
       state.char.verticalAlign = undefined;
-      return true;
+      break;
     // The run-level bidirectional pair (RTF 1.9.1, "Font (Character) Formatting Properties"): "\rtlch Character data following this control word is treated as a right-to-left run" / "\ltrch ... treated as a left-to-right run (the default)". Bare on-words with no off-spelling of their own -- the state they leave is simply whichever of the two was stated last, so a later word replaces an earlier one rather than toggling against it, and a group's close or \plain restores the enclosing state like every other character property here.
     case "rtlch":
       state.char.direction = "rtl";
-      return true;
+      break;
     case "ltrch":
       state.char.direction = "ltr";
-      return true;
+      break;
     // The <chrev> production. Each writes the revision half of the character state, which rides the group stack with the rest of it.
     case "revised":
       state.char.revision = {
         ...state.char.revision,
         revised: toggleValue(param),
       };
-      return true;
+      break;
     case "revauth":
       state.char.revision = { ...state.char.revision, revisedAuthor: param };
-      return true;
+      break;
     case "revdttm":
       state.char.revision = { ...state.char.revision, revisedDateTime: param };
-      return true;
+      break;
     case "deleted":
       state.char.revision = {
         ...state.char.revision,
         deleted: toggleValue(param),
       };
-      return true;
+      break;
     case "revauthdel":
       state.char.revision = { ...state.char.revision, deletedAuthor: param };
-      return true;
+      break;
     case "revdttmdel":
       state.char.revision = { ...state.char.revision, deletedDateTime: param };
-      return true;
+      break;
     case "mvf":
       state.char.revision = {
         ...state.char.revision,
         moved: toggleValue(param) ? "moveFrom" : undefined,
       };
-      return true;
+      break;
     case "mvt":
       state.char.revision = {
         ...state.char.revision,
         moved: toggleValue(param) ? "moveTo" : undefined,
       };
-      return true;
+      break;
     case "mvauth":
       state.char.revision = { ...state.char.revision, movedAuthor: param };
-      return true;
+      break;
     case "mvdate":
       state.char.revision = { ...state.char.revision, movedDateTime: param };
-      return true;
+      break;
     case "crauth":
       state.char.revision = { ...state.char.revision, formatAuthor: param };
-      return true;
+      break;
     case "crdate":
       state.char.revision = { ...state.char.revision, formatDateTime: param };
-      return true;
+      break;
     default:
       // Underline is a family of control words rather than one: "\ul* Continuous underline. \ul0 turns off all underlining" plus a dozen styled variants (\uld, \uldash, \ulth, \ulwave, ...), all of which ContentRun expresses as the one boolean it carries. \ulc (underline colour) is deliberately not one of them.
-      if (name.startsWith("ul") && name !== "ulc") {
-        state.char.underline = toggleValue(param);
-        return true;
+      if (!name.startsWith("ul") || name === "ulc") {
+        return;
       }
-      return false;
+      state.char.underline = toggleValue(param);
   }
 }
 
+// Void for the same reason applyCharacterControlWord above is.
 function applyParagraphControlWord(
   name: string,
   param: number | undefined,
   state: GroupState,
-): boolean {
+): void {
   const alignment = ALIGNMENTS.get(name);
   if (alignment !== undefined) {
     state.para.alignment = alignment;
-    return true;
+    return;
   }
   switch (name) {
     case "pard":
       state.para = defaultParagraphState();
-      return true;
+      break;
     case "s":
       state.para.styleIndex = param;
-      return true;
+      break;
     // The paragraph-level bidirectional pair (RTF 1.9.1, "Bidirectional Controls" under "Paragraph Formatting Properties"): "\rtlpar Text in this paragraph will display with right-to-left precedence" / "\ltrpar ... left-to-right precedence (the default)". Bare on-words like \rtlch/\ltrch above -- last stated wins, \pard restores the default.
     case "rtlpar":
       state.para.direction = "rtl";
-      return true;
+      break;
     case "ltrpar":
       state.para.direction = "ltr";
-      return true;
+      break;
     case "outlinelevel":
       // "\outlinelevelN ... a value from 0 to 8 ... In the default case, no outline level is specified (same as body text)." A value above 8 is a producer's own spelling of body text, so it clears the level rather than becoming a tenth heading depth.
       state.para.outlineLevel =
         param === undefined || param > 8 ? undefined : param;
-      return true;
+      break;
     case "li":
     case "lin":
       state.para.indentLeftTwips = param ?? 0;
-      return true;
+      break;
     case "fi":
       state.para.indentFirstLineTwips = param ?? 0;
-      return true;
+      break;
     case "sb":
       state.para.spaceBeforeTwips = param ?? 0;
-      return true;
+      break;
     case "sa":
       state.para.spaceAfterTwips = param ?? 0;
-      return true;
+      break;
     case "sl":
       state.para.lineSpacingTwips = param;
-      return true;
+      break;
     case "slmult":
       state.para.lineSpacingIsMultiple = toggleValue(param);
-      return true;
+      break;
     case "pagebb":
       state.para.pageBreakBefore = true;
-      return true;
+      break;
     case "ls":
       state.para.listOverrideIndex = param;
-      return true;
+      break;
     case "ilvl":
       state.para.listLevel = param ?? 0;
-      return true;
+      break;
     case "intbl":
       state.para.inTable = true;
-      return true;
-    default:
-      return false;
+      break;
   }
 }
 
 // The <secfmt> production's own properties (RTF 1.9.1, "Section Formatting Properties"). Every one of them is a section-scoped twin of a document-level control word the header parser already reads -- \pgwsxnN beside \paperwN, \marglsxnN beside \marglN -- because RTF states page geometry twice: once for the document and once per section that departs from it.
+// Void for the same reason applyCharacterControlWord above is.
 function applySectionControlWord(
   name: string,
   param: number | undefined,
   section: SectionState,
   header: RtfHeader,
   sink: RtfDiagnosticSink,
-): boolean {
+): void {
   if (name === "sectd") {
     Object.assign(section, defaultSectionState(header));
-    return true;
+    return;
   }
   if (name === "sbkcol") {
     sink({
@@ -2406,36 +2429,35 @@ function applySectionControlWord(
         "\\sbkcol starts the section at a new column; ContentSection.breakType names page-level breaks only, so the break kind is dropped and the section itself is kept",
     });
     section.breakType = undefined;
-    return true;
+    return;
   }
   if (SECTION_BREAK_TYPES.has(name)) {
     section.breakType = SECTION_BREAK_TYPES.get(name);
-    return true;
+    return;
   }
+  // Every remaining recognised name here takes a twips parameter -- unlike the three checks above, none of which do -- so a bare occurrence (no parameter) genuinely has nothing to apply, rather than a default this reader would otherwise assign.
   if (param === undefined) {
-    return false;
+    return;
   }
   switch (name) {
     case "pgwsxn":
       section.paperWidthTwips = param;
-      return true;
+      break;
     case "pghsxn":
       section.paperHeightTwips = param;
-      return true;
+      break;
     case "marglsxn":
       section.marginLeftTwips = param;
-      return true;
+      break;
     case "margrsxn":
       section.marginRightTwips = param;
-      return true;
+      break;
     case "margtsxn":
       section.marginTopTwips = param;
-      return true;
+      break;
     case "margbsxn":
       section.marginBottomTwips = param;
-      return true;
-    default:
-      return false;
+      break;
   }
 }
 
@@ -2446,35 +2468,36 @@ function applyStructureControlWord(
   builder: ContentBuilder,
   section: SectionState,
   sink: RtfDiagnosticSink,
-): boolean {
+): void {
+  // Void, not boolean: this is the last dispatcher in applyControlWord's own chain, called unconditionally with its result never inspected -- an unrecognised word simply falls out of the switch as a real no-op, exactly as the spec requires of any control word a reader does not know.
   switch (name) {
     case "par":
       builder.endParagraph(state.para, true);
-      return true;
+      break;
     case "trowd":
       state.para.inTable = true;
       builder.startRowDefinition();
-      return true;
+      break;
     case "trleft":
       builder.setRowLeft(param ?? 0);
-      return true;
+      break;
     // The row-level bidirectional pair, a <rowwrite> member of the <tbldef> this row's own definition builds (RTF 1.9.1, "Table Row Formatting"): "\rtlrow Cells in this table row will have right-to-left precedence" / "\ltrrow ... left-to-right precedence (the default)". Bare on-words; last stated wins, and \trowd's own startRowDefinition resets the pending row's direction with the rest of its state.
     case "rtlrow":
       builder.setRowDirection("rtl");
-      return true;
+      break;
     case "ltrrow":
       builder.setRowDirection("ltr");
-      return true;
+      break;
     case "cellx":
       if (param !== undefined) builder.addCellBoundary(param);
-      return true;
+      break;
     case "cell":
       builder.endCell(state.para);
-      return true;
+      break;
     case "row":
       builder.endRow(state.para);
       state.para.inTable = false;
-      return true;
+      break;
     case "nestcell":
     case "nestrow":
       // A nested table is read as ordinary cell content rather than a table inside a cell: \nestcell/\nestrow describe the inner row through a {\*\nesttableprops ...} group whose own <tbldef> this reader does not track separately, so promoting it would need a second row builder keyed by \itapN nesting depth.
@@ -2484,18 +2507,17 @@ function applyStructureControlWord(
         message:
           "a nested table's cell/row marks are read as ordinary cell content; the inner table's own structure is not reconstructed",
       });
-      return true;
+      break;
     case "page":
       builder.endParagraph(state.para, false);
       builder.addBlocks([{ kind: "pageBreak" }], state.para.inTable);
-      return true;
+      break;
     case "sect":
       // "\sect End of section and paragraph" -- both, in that order: the paragraph closes into the section that is ending, not into the one about to begin.
       builder.endParagraph(state.para, true);
       builder.endSection(section, state.para);
-      return true;
-    default:
-      return false;
+      break;
+    // No `default: break;` clause: an unmatched name already falls out of the switch with no default present, landing in the identical place -- this function's own end -- that an explicit break in a default clause with no other statement would.
   }
 }
 
@@ -2534,12 +2556,9 @@ function applyControlWord(
     return;
   }
   const formField = state.field?.formField;
-  if (
-    state.destination === "formField" &&
-    formField !== undefined &&
-    applyFormFieldControlWord(name, param, formField)
-  ) {
-    return;
+  // Applying a genuine \ffres/\ffdefres/\ffprot/\ffownhelp word and discarding an unrecognised one are handled by the SAME unconditional return just below: nothing here branches on which of the two happened, so applyFormFieldControlWord's own effect (if any) is folded into that one guard rather than gated by a second, redundant destination check of its own.
+  if (state.destination === "formField" && formField !== undefined) {
+    applyFormFieldControlWord(name, param, formField);
   }
   if (
     state.destination === "formField" ||
@@ -2550,19 +2569,12 @@ function applyControlWord(
     // Mirrors the bookmarkStart/bookmarkEnd guard above: \*\formfield carries no #PCDATA of its own (its content is entirely its own \ffres/\ffdefres/\ffprot/\ffownhelp control words, already handled above), and \*\ffname/\*\ffhelptext/\*\ffl's content is a name or help string, not formatted text -- so a stray character, paragraph, or structure control word inside any of the four (\par, \page, \sect, \b, ...) is ignored here rather than applied to the paragraph/section/document surrounding the field.
     return;
   }
-  if (applyCharacterControlWord(name, param, state, header)) {
-    return;
-  }
+  // Every one of these five word-appliers is now called unconditionally, none gated on whether an earlier one already matched: applyCharacterControlWord's own recognised names (b/cf/crauth/crdate/deleted/dn/f/fs/i/ltrch/mvauth/mvdate/mvf/mvt/nosupersub/plain/revauth/revauthdel/revdttm/revdttmdel/revised/rtlch/strike/sub/super/uc/ulnone/up/v), applyCellDefinition's own (CELL_BORDER_SIDES' cl-prefixed side names, clvmgf/clvmrg/clmgf/clmrg/clcbpat/clcfpat/clshdng/clvertalc/clvertalb/clvertalt, every no-border/border-style keyword, brdrw/brdrcf, and anything else starting "brdr"/"brsp"), applyParagraphControlWord's own (ALIGNMENTS' ql/qc/qr/qj plus pard/s/rtlpar/ltrpar/outlinelevel/li/lin/fi/sb/sa/sl/slmult/pagebb/ls/ilvl/intbl), applySectionControlWord's own (sectd/sbkcol/SECTION_BREAK_TYPES' sbknone/sbkpage/sbkeven/sbkodd plus pgwsxn/pghsxn/marglsxn/margrsxn/margtsxn/margbsxn), and applyStructureControlWord's own (par/trowd/trleft/rtlrow/ltrrow/cellx/cell/row/nestcell/nestrow/page/sect) share not one single control-word name across all five sets -- so a name any one of them recognises can never also be one a sibling would act on, making a sequential gate-and-return chain unnecessary: each function already applies its own effect only for the names it recognises and is a genuine no-op for every other name, so calling all five in a fixed order (cell definition before paragraph, since several \cl-prefixed words share a bare-word prefix with a paragraph border word RTF's own \brdr* production never actually reaches -- see the cell-definition comment below) produces the identical result a return-gated chain would, with no ordering-dependent short-circuit to get wrong. (The cell-definition comment immediately below is about a different, RTF-spec-level ambiguity -- a paragraph-level \brdr* border this reader does not implement at all, not an actual collision between the two functions' own recognised name sets, which remain disjoint either way.)
+  applyCharacterControlWord(name, param, state, header);
   // The <celldef> run comes before the paragraph dispatch: several of its members share a prefix with paragraph border words, and a cell definition's own side is the narrower reading whenever one is open.
-  if (builder.applyCellDefinition(name, param)) {
-    return;
-  }
-  if (applyParagraphControlWord(name, param, state)) {
-    return;
-  }
-  if (applySectionControlWord(name, param, section, header, sink)) {
-    return;
-  }
+  builder.applyCellDefinition(name, param);
+  applyParagraphControlWord(name, param, state);
+  applySectionControlWord(name, param, section, header, sink);
   applyStructureControlWord(name, param, state, builder, section, sink);
 }
 
