@@ -71,9 +71,6 @@ export function codePointAt(text: string, index: number): string {
   if (index >= text.length) {
     return "\n";
   }
-  const code = text.codePointAt(index);
-  if (code === undefined) {
-    return "\n";
-  }
-  return String.fromCodePoint(code);
+  // text.codePointAt only ever returns undefined for an out-of-range index, and the guard above has already ruled that out -- no further fallback needed for an index it can actually be called with here.
+  return String.fromCodePoint(text.codePointAt(index)!);
 }
