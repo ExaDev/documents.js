@@ -722,6 +722,101 @@ describe("readSheetRecords formula cells", () => {
     expect(cells[3]?.formula).toBe("200");
   });
 
+  it("never forms a shared-formula group from a non-Formula record immediately followed by a ShrFmla, even though the two share the identical leading Cell-header layout", () => {
+    // A Number record's own base cell (3, 3) happens to parse through readCellHeader exactly like a Formula record's would -- collectFormulaGroups' own record.type check is the only thing distinguishing "this is a real base cell" from "this happens to precede a ShrFmla by coincidence."
+    const ptgInt = (value: number) => [0x1e, ...u16(value)];
+    const ptgExpTo = (row: number, column: number) => [
+      0x01,
+      ...u16(row),
+      ...u16(column),
+    ];
+    const cells = readCells(
+      record(RECORD_NUMBER, [...cell(3, 3), ...f64(9)]),
+      record(RECORD_SHRFMLA, [
+        ...u16(3),
+        ...u16(3),
+        3,
+        3,
+        0,
+        2,
+        ...u16(ptgInt(999).length),
+        ...ptgInt(999),
+      ]),
+      record(RECORD_FORMULA, [
+        ...cell(0, 0),
+        ...f64(1),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpTo(3, 3).length),
+        ...ptgExpTo(3, 3),
+      ]),
+    );
+
+    expect(cells[1]?.formula).toBeUndefined();
+  });
+
+  it("never forms an array-formula group from a Formula record followed by anything other than ShrFmla or Array, even a record shaped just like a well-formed Array group", () => {
+    // Table shares the identical layout an Array record's own group-reading would expect (12-byte header, then a two-byte cce and that many rgce bytes) -- only next.type distinguishes "this really is this Formula's own Array companion" from "the next record just happens to be shaped the same way."
+    const ptgInt = (value: number) => [0x1e, ...u16(value)];
+    const ptgExpTo = (row: number, column: number) => [
+      0x01,
+      ...u16(row),
+      ...u16(column),
+    ];
+    const arrayShapedRgce = ptgInt(77);
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(2, 2),
+        ...f64(1),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpTo(2, 2).length),
+        ...ptgExpTo(2, 2),
+      ]),
+      record(RECORD_TABLE, [
+        ...new Array<number>(12).fill(0), // the identical 12-byte header ARRAY_HEADER_BYTES skips
+        ...u16(arrayShapedRgce.length),
+        ...arrayShapedRgce,
+      ]),
+      record(RECORD_FORMULA, [
+        ...cell(5, 5),
+        ...f64(1),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpTo(2, 2).length),
+        ...ptgExpTo(2, 2),
+      ]),
+    );
+
+    expect(cells[1]?.formula).toBeUndefined();
+  });
+
+  it("propagates a genuine bug out of collectFormulaGroup rather than absorbing it as just another malformed base cell", () => {
+    // A well-formed Formula+ShrFmla pair, the very first thing readSheetRecords touches -- the injected bug is a plain Error a spy forces the base cell's own very first field read to throw, not anything a file could ever produce, proving collectFormulaGroup's own catch only recovers from a genuine BiffFormatError (recoverFromFormatError's own re-throw for anything else), not silently swallowing every exception reading a base cell or its group could throw.
+    const bug = new TypeError("a genuine bug, not a malformed record");
+    const spy = vi
+      .spyOn(BlockCursor.prototype, "u16")
+      .mockImplementationOnce(() => {
+        throw bug;
+      });
+    try {
+      expect(() =>
+        readCells(
+          record(RECORD_FORMULA, [
+            ...cell(0, 1),
+            ...f64(1),
+            ...u16(0),
+            ...u32(0),
+            ...u16(0),
+          ]),
+          record(RECORD_SHRFMLA, [...u16(0), ...u16(0), 1, 1, 0, 2, ...u16(0)]),
+        ),
+      ).toThrow(bug);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("expands a shared formula mixing an absolute PtgRef with a relative PtgRefN, a real on-disk shape per [MS-XLS]", () => {
     // "=$A$1+A<row>" filled down: the absolute half never changes with the referencing cell, only the relative half does. SharedParsedFormula's own grammar permits ordinary (non-N) Ptg tokens alongside PtgRefN/PtgAreaN in the same rgce -- only the relative ones expand per cell.
     const shrFmlaRgce = [
