@@ -1,5 +1,5 @@
 import type { Part, XmlElement } from "ooxml.js";
-import { rootElement } from "ooxml.js";
+import { resolveRelationships, rootElement } from "ooxml.js";
 import { describe, expect, it } from "vitest";
 import { createPptx, openPptx } from "./editor";
 
@@ -144,5 +144,70 @@ describe("PptxSlide.shapes / tables", () => {
     const reopenedSlide = reopened.slides()[0];
     expect(reopenedSlide?.tables()).toHaveLength(1);
     expect(reopenedSlide?.shapes()).toHaveLength(0);
+  });
+});
+
+describe("PptxSlide.addVector", () => {
+  it("appends a vector primitive as its own shape, in paint order after an earlier addTextBox", () => {
+    const editor = createPptx();
+    const slide = editor.addSlide();
+    slide.addTextBox({
+      frame: { xPt: 0, yPt: 0, widthPt: 50, heightPt: 20 },
+      text: "Behind",
+    });
+    const vectorShape = slide.addVector({
+      kind: "rect",
+      frame: { xPt: 10, yPt: 10, widthPt: 30, heightPt: 30 },
+    });
+
+    const shapes = slide.shapes();
+    expect(shapes).toHaveLength(2);
+    expect(shapes[1]).toEqual(vectorShape);
+    expect(vectorShape.frame).toEqual({
+      xPt: 10,
+      yPt: 10,
+      widthPt: 30,
+      heightPt: 30,
+    });
+  });
+});
+
+describe("PptxSlide.registerHyperlink", () => {
+  it("adds an External hyperlink relationship on the slide's own part and returns its r:id", () => {
+    const editor = createPptx();
+    const slide = editor.addSlide();
+    const rId = slide.registerHyperlink("https://example.com/");
+
+    const slidePartPath = Object.keys(editor.toPackage().parts).find((p) =>
+      /^ppt\/slides\/slide\d+\.xml$/.test(p),
+    );
+    if (slidePartPath === undefined) {
+      throw new Error("expected a ppt/slides/slideN.xml part");
+    }
+    const rels = resolveRelationships(editor.toPackage(), slidePartPath);
+    const rel = rels.get(rId);
+    expect(rel).toEqual({
+      type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+      target: "https://example.com/",
+      targetMode: "External",
+    });
+  });
+});
+
+describe("PptxSlide.remove", () => {
+  it("removes the slide from the presentation and throws on further use", () => {
+    const editor = createPptx();
+    const first = editor.addSlide();
+    first.addTextBox({
+      frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      text: "Keep",
+    });
+    const second = editor.addSlide();
+
+    second.remove();
+
+    expect(editor.slides()).toHaveLength(1);
+    expect(editor.slides()[0]?.shapes()[0]?.text).toBe("Keep");
+    expect(() => second.shapes()).toThrow(/removed/);
   });
 });

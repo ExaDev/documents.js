@@ -26,7 +26,7 @@ const DEFAULT_NOTES_HEIGHT_EMU = "9144000";
 const SLIDE_MASTER_PART_PATH = "ppt/slideMasters/slideMaster1.xml";
 export const SLIDE_LAYOUT_PART_PATH = "ppt/slideLayouts/slideLayout1.xml";
 const THEME_PART_PATH = "ppt/theme/theme1.xml";
-const PRESENTATION_PART_PATH = "ppt/presentation.xml";
+export const PRESENTATION_PART_PATH = "ppt/presentation.xml";
 const NOTES_MASTER_PART_PATH = "ppt/notesMasters/notesMaster1.xml";
 
 const SLIDE_MASTER_CONTENT_TYPE =
