@@ -1806,38 +1806,40 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
   });
 
   it("canonicalRun: keeps only the fields actually stated, one at a time", () => {
-    expect(canonicalRun({ text: "a" })).toEqual({ text: "a" });
-    expect(canonicalRun({ text: "a", bold: true })).toEqual({
+    expect(canonicalRun({ text: "a" })).toStrictEqual({ text: "a" });
+    expect(canonicalRun({ text: "a", bold: true })).toStrictEqual({
       text: "a",
       bold: true,
     });
-    expect(canonicalRun({ text: "a", italic: true })).toEqual({
+    expect(canonicalRun({ text: "a", italic: true })).toStrictEqual({
       text: "a",
       italic: true,
     });
-    expect(canonicalRun({ text: "a", underline: true })).toEqual({
+    expect(canonicalRun({ text: "a", underline: true })).toStrictEqual({
       text: "a",
       underline: true,
     });
-    expect(canonicalRun({ text: "a", strike: true })).toEqual({
+    expect(canonicalRun({ text: "a", strike: true })).toStrictEqual({
       text: "a",
       strike: true,
     });
-    expect(canonicalRun({ text: "a", fontFamily: "Arial" })).toEqual({
+    expect(canonicalRun({ text: "a", fontFamily: "Arial" })).toStrictEqual({
       text: "a",
       fontFamily: "Arial",
     });
-    expect(canonicalRun({ text: "a", sizePt: 12 })).toEqual({
+    expect(canonicalRun({ text: "a", sizePt: 12 })).toStrictEqual({
       text: "a",
       sizePt: 12,
     });
-    expect(canonicalRun({ text: "a", color: { r: 1, g: 0, b: 0 } })).toEqual({
+    expect(
+      canonicalRun({ text: "a", color: { r: 1, g: 0, b: 0 } }),
+    ).toStrictEqual({
       text: "a",
       color: { r: 1, g: 0, b: 0 },
     });
     expect(
       canonicalRun({ text: "a", hyperlink: "https://example.com" }),
-    ).toEqual({ text: "a", hyperlink: "https://example.com" });
+    ).toStrictEqual({ text: "a", hyperlink: "https://example.com" });
   });
 
   it("canonicalCellValue: every value kind", () => {
@@ -1930,7 +1932,7 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
       verticalAlignment: "middle",
       comment: { text: "hi" },
     });
-    expect(cell).toEqual({
+    expect(cell).toStrictEqual({
       row: 2,
       column: 3,
       value: { kind: "string", value: "x" },
@@ -1946,6 +1948,22 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
       alignment: "center",
       verticalAlignment: "middle",
       comment: { text: "hi" },
+    });
+  });
+
+  it("canonicalCell: carries no optional field at all when none are stated, not one set to undefined", () => {
+    const cell = canonicalCell({
+      row: 0,
+      column: 0,
+      value: { kind: "string", value: "x" },
+      displayText: "x",
+    });
+    expect(cell).toStrictEqual({
+      row: 0,
+      column: 0,
+      value: { kind: "string", value: "x" },
+      displayText: "x",
+      runs: [{ text: "x" }],
     });
   });
 
