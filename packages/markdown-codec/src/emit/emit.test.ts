@@ -1617,6 +1617,25 @@ describe("lists", () => {
     expect(markdown).toBe("- [ ] todo");
   });
 
+  it("never strips a run's own leading text when the checkbox comes from membership.checked instead of a legacy glyph, even when that text happens to look exactly like the legacy glyph spelling", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "☒ literal text not a glyph to strip" }],
+          list: {
+            numId: "md1:bullet+task",
+            level: 0,
+            checked: true,
+            itemId: "i1",
+          },
+        },
+      ]),
+    );
+    // stripGlyph must be false here -- the checkbox already came from membership.checked, so this run's own text is ordinary content, never a legacy glyph prefix to strip back off.
+    expect(markdown).toBe("- [x] ☒ literal text not a glyph to strip");
+  });
+
   it("strips a legacy checkbox glyph from a run that ALSO carries its own following text, not just when the glyph fills a whole separate run of its own", () => {
     const markdown = emitMarkdown(
       doc([
