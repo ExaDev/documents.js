@@ -54,7 +54,6 @@ import {
 } from "../defaults/defaults";
 import { matchHtmlBlockStart } from "../html/html";
 import { isValidFootnoteLabel } from "../inline/footnote";
-import { MARKDOWN_TAB_STOP_WIDTH } from "../scan/scan";
 import type {
   MarkdownHeadingStyle,
   WriteMarkdownOptions,
@@ -199,19 +198,22 @@ function firstContentLineIndex(text: string): number {
     .findIndex((line) => !BLANK_OR_WHITESPACE_ONLY_LINE.test(line));
 }
 
-// The column width of a line's own leading run of spaces and tabs, expanded per CommonMark's own tab-stop rule (spec 0.31.2, "Tabs": "in contexts where spaces help to define block structure, tabs behave as if they were replaced by spaces with a tab stop of 4 characters", counted from the start of the LINE, not the whole document). Shares MARKDOWN_TAB_STOP_WIDTH with src/scan/scan.ts's own MarkdownScanCursor so a tab's width agrees with the read side's parse of the very text this function is predicting the reparse of.
-function leadingIndentColumns(line: string): number {
+// Whether a line's own leading run of spaces and tabs reaches CommonMark's own 4-column indented-code-block threshold (spec 0.31.2, "Tabs": "in contexts where spaces help to define block structure, tabs behave as if they were replaced by spaces with a tab stop of 4 characters", counted from the start of the LINE, not the whole document). Shares MARKDOWN_TAB_STOP_WIDTH with src/scan/scan.ts's own MarkdownScanCursor so a tab's width agrees with the read side's parse of the very text this function is predicting the reparse of. The sole caller below only ever asks a >= CODE_INDENT_COLUMNS boundary question, never the exact column count beyond it, so this returns that boundary directly: a tab encountered anywhere before the threshold is reached by spaces alone is always itself sufficient to cross it, since CODE_INDENT_COLUMNS <= MARKDOWN_TAB_STOP_WIDTH means expanding even a single tab from column 0 already lands exactly on (never short of) the threshold.
+function leadingIndentReachesCodeThreshold(line: string): boolean {
   let column = 0;
   for (const char of line) {
-    if (char === " ") {
-      column += 1;
-    } else if (char === "\t") {
-      column += MARKDOWN_TAB_STOP_WIDTH - (column % MARKDOWN_TAB_STOP_WIDTH);
-    } else {
-      break;
+    if (char === "\t") {
+      return true;
+    }
+    if (char !== " ") {
+      return false;
+    }
+    column += 1;
+    if (column >= CODE_INDENT_COLUMNS) {
+      return true;
     }
   }
-  return column;
+  return false;
 }
 
 // CommonMark's own list-item grammar (spec 0.31.2, section 5.2 "List items"): "A list item can begin with at most one blank line." -- the bound the leading-run exemption above is held to, applied universally regardless of which context (top-level, blockquote, list item) the heading being checked is actually about to render through, since this function cannot see that and the bound is harmless where it is not strictly required.
@@ -277,7 +279,7 @@ function unsafeSetextBreakReason(text: string): UnsafeSetextBreakReason {
         continue;
       }
       sawContentLine = true;
-      if (leadingIndentColumns(line) >= CODE_INDENT_COLUMNS) {
+      if (leadingIndentReachesCodeThreshold(line)) {
         return "leading-indentation";
       }
       if (interruptsSetextParagraph(line, true)) {
