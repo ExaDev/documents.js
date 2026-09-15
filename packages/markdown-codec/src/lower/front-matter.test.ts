@@ -24,6 +24,17 @@ describe("extractFrontMatter: no front matter present at all", () => {
       source: undefined,
     });
   });
+
+  it("leaves a document unchanged even when a later line happens to look like a closing delimiter, since the first line never opened a block at all", () => {
+    // The first line's own check must genuinely gate the whole function: without it, a body that merely contains a bare "---" or "..." later on could be misread as if it closed a front-matter block that was never opened.
+    const source = "not front matter\n---\nbody\n";
+    const result = extractFrontMatter(source);
+    expect(result).toStrictEqual({
+      metadata: {},
+      rest: source,
+      source: undefined,
+    });
+  });
 });
 
 describe("extractFrontMatter: closing delimiter shapes", () => {
@@ -111,6 +122,35 @@ describe("extractFrontMatter: scalar quote stripping, at the exact length-2 boun
       },
     );
   });
+
+  // The single-quote checks mirror the double-quote ones above exactly -- isDoubleQuoted short-circuits on startsWith('"') before ever reaching endsWith for a single-quoted value, so only a value that itself exercises isSingleQuoted's own length/startsWith/endsWith checks at each boundary can kill a mutant in it.
+  it("does not strip a lone single-quote character (length 1, below the boundary)", () => {
+    expect(extractFrontMatter("---\ntitle: '\n---\n").metadata).toStrictEqual({
+      title: "'",
+    });
+  });
+
+  it("strips an empty single-quoted value (length exactly 2)", () => {
+    expect(extractFrontMatter("---\ntitle: ''\n---\n").metadata).toStrictEqual({
+      title: "",
+    });
+  });
+
+  it("does not strip when only the opening single quote matches -- no closing quote at all", () => {
+    expect(
+      extractFrontMatter("---\ntitle: 'abc\n---\n").metadata,
+    ).toStrictEqual({
+      title: "'abc",
+    });
+  });
+
+  it("does not strip when only the closing single quote matches -- no opening quote at all", () => {
+    expect(
+      extractFrontMatter("---\ntitle: abc'\n---\n").metadata,
+    ).toStrictEqual({
+      title: "abc'",
+    });
+  });
 });
 
 describe("extractFrontMatter: keywords, both the bracketed and the bare comma-separated shape", () => {
@@ -150,14 +190,26 @@ describe("extractFrontMatter: keywords, both the bracketed and the bare comma-se
       extractFrontMatter("---\nkeywords: a,,b\n---\n").metadata.keywords,
     ).toStrictEqual(["a", "b"]);
   });
+
+  it("does not treat a value as bracketed when only the closing bracket is present", () => {
+    // Malformed the other way round: ends with "]" but never opens -- still read as one bare comma-separated line, since both the opening AND closing bracket are required together. The unstripped trailing "]" survives on the last item.
+    expect(
+      extractFrontMatter("---\nkeywords: a, b]\n---\n").metadata.keywords,
+    ).toStrictEqual(["a", "b]"]);
+  });
 });
 
 describe("extractFrontMatter: direction, a two-member enum that silently drops any other value", () => {
-  it("maps a recognised direction value", () => {
+  it("maps both recognised direction values", () => {
     expect(
       extractFrontMatter("---\ndirection: rtl\n---\n").metadata,
     ).toStrictEqual({
       direction: "rtl",
+    });
+    expect(
+      extractFrontMatter("---\ndirection: ltr\n---\n").metadata,
+    ).toStrictEqual({
+      direction: "ltr",
     });
   });
 
