@@ -646,6 +646,7 @@ describe("appReducer docx mutations", () => {
       runIndex: 0,
     });
     expect(missed.status?.severity).toBe("warning");
+    expect(missed.status?.text).toBe("There is no paragraph at index 7");
     expect(missed.hasUnsavedChanges).toBe(false);
   });
 
@@ -727,6 +728,7 @@ describe.each(["docx", "odt"] as const)(
         fontFamily: "Georgia",
       });
       expect(missed.status?.severity).toBe("warning");
+      expect(missed.status?.text).toBe("There is no paragraph at index 7");
       expect(missed.hasUnsavedChanges).toBe(false);
     });
   },
@@ -1575,6 +1577,9 @@ describe("appReducer markdown mutations", () => {
       runIndex: 0,
     });
     expect(underlineResult.status?.severity).toBe("warning");
+    expect(underlineResult.status?.text).toBe(
+      "That action needs a docx, odt or doc document; the open document is markdown",
+    );
     expect(underlineResult.hasUnsavedChanges).toBe(false);
 
     const colorResult = appReducer(opened, {
@@ -2685,6 +2690,7 @@ describe("appReducer PDF item and page mutations", () => {
       init: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
     });
     expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no page at index 5");
     expect(result.hasUnsavedChanges).toBe(false);
   });
 
