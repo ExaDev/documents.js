@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { STANDARD_METRICS, widthOfCode } from "./afm-widths";
 import { WINANSI_GLYPH_NAMES } from "./encoding";
 
@@ -67,6 +67,13 @@ describe("widthOfCode", () => {
   it("returns the fixed width for Courier regardless of code", () => {
     expect(widthOfCode("Courier", 65)).toBe(600);
     expect(widthOfCode("Courier", 105)).toBe(600);
+  });
+
+  it("returns the fixed width without ever consulting the per-glyph AFM table for a monospace face", () => {
+    const getSpy = vi.spyOn(STANDARD_METRICS.Courier.widths, "get");
+    expect(widthOfCode("Courier", 65)).toBe(600);
+    expect(getSpy).not.toHaveBeenCalled();
+    getSpy.mockRestore();
   });
 
   it("returns the AFM width for a proportional face", () => {
