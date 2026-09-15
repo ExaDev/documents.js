@@ -722,6 +722,87 @@ describe("readChartSeries", () => {
     expect(series[0]?.categories).toStrictEqual([""]);
   });
 
+  it("resolves the empty string for an own-sheet range point naming a cell the sheet's own cell list doesn't carry", () => {
+    const groups = chartRecords([
+      seriesRecord(1, 0),
+      aiRangeRecord(AI_ID_CATEGORIES, area3dToken(0, 5, 5, 5, 5)),
+    ]);
+
+    const series = readChartSeries(groups, contextWithCells([]));
+
+    expect(series[0]?.categories).toStrictEqual([""]);
+  });
+
+  it("never resolves a single-cell (PtgRef3d) reference through the owning sheet's own cells when it points to a different sheet", () => {
+    const cells: ContentSheetCell[] = [
+      {
+        row: 0,
+        column: 0,
+        value: { kind: "string", value: "WRONG" },
+        displayText: "WRONG",
+      },
+    ];
+    const groups = chartRecords([
+      seriesRecord(1, 0),
+      aiRangeRecord(AI_ID_CATEGORIES, ref3dToken(1, 0, 0)), // ixti 1 -> Sheet2, not the owning sheet
+    ]);
+
+    const series = readChartSeries(groups, contextWithCells(cells));
+
+    expect(series[0]?.categories).toStrictEqual([""]);
+  });
+
+  it("resolves nothing for a range-reference AI carrying an opcode that is neither the PtgRef3d nor the PtgArea3d family", () => {
+    const groups = chartRecords([
+      seriesRecord(1, 0),
+      aiRangeRecord(AI_ID_CATEGORIES, [0x00, ...u16(0), ...u16(0), ...u16(0)]),
+    ]);
+
+    const series = readChartSeries(groups, contextWithCells([]));
+
+    expect(series[0]?.categories).toStrictEqual([""]);
+  });
+
+  it("orders a PtgArea3d's own reversed row pair into ascending start/end, regardless of which comes first", () => {
+    const cells: ContentSheetCell[] = [
+      {
+        row: 0,
+        column: 0,
+        value: { kind: "string", value: "x" },
+        displayText: "x",
+      },
+      {
+        row: 1,
+        column: 0,
+        value: { kind: "string", value: "y" },
+        displayText: "y",
+      },
+    ];
+    const groups = chartRecords([
+      seriesRecord(2, 0),
+      // rowFirst=1, rowLast=0 -- reversed, so startRow must come from Math.min and endRow from Math.max, not the other way round.
+      aiRangeRecord(AI_ID_CATEGORIES, area3dToken(0, 1, 0, 0, 0)),
+    ]);
+
+    const series = readChartSeries(groups, contextWithCells(cells));
+
+    expect(series[0]?.categories).toStrictEqual(["x", "y"]);
+  });
+
+  it("keeps every earlier cached point when a later point arrives for the same role, rather than starting the role's own cache over each time", () => {
+    const groups = chartRecords([
+      seriesRecord(2, 0),
+      aiAutoRecord(AI_ID_CATEGORIES),
+      siIndexRecord(0x0002),
+      cachedLabel(0, 0, "First"),
+      cachedLabel(1, 0, "Second"),
+    ]);
+
+    const series = readChartSeries(groups, contextWithCells([]));
+
+    expect(series[0]?.categories).toStrictEqual(["First", "Second"]);
+  });
+
   it("treats a genuinely external workbook reference (a formatted sheet label, not a resolved range) as not the owning sheet", () => {
     const externalContext: ChartRangeContext = {
       formulaSheets: {
