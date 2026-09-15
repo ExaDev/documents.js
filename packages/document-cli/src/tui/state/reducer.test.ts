@@ -34,14 +34,21 @@ import type { Action } from "./actions.js";
 import { appReducer, createInitialState } from "./reducer.js";
 import type {
   AppState,
+  CsvOpenDocument,
   DocxOpenDocument,
+  EpubOpenDocument,
   MarkdownOpenDocument,
+  OdbOpenDocument,
   OdgOpenDocument,
   OdpOpenDocument,
   OdsOpenDocument,
   OdtOpenDocument,
   PdfOpenDocument,
   PptxOpenDocument,
+  RtfOpenDocument,
+  SvgOpenDocument,
+  WpdOpenDocument,
+  XlsxOpenDocument,
 } from "./types.js";
 import { isEditableDocument } from "./types.js";
 
@@ -241,6 +248,34 @@ function openXlsxDocument(
     path,
     doc: { format: "xlsx", layout: readPdf(xlsxToPdf(bytes)), bytes, path },
   });
+}
+
+// A minimal document for each of UNDO's own read-only formats: odb carries no layout/bytes at all (see OdbOpenDocument's own doc comment), the other six share the identical read-only-preview shape XlsxOpenDocument above already builds, populated through a real PdfEditor rather than a hand-authored LayoutDocument literal -- these tests only exercise UNDO's own per-format branch, never the layout content itself.
+function readOnlyOpenDocument(
+  format: "odb" | "xlsx" | "csv" | "svg" | "rtf" | "wpd" | "epub",
+):
+  | OdbOpenDocument
+  | XlsxOpenDocument
+  | CsvOpenDocument
+  | SvgOpenDocument
+  | RtfOpenDocument
+  | WpdOpenDocument
+  | EpubOpenDocument {
+  if (format === "odb") {
+    return {
+      format: "odb",
+      tables: [],
+      forms: [],
+      reports: [],
+      path: "/tmp/database.odb",
+    };
+  }
+  return {
+    format,
+    layout: createPdf().toLayoutDocument(),
+    bytes: createPdf().toBytes(),
+    path: `/tmp/source.${format}`,
+  };
 }
 
 function markdownDocument(state: AppState): MarkdownOpenDocument {
@@ -1730,6 +1765,27 @@ describe("appReducer undo", () => {
       }
       expect(undone.openDocument.format).toBe(format);
       expect(undone.openDocument.editor).not.toBe(mutatedEditor);
+    },
+  );
+
+  // The genuinely read-only formats (no live-view editor, so nothing ever pushes an undo snapshot for them) each get their own dedicated warning naming that exact format, rather than falling through to the "nothing to undo" info message every editable format's own empty undo stack produces above.
+  it.each(["odb", "xlsx", "csv", "svg", "rtf", "wpd", "epub"] as const)(
+    "says a %s document is read-only with nothing to undo",
+    (format) => {
+      const doc = readOnlyOpenDocument(format);
+      const opened = appReducer(createInitialState(), {
+        type: "OPEN_FILE_SUCCESS",
+        path: doc.path,
+        doc,
+      });
+
+      const undone = appReducer(opened, { type: "UNDO" });
+      expect(undone.status?.severity).toBe("warning");
+      expect(undone.status?.text).toBe(
+        `A ${format} document is read-only, so it has no history to undo`,
+      );
+      expect(undone.openDocument).toBe(opened.openDocument);
+      expect(undone.undoStack).toHaveLength(0);
     },
   );
 });
