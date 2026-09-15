@@ -245,6 +245,48 @@ describe("renderDocumentToHtml: cr() only inserts a newline when the buffer genu
       "<ul>\n<li>a\n<table>\n<thead>\n<tr>\n<th>h</th>\n</tr>\n</thead>\n</table>\n</li>\n</ul>\n",
     );
   });
+
+  it("inserts a newline between a tight list item's bare paragraph text and a math block that follows it in the same item", () => {
+    const html = render([
+      {
+        type: "list",
+        markerType: "bullet",
+        bulletMarker: "-",
+        tight: true,
+        children: [
+          {
+            type: "listItem",
+            children: [
+              { type: "paragraph", children: [{ type: "text", value: "a" }] },
+              { type: "mathBlock", literal: "x" },
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(html).toBe("<ul>\n<li>a\n$$\nx\n$$\n</li>\n</ul>\n");
+  });
+
+  it("inserts a newline between a tight list item's bare paragraph text and a footnote definition that follows it in the same item", () => {
+    const html = render([
+      {
+        type: "list",
+        markerType: "bullet",
+        bulletMarker: "-",
+        tight: true,
+        children: [
+          {
+            type: "listItem",
+            children: [
+              { type: "paragraph", children: [{ type: "text", value: "a" }] },
+              { type: "footnoteDefinition", label: "n", children: [] },
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(html).toBe("<ul>\n<li>a\n[^n]:\n</li>\n</ul>\n");
+  });
 });
 
 describe("renderInlines: image, the one leaf case none of block.test.ts/lower.test.ts/conformance corpora happen to reach through renderDocumentToHtml", () => {
