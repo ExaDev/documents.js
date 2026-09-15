@@ -174,6 +174,72 @@ describe("parseTextProperties", () => {
     expect(result.hasUnknown).toBe(true);
   });
 
+  it("flags hasUnknown for an underline companion attribute (width) present with no style:text-underline-style at all", () => {
+    const element = el("style:text-properties", {
+      "style:text-underline-width": "auto",
+    });
+    const result = parseTextProperties(element);
+    expect(result.properties.underline).toBeUndefined();
+    expect(result.hasUnknown).toBe(true);
+  });
+
+  it("flags hasUnknown for an underline companion attribute (color) present with no style:text-underline-style at all", () => {
+    const element = el("style:text-properties", {
+      "style:text-underline-color": "font-color",
+    });
+    const result = parseTextProperties(element);
+    expect(result.properties.underline).toBeUndefined();
+    expect(result.hasUnknown).toBe(true);
+  });
+
+  it("flags hasUnknown for a canonical-looking underline whose width does not match the on-value, even when its colour does", () => {
+    const element = el("style:text-properties", {
+      "style:text-underline-style": "solid",
+      "style:text-underline-width": "bold",
+      "style:text-underline-color": "font-color",
+    });
+    const result = parseTextProperties(element);
+    expect(result.properties.underline).toBeUndefined();
+    expect(result.hasUnknown).toBe(true);
+  });
+
+  it('flags hasUnknown for style:text-underline-style="none" accompanied by a companion attribute, since a real "off" underline never carries one', () => {
+    const withWidth = parseTextProperties(
+      el("style:text-properties", {
+        "style:text-underline-style": "none",
+        "style:text-underline-width": "auto",
+      }),
+    );
+    expect(withWidth.properties.underline).toBeUndefined();
+    expect(withWidth.hasUnknown).toBe(true);
+
+    const withColor = parseTextProperties(
+      el("style:text-properties", {
+        "style:text-underline-style": "none",
+        "style:text-underline-color": "font-color",
+      }),
+    );
+    expect(withColor.properties.underline).toBeUndefined();
+    expect(withColor.hasUnknown).toBe(true);
+  });
+
+  it('flags hasUnknown for style:text-line-through-style="none" accompanied by style:text-line-through-type', () => {
+    const result = parseTextProperties(
+      el("style:text-properties", {
+        "style:text-line-through-style": "none",
+        "style:text-line-through-type": "single",
+      }),
+    );
+    expect(result.properties.strike).toBeUndefined();
+    expect(result.hasUnknown).toBe(true);
+  });
+
+  it("sets no underline/strike property at all (not even as undefined) when neither has any attribute present", () => {
+    const result = parseTextProperties(el("style:text-properties"));
+    expect("underline" in result.properties).toBe(false);
+    expect("strike" in result.properties).toBe(false);
+  });
+
   it("returns an empty, non-unknown result for an element with no attributes at all", () => {
     const element = el("style:text-properties");
     expect(parseTextProperties(element)).toEqual({
@@ -338,6 +404,14 @@ describe("parseParagraphProperties", () => {
     }
   });
 
+  it("flags hasUnknown for an fo:break-after value the boolean model cannot hold, the identical way fo:break-before does", () => {
+    const result = parseParagraphProperties(
+      el("style:paragraph-properties", { "fo:break-after": "column" }),
+    );
+    expect(result.properties.pageBreakAfter).toBeUndefined();
+    expect(result.hasUnknown).toBe(true);
+  });
+
   // fo:border-* parsing, added for ExaDev/documents.js#1086 -- the odt half of #1082's own docx w:pBdr reading, so a border-only paragraph (Word's AutoCorrect "---" horizontal rule, or LibreOffice's own equivalent) is detected the same way regardless of source format.
   it("parses a bottom-only border -- the exact shape a border-only horizontal rule takes", () => {
     const element = el("style:paragraph-properties", {
@@ -433,6 +507,15 @@ describe("parseParagraphProperties", () => {
     expect(result.hasUnknown).toBe(false);
   });
 
+  it("flags hasUnknown for a malformed fo:border shorthand value, the identical way a malformed per-edge value does", () => {
+    const element = el("style:paragraph-properties", {
+      "fo:border": "not-three-tokens",
+    });
+    const result = parseParagraphProperties(element);
+    expect(result.properties.borderLeft).toBeUndefined();
+    expect(result.hasUnknown).toBe(true);
+  });
+
   it("flags hasUnknown and leaves the field untouched for a malformed fo:border-* value (wrong token count, unparseable length/colour)", () => {
     for (const value of [
       "not-three-tokens",
@@ -484,6 +567,17 @@ describe("parseStyleElementProperties", () => {
     );
     const result = parseStyleElementProperties(styleElement);
     expect(result.properties).toEqual({});
+    expect(result.hasUnknown).toBe(true);
+  });
+
+  it("never routes an unrecognised child tag through the paragraph-properties parser, even when it happens to carry an attribute name paragraph-properties would otherwise recognise", () => {
+    const styleElement = el(
+      "style:style",
+      { "style:name": "ta1", "style:family": "table" },
+      [el("style:table-properties", { "fo:text-align": "center" })],
+    );
+    const result = parseStyleElementProperties(styleElement);
+    expect(result.properties.alignment).toBeUndefined();
     expect(result.hasUnknown).toBe(true);
   });
 
