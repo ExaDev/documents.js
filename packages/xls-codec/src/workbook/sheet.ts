@@ -793,12 +793,12 @@ function readFormula(
   let rgcb: Uint8Array<ArrayBuffer> | undefined;
   try {
     rgce = cursor.take(cce);
+    // Never negative here, unlike readArrayGroup's identical-looking subtraction: cce is only reached this line if the cursor.take(cce) just above already proved that many bytes genuinely present, so recordByteLength(record) is provably >= FORMULA_HEADER_BYTES + cce already. Always taking it (rather than branching on rgcbLength > 0) still hands parseFormulaText the exact same "no PtgArray trailer" fact for a genuinely empty result: an empty-but-defined rgcb makes ptg.ts's own rgcbCursor real rather than undefined, but a real cursor with zero bytes left fails on its own very first read exactly as an absent one already does, so a formula needing one still resolves to undefined either way, and one that needs none never consults rgcb at all.
     const rgcbLength = recordByteLength(record) - (FORMULA_HEADER_BYTES + cce);
-    rgcb = rgcbLength > 0 ? cursor.take(rgcbLength) : undefined;
+    rgcb = cursor.take(rgcbLength);
   } catch (error) {
+    // rgce and rgcb are only ever reached here through cursor.take(cce) itself throwing (rgcb's own take, immediately after, is provably given exactly its own remaining byte count and so cannot overrun in turn) -- both variables are still sitting at their un-reassigned `undefined` from the declarations above, so there is nothing left to reset.
     recoverFromFormatError(error, undefined);
-    rgce = undefined;
-    rgcb = undefined;
   }
   // formula is spread in unconditionally, its own value undefined when nothing resolved: every real consumer (content.ts's own `cell.formula !== undefined` check) reads it by value, never by key presence, so a present-but-undefined field and an absent one are indistinguishable to anything that actually looks at this object -- an "is it undefined" branch deciding whether to include the key at all would be true by construction, never a fact a test could observe either way.
   const formula =
