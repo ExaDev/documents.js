@@ -91,6 +91,74 @@ function buildFormat6Subtable(
   return subtable;
 }
 
+// A minimal format 4 (segment mapping to delta values) subtable, one segment covering [firstCode, firstCode + glyphIds.length - 1] via idDelta (idRangeOffset left at 0, so no glyph-index array is needed). segCountX2Override lets a test deliberately install a malformed segment count without disturbing the rest of the layout.
+function buildFormat4Subtable(
+  firstCode: number,
+  glyphIds: readonly number[],
+  segCountX2Override?: number,
+): Uint8Array<ArrayBuffer> {
+  const HEADER_SIZE = 14;
+  const segCount = 1;
+  const segCountX2 = segCountX2Override ?? segCount * 2;
+  const endCode = firstCode + glyphIds.length - 1;
+  // idDelta must satisfy (code + idDelta) & 0xffff === glyphIds[code - firstCode] for every code in range; with one glyph run starting at glyphIds[0], idDelta = glyphIds[0] - firstCode covers it exactly since each subsequent glyph id increments in step with the code.
+  const idDelta = (glyphIds[0]! - firstCode) & 0xffff;
+  const arraysSize = segCountX2 * 4 + 2; // endCodes + reservedPad + startCodes + idDeltas + idRangeOffsets
+  const subtable = new Uint8Array(HEADER_SIZE + arraysSize);
+  const view = new DataView(subtable.buffer);
+  view.setUint16(0, 4); // format
+  view.setUint16(2, subtable.length); // length
+  view.setUint16(6, segCountX2);
+  if (segCountX2Override === undefined) {
+    // The well-formed case only: a malformed declared segCountX2 (0, or an odd value) has no real one-segment layout to write field values into, and none is needed -- the test using it only checks that the malformed count itself is rejected, not what a garbage lookup would return.
+
+    const startCodesOffset = HEADER_SIZE + segCountX2 + 2;
+    const idDeltasOffset = startCodesOffset + segCountX2;
+    const idRangeOffsetsOffset = idDeltasOffset + segCountX2;
+    view.setUint16(HEADER_SIZE, endCode);
+    view.setUint16(startCodesOffset, firstCode);
+    view.setUint16(idDeltasOffset, idDelta);
+    view.setUint16(idRangeOffsetsOffset, 0);
+  }
+  return subtable;
+}
+
+describe("format 4 (segment mapping to delta values)", () => {
+  it("drives a font whose only subtable is a hand-built format 4 one", () => {
+    const font = parse(
+      buildFontWithCmapSubtable(3, 1, buildFormat4Subtable(0x41, [11, 12, 13])),
+    );
+    const lookup = buildCmapLookup(font);
+    expect(lookup).toBeDefined();
+    expect(lookup!(0x41)).toBe(11);
+    expect(lookup!(0x42)).toBe(12);
+    expect(lookup!(0x43)).toBe(13);
+    expect(lookup!(0x44)).toBeUndefined(); // past the segment's own endCode
+  });
+
+  it("returns undefined when a format 4 subtable's own fixed header does not fit", () => {
+    // Four bytes (format + length) is nowhere near the 14-byte fixed header format 4 requires; hasBytes must catch this before any field past it is read.
+    const shortSubtable = new Uint8Array(4);
+    new DataView(shortSubtable.buffer).setUint16(0, 4); // format
+    const font = parse(buildFontWithCmapSubtable(3, 1, shortSubtable));
+    expect(buildCmapLookup(font)).toBeUndefined();
+  });
+
+  it("rejects a format 4 subtable declaring a zero segment count", () => {
+    const font = parse(
+      buildFontWithCmapSubtable(3, 1, buildFormat4Subtable(0x41, [11], 0)),
+    );
+    expect(buildCmapLookup(font)).toBeUndefined();
+  });
+
+  it("rejects a format 4 subtable declaring an odd segCountX2 (segCountX2 is always meant to be even)", () => {
+    const font = parse(
+      buildFontWithCmapSubtable(3, 1, buildFormat4Subtable(0x41, [11], 3)),
+    );
+    expect(buildCmapLookup(font)).toBeUndefined();
+  });
+});
+
 describe("format 6 (trimmed table mapping)", () => {
   it("drives a font whose only subtable is a format 6 one", () => {
     const font = parse(
