@@ -50,6 +50,19 @@ describe("headings", () => {
     ).toBe("### foo");
   });
 
+  it("does NOT fire HEADING_LEVEL_CLAMPED for a heading whose own level needs no clamping at all", () => {
+    const collector = createDiagnosticCollector();
+    emitMarkdown(
+      doc([
+        { kind: "paragraph", runs: [{ text: "foo" }], styleId: "Heading3" },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(collector.has(MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED)).toBe(
+      false,
+    );
+  });
+
   it('emits level 1/2 as setext when headingStyle: "setext" is requested, and falls back to ATX beyond level 2', () => {
     expect(
       emitMarkdown(
@@ -1298,6 +1311,25 @@ describe("math (ExaDev/markdown-codec#53)", () => {
         ]),
       ),
     ).toBe("$$\n$$");
+  });
+
+  it("does not render the $$ math shortcut when objectKind disagrees with the document's own kind, even though the document itself is a formula carrying real presentation LaTeX -- both fields must agree, not just the document's own kind", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "embeddedObject",
+            objectKind: "wordprocessing",
+            document: {
+              kind: "formula",
+              metadata: {},
+              formula: { mathml: [], presentation: { latex: "x^2" } },
+            },
+            frame: { xPt: 0, yPt: 0, widthPt: 1, heightPt: 1 },
+          },
+        ]),
+      ),
+    ).toBe("");
   });
 
   it("still silently drops an embedded object of any other kind, and a formula with no presentation LaTeX, which have no markdown spelling", () => {
