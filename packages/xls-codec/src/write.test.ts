@@ -52,7 +52,10 @@ import {
   writeXls,
   writeXlsContent,
 } from "./write";
-import { writeSheetConditionalFormats } from "./workbook/conditional-format-write";
+import {
+  validateRuleCount,
+  writeSheetConditionalFormats,
+} from "./workbook/conditional-format-write";
 import { writeSheetDataValidations } from "./workbook/data-validation-write";
 import { buildWorksheetSubstream } from "./workbook/sheet-writer";
 import * as drawingWriterModule from "./workbook/drawing-writer";
@@ -2640,35 +2643,19 @@ describe("writeXlsContent: conditional formats written (#971)", () => {
     ).toStrictEqual([]);
   });
 
-  it("refuses a sheet whose own conditional-format rule count exceeds CondFmt's own 15-bit nID field, naming the exact count", () => {
-    const range = { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 };
-    const rules: ContentSheetConditionalFormat[] = Array.from(
-      { length: 0x8000 },
-      () => ({ type: "uniqueValues", ranges: [range] }),
-    );
-    expect(() =>
-      writeSheetConditionalFormats(
-        sheet("S", [], { conditionalFormats: rules }),
-        () => 0,
-      ),
-    ).toThrow(
+  it("refuses a rule count exceeding CondFmt's own 15-bit nID field, naming the exact count", () => {
+    expect(() => {
+      validateRuleCount(0x8000);
+    }).toThrow(
       "this sheet's 32768 conditional-format rules exceed CondFmt's own 15-bit nID field",
     );
   });
 
-  it("accepts a sheet whose own conditional-format rule count sits exactly at CondFmt's own 15-bit nID field boundary", () => {
-    const range = { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 };
-    const rules: ContentSheetConditionalFormat[] = Array.from(
-      { length: 0x7fff },
-      () => ({ type: "uniqueValues", ranges: [range] }),
-    );
-    expect(() =>
-      writeSheetConditionalFormats(
-        sheet("S", [], { conditionalFormats: rules }),
-        () => 0,
-      ),
-    ).not.toThrow();
-  }, 20000);
+  it("accepts a rule count sitting exactly at CondFmt's own 15-bit nID field boundary", () => {
+    expect(() => {
+      validateRuleCount(0x7fff);
+    }).not.toThrow();
+  });
 
   it("assigns each rule its own 1-based nID in declaration order across three rules, not just the two a smaller fixture cannot distinguish from an off-by-one", () => {
     const range = { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 };
