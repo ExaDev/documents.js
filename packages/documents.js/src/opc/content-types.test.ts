@@ -1,6 +1,7 @@
 import type { Package, XmlElement } from "ooxml.js";
 import { attr, decodePackage, encodePackage } from "ooxml.js";
 import { describe, expect, it } from "vitest";
+import { el } from "../xml/fragment";
 import type { ElementCursor } from "../xml/query";
 import { findChildElements } from "../xml/query";
 import {
@@ -106,6 +107,16 @@ describe("ensureContentTypeOverride", () => {
   it("does not duplicate an existing override for the same part", () => {
     const pkg = emptyPackage();
     ensureContentTypeOverride(pkg, "word/document.xml", "application/xml");
+    ensureContentTypeOverride(pkg, "word/document.xml", "application/xml");
+    expect(findChildElements(rootChildren(pkg), "Override")).toHaveLength(1);
+  });
+
+  // A sibling element that merely happens to carry a matching PartName attribute must not be mistaken for an existing Override -- the scan has to check the element's own tag, not just its PartName, or a same-named non-Override child would suppress the real Override this call is meant to add. No real Override exists yet, so a scan that matched on PartName alone would wrongly conclude one is already present and add nothing.
+  it("does not treat a non-Override element with a matching PartName as an existing entry", () => {
+    const pkg = emptyPackage();
+    ensureDefaultContentType(pkg, "png", "image/png");
+    const root = rootChildren(pkg);
+    root.push(el("NotAnOverride", { PartName: "/word/document.xml" }));
     ensureContentTypeOverride(pkg, "word/document.xml", "application/xml");
     expect(findChildElements(rootChildren(pkg), "Override")).toHaveLength(1);
   });
