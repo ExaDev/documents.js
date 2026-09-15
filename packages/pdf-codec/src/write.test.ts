@@ -1,4 +1,5 @@
 import { decodePng, encodePng } from "byte-codec";
+import type { PositionedFormula } from "document-schema.js";
 import { base64ToBytes, bytesToBase64 } from "./util/base64";
 import { describe, expect, it } from "vitest";
 import { openPdfDocument } from "./document";
@@ -72,6 +73,56 @@ function tinyJpegAsset(): LayoutImageAsset {
   };
 }
 
+// Same shape as tinyJpegAsset, generalised over component count and an optional Adobe APP14 marker (ISO 32000-1 has no opinion on this marker; it's a de facto Adobe convention every real CMYK JPEG carries), for exercising prepareJpegImage's colour-space and /Decode-inversion branches.
+function jpegAsset(
+  components: 1 | 3 | 4,
+  adobeTransform?: number,
+): LayoutImageAsset {
+  const componentBytes: number[] = [];
+  for (let i = 0; i < components; i++) {
+    componentBytes.push(i + 1, 0x22, 0);
+  }
+  const app14: number[] =
+    adobeTransform === undefined
+      ? []
+      : [
+          0xff,
+          0xee, // APP14
+          0x00,
+          0x0e, // length 14
+          0x41,
+          0x64,
+          0x6f,
+          0x62,
+          0x65, // "Adobe"
+          0x00,
+          0x64, // version
+          0x00,
+          0x00, // flags0
+          0x00,
+          0x00, // flags1
+          adobeTransform,
+        ];
+  // prettier-ignore
+  const bytes = new Uint8Array([
+    0xff, 0xd8, // SOI
+    ...app14,
+    0xff, 0xc0, 0x00, 8 + 3 * components, // SOF0
+    0x08, // precision
+    0x00, 0x02, // height = 2
+    0x00, 0x03, // width = 3
+    components,
+    ...componentBytes,
+    0xff, 0xd9, // EOI
+  ]);
+  return {
+    format: "jpeg",
+    base64: bytesToBase64(bytes),
+    widthPx: 3,
+    heightPx: 2,
+  };
+}
+
 describe("writePdf: document structure", () => {
   it("starts with the PDF header and ends with %%EOF", () => {
     const bytes = writePdf(docWithPages([]));
@@ -113,6 +164,46 @@ describe("writePdf: document structure", () => {
       }),
     );
     expect(text).toContain("/MediaBox [0 0 612 792]");
+  });
+
+  it("round-trips every optional Info dict field, and omits the ones the source document does not carry", async () => {
+    const { readPdf } = await import("./read");
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {
+        title: "A Title",
+        author: "An Author",
+        subject: "A Subject",
+        keywords: ["one", "two"],
+        creator: "A Creator",
+        createdIso: "2024-03-05T06:07:08Z",
+        modifiedIso: "2024-03-06T07:08:09Z",
+      },
+      pages: [],
+      images: {},
+    };
+    const out = writePdf(doc, { compress: false });
+    const reread = readPdf(out);
+    expect(reread.metadata.title).toBe("A Title");
+    expect(reread.metadata.author).toBe("An Author");
+    expect(reread.metadata.subject).toBe("A Subject");
+    expect(reread.metadata.keywords).toEqual(["one", "two"]);
+    expect(reread.metadata.creator).toBe("A Creator");
+    expect(reread.metadata.createdIso).toBe("2024-03-05T06:07:08Z");
+    expect(reread.metadata.modifiedIso).toBe("2024-03-06T07:08:09Z");
+
+    const bareText = decode(writePdf(docWithPages([]), { compress: false }));
+    for (const key of [
+      "/Title",
+      "/Author",
+      "/Subject",
+      "/Keywords",
+      "/Creator",
+      "/CreationDate",
+      "/ModDate",
+    ]) {
+      expect(bareText).not.toContain(key);
+    }
   });
 });
 
@@ -219,6 +310,108 @@ describe("writePdf: text and fonts", () => {
     );
     expect(text).toContain("/Filter /FlateDecode");
     expect(text).not.toContain("BT\n");
+  });
+
+  it("sets FontDescriptor /Flags bits per standard face: fixed-pitch, serif, italic, and force-bold each add their own bit to the always-set nonsymbolic bit", () => {
+    const courierNew = {
+      family: "Courier New",
+      weight: "normal",
+      style: "normal",
+    } as const;
+    const timesRoman = {
+      family: "Times New Roman",
+      weight: "normal",
+      style: "normal",
+    } as const;
+    const timesItalic = {
+      family: "Times New Roman",
+      weight: "normal",
+      style: "italic",
+    } as const;
+    const helveticaBold = {
+      family: "Helvetica",
+      weight: "bold",
+      style: "normal",
+    } as const;
+    const text = decode(
+      writePdf(
+        docWithItems([
+          {
+            kind: "text",
+            text: "A",
+            xPt: 0,
+            yPt: 0,
+            font: courierNew,
+            sizePt: 10,
+            color: BLACK,
+          },
+          {
+            kind: "text",
+            text: "B",
+            xPt: 0,
+            yPt: 0,
+            font: timesRoman,
+            sizePt: 10,
+            color: BLACK,
+          },
+          {
+            kind: "text",
+            text: "C",
+            xPt: 0,
+            yPt: 0,
+            font: timesItalic,
+            sizePt: 10,
+            color: BLACK,
+          },
+          {
+            kind: "text",
+            text: "D",
+            xPt: 0,
+            yPt: 0,
+            font: helveticaBold,
+            sizePt: 10,
+            color: BLACK,
+          },
+        ]),
+        { compress: false },
+      ),
+    );
+    // NONSYMBOLIC(32) is always set; each face then adds FIXED_PITCH(1), SERIF(2), ITALIC(64), or FORCE_BOLD(262144) of its own on top of it.
+    expect(text).toContain("/BaseFont /Courier ");
+    expect(text).toContain("/Flags 33"); // Courier: nonsymbolic + fixed-pitch
+    expect(text).toContain("/BaseFont /Times-Roman");
+    expect(text).toContain("/Flags 34"); // Times-Roman: nonsymbolic + serif
+    expect(text).toContain("/BaseFont /Times-Italic");
+    expect(text).toContain("/Flags 98"); // Times-Italic: nonsymbolic + serif + italic
+    expect(text).toContain("/BaseFont /Helvetica-Bold");
+    expect(text).toContain("/Flags 262176"); // Helvetica-Bold: nonsymbolic + force-bold
+  });
+
+  it("gives every Widths-array entry the font's own real AFM advance width, across the full FirstChar..LastChar range", () => {
+    const text = decode(
+      writePdf(
+        docWithItems([
+          {
+            kind: "text",
+            text: "A",
+            xPt: 0,
+            yPt: 0,
+            font: HELVETICA,
+            sizePt: 10,
+            color: BLACK,
+          },
+        ]),
+        { compress: false },
+      ),
+    );
+    const widthsMatch = /\/Widths \[([^\]]*)\]/.exec(text);
+    expect(widthsMatch).not.toBeNull();
+    const widths = widthsMatch![1]!.trim().split(/\s+/).map(Number);
+    expect(widths).toHaveLength(255 - 32 + 1);
+    // Every code in range resolves to a real, positive advance width -- WINANSI_GLYPH_NAMES has no gap in this range and every standard-14 AFM table defines every glyph name it can produce, so a 0 anywhere here would mean a genuine regression, not a legitimate "unassigned code" placeholder.
+    expect(widths.every((w) => w > 0)).toBe(true);
+    // Space (code 32, the first entry) is a known, specific value worth pinning exactly.
+    expect(widths[0]).toBe(278);
   });
 
   it("reports WinAnsi substitutions via the onSubstitution callback, with the page index", () => {
@@ -384,6 +577,65 @@ describe("writePdf: images", () => {
     expect(text).toContain("/Width 3");
     expect(text).toContain("/Height 2");
     expect(text).toContain("/ColorSpace /DeviceRGB");
+  });
+
+  it("resolves a JPEG's colour space from its own component count: 1 -> DeviceGray, 3 -> DeviceRGB, 4 -> DeviceCMYK", () => {
+    for (const [components, colorSpace] of [
+      [1, "DeviceGray"],
+      [3, "DeviceRGB"],
+      [4, "DeviceCMYK"],
+    ] as const) {
+      const doc = docWithPages(
+        [
+          {
+            widthPt: 100,
+            heightPt: 100,
+            items: [
+              {
+                kind: "image",
+                imageId: "photo",
+                xPt: 0,
+                yPt: 0,
+                widthPt: 50,
+                heightPt: 50,
+              },
+            ],
+          },
+        ],
+        { photo: jpegAsset(components) },
+      );
+      const text = decode(writePdf(doc, { compress: false }));
+      expect(text).toContain(`/ColorSpace /${colorSpace}`);
+    }
+  });
+
+  it("inverts a CMYK JPEG's colour with /Decode when its Adobe transform is YCCK (2) or absent, but not when it is explicitly untransformed (0)", () => {
+    const decodeFor = (adobeTransform: number | undefined): boolean => {
+      const doc = docWithPages(
+        [
+          {
+            widthPt: 100,
+            heightPt: 100,
+            items: [
+              {
+                kind: "image",
+                imageId: "photo",
+                xPt: 0,
+                yPt: 0,
+                widthPt: 50,
+                heightPt: 50,
+              },
+            ],
+          },
+        ],
+        { photo: jpegAsset(4, adobeTransform) },
+      );
+      const text = decode(writePdf(doc, { compress: false }));
+      return text.includes("/Decode [1 0 1 0 1 0 1 0]");
+    };
+    expect(decodeFor(2)).toBe(true);
+    expect(decodeFor(undefined)).toBe(true);
+    expect(decodeFor(0)).toBe(false);
   });
 
   it("writes a bilevel image as CCITT Group 4 when that is smaller than Flate, and reads it back (#975)", async () => {
@@ -1154,5 +1406,85 @@ describe("writePdf: package-level residue (#967)", () => {
     const text = new TextDecoder("latin1").decode(bytes);
     expect(text).not.toContain("/OpenAction");
     expect(readPdf(bytes).source?.["open-action"]).toBeUndefined();
+  });
+});
+
+// options.formulas is writePdf's own side channel for embedded-math-font content (see this module's own top comment for why a formula cannot travel as an ordinary LayoutItem) -- exercised here through writePdf itself, not just through math-content-write.ts/math-font-write.ts's own unit tests, since only this integration proves the allocation, the resource dict, and the emitted content stream actually agree on object numbers.
+describe("writePdf: embedded formulas", () => {
+  function formula(pageIndex: number): PositionedFormula {
+    return {
+      pageIndex,
+      xPt: 50,
+      yPt: 100,
+      box: {
+        widthPt: 20,
+        heightPt: 12,
+        ascentPt: 12,
+        descentPt: 0,
+        items: [
+          {
+            kind: "glyphs",
+            xPt: 0,
+            yPt: 0,
+            text: "x",
+            sizePt: 12,
+            color: BLACK,
+          },
+        ],
+      },
+    };
+  }
+
+  it("allocates a Type0/CIDFontType0 composite font group, references it from the page Resources, and draws the formula's own glyph run", () => {
+    const text = decode(
+      writePdf(docWithItems([]), {
+        compress: false,
+        formulas: [formula(0)],
+      }),
+    );
+    expect(text).toContain("/Subtype /Type0");
+    expect(text).toContain("/Subtype /CIDFontType0");
+    expect(text).toContain("/FontFile3");
+    expect(text).toContain("/Font <</MF ");
+    // The formula's own content bytes are appended after the page's ordinary LayoutItem bytes, in the same Contents stream.
+    expect(text).toContain("/MF 12 Tf");
+  });
+
+  it("allocates no math font group at all when no formula is supplied, and never references /MF", () => {
+    const text = decode(
+      writePdf(docWithItems([]), { compress: false, formulas: [] }),
+    );
+    expect(text).not.toContain("/CIDFontType0");
+    expect(text).not.toContain("/MF");
+  });
+
+  it("routes each formula to its own page's Contents stream by pageIndex, never the other page's", () => {
+    const marker = (label: string): LayoutItem => ({
+      kind: "text",
+      text: label,
+      xPt: 0,
+      yPt: 0,
+      font: HELVETICA,
+      sizePt: 10,
+      color: BLACK,
+    });
+    const text = decode(
+      writePdf(
+        docWithPages([
+          { widthPt: 100, heightPt: 100, items: [marker("A")] },
+          { widthPt: 100, heightPt: 100, items: [marker("B")] },
+        ]),
+        { compress: false, formulas: [formula(1)] },
+      ),
+    );
+    const streams = [...text.matchAll(/stream\n([\s\S]*?)\nendstream/g)].map(
+      (m) => m[1]!,
+    );
+    const pageAStream = streams.find((s) => s.includes("<41>")); // 'A'
+    const pageBStream = streams.find((s) => s.includes("<42>")); // 'B'
+    expect(pageAStream).toBeDefined();
+    expect(pageBStream).toBeDefined();
+    expect(pageAStream).not.toContain("/MF");
+    expect(pageBStream).toContain("/MF 12 Tf");
   });
 });
