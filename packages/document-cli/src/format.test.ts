@@ -21,6 +21,11 @@ describe("isDocumentFormat", () => {
       "markdown",
       "rtf",
       "pdf",
+      "wpd",
+      "doc",
+      "xls",
+      "ppt",
+      "epub",
     ]) {
       expect(isDocumentFormat(format)).toBe(true);
     }
@@ -102,6 +107,14 @@ describe("inferFormatFromExtension", () => {
   it("infers rtf from its own extension", () => {
     expect(inferFormatFromExtension("letter.rtf")).toBe("rtf");
   });
+
+  it("infers each legacy binary and flowable format from its own extension", () => {
+    expect(inferFormatFromExtension("draft.wpd")).toBe("wpd");
+    expect(inferFormatFromExtension("legacy.doc")).toBe("doc");
+    expect(inferFormatFromExtension("legacy.xls")).toBe("xls");
+    expect(inferFormatFromExtension("legacy.ppt")).toBe("ppt");
+    expect(inferFormatFromExtension("book.epub")).toBe("epub");
+  });
 });
 
 describe("formatToExtension", () => {
@@ -124,6 +137,11 @@ describe("formatToExtension", () => {
       ["markdown", "md"],
       ["rtf", "rtf"],
       ["pdf", "pdf"],
+      ["wpd", "wpd"],
+      ["doc", "doc"],
+      ["xls", "xls"],
+      ["ppt", "ppt"],
+      ["epub", "epub"],
     ];
     for (const [format, extension] of cases) {
       expect(formatToExtension(format)).toBe(extension);
