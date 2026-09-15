@@ -377,7 +377,11 @@ function resolveDecorationForCell(
   };
 }
 
-/** A deterministic signature for one cell XF's own (formatId, fontIndex, alignment, verticalAlignment, decoration) tuple, so two cells sharing all five share one XF record -- the interning key buildCellXfPlan below dedupes on, mirroring how CellFormatTable in ooxml.js's typed/xlsx/styles.ts dedupes an <xf> on (number format, decoration) together rather than on format alone, widened here by the cell's own font and alignment. */
+/**
+ * A deterministic signature for one cell XF's own (formatId, fontIndex, alignment, verticalAlignment, decoration) tuple, so two cells sharing all five share one XF record -- the interning key buildCellXfPlan below dedupes on, mirroring how CellFormatTable in ooxml.js's typed/xlsx/styles.ts dedupes an <xf> on (number format, decoration) together rather than on format alone, widened here by the cell's own font and alignment.
+ *
+ * JSON.stringify rather than hand-assembled template segments: a per-field placeholder for "this field was left unstated" (a `?? ""` fallback, an `if (field !== undefined)` guard before appending a segment) is either unobservable -- no real Alignment/verticalAlignment/decoration value can ever equal an arbitrary placeholder string, so no mutation of it changes any test's outcome -- or, worse, itself wrong: `JSON.stringify` already drops an `undefined`-valued property from its own object-literal argument entirely (`JSON.stringify({a: undefined})` is `"{}"`, identical to an object that never had the key), which is exactly "unstated fields collapse to one shared signature, stated ones do not" with no hand-written branch to get subtly wrong or leave untested.
+ */
 function signatureOfCellXf(
   formatId: number,
   fontIndex: number,
@@ -385,24 +389,13 @@ function signatureOfCellXf(
   verticalAlignment: "top" | "middle" | "bottom" | undefined,
   decoration: XfDecorationFields | undefined,
 ): string {
-  // alignment/verticalAlignment are appended only when stated, rather than through a `?? ""` fallback: the fallback's own placeholder value is never observable either way (no real Alignment/verticalAlignment value can ever equal it, so it can never falsely collide with or falsely distinguish a real one), so a StringLiteral mutant swapping the placeholder for a different one is undetectable no matter what string is chosen there. Omitting the segment entirely instead means two cells that both leave alignment unstated share the identical (absent) segment, and one that states it never does -- the same distinction, expressed as a difference the segment's own presence carries rather than one it is trusted to encode into an arbitrary constant.
-  let signature = `f${formatId}|n${fontIndex}`;
-  if (alignment !== undefined) {
-    signature += `|a${alignment}`;
-  }
-  if (verticalAlignment !== undefined) {
-    signature += `|v${verticalAlignment}`;
-  }
-  if (decoration === undefined) {
-    return signature;
-  }
-  signature +=
-    `|p${decoration.fillPattern}:${decoration.fillForegroundIcv}:${decoration.fillBackgroundIcv}` +
-    `|l${decoration.left.style}:${decoration.left.icv}` +
-    `|r${decoration.right.style}:${decoration.right.icv}` +
-    `|t${decoration.top.style}:${decoration.top.icv}` +
-    `|b${decoration.bottom.style}:${decoration.bottom.icv}`;
-  return signature;
+  return JSON.stringify({
+    formatId,
+    fontIndex,
+    alignment,
+    verticalAlignment,
+    decoration,
+  });
 }
 
 export interface FontPlan {
