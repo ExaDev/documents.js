@@ -1583,12 +1583,12 @@ describe("lists", () => {
     expect(markdown).toBe("- [x] done");
   });
 
-  it("recognises the pre-field UNCHECKED glyph spelling on its OWN, with no checked item preceding it in the same call", () => {
+  it("recognises the pre-field UNCHECKED glyph spelling on its OWN, with no checked item preceding it in the same call, and with real text following the glyph in the SAME run (so startsWith and endsWith genuinely disagree)", () => {
     const markdown = emitMarkdown(
       doc([
         {
           kind: "paragraph",
-          runs: [{ text: "☐ " }, { text: "todo" }],
+          runs: [{ text: "☐ todo" }],
           list: { numId: "md1:bullet+task", level: 0 },
         },
       ]),
