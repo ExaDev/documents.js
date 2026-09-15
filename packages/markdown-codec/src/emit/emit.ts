@@ -1217,10 +1217,10 @@ function emitBlocks(
   return renderItems(groupConstructItems(blocks, 0).items, context);
 }
 
-// A paragraph's run-level construct extents must name real runs before anything renders them -- the run-level twin of the marker-balance check above, through document-schema.js's own findRunConstructFault so every codec and consumer agree on one definition of well-formed. Tables are walked into because a cell's block list holds its own paragraphs (and nothing else descends further: a table inside a table cell is not a shape GFM or this model produces).
+// A paragraph's run-level construct extents must name real runs before anything renders them -- the run-level twin of the marker-balance check above, through document-schema.js's own findRunConstructFault so every codec and consumer agree on one definition of well-formed. Tables are walked into because a cell's block list holds its own paragraphs (and nothing else descends further: a table inside a table cell is not a shape GFM or this model produces). No separate `block.constructs !== undefined` guard here: findRunConstructFault already checks that itself and returns undefined immediately, so a paragraph with no constructs at all is exactly as safe to pass through unconditionally.
 function validateRunConstructExtents(blocks: readonly ContentBlock[]): void {
   for (const block of blocks) {
-    if (block.kind === "paragraph" && block.constructs !== undefined) {
+    if (block.kind === "paragraph") {
       const fault = findRunConstructFault(block);
       if (fault !== undefined) {
         throw new MarkdownInvalidRunConstructExtentError(
