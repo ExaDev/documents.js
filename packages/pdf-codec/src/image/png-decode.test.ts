@@ -183,4 +183,25 @@ describe("decodePng against hand-built (Node zlib) fixtures", () => {
   it("throws on a file that does not start with the PNG signature", () => {
     expect(() => decodePng(new Uint8Array([1, 2, 3, 4]))).toThrow();
   });
+
+  it("throws when a chunk header sits exactly at the end of the file with no room for its data or CRC", () => {
+    const scanline = Buffer.from([0, 42]);
+    const png = buildPng(
+      { width: 1, height: 1, bitDepth: 8, colorType: 0 },
+      scanline,
+    );
+    const iendChunkLength = pngChunk("IEND", Buffer.alloc(0)).length;
+    const withoutIend = png.subarray(0, png.length - iendChunkLength);
+    // A chunk header (length + type, 8 bytes) with nothing after it -- exactly the boundary offset + 8 === bytes.length that distinguishes "enter the loop and discover there's no room for the data/CRC" from "stop the loop before reading a header at all".
+    const truncatedHeader = Buffer.concat([
+      u32be(0),
+      Buffer.from("tEXt", "ascii"),
+    ]);
+    const truncated = new Uint8Array(
+      withoutIend.length + truncatedHeader.length,
+    );
+    truncated.set(withoutIend, 0);
+    truncated.set(truncatedHeader, withoutIend.length);
+    expect(() => decodePng(truncated)).toThrow(/runs past the end/);
+  });
 });
