@@ -17,6 +17,8 @@ permissions:
 env:
   # Mirrors ci.yml's own TURBO_FLAGS exactly: a PR scopes to the packages it actually touches (and their dependents, via turbo's own dependency-aware --affected), main runs the whole workspace.
   TURBO_FLAGS: ${{ github.event_name == 'pull_request' && '--affected' || '' }}
+  # Mirrors ci.yml's own TURBO_SCM_BASE exactly, and is required for --affected to mean anything on a pull_request: actions/checkout's detached-HEAD checkout has no local branch named `main` (only `origin/main`), so without an explicit base turbo cannot resolve the literal `main` ref it falls back to, warns "unable to detect git range, assuming all files have changed", and silently treats every package as affected -- confirmed directly (2026-09-15: a pull_request run's own Plan job logged that exact fallback and planned all 23 workspace packages into 8 shards for a PR whose diff touched a single package).
+  TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
 
 jobs:
   plan:
