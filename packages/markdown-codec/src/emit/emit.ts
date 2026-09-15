@@ -617,13 +617,13 @@ function firstBlockCheckbox(
     return { checkboxText: "", stripGlyph: false };
   }
   const leading = first.block.runs[0]?.text ?? "";
-  if (leading.startsWith(`${TASK_CHECKBOX_CHECKED} `)) {
-    return { checkboxText: "[x] ", stripGlyph: true };
-  }
-  if (leading.startsWith(`${TASK_CHECKBOX_UNCHECKED} `)) {
-    return { checkboxText: "[ ] ", stripGlyph: true };
-  }
-  return { checkboxText: "", stripGlyph: false };
+  // No separate "found nothing" return with its own stripGlyph: false literal: stripCheckboxRun below already re-checks the identical two prefixes and no-ops when neither matches, so stripGlyph here can only ever be observed to equal whether checkboxText itself is non-empty.
+  const checkboxText = leading.startsWith(`${TASK_CHECKBOX_CHECKED} `)
+    ? "[x] "
+    : leading.startsWith(`${TASK_CHECKBOX_UNCHECKED} `)
+      ? "[ ] "
+      : "";
+  return { checkboxText, stripGlyph: checkboxText !== "" };
 }
 
 interface RenderedListMarker {
