@@ -3445,6 +3445,22 @@ describe("buildFormatPlan", () => {
     );
   });
 
+  it("accepts exactly 219 distinct custom codes, filling the 164-382 range without overflowing it", () => {
+    const cells = Array.from({ length: 219 }, (_, index) =>
+      cell(
+        0,
+        index,
+        { kind: "number", value: index },
+        {
+          numberFormatCode: `CUSTOM_${index}`,
+        },
+      ),
+    );
+    const plan = planFor(cells);
+    expect(plan.customFormats).toHaveLength(219);
+    expect(plan.customFormats.at(-1)?.id).toBe(382);
+  });
+
   it("never registers the number-format code of a cell writesCellRecord would drop, so an unused custom format is never minted for it", () => {
     // An empty, unformatted, formula-free cell writes no record at all (written-cells.ts's own writesCellRecord), so a numberFormatCode stated on it alone must never mint a customFormats entry no written cell record could ever reference.
     const droppedCell = cell(
@@ -3569,6 +3585,32 @@ describe("buildFontPlan", () => {
       /resolves to a font the workbook-wide font scan never saw/,
     );
   });
+
+  it("mints two distinct font entries for fonts differing only in colour, not just name/size/weight/style", () => {
+    const sheets = [
+      sheet("S", [
+        cell(
+          0,
+          0,
+          { kind: "number", value: 1 },
+          {
+            font: { color: rgbHexToColor("ff0000") },
+          },
+        ),
+        cell(
+          0,
+          1,
+          { kind: "number", value: 2 },
+          {
+            font: { color: rgbHexToColor("0000ff") },
+          },
+        ),
+      ]),
+    ];
+    const plan = buildFontPlan(sheets, buildPalettePlan(sheets));
+    // Entry 0 is Normal; the two colours must each mint their own entry rather than collapsing onto one.
+    expect(plan.fontEntries).toHaveLength(3);
+  });
 });
 
 describe("buildCellXfPlan", () => {
@@ -3622,6 +3664,57 @@ describe("buildCellXfPlan", () => {
     );
     const plan = planFor([centered, rightAligned]);
     expect(plan.cellXfEntries).toHaveLength(2);
+  });
+
+  it("gives each of the four border sides its own distinct cell-XF entry, against an otherwise-identical undecorated baseline", () => {
+    // Every cell here shares the identical background, so the only thing that could tell two of their cell-Xf signatures apart is which single border side (if any) each one states -- proving each side's own segment of the signature genuinely carries the side's identity, not just its style/colour.
+    const backgroundOnly = {
+      kind: "solid",
+      color: rgbHexToColor("00ff00"),
+    } as const;
+    const borderEdge = { color: rgbHexToColor("ff0000"), widthPt: 0.75 };
+    const withBorder = (
+      column: number,
+      side: "left" | "right" | "top" | "bottom",
+    ) =>
+      cell(
+        0,
+        column,
+        { kind: "number", value: 1 },
+        {
+          background: backgroundOnly,
+          borders: { [side]: borderEdge },
+        },
+      );
+    const baseline = cell(
+      0,
+      0,
+      { kind: "number", value: 1 },
+      {
+        background: backgroundOnly,
+      },
+    );
+    const plan = planFor([
+      baseline,
+      withBorder(1, "left"),
+      withBorder(2, "right"),
+      withBorder(3, "top"),
+      withBorder(4, "bottom"),
+    ]);
+    expect(plan.cellXfEntries).toHaveLength(5);
+  });
+
+  it("refuses a cell fill of a kind ContentCellFillSchema's own discriminated union does not define", () => {
+    const bogusFill = {
+      kind: "bogus",
+    } as unknown as ContentSheetCell["background"];
+    expect(() =>
+      planFor([
+        cell(0, 0, { kind: "number", value: 1 }, { background: bogusFill }),
+      ]),
+    ).toThrow(
+      "xls-codec cannot write a cell fill with kind 'bogus': ContentCellFillSchema's discriminated union only defines 'solid' and 'pattern'",
+    );
   });
 
   it("mints a real decoration for a cell that carries formatting, rather than treating every cell as undecorated", () => {
