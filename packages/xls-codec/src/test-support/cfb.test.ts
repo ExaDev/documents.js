@@ -24,6 +24,7 @@ function streamOf(
 /** Direct, byte-level access to a compound file's own header and directory entries -- for the fields (sector counts, the FAT's own marker bytes, a directory entry's own colour flag and name) that this package's own reader (archive-codec's readCompoundFile) either never reads back or never cross-checks, so a round trip alone cannot prove the writer stated them correctly. */
 function parseHeader(bytes: Uint8Array<ArrayBuffer>) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const minorVersion = view.getUint16(0x18, true);
   const fatSectorCount = view.getUint32(0x2c, true);
   const directoryStart = view.getUint32(0x30, true);
   const directorySectorCountField = view.getUint32(0x28, true);
@@ -33,6 +34,7 @@ function parseHeader(bytes: Uint8Array<ArrayBuffer>) {
     view.getUint32(0x4c + i * 4, true),
   );
   return {
+    minorVersion,
     fatSectorCount,
     directoryStart,
     directorySectorCountField,
@@ -286,6 +288,17 @@ describe("compoundFile", () => {
     expect(new TextDecoder().decode(streamOf("a/b", streams))).toBe("a-b");
   });
 
+  it("reuses one storage across every stream nested under it, rather than minting a fresh one per stream", () => {
+    // Each of these 4 streams independently walks the same single "S" path segment; a lookup that never finds the storage it already created would mint 4 separate "S" storages instead of reusing the one, pushing the directory past a sector boundary the correctly-deduplicated tree never reaches.
+    const entries = Array.from({ length: 4 }, (_, i) => ({
+      path: `S/stream${i}`,
+      bytes: new Uint8Array(10).fill(i),
+    }));
+    const bytes = compoundFile(entries);
+
+    expect(bytes.length).toBe(3072);
+  });
+
   it("round-trips two streams under the same nested storage, not two separate storages each holding one", () => {
     const bytes = compoundFile([
       { path: "Storage/First", bytes: textStream("first") },
@@ -353,6 +366,28 @@ describe("compoundFile", () => {
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 
     expect(view.getUint32(0x28, true)).toBe(0);
+  });
+
+  it("states the minor version producers commonly write in the header's own field", () => {
+    const bytes = compoundFile([{ path: "Workbook", bytes: textStream("x") }]);
+    const header = parseHeader(bytes);
+
+    expect(header.minorVersion).toBe(0x3e);
+  });
+
+  it("states the real mini-FAT sector count in the header's own field, for a workbook whose mini stream needs one", () => {
+    const bytes = compoundFile([{ path: "Workbook", bytes: textStream("x") }]);
+    const header = parseHeader(bytes);
+
+    expect(header.miniFatSectorCount).toBe(1);
+  });
+
+  it("round-trips a stream sitting exactly at the mini-stream cutoff (4096 bytes), classified as a big FAT-chained stream, not a small one", () => {
+    const at = new Uint8Array(4096).fill(7);
+    const bytes = compoundFile([{ path: "AtCutoff", bytes: at }]);
+    const streams = readCompoundFile(bytes);
+
+    expect(streamOf("AtCutoff", streams)).toStrictEqual(at);
   });
 
   it("allocates no data sectors at all for a workbook whose only stream is small, not one wastefully allocated for it as if it were also big", () => {
