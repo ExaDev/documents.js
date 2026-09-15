@@ -997,8 +997,13 @@ function writeRowCells(
 
     const cell = cellByPosition.get(key);
     const images = imagesByPosition.get(key);
+    const objects = objectsByPosition.get(key);
     const validationName = validationByPosition.get(key);
-    if (cell !== undefined || (images !== undefined && images.length > 0)) {
+    if (
+      cell !== undefined ||
+      (images !== undefined && images.length > 0) ||
+      (objects !== undefined && objects.length > 0)
+    ) {
       const attributes: Record<string, string> = {};
       if (cell !== undefined) {
         Object.assign(attributes, writeCellValueAttributes(cell.value));
@@ -1031,7 +1036,7 @@ function writeRowCells(
       for (const image of images ?? []) {
         children.push(writeSheetImageFrame(image, state));
       }
-      for (const object of objectsByPosition.get(key) ?? []) {
+      for (const object of objects ?? []) {
         children.push(writeSheetEmbeddedObjectFrame(object, state));
       }
       nodes.push(el("table:table-cell", attributes, children));
