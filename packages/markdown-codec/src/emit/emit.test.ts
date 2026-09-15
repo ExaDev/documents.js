@@ -1856,6 +1856,37 @@ describe("lists", () => {
     expect(markdown).toBe("- a\n  - ```\n    b\n    ```\n  z");
   });
 
+  it("needs no forced blank line before a construct whose own FIRST child is an EMPTY, non-division nested construct, in the SAME list item -- emitItemCanInterrupt's construct-recursion base case (an empty children array) defaults to interrupting, exactly like the non-paragraph fallback it mirrors", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        {
+          kind: "constructStart",
+          descriptor: {
+            kind: "link",
+            target: { kind: "external", uri: "https://example.com" },
+          },
+        },
+        {
+          kind: "constructStart",
+          descriptor: { kind: "anchor", anchorType: "bookmark", name: "empty" },
+        },
+        { kind: "constructEnd" },
+        {
+          kind: "paragraph",
+          runs: [{ text: "caption" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        { kind: "constructEnd" },
+      ]),
+    );
+    expect(markdown).toBe("- a\n  caption");
+  });
+
   it("needs no forced blank line between an open (styleId-less) paragraph and a following link-construct whose FIRST child is a non-paragraph IMAGE block, in the SAME list item -- a non-paragraph block always interrupts an open paragraph unconditionally, per emitItemCanInterrupt's non-construct fallback", () => {
     const markdown = emitMarkdown(
       doc([
