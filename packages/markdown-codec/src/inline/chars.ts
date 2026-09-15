@@ -38,12 +38,7 @@ export function isAsciiControl(char: string): boolean {
 
 // Whether any ASCII control character or space appears in `text` -- the exclusion an absolute URI inside an autolink is defined by (spec 0.31.2: "zero or more characters other than ASCII control characters, space, `<`, and `>`"). Written as a scan rather than a regex character range deliberately: a `[\x00-\x20]` class is a literal control character embedded in a pattern, which is both unreadable and exactly what eslint's own no-control-regex rule exists to catch.
 export function containsAsciiControlOrSpace(text: string): boolean {
-  for (let index = 0; index < text.length; index += 1) {
-    if (isAsciiControl(text.charAt(index)) || text.charAt(index) === " ") {
-      return true;
-    }
-  }
-  return false;
+  return text.split("").some((char) => isAsciiControl(char) || char === " ");
 }
 
 // Spaces, tabs, and line endings -- the whitespace vocabulary CommonMark's own *syntactic* rules use (link label normalisation, the whitespace permitted between an inline link's components), as opposed to the full Unicode whitespace class the flanking rules use. Kept distinct deliberately: collapsing the two would make a non-breaking space count as a label separator, which the spec does not allow.
@@ -56,8 +51,9 @@ export function codePointBefore(text: string, index: number): string {
   if (index <= 0) {
     return "\n";
   }
+  // No separate "index >= 2" guard: index <= 0 has already returned above, leaving index === 1 as the only remaining case a missing guard could affect, and text.charCodeAt(-2) there is always NaN, which already fails the high-surrogate check below on its own -- an explicit index guard would only ever exclude a case that already excludes itself.
   const low = text.charCodeAt(index - 1);
-  if (index >= 2 && low >= 0xdc00 && low <= 0xdfff) {
+  if (low >= 0xdc00 && low <= 0xdfff) {
     const high = text.charCodeAt(index - 2);
     if (high >= 0xd800 && high <= 0xdbff) {
       return text.slice(index - 2, index);
