@@ -1,5 +1,61 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadMathFont } from "./math-font";
+import type * as SfntModule from "./sfnt";
+import type * as CmapTableModule from "./cmap-table";
+
+// loadMathFont() caches its result in a module-scoped variable, so exercising its "the embedded font is unreadable" guards -- invariant checks on this package's own build output, never reachable through the real vendored font -- needs a fresh, unmocked module per test: vi.resetModules() plus a dynamic re-import gets a clean, uncached loadMathFont, and vi.doMock lets exactly one of its own real dependencies fail while every other real parser still runs underneath it.
+describe("loadMathFont against a deliberately broken parse (module-level cache reset per test)", () => {
+  afterEach(() => {
+    vi.doUnmock("./sfnt");
+    vi.doUnmock("./cmap-table");
+    vi.resetModules();
+  });
+
+  it("throws its own exact message when the embedded bytes are not a readable sfnt container at all", async () => {
+    vi.resetModules();
+    vi.doMock("./sfnt", async (importOriginal) => ({
+      ...(await importOriginal<typeof SfntModule>()),
+      parseSfnt: () => undefined,
+    }));
+    const { loadMathFont: freshLoadMathFont } = await import("./math-font");
+    expect(() => freshLoadMathFont()).toThrow(
+      "embedded math font is not a readable sfnt container",
+    );
+  });
+
+  it("throws its own exact message when a required sfnt table (head/hhea/CFF ) is missing", async () => {
+    vi.resetModules();
+    vi.doMock("./sfnt", async (importOriginal) => {
+      const actual = await importOriginal<typeof SfntModule>();
+      return {
+        ...actual,
+        sfntTableBytes: (font: unknown, tag: string) =>
+          tag === "CFF "
+            ? undefined
+            : actual.sfntTableBytes(
+                font as Parameters<typeof actual.sfntTableBytes>[0],
+                tag,
+              ),
+      };
+    });
+    const { loadMathFont: freshLoadMathFont } = await import("./math-font");
+    expect(() => freshLoadMathFont()).toThrow(
+      "embedded math font is missing a required sfnt table (head/hhea/CFF )",
+    );
+  });
+
+  it("throws its own exact message when the embedded font has no readable cmap subtable", async () => {
+    vi.resetModules();
+    vi.doMock("./cmap-table", async (importOriginal) => ({
+      ...(await importOriginal<typeof CmapTableModule>()),
+      buildCmapLookup: () => undefined,
+    }));
+    const { loadMathFont: freshLoadMathFont } = await import("./math-font");
+    expect(() => freshLoadMathFont()).toThrow(
+      "embedded math font has no readable cmap subtable",
+    );
+  });
+});
 
 // Every expected value below was independently verified against the real vendored assets/fonts/STIXTwoMath-Regular.otf's own raw bytes while building math-table.ts/cmap-table.ts/hmtx-table.ts (a standalone Node script reading the sfnt table directory directly, not this package's own parser) -- these are real, external cross-checks, not values derived from and re-asserted against this module's own output.
 describe("loadMathFont", () => {
