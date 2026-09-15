@@ -558,7 +558,7 @@ export function annotationsPdf(): Uint8Array<ArrayBuffer> {
   b.object(2, "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>");
   b.object(
     3,
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R /Annots [7 0 R 8 0 R 9 0 R 10 0 R] >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R /Annots [7 0 R 8 0 R 9 0 R 10 0 R 11 0 R 12 0 R 13 0 R] >>",
   );
   b.object(
     4,
@@ -582,7 +582,19 @@ export function annotationsPdf(): Uint8Array<ArrayBuffer> {
     10,
     "<< /Type /Annot /Subtype /Stamp /Rect [100 20 140 40] /Contents (Approved) /T (Reviewer) /Name /Approved >>",
   );
-  b.classicXrefAndTrailer(10, "/Root 1 0 R");
+  b.object(
+    11,
+    "<< /Type /Annot /Subtype /Underline /Rect [20 70 80 82] /Contents (Underlined text) /T (Third reviewer) /QuadPoints [20 82 80 82 80 70 20 70] >>",
+  );
+  b.object(
+    12,
+    "<< /Type /Annot /Subtype /StrikeOut /Rect [90 70 150 82] /Contents (Struck text) /T (Third reviewer) /QuadPoints [90 82 150 82 150 70 90 70] >>",
+  );
+  b.object(
+    13,
+    "<< /Type /Annot /Subtype /Squiggly /Rect [20 85 80 97] /Contents (Squiggly text) /T (Third reviewer) /QuadPoints [20 97 80 97 80 85 20 85] >>",
+  );
+  b.classicXrefAndTrailer(13, "/Root 1 0 R");
   return b.bytes();
 }
 

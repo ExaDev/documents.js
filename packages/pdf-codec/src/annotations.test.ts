@@ -30,6 +30,8 @@ describe("readPdf: annotations", () => {
       contents: "Typed remark",
       author: "Reviewer",
     });
+    // A markup-family subtype's fields, never the opaque-residue fallback's -- pins that FreeText is genuinely recognised via SEMANTIC_SUBTYPES, not merely carrying its own literal subtype string through unaffected by that classification.
+    expect(freeText?.source).toBeUndefined();
   });
 
   it("reads a markup annotation's /QuadPoints transformed into page space", () => {
@@ -48,6 +50,66 @@ describe("readPdf: annotations", () => {
         { xPt: 60, yPt: 42 },
         { xPt: 60, yPt: 30 },
         { xPt: 12, yPt: 30 },
+      ],
+    ]);
+  });
+
+  it("reads an Underline markup annotation's /QuadPoints transformed into page space", () => {
+    const doc = readPdf(annotationsPdf());
+    const underline = doc.pages[0]!.annotations?.find(
+      (a) => a.subtype === "Underline",
+    );
+    expect(underline).toMatchObject({
+      subtype: "Underline",
+      contents: "Underlined text",
+      author: "Third reviewer",
+    });
+    expect(underline?.quads).toEqual([
+      [
+        { xPt: 20, yPt: 82 },
+        { xPt: 80, yPt: 82 },
+        { xPt: 80, yPt: 70 },
+        { xPt: 20, yPt: 70 },
+      ],
+    ]);
+  });
+
+  it("reads a StrikeOut markup annotation's /QuadPoints transformed into page space", () => {
+    const doc = readPdf(annotationsPdf());
+    const strikeOut = doc.pages[0]!.annotations?.find(
+      (a) => a.subtype === "StrikeOut",
+    );
+    expect(strikeOut).toMatchObject({
+      subtype: "StrikeOut",
+      contents: "Struck text",
+      author: "Third reviewer",
+    });
+    expect(strikeOut?.quads).toEqual([
+      [
+        { xPt: 90, yPt: 82 },
+        { xPt: 150, yPt: 82 },
+        { xPt: 150, yPt: 70 },
+        { xPt: 90, yPt: 70 },
+      ],
+    ]);
+  });
+
+  it("reads a Squiggly markup annotation's /QuadPoints transformed into page space", () => {
+    const doc = readPdf(annotationsPdf());
+    const squiggly = doc.pages[0]!.annotations?.find(
+      (a) => a.subtype === "Squiggly",
+    );
+    expect(squiggly).toMatchObject({
+      subtype: "Squiggly",
+      contents: "Squiggly text",
+      author: "Third reviewer",
+    });
+    expect(squiggly?.quads).toEqual([
+      [
+        { xPt: 20, yPt: 97 },
+        { xPt: 80, yPt: 97 },
+        { xPt: 80, yPt: 85 },
+        { xPt: 20, yPt: 85 },
       ],
     ]);
   });
