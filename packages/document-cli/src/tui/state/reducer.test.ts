@@ -476,6 +476,64 @@ describe("appReducer SAVE_ERROR", () => {
   });
 });
 
+describe("appReducer OPEN_FILE_ERROR", () => {
+  it("records the failure as an error status and populates errorDetail", () => {
+    const result = appReducer(createInitialState(), {
+      type: "OPEN_FILE_ERROR",
+      message: "not a valid docx",
+      detail: "unexpected end of zip central directory",
+    });
+    expect(result.status?.severity).toBe("error");
+    expect(result.status?.text).toBe("not a valid docx");
+    expect(result.errorDetail).toStrictEqual({
+      message: "not a valid docx",
+      detail: "unexpected end of zip central directory",
+    });
+  });
+});
+
+describe("appReducer SAVE_AS_REQUEST / SET_SEARCH_QUERY / CLEAR_STATUS / DISMISS_ERROR_DETAIL", () => {
+  it("pushes the saveAsPrompt screen onto the stack", () => {
+    const result = appReducer(createInitialState(), {
+      type: "SAVE_AS_REQUEST",
+    });
+    expect(result.stack.map((screen) => screen.kind)).toEqual([
+      "launcher",
+      "saveAsPrompt",
+    ]);
+  });
+
+  it("replaces the search query verbatim", () => {
+    const result = appReducer(createInitialState(), {
+      type: "SET_SEARCH_QUERY",
+      query: "invoice",
+    });
+    expect(result.searchQuery).toBe("invoice");
+  });
+
+  it("clears an existing status message", () => {
+    const withStatus = appReducer(createInitialState(), {
+      type: "OPEN_FILE_ERROR",
+      message: "boom",
+      detail: undefined,
+    });
+    expect(withStatus.status).toBeDefined();
+    const cleared = appReducer(withStatus, { type: "CLEAR_STATUS" });
+    expect(cleared.status).toBeUndefined();
+  });
+
+  it("dismisses errorDetail without touching the status message", () => {
+    const withError = appReducer(createInitialState(), {
+      type: "OPEN_FILE_ERROR",
+      message: "boom",
+      detail: "trace",
+    });
+    const dismissed = appReducer(withError, { type: "DISMISS_ERROR_DETAIL" });
+    expect(dismissed.errorDetail).toBeUndefined();
+    expect(dismissed.status).toStrictEqual(withError.status);
+  });
+});
+
 describe("appReducer OPEN_OVERLAY / CLOSE_OVERLAY", () => {
   it("opens and closes the confirmClose overlay without touching any other overlay", () => {
     const opened = appReducer(createInitialState(), {
@@ -657,6 +715,29 @@ describe("appReducer docx mutations", () => {
     });
     expect(run.bold).toBe(false);
     expect(unbolded.hasUnsavedChanges).toBe(true);
+  });
+
+  it("replaces a run's text via SET_RUN_TEXT", () => {
+    const state = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      {
+        type: "APPEND_PARAGRAPH",
+        text: undefined,
+        styleId: undefined,
+        alignment: undefined,
+      },
+      { type: "APPEND_RUN", blockIndex: 0, text: "Hello" },
+    ]);
+    const retyped = appReducer(state, {
+      type: "SET_RUN_TEXT",
+      blockIndex: 0,
+      runIndex: 0,
+      text: "Goodbye",
+    });
+    expect(retyped.hasUnsavedChanges).toBe(true);
+    expect(docxDocument(retyped).editor.paragraphs()[0]?.runs()[0]?.text).toBe(
+      "Goodbye",
+    );
   });
 
   it("reports a missing run rather than throwing", () => {
