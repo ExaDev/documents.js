@@ -203,7 +203,11 @@ describe("writePdf: verbatim passthrough of no-encoder image filters", () => {
 
     const bytes = writePdf(docWithImage(built!.asset), { compress: false });
     const text = new TextDecoder("latin1").decode(bytes);
+    expect(text).toContain("/Type /XObject");
+    expect(text).toContain("/Subtype /Image");
     expect(text).toContain("/JBIG2Decode");
+    expect(text).toContain("/ColorSpace /DeviceGray");
+    expect(text).toContain("/BitsPerComponent 1");
     expect(containsSubsequence(bytes, jbig2FixtureBytes(generic!.stream))).toBe(
       true,
     );
@@ -251,7 +255,12 @@ describe("writePdf: verbatim passthrough of no-encoder image filters", () => {
 
     const bytes = writePdf(docWithImage(built!.asset), { compress: false });
     const text = new TextDecoder("latin1").decode(bytes);
+    expect(text).toContain("/Type /XObject");
+    expect(text).toContain("/Subtype /Image");
     expect(text).toContain("/JPXDecode");
+    // Unlike JBIG2 (always 1-bit /DeviceGray), a JPX codestream states its own component count and sample depth -- neither /ColorSpace nor /BitsPerComponent is written for it.
+    expect(text).not.toContain("/ColorSpace");
+    expect(text).not.toContain("/BitsPerComponent");
     expect(
       containsSubsequence(bytes, jpeg2000FixtureBytes(fixture!.codestream)),
     ).toBe(true);
