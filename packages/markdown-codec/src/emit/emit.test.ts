@@ -715,6 +715,30 @@ describe("headings", () => {
           { text: "> q", source: { format: "markdown" as const, xml: "> q" } },
         ],
       },
+      {
+        level: "Heading1" as const,
+        shape: "ATX-heading-shaped ('# x')",
+        runs: [
+          { text: "# x", source: { format: "markdown" as const, xml: "# x" } },
+        ],
+      },
+      {
+        level: "Heading2" as const,
+        shape: "math-block-shaped ('$$')",
+        runs: [
+          { text: "$$", source: { format: "markdown" as const, xml: "$$" } },
+        ],
+      },
+      {
+        level: "Heading1" as const,
+        shape: "list-marker-shaped ('- item')",
+        runs: [
+          {
+            text: "- item",
+            source: { format: "markdown" as const, xml: "- item" },
+          },
+        ],
+      },
     ])(
       "collapses to ATX with HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT when the heading's own single (break-free) line is itself $shape (ExaDev/documents.js#940)",
       ({ level, runs }) => {
@@ -3511,6 +3535,65 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
         ? cell.blocks[0].runs.map((run) => run.text).join("")
         : undefined;
     expect(text).toBe("one<br>two");
+  });
+});
+
+describe("quoteDepthOf, longestRunLength, and leadingIndentColumns boundaries", () => {
+  it("treats indentLeftPt: 0 the same as no indentLeftPt at all -- no quote depth, no '>' prefix", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            styleId: "Quote",
+            indentLeftPt: 0,
+          },
+        ]),
+      ),
+    ).toBe("x");
+  });
+
+  it("resets the fence-character run counter after a non-fence character interrupts it, rather than compounding the interrupted run's own length into a later run of the SAME length as if nothing had broken it", () => {
+    // The genuine longest run of '`' here is 4 (the second one); a counter that failed to reset after 'xxx' would instead carry the first run's own length of 3 into the second, overcounting to 7 and picking an unnecessarily long fence.
+    const literal = "```xxx````";
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [{ text: literal }],
+            styleId: "CodeBlock",
+          },
+        ]),
+      ),
+    ).toBe(`\`\`\`\`\`\n${literal}\n\`\`\`\`\``);
+  });
+
+  it("expands a leading tab to the correct tab-stop-aligned column count, not merely to SOME value past the 4-column indented-code-block threshold, when the tab is not the first character of the line", () => {
+    // Two leading spaces (column 2) then a tab: the correct tab-stop rule rounds up to the NEXT multiple of 4, landing on column 4 (2 + 2) -- exactly at, not past, CODE_INDENT_COLUMNS. A `%` -> `*` mutation of the tab-stop arithmetic computes 2 + (4 - 2*4) = 2 + -4 = -2 instead, which is NOT >= 4 and would wrongly let this promote to setext.
+    const collector = createDiagnosticCollector();
+    const written = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [
+            {
+              text: "  \tx",
+              source: { format: "markdown", xml: "  \tx" },
+            },
+          ],
+          styleId: "Heading1",
+        },
+      ]),
+      { headingStyle: "setext", sink: collector.sink },
+    );
+    expect(written).toBe("#   \tx");
+    expect(
+      collector.has(
+        MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+      ),
+    ).toBe(true);
   });
 });
 
