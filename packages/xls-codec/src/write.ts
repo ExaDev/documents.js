@@ -84,7 +84,7 @@ const BUILTIN_FORMAT_TIME = 21; // "h:mm:ss"
 const BUILTIN_FORMAT_DATE_TIME = 22; // "m/d/yy h:mm"
 const GENERAL_FORMAT_ID = 0;
 
-function builtinCode(id: number): string {
+export function builtinCode(id: number): string {
   const code = BUILTIN_NUMBER_FORMATS.get(id);
   if (code === undefined) {
     throw new BiffWriteError(
@@ -136,7 +136,7 @@ function formatCodeForCell(cell: ContentSheetCell): string {
   );
 }
 
-interface FormatPlan {
+export interface FormatPlan {
   readonly customFormats: readonly {
     readonly id: number;
     readonly code: string;
@@ -145,7 +145,7 @@ interface FormatPlan {
 }
 
 /** Scans every sheet's cells once, assigning each distinct number-format code a formatId: reusing a built-in id for a code matching one of excel-number-format's own BUILTIN_NUMBER_FORMATS strings exactly, minting a new custom id from FIRST_CUSTOM_FORMAT_ID otherwise. Cell XF index assignment is a separate, later pass (buildCellXfPlan below) -- a formatId alone no longer determines a cell's XF index once decoration exists, since two cells sharing a format but differing in background/borders need two distinct XFs. */
-function buildFormatPlan(sheets: readonly ContentSheet[]): FormatPlan {
+export function buildFormatPlan(sheets: readonly ContentSheet[]): FormatPlan {
   const codeToFormatId = new Map<string, number>();
   const builtinIdByCode = new Map<string, number>(
     Array.from(BUILTIN_NUMBER_FORMATS, ([id, code]) => [code, id]),
@@ -198,7 +198,7 @@ function buildFormatPlan(sheets: readonly ContentSheet[]): FormatPlan {
 
 // --- Cell decoration: the workbook-wide colour table, and the (format, decoration) -> XF-index interning that carries it ---
 
-interface PalettePlan {
+export interface PalettePlan {
   /** The workbook's own custom colour table (56 entries, icv 8 first), or undefined when every distinct decoration colour the workbook's cells use already matches the fixed default table -- in which case no Palette record is needed at all, and icvOf resolves every colour straight through that default table. */
   readonly paletteColors: readonly Color[] | undefined;
   /** The icv (7-bit colour-table index) a decoration colour resolves to -- into `paletteColors` when defined, into the fixed default table otherwise. Every colour this is called with must already have been registered during the workbook-wide colour scan below. */
@@ -206,7 +206,7 @@ interface PalettePlan {
 }
 
 /** Scans every sheet's cells once for the distinct fill/border colours the workbook actually uses (background, and each present border side's own colour), then decides whether they all already have a home in the fixed default table (no Palette record needed) or whether at least one genuinely custom colour forces a real one -- in which case every distinct colour, not just the non-default ones, is allocated its own dedicated slot, so the whole 56-entry table is self-consistent and every reference resolves through it rather than a mix of "the file's own table" and "the implicit default". */
-function buildPalettePlan(sheets: readonly ContentSheet[]): PalettePlan {
+export function buildPalettePlan(sheets: readonly ContentSheet[]): PalettePlan {
   const colorByHex = new Map<string, Color>();
   const record = (color: Color | undefined): void => {
     if (color === undefined) {
@@ -230,8 +230,8 @@ function buildPalettePlan(sheets: readonly ContentSheet[]): PalettePlan {
   };
 
   for (const sheet of sheets) {
-    // Only cells that actually become records, so the scan can never allocate a palette slot to a colour the XF pass below then never writes -- see written-cells.ts on why every pass shares one predicate.
-    for (const cell of sheet.cells.filter(writesCellRecord)) {
+    // No writesCellRecord filter here, unlike the format/font scans below: every field this loop reads (background, a differing font's own colour, a present border side's colour) is also one of cellCarriesFormatting's own checks, so a cell this loop would register a colour from is already a cell writesCellRecord counts as formatted and therefore written -- filtering first can never change which colours this scan sees, only cost an extra pass to compute the identical answer.
+    for (const cell of sheet.cells) {
       recordFill(cell.background);
       record(cell.font?.color);
       record(cell.borders?.left?.color);
@@ -407,7 +407,7 @@ function signatureOfCellXf(
   return signature;
 }
 
-interface FontPlan {
+export interface FontPlan {
   /** The workbook's font table in write order: entry 0 is the Normal font, every later entry one distinct cell font, exactly as globals-writer.ts writes the records. */
   readonly fontEntries: readonly XfFontFields[];
   /** The font-table index a cell's own font resolves to -- 0 (the Normal font) for a cell stating none, so the index this returns and the font-entry interning above can never disagree about what "no font" means. */
@@ -426,7 +426,7 @@ function signatureOfFont(fields: XfFontFields): string {
 /**
  * Scans every sheet's cells once, interning each distinct cell font into its own font-table entry: the Normal font is always entry 0 (every style XF and the implicit General cell XF reference it, whether or not any cell states a font of its own), and each distinct ContentFont the workbook's cells resolve to mints one further entry the first time it is seen. A ContentFont that normalises back to the Normal font's own fields -- absent, empty, or restating only default values -- resolves to entry 0 and mints nothing, the write-side mirror of the reader's own diff against entry 0.
  */
-function buildFontPlan(
+export function buildFontPlan(
   sheets: readonly ContentSheet[],
   palettePlan: PalettePlan,
 ): FontPlan {
@@ -438,8 +438,8 @@ function buildFontPlan(
     xfFontFieldsOf(cell.font, palettePlan.icvOf);
 
   for (const sheet of sheets) {
-    // The same predicate every other workbook-wide pass applies, so a font is never interned for a cell that then writes no record naming it.
-    for (const cell of sheet.cells.filter(writesCellRecord)) {
+    // No writesCellRecord filter here: cellFontDiffersFromNormal (cellCarriesFormatting's own font check) diffs a font against exactly the same fields xfFontFieldsOf resolves, so a font this loop would ever intern as a NEW entry already makes its own cell one writesCellRecord counts as formatted and therefore written. A font that resolves to NORMAL_FONT_FIELDS' own signature (an absent font, or one restating only default values) is already registered at index 0 before the loop starts, so scanning a filtered-out cell's font mints nothing new either way.
+    for (const cell of sheet.cells) {
       const fields = fieldsOf(cell);
       const signature = signatureOfFont(fields);
       if (indexBySignature.has(signature)) {
@@ -464,7 +464,7 @@ function buildFontPlan(
   };
 }
 
-interface CellXfPlan {
+export interface CellXfPlan {
   readonly cellXfEntries: readonly CellXfPlanEntry[];
   readonly xfIndexForCell: (cell: ContentSheetCell) => number;
 }
@@ -474,7 +474,7 @@ interface CellXfPlan {
  *
  * The returned xfIndexForCell only ever LOOKS UP -- it cannot mint an entry, and refuses a signature this scan never saw. buildWorkbookGlobals is handed cellXfEntries before any sheet's records are built, so an entry minted later than this scan would be one no XF record was written for, and the cell record naming its index would point past the end of the workbook's XF table. Nothing about the resulting bytes says so: a reader resolves that index to whatever XF happens to sit there, or to none, and the cell's format is silently wrong either way. Refusing the lookup is the only place that divergence can still be caught.
  */
-function buildCellXfPlan(
+export function buildCellXfPlan(
   sheets: readonly ContentSheet[],
   formatPlan: FormatPlan,
   palettePlan: PalettePlan,
@@ -543,14 +543,14 @@ function buildCellXfPlan(
   };
 }
 
-interface SstPlan {
+export interface SstPlan {
   readonly strings: readonly string[];
   readonly totalCount: number;
   readonly indexOf: (text: string) => number;
 }
 
 /** Scans every sheet's string-kind cells once, in sheet then cell order, assigning each distinct value the shared string table index every LabelSst cell referencing it uses. */
-function buildSstPlan(sheets: readonly ContentSheet[]): SstPlan {
+export function buildSstPlan(sheets: readonly ContentSheet[]): SstPlan {
   const indexOf = new Map<string, number>();
   const strings: string[] = [];
   let totalCount = 0;
@@ -623,7 +623,7 @@ function concatBytes(
   return out;
 }
 
-interface WorkbookStreamBuild {
+export interface WorkbookStreamBuild {
   readonly bytes: Uint8Array<ArrayBuffer>;
   /** The Embedding Storage streams (drawing-writer.ts's own MBD-named Package streams, [MS-XLS] 2.1.7) an embedded OLE object needs beside the Workbook stream in the outer compound file -- empty when the workbook carries none. */
   readonly embeddingStreams: readonly {
@@ -633,7 +633,9 @@ interface WorkbookStreamBuild {
 }
 
 /** Builds the [MS-XLS] Workbook stream: the globals substream followed by one worksheet substream per sheet, with every BoundSheet8's own lbPlyPos patched to the real byte offset its sheet's substream landed at. */
-function buildWorkbookStream(content: XlsContentDocument): WorkbookStreamBuild {
+export function buildWorkbookStream(
+  content: XlsContentDocument,
+): WorkbookStreamBuild {
   if (content.sheets.length === 0) {
     throw new BiffWriteError(
       "a .xls workbook must contain at least one sheet ([MS-XLS] 2.1.7.20.3's own BUNDLESHEET production requires 1*BoundSheet8), but the document being written has none",
@@ -689,11 +691,11 @@ function buildWorkbookStream(content: XlsContentDocument): WorkbookStreamBuild {
     offset += stream.length;
   }
 
-  const globalsBytes = globals.bytes.slice();
-  patchBoundSheetOffsets(globalsBytes, globals.lbPlyPosOffsets, sheetOffsets);
+  // No defensive copy before patching in place: concatRecords (buildWorkbookGlobals's own final step) always allocates a fresh Uint8Array regardless of piece count, so globals.bytes is never a reference to any other array this module -- or globals-writer.ts's own caller -- could observe, and nothing reads globals.bytes again after this point.
+  patchBoundSheetOffsets(globals.bytes, globals.lbPlyPosOffsets, sheetOffsets);
 
   return {
-    bytes: concatBytes([globalsBytes, ...sheetStreams]),
+    bytes: concatBytes([globals.bytes, ...sheetStreams]),
     embeddingStreams: drawingPlan.embeddingStreams,
   };
 }
