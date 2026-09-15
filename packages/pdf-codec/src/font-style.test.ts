@@ -6,6 +6,20 @@ describe("styleFromBaseFontName", () => {
     expect(styleFromBaseFontName("ABCDEF+Arial").baseFamily).toBe("Arial");
   });
 
+  it("does not strip a subset-tag-shaped substring that isn't anchored at the very start of the name", () => {
+    // The subset tag marker is only ever the name's own first six characters (ISO 32000-1 9.6.4); a "letters+" run appearing later in the name is just part of the family name and must survive untouched.
+    expect(styleFromBaseFontName("Foo-ABCDEF+Bar").baseFamily).toBe(
+      "Foo-ABCDEF+Bar",
+    );
+  });
+
+  it("does not strip a shorter or longer run of uppercase letters before the '+' as if it were a six-letter subset tag", () => {
+    expect(styleFromBaseFontName("A+Arial").baseFamily).toBe("A+Arial");
+    expect(styleFromBaseFontName("ABCDEFG+Arial").baseFamily).toBe(
+      "ABCDEFG+Arial",
+    );
+  });
+
   it("detects bold/italic from a hyphenated suffix and strips it from the family", () => {
     expect(styleFromBaseFontName("Arial-BoldItalic")).toEqual({
       baseFamily: "Arial",
@@ -41,6 +55,14 @@ describe("styleFromBaseFontName", () => {
     expect(styleFromBaseFontName("Helvetica-Oblique")).toEqual({
       baseFamily: "Helvetica",
       bold: false,
+      italic: true,
+    });
+  });
+
+  it('strips a hyphenated "BoldOblique" suffix from the family, distinctly from the shorter "Bold"/"Oblique" suffixes it contains', () => {
+    expect(styleFromBaseFontName("Helvetica-BoldOblique")).toEqual({
+      baseFamily: "Helvetica",
+      bold: true,
       italic: true,
     });
   });
