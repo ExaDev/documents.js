@@ -1660,6 +1660,35 @@ describe("lists", () => {
     expect(markdown.split("\n")).toContain("");
   });
 
+  it("pops a SIBLING item's own membership off openMemberships before pushing the next one at the SAME level, not just a genuinely deeper one -- a stale sibling entry left on the stack could wrongly absorb a later construct that only carries THAT earlier sibling's own itemId", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "i1" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "i2" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i2" },
+        },
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division", name: "d1" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "carries i1" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        { kind: "constructEnd" },
+      ]),
+    );
+    // i1's own membership must already be off the stack once i2 (its sibling at the SAME level) is pushed -- so this construct, which carries only i1's itemId, cannot still be absorbed into the (no-longer-open) i1 item; it fractures out and re-enters as its OWN fresh list region instead (its wrapped paragraph still carries itemId i1, but as a new region, not a continuation of the item above).
+    expect(markdown).toBe("- i1\n- i2\n\n- carries i1");
+  });
+
   it("finds the REAL last styleId of a NESTED sub-list's own last block, not just undefined, so the outer item's own resuming block reflects what that sub-list actually ends on", () => {
     const markdown = emitMarkdown(
       doc([
