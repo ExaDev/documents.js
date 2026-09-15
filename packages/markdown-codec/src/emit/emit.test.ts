@@ -1660,6 +1660,31 @@ describe("lists", () => {
     expect(markdown.split("\n")).toContain("");
   });
 
+  it("finds the REAL last styleId of a NESTED sub-list's own last block, not just undefined, so the outer item's own resuming block reflects what that sub-list actually ends on", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "b" }],
+          styleId: "CodeBlock",
+          list: { numId: "md1:bullet", level: 1, itemId: "i2" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "z" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+      ]),
+    );
+    // No forced blank line before "z": the nested sub-list's own last (and only) item is a CodeBlock, which terminates cleanly -- reading segment.blocks[segment.blocks.length - 1] must actually find that item, not silently report undefined (which would wrongly force a blank line here).
+    expect(markdown).toBe("- a\n  - ```\n    b\n    ```\n  z");
+  });
+
   it("finds the REAL last styleId inside a construct that resumes a list item, not just undefined, so a following block's own blank-line decision reflects what that construct actually ends on", () => {
     const markdown = emitMarkdown(
       doc([
