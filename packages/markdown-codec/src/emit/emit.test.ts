@@ -3813,6 +3813,57 @@ describe("renderConstruct's own unrepresentable shapes", () => {
     // Exactly one level of '> ' from the division itself -- NOT '> > x', which double-counting the paragraph's own indentLeftPt (72pt, two quote levels' worth) on top of the division's own wrapping would produce.
     expect(markdown).toBe("> x");
   });
+
+  it("restores divisionDepth to its own PRIOR value once a division closes, rather than leaking an elevated depth into whatever renders after it", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division", name: "d1" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          styleId: "Quote",
+          indentLeftPt: 36,
+        },
+        { kind: "constructEnd" },
+        {
+          kind: "paragraph",
+          runs: [{ text: "y" }],
+          styleId: "Quote",
+          indentLeftPt: 36,
+        },
+      ]),
+    );
+    // A STANDALONE paragraph after the division closes must recover its own '> ' from indentLeftPt alone -- a decrement that failed to restore divisionDepth to 0 would leave this second paragraph's own quote prefix wrongly suppressed, rendering plain "y" instead of "> y".
+    expect(markdown).toBe("> x\n\n> y");
+  });
+
+  it("still re-embeds a data: URI destination for a link construct wrapping exactly one image when images is left at its own default (true), rather than always falling back to the no-bytes rendering", () => {
+    const dataUri = "data:image/png;base64,AAAA";
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "constructStart",
+          descriptor: {
+            kind: "link",
+            target: { kind: "external", uri: dataUri },
+          },
+        },
+        {
+          kind: "image",
+          format: "png",
+          base64: "AAAA",
+          widthPt: 1,
+          heightPt: 1,
+          altText: "alt",
+        },
+        { kind: "constructEnd" },
+      ]),
+    );
+    expect(markdown).toBe(`![alt](${dataUri})`);
+  });
 });
 
 describe("emitMarkdown's own top-level assembly", () => {
