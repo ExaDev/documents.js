@@ -163,21 +163,33 @@ const SHEET_QUALIFIED_REFERENCE_RE =
 const CELL_REFERENCE_NAME_RE =
   /^\$?[A-Za-z]{1,3}\$?[0-9]{1,5}(:\$?[A-Za-z]{1,3}\$?[0-9]{1,5})?$/;
 
+/**
+ * Narrows a regex capture group's `string | undefined` type -- every array index this project's own `noUncheckedIndexedAccess` sees this way, capturing groups included -- to the plain `string` it always genuinely holds once this module's own callers reach it. Both regexes below capture every one of their own groups unconditionally: none is wrapped in a group-level `?` (only the `$` markers' own inner content is optional, matching an empty string rather than leaving the surrounding group unmatched), and `String.prototype.split` always returns at least one element even for the empty string. So this function's own `undefined` branch is never reachable from any of this module's actual call sites -- exported so that fact is directly testable rather than trusted to a comment alone.
+ */
+export function requiredCaptureGroup(group: string | undefined): string {
+  if (group === undefined) {
+    throw new BiffWriteError(
+      "internal error: a regex capture group this module's own callers already proved present was undefined",
+    );
+  }
+  return group;
+}
+
 function parseCorner(text: string): ReferenceCorner | undefined {
   const match = REFERENCE_CORNER_RE.exec(text);
   if (match === null) {
     return undefined;
   }
-  const column = columnLettersToIndex(match[2] ?? "");
-  const row = Number.parseInt(match[4] ?? "", 10) - 1;
+  const column = columnLettersToIndex(requiredCaptureGroup(match[2]));
+  const row = Number.parseInt(requiredCaptureGroup(match[4]), 10) - 1;
   if (column === undefined || row < 0) {
     return undefined;
   }
   return {
     row,
     column,
-    columnAbsolute: (match[1] ?? "") === "$",
-    rowAbsolute: (match[3] ?? "") === "$",
+    columnAbsolute: match[1] === "$",
+    rowAbsolute: match[3] === "$",
   };
 }
 
@@ -227,11 +239,13 @@ export function definedNameEntriesFor(
   sheets: readonly { readonly name: string }[],
 ): DefinedNamePlanEntry[] {
   return names.map((defined) => {
-    const builtinName = defined.name.startsWith(XLNM_PREFIX)
-      ? builtinIndexOf(defined.name)
-      : undefined;
-    if (builtinName === undefined) {
+    // A name resolves to exactly one of the two branches below, not a builtin lookup followed by a separate "was it a builtin" re-check: every BUILTIN_NAME_SPELLINGS entry is itself already exempt from validateUserName's own length/cell-reference-shape rules by construction, so re-deriving "is this a builtin" from builtinName's own value would only restate what the branch already knows.
+    let builtinName: number | undefined;
+    if (defined.name.startsWith(XLNM_PREFIX)) {
+      builtinName = builtinIndexOf(defined.name);
+    } else {
       validateUserName(defined.name);
+      builtinName = undefined;
     }
     return {
       name: defined.name,
@@ -303,16 +317,16 @@ function compileRefersTo(
     );
   }
   // The sheet-name prefix ends at the LAST "!": Excel sheet names cannot contain "!" (a reserved formula character), so this split is unambiguous without parsing the quoting, the same rule ooxml.js's own stripSheetPrefix applies.
-  const sheetName = unquoteSheetLabel(match[1] ?? "");
+  const sheetName = unquoteSheetLabel(requiredCaptureGroup(match[1]));
   const sheetIndex = sheets.findIndex((sheet) => sheet.name === sheetName);
   if (sheetIndex === -1) {
     throw new BiffWriteError(
       `xls-codec cannot write the defined name ${JSON.stringify(defined.name)}: its refersTo names the sheet ${JSON.stringify(sheetName)}, which the document's own sheets do not carry`,
     );
   }
-  const referenceText = match[2] ?? "";
+  const referenceText = requiredCaptureGroup(match[2]);
   const [firstText, lastText] = referenceText.split(":");
-  const first = parseCorner(firstText ?? "");
+  const first = parseCorner(requiredCaptureGroup(firstText));
   const last = lastText === undefined ? first : parseCorner(lastText);
   if (first === undefined || last === undefined) {
     throw new BiffWriteError(
