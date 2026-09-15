@@ -1621,14 +1621,25 @@ describe("writePdf: the tagged structure tree (#967)", () => {
           id: "e-root",
           type: "Document",
           children: [
-            { id: "e-h1", type: "H1", title: "The heading", children: [] },
+            {
+              id: "e-h1",
+              type: "H1",
+              title: "The heading",
+              language: "en-GB",
+              children: [],
+            },
             { id: "e-p", type: "P", alt: "a paragraph", children: [] },
           ],
         },
       ],
     };
+    const bytes = writePdf(doc, { compress: false });
+    const rawText = new TextDecoder("latin1").decode(bytes);
+    expect(rawText).toContain("/Type /StructElem");
+    expect(rawText).toContain("/P ");
+    expect(rawText).toContain("/Lang");
     const { readPdf } = await import("./read");
-    const reread = readPdf(writePdf(doc));
+    const reread = readPdf(bytes);
     const tree = reread.structure!;
     // Element ids are reader-minted in document order, so identity is positional: the first H1 under the root owns the heading item.
     expect(tree).toEqual([
