@@ -394,3 +394,73 @@ describe('ParagraphDetailScreen "m" formula insertion (docx paragraph-scoped)', 
     expect(lastFrame()).not.toContain("Insert formula");
   });
 });
+
+describe("ParagraphDetailScreen's own fallback renders", () => {
+  it("reports being rendered outside a paragraphDetail screen when mounted before any screen push", () => {
+    // No CREATE_DOCUMENT, no PUSH_SCREEN at all -- the app's own initial screen is never paragraphDetail, so mounting this screen component directly (as app.tsx's real router never would on its own) must hit its own outside-screen guard rather than crash or render nothing.
+    const { lastFrame } = render(
+      <AppStateProvider>
+        <ParagraphDetailScreen />
+      </AppStateProvider>,
+    );
+    expect(lastFrame()).toContain(
+      "ParagraphDetailScreen rendered outside a paragraphDetail screen",
+    );
+  });
+
+  it("reports no open document when pushed to paragraphDetail with nothing open", async () => {
+    function PushWithNoDocument(): ReactElement | null {
+      const dispatch = useAppDispatch();
+      useEffect(() => {
+        dispatch({
+          type: "PUSH_SCREEN",
+          screen: { kind: "paragraphDetail", blockIndex: 0 },
+        });
+      }, [dispatch]);
+      return <ParagraphDetailScreen />;
+    }
+    const { lastFrame } = render(
+      <AppStateProvider>
+        <PushWithNoDocument />
+      </AppStateProvider>,
+    );
+    await vi.waitFor(() => {
+      expect(lastFrame()).toContain(
+        "ParagraphDetailScreen requires an open docx, odt or markdown document",
+      );
+    });
+  });
+
+  it.each(["docx", "odt"] as const)(
+    "reports no paragraph at the given index once blockIndex runs past the document's own paragraph count (%s)",
+    async (format) => {
+      function PushWithBadIndex(): ReactElement | null {
+        const state = useAppState();
+        const dispatch = useAppDispatch();
+        useEffect(() => {
+          dispatch({ type: "CREATE_DOCUMENT", format });
+        }, [dispatch]);
+        useEffect(() => {
+          if (state.openDocument?.format === format) {
+            dispatch({
+              type: "PUSH_SCREEN",
+              screen: { kind: "paragraphDetail", blockIndex: 99 },
+            });
+          }
+        }, [state.openDocument, dispatch]);
+        if (state.openDocument?.format !== format) {
+          return null;
+        }
+        return <ParagraphDetailScreen />;
+      }
+      const { lastFrame } = render(
+        <AppStateProvider>
+          <PushWithBadIndex />
+        </AppStateProvider>,
+      );
+      await vi.waitFor(() => {
+        expect(lastFrame()).toContain("There is no paragraph at index 99");
+      });
+    },
+  );
+});
