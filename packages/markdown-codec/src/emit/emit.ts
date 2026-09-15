@@ -856,11 +856,10 @@ function renderListRegion(
     const info = listInfoFor(numId, context);
     const loose = info?.loose === true;
     const type = info?.type ?? "bullet";
+    // A depth-only membership (numId undefined) always resolves through listInfoFor's OWN undefined-numId branch, which never returns real ListNumIdInfo -- so `type` above is always its own "bullet" default here, and `type === "ordered"` can never be true in this branch specifically; only the numId-carrying side ever sees a genuinely ordered type.
     const glyph =
       numId === undefined
-        ? type === "ordered"
-          ? context.orderedDelimiter
-          : context.bulletMarker
+        ? context.bulletMarker
         : resolveListGlyph(numId, type, previousSibling, context);
     if (numId !== undefined) {
       previousSibling = { numId, type, glyph };
