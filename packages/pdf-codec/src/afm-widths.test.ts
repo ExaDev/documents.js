@@ -83,4 +83,18 @@ describe("widthOfCode", () => {
   it("throws for a code with no WinAnsi glyph mapping", () => {
     expect(() => widthOfCode("Helvetica", 1)).toThrow(/WinAnsi/);
   });
+
+  it("throws naming the face, glyph, and code when a face's own AFM table is genuinely missing a glyph its widths map should carry", () => {
+    // Every real standard-14 AFM defines a width for every WinAnsi-mapped glyph (proved by the spot-check above), so this path is unreachable through the public API with real data -- it exists as a caller-invariant guard against a future data gap, per the function's own doc comment. STANDARD_METRICS is exported specifically so a test can reach behind that invariant and exercise the guard directly, deleting one real entry and restoring it immediately after. The cast undoes only this module's own `ReadonlyMap` return type, which exists to stop ordinary callers mutating shared metrics -- the backing object is a genuine mutable Map, and this test's whole point is temporarily mutating it.
+    const widths = STANDARD_METRICS.Helvetica.widths as Map<string, number>;
+    const original = widths.get("A");
+    widths.delete("A");
+    try {
+      expect(() => widthOfCode("Helvetica", 65)).toThrow(
+        "Helvetica has no AFM width for glyph 'A' (code 65)",
+      );
+    } finally {
+      widths.set("A", original!);
+    }
+  });
 });
