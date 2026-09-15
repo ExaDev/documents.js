@@ -107,8 +107,6 @@ export function readChartSeries(
           addCacheEntry(cache, currentCacheRole, record);
         }
         break;
-      default:
-        break;
     }
   }
 
@@ -277,19 +275,12 @@ function resolvePoints(
   return points;
 }
 
-/** The Nth cell of a range, in reading order -- a single row walks across its columns, a single column (the common vertical-series case) walks down its rows, and a genuine rectangular box walks row-major. */
+/** The Nth cell of a range, in reading order -- row-major: a single row walks across its columns, a single column (the common vertical-series case) walks down its rows, and a genuine rectangular box walks a full row before moving to the next, all through the identical formula below. A single-row or single-column range needs no case of its own: with width the range's own total column count, index (always < the range's own cell count for a well-formed chart) never reaches a second row when the range is one row tall (Math.floor(index / width) stays 0 throughout, since index < width), and never advances past column zero when the range is one column wide (index % 1 is always 0) -- the general formula already reduces to exactly the row-only or column-only walk each of those shapes needs. */
 function pointInRange(
   range: OwnSheetRange,
   index: number,
 ): { row: number; column: number } {
-  const height = range.endRow - range.startRow + 1;
   const width = range.endColumn - range.startColumn + 1;
-  if (height <= 1) {
-    return { row: range.startRow, column: range.startColumn + index };
-  }
-  if (width <= 1) {
-    return { row: range.startRow + index, column: range.startColumn };
-  }
   return {
     row: range.startRow + Math.floor(index / width),
     column: range.startColumn + (index % width),
