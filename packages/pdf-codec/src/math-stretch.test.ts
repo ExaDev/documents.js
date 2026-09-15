@@ -420,6 +420,20 @@ describe("assembleStretchyGlyph on constructions the real font does not contain"
     ).toBeUndefined();
   });
 
+  it("returns undefined for an assembly with no parts at all, rather than a hollow zero-size construction", () => {
+    const construction: MathGlyphConstruction = {
+      variants: [],
+      assembly: { italicsCorrection: 0, parts: [] },
+    };
+    expect(
+      assembleStretchyGlyph(construction, {
+        axis: "vertical",
+        targetSize: 1000,
+        minConnectorOverlap: 100,
+      }),
+    ).toBeUndefined();
+  });
+
   it("falls back to the largest variant when the target is unreachable and there is no assembly", () => {
     const construction: MathGlyphConstruction = {
       variants: [
