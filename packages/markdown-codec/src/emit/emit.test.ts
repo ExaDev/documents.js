@@ -3367,6 +3367,48 @@ describe("link and image titles (the `link` construct annotation)", () => {
       "a paragraph's run-level construct extent ends before it starts (constructs entry 0); a run extent must name real runs in 0..runs.length",
     );
   });
+
+  it("also throws for an invalid run-level construct extent buried inside a TABLE CELL's own paragraph, not just a top-level one -- validateRunConstructExtents must actually recurse into every row's every cell", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [
+                {
+                  kind: "paragraph",
+                  runs: [{ text: "text", hyperlink: "/u" }],
+                  constructs: [
+                    {
+                      descriptor: {
+                        kind: "link",
+                        target: { kind: "external", uri: "/u" },
+                        title: "t",
+                      },
+                      startRun: 0,
+                      endRun: 5,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    let inCell: unknown;
+    try {
+      emitMarkdown(doc([table]));
+    } catch (error) {
+      inCell = error;
+    }
+    expect(inCell).toBeInstanceOf(MarkdownInvalidRunConstructExtentError);
+    expect((inCell as MarkdownInvalidRunConstructExtentError).faultKind).toBe(
+      "beyondRuns",
+    );
+  });
 });
 
 describe("nested style ordering (ExaDev/markdown-codec#957)", () => {
