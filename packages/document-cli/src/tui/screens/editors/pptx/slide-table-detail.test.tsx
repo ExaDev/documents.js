@@ -165,6 +165,86 @@ function renderAtSlideDetail(
   );
 }
 
+// Pushes straight to slideTableDetail with the given tableIndex, skipping slide-detail's own Enter-key navigation -- the only way to reach an OUT-OF-RANGE tableIndex, since the real UI never offers one that doesn't already correspond to a live table.
+function OpenAtSlideTableDetail({
+  format,
+  bytes,
+  tableIndex,
+}: {
+  readonly format: "pptx" | "odp";
+  readonly bytes: Uint8Array<ArrayBuffer>;
+  readonly tableIndex: number;
+}): ReactElement | undefined {
+  const dispatch = useAppDispatch();
+  useEffect(() => {
+    if (format === "pptx") {
+      dispatch({
+        type: "OPEN_FILE_SUCCESS",
+        path: "test.pptx",
+        doc: { format: "pptx", editor: openPptx(bytes), path: "test.pptx" },
+      });
+    } else {
+      dispatch({
+        type: "OPEN_FILE_SUCCESS",
+        path: "test.odp",
+        doc: { format: "odp", editor: openOdp(bytes), path: "test.odp" },
+      });
+    }
+    dispatch({
+      type: "PUSH_SCREEN",
+      screen: { kind: "slideDetail", slideIndex: 0 },
+    });
+    dispatch({
+      type: "PUSH_SCREEN",
+      screen: { kind: "slideTableDetail", slideIndex: 0, tableIndex },
+    });
+  }, [format, bytes, tableIndex, dispatch]);
+  return undefined;
+}
+
+function HarnessAtTableIndex({
+  format,
+  bytes,
+  tableIndex,
+}: {
+  readonly format: "pptx" | "odp";
+  readonly bytes: Uint8Array<ArrayBuffer>;
+  readonly tableIndex: number;
+}): ReactElement {
+  const state = useAppState();
+  if (state.openDocument === undefined) {
+    return (
+      <OpenAtSlideTableDetail
+        format={format}
+        bytes={bytes}
+        tableIndex={tableIndex}
+      />
+    );
+  }
+  return (
+    <Box flexDirection="column">
+      <SlideTableRouter />
+      <DocumentProbe format={format} />
+    </Box>
+  );
+}
+
+function renderAtTableIndex(
+  format: "pptx" | "odp",
+  bytes: Uint8Array<ArrayBuffer>,
+  tableIndex: number,
+): ReturnType<typeof render> {
+  return render(
+    <AppStateProvider>
+      <HarnessAtTableIndex
+        format={format}
+        bytes={bytes}
+        tableIndex={tableIndex}
+      />
+    </AppStateProvider>,
+  );
+}
+
 describe.each(["pptx", "odp"] as const)(
   "SlideTableDetailScreen on %s",
   (format) => {
@@ -216,6 +296,100 @@ describe.each(["pptx", "odp"] as const)(
       const cancelled = await waitForText(lastFrame, "anchor a merge");
       expect(cancelled).toContain("probe:anchorColSpan=1 anchorRowSpan=1");
       expect(cancelled).toContain("table 1 (3x3)");
+
+      await sendKey(stdin, ESCAPE_KEY);
+      await waitForText(lastFrame, "Tables (1)");
+    });
+
+    it("reports the table as gone when tableIndex no longer resolves to a real table, and Esc still returns to slide-detail", async () => {
+      const bytes =
+        format === "pptx"
+          ? buildPptxTableDeckBytes()
+          : buildOdpTableDeckBytes();
+      const { lastFrame, stdin } = renderAtTableIndex(format, bytes, 5);
+      const gone = await waitForText(lastFrame, "no longer exists");
+      expect(gone).toContain("Slide 1, table 6");
+
+      await sendKey(stdin, ESCAPE_KEY);
+      await waitForText(lastFrame, "Tables (1)");
+    });
+
+    it("moves the cursor with individual h/k/j/l keys and clamps at every edge of the grid", async () => {
+      const bytes =
+        format === "pptx"
+          ? buildPptxTableDeckBytes()
+          : buildOdpTableDeckBytes();
+      const { lastFrame, stdin } = renderAtSlideDetail(format, bytes);
+      await waitForText(lastFrame, "Tables (1)");
+      await sendKey(stdin, ENTER_KEY);
+      await waitForText(lastFrame, "table 1 (3x3)");
+
+      // Up/left from the starting (0,0) cell must clamp at zero rather than go negative.
+      await sendKey(stdin, "k");
+      await sendKey(stdin, "h");
+      await sendKey(stdin, "m");
+      const stillAtOrigin = await waitForText(lastFrame, "m/Enter to merge");
+      expect(stillAtOrigin).toContain("table 1 (3x3)");
+      await sendKey(stdin, ESCAPE_KEY);
+      await waitForText(lastFrame, "anchor a merge");
+
+      // Down/right past the last row/column must clamp at the last index (row/column 2 of a 3x3 table), not run off the end.
+      for (let i = 0; i < 5; i += 1) {
+        await sendKey(stdin, "j");
+      }
+      for (let i = 0; i < 5; i += 1) {
+        await sendKey(stdin, "l");
+      }
+      await sendKey(stdin, "m");
+      const atBottomRight = await waitForText(lastFrame, "m/Enter to merge");
+      expect(atBottomRight).toContain("table 1 (3x3)");
+
+      // Committing the merge at the clamped bottom-right cell against itself as anchor is a 1x1 merge (a same-cell no-op) -- proves the clamp landed on the last real cell rather than an out-of-bounds one, since a stale unclamped index would target a cell resolveSlideTable's own bounds check would reject.
+      await sendKey(stdin, "m");
+      const merged = await waitForText(
+        lastFrame,
+        "probe:anchorColSpan=1 anchorRowSpan=1",
+      );
+      expect(merged).toContain("anchor a merge");
+    });
+
+    it("commits a pending merge with Enter as well as 'm'", async () => {
+      const bytes =
+        format === "pptx"
+          ? buildPptxTableDeckBytes()
+          : buildOdpTableDeckBytes();
+      const { lastFrame, stdin } = renderAtSlideDetail(format, bytes);
+      await waitForText(lastFrame, "Tables (1)");
+      await sendKey(stdin, ENTER_KEY);
+      await waitForText(lastFrame, "table 1 (3x3)");
+
+      await sendKey(stdin, "m");
+      await waitForText(lastFrame, "m/Enter to merge");
+      await sendKey(stdin, "l");
+      await sendKey(stdin, "j");
+      await sendKey(stdin, ENTER_KEY);
+
+      const merged = await waitForText(
+        lastFrame,
+        "probe:anchorColSpan=2 anchorRowSpan=2",
+      );
+      expect(merged).toContain("anchor a merge");
+    });
+
+    it("ignores every navigation and merge key once the table itself is gone, but Esc still works", async () => {
+      const bytes =
+        format === "pptx"
+          ? buildPptxTableDeckBytes()
+          : buildOdpTableDeckBytes();
+      const { lastFrame, stdin } = renderAtTableIndex(format, bytes, 5);
+      const gone = await waitForText(lastFrame, "no longer exists");
+
+      await sendKey(stdin, "j");
+      await sendKey(stdin, "l");
+      await sendKey(stdin, "m");
+      await sendKey(stdin, ENTER_KEY);
+      await settle();
+      expect(lastFrame()).toBe(gone);
 
       await sendKey(stdin, ESCAPE_KEY);
       await waitForText(lastFrame, "Tables (1)");
