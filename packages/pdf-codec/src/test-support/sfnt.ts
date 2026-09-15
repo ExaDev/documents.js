@@ -656,8 +656,8 @@ export function buildGsubTable(
     featureTableAt += featureTables[index]!.length;
   });
   const lookupTables = lookups.map((lookup) => {
-    const markFilteringSetWidth =
-      lookup.flag !== undefined && (lookup.flag & 0x0010) !== 0 ? 2 : 0;
+    // No separate "is flag even defined" check is needed: JS's bitwise `&` coerces `undefined` to 0 before operating, so `undefined & 0x0010` is already 0 -- exactly the same as explicitly treating an absent flag as clearing every bit.
+    const markFilteringSetWidth = ((lookup.flag ?? 0) & 0x0010) !== 0 ? 2 : 0;
     // The Lookup table's own layout: a 6-byte header, the subtable offset array, then — only when the flag selects one — the trailing markFilteringSet index the flag's set number refers to.
     let at = 6 + lookup.subtables.length * 2 + markFilteringSetWidth;
     const offsets = lookup.subtables.map((subtable) => {
