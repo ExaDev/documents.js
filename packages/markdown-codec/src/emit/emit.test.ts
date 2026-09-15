@@ -3332,6 +3332,37 @@ describe("link and image titles (the `link` construct annotation)", () => {
     );
   });
 
+  it("does NOT render the image-shortcut spelling for a link construct wrapping MORE than one child, even when the first of them is an image -- the mint condition is exactly one child, not merely 'starts with an image'", () => {
+    const collector = createDiagnosticCollector();
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "constructStart",
+          descriptor: {
+            kind: "link",
+            target: { kind: "external", uri: "https://example.com/a.png" },
+          },
+        },
+        {
+          kind: "image",
+          format: "png",
+          base64: "AAAA",
+          widthPt: 1,
+          heightPt: 1,
+          altText: "alt",
+        },
+        { kind: "paragraph", runs: [{ text: "caption" }] },
+        { kind: "constructEnd" },
+      ]),
+      { sink: collector.sink },
+    );
+    // The construct falls through to the generic, transparent rendering -- its own image child renders as ITSELF (a plain data: URI image, not the link-shortcut's own remote-destination spelling), and the caption follows as an ordinary paragraph.
+    expect(markdown).toBe("![alt](data:image/png;base64,AAAA)\n\ncaption");
+    expect(collector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(
+      true,
+    );
+  });
+
   it("falls back to the plain no-bytes image rendering when the construct destination is itself a data: URI and images: false asks for no bytes", () => {
     const blocks: ContentBlock[] = [
       {
