@@ -197,8 +197,8 @@ export function isoFromDttm(value: number): string | undefined {
   const day = (bits >>> DTTM_DAY_SHIFT) & DTTM_DAY_MASK;
   const month = (bits >>> DTTM_MONTH_SHIFT) & DTTM_MONTH_MASK;
   const year = ((bits >>> DTTM_YEAR_SHIFT) & DTTM_YEAR_MASK) + DTTM_YEAR_EPOCH;
-  // A zero DTTM -- day 0, month 0 -- is what a producer writes for "no time recorded", and it is not a date. Rejecting it here keeps a fabricated 1900-00-00 out of dateIso rather than letting the field claim a timestamp the document never carried.
-  if (day === 0 || month === 0 || month > 12 || day > 31) {
+  // A zero DTTM -- day 0, month 0 -- is what a producer writes for "no time recorded", and it is not a date. Rejecting it here keeps a fabricated 1900-00-00 out of dateIso rather than letting the field claim a timestamp the document never carried. No day-range upper check is needed alongside month>12: day is already masked to 0-31 by DTTM_DAY_MASK above, so it can never exceed 31 in the first place -- unlike month, whose own 4-bit mask reaches as high as 15.
+  if (day === 0 || month === 0 || month > 12) {
     return undefined;
   }
   return (
@@ -219,8 +219,9 @@ export function dttmFromIso(dateIso: string): number | undefined {
   const year = Number(match[1]) - DTTM_YEAR_EPOCH;
   const month = Number(match[2]);
   const day = Number(match[3]);
-  const hour = match[4] === undefined ? 0 : Number(match[4]);
-  const minute = match[5] === undefined ? 0 : Number(match[5]);
+  // Number(undefined) is NaN when the optional time-of-day group didn't match, and NaN & mask is 0 by ToInt32 coercion -- the same "default to 0" a defined-check would spell out, so the bit-packing below already gives an absent hour/minute the right value with no explicit fallback needed.
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
   if (year < 0 || year > DTTM_YEAR_MASK) {
     return undefined;
   }
@@ -313,17 +314,13 @@ export function formFieldContentControl(
     descriptor.checked = (current ?? formField.defaultResultIndex ?? 0) !== 0;
   } else if (controlType === "dropDown" && formField.listItems.length > 0) {
     descriptor.options = [...formField.listItems];
-    // \ffres also names a dropdown's own currently selected entry -- the same field FFDataBits gives the checkbox's state, read here under iTypeDrop's own "zero-based index into \ffl" meaning instead. FFDataBits's reserved 25 sentinel (see FORM_FIELD_RESULT_UNDEFINED above) means "selection is undefined" for iTypeDrop exactly as it means "checkbox state is undefined" for iTypeChck, so the identical sentinel-then-default fallback the checkbox branch above applies to its own `current` value applies here too: a sentinel or absent \ffres falls through to \ffdefres, the field's own recorded default selection. Confirmed against a real PHPRtfLite fixture, which always emits the sentinel \ffres25 alongside a meaningful \ffdefres -- without this fallback, a real-world dropdown's selection is silently lost even though \ffdefres names it. Bounds-checked against the list actually read, since an out-of-range index names no real entry.
+    // \ffres also names a dropdown's own currently selected entry -- the same field FFDataBits gives the checkbox's state, read here under iTypeDrop's own "zero-based index into \ffl" meaning instead. FFDataBits's reserved 25 sentinel (see FORM_FIELD_RESULT_UNDEFINED above) means "selection is undefined" for iTypeDrop exactly as it means "checkbox state is undefined" for iTypeChck, so the identical sentinel-then-default fallback the checkbox branch above applies to its own `current` value applies here too: a sentinel or absent \ffres falls through to \ffdefres, the field's own recorded default selection. Confirmed against a real PHPRtfLite fixture, which always emits the sentinel \ffres25 alongside a meaningful \ffdefres -- without this fallback, a real-world dropdown's selection is silently lost even though \ffdefres names it. No separate bounds check against the list actually read: a negative index or one at or past listItems.length reads back undefined from the array exactly like a genuine sparse hole inside range does, so the `selected !== undefined` check below already excludes every out-of-range index on its own.
     const current =
       formField.resultIndex === FORM_FIELD_RESULT_UNDEFINED
         ? undefined
         : formField.resultIndex;
     const selectedIndex = current ?? formField.defaultResultIndex;
-    if (
-      selectedIndex !== undefined &&
-      selectedIndex >= 0 &&
-      selectedIndex < formField.listItems.length
-    ) {
+    if (selectedIndex !== undefined) {
       const selected = formField.listItems[selectedIndex];
       if (selected !== undefined) {
         descriptor.value = selected;
@@ -342,9 +339,12 @@ export function coalesceRunConstructs(
     { descriptor: ConstructDescriptor; start: number }
   >();
   const out: RunConstructExtent[] = [];
-  const close = (key: string, end: number): void => {
-    const entry = open.get(key);
-    if (entry === undefined) return;
+  // Takes the entry itself, not a key to re-look-up: both call sites below already hold it from iterating `open` directly, so there is no "key not found" case to guard against here -- Map.get would only ever repeat a lookup the caller has already done.
+  const close = (
+    key: string,
+    entry: { descriptor: ConstructDescriptor; start: number },
+    end: number,
+  ): void => {
     out.push({
       descriptor: entry.descriptor,
       startRun: entry.start,
@@ -356,9 +356,9 @@ export function coalesceRunConstructs(
     const present = new Map(
       descriptors.map((descriptor) => [JSON.stringify(descriptor), descriptor]),
     );
-    for (const key of [...open.keys()]) {
+    for (const [key, entry] of [...open]) {
       if (!present.has(key)) {
-        close(key, index);
+        close(key, entry, index);
       }
     }
     for (const [key, descriptor] of present) {
@@ -367,12 +367,9 @@ export function coalesceRunConstructs(
       }
     }
   }
-  for (const key of [...open.keys()]) {
-    close(key, perRun.length);
+  for (const [key, entry] of [...open]) {
+    close(key, entry, perRun.length);
   }
-  // Document order by where each extent starts, so a paragraph's constructs array reads the way the source did.
-  return out.sort(
-    (left, right) =>
-      left.startRun - right.startRun || left.endRun - right.endRun,
-  );
+  // Document order by where each extent starts, so a paragraph's constructs array reads the way the source did. No endRun tie-break is needed alongside it: every entry sharing a startRun was necessarily pushed into `out` above in ascending close-run order (the per-run loop above visits run indices strictly increasingly, closing whatever is open at each one), so Array.prototype.sort's guaranteed stability (ES2019+) already preserves that ascending order for a tied startRun with no second comparison required.
+  return out.sort((left, right) => left.startRun - right.startRun);
 }

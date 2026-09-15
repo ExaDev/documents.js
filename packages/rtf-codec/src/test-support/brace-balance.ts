@@ -10,24 +10,13 @@ function countGroupBraces(rtf: string): {
 } {
   let open = 0;
   let close = 0;
-  let index = 0;
-  while (index < rtf.length) {
-    const character = rtf[index];
-    if (character === "\\") {
-      const next = rtf[index + 1];
-      if (next === "\\" || next === "{" || next === "}") {
-        index += 2;
-        continue;
-      }
-      index += 1;
-      continue;
-    }
-    if (character === "{") {
+  // One pass, matching either a two-character escape (\\, \{, \}) or a single real brace, left to right and non-overlapping -- exactly what a character-by-character scan tracking "am I mid-escape" would do, since RTF's escapes are never longer than two characters. Only the second alternative's own match is ever compared against "{"/"}"; a matched escape pair is a two-character string that can never equal either, so it is correctly skipped without needing its own branch.
+  for (const [token] of rtf.matchAll(/\\[\\{}]|[{}]/g)) {
+    if (token === "{") {
       open += 1;
-    } else if (character === "}") {
+    } else if (token === "}") {
       close += 1;
     }
-    index += 1;
   }
   return { open, close };
 }
