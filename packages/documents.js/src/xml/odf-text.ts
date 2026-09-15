@@ -27,7 +27,8 @@ export function encodeOdfText(text: string): XmlNode[] {
   };
 
   let i = 0;
-  while (i < text.length) {
+  // i !== text.length, not i < text.length: every step below advances i by a positive integer that always lands exactly on an untouched index or on text.length itself (never past it -- the space-run lookahead's own loop is bounded the same way, see its comment), so the two conditions are behaviorally identical here. They are not equivalent as mutation targets, though: flipping a `<` to `<=` past the string's end is unobservable (an out-of-range charAt/index access yields ""/undefined either way, appending "" changes nothing), while flipping `!==` to `===` inverts the loop's own run condition entirely.
+  while (i !== text.length) {
     const ch = text.charAt(i);
     if (ch === " ") {
       let runLength = 1;
