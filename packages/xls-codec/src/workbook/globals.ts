@@ -156,8 +156,7 @@ export function readWorkbookGlobals(
         palette = readPalette(record);
         break;
       default:
-        // Every other record in the globals substream -- the window settings, the theme, the drawing group -- carries nothing this reader acts on yet.
-        break;
+      // Every other record in the globals substream -- the window settings, the theme, the drawing group -- carries nothing this reader acts on yet. No break: this is the switch's own last case, so control already leaves it here regardless.
     }
   }
 
@@ -197,7 +196,7 @@ const SUPBOOK_UNUSED_CHAR = " ";
 /**
  * One SupBook record's own resolution, keyed by kind ([MS-XLS] 2.4.271's cch/virtPath table) -- see readSupBook. "self" needs no further data, since the workbook's own BoundSheet8 list already resolves it elsewhere. "external-workbook" carries what this reader could recover from virtPath and rgst. "unresolvable" carries a short, fixed diagnostic for every other kind (add-in, DDE/OLE data source, same-sheet, unused, a virtPath shape fileNameFromVirtPath's own deliberately partial VirtualPath decoding does not attempt, or a record too malformed for readSupBookSafely to finish reading at all).
  */
-type SupBookInfo =
+export type SupBookInfo =
   | { readonly kind: "self" }
   | {
       readonly kind: "external-workbook";
@@ -211,7 +210,7 @@ type SupBookInfo =
 /**
  * SupBook ([MS-XLS] 2.4.271): a two-byte ctab, a two-byte cch, then -- for every kind but self-referencing and add-in-referencing -- a virtPath (an XLUnicodeStringNoCch, cch characters long) and, for an external-workbook or unused link specifically, ctab sheet names (XLUnicodeString) in rgst.
  */
-function readSupBook(record: RecordGroup): SupBookInfo {
+export function readSupBook(record: RecordGroup): SupBookInfo {
   const cursor = new BlockCursor(record.blocks);
   const ctab = cursor.u16();
   const cch = cursor.u16();
@@ -275,7 +274,7 @@ const VIRTPATH_LIBRARY_MARKER = 0x08;
 /**
  * Isolates a plain trailing file name from a SupBook's own virtPath, when it uses one of the VirtualPath grammar's simpler forms: simple-file-path (no marker at all, or its own optional lone %x0001 with no second marker byte), or a genuine two-character marker saying the path is relative to the referencing workbook's own drive, the startup directory, the alternate startup directory, or the library directory (rel-volume/startup/alt-startup/library -- [MS-XLS] 480c3d2a's own virt-path alternatives). An absolute drive volume, a UNC share, or a transfer-protocol URL needs more of the grammar than a trailing path segment to reproduce faithfully, so those return undefined rather than a guess -- readSupBook's own caller then shows the sheet name(s) (still fully resolvable from rgst) against a placeholder workbook label instead of discarding them. file-path's own bracketed form (`"[" relative-path "]" sheet-name`, naming a sheet directly in the path rather than through SupBook's separate rgst array) is outside what this reader reconstructs too, and is declined the same way rather than folded into the file name and doubled up with the caller's own `[bookLabel]` bracketing.
  */
-function fileNameFromVirtPath(virtPath: string): string | undefined {
+export function fileNameFromVirtPath(virtPath: string): string | undefined {
   let path = virtPath;
   if (path.startsWith("\u0001")) {
     const marker = path.codePointAt(1);
@@ -318,7 +317,7 @@ function diagnosticLabel(reason: string): string {
  *
  * The SupBook's own kind is checked before the `-2` sentinel, not after: [MS-XLS] 2.5.344's itabFirst/itabLast table produces `-2` for a same-sheet, add-in, DDE, and OLE supporting link alike (none of them names a sheet at all), so treating every `-2` as a generic "workbook-level reference" before asking what kind of SupBook it belongs to would overwrite each of those already-specific `unresolvable` diagnostics with a less useful, wrong one. `-2` only means "workbook-level" for the two kinds that otherwise resolve a real sheet scope -- self and external-workbook -- so the sentinel is scoped to those.
  */
-function resolveXti(
+export function resolveXti(
   supBook: SupBookInfo | undefined,
   itabFirst: number,
   itabLast: number,

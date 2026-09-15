@@ -25,7 +25,14 @@ import {
   xlUnicodeString,
   xlUnicodeStringNoCch,
 } from "../test-support/biff";
-import { formatCodeOf, readWorkbookGlobals } from "./globals";
+import {
+  fileNameFromVirtPath,
+  formatCodeOf,
+  readSupBook,
+  readWorkbookGlobals,
+  resolveXti,
+  type SupBookInfo,
+} from "./globals";
 
 /** The low bytes of an ASCII string, as a compressed (fHighByte = 0) rgb holds them. Indexed rather than spread, since spreading a string iterates code points and this needs UTF-16 units. */
 function lowBytes(text: string): number[] {
@@ -145,6 +152,11 @@ describe("readWorkbookGlobals", () => {
     expect(globals.sharedStrings).toStrictEqual(["Alpha", "Beta"]);
   });
 
+  it("is an empty shared-string table for a globals substream carrying no SST record at all", () => {
+    const globals = readWorkbookGlobals(groupsOf());
+    expect(globals.sharedStrings).toStrictEqual([]);
+  });
+
   it("reads a shared string table spanning a Continue record", () => {
     // The case the whole cursor design exists for: the second string's characters start in the base record and finish in the Continue, which re-states the fHighByte flag before resuming.
     const globals = readWorkbookGlobals(
@@ -164,12 +176,23 @@ describe("readWorkbookGlobals", () => {
     expect(globals.sharedStrings).toStrictEqual(["Alpha", "Abcdef"]);
   });
 
-  it("rejects an SST declaring more strings than its bytes could carry", () => {
+  it("rejects an SST declaring more strings than its bytes could carry, naming the exact counts", () => {
     expect(() =>
       readWorkbookGlobals(
         groupsOf(record(RECORD_SST, [...u32(1000), ...u32(1000)])),
       ),
-    ).toThrow(BiffFormatError);
+    ).toThrow(
+      "SST declares 1000 unique strings, more than its 8 bytes could carry",
+    );
+  });
+
+  it("rejects an SST declaring a negative unique-string count, naming the exact value", () => {
+    // cbUnique is a signed field, so 0xFFFFFFFF reads back as -1.
+    expect(() =>
+      readWorkbookGlobals(
+        groupsOf(record(RECORD_SST, [...u32(0), 0xff, 0xff, 0xff, 0xff])),
+      ),
+    ).toThrow("SST declares a negative unique-string count (-1)");
   });
 
   it("reads a custom number format by its identifier", () => {
@@ -296,7 +319,9 @@ describe("readWorkbookGlobals", () => {
           record(RECORD_PALETTE, [...u16(entries.length), ...entries.flat()]),
         ),
       ),
-    ).toThrow(BiffFormatError);
+    ).toThrow(
+      `Palette declares ${entries.length} colour entries, but [MS-XLS] 2.4.188's own ccv field MUST be ${PALETTE_ENTRY_COUNT}`,
+    );
   });
 
   it("refuses a Palette record declaring zero colour entries", () => {
@@ -327,6 +352,14 @@ describe("readWorkbookGlobals", () => {
     );
 
     expect(globals.date1904).toBe(true);
+  });
+
+  it("reads an explicit false 1904 date system flag, not just a genuinely absent record", () => {
+    const globals = readWorkbookGlobals(
+      groupsOf(record(RECORD_DATE1904, u16(0))),
+    );
+
+    expect(globals.date1904).toBe(false);
   });
 
   it("ignores records it has no use for", () => {
@@ -685,6 +718,198 @@ describe("readWorkbookGlobals", () => {
     expect(globals.sheets).toStrictEqual([
       { name: "Summary", hidden: false, sheetType: 0, bofPosition: 0x0200 },
     ]);
+  });
+});
+
+describe("readSupBook", () => {
+  function supBookGroup(bytes: readonly number[]): RecordGroup {
+    const group = groupsOf(record(RECORD_SUPBOOK, bytes))[0];
+    if (group === undefined) {
+      throw new Error("expected a SupBook record group");
+    }
+    return group;
+  }
+
+  it("refuses a cch one below the smallest genuine virtPath length (0), naming the exact hex value", () => {
+    expect(readSupBook(supBookGroup([...u16(0), ...u16(0)]))).toStrictEqual({
+      kind: "unresolvable",
+      diagnostic: "supporting link of unrecognised type (cch=0x0000)",
+    });
+  });
+
+  it("accepts a cch of exactly 1, the smallest genuine virtPath length", () => {
+    expect(
+      readSupBook(
+        supBookGroup([...u16(0), ...u16(1), ...xlUnicodeStringNoCch("X")]),
+      ),
+    ).toStrictEqual({
+      kind: "unresolvable",
+      diagnostic: "DDE or OLE data source reference",
+    });
+  });
+
+  it("accepts a cch of exactly 255, the largest genuine virtPath length", () => {
+    const text = "X".repeat(255);
+    expect(
+      readSupBook(
+        supBookGroup([...u16(0), ...u16(255), ...xlUnicodeStringNoCch(text)]),
+      ),
+    ).toStrictEqual({
+      kind: "unresolvable",
+      diagnostic: "DDE or OLE data source reference",
+    });
+  });
+
+  it("refuses a cch one past the largest genuine virtPath length (256), naming the exact hex value", () => {
+    expect(readSupBook(supBookGroup([...u16(0), ...u16(256)]))).toStrictEqual({
+      kind: "unresolvable",
+      diagnostic: "supporting link of unrecognised type (cch=0x0100)",
+    });
+  });
+
+  it("resolves a same-sheet reference from its own exact single-character virtPath", () => {
+    expect(
+      readSupBook(
+        supBookGroup([...u16(0), ...u16(1), ...xlUnicodeStringNoCch(" ")]),
+      ),
+    ).toStrictEqual({
+      kind: "unresolvable",
+      diagnostic: "same-sheet reference",
+    });
+  });
+
+  it("resolves an unused supporting link from its own exact single-character virtPath", () => {
+    expect(
+      readSupBook(
+        supBookGroup([...u16(0), ...u16(1), ...xlUnicodeStringNoCch(" ")]),
+      ),
+    ).toStrictEqual({
+      kind: "unresolvable",
+      diagnostic: "unused supporting link",
+    });
+  });
+});
+
+describe("fileNameFromVirtPath", () => {
+  it("declines a path that is empty once its own lone marker byte is stripped", () => {
+    expect(fileNameFromVirtPath("")).toBeUndefined();
+  });
+
+  it("isolates a plain trailing file name with no marker at all", () => {
+    expect(fileNameFromVirtPath("dirBook.xlsx")).toBe("Book.xlsx");
+  });
+
+  it("declines a final segment reached through a directory separator that itself carries a bracket", () => {
+    expect(fileNameFromVirtPath("sub[Book.xlsx]Sheet1")).toBeUndefined();
+  });
+});
+
+describe("resolveXti", () => {
+  const SELF: SupBookInfo = { kind: "self" };
+  const UNRESOLVABLE: SupBookInfo = {
+    kind: "unresolvable",
+    diagnostic: "add-in function reference",
+  };
+  const EXTERNAL: SupBookInfo = {
+    kind: "external-workbook",
+    fileName: "Book.xlsx",
+    sheetNames: ["Sheet1", "Sheet2"],
+  };
+  const EXTERNAL_UNNAMED: SupBookInfo = {
+    kind: "external-workbook",
+    fileName: undefined,
+    sheetNames: ["Sheet1", "Sheet2"],
+  };
+
+  it("refuses an XTI whose own iSupBook index named no SupBook record at all", () => {
+    expect(resolveXti(undefined, 0, 0)).toStrictEqual({
+      label: "#REF!(supporting link index out of range)",
+      diagnostic: true,
+    });
+  });
+
+  it("carries an unresolvable SupBook's own diagnostic through unchanged", () => {
+    expect(resolveXti(UNRESOLVABLE, 0, 0)).toStrictEqual({
+      label: "#REF!(add-in function reference)",
+      diagnostic: true,
+    });
+  });
+
+  it("treats itabFirst alone being -2 as a workbook-level reference, even with a genuinely real itabLast", () => {
+    expect(resolveXti(SELF, -2, 0)).toStrictEqual({
+      label: "#REF!(workbook-level reference)",
+      diagnostic: true,
+    });
+  });
+
+  it("treats itabLast alone being -2 as a workbook-level reference too, even with a genuinely real itabFirst", () => {
+    expect(resolveXti(SELF, 0, -2)).toStrictEqual({
+      label: "#REF!(workbook-level reference)",
+      diagnostic: true,
+    });
+  });
+
+  it("resolves a self-referencing SheetRange when both indices are real", () => {
+    expect(resolveXti(SELF, 1, 3)).toStrictEqual({
+      firstSheetIndex: 1,
+      lastSheetIndex: 3,
+    });
+  });
+
+  it("refuses a self-referencing XTI whose own itabFirst alone is the -1 not-found sentinel", () => {
+    expect(resolveXti(SELF, -1, 0)).toStrictEqual({
+      label: "#REF!(sheet not found)",
+      diagnostic: true,
+    });
+  });
+
+  it("refuses a self-referencing XTI whose own itabLast alone is the -1 not-found sentinel", () => {
+    expect(resolveXti(SELF, 0, -1)).toStrictEqual({
+      label: "#REF!(sheet not found)",
+      diagnostic: true,
+    });
+  });
+
+  it("refuses an external-workbook XTI whose own itabFirst names no real sheet, even with a genuinely real itabLast", () => {
+    expect(resolveXti(EXTERNAL, 9, 0)).toStrictEqual({
+      label: "[Book.xlsx]#REF!(sheet not found)",
+      diagnostic: true,
+    });
+  });
+
+  it("refuses an external-workbook XTI whose own itabLast names no real sheet, even with a genuinely real itabFirst", () => {
+    expect(resolveXti(EXTERNAL, 0, 9)).toStrictEqual({
+      label: "[Book.xlsx]#REF!(sheet not found)",
+      diagnostic: true,
+    });
+  });
+
+  it("labels an external-workbook's own unresolved sheet under the EXTERNAL placeholder when the workbook's own name was not recovered either", () => {
+    expect(resolveXti(EXTERNAL_UNNAMED, 9, 0)).toStrictEqual({
+      label: "[EXTERNAL]#REF!(sheet not found)",
+      diagnostic: true,
+    });
+  });
+
+  it("resolves a single-sheet external reference without a range separator when both indices name the identical sheet", () => {
+    expect(resolveXti(EXTERNAL, 0, 0)).toStrictEqual({
+      label: "[Book.xlsx]Sheet1",
+      diagnostic: false,
+    });
+  });
+
+  it("resolves a genuine external sheet range, first:last, when the two indices differ", () => {
+    expect(resolveXti(EXTERNAL, 0, 1)).toStrictEqual({
+      label: "[Book.xlsx]Sheet1:Sheet2",
+      diagnostic: false,
+    });
+  });
+
+  it("resolves an external reference under the EXTERNAL placeholder, still marked diagnostic, when only the workbook's own name was not recovered", () => {
+    expect(resolveXti(EXTERNAL_UNNAMED, 0, 1)).toStrictEqual({
+      label: "[EXTERNAL]Sheet1:Sheet2",
+      diagnostic: true,
+    });
   });
 });
 
