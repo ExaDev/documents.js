@@ -29,7 +29,7 @@ import { writeEmbeddedObjectPackage } from "./embedded-object";
 // A 'chart' embedded object is refused by name rather than approximated: writing one means embedding a genuine BIFF8 chart substream -- the whole [MS-XLS] chart grammar a flattened series/category table would have to drive, with series data links resolving back to real cells -- which is a chart engine of its own, not a container to place a table in. The other five objectKinds all embed through the one OLE mechanism.
 
 /** The sheet-grid geometry an anchor resolves against and inverts into, the write-side mirror of workbook/drawing.ts's own SheetGridGeometry: declared column widths/row heights with the same Excel "Normal" defaults beneath, so a shape written from a given placement reads back at the identical placement. Derived from the same constants (units.ts) the reader's own geometry uses, so the two cannot disagree about what an undeclared cell sizes. */
-class WriterGridGeometry {
+export class WriterGridGeometry {
   private readonly columnWidths = new Map<number, number>();
   private readonly rowHeights = new Map<number, number>();
   private readonly defaultColumnWidthPt = columnWidthToPoints(
@@ -115,7 +115,7 @@ interface Placement {
   readonly heightPt: number;
 }
 
-function placementOfImage(
+export function placementOfImage(
   image: ContentSheetImage,
   geometry: WriterGridGeometry,
 ): Placement {
@@ -132,7 +132,7 @@ function placementOfImage(
   };
 }
 
-function placementOfEmbedded(
+export function placementOfEmbedded(
   embedded: ContentEmbeddedObject,
   geometry: WriterGridGeometry,
 ): Placement {
@@ -154,7 +154,7 @@ function placementOfEmbedded(
 }
 
 /** Inverts a placement into the OfficeArtClientAnchorSheet corner pair the reader's own resolveAnchorPlacement turns back into that placement: each corner resolved to its containing cell and a 1/1024ths (columns) or 1/256ths (rows) fraction within it. */
-function anchorOf(
+export function anchorOf(
   placement: Placement,
   geometry: WriterGridGeometry,
 ): ShapeAnchor {
@@ -180,7 +180,7 @@ function anchorOf(
 const OBJECT_TYPE_PICTURE = 0x0008;
 
 /** FtCmo ([MS-XLS] 2.5.92, 22 bytes): ft 0x15, cb 0x12, the object type and id, then grbit and three unused dwords all written zero -- the identical shape comment-writer.ts writes for a Note, restated here with the object type as a parameter rather than shared across the two direction modules. */
-function writeFtCmo(ot: number, id: number): Uint8Array<ArrayBuffer> {
+export function writeFtCmo(ot: number, id: number): Uint8Array<ArrayBuffer> {
   return new RecordBuilder()
     .u16(0x0015)
     .u16(0x0012)
@@ -194,12 +194,12 @@ function writeFtCmo(ot: number, id: number): Uint8Array<ArrayBuffer> {
 }
 
 /** FtCf ([MS-XLS] 2.5.142, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/fc5bb3ce-8e35-4393-b22f-9cf54062a3a4): the clipboard format of the picture this object shows. 0xFFFF names "an unspecified format that is neither an enhanced metafile nor a bitmap" -- honest for a shape whose visible rendering is the blip the Escher layer itself carries and for an OLE object this writer has no preview metafile for. */
-function writeFtCf(): Uint8Array<ArrayBuffer> {
+export function writeFtCf(): Uint8Array<ArrayBuffer> {
   return new RecordBuilder().u16(0x0007).u16(0x0002).u16(0xffff).build();
 }
 
 /** FtPioGrbit ([MS-XLS] 2.5.151, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/8eee0b3d-9d27-4294-85fc-a66ae8a361c9): a plain picture states fAutoPict (aspect preserved across views); an OLE embedding states no bits at all -- fPrstm and fDde stay clear, the pair the Embedding Storage page requires for storage-based object data. */
-function writeFtPioGrbit(autoPict: boolean): Uint8Array<ArrayBuffer> {
+export function writeFtPioGrbit(autoPict: boolean): Uint8Array<ArrayBuffer> {
   return new RecordBuilder()
     .u16(0x0008)
     .u16(0x0002)
@@ -214,7 +214,7 @@ const PTG_TBL = 0x02;
 const EMBED_CLASS_NAME = "Package";
 
 /** FtPictFmla ([MS-XLS] 2.5.150, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/00f89d32-67b0-408e-9eaf-f4fecbddb089) for an embedded OLE object: the ObjFmla (cbFmla counting the ObjectParsedFormula, the PictFmlaEmbedInfo, and the padding -- even, per [MS-XLS] 2.5.187's own cbFmla rule), then lPosInCtlStm, the storage id the Embedding Storage's own MBD name is the eight-hex-digit spelling of. The ObjectParsedFormula is the one shape [MS-XLS] pins for an embedding: cce 5, rgce one PtgTbl followed by four undefined bytes. */
-function writeFtPictFmla(storageId: number): Uint8Array<ArrayBuffer> {
+export function writeFtPictFmla(storageId: number): Uint8Array<ArrayBuffer> {
   const formula = new RecordBuilder()
     .u16(5) // ObjectParsedFormula.cce
     .u32(0) // ObjectParsedFormula.unused
@@ -241,7 +241,9 @@ function writeFtPictFmla(storageId: number): Uint8Array<ArrayBuffer> {
 const OBJ_RESERVED_END = new Uint8Array(4);
 
 /** One picture shape's Obj record: FtCmo (ot Picture), FtCf, FtPioGrbit, and the trailing reserved field. No FtPictFmla -- the image's bytes live in the workbook's Blip Store, which the shape's own pib property names, leaving the Obj record itself nothing to locate. */
-function writePictureObjRecord(objectId: number): Uint8Array<ArrayBuffer> {
+export function writePictureObjRecord(
+  objectId: number,
+): Uint8Array<ArrayBuffer> {
   return writeRecord(
     RECORD_OBJ,
     new RecordBuilder()
@@ -254,7 +256,7 @@ function writePictureObjRecord(objectId: number): Uint8Array<ArrayBuffer> {
 }
 
 /** One embedded OLE object's Obj record: FtCmo (ot Picture), FtCf, FtPioGrbit (no bits -- storage-based, per the Embedding Storage page's own fPrstm/fDde requirement), the FtPictFmla naming the storage, and the trailing reserved field. */
-function writeEmbeddedObjRecord(
+export function writeEmbeddedObjRecord(
   objectId: number,
   storageId: number,
 ): Uint8Array<ArrayBuffer> {
@@ -273,7 +275,7 @@ function writeEmbeddedObjRecord(
 // --- The workbook-wide plan ---
 
 /** Base64's own character set, decoded by hand rather than through atob's DOM-string round trip -- mirroring drawing/blips.ts's own hand-written encoder, which exists for the identical reason: byte-exact, allocation-predictable, and identical in Node and a Workers isolate. */
-function bytesFromBase64(base64: string): Uint8Array<ArrayBuffer> {
+export function bytesFromBase64(base64: string): Uint8Array<ArrayBuffer> {
   const values = new Int8Array(256).fill(-1);
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
     .split("")
@@ -329,7 +331,11 @@ export function buildDrawingWritePlan(
   sheets: readonly ContentSheet[],
 ): DrawingWritePlan {
   const blips: MutableStoredBlip[] = [];
-  const blipIndexByBase64 = new Map<string, number>();
+  // Keyed by base64 rather than by index: resolving a repeat directly to the same blip object this map already holds means a dedup lookup can never land on an index the `blips` array itself doesn't recognise -- there is no index arithmetic here for such a lookup to disagree with in the first place.
+  const blipsByBase64 = new Map<
+    string,
+    { readonly index: number; readonly blip: MutableStoredBlip }
+  >();
 
   const resolveBlip = (image: ContentSheetImage): number => {
     if (image.format !== "png" && image.format !== "jpeg") {
@@ -337,25 +343,20 @@ export function buildDrawingWritePlan(
         `xls-codec cannot write a sheet image of format "${image.format}": [MS-ODRAW]'s own MSOBLIPTYPE enumeration has no member for it, so no Blip Store entry can carry it`,
       );
     }
-    const existing = blipIndexByBase64.get(image.base64);
+    const existing = blipsByBase64.get(image.base64);
     if (existing !== undefined) {
       // A deduplicated reference: the BSE's own cRef counts references to the BLIP, so the count grows rather than a second entry being minted.
-      const blip = blips[existing - 1];
-      if (blip === undefined) {
-        throw new BiffWriteError(
-          "internal error: a blip index resolved that the workbook-wide image scan never assigned",
-        );
-      }
-      blip.referenceCount += 1;
-      return existing;
+      existing.blip.referenceCount += 1;
+      return existing.index;
     }
     const index = blips.length + 1;
-    blipIndexByBase64.set(image.base64, index);
-    blips.push({
+    const blip: MutableStoredBlip = {
       format: image.format,
       fileBytes: bytesFromBase64(image.base64),
       referenceCount: 1,
-    });
+    };
+    blipsByBase64.set(image.base64, { index, blip });
+    blips.push(blip);
     return index;
   };
 
