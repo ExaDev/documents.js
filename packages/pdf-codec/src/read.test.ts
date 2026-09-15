@@ -145,7 +145,7 @@ describe("readPdf: PDFs that open without a password", () => {
     ],
   ];
 
-  // AES-256's key derivation runs the SHA-256/384/512 hardened hash of ISO 32000-2 Algorithm 2.B, which is CPU-bound and slow enough under load to miss vitest's default 5000ms timeout on a busy CI runner -- applied to every fixture in this loop for a consistent timeout across the table, not just the AES-256 entries.
+  // AES-256's key derivation runs the SHA-256/384/512 hardened hash of ISO 32000-2 Algorithm 2.B, which is CPU-bound -- applied to every fixture in this loop for a consistent shape across the table, not just the AES-256 entries. No per-test timeout override here: vitest.config.ts's UNIT_TEST_TIMEOUT_MS already covers the whole unit project, including this file under Stryker's instrumented dry run, with a documented derivation.
   for (const [label, fixture] of fixtures) {
     it(`decrypts and reads a permissions-only PDF encrypted with ${label}`, () => {
       const doc = readPdf(fixture());
@@ -156,7 +156,7 @@ describe("readPdf: PDFs that open without a password", () => {
       ]);
       expect(doc.metadata.title).toBe(ENCRYPTED_FIXTURE_TITLE);
       expect(doc.metadata.author).toBe(ENCRYPTED_FIXTURE_AUTHOR);
-    }, 60_000);
+    });
   }
 
   it("reports no diagnostics at all while decrypting", () => {
@@ -165,7 +165,7 @@ describe("readPdf: PDFs that open without a password", () => {
       sink: (diagnostic) => diagnostics.push(diagnostic),
     });
     expect(diagnostics).toEqual([]);
-  }, 60_000);
+  });
 });
 
 describe("readPdf: PDFs it refuses to open", () => {
@@ -176,12 +176,12 @@ describe("readPdf: PDFs it refuses to open", () => {
     );
   });
 
-  // AES-256's key derivation is CPU-bound (see the timeout note above the fixtures table) -- slow enough under load to miss vitest's default 5000ms timeout.
+  // AES-256's key derivation is CPU-bound (see vitest.config.ts's UNIT_TEST_TIMEOUT_MS derivation).
   it("throws PdfPasswordRequiredError for an AES-256 file with a real user password", () => {
     expect(() => readPdf(aes256RealUserPasswordPdf())).toThrow(
       PdfPasswordRequiredError,
     );
-  }, 60_000);
+  });
 
   it("throws PdfEncryptedError, not PdfPasswordRequiredError, for a security handler no password could open", () => {
     expect(() => readPdf(unsupportedSecurityHandlerPdf())).toThrow(
@@ -280,6 +280,10 @@ describe("readPdf: cancellation", () => {
     ).toThrow();
   });
 
+  it("reads an unaborted pageless document normally, resolving its catalog to zero pages", () => {
+    expect(readPdf(pagelessPdf()).pages).toHaveLength(0);
+  });
+
   // The abort contract's real granularity (ExaDev/documents.js#585): the signal is consulted once per page-loop iteration, so a signal aborted WHILE page 1 is being read (here: the sink fires on page 1's missing-/Resources warning and aborts) stops the parse before page 2 is ever interpreted, rather than running to completion.
   it("honours an aborted signal between pages, not only before reading begins", () => {
     const controller = new AbortController();
@@ -314,6 +318,11 @@ describe("readPdf: page notes", () => {
   it("does not mistake a third-party tool's own hidden sticky note for pptx speaker notes", () => {
     const doc = readPdf(pdfWithForeignHiddenAnnotationPdf());
     expect(doc.pages[0]!.notes).toBeUndefined();
+    // Proves the annotation itself was genuinely read and excluded on its /T marker -- not that it (or its /Annots entry) never reached the reader at all, which would leave notes undefined for an unrelated reason.
+    const sticky = doc.pages[0]!.annotations?.find((a) => a.subtype === "Text");
+    expect(sticky?.contents).toBe(
+      "A real reviewer note, not pptx speaker notes",
+    );
   });
 });
 

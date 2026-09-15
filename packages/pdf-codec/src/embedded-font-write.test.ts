@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ByteWriter } from "./bytes/writer";
+import { crc32 } from "./bytes/crc32";
 import { NOOP_DIAGNOSTIC_SINK } from "./diagnostics";
 import { openPdfDocument } from "./document";
 import {
@@ -13,7 +14,7 @@ import {
   embeddedSubsetTag,
 } from "./embedded-font-write";
 import { decodeStream } from "./filters";
-import type { PdfDict, PdfObject } from "./objects";
+import type { PdfDict } from "./objects";
 import {
   asArray,
   asName,
@@ -32,7 +33,13 @@ import { writeObject } from "./serialize";
 import type { SfntSubsetResult } from "./sfnt-subset";
 import { subsetSfnt } from "./sfnt-subset";
 import { parseSfnt } from "./sfnt";
-import { carlitoRegularBytes } from "./test-support/fonts";
+import {
+  caladeaItalicBytes,
+  caladeaRegularBytes,
+  carlitoRegularBytes,
+} from "./test-support/fonts";
+import type { AllocatedObject } from "./test-support/write-pdf-fixture";
+import { assemblePdf } from "./test-support/write-pdf-fixture";
 
 // The end-to-end proof this module exists for: take a real vendored face, cut a real subset of it for a real string, build the whole PDF object group, assemble a genuine PDF file around it by hand, and read that file back with this package's own readPdf. Nothing here is a synthetic fixture -- the font is the checked-in Carlito Regular, the subset is sfnt-subset.ts's own output, and the file is a complete, well-formed PDF with a real cross-reference table.
 //
@@ -46,48 +53,6 @@ const TEXT_Y_PT = 700;
 const PAGE_WIDTH_PT = 612;
 const PAGE_HEIGHT_PT = 792;
 const FONT_RESOURCE_NAME = "F1";
-
-interface AllocatedObject {
-  readonly num: number;
-  readonly value: PdfObject;
-}
-
-// A complete classic-cross-reference PDF file around an already-built object list -- the same shape write.ts's own tail emits, written out here so this test owns every byte of the file it then reads back.
-function assemblePdf(
-  objects: readonly AllocatedObject[],
-  rootNum: number,
-): Uint8Array<ArrayBuffer> {
-  const writer = new ByteWriter();
-  writer.writeAscii("%PDF-1.7\n");
-  const offsets = new Map<number, number>();
-  for (const { num, value } of objects) {
-    offsets.set(num, writer.length);
-    writer.writeAscii(`${num} 0 obj\n`);
-    writeObject(writer, value);
-    writer.writeAscii("\nendobj\n");
-  }
-  const maxObjNum = Math.max(...objects.map((object) => object.num));
-  const xrefOffset = writer.length;
-  writer.writeAscii("xref\n");
-  writer.writeAscii(`0 ${maxObjNum + 1}\n`);
-  writer.writeAscii("0000000000 65535 f \n");
-  for (let num = 1; num <= maxObjNum; num++) {
-    const offset = offsets.get(num);
-    if (offset === undefined) {
-      throw new Error(`object ${String(num)} was never written`);
-    }
-    writer.writeAscii(`${offset.toString().padStart(10, "0")} 00000 n \n`);
-  }
-  writer.writeAscii("trailer\n");
-  writeObject(
-    writer,
-    pdfDict({ Size: pdfNum(maxObjNum + 1), Root: pdfRef(rootNum, 0) }),
-  );
-  writer.writeAscii("\nstartxref\n");
-  writer.writeAscii(`${xrefOffset}\n`);
-  writer.writeAscii("%%EOF");
-  return writer.toBytes();
-}
 
 // The one text-showing sequence the page draws: the string's CIDs, big-endian, as a hex-string Tj operand against the embedded composite font -- exactly what math-content-write.ts already emits for the math font, and the only content-stream shape an Identity-H font can be shown with.
 function buildContentStream(
@@ -293,6 +258,20 @@ describe("a real PDF carrying an embedded, subsetted Carlito, read back by this 
     const cidSystemInfo = document.resolveDict(
       dictGet(cidFont!, "CIDSystemInfo"),
     );
+    const registry = dictGet(cidSystemInfo!, "Registry");
+    const ordering = dictGet(cidSystemInfo!, "Ordering");
+    expect(registry?.kind).toBe("string");
+    expect(ordering?.kind).toBe("string");
+    expect(
+      registry?.kind === "string"
+        ? new TextDecoder().decode(registry.bytes)
+        : undefined,
+    ).toBe("Adobe");
+    expect(
+      ordering?.kind === "string"
+        ? new TextDecoder().decode(ordering.bytes)
+        : undefined,
+    ).toBe("Identity");
     expect(asNumber(dictGet(cidSystemInfo!, "Supplement"))).toBe(0);
 
     const descriptor = document.resolveDict(
@@ -408,18 +387,32 @@ describe("a real PDF carrying an embedded, subsetted Carlito, read back by this 
       4,
     );
     expect(asNumber(dictGet(descriptor!, "ItalicAngle"))).toBe(0);
+    expect(asNumber(dictGet(descriptor!, "StemV"))).toBe(80); // NOMINAL_STEM_V -- a nominal, spec-required value no conforming reader actually consults
+    expect(asName(dictGet(descriptor!, "Type"))).toBe("FontDescriptor");
     // Every geometry field is in 1000-unit glyph space, not Carlito's own 2048-unit design grid -- so the bounding box read back here is roughly half the raw head-table one.
-    asArray(dictGet(descriptor!, "FontBBox"))?.forEach((entry, index) => {
+    //
+    // A hard length assertion first, not just the forEach below: FontBBox is read through optional chaining because it's read from an already-round-tripped PDF dict (a genuinely absent key is a real, distinct outcome from an empty array), so a mutant blanking out the FontBBox key would otherwise leave the forEach body silently unrun and this test vacuously green.
+    const bbox = asArray(dictGet(descriptor!, "FontBBox"));
+    expect(bbox).toBeDefined();
+    expect(bbox).toHaveLength(4);
+    bbox?.forEach((entry, index) => {
       expect(asNumber(entry)).toBeCloseTo(
         face.metrics.bboxGlyphSpace[index]!,
         4,
       );
     });
-    expect(asNumber(asArray(dictGet(descriptor!, "FontBBox"))?.[2])).not.toBe(
-      2351,
-    );
+    expect(asNumber(bbox?.[2])).not.toBe(2351);
     // NONSYMBOLIC only: Carlito is a sans design (no SERIF bit) drawn upright (no ITALIC bit).
     expect(asNumber(dictGet(descriptor!, "Flags"))).toBe(32);
+  });
+
+  it("names the CIDFontType2 dict's own /Type as /Font, the same as the outer Type0", () => {
+    const { pdfBytes } = buildDocument();
+    const document = openPdfDocument(pdfBytes, NOOP_DIAGNOSTIC_SINK);
+    const cidFont = document.resolveDict(
+      asArray(dictGet(fontDictOf(pdfBytes), "DescendantFonts"))?.[0],
+    );
+    expect(asName(dictGet(cidFont!, "Type"))).toBe("Font");
   });
 });
 
@@ -477,5 +470,81 @@ describe("the subset tag", () => {
     expect(embeddedSubsetTag("Carlito-Regular", [0, 15])).not.toBe(
       embeddedSubsetTag("Carlito-Bold", [0, 15]),
     );
+  });
+
+  it("keeps glyph IDs comma-separated, rather than concatenating them into one ambiguous digit run", () => {
+    // Without a separator, [1, 23] and [12, 3] would both join to the identical digit string "123" and collide on the same tag.
+    expect(embeddedSubsetTag("Face", [1, 23])).not.toBe(
+      embeddedSubsetTag("Face", [12, 3]),
+    );
+  });
+
+  it("derives its six letters as a base-26, most-significant-letter-first encoding of the CRC32 hash", () => {
+    // Computed independently of embeddedSubsetTag's own implementation, using the package's own separately-tested crc32() as the trusted primitive -- proves the exact digit-extraction direction (most significant letter first, via repeated floor-division) rather than merely that some six letters come out.
+    const postScriptName = "Test-Face";
+    const glyphIds = [3, 90, 4000];
+    const codeSpace = 26 ** 6;
+    let value =
+      crc32(
+        new TextEncoder().encode(`${postScriptName} ${glyphIds.join(",")}`),
+      ) % codeSpace;
+    const expectedChars: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      expectedChars.unshift(String.fromCharCode(65 + (value % 26)));
+      value = Math.floor(value / 26);
+    }
+    expect(embeddedSubsetTag(postScriptName, glyphIds)).toBe(
+      expectedChars.join(""),
+    );
+  });
+});
+
+describe("buildEmbeddedFontObjects: FLAG_SERIF", () => {
+  it("sets the SERIF descriptor bit for a face whose own metrics declare it serif", () => {
+    const sfnt = parseSfnt(caladeaRegularBytes())!;
+    const face = loadEmbeddedFace(sfnt)!;
+    expect(face.metrics.serif).toBe(true); // real Caladea data, not a synthetic fixture -- confirms this test exercises the branch it claims to
+    const subset = subsetSfnt(sfnt, [0x41])!;
+    const usedGlyphs = collectEmbeddedGlyphs(["A"], face);
+    const { descriptor } = buildEmbeddedFontObjects(
+      face,
+      subset,
+      usedGlyphs,
+      {
+        cidFontRef: pdfRef(1, 0),
+        descriptorRef: pdfRef(2, 0),
+        fontFileRef: pdfRef(3, 0),
+        toUnicodeRef: pdfRef(4, 0),
+      },
+      false,
+    );
+    const flags = asNumber(dictGet(descriptor, "Flags"))!;
+    const FLAG_SERIF = 2;
+    expect(flags & FLAG_SERIF).toBe(FLAG_SERIF);
+  });
+});
+
+describe("buildEmbeddedFontObjects: FLAG_ITALIC", () => {
+  it("sets the ITALIC descriptor bit for a face whose own italicAngleDegrees is non-zero", () => {
+    const sfnt = parseSfnt(caladeaItalicBytes())!;
+    const face = loadEmbeddedFace(sfnt)!;
+    expect(face.metrics.italicAngleDegrees).not.toBe(0); // real Caladea Italic data, not a synthetic fixture -- confirms this test exercises the branch it claims to
+    const subset = subsetSfnt(sfnt, [0x41])!;
+    const usedGlyphs = collectEmbeddedGlyphs(["A"], face);
+    const { descriptor } = buildEmbeddedFontObjects(
+      face,
+      subset,
+      usedGlyphs,
+      {
+        cidFontRef: pdfRef(1, 0),
+        descriptorRef: pdfRef(2, 0),
+        fontFileRef: pdfRef(3, 0),
+        toUnicodeRef: pdfRef(4, 0),
+      },
+      false,
+    );
+    const flags = asNumber(dictGet(descriptor, "Flags"))!;
+    const FLAG_ITALIC = 64;
+    expect(flags & FLAG_ITALIC).toBe(FLAG_ITALIC);
   });
 });

@@ -84,17 +84,14 @@ function cidBytes(glyphId: number): Uint8Array<ArrayBuffer> {
   return new Uint8Array([(glyphId >> 8) & 0xff, glyphId & 0xff]);
 }
 
-// A PDF text string (ISO 32000-1 7.9.2.2) in UTF-16BE with the leading U+FEFF byte-order mark that identifies it as such -- the encoding /ActualText needs to carry arbitrary Unicode. String.charCodeAt already yields UTF-16 code units, surrogate pairs included, so this needs no surrogate arithmetic of its own.
+// A PDF text string (ISO 32000-1 7.9.2.2) in UTF-16BE with the leading U+FEFF byte-order mark that identifies it as such -- the encoding /ActualText needs to carry arbitrary Unicode. String.charCodeAt already yields UTF-16 code units, surrogate pairs included, so this needs no surrogate arithmetic of its own. Built by appending each code unit's two bytes in turn rather than pre-sizing a typed array and writing by computed offset: there is then no `2 + i * 2` index arithmetic to get right, and the length of the result falls out of how many bytes were actually appended instead of being asserted up front.
 function utf16BeWithBom(text: string): Uint8Array<ArrayBuffer> {
-  const bytes = new Uint8Array(2 + text.length * 2);
-  bytes[0] = 0xfe;
-  bytes[1] = 0xff;
+  const bytes: number[] = [0xfe, 0xff];
   for (let i = 0; i < text.length; i++) {
     const unit = text.charCodeAt(i);
-    bytes[2 + i * 2] = (unit >> 8) & 0xff;
-    bytes[3 + i * 2] = unit & 0xff;
+    bytes.push((unit >> 8) & 0xff, unit & 0xff);
   }
-  return bytes;
+  return new Uint8Array(bytes);
 }
 
 // Draws one stretched operator: each of its placements is a single glyph of the embedded font shown at its own computed position, addressed by glyph ID directly (Identity-H CIDs are this font's glyph IDs -- see math-font.ts) rather than resolved from text through the cmap the way writeGlyphRun does, because most of these glyphs have no Unicode code point to resolve from at all.

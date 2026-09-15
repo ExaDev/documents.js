@@ -27,14 +27,6 @@ const MARKER_EOC = 0xffd9;
 export type Jpeg2000ProgressionOrder =
   "LRCP" | "RLCP" | "RPCL" | "PCRL" | "CPRL";
 
-const PROGRESSION_ORDERS: readonly Jpeg2000ProgressionOrder[] = [
-  "LRCP",
-  "RLCP",
-  "RPCL",
-  "PCRL",
-  "CPRL",
-];
-
 // T.800 A.6.1 Table A.20: the wavelet filter the tile-component was transformed with.
 export type Jpeg2000Transform = "reversible-5-3" | "irreversible-9-7";
 
@@ -136,7 +128,8 @@ export interface Jpeg2000Codestream {
   readonly truncated: boolean;
 }
 
-class MarkerCursor {
+// Exported for direct unit testing of the primitives below: readHeaderSegment (the class's sole production caller) already re-derives and re-checks segmentEnd against cursor.data.length before ever calling bytes(), so the length it passes always already satisfies position + length <= data.length on its own -- only a direct cursor test can exercise this class's own arithmetic and bounds-checking in isolation from that guarantee.
+export class MarkerCursor {
   position: number;
 
   constructor(
@@ -242,12 +235,8 @@ function readCodingStyleParameters(
       `SPcod/SPcoc declares transformation ${String(transformCode)}, which is neither of the two ISO/IEC 15444-1 defines`,
     );
   }
-  // T.800 Table A.18: the transmitted values are xcb-2 and ycb-2, and the standard caps the code-block area at 4096 samples with each side at most 2^10.
-  if (
-    codeBlockWidthExp > 10 ||
-    codeBlockHeightExp > 10 ||
-    codeBlockWidthExp + codeBlockHeightExp > 12
-  ) {
+  // T.800 Table A.18: the transmitted values are xcb-2 and ycb-2, and the standard caps the code-block area at 4096 samples with each side at most 2^10. No separate per-side check is needed alongside the area cap: each exponent's own floor of 2 (from the `+ 2` above) means either one alone exceeding 10 already puts the sum past 12 (11 + 2 = 13), so the sum check below already catches every case an individual >10 check would.
+  if (codeBlockWidthExp + codeBlockHeightExp > 12) {
     throw new Jpeg2000ParseError(
       `code-block size 2^${String(codeBlockWidthExp)} by 2^${String(codeBlockHeightExp)} is outside the range ISO/IEC 15444-1 Table A.18 permits`,
     );
@@ -277,8 +266,16 @@ function readCodingStyleParameters(
 }
 
 function readCodingDefaults(cursor: MarkerCursor): Jpeg2000CodingDefaults {
+  // T.800 A.6.1 Table A.16: the five progression orders, in the order the Table's own values run. Built inside this function rather than as a module-level constant so a mutation to one of its entries is attributed, by Stryker's per-test coverage analysis, to the tests that actually call this function -- a module-level `const` here would run once at import time as a static mutant, which Stryker tests against a single arbitrary covering test rather than the full set that genuinely exercises this lookup.
+  const progressionOrders: readonly Jpeg2000ProgressionOrder[] = [
+    "LRCP",
+    "RLCP",
+    "RPCL",
+    "PCRL",
+    "CPRL",
+  ];
   const scod = cursor.uint8();
-  const progressionOrder = PROGRESSION_ORDERS[cursor.uint8()];
+  const progressionOrder = progressionOrders[cursor.uint8()];
   if (progressionOrder === undefined) {
     throw new Jpeg2000ParseError(
       "COD declares a progression order outside the five ISO/IEC 15444-1 Table A.16 defines",
@@ -560,7 +557,7 @@ function readTilePart(
     );
   }
   // A truncated final tile-part is the shape a clipped PDF stream takes; keeping whatever bytes did arrive lets the decoder report a partial image rather than nothing at all.
-  const trimmedEnd = trimTrailingEoc(cursor.data, dataStart, dataEnd);
+  const trimmedEnd = trimTrailingEoc(cursor.data, dataEnd);
   tileParts.push({
     tileIndex,
     partIndex,
@@ -571,13 +568,9 @@ function readTilePart(
   cursor.position = dataEnd;
 }
 
-// A Psot of 0 runs the tile-part to the end of the codestream, which includes the EOC marker; the packet decoder must not see those two bytes as coded data.
-function trimTrailingEoc(
-  data: Uint8Array<ArrayBuffer>,
-  start: number,
-  end: number,
-): number {
-  if (end - start >= 2 && data[end - 2] === 0xff && data[end - 1] === 0xd9) {
+// A Psot of 0 runs the tile-part to the end of the codestream, which includes the EOC marker; the packet decoder must not see those two bytes as coded data. Takes no separate start/length: readTilePart, this function's sole caller, always calls it with a range beginning immediately after a real SOD marker (0xFF 0x93), so whenever that range is under 2 bytes long, one of the two positions checked below falls on that marker's own fixed bytes rather than on data -- and 0x93 can never be mistaken for 0xD9 -- making the byte comparisons already refuse a too-short range on their own, with no need to measure it first.
+function trimTrailingEoc(data: Uint8Array<ArrayBuffer>, end: number): number {
+  if (data[end - 2] === 0xff && data[end - 1] === 0xd9) {
     return end - 2;
   }
   return end;

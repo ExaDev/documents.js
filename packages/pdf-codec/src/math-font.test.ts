@@ -1,5 +1,61 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadMathFont } from "./math-font";
+import type * as SfntModule from "./sfnt";
+import type * as CmapTableModule from "./cmap-table";
+
+// loadMathFont() caches its result in a module-scoped variable, so exercising its "the embedded font is unreadable" guards -- invariant checks on this package's own build output, never reachable through the real vendored font -- needs a fresh, unmocked module per test: vi.resetModules() plus a dynamic re-import gets a clean, uncached loadMathFont, and vi.doMock lets exactly one of its own real dependencies fail while every other real parser still runs underneath it.
+describe("loadMathFont against a deliberately broken parse (module-level cache reset per test)", () => {
+  afterEach(() => {
+    vi.doUnmock("./sfnt");
+    vi.doUnmock("./cmap-table");
+    vi.resetModules();
+  });
+
+  it("throws its own exact message when the embedded bytes are not a readable sfnt container at all", async () => {
+    vi.resetModules();
+    vi.doMock("./sfnt", async (importOriginal) => ({
+      ...(await importOriginal<typeof SfntModule>()),
+      parseSfnt: () => undefined,
+    }));
+    const { loadMathFont: freshLoadMathFont } = await import("./math-font");
+    expect(() => freshLoadMathFont()).toThrow(
+      "embedded math font is not a readable sfnt container",
+    );
+  });
+
+  it("throws its own exact message when a required sfnt table (head/hhea/CFF ) is missing", async () => {
+    vi.resetModules();
+    vi.doMock("./sfnt", async (importOriginal) => {
+      const actual = await importOriginal<typeof SfntModule>();
+      return {
+        ...actual,
+        sfntTableBytes: (font: unknown, tag: string) =>
+          tag === "CFF "
+            ? undefined
+            : actual.sfntTableBytes(
+                font as Parameters<typeof actual.sfntTableBytes>[0],
+                tag,
+              ),
+      };
+    });
+    const { loadMathFont: freshLoadMathFont } = await import("./math-font");
+    expect(() => freshLoadMathFont()).toThrow(
+      "embedded math font is missing a required sfnt table (head/hhea/CFF )",
+    );
+  });
+
+  it("throws its own exact message when the embedded font has no readable cmap subtable", async () => {
+    vi.resetModules();
+    vi.doMock("./cmap-table", async (importOriginal) => ({
+      ...(await importOriginal<typeof CmapTableModule>()),
+      buildCmapLookup: () => undefined,
+    }));
+    const { loadMathFont: freshLoadMathFont } = await import("./math-font");
+    expect(() => freshLoadMathFont()).toThrow(
+      "embedded math font has no readable cmap subtable",
+    );
+  });
+});
 
 // Every expected value below was independently verified against the real vendored assets/fonts/STIXTwoMath-Regular.otf's own raw bytes while building math-table.ts/cmap-table.ts/hmtx-table.ts (a standalone Node script reading the sfnt table directory directly, not this package's own parser) -- these are real, external cross-checks, not values derived from and re-asserted against this module's own output.
 describe("loadMathFont", () => {
@@ -56,6 +112,41 @@ describe("loadMathFont", () => {
       metrics.fractionRuleThicknessPt * 2,
       6,
     );
+  });
+
+  it("parses every *Pt MATH constant this package exposes, not just the two spot-checked above", () => {
+    // Design-unit values below come from the same independent standalone script the previous test's own top comment describes, reading STIXTwoMath-Regular.otf's raw sfnt bytes directly rather than this package's own parser. Checking every field this package's MathFontMetrics actually exposes (math-table.ts's MATH_VALUE_RECORD_INDEX), not just axisHeight/fractionRuleThickness, is what catches an index entry pointing at the wrong MathValueRecord slot: a transposed pair of adjacent indices would still leave axisHeight and fractionRuleThickness correct.
+    const { metricsAt } = loadMathFont();
+    const metrics = metricsAt(12);
+    const pt = (designUnits: number): number => (designUnits / 1000) * 12;
+    expect(metrics.subscriptShiftDownPt).toBeCloseTo(pt(210), 6);
+    expect(metrics.subscriptBaselineDropMinPt).toBeCloseTo(pt(160), 6);
+    expect(metrics.superscriptShiftUpPt).toBeCloseTo(pt(360), 6);
+    expect(metrics.superscriptShiftUpCrampedPt).toBeCloseTo(pt(252), 6);
+    expect(metrics.superscriptBaselineDropMaxPt).toBeCloseTo(pt(230), 6);
+    expect(metrics.subSuperscriptGapMinPt).toBeCloseTo(pt(150), 6);
+    expect(metrics.spaceAfterScriptPt).toBeCloseTo(pt(40), 6);
+    expect(metrics.upperLimitGapMinPt).toBeCloseTo(pt(135), 6);
+    expect(metrics.upperLimitBaselineRiseMinPt).toBeCloseTo(pt(300), 6);
+    expect(metrics.lowerLimitGapMinPt).toBeCloseTo(pt(135), 6);
+    expect(metrics.lowerLimitBaselineDropMinPt).toBeCloseTo(pt(670), 6);
+    expect(metrics.stackTopShiftUpPt).toBeCloseTo(pt(470), 6);
+    expect(metrics.stackBottomShiftDownPt).toBeCloseTo(pt(385), 6);
+    expect(metrics.stackGapMinPt).toBeCloseTo(pt(150), 6);
+    expect(metrics.fractionNumeratorShiftUpPt).toBeCloseTo(pt(585), 6);
+    expect(metrics.fractionNumeratorDisplayShiftUpPt).toBeCloseTo(pt(640), 6);
+    expect(metrics.fractionDenominatorShiftDownPt).toBeCloseTo(pt(585), 6);
+    expect(metrics.fractionDenominatorDisplayShiftDownPt).toBeCloseTo(
+      pt(640),
+      6,
+    );
+    expect(metrics.fractionNumeratorGapMinPt).toBeCloseTo(pt(68), 6);
+    expect(metrics.fractionDenominatorGapMinPt).toBeCloseTo(pt(68), 6);
+    expect(metrics.radicalRuleThicknessPt).toBeCloseTo(pt(68), 6);
+    expect(metrics.radicalExtraAscenderPt).toBeCloseTo(pt(78), 6);
+    expect(metrics.radicalVerticalGapPt).toBeCloseTo(pt(85), 6);
+    expect(metrics.radicalKernBeforeDegreePt).toBeCloseTo(pt(65), 6);
+    expect(metrics.radicalKernAfterDegreePt).toBeCloseTo(pt(-335), 6);
   });
 
   it("glyph() reports advance width, italic correction, and (for glyphs the font's MathTopAccentAttachment table covers) a top-accent x position", () => {

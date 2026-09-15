@@ -72,6 +72,9 @@ describe("readPdf: AcroForm fields", () => {
       checked: true,
       value: "Yes",
     });
+    expect(checkbox?.widgets).toEqual([
+      { pageIndex: 0, xPt: 10, yPt: 40, widthPt: 12, heightPt: 12 },
+    ]);
   });
 
   it("maps /FT /Sig to a signature field with no control value", () => {
@@ -80,6 +83,9 @@ describe("readPdf: AcroForm fields", () => {
     expect(signature).toMatchObject({ fieldType: "signature" });
     expect(signature?.value).toBeUndefined();
     expect(signature?.checked).toBeUndefined();
+    expect(signature?.widgets).toEqual([
+      { pageIndex: 0, xPt: 150, yPt: 20, widthPt: 40, heightPt: 20 },
+    ]);
   });
 
   it("collects the root field list in document order", () => {

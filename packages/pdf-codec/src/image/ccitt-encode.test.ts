@@ -45,6 +45,26 @@ function realPixelBytes(bytes: Uint8Array, columns: number, rowsCount: number) {
   return out;
 }
 
+describe("encodeCcittFax: degenerate geometry", () => {
+  it("returns an empty stream for zero columns rather than encoding a nonsensical width", () => {
+    const encoded = encodeCcittFax(new Uint8Array(0), { columns: 0, rows: 4 });
+    expect(encoded).toEqual(new Uint8Array(0));
+  });
+
+  it("returns an empty stream for zero rows rather than encoding a nonsensical height", () => {
+    const encoded = encodeCcittFax(new Uint8Array(0), { columns: 8, rows: 0 });
+    expect(encoded).toEqual(new Uint8Array(0));
+  });
+
+  it("returns an empty stream for a negative row count", () => {
+    const encoded = encodeCcittFax(new Uint8Array(0), {
+      columns: 8,
+      rows: -1,
+    });
+    expect(encoded).toEqual(new Uint8Array(0));
+  });
+});
+
 describe("encodeCcittFax: exact bit strings", () => {
   it("codes an all-white row pair as one vertical-mode bit per row", () => {
     // Line 0 against the imaginary all-white reference: a1 = b1 = the sentinel columns, delta 0, so one "1" bit. Line 1 is identical against line 0. Two rows of one bit each = "11", zero-padded to 0xC0.

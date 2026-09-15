@@ -9,8 +9,15 @@ function enc(text: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(text);
 }
 
-// Tracks byte offsets as objects are appended, purely by recording ByteWriter's own running length before each write -- the same mechanical idea src/pdf/write.ts uses, reimplemented independently here rather than shared with it.
-class FixtureBuilder {
+// Boilerplate literals shared verbatim across many otherwise-independent fixtures below -- named once so each is one auditable spelling (and one mutation target) rather than a duplicate the reader has to trust is identical everywhere it recurs.
+const EMPTY_DICT = "<< >>"; // a stream's own dict when it carries no entries beyond the /Length this file's stream() inserts automatically
+const EMC = "EMC"; // marked-content end (ISO 32000-1 14.6): closes whichever BMC/BDC opened the span
+const PDF_1_4 = "1.4";
+const HELVETICA_FONT_DICT =
+  "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
+
+// Tracks byte offsets as objects are appended, purely by recording ByteWriter's own running length before each write -- the same mechanical idea src/pdf/write.ts uses, reimplemented independently here rather than shared with it. Exported solely so pdf.test.ts can exercise its own byte-level mechanics (the /Length-insertion regex, xref padding, offsetOf's misuse guard) directly -- the exported fixture functions below only ever feed it well-formed, non-adversarial input, so those specific mechanics have no other route to direct coverage.
+export class FixtureBuilder {
   private readonly writer = new ByteWriter();
   private readonly offsets = new Map<number, number>();
 
@@ -25,11 +32,6 @@ class FixtureBuilder {
 
   raw(text: string): this {
     this.writer.writeAscii(text);
-    return this;
-  }
-
-  rawBytes(bytes: Uint8Array<ArrayBuffer>): this {
-    this.writer.writeBytes(bytes);
     return this;
   }
 
@@ -99,14 +101,14 @@ function catalogPagesPageFontObjects(
     3,
     `<< /Type /Page /Parent 2 0 R /MediaBox ${mediaBox} /Resources << /Font << /F1 4 0 R >> >> /Contents ${contentObjNum} 0 R ${extraPageEntries}>>`,
   );
-  b.object(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  b.object(4, HELVETICA_FONT_DICT);
 }
 
 // A minimal, structurally ordinary PDF: classic xref table, a literal (parenthesized) content-stream string -- the OTHER string form our own writer never emits (it always emits hex strings), so a fixture using this form specifically exercises the parser's literal-string handling rather than only round-tripping what our own writer happens to produce.
 export function minimalClassicXrefPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.4");
+  const b = new FixtureBuilder().header(PDF_1_4);
   catalogPagesPageFontObjects(b, 5);
-  b.stream(5, "<< >>", enc(HELLO_CONTENT));
+  b.stream(5, EMPTY_DICT, enc(HELLO_CONTENT));
   b.classicXrefAndTrailer(5, "/Root 1 0 R");
   return b.bytes();
 }
@@ -115,16 +117,16 @@ export function minimalClassicXrefPdf(): Uint8Array<ArrayBuffer> {
 export function bTetTextStatePersistencePdf(): Uint8Array<ArrayBuffer> {
   const content =
     "BT /F1 12 Tf 10 80 Td (First line) Tj ET BT 10 60 Td (Second line) Tj ET";
-  const b = new FixtureBuilder().header("1.4");
+  const b = new FixtureBuilder().header(PDF_1_4);
   catalogPagesPageFontObjects(b, 5);
-  b.stream(5, "<< >>", enc(content));
+  b.stream(5, EMPTY_DICT, enc(content));
   b.classicXrefAndTrailer(5, "/Root 1 0 R");
   return b.bytes();
 }
 
 // A structurally valid document with an empty page tree: the page loop over doc.pages() has zero iterations, so a signal whose only check lives inside that loop would never be consulted -- the abort-contract gap this fixture exists to hold closed.
 export function pagelessPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.4");
+  const b = new FixtureBuilder().header(PDF_1_4);
   b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
   b.object(2, "<< /Type /Pages /Kids [] /Count 0 >>");
   b.classicXrefAndTrailer(2, "/Root 1 0 R");
@@ -133,16 +135,16 @@ export function pagelessPdf(): Uint8Array<ArrayBuffer> {
 
 // A two-page document whose FIRST page has no /Resources dict (a deterministic, per-page-1 recoverable warning through the sink) and whose second page carries ordinary text content. Reading it with a signal that the sink aborts on page 1's warning distinguishes "the page loop checks between pages" (throws before page 2 is ever interpreted) from "the signal is only consulted once up front" (returns normally after reading both).
 export function twoPagesFirstWithoutResourcesPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.4");
+  const b = new FixtureBuilder().header(PDF_1_4);
   b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
   b.object(2, "<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>");
   b.object(3, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] >>");
-  b.object(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  b.object(4, HELVETICA_FONT_DICT);
   b.object(
     5,
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 6 0 R >>",
   );
-  b.stream(6, "<< >>", enc(HELLO_CONTENT));
+  b.stream(6, EMPTY_DICT, enc(HELLO_CONTENT));
   b.classicXrefAndTrailer(6, "/Root 1 0 R");
   return b.bytes();
 }
@@ -178,11 +180,10 @@ export function xrefStreamWithObjectStreamPdf(): Uint8Array<ArrayBuffer> {
     `<< /Type /ObjStm /N ${entries.length} /First ${header.length + 1} /Filter /FlateDecode >>`,
     objStmCompressed,
   );
-  b.stream(5, "<< >>", enc(HELLO_CONTENT));
+  b.stream(5, EMPTY_DICT, enc(HELLO_CONTENT));
 
-  // /W [1 4 2]: 1-byte type, 4-byte second field, 2-byte third field -- type 2 (compressed) rows store the containing ObjStm's object number and the index within it; type 1 (uncompressed) rows store a plain byte offset and generation.
+  // /W [1 4 2]: 1-byte type, 4-byte second field, 2-byte third field -- type 2 (compressed) rows store the containing ObjStm's object number and the index within it; type 1 (uncompressed) rows store a plain byte offset and generation. Object 0's own row is never written explicitly: readXref's `type === 0` branch skips a free entry outright regardless of its other field values, so xrefRows' pre-zeroed leading 7 bytes (type 0, offset/gen both 0) already read exactly the same as any other free-list-head content a literal here could assert.
   const rows: number[][] = [
-    [0, 0, 0, 0, 0, 255, 255], // object 0: the conventional free-list head
     [2, 0, 0, 0, 4, 0, 0], // object 1 (Catalog): in ObjStm 4, index 0
     [2, 0, 0, 0, 4, 0, 1], // object 2 (Pages): index 1
     [2, 0, 0, 0, 4, 0, 2], // object 3 (Page): index 2
@@ -192,21 +193,22 @@ export function xrefStreamWithObjectStreamPdf(): Uint8Array<ArrayBuffer> {
   rows.push([1, ...be4(objStmOffset), 0, 0]);
   rows.push([1, ...be4(contentOffset), 0, 0]);
   const xrefObjNum = 6;
-  // The xref stream's own row references its own not-yet-written offset -- known in advance because FixtureBuilder assigns it the moment `stream()` is called, before any bytes are written.
+  // The xref stream's own row references its own not-yet-written offset -- known in advance because FixtureBuilder assigns it the moment `stream()` is called, before any bytes are written. Reserved by a length bump rather than a placeholder row literal: any placeholder value here is fully overwritten below before `xrefRows` is ever built from it, so a literal would only assert bytes nothing downstream can observe.
   const xrefOffsetPlaceholderIndex = rows.length;
-  rows.push([1, 0, 0, 0, 0, 0, 0]); // patched below once the real offset is known
+  rows.length += 1;
 
   const xrefOffset = b.length; // object 6 (the xref stream) starts here, matching what stream(6, ...) is about to record
   rows[xrefOffsetPlaceholderIndex] = [1, ...be4(xrefOffset), 0, 0];
-  const xrefRows = new Uint8Array(rows.length * 7);
+  const totalRows = rows.length + 1; // + object 0's own implicit free-list-head row, never written explicitly (see the comment on `rows` above)
+  const xrefRows = new Uint8Array(totalRows * 7);
   rows.forEach((row, i) => {
-    xrefRows.set(row, i * 7);
+    xrefRows.set(row, (i + 1) * 7);
   });
   const xrefCompressed = zlibSync(xrefRows);
 
   b.stream(
     xrefObjNum,
-    `<< /Type /XRef /Size ${rows.length} /W [1 4 2] /Index [0 ${rows.length}] /Root 1 0 R /Filter /FlateDecode >>`,
+    `<< /Type /XRef /Size ${totalRows} /W [1 4 2] /Index [0 ${totalRows}] /Root 1 0 R /Filter /FlateDecode >>`,
     xrefCompressed,
   );
   b.raw(`startxref\n${xrefOffset}\n%%EOF`);
@@ -219,18 +221,18 @@ function be4(n: number): [number, number, number, number] {
 
 // startxref points at a nonsense offset -- the parser must fall back to a linear scan for "N G obj" patterns to rebuild the xref table from scratch, then raise a recovery diagnostic rather than failing outright.
 export function brokenStartxrefPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.4");
+  const b = new FixtureBuilder().header(PDF_1_4);
   catalogPagesPageFontObjects(b, 5);
-  b.stream(5, "<< >>", enc(HELLO_CONTENT));
+  b.stream(5, EMPTY_DICT, enc(HELLO_CONTENT));
   b.raw(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n999999\n%%EOF`);
   return b.bytes();
 }
 
 // A first revision followed by an incremental update: object 3 (the Page) is redefined by a second, later xref section chained via /Prev to the first. A reader must walk /Prev newest-first and take the FIRST definition of each object number it encounters (the later revision), while objects the second revision doesn't touch (1, 2, 4, 5) still resolve through the original section.
 export function incrementalUpdatePdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.4");
+  const b = new FixtureBuilder().header(PDF_1_4);
   catalogPagesPageFontObjects(b, 5, "[0 0 200 100]");
-  b.stream(5, "<< >>", enc(HELLO_CONTENT));
+  b.stream(5, EMPTY_DICT, enc(HELLO_CONTENT));
   const firstXrefOffset = b.length;
   b.raw("xref\n0 6\n");
   b.raw("0000000000 65535 f \n");
@@ -257,9 +259,9 @@ export function incrementalUpdatePdf(): Uint8Array<ArrayBuffer> {
 
 // /Encrypt present, naming a security handler other than /Standard (this one is the public-key handler, the only other one ISO 32000-1 defines). Nothing derived from a password can open it, so readPdf must say so with a clear PdfEncryptedError rather than a generic parse failure -- distinct from a /Standard-handler file that merely needs a password, which src/test-support/encrypted-pdfs.ts covers with real qpdf-encrypted bytes.
 export function unsupportedSecurityHandlerPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.4");
+  const b = new FixtureBuilder().header(PDF_1_4);
   catalogPagesPageFontObjects(b, 5);
-  b.stream(5, "<< >>", enc(HELLO_CONTENT));
+  b.stream(5, EMPTY_DICT, enc(HELLO_CONTENT));
   b.object(
     6,
     "<< /Filter /Adobe.PubSec /SubFilter /adbe.pkcs7.s5 /V 4 /R 4 >>",
@@ -270,9 +272,9 @@ export function unsupportedSecurityHandlerPdf(): Uint8Array<ArrayBuffer> {
 
 // A page rotated 90 degrees clockwise (/Rotate, ISO 32000-1's own page-rotation attribute -- distinct from any content-stream rotation matrix).
 export function rotatedPagePdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.4");
+  const b = new FixtureBuilder().header(PDF_1_4);
   catalogPagesPageFontObjects(b, 5, "[0 0 200 100]", "/Rotate 90 ");
-  b.stream(5, "<< >>", enc(HELLO_CONTENT));
+  b.stream(5, EMPTY_DICT, enc(HELLO_CONTENT));
   b.classicXrefAndTrailer(5, "/Root 1 0 R");
   return b.bytes();
 }
@@ -282,7 +284,7 @@ export function symbolFontProgramPdf(
   program: Uint8Array<ArrayBuffer>,
   code: number,
 ): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.4");
+  const b = new FixtureBuilder().header(PDF_1_4);
   b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
   b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
   b.object(
@@ -297,10 +299,10 @@ export function symbolFontProgramPdf(
     5,
     "<< /Type /FontDescriptor /FontName /CIDFont+F3 /Flags 4 /FontFile2 6 0 R >>",
   );
-  b.stream(6, "<< >>", program);
+  b.stream(6, EMPTY_DICT, program);
   b.stream(
     7,
-    "<< >>",
+    EMPTY_DICT,
     enc(`BT /F1 12 Tf 10 50 Td <${code.toString(16).padStart(2, "0")}> Tj ET`),
   );
   b.classicXrefAndTrailer(7, "/Root 1 0 R");
@@ -309,25 +311,25 @@ export function symbolFontProgramPdf(
 
 // A /MediaBox whose origin isn't (0,0) -- our own writer never produces one (see write.ts's own module doc), but real producers occasionally do; placement must be computed relative to the MediaBox's own origin, not assumed to be (0,0). The text sits at (60, 60), inside the box, so it survives the crop-box visibility filter (the box IS the visible region even without a declared /CropBox).
 export function nonZeroOriginMediaBoxPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.4");
+  const b = new FixtureBuilder().header(PDF_1_4);
   catalogPagesPageFontObjects(b, 5, "[50 50 250 150]");
-  b.stream(5, "<< >>", enc("BT /F1 12 Tf 60 60 Td (Hello) Tj ET"));
+  b.stream(5, EMPTY_DICT, enc("BT /F1 12 Tf 60 60 Td (Hello) Tj ET"));
   b.classicXrefAndTrailer(5, "/Root 1 0 R");
   return b.bytes();
 }
 
 // A page whose content invokes a form XObject (/Subtype /Form) -- common output from LibreOffice and other producers that wrap page content in a reusable form. The interpreter must recurse into it, composing the form's own /Matrix into the CTM.
 export function formXObjectPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.4");
+  const b = new FixtureBuilder().header(PDF_1_4);
   b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
   b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
   b.object(
     3,
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> /XObject << /Fm1 6 0 R >> >> /Contents 5 0 R >>",
   );
-  b.object(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  b.object(4, HELVETICA_FONT_DICT);
   const pageContent = "q 1 0 0 1 20 20 cm /Fm1 Do Q";
-  b.stream(5, "<< >>", enc(pageContent));
+  b.stream(5, EMPTY_DICT, enc(pageContent));
   const formContent = "BT /F1 12 Tf 0 0 Td (In a form) Tj ET";
   b.stream(
     6,
@@ -340,7 +342,7 @@ export function formXObjectPdf(): Uint8Array<ArrayBuffer> {
 
 // A content stream using the inline-image form (BI ... ID <binary> EI) rather than a full Image XObject -- its end must be located by scanning for EI (no /Length is available for inline images), which is a distinct, easy-to-desynchronize code path from the XObject case.
 export function inlineImagePdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.4");
+  const b = new FixtureBuilder().header(PDF_1_4);
   catalogPagesPageFontObjects(b, 5);
   const pixelData = new Uint8Array([
     255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0,
@@ -349,14 +351,14 @@ export function inlineImagePdf(): Uint8Array<ArrayBuffer> {
   writer.writeAscii("q 100 0 0 100 10 0 cm BI /W 2 /H 2 /CS /RGB /BPC 8 ID ");
   writer.writeBytes(pixelData);
   writer.writeAscii(" EI Q");
-  b.stream(5, "<< >>", writer.toBytes());
+  b.stream(5, EMPTY_DICT, writer.toBytes());
   b.classicXrefAndTrailer(5, "/Root 1 0 R");
   return b.bytes();
 }
 
 // Two pages under a Pages node that itself carries /MediaBox and /Resources -- neither Page defines them directly, so a reader must inherit both down from the Pages node (ISO 32000-1 7.7.3.4, Table 30). The second page additionally sets its own /Rotate, which an inheriting reader must not overwrite with any (here absent) inherited value.
 export function inheritedPageAttributesPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.4");
+  const b = new FixtureBuilder().header(PDF_1_4);
   b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
   b.object(
     2,
@@ -364,17 +366,17 @@ export function inheritedPageAttributesPdf(): Uint8Array<ArrayBuffer> {
   );
   b.object(3, "<< /Type /Page /Parent 2 0 R /Contents 6 0 R >>");
   b.object(4, "<< /Type /Page /Parent 2 0 R /Contents 6 0 R /Rotate 90 >>");
-  b.object(5, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-  b.stream(6, "<< >>", enc(HELLO_CONTENT));
+  b.object(5, HELVETICA_FONT_DICT);
+  b.stream(6, EMPTY_DICT, enc(HELLO_CONTENT));
   b.classicXrefAndTrailer(6, "/Root 1 0 R");
   return b.bytes();
 }
 
 // A page with a hidden /Subtype /Text annotation NOT authored by documents.js's own writer (a different /T, as a real third-party tool's own sticky note would have) -- proves readPageNotes's /T-marker check genuinely discriminates our own notes annotation from someone else's, rather than treating every hidden Text annotation as recovered pptx notes.
 export function pdfWithForeignHiddenAnnotationPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.4");
+  const b = new FixtureBuilder().header(PDF_1_4);
   catalogPagesPageFontObjects(b, 5, "[0 0 200 100]", "/Annots [6 0 R] ");
-  b.stream(5, "<< >>", enc(HELLO_CONTENT));
+  b.stream(5, EMPTY_DICT, enc(HELLO_CONTENT));
   b.object(
     6,
     "<< /Type /Annot /Subtype /Text /Rect [0 0 0 0] /Contents (A real reviewer note, not pptx speaker notes) /T (Some Other Tool) /F 2 >>",
@@ -385,9 +387,9 @@ export function pdfWithForeignHiddenAnnotationPdf(): Uint8Array<ArrayBuffer> {
 
 // An /Info dict mixing the two real-world string encodings a reader must handle: /Title as UTF-16BE-with-BOM (our own writer's own convention, ISO 32000-1 7.9.2.2's "long form"), and /Author/Keywords as plain literal-string PDFDocEncoding (the common case for ASCII-only metadata most third-party producers emit). /CreationDate uses the PDF date format (ISO 32000-1 7.9.4) with an explicit UTC+02:00 offset.
 export function withInfoDictPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.4");
+  const b = new FixtureBuilder().header(PDF_1_4);
   catalogPagesPageFontObjects(b, 5);
-  b.stream(5, "<< >>", enc(HELLO_CONTENT));
+  b.stream(5, EMPTY_DICT, enc(HELLO_CONTENT));
   const titleHex = `feff${Array.from("Test Doc")
     .map((ch) => ch.charCodeAt(0).toString(16).padStart(4, "0"))
     .join("")}`;
@@ -401,7 +403,7 @@ export function withInfoDictPdf(): Uint8Array<ArrayBuffer> {
 
 // A two-page document exercising the whole navigation cluster (#721's core): named destinations from BOTH the old-style catalog /Dests dictionary and a /Names /Dests name tree with a real /Kids split, a two-level document outline, and all three internal-link spellings on page 1 -- a /Dest naming a name-tree destination, a /Dest carrying a direct destination array, and a /A /GoTo action naming an old-style /Dests entry. Page 2 exists so pageIndex resolution is real, not a constant 0.
 export function navigationClusterPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.7");
+  const b = new FixtureBuilder().header();
   b.object(
     1,
     "<< /Type /Catalog /Pages 2 0 R /Dests 9 0 R /Names << /Dests 10 0 R >> /Outlines 11 0 R >>",
@@ -415,8 +417,8 @@ export function navigationClusterPdf(): Uint8Array<ArrayBuffer> {
     4,
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R >>",
   );
-  b.object(5, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-  b.stream(6, "<< >>", enc(HELLO_CONTENT));
+  b.object(5, HELVETICA_FONT_DICT);
+  b.stream(6, EMPTY_DICT, enc(HELLO_CONTENT));
   b.object(
     7,
     "<< /Type /Annot /Subtype /Link /Rect [10 10 60 24] /Dest (second) >>",
@@ -448,18 +450,18 @@ export function navigationClusterPdf(): Uint8Array<ArrayBuffer> {
 
 // The embedded-files cluster (#721 phase 2): a /Names /EmbeddedFiles name-tree entry whose stream carries /Subtype and whose filespec carries /Desc; a /FileAttachment annotation on the page with its own filespec plus a SECOND annotation whose filespec duplicates the name-tree entry's name (the dedup case); and a catalog /AF associated-files entry (ISO 32000-2). One of the streams is Flate-compressed so decoding goes through the ordinary filter path, and one is raw binary bytes with no /Subtype, pinning that mimeType is absent rather than guessed.
 export function embeddedFilesPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.7");
+  const b = new FixtureBuilder().header();
   b.object(
     1,
-    "<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles 6 0 R >> /AF [13 0 R] >>",
+    "<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles 6 0 R >> /AF [13 0 R 16 0 R] >>",
   );
   b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
   b.object(
     3,
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R /Annots [10 0 R 11 0 R] >>",
   );
-  b.object(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-  b.stream(5, "<< >>", enc(HELLO_CONTENT));
+  b.object(4, HELVETICA_FONT_DICT);
+  b.stream(5, EMPTY_DICT, enc(HELLO_CONTENT));
   // The name tree root, split through a /Kids node so the walker's recursion is exercised here too.
   b.object(6, "<< /Kids [7 0 R] >>");
   b.object(7, "<< /Names [(notes.txt) 8 0 R] >>");
@@ -497,13 +499,15 @@ export function embeddedFilesPdf(): Uint8Array<ArrayBuffer> {
     "<< /Type /EmbeddedFile /Filter /FlateDecode >>",
     zlibSync(enc("{}")),
   );
-  b.classicXrefAndTrailer(15, "/Root 1 0 R");
+  // A catalog /AF entry whose /EF resolves but carries neither an /F nor a /UF stream reference -- the one shape readAttachments contributes nothing for, and warns about, rather than an external/referenced filespec that never declares /EF at all.
+  b.object(16, "<< /Type /Filespec /F (broken.bin) /EF << >> >>");
+  b.classicXrefAndTrailer(16, "/Root 1 0 R");
   return b.bytes();
 }
 
 // The optional-content cluster (#721 phase 3): two OCGs with the default configuration switching one OFF, a /OC BDC span in the named-property-list form, one in the inline-dict form carrying /ActualText, and two form XObjects -- one inheriting the outer span's layer, one declaring its own /OC (which wins for its items).
 export function ocgPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.7");
+  const b = new FixtureBuilder().header();
   b.object(
     1,
     "<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [6 0 R 7 0 R] /D << /BaseState /ON /OFF [6 0 R] >> >> >>",
@@ -513,20 +517,20 @@ export function ocgPdf(): Uint8Array<ArrayBuffer> {
     3,
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 4 0 R >> /Properties << /L1 << /OC 6 0 R >> >> /XObject << /Fm1 8 0 R /Fm2 9 0 R >> >> /Contents 5 0 R >>",
   );
-  b.object(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  b.object(4, HELVETICA_FONT_DICT);
   b.stream(
     5,
-    "<< >>",
+    EMPTY_DICT,
     enc(
       [
         "BT /F1 12 Tf 10 180 Td (Visible text) Tj ET",
         "/OC /L1 BDC",
         "BT /F1 12 Tf 10 150 Td (Hidden layer text) Tj ET",
         "/Fm1 Do",
-        "EMC",
+        EMC,
         "/Span << /OC 7 0 R /ActualText (Replacement reading) >> BDC",
         "BT /F1 12 Tf 10 120 Td (Annotated text) Tj ET",
-        "EMC",
+        EMC,
         "/Fm2 Do",
       ].join("\n"),
     ),
@@ -549,19 +553,19 @@ export function ocgPdf(): Uint8Array<ArrayBuffer> {
 
 // The annotation cluster (#721 phase 4): a genuine third-party sticky note (a /T that is not this package's own presenter-notes marker), a FreeText, a Highlight carrying /QuadPoints, and a Stamp -- the opaque kind whose facts ride the quarantined residue channel. Page 2 carries no annotations at all, pinning that the page field is absent rather than an empty array.
 export function annotationsPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.7");
+  const b = new FixtureBuilder().header();
   b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
   b.object(2, "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>");
   b.object(
     3,
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R /Annots [7 0 R 8 0 R 9 0 R 10 0 R] >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R /Annots [7 0 R 8 0 R 9 0 R 10 0 R 11 0 R 12 0 R 13 0 R] >>",
   );
   b.object(
     4,
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R >>",
   );
-  b.object(5, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-  b.stream(6, "<< >>", enc(HELLO_CONTENT));
+  b.object(5, HELVETICA_FONT_DICT);
+  b.stream(6, EMPTY_DICT, enc(HELLO_CONTENT));
   b.object(
     7,
     "<< /Type /Annot /Subtype /Text /Rect [10 60 26 76] /Contents (A real reviewer note) /T (Reviewer) /M (D:20260819140300Z) >>",
@@ -578,13 +582,25 @@ export function annotationsPdf(): Uint8Array<ArrayBuffer> {
     10,
     "<< /Type /Annot /Subtype /Stamp /Rect [100 20 140 40] /Contents (Approved) /T (Reviewer) /Name /Approved >>",
   );
-  b.classicXrefAndTrailer(10, "/Root 1 0 R");
+  b.object(
+    11,
+    "<< /Type /Annot /Subtype /Underline /Rect [20 70 80 82] /Contents (Underlined text) /T (Third reviewer) /QuadPoints [20 82 80 82 80 70 20 70] >>",
+  );
+  b.object(
+    12,
+    "<< /Type /Annot /Subtype /StrikeOut /Rect [90 70 150 82] /Contents (Struck text) /T (Third reviewer) /QuadPoints [90 82 150 82 150 70 90 70] >>",
+  );
+  b.object(
+    13,
+    "<< /Type /Annot /Subtype /Squiggly /Rect [20 85 80 97] /Contents (Squiggly text) /T (Third reviewer) /QuadPoints [20 97 80 97 80 85 20 85] >>",
+  );
+  b.classicXrefAndTrailer(13, "/Root 1 0 R");
   return b.bytes();
 }
 
 // The AcroForm cluster (#721 phase 5): a merged text field (its own /Rect, no widget kids) with /V, /TU, and the ReadOnly /Ff bit; a non-terminal group field whose two children exercise the combo flag on /FT /Ch (with /Opt and a /V) and a checkbox whose /V names an export value other than Off; and a signature field. The widget kids appear in the page's /Annots too, pinning that the Widget walk is owned by the field tree rather than duplicating as an annotation record.
 export function acroFormPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.7");
+  const b = new FixtureBuilder().header();
   b.object(
     1,
     "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [6 0 R 7 0 R 12 0 R] >> >>",
@@ -594,8 +610,8 @@ export function acroFormPdf(): Uint8Array<ArrayBuffer> {
     3,
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R /Annots [6 0 R 10 0 R 11 0 R 13 0 R] >>",
   );
-  b.object(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-  b.stream(5, "<< >>", enc(HELLO_CONTENT));
+  b.object(4, HELVETICA_FONT_DICT);
+  b.stream(5, EMPTY_DICT, enc(HELLO_CONTENT));
   b.object(
     6,
     "<< /Type /Annot /Subtype /Widget /FT /Tx /T (fullname) /V (Jane Doe) /TU (Full name) /Ff 1 /Rect [10 80 110 96] /P 3 0 R >>",
@@ -643,7 +659,7 @@ export function metadataResiduePdf(): Uint8Array<ArrayBuffer> {
     "</x:xmpmeta>",
     '<?xpacket end="w"?>',
   ].join("\n");
-  const b = new FixtureBuilder().header("1.7");
+  const b = new FixtureBuilder().header();
   b.object(
     1,
     "<< /Type /Catalog /Pages 2 0 R /Lang (en-GB) /Metadata 6 0 R /ViewerPreferences << /HideToolbar true >> /PageMode /UseOutlines /OutputIntents [7 0 R] >>",
@@ -653,8 +669,8 @@ export function metadataResiduePdf(): Uint8Array<ArrayBuffer> {
     3,
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
   );
-  b.object(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-  b.stream(5, "<< >>", enc(HELLO_CONTENT));
+  b.object(4, HELVETICA_FONT_DICT);
+  b.stream(5, EMPTY_DICT, enc(HELLO_CONTENT));
   b.stream(6, "<< /Type /Metadata /Subtype /XML >>", enc(xmp));
   b.object(
     7,
@@ -672,7 +688,7 @@ export function metadataResiduePdf(): Uint8Array<ArrayBuffer> {
 
 // MediaBox [0 0 200 100] with CropBox [100 0 200 50] -- the right half's lower band is the only visible region. Three paint operations: text wholly inside the crop, text wholly in the cropped-away left half, and a rect straddling the crop's right edge (x 190..210 against the boundary at 200). A viewer shows the inside text in full, the straddling rect clipped at x=200, and nothing of the outside text. A URI link annotation in the cropped-away half rides along: an annotation is an anchored construct, not painted stream content, so the visibility filter must not claim it.
 export function cropBoxPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.7");
+  const b = new FixtureBuilder().header();
   catalogPagesPageFontObjects(
     b,
     5,
@@ -681,7 +697,7 @@ export function cropBoxPdf(): Uint8Array<ArrayBuffer> {
   );
   b.stream(
     5,
-    "<< >>",
+    EMPTY_DICT,
     enc(
       "BT /F1 12 Tf 120 20 Td (inside) Tj ET BT /F1 12 Tf 10 80 Td (outside) Tj ET 190 20 20 10 re f",
     ),
@@ -696,7 +712,7 @@ export function cropBoxPdf(): Uint8Array<ArrayBuffer> {
 
 // The same geometry with /Rotate 90 -- the crop rect must land origin-normalised in the rotated frame too (the rotated crop spans x 0..50, y 0..100, so the page reports 50x100, the inside text at (120, 20) lands at (20, 80), and the straddling rect crosses the rotated boundary at y=0).
 export function rotatedCropBoxPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.7");
+  const b = new FixtureBuilder().header();
   catalogPagesPageFontObjects(
     b,
     5,
@@ -705,7 +721,7 @@ export function rotatedCropBoxPdf(): Uint8Array<ArrayBuffer> {
   );
   b.stream(
     5,
-    "<< >>",
+    EMPTY_DICT,
     enc(
       "BT /F1 12 Tf 120 20 Td (inside) Tj ET BT /F1 12 Tf 10 80 Td (outside) Tj ET 190 20 20 10 re f",
     ),
@@ -716,7 +732,7 @@ export function rotatedCropBoxPdf(): Uint8Array<ArrayBuffer> {
 
 // CropBox declared on the PARENT Pages node -- it is one of the four page-tree-inheritable attributes (ISO 32000-1 7.7.3.4), so a page with no /CropBox of its own inherits the bottom band [0 0 200 50].
 export function inheritedCropBoxPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.7");
+  const b = new FixtureBuilder().header();
   b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
   b.object(
     2,
@@ -726,10 +742,10 @@ export function inheritedCropBoxPdf(): Uint8Array<ArrayBuffer> {
     3,
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
   );
-  b.object(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  b.object(4, HELVETICA_FONT_DICT);
   b.stream(
     5,
-    "<< >>",
+    EMPTY_DICT,
     enc(
       "BT /F1 12 Tf 10 20 Td (inside) Tj ET BT /F1 12 Tf 10 80 Td (outside) Tj ET",
     ),
@@ -740,30 +756,30 @@ export function inheritedCropBoxPdf(): Uint8Array<ArrayBuffer> {
 
 // MediaBox with an EQUAL CropBox plus the three print-production boxes declared page-direct (ISO 32000-1 Table 30 lists /BleedBox /TrimBox /ArtBox as ordinary per-page entries, not inheritable ones): nothing is cropped away, but the declared boxes are facts beyond the visible box that the model has no field for.
 export function printBoxesPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.7");
+  const b = new FixtureBuilder().header();
   catalogPagesPageFontObjects(
     b,
     5,
     "[0 0 200 100]",
     "/CropBox [0 0 200 100] /BleedBox [0 0 210 110] /TrimBox [5 5 195 95] /ArtBox [10 10 190 90] ",
   );
-  b.stream(5, "<< >>", enc(HELLO_CONTENT));
+  b.stream(5, EMPTY_DICT, enc(HELLO_CONTENT));
   b.classicXrefAndTrailer(5, "/Root 1 0 R");
   return b.bytes();
 }
 
 // MediaBox with an EQUAL CropBox and nothing else -- the degenerate declaration a producer sometimes writes. Nothing is cropped away, and a crop box that IS the media box carries no fact beyond the visible one, so this page contributes no residue row.
 export function equalCropBoxPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.7");
+  const b = new FixtureBuilder().header();
   catalogPagesPageFontObjects(b, 5, "[0 0 200 100]", "/CropBox [0 0 200 100] ");
-  b.stream(5, "<< >>", enc(HELLO_CONTENT));
+  b.stream(5, EMPTY_DICT, enc(HELLO_CONTENT));
   b.classicXrefAndTrailer(5, "/Root 1 0 R");
   return b.bytes();
 }
 
 // The tagged-structure cluster (#760): a /StructTreeRoot whose /K walk covers a role-mapped heading (/S /Chapter that /RoleMap maps to /H1, set at the SAME 12pt as the body so a heading test can pin structure-over-geometry), a /P resolving its /Lang through /ClassMap, a Table/TR/TH/TD subtree, and a second page whose /Sect carries its own /T and /Lang. The parent tree's per-page entries use the shape real producers write (14.7.4.4): each page's key is that page's OWN /StructParents value and the entry is an ARRAY of owning elements indexed by MCID, so MCID 0 appears on BOTH pages owned by different elements -- pinning that association is keyed (page, mcid), never mcid alone. Page 2 also carries unmarked text, pinning that an item with no association simply omits the field, and key 5 holds a single element reference no page claims -- the OBJR channel's shape, which the (page, MCID) walk must recognise and skip.
 export function taggedStructurePdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.7");
+  const b = new FixtureBuilder().header();
   b.object(1, "<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 8 0 R >>");
   b.object(2, "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>");
   b.object(
@@ -774,41 +790,41 @@ export function taggedStructurePdf(): Uint8Array<ArrayBuffer> {
     4,
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 5 0 R >> >> /Contents 7 0 R /StructParents 1 >>",
   );
-  b.object(5, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  b.object(5, HELVETICA_FONT_DICT);
   b.stream(
     6,
-    "<< >>",
+    EMPTY_DICT,
     enc(
       [
         "/H1 << /MCID 0 >> BDC",
         "BT /F1 12 Tf 10 180 Td (Chapter title) Tj ET",
-        "EMC",
+        EMC,
         "/P << /MCID 1 >> BDC",
         "BT /F1 12 Tf 10 150 Td (Body paragraph) Tj ET",
-        "EMC",
+        EMC,
         "/TH << /MCID 2 >> BDC",
         "BT /F1 12 Tf 10 120 Td (Name) Tj ET",
-        "EMC",
+        EMC,
         "/TH << /MCID 3 >> BDC",
         "BT /F1 12 Tf 100 120 Td (Value) Tj ET",
-        "EMC",
+        EMC,
         "/TD << /MCID 4 >> BDC",
         "BT /F1 12 Tf 10 90 Td (Alpha) Tj ET",
-        "EMC",
+        EMC,
         "/TD << /MCID 5 >> BDC",
         "BT /F1 12 Tf 100 90 Td (One) Tj ET",
-        "EMC",
+        EMC,
       ].join("\n"),
     ),
   );
   b.stream(
     7,
-    "<< >>",
+    EMPTY_DICT,
     enc(
       [
         "/P << /MCID 0 >> BDC",
         "BT /F1 12 Tf 10 180 Td (Paragraphe francais) Tj ET",
-        "EMC",
+        EMC,
         "BT /F1 12 Tf 10 150 Td (Untagged) Tj ET",
       ].join("\n"),
     ),
@@ -853,7 +869,7 @@ export function taggedStructurePdf(): Uint8Array<ArrayBuffer> {
 
 // A parent tree whose keys do NOT match page positions (#760): page 1 (index 0) declares /StructParents 7 and page 2 (index 1) declares /StructParents 0, inverting both against their indices -- a reader that treats the key as a page index hands each page the other page's element. Page 2's array also opens with a null (an MCID no element owns), pinning that array entries naming no element are skipped rather than misread, and its stream therefore marks MCID 1.
 export function taggedStructureInvertedParentsPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.7");
+  const b = new FixtureBuilder().header();
   b.object(1, "<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 8 0 R >>");
   b.object(2, "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>");
   b.object(
@@ -864,26 +880,26 @@ export function taggedStructureInvertedParentsPdf(): Uint8Array<ArrayBuffer> {
     4,
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 5 0 R >> >> /Contents 7 0 R /StructParents 0 >>",
   );
-  b.object(5, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  b.object(5, HELVETICA_FONT_DICT);
   b.stream(
     6,
-    "<< >>",
+    EMPTY_DICT,
     enc(
       [
         "/P << /MCID 0 >> BDC",
         "BT /F1 12 Tf 10 180 Td (First page) Tj ET",
-        "EMC",
+        EMC,
       ].join("\n"),
     ),
   );
   b.stream(
     7,
-    "<< >>",
+    EMPTY_DICT,
     enc(
       [
         "/P << /MCID 1 >> BDC",
         "BT /F1 12 Tf 10 180 Td (Second page) Tj ET",
-        "EMC",
+        EMC,
       ].join("\n"),
     ),
   );
@@ -906,25 +922,25 @@ export function taggedStructureInvertedParentsPdf(): Uint8Array<ArrayBuffer> {
 
 // Marked content painted through a form XObject (#760): a form invoked inside a page MCID span paints that span's content (the enclosing page MCID carries onto what it paints), while a form whose own dict declares /StructParents numbers its own MCIDs in its own parent-tree key, so neither its marked nor its unmarked content may inherit the invoking span. The second form's own MCID 0 DOES have an owner under key 3, pinning that the /Stm-qualified channel is left alone rather than looked up against the page's numbering.
 export function taggedFormPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.7");
+  const b = new FixtureBuilder().header();
   b.object(1, "<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 6 0 R >>");
   b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
   b.object(
     3,
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 4 0 R >> /XObject << /FmA 8 0 R /FmB 9 0 R >> >> /Contents 5 0 R /StructParents 0 >>",
   );
-  b.object(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  b.object(4, HELVETICA_FONT_DICT);
   b.stream(
     5,
-    "<< >>",
+    EMPTY_DICT,
     enc(
       [
         "/P << /MCID 0 >> BDC",
         "/FmA Do",
-        "EMC",
+        EMC,
         "/P << /MCID 1 >> BDC",
         "/FmB Do",
-        "EMC",
+        EMC,
       ].join("\n"),
     ),
   );
@@ -948,7 +964,7 @@ export function taggedFormPdf(): Uint8Array<ArrayBuffer> {
       [
         "/Span << /MCID 0 >> BDC",
         "BT /F1 12 Tf 10 10 Td (Self-marked form text) Tj ET",
-        "EMC",
+        EMC,
       ].join("\n"),
     ),
   );
@@ -963,22 +979,22 @@ export function taggedFormPdf(): Uint8Array<ArrayBuffer> {
 
 // A page whose /StructParents names a key the parent tree does not carry (#760) -- the inconsistent-mapping malformation real producers do create. The tree itself is healthy (key 0 names an owner for MCID 0) but the page declares 4, so its marked content resolves to no owner and the inconsistency surfaces as a diagnostic rather than silence.
 export function parentTreeMissingEntryPdf(): Uint8Array<ArrayBuffer> {
-  const b = new FixtureBuilder().header("1.7");
+  const b = new FixtureBuilder().header();
   b.object(1, "<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 6 0 R >>");
   b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
   b.object(
     3,
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R /StructParents 4 >>",
   );
-  b.object(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  b.object(4, HELVETICA_FONT_DICT);
   b.stream(
     5,
-    "<< >>",
+    EMPTY_DICT,
     enc(
       [
         "/P << /MCID 0 >> BDC",
         "BT /F1 12 Tf 10 100 Td (Owned by nothing) Tj ET",
-        "EMC",
+        EMC,
       ].join("\n"),
     ),
   );

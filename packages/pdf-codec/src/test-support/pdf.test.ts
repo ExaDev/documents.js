@@ -2,13 +2,16 @@ import { unzlibSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import {
   brokenStartxrefPdf,
+  FixtureBuilder,
   formXObjectPdf,
   incrementalUpdatePdf,
   inheritedPageAttributesPdf,
   inlineImagePdf,
   minimalClassicXrefPdf,
   nonZeroOriginMediaBoxPdf,
+  pagelessPdf,
   rotatedPagePdf,
+  symbolFontProgramPdf,
   unsupportedSecurityHandlerPdf,
   withInfoDictPdf,
   xrefStreamWithObjectStreamPdf,
@@ -66,6 +69,7 @@ describe("xrefStreamWithObjectStreamPdf", () => {
   it("is well-formed, with startxref pointing at the xref stream's own header", () => {
     const bytes = xrefStreamWithObjectStreamPdf();
     const text = expectWellFormedHeaderAndTrailer(bytes);
+    expect(text.startsWith("%PDF-1.5\n")).toBe(true); // xref streams are a 1.5+ feature, distinct from the classic-xref fixtures' own 1.4
     const match = /startxref\n(\d+)\n%%EOF$/.exec(text);
     expect(match).not.toBeNull();
     const offset = Number(match![1]);
@@ -173,6 +177,22 @@ describe("incrementalUpdatePdf", () => {
       "[0 0 200 100]",
     );
   });
+
+  it("pads every offset in the first revision's own xref section to exactly 10 digits, matching the second revision's", () => {
+    const text = decode(incrementalUpdatePdf());
+    const firstXrefIdx = text.indexOf("xref\n0 6\n");
+    const section = text.slice(firstXrefIdx, text.indexOf("trailer"));
+    expect(section.match(/\d{10} 00000 n /g)).toHaveLength(5);
+  });
+
+  it("closes the first revision's own trailer with a self-contained, well-formed startxref and %%EOF", () => {
+    const text = decode(incrementalUpdatePdf());
+    const firstXrefIdx = text.indexOf("xref\n0 6\n");
+    const firstTrailerIdx = text.indexOf("trailer", firstXrefIdx);
+    expect(text.slice(firstTrailerIdx)).toMatch(
+      /^trailer\n<< \/Size 6 \/Root 1 0 R >>\nstartxref\n\d+\n%%EOF\n3 0 obj/,
+    );
+  });
 });
 
 describe("unsupportedSecurityHandlerPdf", () => {
@@ -274,5 +294,76 @@ describe("inlineImagePdf", () => {
     expect(text).toContain("BI /W 2 /H 2");
     expect(text).toContain(" ID ");
     expect(text).toContain(" EI Q");
+    // The raw 2x2 RGB pixel bytes themselves must sit between ID and EI -- the substring checks above would pass unchanged even with no pixel data at all. latin1 decoding is one character per byte, so the string index doubles as the byte offset.
+    const pixelStart = text.indexOf(" ID ") + " ID ".length;
+    const pixelBytes = [255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0];
+    expect([
+      ...bytes.slice(pixelStart, pixelStart + pixelBytes.length),
+    ]).toEqual(pixelBytes);
+  });
+});
+
+describe("pagelessPdf", () => {
+  it("is a well-formed, structurally valid document with an empty page tree", () => {
+    const bytes = pagelessPdf();
+    verifyFullClassicXref(bytes);
+    const text = expectWellFormedHeaderAndTrailer(bytes);
+    expect(text).toContain("<< /Type /Catalog /Pages 2 0 R >>");
+    expect(text).toContain("<< /Type /Pages /Kids [] /Count 0 >>");
+  });
+});
+
+describe("symbolFontProgramPdf", () => {
+  it("zero-pads a single-hex-digit code to two digits in the content stream", () => {
+    const text = decode(symbolFontProgramPdf(Uint8Array.from([1, 2, 3]), 5));
+    expect(text).toContain("<05> Tj ET");
+  });
+});
+
+// FixtureBuilder itself, exercised directly: the exported fixture functions above only ever feed it well-formed dicts and object numbers that genuinely exist, so its own /Length-insertion regex, misuse guard, and xref-padding arithmetic have no route to coverage except a test that deliberately probes their edge cases.
+describe("FixtureBuilder", () => {
+  it("defaults header() to version 1.7 when called with no argument", () => {
+    const text = decode(new FixtureBuilder().header().bytes());
+    expect(text).toBe("%PDF-1.7\n");
+  });
+
+  it("inserts /Length at the dict's own true end, not at the first nested '>>' it happens to find", () => {
+    const bytes = new FixtureBuilder()
+      .stream(1, "<< /Sub << /X 1 >> >>", new TextEncoder().encode("abc"))
+      .bytes();
+    const text = decode(bytes);
+    expect(text).toContain("<< /Sub << /X 1 >>  /Length 3 >>");
+  });
+
+  it("still inserts /Length when the dict's final '>>' has no whitespace before it", () => {
+    const bytes = new FixtureBuilder()
+      .stream(1, "<<>>", new TextEncoder().encode("ab"))
+      .bytes();
+    const text = decode(bytes);
+    expect(text).toContain("<< /Length 2 >>");
+  });
+
+  it("still inserts /Length when the dict has trailing whitespace after its final '>>'", () => {
+    const bytes = new FixtureBuilder()
+      .stream(1, "<<>> ", new TextEncoder().encode("a"))
+      .bytes();
+    const text = decode(bytes);
+    expect(text).toContain("<< /Length 1 >>");
+  });
+
+  it("throws a clear error rather than silently reading an unwritten object's offset", () => {
+    const b = new FixtureBuilder();
+    expect(() => b.offsetOf(1)).toThrow("fixture object 1 was never written");
+  });
+
+  it("writes the trailer's /Size and the xref subsection count as maxObjNum + 1, and pads every offset to exactly 10 digits", () => {
+    const b = new FixtureBuilder().header("1.4");
+    b.object(1, "<< >>");
+    b.classicXrefAndTrailer(1, "/Root 1 0 R");
+    const text = decode(b.bytes());
+    expect(text).toContain("xref\n0 2\n");
+    expect(text).toContain("trailer\n<< /Size 2 /Root 1 0 R >>");
+    // object 1 starts right after the 9-byte header ("%PDF-1.4\n"), a single-digit offset that must still occupy the full fixed 10-digit field.
+    expect(text).toContain("0000000009 00000 n \n");
   });
 });

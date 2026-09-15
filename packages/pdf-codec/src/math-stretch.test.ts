@@ -164,7 +164,7 @@ describe("MathVariants parsing against the real STIX Two Math font", () => {
     ]);
   });
 
-  // Enumerating the whole 0x1FFFF codepoint range is cheap uninstrumented (well under 200ms), but instrumentation multiplies the per-call cost of every one of the ~131,000 glyphId() calls below: `pnpm test:coverage`'s v8 coverage has been observed taking this test over 30s on a busy CI runner (ExaDev/documents.js#1002), and Stryker's mutant instrumentation is an order of magnitude heavier still, measuring ~28s for this test on a fast local machine and exceeding 90s on a GitHub mutation runner (ExaDev/documents.js#1194). An explicit timeout, not a change to what this test checks: the budget below leaves headroom above the worst instrumented case (a fully-instrumented mutation dry run on a loaded runner) rather than matching it.
+  // Enumerating the whole 0x1FFFF codepoint range is cheap uninstrumented (well under 200ms), but instrumentation multiplies the per-call cost of every one of the ~131,000 glyphId() calls below: `pnpm test:coverage`'s v8 coverage has been observed taking this test over 30s on a busy CI runner (ExaDev/documents.js#1002), and Stryker's mutant instrumentation is an order of magnitude heavier still, measuring ~28s for this test on a fast local machine and exceeding 90s on a GitHub mutation runner (ExaDev/documents.js#1194). No per-test timeout override here: vitest.config.ts's UNIT_TEST_TIMEOUT_MS already leaves a wider margin above this test's own worst observed case than a bespoke value would.
   it("names glyphs that no Unicode code point reaches, which is why drawing a construction needs glyph IDs rather than text", () => {
     const font = loadMathFont();
     const encoded = new Set<number>();
@@ -198,7 +198,7 @@ describe("MathVariants parsing against the real STIX Two Math font", () => {
       .assembly!.parts) {
       expect(encoded.has(part.glyphId)).toBe(false);
     }
-  }, 300_000);
+  });
 
   it("reads the radical sign's own vertical construction", () => {
     const construction = verticalConstruction(RADICAL);
@@ -417,6 +417,20 @@ describe("assembleStretchyGlyph on constructions the real font does not contain"
         { variants: [] },
         { axis: "vertical", targetSize: 1000, minConnectorOverlap: 100 },
       ),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined for an assembly with no parts at all, rather than a hollow zero-size construction", () => {
+    const construction: MathGlyphConstruction = {
+      variants: [],
+      assembly: { italicsCorrection: 0, parts: [] },
+    };
+    expect(
+      assembleStretchyGlyph(construction, {
+        axis: "vertical",
+        targetSize: 1000,
+        minConnectorOverlap: 100,
+      }),
     ).toBeUndefined();
   });
 

@@ -134,8 +134,9 @@ function padBigEndian(
   const padded = new Uint8Array(paddedLength);
   padded.set(bytes);
   padded[bytes.length] = 0x80;
+  // No early exit once bitLength reaches 0: `padded` is already zero-filled, so writing `0 % 256` into the remaining length-field bytes is a no-op, and a message's bit length only ever needs a handful of these `lengthBytes` slots (a JS number's own 2^53 precision ceiling needs at most 7 bytes to represent, well inside SHA-256's 8 and SHA-512's 16) -- realistically never enough real iterations for a `&& bitLength > 0` guard to be the thing that stops this loop, which is exactly the kind of unobservable boundary an equivalent mutant lives in.
   let bitLength = bytes.length * 8;
-  for (let i = 0; i < lengthBytes && bitLength > 0; i++) {
+  for (let i = 0; i < lengthBytes; i++) {
     padded[paddedLength - 1 - i] = bitLength % 256;
     bitLength = Math.floor(bitLength / 256);
   }
@@ -153,22 +154,30 @@ export function sha256(
   const state = Uint32Array.from(H256);
   const w = new Uint32Array(SHA256_ROUNDS);
   for (let offset = 0; offset < padded.length; offset += SHA256_BLOCK_BYTES) {
-    for (let t = 0; t < WORDS_PER_BLOCK; t++) {
-      const at = offset + t * 4;
-      w[t] =
-        ((padded[at]! << 24) |
-          (padded[at + 1]! << 16) |
-          (padded[at + 2]! << 8) |
-          padded[at + 3]!) >>>
-        0;
-    }
-    for (let t = WORDS_PER_BLOCK; t < SHA256_ROUNDS; t++) {
+    // Fills w's first WORDS_PER_BLOCK entries via Uint32Array.set + Array.from's own length argument rather than a counted for-loop: an off-by-one bound on a Uint32Array like `w` would write one entry past its own fixed length, which a typed array silently drops -- an equivalent mutant no test could ever observe.
+    w.set(
+      Array.from({ length: WORDS_PER_BLOCK }, (_, t) => {
+        const at = offset + t * 4;
+        return (
+          ((padded[at]! << 24) |
+            (padded[at + 1]! << 16) |
+            (padded[at + 2]! << 8) |
+            padded[at + 3]!) >>>
+          0
+        );
+      }),
+    );
+    // Array.from's own length argument is SHA256_ROUNDS itself (the full word count, not an arithmetic offset from it), with the already-filled first WORDS_PER_BLOCK entries skipped inside the mapfn -- a subtraction expressing the remaining count here would size a Uint32Array write that a wrong length silently drops (equally unobservable in either direction), whereas mutating this skip condition instead corrupts w[16] onward and is caught by every hash test below.
+    Array.from({ length: SHA256_ROUNDS }, (_, t) => {
+      if (t < WORDS_PER_BLOCK) {
+        return; // already filled directly from the block's own bytes above
+      }
       const x = w[t - 15]!;
       const y = w[t - 2]!;
       const s0 = rotr32(x, 7) ^ rotr32(x, 18) ^ (x >>> 3);
       const s1 = rotr32(y, 17) ^ rotr32(y, 19) ^ (y >>> 10);
       w[t] = (w[t - 16]! + s0 + w[t - 7]! + s1) >>> 0;
-    }
+    });
     let a = state[0]!;
     let b = state[1]!;
     let c = state[2]!;
@@ -194,18 +203,16 @@ export function sha256(
       a = (t1 + t2) >>> 0;
     }
     const next = [a, b, c, d, e, f, g, h];
-    for (let i = 0; i < state.length; i++) {
-      state[i] = (state[i]! + next[i]!) >>> 0;
-    }
+    // Uint32Array.prototype.map's own iteration count (its length) replaces a counted `i < state.length` for-loop for the same reason as w's fill above: an off-by-one bound would read/write one entry past state's fixed length, invisibly dropped by the typed array.
+    state.set(state.map((value, i) => (value + next[i]!) >>> 0));
   }
   const digest = new Uint8Array(state.length * 4);
-  for (let i = 0; i < state.length; i++) {
-    const word = state[i]!;
+  state.forEach((word, i) => {
     digest[i * 4] = (word >>> 24) & 0xff;
     digest[i * 4 + 1] = (word >>> 16) & 0xff;
     digest[i * 4 + 2] = (word >>> 8) & 0xff;
     digest[i * 4 + 3] = word & 0xff;
-  }
+  });
   return digest;
 }
 
@@ -221,22 +228,28 @@ function sha512Core(
 ): Uint8Array<ArrayBuffer> {
   const padded = padBigEndian(bytes, SHA512_BLOCK_BYTES, 16);
   const state = Array.from(initialState);
-  const w = new Array<bigint>(SHA512_ROUNDS).fill(0n);
+  // A plain empty array, not a pre-sized, zero-filled one: every one of its SHA512_ROUNDS entries is explicitly assigned below (the fill loop covers 0..WORDS_PER_BLOCK-1, the expansion loop the rest) before any is ever read, so a pre-sized fill's own length argument would be one more equivalent-mutant boundary for no real behaviour.
+  const w: bigint[] = [];
   for (let offset = 0; offset < padded.length; offset += SHA512_BLOCK_BYTES) {
-    for (let t = 0; t < WORDS_PER_BLOCK; t++) {
+    // Array.from's own length argument replaces a counted `t < WORDS_PER_BLOCK` for-loop, for the same reason as sha256's own word-fill above -- though here w is a plain array rather than a fixed-length typed one, so an off-by-one bound would merely grow it by one entry nothing downstream ever reads, an equally unobservable difference.
+    Array.from({ length: WORDS_PER_BLOCK }, (_, t) => {
       let word = 0n;
       for (let i = 0; i < 8; i++) {
         word = (word << 8n) | BigInt(padded[offset + t * 8 + i]!);
       }
       w[t] = word;
-    }
-    for (let t = WORDS_PER_BLOCK; t < SHA512_ROUNDS; t++) {
+    });
+    // As sha256's own expansion above: Array.from's own length is SHA512_ROUNDS itself, not an arithmetic offset from it, with the already-filled first WORDS_PER_BLOCK entries skipped inside the mapfn -- growing w by extra unread entries past SHA512_ROUNDS is equally unobservable in either direction, whereas mutating this skip condition corrupts w[16] onward and is caught by every hash test below.
+    Array.from({ length: SHA512_ROUNDS }, (_, t) => {
+      if (t < WORDS_PER_BLOCK) {
+        return; // already filled directly from the block's own bytes above
+      }
       const x = w[t - 15]!;
       const y = w[t - 2]!;
       const s0 = rotr64(x, 1n) ^ rotr64(x, 8n) ^ (x >> 7n);
       const s1 = rotr64(y, 19n) ^ rotr64(y, 61n) ^ (y >> 6n);
       w[t] = (w[t - 16]! + s0 + w[t - 7]! + s1) & MASK64;
-    }
+    });
     let a = state[0]!;
     let b = state[1]!;
     let c = state[2]!;

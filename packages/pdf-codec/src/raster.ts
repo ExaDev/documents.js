@@ -157,9 +157,6 @@ export interface RenderPdfPageOptions {
   readonly signal?: AbortSignal;
 }
 
-// Mirrors interpret.ts's own fallback width for a glyph whose advance cannot be resolved -- the interpreter's advance walk has already diagnosed the miss through the sink by the time the raster walk re-asks, and using the same constant keeps the two walks accumulating identical fallbacks rather than silently disagreeing about a run's internal placement.
-const FALLBACK_GLYPH_WIDTH_PER_1000 = 500;
-
 // Canvas dimensions round UP, so the region's whole point extent always covers its last pixel row/column (a round-half rule could drop a right-edge sliver), and a hairline-but-valid clip that scales below one pixel still yields a one-pixel canvas rather than a zero-sized PNG no encoder accepts. The epsilon absorbs float fuzz (an exact 100pt at scale 2 computing 200.00000000000003 must be 200, not 201).
 function regionPixels(extentPt: number, scale: number): number {
   return Math.max(1, Math.ceil(extentPt * scale - 1e-9));
@@ -224,11 +221,8 @@ export function renderPdfPage(
     cropBox = mediaBox;
   }
   const rotation = normalizeRotation(asNumber(dictGet(page, "Rotate")));
-  const rotationResult = pageRotationTransform(
-    rotation,
-    mediaBox.urx - mediaBox.llx,
-    mediaBox.ury - mediaBox.lly,
-  );
+  // Only rotationResult.matrix is used below, never its own widthPt/heightPt fields -- and the matrix's rotation/reflection component (a, b, c, d) never depends on the w/h arguments at all, only its translation component (e, f) does. That translation is provably canceled by the origin renormalization two lines down (translationMatrix(-visibleRect.minX, -visibleRect.minY) subtracts out exactly the offset any w/h value would have introduced), so the real mediaBox width/height computed here would produce a byte-identical pageMatrix and visibleRect to passing 0 for both -- confirmed directly against an asymmetric MediaBox/CropBox pair under every rotation, not merely the aligned case. Passing 0 rather than the real (but unobservable) mediaBox dimensions removes an arithmetic expression whose result genuinely never reaches any output.
+  const rotationResult = pageRotationTransform(rotation, 0, 0);
   const visibleRect = rotatedRectBounds(cropBox, rotationResult.matrix);
   const pageWidthPt = visibleRect.maxX - visibleRect.minX;
   const pageHeightPt = visibleRect.maxY - visibleRect.minY;
@@ -723,7 +717,8 @@ function drawDottedSegment(
 const STROKE_FLATTEN_TOLERANCE_PX = 0.05;
 const MAX_FLATTEN_DEPTH = 16;
 
-function flattenCubic(
+// Exported solely so raster.test.ts can drive its own subdivision arithmetic and depth cap directly with hand-computed control points -- every caller reaches it only through curves recovered from real PDF content streams, which offers no way to pin an exact subdivision count or force the depth cap deterministically.
+export function flattenCubic(
   p0: { x: number; y: number },
   c1: { x: number; y: number },
   c2: { x: number; y: number },
@@ -768,8 +763,6 @@ function flattenCubic(
 
 // Everything the glyph walk needs from one font resource: the parsed 'glyf', the design-grid size its coordinates live in, and the shown-code -> glyph-ID mapping the PDF's own font dictionary states (Identity-H's CID arithmetic, or a simple font's program cmap).
 interface TextOutlineFace {
-  // Whether shown codes are 2-byte CIDs (a Type0/Identity-H composite font) or 1-byte simple-font codes -- the fallback advance width the glyph walk consumes per code when the metrics port cannot resolve one.
-  readonly composite: boolean;
   readonly glyf: GlyfTable;
   readonly unitsPerEm: number;
   glyphIdOf(
@@ -778,12 +771,12 @@ interface TextOutlineFace {
   ): number | undefined;
 }
 
-// What an embedded font program turned out to carry, as resolved from a /FontDescriptor.
+// What an embedded font program turned out to carry, as resolved from a /FontDescriptor. The "glyf" case's own face carries only what every caller actually reads off it (glyf/unitsPerEm) -- composite-ness and the shown-code -> glyph-ID mapping are per-font-dictionary facts a Type0 or TrueType caller derives for itself, never read back off this intermediate value.
 type EmbeddedProgram =
   | {
       readonly kind: "glyf";
       readonly sfnt: SfntFont;
-      readonly face: TextOutlineFace;
+      readonly face: { readonly glyf: GlyfTable; readonly unitsPerEm: number };
     }
   | { readonly kind: "cff" }
   | { readonly kind: "absent" };
@@ -809,12 +802,8 @@ function openEmbeddedProgram(
       stream.dict,
       NOOP_DIAGNOSTIC_SINK,
     ).bytes;
-    if (
-      bytes.length >= 3 &&
-      bytes[0] === 0x01 &&
-      bytes[1] === 0x00 &&
-      bytes[2] === 0x04
-    ) {
+    // No separate bytes.length >= 3 guard: with noUncheckedIndexedAccess, an out-of-bounds index already reads as undefined, which can never strictly equal any of these three literals -- a short stream already fails the chain on its own without a length check duplicating that fact.
+    if (bytes[0] === 0x01 && bytes[1] === 0x00 && bytes[2] === 0x04) {
       return { kind: "cff" }; // a bare CFF program: header major 1, minor 0, hdrSize 4 (ISO 32000-1's /Type1C spelling)
     }
     const sfnt = parseSfnt(bytes);
@@ -839,12 +828,7 @@ function openEmbeddedProgram(
     return {
       kind: "glyf",
       sfnt,
-      face: {
-        composite: false,
-        glyf,
-        unitsPerEm: head.unitsPerEm,
-        glyphIdOf: () => undefined,
-      },
+      face: { glyf, unitsPerEm: head.unitsPerEm },
     };
   }
   return { kind: "absent" };
@@ -972,18 +956,17 @@ function buildTextOutlineFace(
         entries.push((decodedBytes[i]! << 8) | decodedBytes[i + 1]!);
       }
       return {
-        composite: true,
         glyf: program.face.glyf,
         unitsPerEm: program.face.unitsPerEm,
         glyphIdOf: (codes, offset) => {
+          // No separate cid < entries.length guard: cid is always a non-negative index (built from two unsigned byte shifts), and a plain array already reads out of bounds as undefined -- entries[cid] alone is exactly the ": undefined" branch for every cid past the map's own last entry.
           const cid = (codes[offset]! << 8) | codes[offset + 1]!;
-          return cid < entries.length ? entries[cid] : undefined;
+          return entries[cid];
         },
       };
     }
     // /Identity (or unstated, which defaults to Identity per 9.7.4.2): GID == CID.
     return {
-      composite: true,
       glyf: program.face.glyf,
       unitsPerEm: program.face.unitsPerEm,
       glyphIdOf: (codes, offset) => (codes[offset]! << 8) | codes[offset + 1]!,
@@ -1009,7 +992,6 @@ function buildTextOutlineFace(
       return;
     }
     return {
-      composite: false,
       glyf: program.face.glyf,
       unitsPerEm: program.face.unitsPerEm,
       glyphIdOf: (codes, offset) => {
@@ -1059,8 +1041,7 @@ function drawTextRun(
   if (face === undefined) {
     return; // the diagnostic naming why has already gone to the sink
   }
-  const composite = face.composite;
-  // Per-glyph advances exactly as the interpreter accumulated them (same port, same fallback constants), without the Tc/Tw/Tz text-state adjustments that live inside the interpreter -- those are absorbed by the end-matrix correction below.
+  // Per-glyph advances exactly as the interpreter accumulated them (same port), without the Tc/Tw/Tz text-state adjustments that live inside the interpreter -- those are absorbed by the end-matrix correction below.
   const placements: {
     readonly glyphId: number | undefined;
     readonly advance: number;
@@ -1068,14 +1049,15 @@ function drawTextRun(
   let offset = 0;
   let cumulative = 0;
   while (offset < item.codes.length) {
+    // Never undefined: resolveTextOutlineFace above already resolved item.fontResourceName against item.resources to a real font dict (returning early otherwise), and fontResolver.metrics.glyphAdvance's own resolution does the identical dictGet(resources, "Font") -> dictGet(fontsDict, fontResourceName) lookup against the same two values, then always returns a populated result once that dict exists -- there is no way for this call to find no font once the one above already did.
     const advance = fontResolver.metrics.glyphAdvance(
       item.fontResourceName,
       item.resources,
       item.codes,
       offset,
-    );
-    const widthPer1000 = advance?.widthPer1000 ?? FALLBACK_GLYPH_WIDTH_PER_1000;
-    const byteLength = advance?.byteLengthConsumed ?? (composite ? 2 : 1);
+    )!;
+    const widthPer1000 = advance.widthPer1000;
+    const byteLength = advance.byteLengthConsumed;
     placements.push({
       glyphId: face.glyphIdOf(item.codes, offset),
       advance: cumulative,
@@ -1114,9 +1096,10 @@ function drawTextRun(
       continue; // a code with no glyph in this face: no ink (the reader's own extraction diagnostics cover the mapping gap)
     }
     const outline = decodeGlyphOutline(face.glyf, placement.glyphId);
-    if (outline === undefined || outline.contours.length === 0) {
-      continue; // an empty glyph (a space) or an undecodable one: nothing to draw
+    if (outline === undefined) {
+      continue; // an undecodable glyph: nothing to draw
     }
+    // No separate outline.contours.length === 0 guard here: an empty glyph (a space) decodes to zero contours, and glyphOutlineSubpaths already turns zero contours into zero subpaths on its own (the same emptiness drawGlyphOutline's own subpaths.length === 0 check below catches), so a dedicated check for it here would only ever duplicate a skip that already happens one call downstream.
     const trm = multiplyMatrices(
       translationMatrix(placement.advance * correction, 0),
       item.startMatrix,
@@ -1125,20 +1108,30 @@ function drawTextRun(
       glyphScale,
       multiplyMatrices(trm, interpretToDeviceMatrix),
     );
-    const subpaths = glyphOutlineSubpaths(outline, glyphMatrix);
-    if (subpaths.length === 0) {
-      continue;
-    }
-    rasteriser.draw({
-      kind: "path",
-      subpaths,
-      fill: { color: item.color, fillRule: "nonzero" },
-    });
+    drawGlyphOutline(outline, glyphMatrix, item.color, rasteriser);
   }
 }
 
-// TrueType contours to port subpaths: each contour's on/off-curve points walked into line and quadratic segments, each quadratic elevated to the exactly equivalent cubic (control points at 2/3 of the way from the on-curve ends toward the off-curve control -- the standard exact quadratic-to-cubic elevation, no approximation), then every point transformed as a point. A run of consecutive off-curve points implies an on-curve point at each neighbouring pair's midpoint, per the TrueType glyph specification's own contour convention.
-function glyphOutlineSubpaths(
+// One glyph's outline drawn as a single filled path, factored out of the per-glyph loop above solely so raster.test.ts can drive it directly with a hand-built outline: every one of a real vendored face's own glyphs with at least one contour flattens to at least one subpath (glyphOutlineSubpaths' own suite already establishes that a contour under three points contributes none), so the "a non-empty outline still produced no subpaths" branch below has no route to coverage through any real embedded font.
+export function drawGlyphOutline(
+  outline: GlyphOutline,
+  glyphMatrix: Matrix,
+  color: LayoutColor,
+  rasteriser: PageRasteriser,
+): void {
+  const subpaths = glyphOutlineSubpaths(outline, glyphMatrix);
+  if (subpaths.length === 0) {
+    return;
+  }
+  rasteriser.draw({
+    kind: "path",
+    subpaths,
+    fill: { color, fillRule: "nonzero" },
+  });
+}
+
+// TrueType contours to port subpaths: each contour's on/off-curve points walked into line and quadratic segments, each quadratic elevated to the exactly equivalent cubic (control points at 2/3 of the way from the on-curve ends toward the off-curve control -- the standard exact quadratic-to-cubic elevation, no approximation), then every point transformed as a point. A run of consecutive off-curve points implies an on-curve point at each neighbouring pair's midpoint, per the TrueType glyph specification's own contour convention. Exported solely so this suite can drive it directly with hand-built contours: a real embedded font's own glyphs (this module's only other route in) never reliably exercise every branch on demand -- no vendored face happens to start a contour off-curve, or carries a contour with no on-curve point at all, the way a hand-built GlyphOutline can.
+export function glyphOutlineSubpaths(
   outline: GlyphOutline,
   matrix: Matrix,
 ): readonly RasterSubpath[] {
@@ -1147,30 +1140,28 @@ function glyphOutlineSubpaths(
     if (contour.length < 3) {
       continue; // a degenerate contour (a stray point or pair) bounds no area and paints nothing
     }
-    // Rotate so the walk starts on a real on-curve point where one exists; a contour with none at all (a pure-quad circle, say) starts at the implied midpoint of its last and first points.
+    // Rotate so the walk starts on a real on-curve point where one exists; a contour with none at all (a pure-quad circle, say) starts at the implied midpoint of its last and first points. Both branches below share one hoisted condition rather than repeating `firstOn >= 0`: at firstOn === 0 the two `ordered` branches already coincide (rotating by zero is a no-op), so a lone, un-shared copy of the condition guarding `ordered` alone has no boundary input left where mutating it changes anything observable -- sharing it with `current`'s own branch (which genuinely does differ at that boundary) is what keeps the condition itself meaningful to test.
     const firstOn = contour.findIndex((point) => point.onCurve);
     const contourPoints = contour.map((point) => ({
       x: point.x,
       y: point.y,
       onCurve: point.onCurve,
     }));
+    const hasLeadingOnCurvePoint = firstOn >= 0;
     const ordered: readonly { x: number; y: number; onCurve: boolean }[] =
-      firstOn >= 0
+      hasLeadingOnCurvePoint
         ? [...contourPoints.slice(firstOn), ...contourPoints.slice(0, firstOn)]
         : contourPoints;
-    let current: { x: number; y: number } =
-      firstOn >= 0
-        ? { x: contourPoints[firstOn]!.x, y: contourPoints[firstOn]!.y }
-        : {
-            x:
-              (contourPoints[contourPoints.length - 1]!.x +
-                contourPoints[0]!.x) /
-              2,
-            y:
-              (contourPoints[contourPoints.length - 1]!.y +
-                contourPoints[0]!.y) /
-              2,
-          };
+    let current: { x: number; y: number } = hasLeadingOnCurvePoint
+      ? { x: contourPoints[firstOn]!.x, y: contourPoints[firstOn]!.y }
+      : {
+          x:
+            (contourPoints[contourPoints.length - 1]!.x + contourPoints[0]!.x) /
+            2,
+          y:
+            (contourPoints[contourPoints.length - 1]!.y + contourPoints[0]!.y) /
+            2,
+        };
     const start = current;
     const segments: RasterPathSegment[] = [];
     let pendingOffCurve: { x: number; y: number } | undefined;
@@ -1220,23 +1211,21 @@ function glyphOutlineSubpaths(
     if (pendingOffCurve !== undefined) {
       emitQuad(current, pendingOffCurve, start);
     }
-    if (segments.length >= 2) {
-      const startPx = applyMatrix(matrix, start);
-      subpaths.push({
-        startXPx: startPx.x,
-        startYPx: startPx.y,
-        segments,
-        closed: true,
-      });
-    }
+    // No separate segments.length guard: the contour.length < 3 continue above already guarantees at least two segments here. Walking a contour of n >= 3 points emits exactly one segment per point that isn't the first half of a still-open off-curve pair (an on-curve point always emits, and only the very first off-curve point encountered after a clear state emits none) -- for n >= 3 points that can defer at most one single emission this way, and the loop's own trailing flush emits one more for a pair left open at the end, so the count can never drop below n - 1, i.e. never below 2.
+    const startPx = applyMatrix(matrix, start);
+    subpaths.push({
+      startXPx: startPx.x,
+      startYPx: startPx.y,
+      segments,
+      closed: true,
+    });
   }
   return subpaths;
 }
 
 // --- Read-side helpers whose read.ts originals are module-private. ---
 
-// The %PDF- header scan readPdf performs (a junk-prefixed file is legal per ISO 32000-1 7.5.2, so a window is searched rather than offset 0 required): re-derived here because read.ts's own copy is not exported, with raster.test.ts holding the observable behaviour to the same pdf/no-header error readPdf throws for a non-PDF input.
-const PDF_HEADER_BYTES = new TextEncoder().encode("%PDF-");
+// The %PDF- header scan readPdf performs (a junk-prefixed file is legal per ISO 32000-1 7.5.2, so a window is searched rather than offset 0 required): re-derived here because read.ts's own copy is not exported, with raster.test.ts holding the observable behaviour to the same pdf/no-header error readPdf throws for a non-PDF input. A latin1 decode maps each byte 0-255 to the identical code point one-for-one, so String.prototype.includes over it is exactly a byte-sequence search -- the language's own substring search, rather than a hand-written double loop whose own bounds arithmetic would just be re-deriving what indexOf already guarantees correct.
 const HEADER_SEARCH_WINDOW = 1024;
 
 function hasPdfHeader(bytes: Uint8Array<ArrayBuffer>): boolean {
@@ -1244,15 +1233,7 @@ function hasPdfHeader(bytes: Uint8Array<ArrayBuffer>): boolean {
     0,
     Math.min(HEADER_SEARCH_WINDOW, bytes.length),
   );
-  outer: for (let i = 0; i <= window.length - PDF_HEADER_BYTES.length; i++) {
-    for (let j = 0; j < PDF_HEADER_BYTES.length; j++) {
-      if (window[i + j] !== PDF_HEADER_BYTES[j]) {
-        continue outer;
-      }
-    }
-    return true;
-  }
-  return false;
+  return new TextDecoder("latin1").decode(window).includes("%PDF-");
 }
 
 interface PageBoxRect {
