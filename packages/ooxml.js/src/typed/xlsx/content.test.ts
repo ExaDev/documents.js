@@ -14,12 +14,13 @@ import type {
   ContentSheetDataValidation,
 } from "document-schema.js";
 import type { Package } from "../../model/package";
+import type { XmlElement, XmlNode } from "../../model/node";
 import { el, txt } from "../../xml/fragment";
 import { decodePackage, encodePackage } from "../../codec";
 import { parsePackage } from "../../package-io/read";
 import { attr, childrenWithTag, rootElement } from "../util";
 import { buildXlsxPackageFromContent } from "./build";
-import { columnWidthCharsToPt } from "./units";
+import { columnWidthCharsToPt, DEFAULT_COLUMN_WIDTH_CHARS } from "./units";
 import { readXlsxContent, resolveSheetEntries } from "./content";
 
 // This suite reads real, unmodified LibreOffice-generated .xlsx fixtures (src/typed/xlsx/fixtures/*.xlsx). Both fixtures are genuine LibreOffice xlsx-exports (`soffice --headless --convert-to xlsx`) of odf.js's own src/typed/ods/fixtures/{kitchen-sink,minimal}.ods -- the same feature set that package's own readOds test suite already validates against ODF's equivalent mechanisms, run back through LibreOffice's real SpreadsheetML export filter so this suite exercises genuine, LibreOffice-authored xlsx markup (column-width character units, row heights, hidden rows/columns, every value-type LibreOffice's own xlsx exporter distinguishes, a real merged range, a real cross-sheet formula, and real print settings including Print_Area/Print_Titles defined names) rather than a hand-built approximation of what that markup might look like. A handful of narrow scope-boundary/error-path tests at the end use small, synthetic, hand-built packages instead (via el/txt), mirroring readOds's own established convention for the identical reason.
@@ -1008,6 +1009,8 @@ describe("readXlsxContent: chart graphic frames", () => {
       chart?.document.kind === "spreadsheet"
         ? chart.document.sheets[0]
         : undefined;
+    // The graphic frame's own xdr:cNvPr/@name ("Chart 1"), not the "Chart" fallback -- the payload sheet is named after the shape that actually held it.
+    expect(sheet?.name).toBe("Chart 1");
     expect(sheet?.cells).toEqual([
       {
         row: 0,
@@ -2035,6 +2038,234 @@ describe("readXlsxContent: drawing pictures (mixed anchor spellings)", () => {
     expect(
       document.sheets[0]?.images.map((image) => image.anchorColumn),
     ).toEqual([0, 1, 0]);
+  });
+});
+
+// A drawing-bearing package for SheetGridGeometry and anchor-walk edge cases the fixtures above don't happen to exercise: the caller supplies the worksheet's own children (cols/sheetFormatPr/sheetData) and the drawing's own single anchor element directly, everything else (workbook, every relationship, the one media part) fixed to the same tiny PNG the picture fixtures above already use.
+function customDrawingPackage(
+  worksheetChildren: XmlNode[],
+  anchor: XmlElement,
+): Package {
+  const worksheet = el("worksheet", {}, [
+    ...worksheetChildren,
+    el("drawing", { "r:id": "rIdDrawing" }),
+  ]);
+  const drawing = el("xdr:wsDr", {}, [anchor]);
+  const relationship = (id: string, type: string, target: string) =>
+    el("Relationship", { Id: id, Type: type, Target: target });
+  return {
+    parts: {
+      "xl/workbook.xml": {
+        kind: "xml",
+        nodes: [
+          el("workbook", {}, [
+            el("sheets", {}, [
+              el("sheet", { name: "Data", sheetId: "1", "r:id": "rIdSheet" }),
+            ]),
+          ]),
+        ],
+      },
+      "xl/_rels/workbook.xml.rels": {
+        kind: "xml",
+        nodes: [
+          el("Relationships", {}, [
+            relationship(
+              "rIdSheet",
+              "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
+              "worksheets/sheet1.xml",
+            ),
+          ]),
+        ],
+      },
+      "xl/worksheets/sheet1.xml": { kind: "xml", nodes: [worksheet] },
+      "xl/worksheets/_rels/sheet1.xml.rels": {
+        kind: "xml",
+        nodes: [
+          el("Relationships", {}, [
+            relationship(
+              "rIdDrawing",
+              "http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing",
+              "../drawings/drawing1.xml",
+            ),
+          ]),
+        ],
+      },
+      "xl/drawings/drawing1.xml": { kind: "xml", nodes: [drawing] },
+      "xl/drawings/_rels/drawing1.xml.rels": {
+        kind: "xml",
+        nodes: [
+          el("Relationships", {}, [
+            relationship(
+              "rIdImage",
+              "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "../media/image1.png",
+            ),
+            relationship(
+              "rIdChart",
+              "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart",
+              "../charts/chart1.xml",
+            ),
+          ]),
+        ],
+      },
+      "xl/media/image1.png": { kind: "binary", base64: TINY_PNG_BASE64 },
+      "xl/charts/chart1.xml": {
+        kind: "xml",
+        nodes: [
+          el("c:chartSpace", {}, [
+            el("c:chart", {}, [el("c:plotArea", {}, [el("c:barChart", {})])]),
+          ]),
+        ],
+      },
+    },
+  };
+}
+
+// A twoCellAnchor carrying a single xdr:pic, from col0/row0 (offset 0) to col1/row1 (offset 0) unless overridden -- the minimal shape for exercising SheetGridGeometry's own column/row reading via the resulting frame size, independent of the anchor-placement arithmetic the fixtures above already cover.
+function onePicTwoCellAnchor(
+  opts: {
+    toCol?: number;
+    toRow?: number;
+    editAs?: string;
+  } = {},
+): XmlElement {
+  const { toCol = 1, toRow = 1, editAs } = opts;
+  const picture = el("xdr:pic", {}, [
+    el("xdr:nvPicPr", {}, [el("xdr:cNvPr", { id: "2", name: "Picture 1" })]),
+    el("xdr:blipFill", {}, [el("a:blip", { "r:embed": "rIdImage" })]),
+    el("xdr:spPr", {}, [
+      el("a:xfrm", {}, [
+        el("a:off", { x: "0", y: "0" }),
+        el("a:ext", { cx: "914400", cy: "914400" }),
+      ]),
+      el("a:prstGeom", { prst: "rect" }, [el("a:avLst")]),
+    ]),
+  ]);
+  return el("xdr:twoCellAnchor", editAs === undefined ? {} : { editAs }, [
+    el("xdr:from", {}, [
+      el("xdr:col", {}, [txt("0")]),
+      el("xdr:colOff", {}, [txt("0")]),
+      el("xdr:row", {}, [txt("0")]),
+      el("xdr:rowOff", {}, [txt("0")]),
+    ]),
+    el("xdr:to", {}, [
+      el("xdr:col", {}, [txt(String(toCol))]),
+      el("xdr:colOff", {}, [txt("0")]),
+      el("xdr:row", {}, [txt(String(toRow))]),
+      el("xdr:rowOff", {}, [txt("0")]),
+    ]),
+    picture,
+    el("xdr:clientData"),
+  ]);
+}
+
+function imagesOf(pkg: Package): ContentSheet["images"] {
+  const document = readXlsxContent(pkg);
+  if (document.kind !== "spreadsheet") {
+    throw new Error("expected a spreadsheet ContentDocument");
+  }
+  return document.sheets[0]?.images ?? [];
+}
+
+describe("readXlsxContent: SheetGridGeometry (synthetic packages)", () => {
+  it("ignores a declared column range whose min is below 1, falling back to the default column width", () => {
+    const images = imagesOf(
+      customDrawingPackage(
+        [
+          el("cols", {}, [el("col", { min: "0", max: "1", width: "999" })]),
+          el("sheetData", {}, []),
+        ],
+        onePicTwoCellAnchor({ toCol: 1 }),
+      ),
+    );
+    // Column 0 must fall back to the default width, not the malformed range's huge declared one.
+    expect(images[0]?.widthPt).toBeCloseTo(
+      columnWidthCharsToPt(DEFAULT_COLUMN_WIDTH_CHARS),
+      5,
+    );
+  });
+
+  it("prefers a covering column range's own declared width over a narrower range with no width at all", () => {
+    // Two declared ranges both cover column 0 -- an outer 1..5 range with no width (a real producer's habit for "these columns use the sheet default"), and an inner 1..1 range that actually states one. The inner range's real width must win, not the wider range's undefined one merely because .find() met it first.
+    const images = imagesOf(
+      customDrawingPackage(
+        [
+          el("cols", {}, [
+            el("col", { min: "1", max: "5" }),
+            el("col", { min: "1", max: "1", width: "40" }),
+          ]),
+          el("sheetData", {}, []),
+        ],
+        onePicTwoCellAnchor({ toCol: 1 }),
+      ),
+    );
+    expect(images[0]?.widthPt).toBeCloseTo(columnWidthCharsToPt(40), 5);
+  });
+
+  it("reads a real sheetFormatPr defaultRowHeight rather than falling back to the built-in default", () => {
+    const images = imagesOf(
+      customDrawingPackage(
+        [
+          el("sheetFormatPr", { defaultRowHeight: "30" }),
+          el("sheetData", {}, []),
+        ],
+        onePicTwoCellAnchor({ toRow: 1 }),
+      ),
+    );
+    expect(images[0]?.heightPt).toBeCloseTo(30, 5);
+  });
+
+  it("reads a declared row's own height, offset by one from its 1-based r, in preference to the default", () => {
+    const images = imagesOf(
+      customDrawingPackage(
+        [
+          el("sheetFormatPr", { defaultRowHeight: "15" }),
+          el("sheetData", {}, [el("row", { r: "1", ht: "50" })]),
+        ],
+        onePicTwoCellAnchor({ toRow: 1 }),
+      ),
+    );
+    // r="1" names the FIRST row (0-based index 0) -- the very row this anchor spans, not the one after it.
+    expect(images[0]?.heightPt).toBeCloseTo(50, 5);
+  });
+
+  it("ignores a declared row whose r is below 1, or whose ht does not parse, falling back to the default height", () => {
+    const images = imagesOf(
+      customDrawingPackage(
+        [
+          el("sheetFormatPr", { defaultRowHeight: "15" }),
+          el("sheetData", {}, [
+            el("row", { r: "0", ht: "999" }),
+            el("row", { r: "1", ht: "not a number" }),
+          ]),
+        ],
+        onePicTwoCellAnchor({ toRow: 1 }),
+      ),
+    );
+    expect(images[0]?.heightPt).toBeCloseTo(15, 5);
+  });
+
+  it("defaults editAs to twoCell (sizing from the to-marker) when the attribute is absent, and reads it when present", () => {
+    const defaulted = imagesOf(
+      customDrawingPackage(
+        [el("sheetData", {}, [])],
+        onePicTwoCellAnchor({ toCol: 2 }),
+      ),
+    );
+    // No editAs at all: sized from the to-marker difference (2 default-width columns), not the picture's own 1"x1" (72pt) xdr:ext.
+    expect(defaulted[0]?.widthPt).toBeCloseTo(
+      2 * columnWidthCharsToPt(DEFAULT_COLUMN_WIDTH_CHARS),
+      5,
+    );
+
+    const oneCell = imagesOf(
+      customDrawingPackage(
+        [el("sheetData", {}, [])],
+        onePicTwoCellAnchor({ toCol: 2, editAs: "oneCell" }),
+      ),
+    );
+    // editAs="oneCell" on a twoCellAnchor (Excel's real spelling for "move but don't size with cells"): sized from the shape's own transform extent (1in = 72pt) instead, ignoring the to-marker entirely.
+    expect(oneCell[0]?.widthPt).toBeCloseTo(72, 5);
   });
 });
 
