@@ -644,6 +644,69 @@ describe("writePdf -> readPdf: structural round trip", () => {
     });
   });
 
+  // Every display-destination view type ISO 32000-1 Table 151 defines (destinationViewArray's own full branch set), each round-tripped through an internal link so the written direct array and the read side's parseDestination agree exactly on both the view type and its own particular coordinates.
+  it.each([
+    { target: { kind: "fit" as const } },
+    { target: { kind: "fitH" as const, topPt: 55 } },
+    { target: { kind: "fitH" as const } },
+    { target: { kind: "fitV" as const, leftPt: 33 } },
+    { target: { kind: "fitV" as const } },
+    {
+      target: {
+        kind: "fitR" as const,
+        leftPt: 1,
+        bottomPt: 2,
+        rightPt: 3,
+        topPt: 4,
+      },
+    },
+    { target: { kind: "fitB" as const } },
+    { target: { kind: "fitBH" as const, topPt: 66 } },
+    { target: { kind: "fitBH" as const } },
+    { target: { kind: "fitBV" as const, leftPt: 77 } },
+    { target: { kind: "fitBV" as const } },
+  ])(
+    "round-trips an internal link's $target.kind destination view",
+    ({ target }) => {
+      const doc = docWithPages([
+        { widthPt: 300, heightPt: 200, items: [] },
+        { widthPt: 300, heightPt: 200, items: [] },
+      ]);
+      doc.destinations = [{ name: "target", pageIndex: 1, target }];
+      doc.pages[0]!.items.push({
+        kind: "internalLink",
+        destination: "target",
+        xPt: 0,
+        yPt: 0,
+        widthPt: 10,
+        heightPt: 10,
+      });
+      const result = readPdf(writePdf(doc, { compress: false }));
+      expect(result.destinations).toEqual([
+        { name: "dest1", pageIndex: 1, target },
+      ]);
+    },
+  );
+
+  it("throws rather than guessing when a destination names a page index beyond the document's own pages", () => {
+    const doc = docWithItems([
+      {
+        kind: "internalLink",
+        destination: "target",
+        xPt: 0,
+        yPt: 0,
+        widthPt: 10,
+        heightPt: 10,
+      },
+    ]);
+    doc.destinations = [
+      { name: "target", pageIndex: 5, target: { kind: "fit" } },
+    ];
+    expect(() => writePdf(doc, { compress: false })).toThrow(
+      /beyond the document/,
+    );
+  });
+
   it("throws rather than guessing when an internal link names a destination the document does not carry", () => {
     const doc = docWithItems([
       {
