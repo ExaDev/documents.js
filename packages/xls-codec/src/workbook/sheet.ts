@@ -307,10 +307,11 @@ export function readSheetRecords(
   let printHeaders: boolean | undefined;
   let fitToPage: boolean | undefined;
 
-  for (let index = 0; index < records.length; index += 1) {
+  // No `index < records.length` bound: index can jump past the end of a genuinely dense array (the CondFmt/CondFmt12 skip below advances it by more than one), and records itself has no real holes, so records[index] === undefined already means, and means only, "index has run past the last record" -- a second, separate length comparison would only ever restate that same fact, one iteration later, for a mutation to silently swap without changing anything this loop actually does.
+  for (let index = 0; ; index += 1) {
     const record = records[index];
     if (record === undefined) {
-      continue;
+      break;
     }
     switch (record.type) {
       case RECORD_DIMENSIONS:
