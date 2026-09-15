@@ -213,10 +213,10 @@ function collectFormulaGroups(
   records: readonly RecordGroup[],
 ): ReadonlyMap<string, FormulaGroup> {
   const groups = new Map<string, FormulaGroup>();
-  for (let index = 0; index < records.length; index += 1) {
-    const record = records[index];
+  // records.entries() rather than an indexed for-loop: it types `record` as a genuine RecordGroup with no undefined case to guard for the loop's own sake (noUncheckedIndexedAccess only has an opinion about arr[i], not about-of iteration), leaving `next = records[index + 1]` -- genuinely capable of running past the array's own end -- as the one undefined check this loop actually needs.
+  for (const [index, record] of records.entries()) {
     const next = records[index + 1];
-    if (record === undefined || next === undefined) {
+    if (next === undefined) {
       continue;
     }
     if (record.type !== RECORD_FORMULA) {
@@ -536,11 +536,8 @@ function stringResultAfter(
   records: readonly RecordGroup[],
   formulaIndex: number,
 ): RecordGroup | undefined {
-  for (let index = formulaIndex + 1; index < records.length; index += 1) {
-    const candidate = records[index];
-    if (candidate === undefined) {
-      return undefined;
-    }
+  // A slice, not an indexed for-loop bounded by records.length: reaching the end of the slice ends the search with the identical "no String found" outcome the explicit undefined check below stated separately, so a real array plus for-of leaves nothing here for that check to do.
+  for (const candidate of records.slice(formulaIndex + 1)) {
     if (candidate.type === RECORD_STRING) {
       return candidate;
     }
