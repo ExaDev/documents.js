@@ -820,10 +820,29 @@ describe("writing footnotes back out", () => {
   });
 
   it("throws rather than guessing when the markers do not pair up", () => {
-    expect(() =>
-      emitMarkdown(minimalDocument([{ kind: "constructEnd" }])),
-    ).toThrow(MarkdownUnbalancedConstructMarkersError);
-    expect(() =>
+    let unmatchedEnd: unknown;
+    try {
+      emitMarkdown(minimalDocument([{ kind: "constructEnd" }]));
+    } catch (error) {
+      unmatchedEnd = error;
+    }
+    expect(unmatchedEnd).toBeInstanceOf(
+      MarkdownUnbalancedConstructMarkersError,
+    );
+    const unmatchedEndTyped =
+      unmatchedEnd as MarkdownUnbalancedConstructMarkersError;
+    expect(unmatchedEndTyped.name).toBe(
+      "MarkdownUnbalancedConstructMarkersError",
+    );
+    expect(unmatchedEndTyped.imbalanceKind).toBe("unmatchedEnd");
+    expect(unmatchedEndTyped.blockIndex).toBe(0);
+    expect(unmatchedEndTyped.code).toBe("md/unbalanced-construct-markers");
+    expect(unmatchedEndTyped.message).toBe(
+      "a constructEnd marker closes no open construct at block index 0; a block list's construct boundary markers must pair as balanced brackets",
+    );
+
+    let unclosedStart: unknown;
+    try {
       emitMarkdown(
         minimalDocument([
           {
@@ -831,8 +850,20 @@ describe("writing footnotes back out", () => {
             descriptor: { kind: "anchor", anchorType: "footnote", name: "1" },
           },
         ]),
-      ),
-    ).toThrow(MarkdownUnbalancedConstructMarkersError);
+      );
+    } catch (error) {
+      unclosedStart = error;
+    }
+    expect(unclosedStart).toBeInstanceOf(
+      MarkdownUnbalancedConstructMarkersError,
+    );
+    const unclosedStartTyped =
+      unclosedStart as MarkdownUnbalancedConstructMarkersError;
+    expect(unclosedStartTyped.imbalanceKind).toBe("unclosedStart");
+    expect(unclosedStartTyped.blockIndex).toBe(0);
+    expect(unclosedStartTyped.message).toBe(
+      "a constructStart marker is never closed at block index 0; a block list's construct boundary markers must pair as balanced brackets",
+    );
   });
 });
 

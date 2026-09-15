@@ -54,7 +54,6 @@ import {
 } from "../defaults/defaults";
 import { matchHtmlBlockStart } from "../html/html";
 import { isValidFootnoteLabel } from "../inline/footnote";
-import { MARKDOWN_TAB_STOP_WIDTH } from "../scan/scan";
 import type {
   MarkdownHeadingStyle,
   WriteMarkdownOptions,
@@ -117,10 +116,19 @@ const SETEXT_LEVEL_1_CHAR = "=";
 const SETEXT_LEVEL_2_CHAR = "-";
 const MIN_SETEXT_UNDERLINE_LENGTH = 1;
 
+// String.prototype.split never returns an empty array for any input, even the empty string ("".split(x) === [""]) -- so a split result's own first line is always genuinely present. Returning a tuple type here, rather than a plain string[], lets every call site destructure or index its own first element directly: TypeScript already knows a tuple's fixed leading position is defined regardless of noUncheckedIndexedAccess, so no call site needs a dead "?? ''"/"= ''" fallback for a branch this invariant guarantees it can never actually take. The non-null assertion below is the one place that invariant is asserted, rather than repeated at every call site.
+function splitLines(
+  text: string,
+  pattern: string | RegExp,
+): readonly [string, ...string[]] {
+  const [first, ...rest] = text.split(pattern);
+  return [first!, ...rest];
+}
+
 function renderSetextHeading(level: number, text: string): string {
   const underlineChar = level === 1 ? SETEXT_LEVEL_1_CHAR : SETEXT_LEVEL_2_CHAR;
   // A setext underline's own length has no semantic meaning beyond "one or more" -- matching the heading text's own rendered length keeps the output visually tidy without claiming any significance for the exact count, so a CR- or CRLF-delimited first line (LINE_ENDING_PATTERN, not a bare '\n' split) still measures the SAME first line the rest of this module's own line-ending-aware checks agree on, rather than treating the whole multi-line text as a single "line" whenever its own first break is not an LF.
-  const firstLine = text.split(LINE_ENDING_PATTERN)[0] ?? "";
+  const [firstLine] = splitLines(text, LINE_ENDING_PATTERN);
   const underline = underlineChar.repeat(
     Math.max(MIN_SETEXT_UNDERLINE_LENGTH, firstLine.length),
   );
@@ -168,20 +176,13 @@ function isQuotableStyle(styleId: string | undefined): boolean {
   );
 }
 
-// Whether a rendered block of this styleId closes itself unambiguously -- so a non-blank line immediately following it is always scanned by a reparse as a FRESH block rather than being absorbed backward into this one as ordinary continuation text. This is the "safe as PREVIOUS" half of requiresBlankLineBefore's compound check below, and unlike canInterruptOpenParagraph it does not depend on any emit option: a fenced code block and a math block each close at their own explicit closing delimiter, a thematic break and an ATX heading are each a single complete line, and a SETEXT heading's own underline line closes it exactly as definitively -- nothing can lazily continue a heading once its underline has been read, so the setext spelling is only unsafe on the OTHER side, as something that ITSELF follows an open paragraph (see canInterruptOpenParagraph). Deliberately false for QUOTE_STYLE_ID (renders through the same prefix-free renderParagraphBody as a plain paragraph here, so carries no boundary of its own) and for HTML_PREFORMATTED_STYLE_ID (this package re-emits raw HTML as a bare literal with no record of which CommonMark HTML-block start condition produced it, and several of those seven conditions close only at a blank line -- with no closing condition of its own to fall back to, anything following without one keeps being read as more of the same literal HTML content).
+// Whether a rendered block of this styleId closes itself unambiguously -- so a non-blank line immediately following it is always scanned by a reparse as a FRESH block rather than being absorbed backward into this one as ordinary continuation text. This is the "safe as PREVIOUS" half of requiresBlankLineBefore's compound check below, and unlike canInterruptOpenParagraph it does not depend on any emit option: a fenced code block and a math block each close at their own explicit closing delimiter, a thematic break and an ATX heading are each a single complete line, and a SETEXT heading's own underline line closes it exactly as definitively -- nothing can lazily continue a heading once its underline has been read, so the setext spelling is only unsafe on the OTHER side, as something that ITSELF follows an open paragraph (see canInterruptOpenParagraph). False for QUOTE_STYLE_ID (renders through the same prefix-free renderParagraphBody as a plain paragraph here, so carries no boundary of its own) and for HTML_PREFORMATTED_STYLE_ID (this package re-emits raw HTML as a bare literal with no record of which CommonMark HTML-block start condition produced it, and several of those seven conditions close only at a blank line -- with no closing condition of its own to fall back to, anything following without one keeps being read as more of the same literal HTML content) -- neither needs its own explicit branch, since neither matches any of the four positive checks below either, so both already fall out to false on their own.
 function terminatesCleanly(styleId: string | undefined): boolean {
-  if (
-    styleId === undefined ||
-    styleId === QUOTE_STYLE_ID ||
-    styleId === HTML_PREFORMATTED_STYLE_ID
-  ) {
-    return false;
-  }
   return (
     styleId === CODE_BLOCK_STYLE_ID ||
     styleId === MATH_BLOCK_STYLE_ID ||
     styleId === HORIZONTAL_RULE_STYLE_ID ||
-    parseHeadingStyleId(styleId) !== undefined
+    (styleId !== undefined && parseHeadingStyleId(styleId) !== undefined)
   );
 }
 
@@ -197,19 +198,16 @@ function firstContentLineIndex(text: string): number {
     .findIndex((line) => !BLANK_OR_WHITESPACE_ONLY_LINE.test(line));
 }
 
-// The column width of a line's own leading run of spaces and tabs, expanded per CommonMark's own tab-stop rule (spec 0.31.2, "Tabs": "in contexts where spaces help to define block structure, tabs behave as if they were replaced by spaces with a tab stop of 4 characters", counted from the start of the LINE, not the whole document). Shares MARKDOWN_TAB_STOP_WIDTH with src/scan/scan.ts's own MarkdownScanCursor so a tab's width agrees with the read side's parse of the very text this function is predicting the reparse of.
-function leadingIndentColumns(line: string): number {
+// Whether a line's own leading run of spaces and tabs reaches CommonMark's own 4-column indented-code-block threshold (spec 0.31.2, "Tabs": "in contexts where spaces help to define block structure, tabs behave as if they were replaced by spaces with a tab stop of 4 characters", counted from the start of the LINE, not the whole document). Shares MARKDOWN_TAB_STOP_WIDTH with src/scan/scan.ts's own MarkdownScanCursor so a tab's width agrees with the read side's parse of the very text this function is predicting the reparse of. The sole caller below only ever asks a >= CODE_INDENT_COLUMNS boundary question, never the exact column count beyond it, so this returns that boundary directly. Once the leading run of plain spaces ends, only the SINGLE character right after it can still change the answer: a tab there is always itself sufficient to reach the threshold (CODE_INDENT_COLUMNS <= MARKDOWN_TAB_STOP_WIDTH means expanding a tab from any column short of the threshold already lands exactly on it), and anything else stops the leading run outright -- so this needs no loop-exhausted fallback the way a step-by-step scan through every remaining character would: `line[column]` reads as `undefined` past the string's own end, which compares unequal to "\t" exactly as a real non-tab character would.
+function leadingIndentReachesCodeThreshold(line: string): boolean {
   let column = 0;
-  for (const char of line) {
-    if (char === " ") {
-      column += 1;
-    } else if (char === "\t") {
-      column += MARKDOWN_TAB_STOP_WIDTH - (column % MARKDOWN_TAB_STOP_WIDTH);
-    } else {
-      break;
-    }
+  while (column < line.length && line[column] === " ") {
+    column += 1;
   }
-  return column;
+  if (column >= CODE_INDENT_COLUMNS) {
+    return true;
+  }
+  return line[column] === "\t";
 }
 
 // CommonMark's own list-item grammar (spec 0.31.2, section 5.2 "List items"): "A list item can begin with at most one blank line." -- the bound the leading-run exemption above is held to, applied universally regardless of which context (top-level, blockquote, list item) the heading being checked is actually about to render through, since this function cannot see that and the bound is harmless where it is not strictly required.
@@ -275,7 +273,7 @@ function unsafeSetextBreakReason(text: string): UnsafeSetextBreakReason {
         continue;
       }
       sawContentLine = true;
-      if (leadingIndentColumns(line) >= CODE_INDENT_COLUMNS) {
+      if (leadingIndentReachesCodeThreshold(line)) {
         return "leading-indentation";
       }
       if (interruptsSetextParagraph(line, true)) {
@@ -349,11 +347,8 @@ function canInterruptOpenParagraph(
   context: EmitContext,
 ): boolean {
   const styleId = paragraph.styleId;
-  if (
-    styleId === undefined ||
-    styleId === QUOTE_STYLE_ID ||
-    styleId === HTML_PREFORMATTED_STYLE_ID
-  ) {
+  // Undefined needs its own early return purely so parseHeadingStyleId below gets a definite string -- QUOTE_STYLE_ID and HTML_PREFORMATTED_STYLE_ID need no explicit check of their own alongside it, since neither matches any of the positive branches below (parseHeadingStyleId included), so both already fall out to the final `return false` on their own.
+  if (styleId === undefined) {
     return false;
   }
   if (styleId === CODE_BLOCK_STYLE_ID || styleId === MATH_BLOCK_STYLE_ID) {
@@ -607,10 +602,10 @@ function toEmitItem(item: ListRegionItem): EmitItem {
   return item.kind === "paragraph" ? { block: item.block } : item.item;
 }
 
-// One item's first-block preparation: the checkbox text its marker line carries, and whether that block's own leading run is a legacy checkbox glyph that must be stripped from the body. The membership's own checked field is the current spelling and needs no task-flagged numId behind it; the glyph sniff is gated on the numId's task flag AND on the first block actually being a paragraph (a construct has no runs of its own to sniff a glyph from), so an ordinary item whose text happens to begin with a ballot-box glyph is never misread as a checkbox.
+// One item's first-block preparation: the checkbox text its marker line carries, and the SAME paragraph with any legacy checkbox glyph run already stripped out of it, when one was found. The membership's own checked field is the current spelling and needs no task-flagged numId behind it; the glyph sniff is gated on the numId's task flag AND on the first block actually being a paragraph (a construct has no runs of its own to sniff a glyph from), so an ordinary item whose text happens to begin with a ballot-box glyph is never misread as a checkbox. Doing the strip here, once, rather than returning a separate "please strip" boolean for listRegionItemBody to act on later, means no second site ever needs to re-derive from the run text whether stripping applies -- the one place that already found the glyph is the one place that removes it.
 interface FirstBlockCheckbox {
   readonly checkboxText: string;
-  readonly stripGlyph: boolean;
+  readonly strippedFirstBlock: ContentParagraph | undefined;
 }
 
 function firstBlockCheckbox(
@@ -620,20 +615,26 @@ function firstBlockCheckbox(
   if (first.list.checked !== undefined) {
     return {
       checkboxText: first.list.checked ? "[x] " : "[ ] ",
-      stripGlyph: false,
+      strippedFirstBlock: undefined,
     };
   }
   if (!taskNumId || first.kind !== "paragraph") {
-    return { checkboxText: "", stripGlyph: false };
+    return { checkboxText: "", strippedFirstBlock: undefined };
   }
   const leading = first.block.runs[0]?.text ?? "";
   if (leading.startsWith(`${TASK_CHECKBOX_CHECKED} `)) {
-    return { checkboxText: "[x] ", stripGlyph: true };
+    return {
+      checkboxText: "[x] ",
+      strippedFirstBlock: stripCheckboxRun(first.block),
+    };
   }
   if (leading.startsWith(`${TASK_CHECKBOX_UNCHECKED} `)) {
-    return { checkboxText: "[ ] ", stripGlyph: true };
+    return {
+      checkboxText: "[ ] ",
+      strippedFirstBlock: stripCheckboxRun(first.block),
+    };
   }
-  return { checkboxText: "", stripGlyph: false };
+  return { checkboxText: "", strippedFirstBlock: undefined };
 }
 
 interface RenderedListMarker {
@@ -721,7 +722,8 @@ function consumeSameItemRun(
   itemId: string,
 ): number {
   let end = from;
-  while (end < items.length) {
+  // No separate `end < items.length` bound: `items[end]` running off the end already returns undefined, which the very next check below catches and breaks on -- an explicit length comparison here would be redundant with that undefined check on every real input, never independently true or false.
+  for (;;) {
     const candidate = items[end];
     if (candidate?.list.level !== level || candidate.list.itemId !== itemId) {
       break;
@@ -750,7 +752,8 @@ function collectListItem(
 
   for (;;) {
     let nestedEnd = index;
-    while (nestedEnd < items.length) {
+    // No separate `nestedEnd < items.length` bound: `items[nestedEnd]` running off the end already yields `candidateLevel === undefined`, which the check below already breaks on.
+    for (;;) {
       const candidateLevel = items[nestedEnd]?.list.level;
       if (candidateLevel === undefined || candidateLevel <= level) {
         break;
@@ -766,10 +769,8 @@ function collectListItem(
     if (itemId === undefined) {
       break;
     }
+    // No separate "did anything actually resume?" check: when nothing does, resumedEnd stays equal to index, so this pushes a harmless empty "own" segment (segments.push/segment.blocks are never read for their COUNT, only segments[0] and each segment's own blocks) and the loop's own nested-run check above terminates it on the very next pass, since index is unchanged from this one.
     const resumedEnd = consumeSameItemRun(items, index, level, itemId);
-    if (resumedEnd === index) {
-      break;
-    }
     segments.push({ kind: "own", blocks: items.slice(index, resumedEnd) });
     index = resumedEnd;
   }
@@ -811,17 +812,14 @@ function lastStyleIdOfRegionItem(item: ListRegionItem): string | undefined {
   return lastStyleIdOf(toEmitItem(item));
 }
 
-// One list-region item's own rendered body, with no marker/indent applied yet. A plain paragraph renders through renderParagraphBody exactly as before (optionally with its checkbox glyph stripped); a construct renders through renderConstruct -- the SAME function renderItems reaches for a construct that is NOT part of any list region, so a construct's own markdown spelling never diverges depending on whether it happens to sit inside a list item, EXCEPT for context.enclosingItemId, set here for the duration of that one call: it is what lets renderItems' own recursive walk over the construct's children tell inherited pass-through membership (this exact item, see EmitContext's own field comment) apart from a genuinely fresh nested list.
+// One list-region item's own rendered body, with no marker/indent applied yet. A plain paragraph renders through renderParagraphBody exactly as before (using `overrideParagraph` in place of the item's own block when the caller already prepared a checkbox-glyph-stripped version, per firstBlockCheckbox above); a construct renders through renderConstruct -- the SAME function renderItems reaches for a construct that is NOT part of any list region, so a construct's own markdown spelling never diverges depending on whether it happens to sit inside a list item, EXCEPT for context.enclosingItemId, set here for the duration of that one call: it is what lets renderItems' own recursive walk over the construct's children tell inherited pass-through membership (this exact item, see EmitContext's own field comment) apart from a genuinely fresh nested list.
 function listRegionItemBody(
   item: ListRegionItem,
   context: EmitContext,
-  stripGlyph: boolean,
+  overrideParagraph: ContentParagraph | undefined,
 ): string {
   if (item.kind === "paragraph") {
-    return renderParagraphBody(
-      stripGlyph ? stripCheckboxRun(item.block) : item.block,
-      context,
-    );
+    return renderParagraphBody(overrideParagraph ?? item.block, context);
   }
   const previousEnclosingItemId = context.enclosingItemId;
   context.enclosingItemId = item.list.itemId;
@@ -854,7 +852,8 @@ function renderListRegion(
   let index = 0;
   // The immediately preceding numId's own resolved type/glyph, local to this call (never read across a recursive call into a nested sub-list, or across a separate top-level renderListRegion call) -- exactly the scope resolveListGlyph's own collision check needs: two lists are only a genuine ADJACENCY risk when nothing else renders between them, which is precisely what "both sit in the SAME renderListRegion call's own items array" already guarantees. Left unset (and never consulted) for a depth-only membership (numId undefined, the cross-format shape LIST_NUMID_FALLBACK already documents) -- a rare cross-format edge case this glyph-alternation scheme does not extend to.
   let previousSibling: ListSiblingSignature | undefined;
-  while (index < items.length) {
+  // No separate `index < items.length` bound: `items[index]` running off the end already returns undefined, which the very next check breaks on.
+  for (;;) {
     const item = items[index];
     if (item === undefined) {
       break;
@@ -863,11 +862,10 @@ function renderListRegion(
     const info = listInfoFor(numId, context);
     const loose = info?.loose === true;
     const type = info?.type ?? "bullet";
+    // A depth-only membership (numId undefined) always resolves through listInfoFor's OWN undefined-numId branch, which never returns real ListNumIdInfo -- so `type` above is always its own "bullet" default here, and `type === "ordered"` can never be true in this branch specifically; only the numId-carrying side ever sees a genuinely ordered type.
     const glyph =
       numId === undefined
-        ? type === "ordered"
-          ? context.orderedDelimiter
-          : context.bulletMarker
+        ? context.bulletMarker
         : resolveListGlyph(numId, type, previousSibling, context);
     if (numId !== undefined) {
       previousSibling = { numId, type, glyph };
@@ -878,7 +876,7 @@ function renderListRegion(
     if (first === undefined) {
       break;
     }
-    const { checkboxText, stripGlyph } = firstBlockCheckbox(
+    const { checkboxText, strippedFirstBlock } = firstBlockCheckbox(
       first,
       info?.task === true,
     );
@@ -911,12 +909,10 @@ function renderListRegion(
       }
       for (const block of segment.blocks) {
         if (!renderedFirstLine) {
-          const bodyLines = listRegionItemBody(
-            block,
-            context,
-            stripGlyph,
-          ).split("\n");
-          const [firstLine = "", ...restLines] = bodyLines;
+          const [firstLine, ...restLines] = splitLines(
+            listRegionItemBody(block, context, strippedFirstBlock),
+            "\n",
+          );
           text = [
             `${marker.full}${firstLine}`,
             ...restLines.map((line) => `${indent}${line}`),
@@ -925,7 +921,7 @@ function renderListRegion(
           previousStyleId = lastStyleIdOfRegionItem(block);
           continue;
         }
-        const rendered = listRegionItemBody(block, context, false)
+        const rendered = listRegionItemBody(block, context, undefined)
           .split("\n")
           .map((line) => (line.length === 0 ? line : `${indent}${line}`))
           .join("\n");
@@ -994,7 +990,8 @@ function groupConstructItems(
 ): { readonly items: EmitItem[]; readonly next: number } {
   const items: EmitItem[] = [];
   let index = start;
-  while (index < blocks.length) {
+  // No separate `index < blocks.length` bound: `blocks[index]` running off the end already returns undefined, which the very next check breaks on.
+  for (;;) {
     const block = blocks[index];
     if (block === undefined) {
       break;
@@ -1024,7 +1021,7 @@ function renderFootnoteDefinition(name: string, body: string): string {
     return marker;
   }
   const indent = " ".repeat(FOOTNOTE_CONTINUATION_INDENT);
-  const [firstLine = "", ...restLines] = body.split("\n");
+  const [firstLine, ...restLines] = splitLines(body, "\n");
   return [
     `${marker} ${firstLine}`,
     ...restLines.map((line) => (line.length === 0 ? line : `${indent}${line}`)),
@@ -1048,17 +1045,15 @@ function renderConstruct(item: ConstructItem, context: EmitContext): string {
     });
     return body;
   }
-  if (descriptor.kind === "division") {
-    // The blockquote spelling is gated on this package's own dual carry, not on the descriptor alone -- see isMaterialisedDivision above for exactly what that gate checks and why. A division whose paragraphs carry no such indent is a FOREIGN one -- an ODF text:section, a tagged-PDF /Sect -- and renders transparently below: a named section is not a markdown blockquote, and rendering it as one would invent a construct the source never had.
-    if (isMaterialisedDivision(item)) {
-      context.divisionDepth += 1;
-      const body = renderItems(item.children, context);
-      context.divisionDepth -= 1;
-      return body
-        .split("\n")
-        .map((line) => (line.length === 0 ? ">" : `> ${line}`))
-        .join("\n");
-    }
+  // The blockquote spelling is gated on this package's own dual carry, not on the descriptor kind alone -- see isMaterialisedDivision above for exactly what that gate checks and why. A division whose paragraphs carry no such indent is a FOREIGN one -- an ODF text:section, a tagged-PDF /Sect -- and renders transparently below: a named section is not a markdown blockquote, and rendering it as one would invent a construct the source never had. No separate `descriptor.kind === "division"` guard here: isMaterialisedDivision's own first check already tests that, so a non-division descriptor is refused there regardless, making an outer duplicate of the same check redundant.
+  if (isMaterialisedDivision(item)) {
+    context.divisionDepth += 1;
+    const body = renderItems(item.children, context);
+    context.divisionDepth -= 1;
+    return body
+      .split("\n")
+      .map((line) => (line.length === 0 ? ">" : `> ${line}`))
+      .join("\n");
   }
   if (descriptor.kind === "link" && descriptor.target.kind === "external") {
     // The mint condition is exact -- a pair around precisely one image block, the shape this package's own read side mints. A link construct of any other shape (an annotated block extent from another codec, a run-level pair flattened into a block list) renders transparently below rather than being guessed at.
@@ -1127,7 +1122,8 @@ function isInheritedListMembership(
 function renderItems(items: readonly EmitItem[], context: EmitContext): string {
   const parts: string[] = [];
   let index = 0;
-  while (index < items.length) {
+  // No separate `index < items.length` bound: `items[index]` running off the end already returns undefined, which the very next check breaks on.
+  for (;;) {
     const item = items[index];
     if (item === undefined) {
       break;
@@ -1227,10 +1223,10 @@ function emitBlocks(
   return renderItems(groupConstructItems(blocks, 0).items, context);
 }
 
-// A paragraph's run-level construct extents must name real runs before anything renders them -- the run-level twin of the marker-balance check above, through document-schema.js's own findRunConstructFault so every codec and consumer agree on one definition of well-formed. Tables are walked into because a cell's block list holds its own paragraphs (and nothing else descends further: a table inside a table cell is not a shape GFM or this model produces).
+// A paragraph's run-level construct extents must name real runs before anything renders them -- the run-level twin of the marker-balance check above, through document-schema.js's own findRunConstructFault so every codec and consumer agree on one definition of well-formed. Tables are walked into because a cell's block list holds its own paragraphs (and nothing else descends further: a table inside a table cell is not a shape GFM or this model produces). No separate `block.constructs !== undefined` guard here: findRunConstructFault already checks that itself and returns undefined immediately, so a paragraph with no constructs at all is exactly as safe to pass through unconditionally.
 function validateRunConstructExtents(blocks: readonly ContentBlock[]): void {
   for (const block of blocks) {
-    if (block.kind === "paragraph" && block.constructs !== undefined) {
+    if (block.kind === "paragraph") {
       const fault = findRunConstructFault(block);
       if (fault !== undefined) {
         throw new MarkdownInvalidRunConstructExtentError(
