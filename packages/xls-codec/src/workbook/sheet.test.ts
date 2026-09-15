@@ -155,6 +155,22 @@ describe("readSheetRecords cell records", () => {
     );
   });
 
+  it("rejects a MulBlank record whose negative payload is nonetheless an exact multiple of its own entry width, proving the negative check is not just standing in for the modulo one", () => {
+    // MulBlank's own entry width is 2 bytes, and a 4-byte record (row + colFirst only, no colLast, no entries) gives a payload of 4 - 6 = -2 -- negative, but -2 % 2 is 0 in JS's own signed modulo, so only a genuine `payload < 0` check catches this; the modulo clause alone would wrongly accept it.
+    expect(() =>
+      readCells(record(RECORD_MULBLANK, [...u16(0), ...u16(0)])),
+    ).toThrow(
+      "multiple-cell record of 4 bytes does not hold a whole number of 2-byte entries",
+    );
+  });
+
+  it("accepts a MulBlank record whose payload is exactly zero, a legitimate empty run rather than a negative one", () => {
+    const cells = readCells(
+      record(RECORD_MULBLANK, [...u16(0), ...u16(0), ...u16(0)]),
+    );
+    expect(cells).toStrictEqual([]);
+  });
+
   it("reads a Blank cell", () => {
     const cells = readCells(record(RECORD_BLANK, cell(1, 1)));
 
@@ -316,6 +332,44 @@ describe("readSheetRecords formula cells", () => {
     );
 
     expect(cells[0]?.value).toStrictEqual({ kind: "boolean", value: false });
+  });
+
+  it("treats byte 6 alone being 0xff, with byte 7 genuinely not, as an untagged numeric FormulaValue -- both bytes must be 0xff, not just one", () => {
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 0),
+        0x01, // would read as a boolean tag if this FormulaValue were actually tagged
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0xff,
+        0x00, // byte 7 is genuinely not 0xff
+        ...formulaTail,
+      ]),
+    );
+
+    expect(cells[0]?.value.kind).toBe("number");
+  });
+
+  it("treats byte 7 alone being 0xff, with byte 6 genuinely not, as an untagged numeric FormulaValue too", () => {
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 0),
+        0x01,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00, // byte 6 is genuinely not 0xff
+        0xff,
+        ...formulaTail,
+      ]),
+    );
+
+    expect(cells[0]?.value.kind).toBe("number");
   });
 
   it("reads an error cached result from its tag byte", () => {

@@ -264,11 +264,8 @@ function readArrayGroup(record: RecordGroup): ArrayFormulaGroup {
   cursor.skip(ARRAY_HEADER_BYTES);
   const cce = cursor.u16();
   const rgce = cursor.take(cce);
+  // Never negative: cursor.take(cce) just above already proved that many bytes genuinely present, so recordByteLength(record) is provably >= ARRAY_HEADER_BYTES + 2 + cce already. Always taking it (rather than special-casing a non-positive length as undefined) still hands parseFormulaText the exact same "no PtgArray trailer" fact when it is genuinely zero: an empty-but-defined rgcb makes ptg.ts's own rgcbCursor real rather than undefined, but a real cursor with zero bytes left fails on its own very first read exactly as an absent one already does, so a formula needing one resolves to undefined either way, and one that needs none never consults rgcb at all. Reading a length larger than what the record actually holds (a genuine overrun) still throws BiffFormatError, caught below for the same reason as before: a malformed trailer should degrade only this one array formula's group, not abort any other cell's read.
   const rgcbLength = recordByteLength(record) - (ARRAY_HEADER_BYTES + 2 + cce);
-  // A non-positive length means the record's own declared byte total does not even cover its header and rgce -- malformed, and genuinely undefined rather than a fake empty buffer: an empty Uint8Array would claim "this record legitimately carries zero bytes of rgcb," which is a real, valid state (an array formula whose rgce has no PtgArray at all) that this distinguishes from. Reading a rgcbLength byte count larger than what the record actually holds (an overrun, as opposed to this too-short case) throws BiffFormatError instead, caught the same way for the same reason: both are this one Array record's own malformed trailer, and neither should stop any OTHER cell's formula from resolving.
-  if (rgcbLength <= 0) {
-    return { kind: "array", rgce, rgcb: undefined };
-  }
   try {
     return { kind: "array", rgce, rgcb: cursor.take(rgcbLength) };
   } catch (error) {
@@ -432,8 +429,7 @@ export function readSheetRecords(
         columnBreaks.push(...readPageBreaks(record));
         break;
       default:
-        // Every other record a worksheet substream carries -- the window settings, the drawing objects, the row-block index -- is not read yet.
-        break;
+      // Every other record a worksheet substream carries -- the window settings, the drawing objects, the row-block index -- is not read yet. No break: this is the switch's own last case, so control already leaves it here regardless.
     }
   }
 
