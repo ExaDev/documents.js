@@ -63,6 +63,12 @@ export function cffIndex(entries: readonly (readonly number[])[]): number[] {
   ];
 }
 
+// A charstring operand in its 3-byte int16 form (TN 5177 section 3.2, operand 28): valid for any value in [-32768, 32767], which is every integer a curve-bounds test needs to place a control point at. Deliberately uniform rather than picking the shortest single-byte encoding a real font toolchain would choose -- cff-bounds.ts's own readOperand already has dedicated tests for its other operand forms, so a charstring built purely to drive the curve-extrema math needs only one encoding it never has to think about.
+export function csInt16(value: number): number[] {
+  const unsigned = value & 0xffff;
+  return [28, (unsigned >>> 8) & 0xff, unsigned & 0xff];
+}
+
 export const CFF_HEADER = [1, 0, 4, 1]; // major 1, minor 0, hdrSize 4, offSize 1
 
 // A minimal CFF program: header, a Name INDEX holding `name`, and a Top DICT INDEX holding `topDict`. Deliberately stops there -- the String and Global Subr INDEXes that a real program carries next are only reached by a reader that gets past the Top DICT, which is exactly what the fixtures built from this are testing does not happen.
@@ -94,13 +100,60 @@ function dictInt32(value: number): number[] {
   ];
 }
 
-const CFF_STANDARD_STRING_COUNT = 391; // SIDs below this index the standard strings (spec Appendix A); the String INDEX starts here
+export const CFF_STANDARD_STRING_COUNT = 391; // SIDs below this index the standard strings (spec Appendix A); the String INDEX starts here
 
-// A complete-enough CFF program carrying its own built-in encoding: a custom Encoding (spec section 12, format 0) mapping character codes onto glyph indices, and a charset (section 13, format 0) naming each glyph through a SID resolved against the String INDEX. Every glyph name is written as a custom string rather than reused from the standard strings, which is what a subsetted symbol font really does with names outside the ISOAdobe repertoire.
+// A charset (spec section 13) in format 1: one run of consecutive SIDs per range, each range a first SID plus a count of additional glyphs it covers -- the form a real font toolchain reaches for once its glyph SIDs are dense enough that format 0's one-SID-per-glyph listing wastes space. Builds the same glyph-order SIDs cffFontWithBuiltinEncoding's own format 0 charset does (CFF_STANDARD_STRING_COUNT + index per glyph), just run-length-encoded into ranges of `rangeSize` glyphs apiece so a test can choose whether the whole charset is one range or several.
+function charsetFormat1(glyphCount: number, rangeSize: number): number[] {
+  const bytes = [1];
+  for (let glyphId = 1; glyphId < glyphCount;) {
+    const firstSid = CFF_STANDARD_STRING_COUNT + (glyphId - 1);
+    const nLeft = Math.min(rangeSize, glyphCount - glyphId) - 1;
+    bytes.push((firstSid >> 8) & 0xff, firstSid & 0xff, nLeft);
+    glyphId += nLeft + 1;
+  }
+  return bytes;
+}
+
+// The same run-length encoding as charsetFormat1, but with a 16-bit nLeft (format 2): the form a font with tens of thousands of glyphs in one contiguous SID range needs, since format 1's own nLeft is a single byte.
+function charsetFormat2(glyphCount: number, rangeSize: number): number[] {
+  const bytes = [2];
+  for (let glyphId = 1; glyphId < glyphCount;) {
+    const firstSid = CFF_STANDARD_STRING_COUNT + (glyphId - 1);
+    const nLeft = Math.min(rangeSize, glyphCount - glyphId) - 1;
+    bytes.push(
+      (firstSid >> 8) & 0xff,
+      firstSid & 0xff,
+      (nLeft >> 8) & 0xff,
+      nLeft & 0xff,
+    );
+    glyphId += nLeft + 1;
+  }
+  return bytes;
+}
+
+// An Encoding (spec section 12) in format 1: ranges of consecutive codes assigned to consecutive glyph IDs starting at 1, each range a first code plus a count of additional codes it covers -- the form a font toolchain reaches for once most of its codes are contiguous, rather than format 0's one-code-per-glyph list. Run-length-encodes `codesByGlyph` (glyph 1's code, glyph 2's code, ...) into the fewest ranges that reproduce it: a run of consecutive codes collapses into one range with nLeft > 0, and any break (a gap, or an unmapped glyph's placeholder 0) starts a new one -- so a caller supplying genuinely consecutive codes exercises the multi-code, nLeft > 0 span this format exists for, not just one range per glyph.
+function encodingFormat1(codesByGlyph: readonly number[]): number[] {
+  const ranges: { first: number; nLeft: number }[] = [];
+  for (const code of codesByGlyph) {
+    const last = ranges[ranges.length - 1];
+    if (last !== undefined && code === last.first + last.nLeft + 1) {
+      last.nLeft += 1;
+    } else {
+      ranges.push({ first: code, nLeft: 0 });
+    }
+  }
+  return [1, ranges.length, ...ranges.flatMap((r) => [r.first, r.nLeft])];
+}
+
+// A complete-enough CFF program carrying its own built-in encoding: a custom Encoding (spec section 12) mapping character codes onto glyph indices, and a charset (section 13) naming each glyph through a SID resolved against the String INDEX. Every glyph name is written as a custom string rather than reused from the standard strings, which is what a subsetted symbol font really does with names outside the ISOAdobe repertoire. `charsetFormat`/`encodingFormat` choose the on-disk encoding of each (format 0's explicit per-glyph list by default); `encodingSupplement` adds format 0/1's own optional supplementary code -> SID entries (spec section 12's high bit on the format byte), each resolved against the charset's own SIDs rather than glyph indices directly.
 export function cffFontWithBuiltinEncoding(options: {
   readonly name: string;
   readonly glyphNames: readonly string[]; // glyphs 1..n; glyph 0 is always .notdef and is not named here
   readonly encoding: ReadonlyMap<number, number>; // character code -> glyph index
+  readonly charsetFormat?: 0 | 1 | 2;
+  readonly charsetRangeSize?: number; // format 1/2 only: how many glyphs each range covers before starting a new one
+  readonly encodingFormat?: 0 | 1;
+  readonly encodingSupplement?: readonly { code: number; sid: number }[];
 }): Uint8Array<ArrayBuffer> {
   const nameIndex = cffIndex([[...new TextEncoder().encode(options.name)]]);
   const stringIndex = cffIndex(
@@ -109,13 +162,20 @@ export function cffFontWithBuiltinEncoding(options: {
     ]),
   );
   const globalSubrIndex = [0, 0];
-  const charset = [
-    0,
-    ...options.glyphNames.flatMap((_, index) => {
-      const sid = CFF_STANDARD_STRING_COUNT + index;
-      return [(sid >> 8) & 0xff, sid & 0xff];
-    }),
-  ];
+  const glyphCount = options.glyphNames.length + 1; // +1 for .notdef
+  const charsetFormat = options.charsetFormat ?? 0;
+  const charset =
+    charsetFormat === 1
+      ? charsetFormat1(glyphCount, options.charsetRangeSize ?? glyphCount)
+      : charsetFormat === 2
+        ? charsetFormat2(glyphCount, options.charsetRangeSize ?? glyphCount)
+        : [
+            0,
+            ...options.glyphNames.flatMap((_, index) => {
+              const sid = CFF_STANDARD_STRING_COUNT + index;
+              return [(sid >> 8) & 0xff, sid & 0xff];
+            }),
+          ];
   const codesByGlyph = [...options.glyphNames.keys()].map((index) => {
     for (const [code, glyph] of options.encoding) {
       if (glyph === index + 1) {
@@ -124,7 +184,23 @@ export function cffFontWithBuiltinEncoding(options: {
     }
     return 0;
   });
-  const encoding = [0, codesByGlyph.length, ...codesByGlyph];
+  const supplementBytes = (options.encodingSupplement ?? []).flatMap((s) => [
+    s.code,
+    (s.sid >> 8) & 0xff,
+    s.sid & 0xff,
+  ]);
+  const supplementFlag = options.encodingSupplement === undefined ? 0 : 0x80;
+  const encodingBody =
+    options.encodingFormat === 1
+      ? encodingFormat1(codesByGlyph)
+      : [0, codesByGlyph.length, ...codesByGlyph];
+  const encoding = [
+    supplementFlag | encodingBody[0]!,
+    ...encodingBody.slice(1),
+    ...(options.encodingSupplement === undefined
+      ? []
+      : [options.encodingSupplement.length, ...supplementBytes]),
+  ];
   const charStrings = cffIndex([
     [14],
     ...options.glyphNames.map(() => [14]), // one bare `endchar` charstring per glyph: the CharStrings INDEX count is what sizes the charset
