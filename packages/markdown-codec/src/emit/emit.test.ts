@@ -1571,6 +1571,32 @@ describe("lists", () => {
     expect(markdown).toBe("- [x] done");
   });
 
+  it("strips a legacy checkbox glyph from a run that ALSO carries its own following text, not just when the glyph fills a whole separate run of its own", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "☒ done" }],
+          list: { numId: "md1:bullet+task", level: 0 },
+        },
+      ]),
+    );
+    expect(markdown).toBe("- [x] done");
+  });
+
+  it("renders an ordinary bullet with no checkbox at all for a task-flagged numId whose leading text matches neither legacy glyph", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "ordinary" }],
+          list: { numId: "md1:bullet+task", level: 0 },
+        },
+      ]),
+    );
+    expect(markdown).toBe("- ordinary");
+  });
+
   it("renders every block of one itemId as a single item -- a blank line and the continuation indent between blocks, one marker only", () => {
     const markdown = emitMarkdown(
       doc([
@@ -3308,6 +3334,31 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     );
     expect(diagnostic?.message).toContain("list1");
     expect(diagnostic?.message).toContain("not minted");
+  });
+
+  it("LIST_NUMID_FALLBACK fires only once for two items sharing the SAME never-minted numId, not once per item", () => {
+    const collector = createDiagnosticCollector();
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "list1", level: 0 },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "b" }],
+          list: { numId: "list1", level: 0 },
+        },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(markdown).toBe("- a\n- b");
+    expect(
+      collector.diagnostics.filter(
+        (d) => d.code === MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK,
+      ),
+    ).toHaveLength(1);
   });
 
   it("LIST_NUMID_FALLBACK fires once for depth-only memberships with no numId, falling back to one tight plain-bullet list", () => {
