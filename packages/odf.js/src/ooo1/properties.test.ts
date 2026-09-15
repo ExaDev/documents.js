@@ -53,6 +53,14 @@ describe("propertyTypesForContainer", () => {
   it("returns undefined for a container tag this module recognises neither by tag nor as a family-bearing style element", () => {
     expect(propertyTypesForContainer(el("office:styles"))).toBeUndefined();
   });
+
+  it("returns undefined for a non-style:style/default-style tag even when it happens to carry a recognised style:family attribute, since only style:style/default-style consult it", () => {
+    expect(
+      propertyTypesForContainer(
+        el("office:styles", { "style:family": "paragraph" }),
+      ),
+    ).toBeUndefined();
+  });
 });
 
 describe("splitStyleProperties: attribute routing", () => {
@@ -117,6 +125,13 @@ describe("splitStyleProperties: attribute routing", () => {
     expect(split).toHaveLength(1);
     expect(split[0]?.tag).toBe("style:paragraph-properties");
     expect(split[0]?.children).toEqual([tabStops]);
+  });
+
+  it("throws rather than silently dropping an attribute when the candidate list is empty, since a family with zero property types is a caller programming error, not a routable input", () => {
+    const properties = el("style:properties", { "fo:color": "#000000" });
+    expect(() => splitStyleProperties(properties, [])).toThrow(
+      "a style family must have at least one property type",
+    );
   });
 });
 
@@ -186,6 +201,20 @@ describe("splitStyleProperties: style:text-crossing-out expansion", () => {
     expect(lineThroughStyleOf("X")?.attributes).toEqual([
       { name: "style:text-line-through-style", value: "solid" },
       { name: "style:text-line-through-text", value: "X" },
+    ]);
+  });
+
+  it('"double-line" expands to style: "solid" plus type: "double"', () => {
+    expect(lineThroughStyleOf("double-line")?.attributes).toEqual([
+      { name: "style:text-line-through-style", value: "solid" },
+      { name: "style:text-line-through-type", value: "double" },
+    ]);
+  });
+
+  it('"thick-line" expands to style: "solid" plus width: "bold"', () => {
+    expect(lineThroughStyleOf("thick-line")?.attributes).toEqual([
+      { name: "style:text-line-through-style", value: "solid" },
+      { name: "style:text-line-through-width", value: "bold" },
     ]);
   });
 
