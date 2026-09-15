@@ -1433,6 +1433,8 @@ describe("readXlsxContent: drawing pictures", () => {
     expect(image?.offsetYPt).toBe(0);
     expect(image?.widthPt).toBeCloseTo(col0 + col1 - offsetX, 5);
     expect(image?.heightPt).toBeCloseTo(45, 5);
+    // A drawing carrying only a picture, no chart graphic frame at all, leaves embeddedObjects absent rather than an empty array -- the same "undefined means none, [] means none for images specifically" split the module doc comment states.
+    expect(document.sheets[0]?.embeddedObjects).toBeUndefined();
   });
 
   it("leaves a picture whose media bytes do not sniff as PNG/JPEG unread rather than emitting an unsniffable image", () => {
@@ -1617,7 +1619,12 @@ describe("readXlsxContent: drawing pictures (oneCellAnchor)", () => {
 });
 
 // The absoluteAnchor spelling: xdr:pos (x/y EMU, page-absolute) plus xdr:ext sizing, no markers at all. ContentSheetImage's anchor vocabulary is cell-relative, so the landing #776 decides on is the nearest-cell re-basing -- the grid geometry's own inverse maps the absolute position onto a containing column/row plus the offset within it, exactly the fields a from-marker spells directly. The fixture grid: column 0 is 10 chars (52.5 pt), column 1 is 20 chars (105 pt), rows default 15 pt; pos 762000 x 190500 EMU is 60 x 15 pt, so column 1 offset 7.5 pt (52.5 + 7.5 = 60) and row 1 offset 0 (15 sits exactly on the row-1 boundary).
-function absolutePicturePackage(extCx = "1828800", extCy = "914400"): Package {
+function absolutePicturePackage(
+  extCx = "1828800",
+  extCy = "914400",
+  posX = "762000",
+  posY = "190500",
+): Package {
   const picture = el("xdr:pic", {}, [
     el("xdr:nvPicPr", {}, [el("xdr:cNvPr", { id: "2", name: "Picture 1" })]),
     el("xdr:blipFill", {}, [el("a:blip", { "r:embed": "rIdImage" })]),
@@ -1631,7 +1638,7 @@ function absolutePicturePackage(extCx = "1828800", extCy = "914400"): Package {
   ]);
   const drawing = el("xdr:wsDr", {}, [
     el("xdr:absoluteAnchor", {}, [
-      el("xdr:pos", { x: "762000", y: "190500" }),
+      el("xdr:pos", { x: posX, y: posY }),
       el("xdr:ext", { cx: extCx, cy: extCy }),
       picture,
       el("xdr:clientData"),
@@ -1730,6 +1737,21 @@ describe("readXlsxContent: drawing pictures (absoluteAnchor)", () => {
       throw new Error("expected a spreadsheet ContentDocument");
     }
     expect(document.sheets[0]?.images).toEqual([]);
+  });
+
+  it("locates a position sitting exactly on a column boundary as the start of the next column, not an offset into the previous one", () => {
+    // Column 0 is 10 chars = columnWidthCharsToPt(10) pt exactly, i.e. that many EMU at 12700 EMU/pt -- pos x lands exactly on the column 0/1 boundary, pos y at 0 keeps the row/height math out of it entirely.
+    const boundaryEmu = Math.round(columnWidthCharsToPt(10) * 12700);
+    const document = readXlsxContent(
+      absolutePicturePackage("1828800", "914400", String(boundaryEmu), "0"),
+    );
+    if (document.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    const image = document.sheets[0]?.images[0];
+    // A position exactly at the boundary belongs to the column it starts (column 1, offset 0), not the tail end of column 0 (column 0, offset = the whole column width).
+    expect(image?.anchorColumn).toBe(1);
+    expect(image?.offsetXPt).toBeCloseTo(0, 5);
   });
 
   it("round-trips the whole document through ContentDocumentSchema, so the absolute-anchored sheet image is schema-valid as read", () => {
@@ -2127,9 +2149,19 @@ function onePicTwoCellAnchor(
     toCol?: number;
     toRow?: number;
     editAs?: string;
+    fromColOffEmu?: number;
+    fromRowOffEmu?: number;
+    fromColNodes?: XmlNode[];
   } = {},
 ): XmlElement {
-  const { toCol = 1, toRow = 1, editAs } = opts;
+  const {
+    toCol = 1,
+    toRow = 1,
+    editAs,
+    fromColOffEmu = 0,
+    fromRowOffEmu = 0,
+    fromColNodes,
+  } = opts;
   const picture = el("xdr:pic", {}, [
     el("xdr:nvPicPr", {}, [el("xdr:cNvPr", { id: "2", name: "Picture 1" })]),
     el("xdr:blipFill", {}, [el("a:blip", { "r:embed": "rIdImage" })]),
@@ -2143,10 +2175,10 @@ function onePicTwoCellAnchor(
   ]);
   return el("xdr:twoCellAnchor", editAs === undefined ? {} : { editAs }, [
     el("xdr:from", {}, [
-      el("xdr:col", {}, [txt("0")]),
-      el("xdr:colOff", {}, [txt("0")]),
+      el("xdr:col", {}, fromColNodes ?? [txt("0")]),
+      el("xdr:colOff", {}, [txt(String(fromColOffEmu))]),
       el("xdr:row", {}, [txt("0")]),
-      el("xdr:rowOff", {}, [txt("0")]),
+      el("xdr:rowOff", {}, [txt(String(fromRowOffEmu))]),
     ]),
     el("xdr:to", {}, [
       el("xdr:col", {}, [txt(String(toCol))]),
@@ -2266,6 +2298,186 @@ describe("readXlsxContent: SheetGridGeometry (synthetic packages)", () => {
     );
     // editAs="oneCell" on a twoCellAnchor (Excel's real spelling for "move but don't size with cells"): sized from the shape's own transform extent (1in = 72pt) instead, ignoring the to-marker entirely.
     expect(oneCell[0]?.widthPt).toBeCloseTo(72, 5);
+  });
+
+  it("never applies a declared column range to an index below its own min, even when that index is within the range's max", () => {
+    const images = imagesOf(
+      customDrawingPackage(
+        [
+          el("cols", {}, [el("col", { min: "3", max: "5", width: "999" })]),
+          el("sheetData", {}, []),
+        ],
+        onePicTwoCellAnchor({ toCol: 1 }),
+      ),
+    );
+    // Column 0 sits below the declared range's own min (2, 0-based) -- it must fall back to the default width, not the range's huge declared one merely because 0 <= the range's own max.
+    expect(images[0]?.widthPt).toBeCloseTo(
+      columnWidthCharsToPt(DEFAULT_COLUMN_WIDTH_CHARS),
+      5,
+    );
+  });
+});
+
+describe("readXlsxContent: anchor marker fields (synthetic packages)", () => {
+  it("reads a marker's own rowOff distinctly from its colOff, rather than one child tag's value doing double duty for both", () => {
+    const images = imagesOf(
+      customDrawingPackage(
+        [el("sheetData", {}, [])],
+        // Small enough to stay well inside the default 15pt row height, so the anchor's own height stays positive (4pt = 50800 EMU).
+        onePicTwoCellAnchor({ fromRowOffEmu: 50_800 }),
+      ),
+    );
+    // The row axis carries a real offset; the column axis stays at its own default (0).
+    expect(images[0]?.offsetXPt).toBe(0);
+    expect(images[0]?.offsetYPt).toBeCloseTo(4, 5);
+  });
+
+  it("extracts a marker child's numeric text past a non-text sibling node, rather than letting that sibling corrupt the joined value", () => {
+    const images = imagesOf(
+      customDrawingPackage(
+        [el("sheetData", {}, [])],
+        onePicTwoCellAnchor({
+          fromColNodes: [{ type: "comment", value: "producer note" }, txt("5")],
+          toCol: 6,
+        }),
+      ),
+    );
+    // The comment sibling contributes nothing to the joined text; the real numeric value is "5", not corrupted by whatever a non-text node's own placeholder text would join in as.
+    expect(images[0]?.anchorColumn).toBe(5);
+  });
+});
+
+describe("readXlsxContent: chart graphic frame structural gaps (synthetic packages)", () => {
+  function chartGraphicFrame(
+    opts: {
+      withCNvPr?: boolean;
+      name?: string;
+      graphicUri?: string;
+    } = {},
+  ): XmlElement {
+    const {
+      withCNvPr = true,
+      graphicUri = "http://schemas.openxmlformats.org/drawingml/2006/chart",
+    } = opts;
+    // "name" in opts (not a destructured default) distinguishes "caller omitted the option, use the real default" from "caller explicitly asked for no name attribute at all" -- a destructured default would treat {name: undefined} identically to {}, which defeats the one test below that needs a cNvPr with genuinely no name attribute.
+    const name = "name" in opts ? opts.name : "Chart 1";
+    const nvGraphicFramePrChildren = withCNvPr
+      ? [
+          el(
+            "xdr:cNvPr",
+            name === undefined ? { id: "2" } : { id: "2", name },
+            [],
+          ),
+        ]
+      : [];
+    return el("xdr:graphicFrame", {}, [
+      el("xdr:nvGraphicFramePr", {}, nvGraphicFramePrChildren),
+      el("a:graphic", {}, [
+        el("a:graphicData", { uri: graphicUri }, [
+          el("c:chart", { "r:id": "rIdChart" }),
+        ]),
+      ]),
+    ]);
+  }
+
+  function chartFrameAnchor(frame: XmlElement): XmlElement {
+    return el("xdr:twoCellAnchor", {}, [
+      el("xdr:from", {}, [
+        el("xdr:col", {}, [txt("0")]),
+        el("xdr:colOff", {}, [txt("0")]),
+        el("xdr:row", {}, [txt("0")]),
+        el("xdr:rowOff", {}, [txt("0")]),
+      ]),
+      el("xdr:to", {}, [
+        el("xdr:col", {}, [txt("1")]),
+        el("xdr:colOff", {}, [txt("0")]),
+        el("xdr:row", {}, [txt("1")]),
+        el("xdr:rowOff", {}, [txt("0")]),
+      ]),
+      frame,
+      el("xdr:clientData"),
+    ]);
+  }
+
+  function embeddedChartOf(pkg: Package) {
+    const document = readXlsxContent(pkg);
+    if (document.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    return document.sheets[0]?.embeddedObjects;
+  }
+
+  it("treats a graphicData whose uri names something other than a chart as carrying no embeddable content at all", () => {
+    const objects = embeddedChartOf(
+      customDrawingPackage(
+        [el("sheetData", {}, [])],
+        chartFrameAnchor(
+          chartGraphicFrame({ graphicUri: "http://example.com/not-a-chart" }),
+        ),
+      ),
+    );
+    expect(objects).toBeUndefined();
+  });
+
+  it("names the payload sheet 'Chart' when the graphic frame carries no xdr:cNvPr at all", () => {
+    const objects = embeddedChartOf(
+      customDrawingPackage(
+        [el("sheetData", {}, [])],
+        chartFrameAnchor(chartGraphicFrame({ withCNvPr: false })),
+      ),
+    );
+    const sheet =
+      objects?.[0]?.document.kind === "spreadsheet"
+        ? objects[0].document.sheets[0]
+        : undefined;
+    expect(sheet?.name).toBe("Chart");
+  });
+
+  it("names the payload sheet 'Chart' when xdr:cNvPr carries no name attribute", () => {
+    const objects = embeddedChartOf(
+      customDrawingPackage(
+        [el("sheetData", {}, [])],
+        chartFrameAnchor(chartGraphicFrame({ name: undefined })),
+      ),
+    );
+    const sheet =
+      objects?.[0]?.document.kind === "spreadsheet"
+        ? objects[0].document.sheets[0]
+        : undefined;
+    expect(sheet?.name).toBe("Chart");
+  });
+
+  it("never resolves an unrelated relationship type as the worksheet's own drawing part, even when it sorts before the real one", () => {
+    // A hyperlink relationship inserted before the genuine drawing relationship in the worksheet's own rels part -- resolveRelationships preserves declaration order, so a coverage-bearing loop that stops at the FIRST relationship regardless of type would resolve the hyperlink's own (nonsensical, non-drawing) target as if it were the drawing part.
+    const relationship = (id: string, type: string, target: string) =>
+      el("Relationship", { Id: id, Type: type, Target: target });
+    const pkg = customDrawingPackage(
+      [el("sheetData", {}, [])],
+      chartFrameAnchor(chartGraphicFrame()),
+    );
+    const sheetRels = pkg.parts["xl/worksheets/_rels/sheet1.xml.rels"];
+    if (sheetRels?.kind !== "xml") {
+      throw new Error("expected the worksheet rels part to be xml");
+    }
+    const relationships = sheetRels.nodes[0];
+    if (relationships?.type !== "element") {
+      throw new Error("expected a Relationships root element");
+    }
+    pkg.parts["xl/worksheets/_rels/sheet1.xml.rels"] = {
+      kind: "xml",
+      nodes: [
+        el("Relationships", {}, [
+          relationship(
+            "rIdHyperlink",
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+            "https://example.com",
+          ),
+          ...relationships.children,
+        ]),
+      ],
+    };
+    const objects = embeddedChartOf(pkg);
+    expect(objects).toHaveLength(1);
   });
 });
 
