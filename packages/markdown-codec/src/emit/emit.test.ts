@@ -1464,6 +1464,27 @@ describe("blockquotes", () => {
     expect(diagnostic?.message).toContain("no markdown syntax");
   });
 
+  it("renders a division transparently (no '> ' wrapping) when only SOME of its wrapped paragraphs carry the dual-carry quote indent, not all of them -- isMaterialisedDivision requires EVERY child to qualify, not just one", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division", name: "mixed" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "quoted" }],
+          styleId: "Quote",
+          indentLeftPt: 36,
+        },
+        { kind: "paragraph", runs: [{ text: "plain" }] },
+        { kind: "constructEnd" },
+      ]),
+    );
+    // Transparent, not materialised -- so each wrapped paragraph still recovers (or doesn't) its own quote depth independently, exactly as if the division weren't there at all: "quoted" keeps its own '> ' from indentLeftPt, "plain" has none.
+    expect(markdown).toBe("> quoted\n\nplain");
+  });
+
   it("round-trips blockquote shapes byte for byte through lower -> emit -> lower, including nesting and adjacency", () => {
     for (const source of [
       "> a\n>\n> b",
