@@ -18,6 +18,17 @@ describe("isXmlNode: non-object/malformed input", () => {
   it("rejects an unrecognised type value", () => {
     expect(isXmlNode({ type: "bogus" })).toBe(false);
   });
+
+  it("rejects an unrecognised type value even when the rest of the object is shaped exactly like a valid element", () => {
+    expect(
+      isXmlNode({ type: "bogus", tag: "text:p", attributes: [], children: [] }),
+    ).toBe(false);
+  });
+
+  it('rejects a non-object value whose typeof is not "object" (a function) even when it carries otherwise-valid text-node properties', () => {
+    const fn = Object.assign(() => {}, { type: "text", value: "hi" });
+    expect(isXmlNode(fn)).toBe(false);
+  });
 });
 
 describe("isXmlNode: text/cdata/comment", () => {
@@ -53,6 +64,15 @@ describe("isXmlNode: declaration", () => {
 
   it("rejects a declaration whose attributes is not an array", () => {
     expect(isXmlNode({ type: "declaration", attributes: "nope" })).toBe(false);
+  });
+
+  it("rejects a declaration whose attribute has a non-string name but a valid string value", () => {
+    expect(
+      isXmlNode({
+        type: "declaration",
+        attributes: [{ name: 5, value: "1.0" }],
+      }),
+    ).toBe(false);
   });
 
   it("rejects a declaration with one malformed attribute among otherwise-valid ones", () => {
