@@ -36,6 +36,16 @@ describe("parseToUnicodeCMap: bfchar", () => {
     expect(cmap.lookup(0x10)).toBe("ffi");
   });
 
+  it("drops a trailing unpaired byte from an odd-length UTF-16BE destination rather than manufacturing an extra code unit", () => {
+    const { sink } = collectDiagnostics();
+    // <414243> is 3 raw bytes -- one complete UTF-16BE code unit (0x4142) plus a dangling 0x43 that forms no second pair.
+    const cmap = parseToUnicodeCMap(
+      textBytes("beginbfchar\n<0007> <414243>\nendbfchar"),
+      sink,
+    );
+    expect(cmap.lookup(7)).toBe(String.fromCharCode(0x4142));
+  });
+
   it("reports a diagnostic and stops cleanly when truncated before endbfchar", () => {
     const { sink, diagnostics } = collectDiagnostics();
     const cmap = parseToUnicodeCMap(
