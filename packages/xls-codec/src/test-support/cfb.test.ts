@@ -272,6 +272,20 @@ describe("compoundFile", () => {
     expect(new TextDecoder().decode(streamOf("a/b", streams))).toBe("nested-b");
   });
 
+  it("never reuses an existing storage of a different name for a new nested path segment, even when one is already present", () => {
+    // "Other" is created first as a storage (holding "x"); processing "a/b" must not mistake it for a storage named "a" just because it's the only other storage around.
+    const bytes = compoundFile([
+      { path: "Other/x", bytes: textStream("other-x") },
+      { path: "a/b", bytes: textStream("a-b") },
+    ]);
+    const streams = readCompoundFile(bytes);
+
+    expect(new TextDecoder().decode(streamOf("Other/x", streams))).toBe(
+      "other-x",
+    );
+    expect(new TextDecoder().decode(streamOf("a/b", streams))).toBe("a-b");
+  });
+
   it("round-trips two streams under the same nested storage, not two separate storages each holding one", () => {
     const bytes = compoundFile([
       { path: "Storage/First", bytes: textStream("first") },
@@ -339,6 +353,29 @@ describe("compoundFile", () => {
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 
     expect(view.getUint32(0x28, true)).toBe(0);
+  });
+
+  it("allocates no data sectors at all for a workbook whose only stream is small, not one wastefully allocated for it as if it were also big", () => {
+    // A single 100-byte stream needs exactly fatSectorCount(1) + directorySectorCount(1) + dataSectorCount(0) + miniStreamSectorCount(1) + miniFatSectorCount(1) = 4 sectors, plus the 512-byte header -- 2560 bytes total. A stream wrongly counted as both small and big (or size-partitioned by the wrong boundary) would add a spurious data sector on top.
+    const bytes = compoundFile([
+      { path: "Small", bytes: new Uint8Array(100).fill(1) },
+    ]);
+
+    expect(bytes.length).toBe(2560);
+  });
+
+  it("round-trips enough small streams to force a second mini-FAT sector, each stream still distinct from its own neighbours", () => {
+    // fatEntriesPerSector is 128 for 512-byte sectors; three streams just under the mini-stream cutoff push miniSectorCount well past 128, forcing miniFatSectorCount to 2 -- the only fixture in this suite that ever needs more than one.
+    const streams = Array.from({ length: 3 }, (_, i) => ({
+      path: `Small${i}`,
+      bytes: new Uint8Array(4000).fill(i + 1),
+    }));
+    const bytes = compoundFile(streams);
+    const read = readCompoundFile(bytes);
+
+    for (const stream of streams) {
+      expect(streamOf(stream.path, read)).toStrictEqual(stream.bytes);
+    }
   });
 });
 
