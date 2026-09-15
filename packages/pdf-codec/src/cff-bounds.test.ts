@@ -343,6 +343,43 @@ describe("parseCffGlyphBounds's charstring interpreter, driven by hand-built cha
     expect(boundsOfOnlyGlyph(bytes)).toBeUndefined();
   });
 
+  it("shifts off endchar's own bare leading width (exactly 1 operand), succeeding rather than treating it as malformed", () => {
+    const OP_HLINETO = 6;
+    const bytes = cffFontWithCharstrings({
+      name: "EndcharBareWidth",
+      charStrings: [
+        [...enc(5), OP_HLINETO, ...enc(999), OP_ENDCHAR], // draw, then a single width-only operand ahead of endchar
+      ],
+    });
+    // If width-shifting were broken, endchar's own arity check would see 1 leftover operand and treat it identically to the seac case's own boundary -- this must draw successfully instead.
+    expect(boundsOfOnlyGlyph(bytes)).toEqual({
+      xMin: 0,
+      yMin: 0,
+      xMax: 5,
+      yMax: 0,
+    });
+  });
+
+  it("treats endchar's own width-plus-seac (exactly 5 operands) as the seac-like form too, discarding any already-drawn ink", () => {
+    const OP_HLINETO = 6;
+    const bytes = cffFontWithCharstrings({
+      name: "EndcharWidthPlusSeac",
+      charStrings: [
+        [
+          ...enc(5),
+          OP_HLINETO, // draws something, so a wrongly-permissive check would report real bounds instead of undefined
+          ...enc(999), // width
+          ...enc(0),
+          ...enc(0),
+          ...enc(0),
+          ...enc(0), // 4 seac-like args
+          OP_ENDCHAR,
+        ],
+      ],
+    });
+    expect(boundsOfOnlyGlyph(bytes)).toBeUndefined();
+  });
+
   it("draws normally through a real Local Subrs INDEX reached via callsubr", () => {
     // The mirror image of the two refusal cases above: a genuine, present, in-range local subroutine that draws a single line, called from the glyph's own charstring -- proof callsubr's success path (not just its failure paths) is exercised directly, without relying on the vendored font's own subroutine usage.
     const OP_HLINETO = 6;
