@@ -9,8 +9,14 @@ import {
   RECORD_MSODRAWING,
   RECORD_OBJ,
 } from "../biff/record-types";
-import { groupRecords, splitSubstreams } from "../biff/substreams";
-import { bofData, ftCmo, record } from "../test-support/biff";
+import { readRecords } from "../biff/records";
+import {
+  groupRecords,
+  splitSubstreams,
+  type RecordGroup,
+  type Substream,
+} from "../biff/substreams";
+import { bofData, ftCmo, record, u16, u32 } from "../test-support/biff";
 import {
   clientAnchorSheet,
   escherContainer,
@@ -18,10 +24,17 @@ import {
   optAtom,
   spAtom,
 } from "../test-support/escher";
+import { PAGE_SIZE_LETTER } from "document-schema.js";
 import type { BlipImage } from "../drawing/blips";
+import type { DrawingShape } from "../drawing/shapes";
 import {
+  chartFromShape,
   chartTableCells,
+  drawingObjectFromShape,
+  embeddedObjectFromObjRecord,
+  imageFromShape,
   readSheetDrawing,
+  SheetGridGeometry,
   type SheetDrawingContext,
 } from "./drawing";
 
@@ -90,6 +103,63 @@ function rectangleShape(spid: number, anchor: readonly number[]): number[] {
     anchor,
   ]);
 }
+
+/** A picture-blip-carrying shape whose own OfficeArtFSP shapeType is chosen independently of the blip, for isolating obj.ot===PICTURE from shape.shapeType===PICTURE_FRAME in readSheetDrawing's own picture-or-embedded dispatch. */
+function pictureShapeOfType(
+  shapeType: number,
+  spid: number,
+  blipIndex: number,
+  anchor: readonly number[],
+): number[] {
+  return escherContainer(0xf004, 0, [
+    spAtom(shapeType, spid, 0),
+    optAtom([foptEntry(0x0104, blipIndex)]),
+    anchor,
+  ]);
+}
+
+/** A minimal FtPictFmla sub-record naming `storageId`, matching comments.test.ts's own identical fixture for the same [MS-XLS] 2.5.150 structure. */
+function ftPictFmla(storageId: number): number[] {
+  const data = [...u16(0), ...u32(storageId)];
+  return [...u16(0x0009), ...u16(data.length), ...data];
+}
+
+/** A standalone Obj RecordGroup naming `storageId` via FtPictFmla, for direct embeddedObjectFromObjRecord tests that never go through readSheetDrawing's own MsoDrawing/Obj pairing at all. */
+function pictureObjGroup(storageId: number): RecordGroup {
+  const bytes = record(RECORD_OBJ, [
+    ...ftCmo(OBJECT_TYPE_PICTURE, 1),
+    ...ftPictFmla(storageId),
+  ]);
+  const group = groupRecords(readRecords(bytes))[0];
+  if (group === undefined) {
+    throw new Error("expected an Obj record group");
+  }
+  return group;
+}
+
+/** An anchor whose own placement collapses to exactly zero width, at a real (non-zero) height -- isolating widthPt<=0 from heightPt<=0 in every one of the three shape-to-content functions that share the identical guard. */
+const ZERO_WIDTH_ANCHOR = {
+  colL: 0,
+  dxL: 0,
+  rwT: 0,
+  dyT: 0,
+  colR: 0,
+  dxR: 0,
+  rwB: 1,
+  dyB: 0,
+};
+
+/** The mirror of ZERO_WIDTH_ANCHOR: exactly zero height, at a real (non-zero) width. */
+const ZERO_HEIGHT_ANCHOR = {
+  colL: 0,
+  dxL: 0,
+  rwT: 0,
+  dyT: 0,
+  colR: 1,
+  dxR: 0,
+  rwB: 0,
+  dyB: 0,
+};
 
 /** Runs a hand-built worksheet substream's own record() bytes through the real BIFF framing/grouping passes. */
 function worksheetRecords(rawRecords: readonly Uint8Array<ArrayBuffer>[]) {
@@ -178,6 +248,54 @@ describe("readSheetDrawing", () => {
     expect(drawing.images).toHaveLength(1);
     expect(drawing.embeddedObjects).toHaveLength(1);
     expect(drawing.embeddedObjects[0]?.objectKind).toBe("drawing");
+  });
+
+  it("treats an Obj record's own picture object type as sufficient on its own, even when the shape's own type is not picture-frame", () => {
+    const anchor = clientAnchorSheet(0, 0, 0, 0, 1, 0, 1, 0);
+    const records = worksheetRecords([
+      msoDrawing([pictureShapeOfType(SHAPE_TYPE_RECTANGLE, 50, 1, anchor)]),
+      objRecord(OBJECT_TYPE_PICTURE, 1),
+    ]);
+    const blipStore = new Map<number, BlipImage>([
+      [1, { format: "png", base64: "xyz" }],
+    ]);
+
+    const drawing = readSheetDrawing(records, baseContext({ blipStore }));
+
+    expect(drawing.images).toHaveLength(1);
+    expect(drawing.embeddedObjects).toStrictEqual([]);
+  });
+
+  it("treats the shape's own picture-frame type as sufficient on its own, even when the Obj record's own object type is not picture", () => {
+    const anchor = clientAnchorSheet(0, 0, 0, 0, 1, 0, 1, 0);
+    const records = worksheetRecords([
+      msoDrawing([pictureShape(51, 1, anchor)]),
+      objRecord(OBJECT_TYPE_OFFICE_ART, 1),
+    ]);
+    const blipStore = new Map<number, BlipImage>([
+      [1, { format: "png", base64: "xyz" }],
+    ]);
+
+    const drawing = readSheetDrawing(records, baseContext({ blipStore }));
+
+    expect(drawing.images).toHaveLength(1);
+    expect(drawing.embeddedObjects).toStrictEqual([]);
+  });
+
+  it("pairs only as many shapes and Obj records as the shorter side names, when a sheet's own two lists disagree in length", () => {
+    const anchorA = clientAnchorSheet(0, 0, 0, 0, 1, 0, 1, 0);
+    const anchorB = clientAnchorSheet(2, 0, 2, 0, 3, 0, 3, 0);
+    // Two shapes, three Obj records: the third Obj record names no shape at all, and must be silently skipped rather than crashing or spuriously pairing with something.
+    const records = worksheetRecords([
+      msoDrawing([rectangleShape(60, anchorA), rectangleShape(61, anchorB)]),
+      objRecord(OBJECT_TYPE_OFFICE_ART, 1),
+      objRecord(OBJECT_TYPE_OFFICE_ART, 2),
+      objRecord(OBJECT_TYPE_OFFICE_ART, 3),
+    ]);
+
+    const drawing = readSheetDrawing(records, baseContext());
+
+    expect(drawing.embeddedObjects).toHaveLength(2);
   });
 
   it("resolves a Chart-type shape by finding its own nested BOF(chart)...EOF substream, bounded by offset", () => {
@@ -284,5 +402,310 @@ describe("chartTableCells", () => {
     ]);
 
     expect(cells).toStrictEqual([]);
+  });
+});
+
+describe("SheetGridGeometry", () => {
+  it("sums only the columns strictly before the one asked for, using each column's own declared width rather than the default", () => {
+    const geometry = new SheetGridGeometry(
+      [
+        { index: 0, widthPt: 100, hidden: false },
+        { index: 1, widthPt: 50, hidden: false },
+      ],
+      [],
+    );
+
+    expect(geometry.columnWidthPt(0)).toBe(100);
+    expect(geometry.xPt(1)).toBe(100);
+    expect(geometry.xPt(2)).toBe(150);
+  });
+
+  it("sums only the rows strictly before the one asked for, using each row's own declared height rather than the default", () => {
+    const geometry = new SheetGridGeometry(
+      [],
+      [
+        { index: 0, heightPt: 20, hidden: false },
+        { index: 1, heightPt: 10, hidden: false },
+      ],
+    );
+
+    expect(geometry.rowHeightPt(0)).toBe(20);
+    expect(geometry.yPt(1)).toBe(20);
+    expect(geometry.yPt(2)).toBe(30);
+  });
+
+  it("falls back to Excel's own Normal-style default width/height for a column/row the sheet never declared", () => {
+    const geometry = new SheetGridGeometry([], []);
+
+    expect(geometry.columnWidthPt(0)).toBeGreaterThan(0);
+    expect(geometry.rowHeightPt(0)).toBeGreaterThan(0);
+    expect(geometry.xPt(0)).toBe(0);
+    expect(geometry.yPt(0)).toBe(0);
+  });
+});
+
+describe("imageFromShape", () => {
+  const context = baseContext({
+    blipStore: new Map<number, BlipImage>([
+      [1, { format: "png", base64: "abc" }],
+    ]),
+  });
+  const geometry = new SheetGridGeometry([], []);
+
+  function shapeAt(anchor: typeof ZERO_WIDTH_ANCHOR): DrawingShape {
+    return {
+      shapeType: SHAPE_TYPE_PICTURE_FRAME,
+      spid: 1,
+      blipIndex: 1,
+      anchor,
+    };
+  }
+
+  it("returns undefined for a zero-width anchor, isolated from the height half of the same guard", () => {
+    expect(
+      imageFromShape(shapeAt(ZERO_WIDTH_ANCHOR), context, geometry),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined for a zero-height anchor, isolated from the width half of the same guard", () => {
+    expect(
+      imageFromShape(shapeAt(ZERO_HEIGHT_ANCHOR), context, geometry),
+    ).toBeUndefined();
+  });
+});
+
+describe("embeddedObjectFromObjRecord", () => {
+  const objGroup = pictureObjGroup(7);
+  const context = baseContext({
+    embeddingStreams: new Map<number, Uint8Array<ArrayBuffer>>([
+      [7, new Uint8Array([1, 2, 3])],
+    ]),
+  });
+  const geometry = new SheetGridGeometry([], []);
+
+  function shapeAt(anchor: typeof ZERO_WIDTH_ANCHOR): DrawingShape {
+    return {
+      shapeType: SHAPE_TYPE_PICTURE_FRAME,
+      spid: 1,
+      blipIndex: undefined,
+      anchor,
+    };
+  }
+
+  it("returns undefined for a zero-width anchor, isolated from the height half of the same guard, before ever reading the Embedding Storage's own Package stream", () => {
+    expect(
+      embeddedObjectFromObjRecord(
+        objGroup,
+        shapeAt(ZERO_WIDTH_ANCHOR),
+        context,
+        geometry,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined for a zero-height anchor, isolated from the width half of the same guard", () => {
+    expect(
+      embeddedObjectFromObjRecord(
+        objGroup,
+        shapeAt(ZERO_HEIGHT_ANCHOR),
+        context,
+        geometry,
+      ),
+    ).toBeUndefined();
+  });
+});
+
+describe("drawingObjectFromShape", () => {
+  const geometry = new SheetGridGeometry([], []);
+
+  function shapeAt(anchor: typeof ZERO_WIDTH_ANCHOR): DrawingShape {
+    return {
+      shapeType: SHAPE_TYPE_RECTANGLE,
+      spid: 5,
+      blipIndex: undefined,
+      anchor,
+    };
+  }
+
+  it("returns undefined for a zero-width anchor, isolated from the height half of the same guard", () => {
+    expect(
+      drawingObjectFromShape(shapeAt(ZERO_WIDTH_ANCHOR), geometry),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined for a zero-height anchor, isolated from the width half of the same guard", () => {
+    expect(
+      drawingObjectFromShape(shapeAt(ZERO_HEIGHT_ANCHOR), geometry),
+    ).toBeUndefined();
+  });
+
+  it("builds a single-page, single-shape document sized and framed exactly at the anchor's own placement, with no image content of its own", () => {
+    const anchor = {
+      colL: 0,
+      dxL: 0,
+      rwT: 0,
+      dyT: 0,
+      colR: 1,
+      dxR: 0,
+      rwB: 1,
+      dyB: 0,
+    };
+    const shape: DrawingShape = {
+      shapeType: SHAPE_TYPE_RECTANGLE,
+      spid: 5,
+      blipIndex: undefined,
+      anchor,
+    };
+    const widthPt = geometry.columnWidthPt(0);
+    const heightPt = geometry.rowHeightPt(0);
+
+    const result = drawingObjectFromShape(shape, geometry);
+
+    expect(result).toStrictEqual({
+      objectKind: "drawing",
+      document: {
+        kind: "drawing",
+        metadata: {},
+        pages: [
+          {
+            size: { widthPt, heightPt },
+            shapes: [
+              {
+                frame: { xPt: 0, yPt: 0, widthPt, heightPt },
+                insetLeftPt: 0,
+                insetTopPt: 0,
+                insetRightPt: 0,
+                insetBottomPt: 0,
+                blocks: [],
+              },
+            ],
+            vectors: [],
+          },
+        ],
+      },
+      frame: { xPt: 0, yPt: 0, widthPt, heightPt },
+      anchorRow: 0,
+      anchorColumn: 0,
+      offsetXPt: 0,
+      offsetYPt: 0,
+    });
+  });
+});
+
+describe("chartFromShape", () => {
+  const shape: DrawingShape = {
+    shapeType: SHAPE_TYPE_RECTANGLE,
+    spid: 1,
+    blipIndex: undefined,
+    anchor: {
+      colL: 0,
+      dxL: 0,
+      rwT: 0,
+      dyT: 0,
+      colR: 1,
+      dxR: 0,
+      rwB: 1,
+      dyB: 0,
+    },
+  };
+  const geometry = new SheetGridGeometry([], []);
+  const context = baseContext();
+
+  function substream(documentType: number, offset: number): Substream {
+    return { documentType, offset, records: [], index: 0 };
+  }
+
+  it("returns undefined when no candidate substream is chart-typed at all", () => {
+    expect(
+      chartFromShape(
+        shape,
+        10,
+        20,
+        {
+          ...context,
+          allSubstreams: [substream(BOF_TYPE_WORKSHEET, 15)],
+        },
+        geometry,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined for a chart substream sitting at or before the Obj record's own offset", () => {
+    expect(
+      chartFromShape(
+        shape,
+        10,
+        20,
+        {
+          ...context,
+          allSubstreams: [substream(BOF_TYPE_CHART, 10)],
+        },
+        geometry,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined for a chart substream sitting at or after the next worksheet record's own offset", () => {
+    expect(
+      chartFromShape(
+        shape,
+        10,
+        20,
+        {
+          ...context,
+          allSubstreams: [substream(BOF_TYPE_CHART, 20)],
+        },
+        geometry,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("picks the one candidate genuinely bounded between the Obj record and the next, ignoring near-miss substreams elsewhere in the list, and builds the chart's own single-sheet document exactly", () => {
+    const result = chartFromShape(
+      shape,
+      10,
+      20,
+      {
+        ...context,
+        allSubstreams: [
+          substream(BOF_TYPE_WORKSHEET, 15),
+          substream(BOF_TYPE_CHART, 5),
+          substream(BOF_TYPE_CHART, 25),
+          substream(BOF_TYPE_CHART, 15),
+        ],
+      },
+      geometry,
+    );
+
+    const widthPt = geometry.columnWidthPt(0);
+    const heightPt = geometry.rowHeightPt(0);
+    expect(result).toStrictEqual({
+      objectKind: "chart",
+      document: {
+        kind: "spreadsheet",
+        metadata: {},
+        sheets: [
+          {
+            name: "Chart",
+            cells: [],
+            columns: [],
+            rows: [],
+            images: [],
+            printSettings: {
+              pageSize: PAGE_SIZE_LETTER,
+              margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+              gridlines: false,
+              headers: false,
+              pageOrder: "downThenOver",
+            },
+          },
+        ],
+      },
+      frame: { xPt: 0, yPt: 0, widthPt, heightPt },
+      anchorRow: 0,
+      anchorColumn: 0,
+      offsetXPt: 0,
+      offsetYPt: 0,
+    });
   });
 });
