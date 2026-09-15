@@ -3616,6 +3616,49 @@ describe("appReducer ADD_RECT / ADD_ELLIPSE / ADD_LINE / ADD_PATH on odp", () =>
     expect(withRect.hasUnsavedChanges).toBe(true);
     expect(odgDocument(withRect).editor.pages()[0]?.vectors()).toHaveLength(1);
   });
+
+  // The odg branch dispatches through its own inner switch (addRect/addEllipse/addLine/addPath), one case per real OdgPage method -- distinct from the ADD_RECT/ADD_ELLIPSE/ADD_LINE/ADD_PATH coverage above, which only ever reaches odg via ADD_RECT. Each case is its own switch-statement mutant, so proving the rect case works says nothing about whether removing the ellipse/line/path cases would still pass.
+  it("adds each real vector kind to an odg page via the page's own addEllipse/addLine/addPath", () => {
+    const editor = createOdg();
+    editor.addPage();
+    const opened = openOdgDocument(editor.toBytes());
+
+    const withEllipse = appReducer(opened, {
+      type: "ADD_ELLIPSE",
+      containerIndex: 0,
+      init: { frame: { xPt: 60, yPt: 10, widthPt: 40, heightPt: 30 } },
+    });
+    const withLine = appReducer(withEllipse, {
+      type: "ADD_LINE",
+      containerIndex: 0,
+      init: {
+        from: { xPt: 0, yPt: 100 },
+        to: { xPt: 100, yPt: 100 },
+        stroke: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
+      },
+    });
+    const withPath = appReducer(withLine, {
+      type: "ADD_PATH",
+      containerIndex: 0,
+      init: {
+        frame: { xPt: 0, yPt: 150, widthPt: 50, heightPt: 50 },
+        subpaths: [
+          {
+            start: { xPt: 0, yPt: 50 },
+            segments: [{ kind: "line", to: { xPt: 25, yPt: 0 } }],
+            closed: false,
+          },
+        ],
+      },
+    });
+    expect(withPath.hasUnsavedChanges).toBe(true);
+    const vectors = odgDocument(withPath).editor.pages()[0]?.vectors();
+    expect(vectors?.map((vector) => vector.kind)).toEqual([
+      "ellipse",
+      "line",
+      "path",
+    ]);
+  });
 });
 
 describe("appReducer SET_VECTOR_FILL / SET_VECTOR_STROKE on odg", () => {
