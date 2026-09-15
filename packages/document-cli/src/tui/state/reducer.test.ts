@@ -1040,6 +1040,72 @@ describe("appReducer APPEND_TABLE and MERGE_TABLE_CELLS on docx/odt", () => {
   });
 });
 
+describe("appReducer SET_TABLE_CELL_TEXT", () => {
+  it("replaces a real docx table cell's text in place", () => {
+    const state = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      { type: "APPEND_TABLE", rows: 2, columns: 2 },
+    ]);
+    const edited = appReducer(state, {
+      type: "SET_TABLE_CELL_TEXT",
+      tableIndex: 0,
+      row: 1,
+      column: 1,
+      text: "Total",
+    });
+    expect(edited.hasUnsavedChanges).toBe(true);
+    const content = readDocxContent(docxDocument(edited).editor.toPackage());
+    if (content.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing ContentDocument, got ${content.kind}`,
+      );
+    }
+    const tableBlock = content.sections[0]?.blocks[0];
+    if (tableBlock?.kind !== "table") {
+      throw new Error(`expected a table block, got ${tableBlock?.kind}`);
+    }
+    const cellText = tableBlock.rows[1]?.cells[1]?.blocks
+      .flatMap((block) => (block.kind === "paragraph" ? block.runs : []))
+      .map((run) => run.text)
+      .join("");
+    expect(cellText).toBe("Total");
+  });
+
+  it("warns rather than crashing for a table index that does not exist", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(created, {
+      type: "SET_TABLE_CELL_TEXT",
+      tableIndex: 0,
+      row: 0,
+      column: 0,
+      text: "x",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no table at index 0");
+  });
+
+  it("warns rather than crashing for a row/column that does not exist", () => {
+    const state = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      { type: "APPEND_TABLE", rows: 2, columns: 2 },
+    ]);
+    const result = appReducer(state, {
+      type: "SET_TABLE_CELL_TEXT",
+      tableIndex: 0,
+      row: 5,
+      column: 0,
+      text: "x",
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe(
+      "There is no cell at row 5, column 0 of table 0",
+    );
+  });
+});
+
 describe("appReducer SET_LIST_ITEM_TEXT on odt", () => {
   it("replaces a real list item's text and the change round-trips through re-decoding the package", () => {
     const editor = createOdt();
