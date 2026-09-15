@@ -3,9 +3,11 @@ import { readFontProgramEncoding } from "./builtin-encoding";
 import { STIX_TWO_MATH_FONT_BASE64 } from "./assets/stix-two-math-font";
 import {
   CFF_HEADER,
+  CFF_STANDARD_STRING_COUNT,
   ROS_OPERANDS_AND_OPERATOR,
   cffFont,
   cffFontWithBuiltinEncoding,
+  cffFontWithCharstrings,
 } from "./test-support/cff";
 import { caladeaRegularBytes, carlitoRegularBytes } from "./test-support/fonts";
 import {
@@ -135,6 +137,82 @@ describe("readFontProgramEncoding: TrueType programs", () => {
 });
 
 describe("readFontProgramEncoding: CFF programs", () => {
+  it("names a glyph through the predefined ISOAdobe charset and predefined StandardEncoding when the font states neither operator", () => {
+    // A raw (non-sfnt) CFF program with no Charset or Encoding operator at all: glyph 1's SID defaults to its own glyph ID (SID 1 is "space" in the standard strings), and predefinedEncodingApplies is true for a bare /FontFile3 Type1C, so StandardEncoding's own code 0x20 reaches it too.
+    const program = cffFontWithCharstrings({
+      name: "PredefinedCharsetAndEncoding",
+      charStrings: [[14], [14]], // glyph 0 (.notdef) and glyph 1, both a bare endchar
+    });
+    const encoding = readFontProgramEncoding(program);
+    expect(encoding?.glyphIdToUnicode(1)).toBe(0x20);
+    expect(encoding?.codeToUnicode(0x20)).toBe(0x20);
+  });
+
+  it("names glyphs through a format 1 charset (ranges of consecutive SIDs)", () => {
+    const program = cffFontWithBuiltinEncoding({
+      name: "Format1Charset",
+      glyphNames: ["Omega", "mu", "A"],
+      encoding: new Map([
+        [0x57, 1],
+        [0x6d, 2],
+        [0x41, 3],
+      ]),
+      charsetFormat: 1,
+      charsetRangeSize: 2, // forces more than one range across 4 glyphs (.notdef + 3)
+    });
+    const encoding = readFontProgramEncoding(program);
+    expect(encoding?.codeToUnicode(0x57)).toBe(OHM_SIGN);
+    expect(encoding?.codeToUnicode(0x6d)).toBe(0xb5);
+    expect(encoding?.codeToUnicode(0x41)).toBe(0x41);
+  });
+
+  it("names glyphs through a format 2 charset (16-bit range counts)", () => {
+    const program = cffFontWithBuiltinEncoding({
+      name: "Format2Charset",
+      glyphNames: ["Omega", "mu"],
+      encoding: new Map([
+        [0x57, 1],
+        [0x6d, 2],
+      ]),
+      charsetFormat: 2,
+      charsetRangeSize: 1, // one glyph per range, so the format 2 loop runs more than once
+    });
+    const encoding = readFontProgramEncoding(program);
+    expect(encoding?.codeToUnicode(0x57)).toBe(OHM_SIGN);
+    expect(encoding?.codeToUnicode(0x6d)).toBe(0xb5);
+  });
+
+  it("maps codes through a format 1 Encoding (ranges of consecutive codes)", () => {
+    const program = cffFontWithBuiltinEncoding({
+      name: "Format1Encoding",
+      glyphNames: ["A", "B", "C"],
+      // Consecutive codes assigned to consecutive glyphs collapse into a single format 1 range.
+      encoding: new Map([
+        [0x41, 1],
+        [0x42, 2],
+        [0x43, 3],
+      ]),
+      encodingFormat: 1,
+    });
+    const encoding = readFontProgramEncoding(program);
+    expect(encoding?.codeToUnicode(0x41)).toBe(0x41);
+    expect(encoding?.codeToUnicode(0x42)).toBe(0x42);
+    expect(encoding?.codeToUnicode(0x43)).toBe(0x43);
+  });
+
+  it("resolves a supplementary code through the Encoding's own supplement entries, addressed by SID rather than glyph index", () => {
+    const program = cffFontWithBuiltinEncoding({
+      name: "EncodingSupplement",
+      glyphNames: ["Omega"],
+      encoding: new Map([[0x57, 1]]),
+      // Glyph 1's own SID under the default format 0 charset is CFF_STANDARD_STRING_COUNT + 0 (its custom "Omega" string).
+      encodingSupplement: [{ code: 0x1a, sid: CFF_STANDARD_STRING_COUNT }],
+    });
+    const encoding = readFontProgramEncoding(program);
+    expect(encoding?.codeToUnicode(0x57)).toBe(OHM_SIGN); // the base format 0 mapping still works
+    expect(encoding?.codeToUnicode(0x1a)).toBe(OHM_SIGN); // reached only through the supplement
+  });
+
   it("maps codes through a custom Encoding and names glyphs through the charset", () => {
     const program = cffFontWithBuiltinEncoding({
       name: "SymbolSubset",
@@ -157,6 +235,8 @@ describe("readFontProgramEncoding: CFF programs", () => {
     );
     expect(encoding?.glyphIdToUnicode(5)).toBe(0x43);
     expect(encoding?.glyphIdToUnicode(35)).toBe(0x1ea8);
+    // An sfnt-wrapped CFF states its encoding through the container's own 'cmap', never the CFF Encoding operator (predefinedEncodingApplies is false here) -- so with no symbolic cmap subtable in this font, no code reaches any glyph at all, only glyph IDs do.
+    expect(encoding?.codeToUnicode(0x43)).toBeUndefined();
   });
 });
 
@@ -198,5 +278,36 @@ describe("readFontProgramEncoding: Type 1 programs", () => {
         textBytes("%!PS-AdobeFont-1.0: Nameless\ncurrentfile eexec\n"),
       ),
     ).toBeUndefined();
+  });
+
+  it("reads a PFB-segmented Type 1 program, whose cleartext header follows a 6-byte binary segment marker", () => {
+    const cleartext = [
+      "%!PS-AdobeFont-1.0: PFB 001.000",
+      "/Encoding 256 array",
+      "dup 87 /Omega put",
+      "readonly def",
+      "currentfile eexec",
+      "",
+    ].join("\n");
+    const body = new TextEncoder().encode(cleartext);
+    const segmentHeader = [0x80, 1, 0, 0, 0, 0]; // marker + a segment-type/length header this module never reads
+    const program = new Uint8Array([...segmentHeader, ...body]);
+    expect(readFontProgramEncoding(program)?.codeToUnicode(0x57)).toBe(
+      OHM_SIGN,
+    );
+  });
+
+  it("reads the /Encoding array out of a program with no eexec marker at all, using the whole file as the cleartext header", () => {
+    const program = textBytes(
+      [
+        "%!PS-AdobeFont-1.0: NoEexec 001.000",
+        "/Encoding 256 array",
+        "dup 87 /Omega put",
+        "readonly def",
+      ].join("\n"),
+    );
+    expect(readFontProgramEncoding(program)?.codeToUnicode(0x57)).toBe(
+      OHM_SIGN,
+    );
   });
 });
