@@ -107,7 +107,7 @@ function writeCfRecord(
 }
 
 // One rule's bounding box, the CondFmt/CondFmt12 header's own refBound ([MS-XLS] 2.5.56's CondFmtStructure): the tight rectangle containing every range the rule names -- redundant with sqref for this reader's purposes, but a real consumer's own grammar expects it and it costs four u16s to state honestly.
-function boundingBoxOf(rule: ContentSheetConditionalFormat): {
+export function boundingBoxOf(rule: ContentSheetConditionalFormat): {
   startRow: number;
   endRow: number;
   startColumn: number;
@@ -411,7 +411,7 @@ function textRuleFormula(
 }
 
 // A relative A1 reference (no $ markers) for the anchor a text rule's formula evaluates each cell against -- relative, because Excel's own generated formulas spell it that way and the anchor names the range's first cell, not a fixed reference the rule means to keep.
-function relativeCellRef(row: number, column: number): string {
+export function relativeCellRef(row: number, column: number): string {
   let letters = "";
   let index = column;
   do {
