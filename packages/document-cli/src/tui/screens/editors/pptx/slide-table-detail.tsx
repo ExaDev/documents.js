@@ -60,6 +60,10 @@ export function SlideTableDetailScreen(
   useInput(
     (input, key) => {
       if (table === undefined) {
+        // The fallback view below tells the user to press Esc to go back, so Esc must still work even with no table to navigate -- every other key is genuinely meaningless here (there is no grid to move a cursor over or merge cells in).
+        if (key.escape) {
+          dispatch({ type: "POP_SCREEN" });
+        }
         return;
       }
       if (key.upArrow || input === "k") {
