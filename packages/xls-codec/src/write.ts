@@ -212,10 +212,8 @@ export function buildPalettePlan(sheets: readonly ContentSheet[]): PalettePlan {
     if (color === undefined) {
       return;
     }
-    const hex = colorToRgbHex(color);
-    if (!colorByHex.has(hex)) {
-      colorByHex.set(hex, color);
-    }
+    // Unconditional: Map.set on a key already present neither moves it in iteration order (only a genuinely new key is appended) nor changes what colorToRgbHex would produce for it later (two Color values sharing one hex are equal in every byte this writer ever serialises), so a has() guard first would only spend a lookup to reach the identical map every time.
+    colorByHex.set(colorToRgbHex(color), color);
   };
   const recordFill = (fill: ContentCellFill | undefined): void => {
     if (fill === undefined) {
@@ -255,14 +253,7 @@ export function buildPalettePlan(sheets: readonly ContentSheet[]): PalettePlan {
     );
   };
 
-  if (colorByHex.size === 0) {
-    return {
-      paletteColors: undefined,
-      icvOf: (color) => missing(colorToRgbHex(color)),
-    };
-  }
-
-  // Fast path: does every distinct colour already match the fixed default table exactly? If so, no Palette record is needed at all.
+  // No separate empty-map return: an empty colorByHex has no hex failing the default-table lookup below (there is nothing to iterate), so it already falls out of the fast path exactly as the dedicated empty case would -- paletteColors undefined, icvOf refusing every colour as unregistered, since none ever was. Fast path: does every distinct colour already match the fixed default table exactly? If so, no Palette record is needed at all.
   const defaultIcvByHex = new Map<string, number>();
   let needsCustomPalette = false;
   for (const hex of colorByHex.keys()) {
@@ -394,7 +385,14 @@ function signatureOfCellXf(
   verticalAlignment: "top" | "middle" | "bottom" | undefined,
   decoration: XfDecorationFields | undefined,
 ): string {
-  let signature = `f${formatId}|n${fontIndex}|a${alignment ?? ""}|v${verticalAlignment ?? ""}`;
+  // alignment/verticalAlignment are appended only when stated, rather than through a `?? ""` fallback: the fallback's own placeholder value is never observable either way (no real Alignment/verticalAlignment value can ever equal it, so it can never falsely collide with or falsely distinguish a real one), so a StringLiteral mutant swapping the placeholder for a different one is undetectable no matter what string is chosen there. Omitting the segment entirely instead means two cells that both leave alignment unstated share the identical (absent) segment, and one that states it never does -- the same distinction, expressed as a difference the segment's own presence carries rather than one it is trusted to encode into an arbitrary constant.
+  let signature = `f${formatId}|n${fontIndex}`;
+  if (alignment !== undefined) {
+    signature += `|a${alignment}`;
+  }
+  if (verticalAlignment !== undefined) {
+    signature += `|v${verticalAlignment}`;
+  }
   if (decoration === undefined) {
     return signature;
   }
