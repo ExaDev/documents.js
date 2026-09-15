@@ -375,4 +375,37 @@ describe("parseCffGlyphBounds's charstring interpreter, driven by hand-built cha
     // Draws nothing (only stems and an endchar), so the only observable difference from a malformed charstring is that this one parses to a defined-but-empty result rather than undefined -- proving the hintmask's own byte-consumption arithmetic didn't run past or short of the charstring.
     expect(boundsOfOnlyGlyph(bytes)).toBeUndefined();
   });
+
+  it("switches a Local Subrs INDEX from the small to the medium subroutine bias exactly at a count of 1240 entries", () => {
+    // subrBias (TN 5177 section 16, "Subrs INDEX bias"): count < 1240 biases by 107, count < 33900 biases by 1131. A callsubr operand is stored as (real index - bias), so calling subroutine 0 needs an operand of exactly -bias -- getting the bias wrong for a given count makes callsubr resolve a different (or out-of-range) subroutine entirely, which is exactly what distinguishes the two branches here.
+    const OP_HLINETO = 6;
+    const DX_100 = 100 + 139; // the single-byte small-integer encoding of 100 (bias 139)
+    const lineSubr = [DX_100, OP_HLINETO]; // draws from (0,0) to (100,0)
+    const filler = [OP_ENDCHAR]; // never called; just needs to be a syntactically valid INDEX entry
+    const drawnBounds = { xMin: 0, yMin: 0, xMax: 100, yMax: 0 };
+
+    // 1239 entries: still below the 1240 threshold, so the bias is the small one (107). Operand -107 is a plain single-byte small integer (32 = 139 + -107).
+    const belowThreshold = cffFontWithCharstrings({
+      name: "SubrBiasSmall",
+      charStrings: [[32, OP_CALLSUBR]],
+      localSubrs: [lineSubr, ...new Array<number[]>(1238).fill(filler)],
+    });
+    expect(boundsOfOnlyGlyph(belowThreshold)).toEqual(drawnBounds);
+
+    // Exactly 1240 entries: at the threshold, so the bias is the medium one (1131). Operand -1131 needs the 3-byte shortint form (28, then a big-endian int16): -1131 as an unsigned 16-bit pattern is 0xfb95.
+    const atThreshold = cffFontWithCharstrings({
+      name: "SubrBiasMedium",
+      charStrings: [[28, 0xfb, 0x95, OP_CALLSUBR]],
+      localSubrs: [lineSubr, ...new Array<number[]>(1239).fill(filler)],
+    });
+    expect(boundsOfOnlyGlyph(atThreshold)).toEqual(drawnBounds);
+
+    // The 1240-entry font's own charstring, reinterpreted against the SMALL bias instead of MEDIUM, resolves to a wildly out-of-range subroutine index and so must fail to draw -- confirming the atThreshold case above is actually pinned on the bias switching, not merely on 1240 entries happening to still work under either bias.
+    const atThresholdWithWrongOperand = cffFontWithCharstrings({
+      name: "SubrBiasMediumWrongOperand",
+      charStrings: [[32, OP_CALLSUBR]],
+      localSubrs: [lineSubr, ...new Array<number[]>(1239).fill(filler)],
+    });
+    expect(boundsOfOnlyGlyph(atThresholdWithWrongOperand)).toBeUndefined();
+  });
 });
