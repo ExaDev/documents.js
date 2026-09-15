@@ -402,6 +402,30 @@ describe("decodeGlyphOutline's simple-glyph and composite decoding, driven by a 
     expect(decodeGlyphOutline(glyf, 0)).toBeUndefined();
   });
 
+  it("applies the SCALED_COMPONENT_OFFSET transform to a component's own placement offset, not just its outline points", () => {
+    // No real vendored composite in this suite's own fonts ever sets SCALED_COMPONENT_OFFSET (bit 11, 0x0800) without also setting UNSCALED_COMPONENT_OFFSET (bit 12, 0x1000) -- Microsoft's own OpenType toolchain never emits that combination, only Apple's does -- so this is the one placement path only a hand-built fixture can reach at all. Component 0's own base point (10, 20), the transform [a,b,c,d] = [2,3,5,7], and offset arguments (6, 8) are all pairwise distinct so that swapping any single +/-/*// in the placement arithmetic below changes the result: dx = a*6 + c*8 = 52, dy = b*6 + d*8 = 74, and the final point is the transformed base point plus that SCALED offset, not the raw (6, 8) UNSCALED_COMPONENT_OFFSET would have placed it at.
+    const base = simpleGlyphBytes([0], [{ dx: 10, dy: 20, onCurve: true }]);
+    const scaledOffsetComponent: CompositeComponent = {
+      flags: 0x0800,
+      glyphIndex: 0,
+      argument1: 6,
+      argument2: 8,
+      argsAreXyValues: true,
+      transform: [2, 3, 5, 7],
+    };
+    const glyf = fakeGlyfTable({
+      entries: new Map([[0, base]]),
+      composites: new Map([[1, [scaledOffsetComponent]]]),
+    });
+    const outline = decodeGlyphOutline(glyf, 1);
+    expect(outline?.contours).toHaveLength(1);
+    expect(outline?.contours[0]?.[0]).toEqual({
+      x: 172, // 2*10 + 5*20 + (2*6 + 5*8)
+      y: 244, // 3*10 + 7*20 + (3*6 + 7*8)
+      onCurve: true,
+    });
+  });
+
   it("refuses a composite chain recursing past the spec's own nesting limit", () => {
     // Glyph 0 composites onto itself: every level is otherwise well-formed, so only the sheer recursion depth -- never a malformed record -- is what trips the limit.
     const selfComposite: CompositeComponent = {
