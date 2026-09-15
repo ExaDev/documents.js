@@ -1,4 +1,5 @@
 import type { XmlElement, XmlNode } from "ooxml.js";
+import { attr } from "ooxml.js";
 import { describe, expect, it } from "vitest";
 import {
   directChildElement,
@@ -139,11 +140,14 @@ describe("insertInSchemaOrder", () => {
   });
 
   it("appends after a same-rank sibling rather than inserting before it", () => {
-    const parent = el("w:rPr", {}, [el("w:b")]);
-    insertInSchemaOrder(parent, el("w:b"), RPR_ORDER);
+    const existing = el("w:b", { id: "existing" });
+    const inserted = el("w:b", { id: "inserted" });
+    const parent = el("w:rPr", {}, [existing]);
+    insertInSchemaOrder(parent, inserted, RPR_ORDER);
+    // Same tag on both sides means the tag sequence alone reads identically either way an equal-rank sibling could be placed -- a distinguishing attribute on each element is what actually tells "appended after" apart from "inserted before".
     expect(
-      parent.children.map((c) => (c.type === "element" ? c.tag : c.type)),
-    ).toEqual(["w:b", "w:b"]);
+      parent.children.map((c) => (c.type === "element" ? attr(c, "id") : c)),
+    ).toEqual(["existing", "inserted"]);
   });
 });
 
