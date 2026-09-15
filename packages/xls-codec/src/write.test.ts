@@ -2550,6 +2550,29 @@ describe("writeXlsContent: conditional formats written (#971)", () => {
     expect(reread.sheets[0]?.conditionalFormats).toStrictEqual([rule]);
   });
 
+  it("round-trips a cellIs rule under each of the remaining single-operand operators cpOf's own switch names -- between/notBetween/equal/greaterThan already exercised above", () => {
+    const operators = [
+      "between",
+      "notEqual",
+      "lessThan",
+      "greaterThanOrEqual",
+    ] as const;
+    for (const operator of operators) {
+      const rule: ContentSheetConditionalFormat = {
+        type: "cellIs",
+        ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
+        operator,
+        formula1: "5",
+      };
+      const reread = readXlsContent(
+        writeXlsContent(
+          document([sheet("S", [], { conditionalFormats: [rule] })]),
+        ),
+      );
+      expect(reread.sheets[0]?.conditionalFormats).toStrictEqual([rule]);
+    }
+  });
+
   it("refuses a rule variant with no BIFF8 spelling rather than dropping it", () => {
     // A colour scale carrying fewer than the schema's own two-stop minimum is malformed input, so the honest refusal fixture is a variant the FORMAT cannot spell: a year-scoped time period, an ODF extension value no icfTemplate names.
     expect(() =>
@@ -2569,6 +2592,101 @@ describe("writeXlsContent: conditional formats written (#971)", () => {
         ]),
       ),
     ).toThrow(/no BIFF8 rule names it/);
+  });
+
+  it("refuses a conditional-format rule carrying no range", () => {
+    expect(() =>
+      writeXlsContent(
+        document([
+          sheet("S", [], {
+            conditionalFormats: [{ type: "uniqueValues", ranges: [] }],
+          }),
+        ]),
+      ),
+    ).toThrow(
+      "a conditional-format rule carrying no range states nothing; the schema requires at least one",
+    );
+  });
+
+  it("refuses a conditional-format range outside BIFF8's own grid, at each of its four edges, naming the exact rows/columns", () => {
+    const base = { type: "uniqueValues" as const };
+    const edges = [
+      { startRow: 0x10000, endRow: 0, startColumn: 0, endColumn: 0 },
+      { startRow: 0, endRow: 0x10000, startColumn: 0, endColumn: 0 },
+      { startRow: 0, endRow: 0, startColumn: 0x100, endColumn: 0 },
+      { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0x100 },
+    ];
+    for (const range of edges) {
+      expect(() =>
+        writeXlsContent(
+          document([
+            sheet("S", [], {
+              conditionalFormats: [{ ...base, ranges: [range] }],
+            }),
+          ]),
+        ),
+      ).toThrow(
+        `a conditional-format range (rows ${range.startRow}-${range.endRow}, columns ${range.startColumn}-${range.endColumn}) is outside BIFF8's own grid; a .xls workbook cannot address it`,
+      );
+    }
+  });
+
+  it("writes no CondFmt/CondFmt12 records at all for a sheet stating an empty conditionalFormats array", () => {
+    expect(
+      writeSheetConditionalFormats(
+        sheet("S", [], { conditionalFormats: [] }),
+        () => 0,
+      ),
+    ).toStrictEqual([]);
+  });
+
+  it("refuses a sheet whose own conditional-format rule count exceeds CondFmt's own 15-bit nID field, naming the exact count", () => {
+    const range = { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 };
+    const rules: ContentSheetConditionalFormat[] = Array.from(
+      { length: 0x8000 },
+      () => ({ type: "uniqueValues", ranges: [range] }),
+    );
+    expect(() =>
+      writeSheetConditionalFormats(
+        sheet("S", [], { conditionalFormats: rules }),
+        () => 0,
+      ),
+    ).toThrow(
+      "this sheet's 32768 conditional-format rules exceed CondFmt's own 15-bit nID field",
+    );
+  });
+
+  it("accepts a sheet whose own conditional-format rule count sits exactly at CondFmt's own 15-bit nID field boundary", () => {
+    const range = { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 };
+    const rules: ContentSheetConditionalFormat[] = Array.from(
+      { length: 0x7fff },
+      () => ({ type: "uniqueValues", ranges: [range] }),
+    );
+    expect(() =>
+      writeSheetConditionalFormats(
+        sheet("S", [], { conditionalFormats: rules }),
+        () => 0,
+      ),
+    ).not.toThrow();
+  }, 20000);
+
+  it("assigns each rule its own 1-based nID in declaration order across three rules, not just the two a smaller fixture cannot distinguish from an off-by-one", () => {
+    const range = { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 };
+    const rules: ContentSheetConditionalFormat[] = [
+      { type: "containsText", ranges: [range], text: "a" },
+      { type: "containsText", ranges: [range], text: "b" },
+      { type: "containsText", ranges: [range], text: "c" },
+    ];
+    const reread = readXlsContent(
+      writeXlsContent(
+        document([sheet("S", [], { conditionalFormats: rules })]),
+      ),
+    );
+    expect(
+      reread.sheets[0]?.conditionalFormats?.map((rule) =>
+        rule.type === "containsText" ? rule.text : undefined,
+      ),
+    ).toStrictEqual(["a", "b", "c"]);
   });
 });
 
@@ -2659,6 +2777,37 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
         ],
       }),
     ).toThrow(/cStates table fixes the set at 3/);
+  });
+
+  it("resolves each of iconSetThresholdCount's own three boundaries to the exact right count, not just one interior set from each band", () => {
+    // 3Symbols2 (index 7) and 4Arrows (index 8) straddle the first boundary; 4TrafficLights (index 12) and 5Arrows (index 13) straddle the second -- each pair proves that boundary is <=, not < or <=-one-off.
+    const caseFor = (
+      iconSetType: string,
+      count: number,
+    ): ContentSheetConditionalFormat => ({
+      type: "iconSet",
+      ranges: [RANGE],
+      iconSetType,
+      thresholds: Array.from({ length: count }, (_unused, index) =>
+        index === 0
+          ? { type: "min" as const }
+          : index === count - 1
+            ? { type: "max" as const }
+            : {
+                type: "percent" as const,
+                value: String((index * 100) / (count - 1)),
+              },
+      ),
+    });
+    for (const [iconSetType, count] of [
+      ["3Symbols2", 3],
+      ["4Arrows", 4],
+      ["4TrafficLights", 4],
+      ["5Arrows", 5],
+    ] as const) {
+      const rule = caseFor(iconSetType, count);
+      expect(roundTripped(rule)).toStrictEqual([{ ...rule, priority: 1 }]);
+    }
   });
 
   it("refuses an icon-set type outside the seventeen built-in sets", () => {
@@ -2913,6 +3062,26 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
       type: "top10",
       ranges: [RANGE],
       rank: 3,
+    };
+    expect(roundTripped(rule)).toStrictEqual([{ ...rule, priority: 1 }]);
+  });
+
+  it("round-trips a top10 rule selecting from the bottom by count, isolating fTop from fPercent", () => {
+    const rule: ContentSheetConditionalFormat = {
+      type: "top10",
+      ranges: [RANGE],
+      rank: 3,
+      bottom: true,
+    };
+    expect(roundTripped(rule)).toStrictEqual([{ ...rule, priority: 1 }]);
+  });
+
+  it("round-trips a top10 rule selecting from the top by percent, isolating fPercent from fTop", () => {
+    const rule: ContentSheetConditionalFormat = {
+      type: "top10",
+      ranges: [RANGE],
+      rank: 3,
+      percent: true,
     };
     expect(roundTripped(rule)).toStrictEqual([{ ...rule, priority: 1 }]);
   });
