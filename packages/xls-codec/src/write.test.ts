@@ -3179,6 +3179,26 @@ describe("buildWorksheetSubstream: sheet-writer.ts's own boundary and array-empt
     ).toBe(false);
   });
 
+  it("writes HorizontalPageBreaks' own break indices in ascending order on the wire, not the declared order, before any read-side re-sorting could mask it", () => {
+    // Reading a break back through ContentSheetPrintSettings' own round trip re-sorts on the read side too (sheet.ts's ascendingDistinct), so a roundtrip assertion alone cannot tell a writer that sorts from one that does not -- this reads the raw HorizontalPageBreaks record directly instead.
+    const records = recordsOf([], {
+      printSettings: {
+        ...PRINT_SETTINGS,
+        manualBreaks: { rows: [20, 5, 15], columns: [] },
+      },
+    });
+    const breaks = records.find(
+      (record) => record.type === RECORD_HORIZONTALPAGEBREAKS,
+    );
+    if (breaks === undefined) {
+      throw new Error("no HorizontalPageBreaks record was written");
+    }
+    expect(u16At(breaks.data, 0)).toBe(3); // cbrk
+    expect(u16At(breaks.data, 2)).toBe(5); // first break: the smallest index
+    expect(u16At(breaks.data, 8)).toBe(15); // second break: the middle index
+    expect(u16At(breaks.data, 14)).toBe(20); // third break: the largest index
+  });
+
   it("writes no MergeCells or comment records at all for a sheet with neither", () => {
     const records = recordsOf([cell(0, 0, { kind: "number", value: 1 })]);
     expect(records.some((record) => record.type === RECORD_MERGECELLS)).toBe(
