@@ -2708,6 +2708,31 @@ describe("appReducer PDF item and page mutations", () => {
     expect(reopenedItem.yPt).toBeCloseTo(60, 0);
   });
 
+  it("adds a text item via ADD_PDF_TEXT, present after a toBytes()/openPdf() round trip", () => {
+    const opened = openPdfDocument(pdfTestBytes());
+
+    const withText = appReducer(opened, {
+      type: "ADD_PDF_TEXT",
+      pageIndex: 0,
+      init: {
+        xPt: 15,
+        yPt: 25,
+        text: "Second",
+        font: { family: "Helvetica", weight: "normal", style: "normal" },
+        sizePt: 14,
+        color: { r: 0, g: 0, b: 0 },
+      },
+    });
+    expect(pdfDocument(withText).editor.page(0)?.items()).toHaveLength(2);
+
+    const reopened = openPdf(pdfDocument(withText).editor.toBytes());
+    const items = reopened.page(0)?.items() ?? [];
+    const second = items.find(
+      (item) => item.kind === "text" && item.text === "Second",
+    );
+    expect(second).toBeDefined();
+  });
+
   it("adds a rect via ADD_PDF_RECT, present after a toBytes()/openPdf() round trip", () => {
     const opened = openPdfDocument(pdfTestBytes());
 
@@ -3682,6 +3707,120 @@ describe("appReducer INSERT_ODT_FORMULA", () => {
     });
     expect(result.status?.severity).toBe("warning");
     expect(result.status?.text).toContain("an odt document");
+  });
+});
+
+describe("appReducer INSERT_DOCX_FORMULA", () => {
+  it("writes a real OMML equation, read back as an embedded formula block through readDocxContent", () => {
+    const state = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      {
+        type: "APPEND_PARAGRAPH",
+        text: undefined,
+        styleId: undefined,
+        alignment: undefined,
+      },
+    ]);
+    const mathml: MathMlNode[] = [
+      {
+        type: "element",
+        tag: "mi",
+        attributes: [],
+        children: [{ type: "text", value: "x" }],
+      },
+    ];
+    const withFormula = appReducer(state, {
+      type: "INSERT_DOCX_FORMULA",
+      blockIndex: 0,
+      mathml,
+    });
+    expect(withFormula.hasUnsavedChanges).toBe(true);
+    expect(withFormula.status?.severity).not.toBe("warning");
+
+    const content = readDocxContent(
+      docxDocument(withFormula).editor.toPackage(),
+    );
+    if (content.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing ContentDocument, got ${content.kind}`,
+      );
+    }
+    const block = content.sections
+      .flatMap((section) => section.blocks)
+      .find((candidate) => candidate.kind === "embeddedObject");
+    if (block?.kind !== "embeddedObject") {
+      throw new Error("expected an embedded formula block");
+    }
+    const formula = formulaOfBlock(block);
+    expect(formula?.mathml[0]).toStrictEqual({
+      type: "element",
+      tag: "mi",
+      attributes: [],
+      children: [{ type: "text", value: "x" }],
+    });
+  });
+
+  it("warns instead of writing an empty paragraph when the formula produces no OMML content", () => {
+    const state = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      {
+        type: "APPEND_PARAGRAPH",
+        text: undefined,
+        styleId: undefined,
+        alignment: undefined,
+      },
+    ]);
+    const withFormula = appReducer(state, {
+      type: "INSERT_DOCX_FORMULA",
+      blockIndex: 0,
+      mathml: [],
+    });
+    expect(withFormula.status?.severity).toBe("warning");
+    expect(withFormula.status?.text).toBe(
+      "The formula produced no OMML content and was not written",
+    );
+
+    const content = readDocxContent(
+      docxDocument(withFormula).editor.toPackage(),
+    );
+    if (content.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing ContentDocument, got ${content.kind}`,
+      );
+    }
+    expect(
+      content.sections
+        .flatMap((section) => section.blocks)
+        .some((candidate) => candidate.kind === "embeddedObject"),
+    ).toBe(false);
+  });
+
+  it("warns rather than crashing for a paragraph index that does not exist", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const result = appReducer(created, {
+      type: "INSERT_DOCX_FORMULA",
+      blockIndex: 7,
+      mathml: [{ type: "element", tag: "mi", attributes: [], children: [] }],
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toBe("There is no paragraph at index 7");
+  });
+
+  it("warns rather than crashing when the open document is not docx", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "odt",
+    });
+    const result = appReducer(created, {
+      type: "INSERT_DOCX_FORMULA",
+      blockIndex: 0,
+      mathml: [{ type: "element", tag: "mi", attributes: [], children: [] }],
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.status?.text).toContain("a docx document");
   });
 });
 
