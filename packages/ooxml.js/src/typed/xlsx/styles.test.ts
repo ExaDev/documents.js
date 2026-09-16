@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
+import type { ContentCellFill } from "document-schema.js";
 import type { Package } from "../../model/package";
 import { el } from "../../xml/fragment";
 import { parsePackage } from "../../package-io/read";
@@ -778,6 +779,62 @@ describe("contentFontOf: omits fontFamily/sizePt/color entirely (not merely as u
     expect(font).toEqual({ bold: true });
     expect(hasOwn(font, "color")).toBe(false);
   });
+
+  it("omits fontFamily entirely when the entry states no <name> at all, even though the baseline has one", () => {
+    const pkg = stylesPackage(
+      el("styleSheet", {}, [
+        el("fonts", {}, [
+          el("font", {}, [el("name", { val: "Calibri" })]),
+          el("font", {}, [el("b")]),
+        ]),
+        el("cellXfs", {}, [el("xf", { numFmtId: "0", fontId: "1" })]),
+      ]),
+    );
+    const font = readCellStyles(pkg)[0]?.font ?? {};
+    expect(font).toEqual({ bold: true });
+    expect(hasOwn(font, "fontFamily")).toBe(false);
+  });
+
+  it("omits sizePt entirely when the entry states no <sz> at all, even though the baseline has one", () => {
+    const pkg = stylesPackage(
+      el("styleSheet", {}, [
+        el("fonts", {}, [
+          el("font", {}, [
+            el("sz", { val: "11" }),
+            el("name", { val: "Calibri" }),
+          ]),
+          el("font", {}, [el("b"), el("name", { val: "Calibri" })]),
+        ]),
+        el("cellXfs", {}, [el("xf", { numFmtId: "0", fontId: "1" })]),
+      ]),
+    );
+    const font = readCellStyles(pkg)[0]?.font ?? {};
+    expect(font).toEqual({ bold: true });
+    expect(hasOwn(font, "sizePt")).toBe(false);
+  });
+
+  it("states an entry's colour when it genuinely differs from the baseline's own resolved colour", () => {
+    const pkg = stylesPackage(
+      el("styleSheet", {}, [
+        el("fonts", {}, [
+          el("font", {}, [
+            el("color", { rgb: "FFFF0000" }),
+            el("name", { val: "Calibri" }),
+          ]),
+          el("font", {}, [
+            el("color", { rgb: "FF0000FF" }),
+            el("name", { val: "Calibri" }),
+          ]),
+        ]),
+        el("cellXfs", {}, [el("xf", { numFmtId: "0", fontId: "1" })]),
+      ]),
+    );
+    expect(readCellStyles(pkg)[0]?.font?.color).toEqual({
+      r: 0,
+      g: 0,
+      b: 1,
+    });
+  });
 });
 
 describe("colorFromElement/readColorRgb: hex length boundary and validation", () => {
@@ -1030,6 +1087,8 @@ describe("CellFormatTable: font signature isolates every one of its own segments
       underline?: boolean;
       strike?: boolean;
       color?: { r: number; g: number; b: number };
+      sizePt?: number;
+      fontFamily?: string;
     },
     fontB: typeof fontA,
   ): [number, number] {
@@ -1069,6 +1128,19 @@ describe("CellFormatTable: font signature isolates every one of its own segments
     const [a, b] = internedFontIds(
       { color: { r: 1, g: 0, b: 0 } },
       { color: { r: 0, g: 0, b: 1 } },
+    );
+    expect(a).not.toBe(b);
+  });
+
+  it("size alone distinguishes two otherwise-identical fonts", () => {
+    const [a, b] = internedFontIds({ sizePt: 11 }, { sizePt: 14 });
+    expect(a).not.toBe(b);
+  });
+
+  it("fontFamily alone distinguishes two otherwise-identical fonts", () => {
+    const [a, b] = internedFontIds(
+      { fontFamily: "Arial" },
+      { fontFamily: "Courier New" },
     );
     expect(a).not.toBe(b);
   });
@@ -1189,6 +1261,54 @@ describe("CellFormatTable: border signature and caching across different outer f
     expect(table.borderDeclarations()[1]).toEqual({
       edges: { left: { style: "dashed", rgb: "000000" } },
     });
+  });
+
+  it("dedupes a border edge with no style stated against one explicitly styled 'solid' -- both are the same visible border", () => {
+    const table = new CellFormatTable();
+    const implicit = table.intern(
+      { kind: "builtin", id: GENERAL_NUM_FMT_ID },
+      { borders: { left: { color: { r: 0, g: 0, b: 0 }, widthPt: 0.75 } } },
+    );
+    const explicit = table.intern(
+      { kind: "builtin", id: 9 },
+      {
+        borders: {
+          left: { color: { r: 0, g: 0, b: 0 }, widthPt: 0.75, style: "solid" },
+        },
+      },
+    );
+    expect(table.cellFormatRecords()[implicit]?.borderId).toBe(
+      table.cellFormatRecords()[explicit]?.borderId,
+    );
+    expect(table.borderDeclarations()).toHaveLength(2);
+  });
+
+  it("a real edge segment distinguishes a border from an entirely empty one, not just an empty-vs-empty collision", () => {
+    const table = new CellFormatTable();
+    const empty = table.intern(
+      { kind: "builtin", id: GENERAL_NUM_FMT_ID },
+      { borders: {} },
+    );
+    const real = table.intern(
+      { kind: "builtin", id: 9 },
+      { borders: { left: { color: { r: 0, g: 0, b: 0 }, widthPt: 0.75 } } },
+    );
+    expect(table.cellFormatRecords()[empty]?.borderId).not.toBe(
+      table.cellFormatRecords()[real]?.borderId,
+    );
+  });
+});
+
+describe("CellFormatTable: internFill's own default branch for a wholly unrecognised fill kind", () => {
+  it("throws naming the unrecognised kind, for a fill this discriminated union genuinely has no member for", () => {
+    const table = new CellFormatTable();
+    const bogus = { kind: "gradient" } as unknown as ContentCellFill;
+    expect(() =>
+      table.intern(
+        { kind: "builtin", id: GENERAL_NUM_FMT_ID },
+        { background: bogus },
+      ),
+    ).toThrow(/gradient/);
   });
 });
 
