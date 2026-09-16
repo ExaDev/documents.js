@@ -85,6 +85,70 @@ describe("readCommonFields: priority and stopIfTrue", () => {
   });
 });
 
+describe("isSheetRuleOperator: every accepted member, distinctly", () => {
+  function operatorOf(operator: string): string | undefined {
+    const { formats } = worksheetWithRule(
+      "A1",
+      el("cfRule", { type: "cellIs", operator, priority: "1" }, [
+        el("formula", {}, [txt("1")]),
+      ]),
+    );
+    const format = formats[0];
+    return format?.type === "cellIs" ? format.operator : undefined;
+  }
+
+  for (const operator of [
+    "between",
+    "notBetween",
+    "equal",
+    "notEqual",
+    "greaterThan",
+    "greaterThanOrEqual",
+    "lessThan",
+    "lessThanOrEqual",
+  ]) {
+    it(`accepts "${operator}"`, () => {
+      expect(operatorOf(operator)).toBe(operator);
+    });
+  }
+
+  it("rejects an unrecognised operator token, dropping the rule to residue", () => {
+    const { formats, residueElements } = worksheetWithRule(
+      "A1",
+      el("cfRule", { type: "cellIs", operator: "bogus", priority: "1" }, [
+        el("formula", {}, [txt("1")]),
+      ]),
+    );
+    expect(formats).toEqual([]);
+    expect(residueElements).toHaveLength(1);
+  });
+});
+
+describe("readCfRule: cellIs formula2 for notBetween too, not just between", () => {
+  it("carries formula2 for a notBetween operator", () => {
+    const { formats } = worksheetWithRule(
+      "A1",
+      el("cfRule", { type: "cellIs", operator: "notBetween", priority: "1" }, [
+        el("formula", {}, [txt("1")]),
+        el("formula", {}, [txt("10")]),
+      ]),
+    );
+    const format = formats[0];
+    expect(format?.type === "cellIs" ? format.formula2 : undefined).toBe("10");
+  });
+});
+
+describe("isTimePeriod: rejects an absent timePeriod attribute, dropping the rule to residue", () => {
+  it("drops a timePeriod rule with no timePeriod attribute at all", () => {
+    const { formats, residueElements } = worksheetWithRule(
+      "A1",
+      el("cfRule", { type: "timePeriod", priority: "1" }),
+    );
+    expect(formats).toEqual([]);
+    expect(residueElements).toHaveLength(1);
+  });
+});
+
 describe("readCfvo: exact type-token membership", () => {
   function cfvoType(type: string): string | undefined {
     const { formats } = worksheetWithRule(
@@ -133,18 +197,68 @@ describe("readCfvo: exact type-token membership", () => {
   });
 });
 
-describe("readColorScaleStops: min/max cfvo/color pair count mismatch", () => {
+function colorScaleFormats(cfvoAndColor: ReturnType<typeof el>[]) {
+  return worksheetWithRule(
+    "A1:B2",
+    el("cfRule", { type: "colorScale", priority: "1" }, [
+      el("colorScale", {}, cfvoAndColor),
+    ]),
+  );
+}
+
+describe("readColorScaleStops: the cfvo/color count boundary (2..3 stops, matched counts)", () => {
   it("rejects a colorScale whose cfvo/color counts genuinely mismatch, dropping the rule to residue", () => {
-    const { formats, residueElements } = worksheetWithRule(
-      "A1:B2",
-      el("cfRule", { type: "colorScale", priority: "1" }, [
-        el("colorScale", {}, [
-          el("cfvo", { type: "min" }),
-          el("cfvo", { type: "max" }),
-          el("color", { rgb: "FFFF0000" }),
-        ]),
-      ]),
-    );
+    const { formats, residueElements } = colorScaleFormats([
+      el("cfvo", { type: "min" }),
+      el("cfvo", { type: "max" }),
+      el("color", { rgb: "FFFF0000" }),
+    ]);
+    expect(formats).toEqual([]);
+    expect(residueElements).toHaveLength(1);
+  });
+
+  it("rejects a single-stop colorScale (below the 2-stop minimum)", () => {
+    const { formats, residueElements } = colorScaleFormats([
+      el("cfvo", { type: "min" }),
+      el("color", { rgb: "FFFF0000" }),
+    ]);
+    expect(formats).toEqual([]);
+    expect(residueElements).toHaveLength(1);
+  });
+
+  it("accepts exactly 2 stops (the minimum boundary itself)", () => {
+    const { formats } = colorScaleFormats([
+      el("cfvo", { type: "min" }),
+      el("cfvo", { type: "max" }),
+      el("color", { rgb: "FFFF0000" }),
+      el("color", { rgb: "FF0000FF" }),
+    ]);
+    expect(formats[0]?.type).toBe("colorScale");
+  });
+
+  it("accepts exactly 3 stops (the maximum boundary itself)", () => {
+    const { formats } = colorScaleFormats([
+      el("cfvo", { type: "min" }),
+      el("cfvo", { type: "percentile", val: "50" }),
+      el("cfvo", { type: "max" }),
+      el("color", { rgb: "FFFF0000" }),
+      el("color", { rgb: "FF00FF00" }),
+      el("color", { rgb: "FF0000FF" }),
+    ]);
+    expect(formats[0]?.type).toBe("colorScale");
+  });
+
+  it("rejects a 4-stop colorScale (above the 3-stop maximum), even though the counts still match", () => {
+    const { formats, residueElements } = colorScaleFormats([
+      el("cfvo", { type: "min" }),
+      el("cfvo", { type: "percentile", val: "25" }),
+      el("cfvo", { type: "percentile", val: "75" }),
+      el("cfvo", { type: "max" }),
+      el("color", { rgb: "FFFF0000" }),
+      el("color", { rgb: "FF00FF00" }),
+      el("color", { rgb: "FF00FFFF" }),
+      el("color", { rgb: "FF0000FF" }),
+    ]);
     expect(formats).toEqual([]);
     expect(residueElements).toHaveLength(1);
   });
@@ -311,6 +425,71 @@ describe("styleFromDxf/dxfResidueChildren: residue passthrough for font/fill/num
     expect(style?.source?.xml).toBe(
       '<alignment horizontal="center"></alignment><border><left style="thin"></left></border><protection locked="0"></protection>',
     );
+    expect(hasOwn(style ?? {}, "textColor")).toBe(false);
+    expect(hasOwn(style ?? {}, "background")).toBe(false);
+  });
+
+  it("round-trips a dxf carrying every residue kind at once (font+color, fill+patternFill+bgColor, numFmt, alignment, border, protection) back through DxfTable.intern", () => {
+    const { formats } = worksheetWithRule(
+      "A1",
+      el("cfRule", { type: "containsBlanks", priority: "1", dxfId: "0" }),
+      [
+        el("dxf", {}, [
+          el("font", {}, [el("b"), el("color", { rgb: "FFFF0000" })]),
+          el("numFmt", { numFmtId: "1", formatCode: "0.00" }),
+          el("fill", {}, [
+            el("patternFill", { patternType: "solid" }, [
+              el("fgColor", { rgb: "FF00FF00" }),
+              el("bgColor", { rgb: "FF0000FF" }),
+            ]),
+          ]),
+          el("alignment", { horizontal: "center" }),
+          el("border", {}, [el("left", { style: "thin" })]),
+          el("protection", { locked: "0" }),
+        ]),
+      ],
+    );
+    const style =
+      formats[0]?.type === "containsBlanks" ? formats[0].style : undefined;
+    if (style === undefined) {
+      throw new Error("expected a style");
+    }
+    const dxfTable = new DxfTable();
+    dxfTable.intern(style);
+    const rebuilt = dxfTable.dxfElements()[0];
+    if (rebuilt === undefined) {
+      throw new Error("expected a rebuilt dxf element");
+    }
+    const tags = rebuilt.children
+      .filter((c) => c.type === "element")
+      .map((c) => c.tag);
+    expect(tags).toEqual([
+      "font",
+      "numFmt",
+      "fill",
+      "alignment",
+      "border",
+      "protection",
+    ]);
+    const font = childrenWithTag(rebuilt, "font")[0];
+    expect(childrenWithTag(font ?? el("x"), "b")).toHaveLength(1);
+    expect(
+      childrenWithTag(font ?? el("x"), "color")[0]?.attributes.find(
+        (a) => a.name === "rgb",
+      )?.value,
+    ).toBe("FFff0000");
+    const fill = childrenWithTag(rebuilt, "fill")[0];
+    const patternFill = childrenWithTag(fill ?? el("x"), "patternFill")[0];
+    expect(
+      childrenWithTag(patternFill ?? el("x"), "fgColor")[0]?.attributes.find(
+        (a) => a.name === "rgb",
+      )?.value,
+    ).toBe("FF00FF00");
+    expect(
+      childrenWithTag(patternFill ?? el("x"), "bgColor")[0]?.attributes.find(
+        (a) => a.name === "rgb",
+      )?.value,
+    ).toBe("FF0000ff");
   });
 
   it("resolves style from an out-of-range dxfId as no style at all, rather than throwing", () => {
@@ -511,6 +690,44 @@ describe("buildCfRuleElement: cellIs formula/formula2 elements", () => {
   });
 });
 
+describe("buildCfRuleElement: residualAttributesFor's own expectedTag gate", () => {
+  it("restores an unmanaged residual attribute (a real one this schema does not model) back onto the built cfRule", () => {
+    const rule = firstCfRule(
+      buildOneRule({
+        type: "containsBlanks",
+        ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }],
+        source: {
+          format: "xlsx",
+          xml: '<cfRule pivot="1"></cfRule>',
+        },
+      }).conditionalFormatting,
+    );
+    expect(rule.attributes.find((a) => a.name === "pivot")?.value).toBe("1");
+  });
+});
+
+describe("rangeSetKey: distinguishes ranges by the separator between fields, not just concatenation", () => {
+  it("groups a single 10:0-1:1 range separately from two adjacent 1:0-1:1/0:1-1:1 ranges, even though naive concatenation without a separator would collide", () => {
+    const elements = buildConditionalFormattingElements(
+      [
+        {
+          type: "containsBlanks",
+          ranges: [{ startRow: 10, startColumn: 0, endRow: 1, endColumn: 1 }],
+        },
+        {
+          type: "containsErrors",
+          ranges: [
+            { startRow: 1, startColumn: 0, endRow: 1, endColumn: 1 },
+            { startRow: 0, startColumn: 1, endRow: 1, endColumn: 1 },
+          ],
+        },
+      ],
+      new DxfTable(),
+    );
+    expect(elements).toHaveLength(2);
+  });
+});
+
 describe("buildCfRuleElement: top10's percent/bottom attribute presence", () => {
   it("writes bottom='1' only when bottom is true, and omits it entirely otherwise", () => {
     const withBottom = firstCfRule(
@@ -537,7 +754,7 @@ describe("buildCfRuleElement: top10's percent/bottom attribute presence", () => 
     );
   });
 
-  it("writes percent='1' only when percent is true", () => {
+  it("writes percent='true' only when percent is true, and omits it entirely otherwise", () => {
     const withPercent = firstCfRule(
       buildOneRule({
         type: "top10",
@@ -549,6 +766,16 @@ describe("buildCfRuleElement: top10's percent/bottom attribute presence", () => 
     expect(
       withPercent.attributes.find((a) => a.name === "percent")?.value,
     ).toBe("true");
+    const withoutPercent = firstCfRule(
+      buildOneRule({
+        type: "top10",
+        ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }],
+        rank: 5,
+      }).conditionalFormatting,
+    );
+    expect(withoutPercent.attributes.some((a) => a.name === "percent")).toBe(
+      false,
+    );
   });
 });
 
@@ -564,9 +791,18 @@ describe("buildCfRuleElement: aboveAverage's own three independent flags", () =>
     expect(rule.attributes.find((a) => a.name === "aboveAverage")?.value).toBe(
       "false",
     );
+    const defaultRule = firstCfRule(
+      buildOneRule({
+        type: "aboveAverage",
+        ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }],
+      }).conditionalFormatting,
+    );
+    expect(defaultRule.attributes.some((a) => a.name === "aboveAverage")).toBe(
+      false,
+    );
   });
 
-  it("writes equalAverage='1' only when equalAverage is explicitly true", () => {
+  it("writes equalAverage='true' only when equalAverage is explicitly true, and omits it otherwise", () => {
     const rule = firstCfRule(
       buildOneRule({
         type: "aboveAverage",
@@ -577,9 +813,18 @@ describe("buildCfRuleElement: aboveAverage's own three independent flags", () =>
     expect(rule.attributes.find((a) => a.name === "equalAverage")?.value).toBe(
       "true",
     );
+    const withoutEqualAverage = firstCfRule(
+      buildOneRule({
+        type: "aboveAverage",
+        ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }],
+      }).conditionalFormatting,
+    );
+    expect(
+      withoutEqualAverage.attributes.some((a) => a.name === "equalAverage"),
+    ).toBe(false);
   });
 
-  it("writes stdDev only when it is genuinely present", () => {
+  it("writes stdDev only when it is genuinely present, never a phantom stdDev attribute", () => {
     const rule = firstCfRule(
       buildOneRule({
         type: "aboveAverage",
@@ -588,6 +833,15 @@ describe("buildCfRuleElement: aboveAverage's own three independent flags", () =>
       }).conditionalFormatting,
     );
     expect(rule.attributes.find((a) => a.name === "stdDev")?.value).toBe("2");
+    const withoutStdDev = firstCfRule(
+      buildOneRule({
+        type: "aboveAverage",
+        ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }],
+      }).conditionalFormatting,
+    );
+    expect(withoutStdDev.attributes.some((a) => a.name === "stdDev")).toBe(
+      false,
+    );
   });
 });
 
@@ -632,6 +886,19 @@ describe("buildCfRuleElement: colorScale/dataBar/iconSet element shape", () => {
     const dataBar = childrenWithTag(rule, "dataBar")[0];
     expect(dataBar?.attributes.find((a) => a.name === "showValue")?.value).toBe(
       "false",
+    );
+    const withoutShowValue = firstCfRule(
+      buildOneRule({
+        type: "dataBar",
+        ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }],
+        min: { type: "min" },
+        max: { type: "max" },
+        color: { r: 1, g: 0, b: 0 },
+      }).conditionalFormatting,
+    );
+    const defaultDataBar = childrenWithTag(withoutShowValue, "dataBar")[0];
+    expect(defaultDataBar?.attributes.some((a) => a.name === "showValue")).toBe(
+      false,
     );
   });
 
@@ -680,6 +947,23 @@ describe("buildCfRuleElement: colorScale/dataBar/iconSet element shape", () => {
     );
     expect(iconSet?.attributes.find((a) => a.name === "showValue")?.value).toBe(
       "false",
+    );
+    const withoutFlags = childrenWithTag(
+      firstCfRule(
+        buildOneRule({
+          type: "iconSet",
+          ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }],
+          iconSetType: "3TrafficLights1",
+          thresholds: [{ type: "percent", value: "33" }],
+        }).conditionalFormatting,
+      ),
+      "iconSet",
+    )[0];
+    expect(withoutFlags?.attributes.some((a) => a.name === "reverse")).toBe(
+      false,
+    );
+    expect(withoutFlags?.attributes.some((a) => a.name === "showValue")).toBe(
+      false,
     );
   });
 });
