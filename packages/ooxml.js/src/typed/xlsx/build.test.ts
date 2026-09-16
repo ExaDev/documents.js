@@ -3088,3 +3088,303 @@ describe("buildSheetPrElement: fitToPage reflects whether fitToPages is actually
 function SUMMARY_ONLY_DOCUMENT(): ContentDocument {
   return { kind: "spreadsheet", metadata: {}, sheets: [SUMMARY_SHEET] };
 }
+
+// --- print settings: margins, page setup, and manual breaks --------------------------------------------------------
+
+describe("buildPageMarginsElement/ptToInches: writes the genuine points-to-inches conversion, not a fabricated one", () => {
+  it("converts 72pt margins to exactly 1 inch on every side, and the fixed 0.5in header/footer margin", () => {
+    const pkg = buildXlsxPackageFromContent(singleSheetDocument([]));
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const margins = requireChild(worksheet, "pageMargins");
+    expect(attr(margins, "left")).toBe("1");
+    expect(attr(margins, "right")).toBe("1");
+    expect(attr(margins, "top")).toBe("1");
+    expect(attr(margins, "bottom")).toBe("1");
+    expect(attr(margins, "header")).toBe("0.3");
+    expect(attr(margins, "footer")).toBe("0.3");
+  });
+
+  it("converts non-72pt margins proportionally, not with a fixed or fabricated ratio", () => {
+    const pkg = buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: {
+            ...DEFAULT_PRINT_SETTINGS,
+            margins: { topPt: 36, rightPt: 18, bottomPt: 144, leftPt: 9 },
+          },
+        },
+      ],
+    });
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const margins = requireChild(worksheet, "pageMargins");
+    expect(attr(margins, "top")).toBe("0.5");
+    expect(attr(margins, "right")).toBe("0.25");
+    expect(attr(margins, "bottom")).toBe("2");
+    expect(attr(margins, "left")).toBe("0.125");
+  });
+});
+
+describe("buildPageSetupElement: paperSize vs paperWidth/paperHeight, orientation, and scale/fitToWidth/fitToHeight defaults", () => {
+  function pageSetupOf(pageSize: {
+    widthPt: number;
+    heightPt: number;
+  }): XmlElement {
+    const pkg = buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: { ...DEFAULT_PRINT_SETTINGS, pageSize },
+        },
+      ],
+    });
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    return requireChild(worksheet, "pageSetup");
+  }
+
+  it('writes paperSize (the recognised code), no paperWidth/paperHeight, and orientation="portrait" for a standard, taller-than-wide page', () => {
+    const pageSetup = pageSetupOf({ widthPt: 612, heightPt: 792 }); // US Letter
+    expect(attr(pageSetup, "paperSize")).toBe("1");
+    expect(attr(pageSetup, "paperWidth")).toBeUndefined();
+    expect(attr(pageSetup, "paperHeight")).toBeUndefined();
+    expect(attr(pageSetup, "orientation")).toBe("portrait");
+  });
+
+  it('writes paperWidth/paperHeight, no paperSize, and orientation="landscape" for a custom, wider-than-tall page', () => {
+    const pageSetup = pageSetupOf({ widthPt: 500, heightPt: 300 });
+    expect(attr(pageSetup, "paperSize")).toBeUndefined();
+    expect(attr(pageSetup, "paperWidth")).toBeDefined();
+    expect(attr(pageSetup, "paperHeight")).toBeDefined();
+    expect(attr(pageSetup, "orientation")).toBe("landscape");
+  });
+
+  it('writes scale="100", fitToWidth="1", fitToHeight="1" as the genuine defaults when neither scalePercent nor fitToPages is declared', () => {
+    const pageSetup = pageSetupOf({ widthPt: 612, heightPt: 792 });
+    expect(attr(pageSetup, "scale")).toBe("100");
+    expect(attr(pageSetup, "fitToWidth")).toBe("1");
+    expect(attr(pageSetup, "fitToHeight")).toBe("1");
+  });
+
+  it("writes the declared scalePercent and fitToPages verbatim when they are present, not the defaults", () => {
+    const pkg = buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: {
+            ...DEFAULT_PRINT_SETTINGS,
+            scalePercent: 80,
+            fitToPages: { width: 2, height: 5 },
+          },
+        },
+      ],
+    });
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const pageSetup = requireChild(worksheet, "pageSetup");
+    expect(attr(pageSetup, "scale")).toBe("80");
+    expect(attr(pageSetup, "fitToWidth")).toBe("2");
+    expect(attr(pageSetup, "fitToHeight")).toBe("5");
+  });
+});
+
+describe("buildBreaksElements: manual row and column breaks are written independently of each other", () => {
+  function pkgWithBreaks(manualBreaks: {
+    rows: readonly number[];
+    columns: readonly number[];
+  }): Package {
+    return buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: { ...DEFAULT_PRINT_SETTINGS, manualBreaks },
+        },
+      ],
+    });
+  }
+
+  it("writes rowBreaks with the exact id/min/max/man attributes and count/manualBreakCount, no colBreaks at all, for row breaks alone", () => {
+    const pkg = pkgWithBreaks({ rows: [3, 7], columns: [] });
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    expect(childrenWithTag(worksheet, "colBreaks")).toHaveLength(0);
+    const rowBreaks = requireChild(worksheet, "rowBreaks");
+    expect(attr(rowBreaks, "count")).toBe("2");
+    expect(attr(rowBreaks, "manualBreakCount")).toBe("2");
+    const brks = elementsOf(rowBreaks, "brk");
+    expect(brks.map((brk) => attributeOf(brk, "id"))).toEqual(["3", "7"]);
+    const first = brks[0];
+    if (first === undefined) {
+      throw new Error("expected the first <brk>");
+    }
+    expect(attributeOf(first, "min")).toBe("0");
+    expect(attributeOf(first, "max")).toBe("16383");
+    expect(attributeOf(first, "man")).toBe("1");
+  });
+
+  it("writes colBreaks with the exact id/min/max/man attributes and count/manualBreakCount, no rowBreaks at all, for column breaks alone", () => {
+    const pkg = pkgWithBreaks({ rows: [], columns: [2] });
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    expect(childrenWithTag(worksheet, "rowBreaks")).toHaveLength(0);
+    const colBreaks = requireChild(worksheet, "colBreaks");
+    expect(attr(colBreaks, "count")).toBe("1");
+    expect(attr(colBreaks, "manualBreakCount")).toBe("1");
+    const brk = elementsOf(colBreaks, "brk")[0];
+    if (brk === undefined) {
+      throw new Error("expected a <brk>");
+    }
+    expect(attributeOf(brk, "id")).toBe("2");
+    expect(attributeOf(brk, "min")).toBe("0");
+    expect(attributeOf(brk, "max")).toBe("1048575");
+    expect(attributeOf(brk, "man")).toBe("1");
+  });
+
+  it("writes neither rowBreaks nor colBreaks when manualBreaks is undefined, and neither when both arrays are empty", () => {
+    const noBreaks = rootElement(
+      buildXlsxPackageFromContent(singleSheetDocument([])).parts[
+        "xl/worksheets/sheet1.xml"
+      ],
+    );
+    if (noBreaks === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    expect(childrenWithTag(noBreaks, "rowBreaks")).toHaveLength(0);
+    expect(childrenWithTag(noBreaks, "colBreaks")).toHaveLength(0);
+
+    const emptyBreaks = rootElement(
+      pkgWithBreaks({ rows: [], columns: [] }).parts[
+        "xl/worksheets/sheet1.xml"
+      ],
+    );
+    if (emptyBreaks === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    expect(childrenWithTag(emptyBreaks, "rowBreaks")).toHaveLength(0);
+    expect(childrenWithTag(emptyBreaks, "colBreaks")).toHaveLength(0);
+  });
+});
+
+describe("buildWorksheetPart: element presence for cols, mergeCells, drawing, and tableParts, and buildWorksheetRelsPart's own root", () => {
+  it("writes cols, mergeCells, drawing, and tableParts all together, and no more than one of each, for a sheet carrying every optional feature", () => {
+    const pkg = buildXlsxPackageFromContent(
+      {
+        kind: "spreadsheet",
+        metadata: {},
+        sheets: [
+          {
+            name: "Sheet1",
+            cells: [
+              {
+                row: 0,
+                column: 0,
+                value: { kind: "string", value: "x" },
+                displayText: "x",
+                colSpan: 2,
+              },
+            ],
+            columns: [{ index: 0, widthPt: 50 }],
+            rows: [],
+            images: [
+              {
+                kind: "image",
+                format: "png",
+                base64: TINY_PNG_BASE64,
+                widthPt: 10,
+                heightPt: 10,
+                anchorRow: 1,
+                anchorColumn: 0,
+                offsetXPt: 0,
+                offsetYPt: 0,
+              },
+            ],
+            printSettings: DEFAULT_PRINT_SETTINGS,
+          },
+        ],
+      },
+      { definitions: tableDefinitions() },
+    );
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    expect(worksheet.tag).toBe("worksheet");
+    expect(attr(worksheet, "xmlns")).toBe(
+      "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+    );
+    expect(attr(worksheet, "xmlns:r")).toBe(
+      "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+    );
+    expect(childrenWithTag(worksheet, "cols")).toHaveLength(1);
+    expect(childrenWithTag(worksheet, "mergeCells")).toHaveLength(1);
+    const drawing = requireChild(worksheet, "drawing");
+    expect(attr(drawing, "r:id")).toBeDefined();
+    const tableParts = requireChild(worksheet, "tableParts");
+    expect(attr(tableParts, "count")).toBe("1");
+    expect(attr(requireChild(tableParts, "tablePart"), "r:id")).toBeDefined();
+
+    const rels = rootElement(pkg.parts["xl/worksheets/_rels/sheet1.xml.rels"]);
+    if (rels === undefined) {
+      throw new Error(
+        "expected the worksheet rels part to have a root element",
+      );
+    }
+    expect(rels.tag).toBe("Relationships");
+    expect(attr(rels, "xmlns")).toBe(
+      "http://schemas.openxmlformats.org/package/2006/relationships",
+    );
+  });
+
+  it("writes no cols, mergeCells, drawing, or tableParts at all for a plain sheet with none of those features", () => {
+    const worksheet = rootElement(
+      buildXlsxPackageFromContent(singleSheetDocument([])).parts[
+        "xl/worksheets/sheet1.xml"
+      ],
+    );
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    expect(childrenWithTag(worksheet, "cols")).toHaveLength(0);
+    expect(childrenWithTag(worksheet, "mergeCells")).toHaveLength(0);
+    expect(childrenWithTag(worksheet, "drawing")).toHaveLength(0);
+    expect(childrenWithTag(worksheet, "tableParts")).toHaveLength(0);
+  });
+});
