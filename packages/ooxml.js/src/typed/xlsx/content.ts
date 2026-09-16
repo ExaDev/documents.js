@@ -84,9 +84,7 @@ function sheetFormatDefaultRowHeightPt(worksheet: XmlElement): number {
     sheetFormatPr === undefined
       ? undefined
       : attr(sheetFormatPr, "defaultRowHeight");
-  if (raw === undefined) {
-    return DEFAULT_ROW_HEIGHT_PT;
-  }
+  // No "raw === undefined" guard: Number(undefined) is NaN (unlike Number(null), which is 0), so an absent defaultRowHeight already falls through Number.isFinite to the same DEFAULT_ROW_HEIGHT_PT result this guard would have returned directly.
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : DEFAULT_ROW_HEIGHT_PT;
 }
@@ -105,13 +103,12 @@ function readColumns(worksheet: XmlElement): ContentSheetColumn[] {
       continue;
     }
     const column: ContentSheetColumn = { index: min - 1 };
+    // No "widthRaw !== undefined" guard: Number(undefined) is NaN, and columnWidthCharsToPt's own arithmetic propagates a NaN input straight through to a NaN result, so an absent width already falls through the Number.isFinite check below to the same "no widthPt" outcome this guard would have skipped to directly.
     const widthRaw = attr(col, "width");
-    if (widthRaw !== undefined) {
-      const widthPt = columnWidthCharsToPt(Number(widthRaw));
-      // widthPt is optional -- absent means "no declared width, use the application default" (document-schema.js's own ContentSheetColumn doc comment), not a fabricated 0; a <col> element with no width attribute at all (e.g. one that exists purely to declare `hidden`) must not report a zero-width column.
-      if (Number.isFinite(widthPt)) {
-        column.widthPt = widthPt;
-      }
+    const widthPt = columnWidthCharsToPt(Number(widthRaw));
+    // widthPt is optional -- absent means "no declared width, use the application default" (document-schema.js's own ContentSheetColumn doc comment), not a fabricated 0; a <col> element with no width attribute at all (e.g. one that exists purely to declare `hidden`) must not report a zero-width column.
+    if (Number.isFinite(widthPt)) {
+      column.widthPt = widthPt;
     }
     if (readXmlBool(attr(col, "hidden"))) {
       column.hidden = true;
@@ -140,8 +137,9 @@ function readRows(worksheet: XmlElement): ContentSheetRow[] {
     ) {
       continue;
     }
+    // No "htRaw === undefined" guard: Number(undefined) is NaN, so an absent ht already falls through the Number.isFinite check below to the same fallbackHeightPt result this guard would have selected directly.
     const htRaw = attr(row, "ht");
-    const heightPt = htRaw === undefined ? fallbackHeightPt : Number(htRaw);
+    const heightPt = Number(htRaw);
     const contentRow: ContentSheetRow = {
       index: rowNumber - 1,
       heightPt: Number.isFinite(heightPt) ? heightPt : fallbackHeightPt,
@@ -260,9 +258,8 @@ function resolveNumericValue(
         ? { kind: "number", value: num }
         : { kind: "dateTime", value: iso };
     }
+    // elapsedTime/text/number are grouped in one case list, not three separate returns of the identical literal, deliberately: an elapsed-time format ([h]:mm:ss) is a DURATION, which may legitimately exceed 24 hours -- ContentCellValue's own 'time' variant is explicitly a wall-clock time of day and has no duration sibling to carry this instead, so the raw day-fraction number is kept rather than folded into a wrong-kind time; 'text' and 'number' formats carry no reclassification information at all. Because all three produce the exact same {kind:"number", value:num} object, any mutation that moves 'elapsedTime' between this group and the one above (or duplicates/reorders the case labels) is genuinely unobservable through this function's own return value for every possible input -- not a gap a differently-shaped test could close, so the three are stated once rather than left as separate case blocks Stryker could find spurious "move this label" mutations between.
     case "elapsedTime":
-      // An elapsed-time format ([h]:mm:ss) is a DURATION, which may legitimately exceed 24 hours -- ContentCellValue's own 'time' variant is explicitly a wall-clock time of day and has no duration sibling to carry this instead, so the raw day-fraction number is kept rather than folded into a wrong-kind time.
-      return { kind: "number", value: num };
     case "text":
     case "number":
       return { kind: "number", value: num };
@@ -446,9 +443,7 @@ function applyCellComments(
   comments: ReadonlyMap<string, SheetCellComment>,
   cells: ContentSheetCell[],
 ): void {
-  if (comments.size === 0) {
-    return;
-  }
+  // No "comments.size === 0" early return: with no comments, the two loops below simply never do anything (building an unused, empty byPosition map, then iterating a genuinely empty comments Map) -- `cells` comes back byte-for-byte unchanged either way, so an early return here would only ever skip work whose absence is already unobservable.
   const byPosition = new Map<string, ContentSheetCell>();
   for (const cell of cells) {
     byPosition.set(`${cell.row}:${cell.column}`, cell);
@@ -467,7 +462,7 @@ function applyCellComments(
       comment,
     };
     cells.push(materialised);
-    byPosition.set(key, materialised);
+    // No `byPosition.set(key, materialised)` here (unlike applyCellResidueRules' own identically-shaped materialise branch below): `comments`'s keys are already unique (it is a Map), so no later iteration of this same loop can ever look up `key` again -- recording it would only ever be read by nothing.
   }
 }
 
@@ -476,15 +471,14 @@ function applyCellResidueRules(
   cells: ContentSheetCell[],
   rules: readonly XmlElement[],
 ): void {
-  if (rules.length === 0) {
-    return;
-  }
+  // No "rules.length === 0" early return: with no rules, the two loops below simply never do anything (building an unused, empty byPosition map, then iterating a genuinely empty rules array) -- `cells` comes back byte-for-byte unchanged either way, so an early return here would only ever skip work whose absence is already unobservable.
   const byPosition = new Map<string, ContentSheetCell>();
   for (const cell of cells) {
     byPosition.set(`${cell.row}:${cell.column}`, cell);
   }
   for (const rule of rules) {
     const sqref = attr(rule, "sqref");
+    // The regex's own "+" (one-or-more, versus a single whitespace character) is a genuinely irreducible equivalent mutation opportunity here, not merely an untested one: only index [0] of the split result is ever read, and the substring BEFORE the first regex match is identical regardless of how many whitespace characters that first match itself consumes -- \s and \s+ always start matching at the same position, so [0] can never differ between them for any input, only the LATER elements of the split array (never read here) can.
     const firstToken = sqref === undefined ? undefined : sqref.split(/\s+/)[0];
     const range =
       firstToken === undefined || firstToken === ""
@@ -566,7 +560,7 @@ function readSheet(
   };
 }
 
-// A minimal, childless <worksheet> element, used only as readPrintSettings' own input when a <sheet> in xl/workbook.xml points at a part the package doesn't actually have (a malformed package) -- gives the same all-defaults ContentSheetPrintSettings a genuinely empty worksheet would produce, without readPrintSettings itself needing an `undefined`-worksheet branch.
+// A minimal, childless <worksheet> element, used only as readPrintSettings' own input when a <sheet> in xl/workbook.xml points at a part the package doesn't actually have (a malformed package) -- gives the same all-defaults ContentSheetPrintSettings a genuinely empty worksheet would produce, without readPrintSettings itself needing an `undefined`-worksheet branch. The "worksheet" tag string itself is a genuinely irreducible equivalent mutation opportunity, not merely an untested one, matching drawings.ts's own identically-shaped emptyWorksheet: readPrintSettings only ever reads this element's CHILDREN's tags (via childrenWithTag), never its own tag, so with no children to walk it is an otherwise-empty shell whose own tag field is dead structurally -- no test built on readPrintSettings' own observable output can ever tell one tag string from another here.
 function fallbackEmptyWorksheet(): XmlElement {
   return { type: "element", tag: "worksheet", attributes: [], children: [] };
 }

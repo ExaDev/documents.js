@@ -20,8 +20,17 @@ import { decodePackage, encodePackage } from "../../codec";
 import { parsePackage } from "../../package-io/read";
 import { attr, childrenWithTag, rootElement } from "../util";
 import { buildXlsxPackageFromContent } from "./build";
-import { columnWidthCharsToPt, DEFAULT_COLUMN_WIDTH_CHARS } from "./units";
+import {
+  columnWidthCharsToPt,
+  DEFAULT_COLUMN_WIDTH_CHARS,
+  DEFAULT_ROW_HEIGHT_PT,
+} from "./units";
 import { readXlsxContent, resolveSheetEntries } from "./content";
+
+// True precisely when `key` is an own property of `obj`, regardless of whether its value is `undefined` -- unlike `toBeUndefined()`, which is satisfied identically by a key holding `undefined` and by the key's own absence, and so cannot distinguish "never assigned" from "assigned undefined". Several of readCell's own optional-field copies (font/background/borders/alignment/verticalAlignment/numberFormatCode) are guarded by a presence check specifically to avoid ever assigning the key at all when the source has nothing to offer, and only a key-existence assertion can prove that guard is doing real work rather than being a no-op the object shape would be identical without.
+function hasOwn(obj: object, key: string): boolean {
+  return Object.hasOwn(obj, key);
+}
 
 // This suite reads real, unmodified LibreOffice-generated .xlsx fixtures (src/typed/xlsx/fixtures/*.xlsx). Both fixtures are genuine LibreOffice xlsx-exports (`soffice --headless --convert-to xlsx`) of odf.js's own src/typed/ods/fixtures/{kitchen-sink,minimal}.ods -- the same feature set that package's own readOds test suite already validates against ODF's equivalent mechanisms, run back through LibreOffice's real SpreadsheetML export filter so this suite exercises genuine, LibreOffice-authored xlsx markup (column-width character units, row heights, hidden rows/columns, every value-type LibreOffice's own xlsx exporter distinguishes, a real merged range, a real cross-sheet formula, and real print settings including Print_Area/Print_Titles defined names) rather than a hand-built approximation of what that markup might look like. A handful of narrow scope-boundary/error-path tests at the end use small, synthetic, hand-built packages instead (via el/txt), mirroring readOds's own established convention for the identical reason.
 
@@ -845,6 +854,331 @@ describe("readXlsxContent: cell decoration (background/borders/alignment/vertica
         el("c", { r: "A1", s: "1" }, [el("v", {}, [txt("1")])]),
       )?.background,
     ).toBeUndefined();
+  });
+
+  it("omits the font/background/borders/alignment/verticalAlignment keys entirely on a cell whose s index carries none of them -- not merely assigned undefined", () => {
+    const cell = readDecoratedCell(
+      styledSheet,
+      el("c", { r: "A1", s: "0" }, [el("v", {}, [txt("42")])]),
+    );
+    expect(cell).toBeDefined();
+    if (cell === undefined) {
+      throw new Error("expected a cell");
+    }
+    expect(hasOwn(cell, "font")).toBe(false);
+    expect(hasOwn(cell, "background")).toBe(false);
+    expect(hasOwn(cell, "borders")).toBe(false);
+    expect(hasOwn(cell, "alignment")).toBe(false);
+    expect(hasOwn(cell, "verticalAlignment")).toBe(false);
+  });
+
+  it("sets the numberFormatCode key when the cell's style resolves one, verbatim", () => {
+    const cell = readDecoratedCell(
+      styledSheet,
+      el("c", { r: "A1", s: "1" }, [el("v", {}, [txt("42")])]),
+    );
+    expect(hasOwn(cell ?? {}, "numberFormatCode")).toBe(true);
+  });
+
+  it("omits numberFormatCode entirely (not merely as undefined) for an out-of-range style index that resolves to no entry at all", () => {
+    const cell = readDecoratedCell(
+      styledSheet,
+      el("c", { r: "A1", s: "99" }, [el("v", {}, [txt("42")])]),
+    );
+    expect(hasOwn(cell ?? {}, "numberFormatCode")).toBe(false);
+  });
+
+  it("omits numberFormatCode entirely (not merely as undefined) for a resolvable style entry whose own numFmtId names no code anywhere", () => {
+    const noCodeSheet = el("styleSheet", {}, [
+      el("cellXfs", {}, [
+        el("xf", { numFmtId: "0" }),
+        el("xf", { numFmtId: "999" }),
+      ]),
+    ]);
+    const cell = readDecoratedCell(
+      noCodeSheet,
+      el("c", { r: "A1", s: "1" }, [el("v", {}, [txt("42")])]),
+    );
+    expect(hasOwn(cell ?? {}, "numberFormatCode")).toBe(false);
+  });
+});
+
+// Every one of readColumns/readRows/sheetFormatDefaultRowHeightPt's own conditional branches and index arithmetic, exercised directly against small synthetic worksheets -- the kitchen-sink fixture's own real rows/columns don't happen to visit every boundary (a 0-based min, a non-numeric width, a row number exactly at its own lower bound) these functions guard against.
+function readSheetFromWorksheet(
+  worksheet: ReturnType<typeof el>,
+): ContentSheet {
+  const result = readXlsxContent(buildMinimalPackage(worksheet));
+  if (result.kind !== "spreadsheet") {
+    throw new Error("expected a spreadsheet ContentDocument");
+  }
+  const sheet = result.sheets[0];
+  if (sheet === undefined) {
+    throw new Error("expected a sheet");
+  }
+  return sheet;
+}
+
+describe("readXlsxContent: row/column geometry edge cases (synthetic packages)", () => {
+  it("falls back to DEFAULT_ROW_HEIGHT_PT for a row with no ht attribute when the worksheet carries no sheetFormatPr at all", () => {
+    const worksheet = el("worksheet", {}, [
+      el("sheetData", {}, [el("row", { r: "1" })]),
+    ]);
+    expect(readSheetFromWorksheet(worksheet).rows).toEqual([
+      { index: 0, heightPt: DEFAULT_ROW_HEIGHT_PT },
+    ]);
+  });
+
+  it("falls back to the sheetFormatPr's own declared defaultRowHeight, not the package-wide default, for a row with no ht of its own", () => {
+    const worksheet = el("worksheet", {}, [
+      el("sheetFormatPr", { defaultRowHeight: "22.5" }),
+      el("sheetData", {}, [el("row", { r: "1" })]),
+    ]);
+    expect(readSheetFromWorksheet(worksheet).rows).toEqual([
+      { index: 0, heightPt: 22.5 },
+    ]);
+  });
+
+  it("prefers a row's own ht over the sheetFormatPr default", () => {
+    const worksheet = el("worksheet", {}, [
+      el("sheetFormatPr", { defaultRowHeight: "22.5" }),
+      el("sheetData", {}, [el("row", { r: "1", ht: "30" })]),
+    ]);
+    expect(readSheetFromWorksheet(worksheet).rows).toEqual([
+      { index: 0, heightPt: 30 },
+    ]);
+  });
+
+  it("drops a row whose own r is 0 (below CT_Row/@r's 1-based lower bound) but keeps one whose r is exactly 1", () => {
+    const worksheet = el("worksheet", {}, [
+      el("sheetData", {}, [el("row", { r: "0" }), el("row", { r: "1" })]),
+    ]);
+    expect(readSheetFromWorksheet(worksheet).rows).toEqual([
+      { index: 0, heightPt: DEFAULT_ROW_HEIGHT_PT },
+    ]);
+  });
+
+  it('recovers row index 4 -- not 6 -- from r="5", proving the 1-based-to-0-based conversion subtracts rather than adds', () => {
+    const worksheet = el("worksheet", {}, [
+      el("sheetData", {}, [el("row", { r: "5" })]),
+    ]);
+    expect(readSheetFromWorksheet(worksheet).rows[0]?.index).toBe(4);
+  });
+
+  it("marks a row hidden only when its own hidden attribute reads true, never as a side effect of any other attribute", () => {
+    const worksheet = el("worksheet", {}, [
+      el("sheetData", {}, [
+        el("row", { r: "1", hidden: "true" }),
+        el("row", { r: "2" }),
+      ]),
+    ]);
+    const rows = readSheetFromWorksheet(worksheet).rows;
+    expect(rows[0]).toEqual({
+      index: 0,
+      heightPt: DEFAULT_ROW_HEIGHT_PT,
+      hidden: true,
+    });
+    expect(hasOwn(rows[1] ?? {}, "hidden")).toBe(false);
+  });
+
+  it("drops a <col> whose min is 0 (below CT_Col/@min's 1-based lower bound) but keeps one whose min is exactly 1", () => {
+    const worksheet = el("worksheet", {}, [
+      el("cols", {}, [
+        el("col", { min: "0", max: "0" }),
+        el("col", { min: "1", max: "1" }),
+      ]),
+      el("sheetData", {}),
+    ]);
+    expect(readSheetFromWorksheet(worksheet).columns).toEqual([{ index: 0 }]);
+  });
+
+  it("sets widthPt from a numeric width attribute, and omits the key entirely when width is absent", () => {
+    const worksheet = el("worksheet", {}, [
+      el("cols", {}, [
+        el("col", { min: "1", max: "1", width: "20" }),
+        el("col", { min: "2", max: "2" }),
+      ]),
+      el("sheetData", {}),
+    ]);
+    const columns = readSheetFromWorksheet(worksheet).columns;
+    expect(columns[0]?.widthPt).toBeCloseTo(columnWidthCharsToPt(20), 10);
+    expect(hasOwn(columns[1] ?? {}, "widthPt")).toBe(false);
+  });
+
+  it("omits widthPt for a non-numeric width attribute, rather than reporting a NaN width", () => {
+    const worksheet = el("worksheet", {}, [
+      el("cols", {}, [
+        el("col", { min: "1", max: "1", width: "not-a-number" }),
+      ]),
+      el("sheetData", {}),
+    ]);
+    expect(
+      hasOwn(readSheetFromWorksheet(worksheet).columns[0] ?? {}, "widthPt"),
+    ).toBe(false);
+  });
+
+  it("marks a column hidden only when its own hidden attribute reads true", () => {
+    const worksheet = el("worksheet", {}, [
+      el("cols", {}, [
+        el("col", { min: "1", max: "1", hidden: "true" }),
+        el("col", { min: "2", max: "2" }),
+      ]),
+      el("sheetData", {}),
+    ]);
+    const columns = readSheetFromWorksheet(worksheet).columns;
+    expect(columns[0]).toEqual({ index: 0, hidden: true });
+    expect(hasOwn(columns[1] ?? {}, "hidden")).toBe(false);
+  });
+});
+
+describe("readXlsxContent: readSheet's own optional-field keys are absent, not undefined, when a sheet carries none of them", () => {
+  it("omits embeddedObjects/dataValidations/conditionalFormats entirely from a sheet with no drawing, validation, or conditional format at all", () => {
+    const sheet = readSheetFromWorksheet(
+      el("worksheet", {}, [el("sheetData", {})]),
+    );
+    expect(hasOwn(sheet, "embeddedObjects")).toBe(false);
+    expect(hasOwn(sheet, "dataValidations")).toBe(false);
+    expect(hasOwn(sheet, "conditionalFormats")).toBe(false);
+  });
+});
+
+describe("readXlsxContent: deriveDisplayText/resolveNumericValue exact per-kind coverage (synthetic packages)", () => {
+  it("renders a numeric-format dateTime cell's displayText as its ISO spelling, not the boolean-branch TRUE/FALSE fallthrough text", () => {
+    const cell = readStyledCell(
+      "yyyy-mm-dd hh:mm:ss",
+      numericCell("46234.604166666666667"),
+    );
+    expect(cell?.displayText).toBe("2026-07-31T14:30:00");
+  });
+
+  it("renders a percentage cell's displayText as the raw stored fraction, not TRUE", () => {
+    const cell = readStyledCell("0.00%", numericCell("0.4256"));
+    expect(cell?.displayText).toBe("0.4256");
+  });
+
+  it("omits the currency key entirely (not merely as undefined) when the format names money by symbol alone", () => {
+    const cell = readStyledCell("[$£-809]#,##0.00", numericCell("99.99"));
+    expect(cell?.value.kind).toBe("currency");
+    expect(hasOwn(cell?.value ?? {}, "currency")).toBe(false);
+  });
+
+  it('renders FALSE, not just "not TRUE", for a false boolean cell', () => {
+    expect(
+      readFirstCell(
+        el("worksheet", {}, [
+          el("sheetData", {}, [
+            el("row", { r: "1" }, [
+              el("c", { r: "A1", t: "b" }, [el("v", {}, [txt("0")])]),
+            ]),
+          ]),
+        ]),
+      ).cells[0],
+    ).toMatchObject({
+      value: { kind: "boolean", value: false },
+      displayText: "FALSE",
+    });
+  });
+});
+
+describe("readXlsxContent: readCellValue's boolean/numeric branch precision (synthetic packages)", () => {
+  it('reads t="b" true from an upper-, lower-, or mixed-case spelling of "true", not just the literal "1"', () => {
+    for (const raw of ["TRUE", "True", "true"]) {
+      const { cells } = readFirstCell(
+        el("worksheet", {}, [
+          el("sheetData", {}, [
+            el("row", { r: "1" }, [
+              el("c", { r: "A1", t: "b" }, [el("v", {}, [txt(raw)])]),
+            ]),
+          ]),
+        ]),
+      );
+      expect(cells[0]?.value).toEqual({ kind: "boolean", value: true });
+    }
+  });
+
+  it('reads t="b" as false for any raw text that is neither "1" nor a case-insensitive "true"', () => {
+    const { cells } = readFirstCell(
+      el("worksheet", {}, [
+        el("sheetData", {}, [
+          el("row", { r: "1" }, [
+            el("c", { r: "A1", t: "b" }, [el("v", {}, [txt("false")])]),
+          ]),
+        ]),
+      ]),
+    );
+    expect(cells[0]?.value).toEqual({ kind: "boolean", value: false });
+  });
+
+  it("drops an untyped cell whose <v> text is not a parseable number at all, rather than reporting NaN", () => {
+    const { cells } = readFirstCell(
+      el("worksheet", {}, [
+        el("sheetData", {}, [
+          el("row", { r: "1" }, [
+            el("c", { r: "A1" }, [el("v", {}, [txt("not-a-number")])]),
+          ]),
+        ]),
+      ]),
+    );
+    expect(cells).toEqual([]);
+  });
+});
+
+describe("readXlsxContent: readCell's formula key presence (synthetic packages)", () => {
+  it("omits the formula key entirely for a plain value cell with no <f> child", () => {
+    const { cells } = readFirstCell(
+      el("worksheet", {}, [
+        el("sheetData", {}, [
+          el("row", { r: "1" }, [
+            el("c", { r: "A1" }, [el("v", {}, [txt("42")])]),
+          ]),
+        ]),
+      ]),
+    );
+    expect(hasOwn(cells[0] ?? {}, "formula")).toBe(false);
+  });
+});
+
+describe("readXlsxContent: merged-range span arithmetic (synthetic packages)", () => {
+  // Anchored at B2, not A1: with a zero-valued start, endColumn-startColumn and endColumn+startColumn (the ArithmeticOperator mutant's own replacement) coincide, so a genuine test needs a nonzero start on both axes to actually distinguish subtraction from addition.
+  function mergedWorksheet(
+    ref: string,
+    anchorRef: string,
+  ): ReturnType<typeof el> {
+    return el("worksheet", {}, [
+      el("sheetData", {}, [
+        el("row", { r: "2" }, [
+          el("c", { r: anchorRef }, [el("v", {}, [txt("1")])]),
+        ]),
+      ]),
+      el("mergeCells", {}, [el("mergeCell", { ref })]),
+    ]);
+  }
+
+  it("computes colSpan and rowSpan from the true end-minus-start distance, not an end-plus-start sum, for a merge anchored away from row/column 0", () => {
+    const { cells } = readFirstCell(mergedWorksheet("B2:D4", "B2"));
+    const anchor = cells[0];
+    expect(anchor?.colSpan).toBe(3);
+    expect(anchor?.rowSpan).toBe(3);
+  });
+
+  it("sets colSpan alone for a 1-row, multi-column merge, never fabricating a rowSpan", () => {
+    const { cells } = readFirstCell(mergedWorksheet("B2:D2", "B2"));
+    const anchor = cells[0];
+    expect(anchor?.colSpan).toBe(3);
+    expect(hasOwn(anchor ?? {}, "rowSpan")).toBe(false);
+  });
+
+  it("sets rowSpan alone for a 1-column, multi-row merge, never fabricating a colSpan", () => {
+    const { cells } = readFirstCell(mergedWorksheet("B2:B4", "B2"));
+    const anchor = cells[0];
+    expect(anchor?.rowSpan).toBe(3);
+    expect(hasOwn(anchor ?? {}, "colSpan")).toBe(false);
+  });
+
+  it("sets neither colSpan nor rowSpan for a single-cell 'merge' (B2:B2) -- a span of exactly 1 on both axes", () => {
+    const { cells } = readFirstCell(mergedWorksheet("B2:B2", "B2"));
+    const anchor = cells[0];
+    expect(hasOwn(anchor ?? {}, "colSpan")).toBe(false);
+    expect(hasOwn(anchor ?? {}, "rowSpan")).toBe(false);
   });
 });
 
@@ -2673,6 +3007,31 @@ describe("readXlsxContent: dataValidation and conditionalFormatting -- what is N
     expect(
       cells.find((cell) => cell.row === 1 && cell.column === 2)?.source,
     ).toBeUndefined();
+  });
+
+  it("leaves a rule whose sqref is the empty string unattached, the same as one that does not parse at all", () => {
+    const cells = readFirstCellOf(
+      el("worksheet", {}, [
+        el("sheetData", {}, []),
+        el("dataValidations", { count: "1" }, [
+          el("dataValidation", { type: "none", sqref: "" }),
+        ]),
+      ]),
+    );
+    expect(cells).toEqual([]);
+  });
+
+  it("materialises a residue-only anchor cell as kind empty with an empty displayText, not a placeholder marker string", () => {
+    const cells = readFirstCellOf(
+      el("worksheet", {}, [
+        el("sheetData", {}, []),
+        el("dataValidations", { count: "1" }, [
+          el("dataValidation", { type: "none", sqref: "F6" }),
+        ]),
+      ]),
+    );
+    const anchor = cells.find((cell) => cell.row === 5 && cell.column === 5);
+    expect(anchor).toMatchObject({ value: { kind: "empty" }, displayText: "" });
   });
 
   it("keeps the first residue-eligible rule when two anchor at the same cell -- one residue slot per cell -- and leaves a rule whose sqref does not parse unattached", () => {
