@@ -3339,12 +3339,13 @@ describe("readDocxContent: comment/footnote optional id, author, and type fields
       ],
     };
     const doc = readDocxContent(pkg);
-    expect(doc.comments[0]).toEqual({
+    expect(doc.comments[0]).toStrictEqual({
       id: "9",
       author: "Reviewer",
       text: "with id",
     });
-    expect(doc.comments[1]).toEqual({ text: "no id or author" });
+    // toStrictEqual (not toEqual) so that a mutant which sets id/author to an explicit undefined, rather than leaving the key genuinely absent, is caught rather than treated as equivalent.
+    expect(doc.comments[1]).toStrictEqual({ text: "no id or author" });
   });
 
   it("carries a footnote's own id, and its own w:type when present", () => {
@@ -3356,15 +3357,17 @@ describe("readDocxContent: comment/footnote optional id, author, and type fields
           el("w:footnote", { "w:id": "4", "w:type": "continuationNotice" }, [
             el("w:p", {}, [textRun("typed note")]),
           ]),
+          el("w:footnote", {}, [el("w:p", {}, [textRun("no id or type")])]),
         ]),
       ],
     };
     const doc = readDocxContent(pkg);
-    expect(doc.footnotes[0]).toEqual({
+    expect(doc.footnotes[0]).toStrictEqual({
       id: "4",
       type: "continuationNotice",
       text: "typed note",
     });
+    expect(doc.footnotes[1]).toStrictEqual({ text: "no id or type" });
   });
 });
 
@@ -3421,5 +3424,53 @@ describe("readDocxContent: word/document.xml missing w:body", () => {
     expect(() => readDocxContent(pkg)).toThrow(
       "readDocxContent: word/document.xml has no w:body element",
     );
+  });
+});
+
+describe("readDocxContent: construct re-indexing after a page-break split with a non-zero offset", () => {
+  it("re-indexes a construct after the split run correctly when the split run's own after-half is empty", () => {
+    const paragraph = el("w:p", {}, [
+      textRun("lead run"),
+      el("w:r", {}, [
+        el("w:t", { "xml:space": "preserve" }, [txt("before")]),
+        el("w:br", { "w:type": "page" }),
+      ]),
+      el("w:bookmarkStart", { "w:id": "9", "w:name": "afterEmpty" }),
+      textRun("bookmarked"),
+      el("w:bookmarkEnd", { "w:id": "9" }),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const blocks = doc.sections[0]?.blocks ?? [];
+    const after = asParagraph(blocks[2]);
+    expect(after.runs.map((r) => r.text)).toEqual(["bookmarked"]);
+    expect(after.constructs).toEqual([
+      {
+        descriptor: {
+          kind: "anchor",
+          anchorType: "bookmark",
+          name: "afterEmpty",
+        },
+        startRun: 0,
+        endRun: 1,
+      },
+    ]);
+  });
+});
+
+describe("readDocxContent: cell/paragraph borders with the surrounding property element present but no border element at all", () => {
+  it("leaves a cell's own borders undefined when w:tcPr is present but carries no w:tcBorders", () => {
+    const table = el("w:tbl", {}, [
+      el("w:tblGrid", {}, [el("w:gridCol", { "w:w": "1440" })]),
+      el("w:tr", {}, [
+        el("w:tc", {}, [
+          el("w:tcPr", {}, [el("w:shd", { "w:fill": "00FF00" })]),
+          el("w:p", {}, [textRun("cell")]),
+        ]),
+      ]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(table));
+    expect(
+      asTable(doc.sections[0]?.blocks[0]).rows[0]?.cells[0]?.borders,
+    ).toBeUndefined();
   });
 });
