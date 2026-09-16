@@ -8,10 +8,8 @@ export function rc4(
   key: Uint8Array<ArrayBuffer>,
   data: Uint8Array<ArrayBuffer>,
 ): Uint8Array<ArrayBuffer> {
-  const state = new Uint8Array(STATE_SIZE);
-  for (let i = 0; i < STATE_SIZE; i++) {
-    state[i] = i;
-  }
+  // Built by index-mapping rather than a counted for-loop: a typed array silently drops an out-of-range integer-index write, so a loop bound of `i <= STATE_SIZE` here would produce byte-for-byte the same 256-entry state array as `i < STATE_SIZE` -- an equivalent mutant no test could ever distinguish. Uint8Array.from's own length argument leaves no comparison operator for a mutation to target at all.
+  const state = Uint8Array.from({ length: STATE_SIZE }, (_, i) => i);
   // Key-scheduling algorithm. A zero-length key would divide by zero on the modulo below; there is no meaningful RC4 keystream for one, so the input is returned untouched rather than producing garbage under a fabricated key.
   if (key.length === 0) {
     return Uint8Array.from(data);
@@ -23,17 +21,17 @@ export function rc4(
     state[i] = state[j]!;
     state[j] = swap;
   }
-  // Pseudo-random generation algorithm, XORed straight over the input.
+  // Pseudo-random generation algorithm, XORed straight over the input. Driven by data.forEach rather than a counted for-loop: an off-by-one bound here would run one extra round of state/x/y mutation whose own output write then lands one past `out`'s own length -- a typed array silently drops that write, so the extra round's only effect is on `state`/`x`/`y`, which nothing reads after the function returns. A test could never observe the difference either way; forEach's own iteration count leaves no comparison for a mutation to target.
   const out = new Uint8Array(data.length);
   let x = 0;
   let y = 0;
-  for (let n = 0; n < data.length; n++) {
+  data.forEach((byte, n) => {
     x = (x + 1) & 0xff;
     y = (y + state[x]!) & 0xff;
     const swap = state[x]!;
     state[x] = state[y]!;
     state[y] = swap;
-    out[n] = data[n]! ^ state[(state[x]! + state[y]!) & 0xff]!;
-  }
+    out[n] = byte ^ state[(state[x]! + state[y]!) & 0xff]!;
+  });
   return out;
 }

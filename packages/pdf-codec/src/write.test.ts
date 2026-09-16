@@ -1,9 +1,11 @@
 import { decodePng, encodePng } from "byte-codec";
+import type { PositionedFormula } from "document-schema.js";
 import { base64ToBytes, bytesToBase64 } from "./util/base64";
 import { describe, expect, it } from "vitest";
 import { openPdfDocument } from "./document";
 import type {
   LayoutDocument,
+  LayoutFormField,
   LayoutImageAsset,
   LayoutItem,
   LayoutPage,
@@ -72,6 +74,56 @@ function tinyJpegAsset(): LayoutImageAsset {
   };
 }
 
+// Same shape as tinyJpegAsset, generalised over component count and an optional Adobe APP14 marker (ISO 32000-1 has no opinion on this marker; it's a de facto Adobe convention every real CMYK JPEG carries), for exercising prepareJpegImage's colour-space and /Decode-inversion branches.
+function jpegAsset(
+  components: 1 | 3 | 4,
+  adobeTransform?: number,
+): LayoutImageAsset {
+  const componentBytes: number[] = [];
+  for (let i = 0; i < components; i++) {
+    componentBytes.push(i + 1, 0x22, 0);
+  }
+  const app14: number[] =
+    adobeTransform === undefined
+      ? []
+      : [
+          0xff,
+          0xee, // APP14
+          0x00,
+          0x0e, // length 14
+          0x41,
+          0x64,
+          0x6f,
+          0x62,
+          0x65, // "Adobe"
+          0x00,
+          0x64, // version
+          0x00,
+          0x00, // flags0
+          0x00,
+          0x00, // flags1
+          adobeTransform,
+        ];
+  // prettier-ignore
+  const bytes = new Uint8Array([
+    0xff, 0xd8, // SOI
+    ...app14,
+    0xff, 0xc0, 0x00, 8 + 3 * components, // SOF0
+    0x08, // precision
+    0x00, 0x02, // height = 2
+    0x00, 0x03, // width = 3
+    components,
+    ...componentBytes,
+    0xff, 0xd9, // EOI
+  ]);
+  return {
+    format: "jpeg",
+    base64: bytesToBase64(bytes),
+    widthPx: 3,
+    heightPx: 2,
+  };
+}
+
 describe("writePdf: document structure", () => {
   it("starts with the PDF header and ends with %%EOF", () => {
     const bytes = writePdf(docWithPages([]));
@@ -113,6 +165,46 @@ describe("writePdf: document structure", () => {
       }),
     );
     expect(text).toContain("/MediaBox [0 0 612 792]");
+  });
+
+  it("round-trips every optional Info dict field, and omits the ones the source document does not carry", async () => {
+    const { readPdf } = await import("./read");
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {
+        title: "A Title",
+        author: "An Author",
+        subject: "A Subject",
+        keywords: ["one", "two"],
+        creator: "A Creator",
+        createdIso: "2024-03-05T06:07:08Z",
+        modifiedIso: "2024-03-06T07:08:09Z",
+      },
+      pages: [],
+      images: {},
+    };
+    const out = writePdf(doc, { compress: false });
+    const reread = readPdf(out);
+    expect(reread.metadata.title).toBe("A Title");
+    expect(reread.metadata.author).toBe("An Author");
+    expect(reread.metadata.subject).toBe("A Subject");
+    expect(reread.metadata.keywords).toEqual(["one", "two"]);
+    expect(reread.metadata.creator).toBe("A Creator");
+    expect(reread.metadata.createdIso).toBe("2024-03-05T06:07:08Z");
+    expect(reread.metadata.modifiedIso).toBe("2024-03-06T07:08:09Z");
+
+    const bareText = decode(writePdf(docWithPages([]), { compress: false }));
+    for (const key of [
+      "/Title",
+      "/Author",
+      "/Subject",
+      "/Keywords",
+      "/Creator",
+      "/CreationDate",
+      "/ModDate",
+    ]) {
+      expect(bareText).not.toContain(key);
+    }
   });
 });
 
@@ -196,9 +288,16 @@ describe("writePdf: text and fonts", () => {
     );
     expect(text).toContain("/BaseFont /Times-Roman");
     expect(text).toContain("/BaseFont /Helvetica");
-    // Sorted alphabetically, "Helvetica" < "Times-Roman", so Helvetica gets F1 and is used by the second item's Tf.
     expect(text).toContain("/F1 10 Tf");
     expect(text).toContain("/F2 10 Tf");
+    // Sorted alphabetically, "Helvetica" < "Times-Roman", so F1 must resolve to the Helvetica object specifically -- not merely "some Font resource named F1 exists", which the two toContain checks above don't distinguish from insertion order (Times New Roman was the first item's own font).
+    const f1Ref = /\/F1 (\d+) 0 R/.exec(text);
+    expect(f1Ref).not.toBeNull();
+    const f1Obj = new RegExp(
+      `\\n${f1Ref![1]} 0 obj\\n([\\s\\S]*?)\\nendobj`,
+    ).exec(text);
+    expect(f1Obj).not.toBeNull();
+    expect(f1Obj![1]).toContain("/BaseFont /Helvetica");
   });
 
   it("by default (compress: true) hides the content stream as FlateDecode-compressed bytes", () => {
@@ -219,6 +318,108 @@ describe("writePdf: text and fonts", () => {
     );
     expect(text).toContain("/Filter /FlateDecode");
     expect(text).not.toContain("BT\n");
+  });
+
+  it("sets FontDescriptor /Flags bits per standard face: fixed-pitch, serif, italic, and force-bold each add their own bit to the always-set nonsymbolic bit", () => {
+    const courierNew = {
+      family: "Courier New",
+      weight: "normal",
+      style: "normal",
+    } as const;
+    const timesRoman = {
+      family: "Times New Roman",
+      weight: "normal",
+      style: "normal",
+    } as const;
+    const timesItalic = {
+      family: "Times New Roman",
+      weight: "normal",
+      style: "italic",
+    } as const;
+    const helveticaBold = {
+      family: "Helvetica",
+      weight: "bold",
+      style: "normal",
+    } as const;
+    const text = decode(
+      writePdf(
+        docWithItems([
+          {
+            kind: "text",
+            text: "A",
+            xPt: 0,
+            yPt: 0,
+            font: courierNew,
+            sizePt: 10,
+            color: BLACK,
+          },
+          {
+            kind: "text",
+            text: "B",
+            xPt: 0,
+            yPt: 0,
+            font: timesRoman,
+            sizePt: 10,
+            color: BLACK,
+          },
+          {
+            kind: "text",
+            text: "C",
+            xPt: 0,
+            yPt: 0,
+            font: timesItalic,
+            sizePt: 10,
+            color: BLACK,
+          },
+          {
+            kind: "text",
+            text: "D",
+            xPt: 0,
+            yPt: 0,
+            font: helveticaBold,
+            sizePt: 10,
+            color: BLACK,
+          },
+        ]),
+        { compress: false },
+      ),
+    );
+    // NONSYMBOLIC(32) is always set; each face then adds FIXED_PITCH(1), SERIF(2), ITALIC(64), or FORCE_BOLD(262144) of its own on top of it.
+    expect(text).toContain("/BaseFont /Courier ");
+    expect(text).toContain("/Flags 33"); // Courier: nonsymbolic + fixed-pitch
+    expect(text).toContain("/BaseFont /Times-Roman");
+    expect(text).toContain("/Flags 34"); // Times-Roman: nonsymbolic + serif
+    expect(text).toContain("/BaseFont /Times-Italic");
+    expect(text).toContain("/Flags 98"); // Times-Italic: nonsymbolic + serif + italic
+    expect(text).toContain("/BaseFont /Helvetica-Bold");
+    expect(text).toContain("/Flags 262176"); // Helvetica-Bold: nonsymbolic + force-bold
+  });
+
+  it("gives every Widths-array entry the font's own real AFM advance width, across the full FirstChar..LastChar range", () => {
+    const text = decode(
+      writePdf(
+        docWithItems([
+          {
+            kind: "text",
+            text: "A",
+            xPt: 0,
+            yPt: 0,
+            font: HELVETICA,
+            sizePt: 10,
+            color: BLACK,
+          },
+        ]),
+        { compress: false },
+      ),
+    );
+    const widthsMatch = /\/Widths \[([^\]]*)\]/.exec(text);
+    expect(widthsMatch).not.toBeNull();
+    const widths = widthsMatch![1]!.trim().split(/\s+/).map(Number);
+    expect(widths).toHaveLength(255 - 32 + 1);
+    // Every code in range resolves to a real, positive advance width -- WINANSI_GLYPH_NAMES has no gap in this range and every standard-14 AFM table defines every glyph name it can produce, so a 0 anywhere here would mean a genuine regression, not a legitimate "unassigned code" placeholder.
+    expect(widths.every((w) => w > 0)).toBe(true);
+    // Space (code 32, the first entry) is a known, specific value worth pinning exactly.
+    expect(widths[0]).toBe(278);
   });
 
   it("reports WinAnsi substitutions via the onSubstitution callback, with the page index", () => {
@@ -358,6 +559,67 @@ describe("writePdf: images", () => {
     expect(text).toContain("/XObject <</Im1 ");
   });
 
+  it("names image resources by sorted imageId order, not first-encountered order", () => {
+    // Two distinctly-sized assets so each one's own object dict is independently identifiable. "zebra" is the FIRST page item (first-encountered), but "apple" sorts first alphabetically -- if imageIds were resource-named by encounter order instead of sorted order, Im1 would resolve to zebra's own 4x4 dict instead of apple's 2x2 one.
+    const small = tinyPngAsset(); // 2x2
+    const width = 4;
+    const height = 4;
+    const large = {
+      format: "png" as const,
+      base64: bytesToBase64(
+        encodePng({
+          width,
+          height,
+          channels: 3,
+          data: new Uint8Array(width * height * 3),
+        }),
+      ),
+      widthPx: width,
+      heightPx: height,
+    };
+    const text = decode(
+      writePdf(
+        docWithPages(
+          [
+            {
+              widthPt: 100,
+              heightPt: 100,
+              items: [
+                {
+                  kind: "image",
+                  imageId: "zebra", // encountered FIRST, but sorts LAST; the 4x4 asset
+                  xPt: 0,
+                  yPt: 0,
+                  widthPt: 50,
+                  heightPt: 50,
+                },
+                {
+                  kind: "image",
+                  imageId: "apple", // encountered SECOND, but sorts FIRST; the 2x2 asset
+                  xPt: 0,
+                  yPt: 0,
+                  widthPt: 50,
+                  heightPt: 50,
+                },
+              ],
+            },
+          ],
+          { zebra: large, apple: small },
+        ),
+        { compress: false },
+      ),
+    );
+    const im1Ref = /\/Im1 (\d+) 0 R/.exec(text);
+    expect(im1Ref).not.toBeNull();
+    const im1Obj = new RegExp(
+      `\\n${im1Ref![1]} 0 obj\\n([\\s\\S]*?)\\nendobj`,
+    ).exec(text);
+    expect(im1Obj).not.toBeNull();
+    // "apple" sorts before "zebra", so Im1 must be apple's own 2x2 object, never zebra's 4x4 one.
+    expect(im1Obj![1]).toContain("/Width 2");
+    expect(im1Obj![1]).toContain("/Height 2");
+  });
+
   it("embeds a JPEG-sourced image verbatim via DCTDecode, never re-encoding it", () => {
     const asset = tinyJpegAsset();
     const doc = docWithPages(
@@ -380,10 +642,96 @@ describe("writePdf: images", () => {
       { photo: asset },
     );
     const text = decode(writePdf(doc, { compress: false }));
+    expect(text).toContain("/Type /XObject");
+    expect(text).toContain("/Subtype /Image");
     expect(text).toContain("/Filter /DCTDecode");
     expect(text).toContain("/Width 3");
     expect(text).toContain("/Height 2");
     expect(text).toContain("/ColorSpace /DeviceRGB");
+    expect(text).toContain("/BitsPerComponent 8");
+  });
+
+  it("resolves a JPEG's colour space from its own component count: 1 -> DeviceGray, 3 -> DeviceRGB, 4 -> DeviceCMYK", () => {
+    for (const [components, colorSpace] of [
+      [1, "DeviceGray"],
+      [3, "DeviceRGB"],
+      [4, "DeviceCMYK"],
+    ] as const) {
+      const doc = docWithPages(
+        [
+          {
+            widthPt: 100,
+            heightPt: 100,
+            items: [
+              {
+                kind: "image",
+                imageId: "photo",
+                xPt: 0,
+                yPt: 0,
+                widthPt: 50,
+                heightPt: 50,
+              },
+            ],
+          },
+        ],
+        { photo: jpegAsset(components) },
+      );
+      const text = decode(writePdf(doc, { compress: false }));
+      expect(text).toContain(`/ColorSpace /${colorSpace}`);
+    }
+  });
+
+  it("inverts a CMYK JPEG's colour with /Decode when its Adobe transform is YCCK (2) or absent, but not when it is explicitly untransformed (0)", () => {
+    const decodeFor = (adobeTransform: number | undefined): boolean => {
+      const doc = docWithPages(
+        [
+          {
+            widthPt: 100,
+            heightPt: 100,
+            items: [
+              {
+                kind: "image",
+                imageId: "photo",
+                xPt: 0,
+                yPt: 0,
+                widthPt: 50,
+                heightPt: 50,
+              },
+            ],
+          },
+        ],
+        { photo: jpegAsset(4, adobeTransform) },
+      );
+      const text = decode(writePdf(doc, { compress: false }));
+      return text.includes("/Decode [1 0 1 0 1 0 1 0]");
+    };
+    expect(decodeFor(2)).toBe(true);
+    expect(decodeFor(undefined)).toBe(true);
+    expect(decodeFor(0)).toBe(false);
+  });
+
+  it("never adds the CMYK /Decode inversion to a non-CMYK (3-component) JPEG, even with an Adobe transform of 2", () => {
+    const doc = docWithPages(
+      [
+        {
+          widthPt: 100,
+          heightPt: 100,
+          items: [
+            {
+              kind: "image",
+              imageId: "photo",
+              xPt: 0,
+              yPt: 0,
+              widthPt: 50,
+              heightPt: 50,
+            },
+          ],
+        },
+      ],
+      { photo: jpegAsset(3, 2) },
+    );
+    const text = decode(writePdf(doc, { compress: false }));
+    expect(text).not.toContain("/Decode");
   });
 
   it("writes a bilevel image as CCITT Group 4 when that is smaller than Flate, and reads it back (#975)", async () => {
@@ -427,9 +775,15 @@ describe("writePdf: images", () => {
     // compress defaults to true -- G4 is compression, so it sits behind the same option as Flate; the dictionary entries stay plain ASCII either way, only streams are flated.
     const out = writePdf(doc);
     const text = new TextDecoder("latin1").decode(out);
+    expect(text).toContain("/Type /XObject");
+    expect(text).toContain("/Subtype /Image");
+    expect(text).toContain("/ColorSpace /DeviceGray");
     expect(text).toContain("/CCITTFaxDecode");
     expect(text).toContain("/K -1");
     expect(text).toContain("/BitsPerComponent 1");
+    expect(text).toContain(`/Columns ${width}`);
+    expect(text).toContain(`/Rows ${height}`);
+    expect(text).toContain("/BlackIs1 false");
     // ...and the package's own reader decodes the G4 stream back to pixels: the recovered asset is a PNG whose samples equal the original checkerboard exactly.
     const { readPdf } = await import("./read");
     const reread = readPdf(out);
@@ -661,7 +1015,10 @@ describe("writePdf: embedded-file attachments (#967)", () => {
         },
       ],
     };
-    const bytes = writePdf(doc);
+    const bytes = writePdf(doc, { compress: false });
+    const rawText = new TextDecoder("latin1").decode(bytes);
+    expect(rawText).toContain("/Type /EmbeddedFile");
+    expect(rawText).toContain("/Type /Filespec");
     const { readPdf } = await import("./read");
     const reread = readPdf(bytes);
     expect(reread.attachments).toEqual([
@@ -672,6 +1029,27 @@ describe("writePdf: embedded-file attachments (#967)", () => {
         base64: bytesToBase64(payload),
       },
     ]);
+  });
+
+  it("writes no /Desc entry for an attachment carrying no description", async () => {
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [],
+      images: {},
+      attachments: [
+        {
+          name: "plain.txt",
+          mimeType: "text/plain",
+          base64: bytesToBase64(new TextEncoder().encode("no description")),
+        },
+      ],
+    };
+    const bytes = writePdf(doc, { compress: false });
+    const rawText = new TextDecoder("latin1").decode(bytes);
+    expect(rawText).not.toContain("/Desc");
+    const { readPdf } = await import("./read");
+    expect(readPdf(bytes).attachments?.[0]?.description).toBeUndefined();
   });
 
   it("writes no /Names tree at all for a document with no attachments", () => {
@@ -742,6 +1120,15 @@ describe("writePdf: the outline (#967)", () => {
       ],
     };
     const bytes = writePdf(doc);
+    const rawText = new TextDecoder("latin1").decode(bytes);
+    expect(rawText).toContain("/Type /Outlines");
+    // Chapter 1 is the sole top-level item and has two children: /Parent on each item, /Prev+/Next linking the two siblings, and /First+/Last+/Count on the parent that owns them.
+    expect(rawText).toContain("/Parent");
+    expect(rawText).toContain("/Prev");
+    expect(rawText).toContain("/Next");
+    expect(rawText).toContain("/First");
+    expect(rawText).toContain("/Last");
+    expect(rawText).toContain("/Count 2");
     const { readPdf } = await import("./read");
     const reread = readPdf(bytes);
     // Destinations are spelled as direct arrays (the identical convention the internal-link writer established: no /Dests tree is emitted), so the reader re-mints table names in read order -- "dest1", "dest2" -- while titles, nesting, and the TARGETS themselves round-trip exactly.
@@ -800,8 +1187,12 @@ describe("writePdf: optional-content layers (#967)", () => {
         { name: "Annotations", visible: false },
       ],
     };
+    const bytes = writePdf(doc, { compress: false });
+    const rawText = new TextDecoder("latin1").decode(bytes);
+    expect(rawText).toContain("/ON [");
+    expect(rawText).toContain("/OFF [");
     const { readPdf } = await import("./read");
-    const reread = readPdf(writePdf(doc));
+    const reread = readPdf(bytes);
     expect(reread.layers).toEqual([
       { name: "Background", visible: true },
       { name: "Annotations", visible: false },
@@ -817,6 +1208,36 @@ describe("writePdf: optional-content layers (#967)", () => {
         item.kind === "rect",
     );
     expect(rect?.layer).toBe("Annotations");
+  });
+
+  it("omits /OFF entirely when every layer is visible, and /ON entirely when every layer is hidden", () => {
+    const allVisible = writePdf(
+      {
+        formatVersion: LAYOUT_FORMAT_VERSION,
+        metadata: {},
+        pages: [],
+        images: {},
+        layers: [{ name: "Background", visible: true }],
+      },
+      { compress: false },
+    );
+    const allVisibleText = new TextDecoder("latin1").decode(allVisible);
+    expect(allVisibleText).toContain("/ON [");
+    expect(allVisibleText).not.toContain("/OFF [");
+
+    const allHidden = writePdf(
+      {
+        formatVersion: LAYOUT_FORMAT_VERSION,
+        metadata: {},
+        pages: [],
+        images: {},
+        layers: [{ name: "Background", visible: false }],
+      },
+      { compress: false },
+    );
+    const allHiddenText = new TextDecoder("latin1").decode(allHidden);
+    expect(allHiddenText).not.toContain("/ON [");
+    expect(allHiddenText).toContain("/OFF [");
   });
 
   it("writes no /OCProperties at all for a document with no layers", () => {
@@ -922,12 +1343,165 @@ describe("writePdf: AcroForm fields (#967)", () => {
     ]);
   });
 
+  it("never splits a group field into per-widget kid objects, even one that carries more than one widget", () => {
+    // Multi-widget object-splitting is a TERMINAL-field concept (12.7.4's own /Kids-as-widgets spelling); a group field's own /Kids are its child FIELDS, never widget annotations, so this must stay a single object regardless of how many widgets it happens to carry.
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [{ widthPt: 200, heightPt: 100, items: [] }],
+      images: {},
+      form: [
+        {
+          name: "oddGroup",
+          fieldType: "group",
+          widgets: [
+            { pageIndex: 0, xPt: 10, yPt: 60, widthPt: 10, heightPt: 10 },
+            { pageIndex: 0, xPt: 10, yPt: 40, widthPt: 10, heightPt: 10 },
+          ],
+          children: [
+            {
+              name: "oddGroup.child",
+              fieldType: "text",
+              value: "x",
+              widgets: [
+                { pageIndex: 0, xPt: 10, yPt: 20, widthPt: 60, heightPt: 12 },
+              ],
+              children: [],
+            },
+          ],
+        },
+      ],
+    };
+    const text = decode(writePdf(doc, { compress: false }));
+    // Exactly 2 field objects (the group itself, plus its one terminal child) -- if the group's own 2 widgets were wrongly split into their own kid objects, a third and fourth "/Subtype /Widget" object would exist beyond the child's own.
+    expect(text.match(/\/Subtype \/Widget/g)).toHaveLength(1);
+  });
+
+  it("maps radio, button, and signature field types to their own /FT value", () => {
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [{ widthPt: 200, heightPt: 100, items: [] }],
+      images: {},
+      form: [
+        {
+          name: "choice",
+          fieldType: "radio",
+          widgets: [
+            { pageIndex: 0, xPt: 10, yPt: 60, widthPt: 10, heightPt: 10 },
+          ],
+          children: [],
+        },
+        {
+          name: "submit",
+          fieldType: "button",
+          widgets: [
+            { pageIndex: 0, xPt: 10, yPt: 40, widthPt: 40, heightPt: 12 },
+          ],
+          children: [],
+        },
+        {
+          name: "sig",
+          fieldType: "signature",
+          widgets: [
+            { pageIndex: 0, xPt: 10, yPt: 20, widthPt: 40, heightPt: 12 },
+          ],
+          children: [],
+        },
+      ],
+    };
+    const text = decode(writePdf(doc, { compress: false }));
+    expect(text).toContain("/FT /Btn");
+    expect(text).toContain("/FT /Sig");
+    // radio and button both map to Btn, so distinguishing them isn't possible from /FT alone -- but exactly two Btn fields and one Sig field must exist.
+    expect(text.match(/\/FT \/Btn/g)).toHaveLength(2);
+  });
+
+  it("sets /Ff bits for read-only, pushbutton, radio, and combo, each independently and combined", () => {
+    const fieldFor = (
+      overrides: Partial<LayoutFormField> & { name: string },
+    ): LayoutFormField => ({
+      fieldType: "text",
+      widgets: [{ pageIndex: 0, xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }],
+      children: [],
+      ...overrides,
+    });
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [{ widthPt: 200, heightPt: 100, items: [] }],
+      images: {},
+      form: [
+        fieldFor({ name: "plain" }), // no flags at all -- no /Ff entry
+        fieldFor({ name: "locked", readOnly: true }), // 1
+        fieldFor({ name: "push", fieldType: "button" }), // 4
+        fieldFor({ name: "choice", fieldType: "radio" }), // 32768
+        fieldFor({ name: "combo", fieldType: "combobox" }), // 131072
+        fieldFor({ name: "lockedPush", fieldType: "button", readOnly: true }), // 1 | 4 = 5
+      ],
+    };
+    const text = decode(writePdf(doc, { compress: false }));
+    for (const ff of ["1", "4", "32768", "131072", "5"]) {
+      expect(text).toContain(`/Ff ${ff}`);
+    }
+    // "plain" carries no flag bits at all -- no /Ff entry for it, distinct from the others which each have their own combination. Field names are written as hex strings, so "plain" (0x706c61696e) identifies its own object's line.
+    const plainLine = text
+      .split("\n")
+      .find((line) => line.includes("<706c61696e>"));
+    expect(plainLine).toBeDefined();
+    expect(plainLine).not.toContain("/Ff");
+  });
+
+  it.each([
+    { checked: true, value: undefined, expected: "Yes" },
+    { checked: false, value: undefined, expected: "Off" },
+    { checked: undefined, value: undefined, expected: "Off" },
+    { checked: false, value: "onValue", expected: "onValue" }, // an explicit export value wins regardless of checked
+    { checked: true, value: "onValue", expected: "onValue" },
+  ] as const)(
+    "gives a checkbox its own /V export value for checked=$checked, value=$value",
+    ({ checked, value, expected }) => {
+      const doc: LayoutDocument = {
+        formatVersion: LAYOUT_FORMAT_VERSION,
+        metadata: {},
+        pages: [{ widthPt: 200, heightPt: 100, items: [] }],
+        images: {},
+        form: [
+          {
+            name: "box",
+            fieldType: "checkbox",
+            ...(checked === undefined ? {} : { checked }),
+            ...(value === undefined ? {} : { value }),
+            widgets: [
+              { pageIndex: 0, xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+            ],
+            children: [],
+          },
+        ],
+      };
+      const text = decode(writePdf(doc, { compress: false }));
+      expect(text).toContain(`/V /${expected}`);
+    },
+  );
+
   it("writes no /AcroForm for a document with no fields", () => {
     const bytes = writePdf({
       formatVersion: LAYOUT_FORMAT_VERSION,
       metadata: {},
       pages: [],
       images: {},
+    });
+    const text = new TextDecoder("latin1").decode(bytes);
+    expect(text).not.toContain("/AcroForm");
+  });
+
+  it("writes no /AcroForm for a document whose form array is present but empty", () => {
+    const bytes = writePdf({
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [],
+      images: {},
+      form: [],
     });
     const text = new TextDecoder("latin1").decode(bytes);
     expect(text).not.toContain("/AcroForm");
@@ -1047,14 +1621,25 @@ describe("writePdf: the tagged structure tree (#967)", () => {
           id: "e-root",
           type: "Document",
           children: [
-            { id: "e-h1", type: "H1", title: "The heading", children: [] },
+            {
+              id: "e-h1",
+              type: "H1",
+              title: "The heading",
+              language: "en-GB",
+              children: [],
+            },
             { id: "e-p", type: "P", alt: "a paragraph", children: [] },
           ],
         },
       ],
     };
+    const bytes = writePdf(doc, { compress: false });
+    const rawText = new TextDecoder("latin1").decode(bytes);
+    expect(rawText).toContain("/Type /StructElem");
+    expect(rawText).toContain("/P ");
+    expect(rawText).toContain("/Lang");
     const { readPdf } = await import("./read");
-    const reread = readPdf(writePdf(doc));
+    const reread = readPdf(bytes);
     const tree = reread.structure!;
     // Element ids are reader-minted in document order, so identity is positional: the first H1 under the root owns the heading item.
     expect(tree).toEqual([
@@ -1135,6 +1720,39 @@ describe("writePdf: package-level residue (#967)", () => {
     expect(reread.source?.["output-intents"]).toBeUndefined();
   });
 
+  it("does not restore a row whose serialisation is a dict that CONTAINS a reference, not just a bare array of one", async () => {
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [],
+      images: {},
+      source: {
+        "piece-info": { format: "pdf", xml: "<< /Private 3 0 R >>" },
+      },
+    };
+    const { readPdf } = await import("./read");
+    const reread = readPdf(writePdf(doc));
+    expect(reread.source?.["piece-info"]).toBeUndefined();
+  });
+
+  it("does not restore a row whose serialisation is a stream whose OWN dict contains a reference", async () => {
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [],
+      images: {},
+      source: {
+        "piece-info": {
+          format: "pdf",
+          xml: "<< /Length 5 /Extra 3 0 R >>\nstream\nhello\nendstream",
+        },
+      },
+    };
+    const { readPdf } = await import("./read");
+    const reread = readPdf(writePdf(doc));
+    expect(reread.source?.["piece-info"]).toBeUndefined();
+  });
+
   it("never restores the open-action row, including an inline action", async () => {
     // /OpenAction is active content: a viewer executes an inline JavaScript/Launch/URI action on open, so restoring it verbatim from a source file would re-arm attacker-supplied behaviour in the rewritten output. The row restores as nothing whether its serialisation is reference-free or not.
     const doc: LayoutDocument = {
@@ -1154,5 +1772,85 @@ describe("writePdf: package-level residue (#967)", () => {
     const text = new TextDecoder("latin1").decode(bytes);
     expect(text).not.toContain("/OpenAction");
     expect(readPdf(bytes).source?.["open-action"]).toBeUndefined();
+  });
+});
+
+// options.formulas is writePdf's own side channel for embedded-math-font content (see this module's own top comment for why a formula cannot travel as an ordinary LayoutItem) -- exercised here through writePdf itself, not just through math-content-write.ts/math-font-write.ts's own unit tests, since only this integration proves the allocation, the resource dict, and the emitted content stream actually agree on object numbers.
+describe("writePdf: embedded formulas", () => {
+  function formula(pageIndex: number): PositionedFormula {
+    return {
+      pageIndex,
+      xPt: 50,
+      yPt: 100,
+      box: {
+        widthPt: 20,
+        heightPt: 12,
+        ascentPt: 12,
+        descentPt: 0,
+        items: [
+          {
+            kind: "glyphs",
+            xPt: 0,
+            yPt: 0,
+            text: "x",
+            sizePt: 12,
+            color: BLACK,
+          },
+        ],
+      },
+    };
+  }
+
+  it("allocates a Type0/CIDFontType0 composite font group, references it from the page Resources, and draws the formula's own glyph run", () => {
+    const text = decode(
+      writePdf(docWithItems([]), {
+        compress: false,
+        formulas: [formula(0)],
+      }),
+    );
+    expect(text).toContain("/Subtype /Type0");
+    expect(text).toContain("/Subtype /CIDFontType0");
+    expect(text).toContain("/FontFile3");
+    expect(text).toContain("/Font <</MF ");
+    // The formula's own content bytes are appended after the page's ordinary LayoutItem bytes, in the same Contents stream.
+    expect(text).toContain("/MF 12 Tf");
+  });
+
+  it("allocates no math font group at all when no formula is supplied, and never references /MF", () => {
+    const text = decode(
+      writePdf(docWithItems([]), { compress: false, formulas: [] }),
+    );
+    expect(text).not.toContain("/CIDFontType0");
+    expect(text).not.toContain("/MF");
+  });
+
+  it("routes each formula to its own page's Contents stream by pageIndex, never the other page's", () => {
+    const marker = (label: string): LayoutItem => ({
+      kind: "text",
+      text: label,
+      xPt: 0,
+      yPt: 0,
+      font: HELVETICA,
+      sizePt: 10,
+      color: BLACK,
+    });
+    const text = decode(
+      writePdf(
+        docWithPages([
+          { widthPt: 100, heightPt: 100, items: [marker("A")] },
+          { widthPt: 100, heightPt: 100, items: [marker("B")] },
+        ]),
+        { compress: false, formulas: [formula(1)] },
+      ),
+    );
+    const streams = [...text.matchAll(/stream\n([\s\S]*?)\nendstream/g)].map(
+      (m) => m[1]!,
+    );
+    const pageAStream = streams.find((s) => s.includes("<41>")); // 'A'
+    const pageBStream = streams.find((s) => s.includes("<42>")); // 'B'
+    expect(pageAStream).toBeDefined();
+    expect(pageBStream).toBeDefined();
+    expect(pageAStream).not.toContain("/MF");
+    expect(pageBStream).toContain("/MF 12 Tf");
   });
 });

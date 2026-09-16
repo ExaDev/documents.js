@@ -32,7 +32,6 @@ import type { EmbeddedFace, EmbeddedFaceSubstitution } from "./embedded-font";
 import { collectEmbeddedGlyphs } from "./embedded-font";
 import { NOTES_ANNOTATION_AUTHOR } from "./notes-annotation-author";
 import { buildEmbeddedFontObjects } from "./embedded-font-write";
-import { winAnsiGlyphName } from "./encoding";
 import type { FontRegistry } from "./font-registry";
 import { resolveFaceWithRegistry } from "./font-registry";
 import {
@@ -183,29 +182,15 @@ function computeFontFlags(
   return flags;
 }
 
-// The Widths array must cover FIRST_CHAR..LAST_CHAR without gaps. widthOfCode() throws for a code with no WinAnsi glyph mapping (a caller-invariant violation on the text-showing path, which is expected to sanitize first) -- but a handful of WinAnsi byte positions are simply unassigned by the encoding itself, and the Widths array still needs an entry for them. widthOfCode already special-cases fixed-width (Courier) faces before ever consulting the glyph name, so this only needs its own check for the proportional faces.
-function widthForWidthsArray(
-  standardName: StandardFontName,
-  code: number,
-): number {
-  const metrics = STANDARD_METRICS[standardName];
-  if (
-    metrics.fixedWidth === undefined &&
-    winAnsiGlyphName(code) === undefined
-  ) {
-    return 0;
-  }
-  return widthOfCode(standardName, code);
-}
-
 function buildFontObjects(
   standardName: StandardFontName,
   descriptorRef: PdfObject,
 ): { readonly font: PdfDict; readonly descriptor: PdfDict } {
   const metrics = STANDARD_METRICS[standardName];
   const widths: PdfObject[] = [];
+  // The Widths array must cover FIRST_CHAR..LAST_CHAR without gaps. WINANSI_GLYPH_NAMES defines a glyph name for every one of those codes (the CP1252 positions with no real assignment are filled with a placeholder name like "bullet" rather than left empty -- see encoding.ts's own comment), and every standard-14 AFM table carries a width for every name that table can produce, so widthOfCode never throws across this whole range for any of the 12 faces.
   for (let code = FIRST_CHAR; code <= LAST_CHAR; code++) {
-    widths.push(pdfNum(widthForWidthsArray(standardName, code)));
+    widths.push(pdfNum(widthOfCode(standardName, code)));
   }
   const font = pdfDict({
     Type: pdfName("Font"),

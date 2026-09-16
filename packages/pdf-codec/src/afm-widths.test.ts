@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { STANDARD_METRICS, widthOfCode } from "./afm-widths";
 import { WINANSI_GLYPH_NAMES } from "./encoding";
 
@@ -69,11 +69,32 @@ describe("widthOfCode", () => {
     expect(widthOfCode("Courier", 105)).toBe(600);
   });
 
+  it("returns the fixed width without ever consulting the per-glyph AFM table for a monospace face", () => {
+    const getSpy = vi.spyOn(STANDARD_METRICS.Courier.widths, "get");
+    expect(widthOfCode("Courier", 65)).toBe(600);
+    expect(getSpy).not.toHaveBeenCalled();
+    getSpy.mockRestore();
+  });
+
   it("returns the AFM width for a proportional face", () => {
     expect(widthOfCode("Helvetica", 65)).toBe(667); // 'A'
   });
 
   it("throws for a code with no WinAnsi glyph mapping", () => {
     expect(() => widthOfCode("Helvetica", 1)).toThrow(/WinAnsi/);
+  });
+
+  it("throws naming the face, glyph, and code when a face's own AFM table is genuinely missing a glyph its widths map should carry", () => {
+    // Every real standard-14 AFM defines a width for every WinAnsi-mapped glyph (proved by the spot-check above), so this path is unreachable through the public API with real data -- it exists as a caller-invariant guard against a future data gap, per the function's own doc comment. STANDARD_METRICS is exported specifically so a test can reach behind that invariant and exercise the guard directly, deleting one real entry and restoring it immediately after. The cast undoes only this module's own `ReadonlyMap` return type, which exists to stop ordinary callers mutating shared metrics -- the backing object is a genuine mutable Map, and this test's whole point is temporarily mutating it.
+    const widths = STANDARD_METRICS.Helvetica.widths as Map<string, number>;
+    const original = widths.get("A");
+    widths.delete("A");
+    try {
+      expect(() => widthOfCode("Helvetica", 65)).toThrow(
+        "Helvetica has no AFM width for glyph 'A' (code 65)",
+      );
+    } finally {
+      widths.set("A", original!);
+    }
   });
 });

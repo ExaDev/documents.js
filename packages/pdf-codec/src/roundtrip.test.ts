@@ -568,6 +568,8 @@ describe("writePdf -> readPdf: structural round trip", () => {
       kind: "text",
       text: "Visible",
     });
+    // Proves the hidden notes annotation is excluded from the annotations list itself, on its /T marker -- not merely that its kind never becomes a visible LayoutItem, which the assertion above already covers by a different mechanism.
+    expect(result.pages[0]!.annotations).toBeUndefined();
   });
 
   // Internal links and the destinations table they resolve against (#721): the writer emits each internalLink as a /Dest direct destination array naming the target page object, so the link and its table entry both survive -- the reader re-mints a fresh destN name for the array on the way back, which is the documented round-trip shape (names are the reader's minting, positions are the file's facts).
@@ -642,6 +644,69 @@ describe("writePdf -> readPdf: structural round trip", () => {
     });
   });
 
+  // Every display-destination view type ISO 32000-1 Table 151 defines (destinationViewArray's own full branch set), each round-tripped through an internal link so the written direct array and the read side's parseDestination agree exactly on both the view type and its own particular coordinates.
+  it.each([
+    { target: { kind: "fit" as const } },
+    { target: { kind: "fitH" as const, topPt: 55 } },
+    { target: { kind: "fitH" as const } },
+    { target: { kind: "fitV" as const, leftPt: 33 } },
+    { target: { kind: "fitV" as const } },
+    {
+      target: {
+        kind: "fitR" as const,
+        leftPt: 1,
+        bottomPt: 2,
+        rightPt: 3,
+        topPt: 4,
+      },
+    },
+    { target: { kind: "fitB" as const } },
+    { target: { kind: "fitBH" as const, topPt: 66 } },
+    { target: { kind: "fitBH" as const } },
+    { target: { kind: "fitBV" as const, leftPt: 77 } },
+    { target: { kind: "fitBV" as const } },
+  ])(
+    "round-trips an internal link's $target.kind destination view",
+    ({ target }) => {
+      const doc = docWithPages([
+        { widthPt: 300, heightPt: 200, items: [] },
+        { widthPt: 300, heightPt: 200, items: [] },
+      ]);
+      doc.destinations = [{ name: "target", pageIndex: 1, target }];
+      doc.pages[0]!.items.push({
+        kind: "internalLink",
+        destination: "target",
+        xPt: 0,
+        yPt: 0,
+        widthPt: 10,
+        heightPt: 10,
+      });
+      const result = readPdf(writePdf(doc, { compress: false }));
+      expect(result.destinations).toEqual([
+        { name: "dest1", pageIndex: 1, target },
+      ]);
+    },
+  );
+
+  it("throws rather than guessing when a destination names a page index beyond the document's own pages", () => {
+    const doc = docWithItems([
+      {
+        kind: "internalLink",
+        destination: "target",
+        xPt: 0,
+        yPt: 0,
+        widthPt: 10,
+        heightPt: 10,
+      },
+    ]);
+    doc.destinations = [
+      { name: "target", pageIndex: 5, target: { kind: "fit" } },
+    ];
+    expect(() => writePdf(doc, { compress: false })).toThrow(
+      /target.*beyond the document/,
+    );
+  });
+
   it("throws rather than guessing when an internal link names a destination the document does not carry", () => {
     const doc = docWithItems([
       {
@@ -653,6 +718,56 @@ describe("writePdf -> readPdf: structural round trip", () => {
         heightPt: 14,
       },
     ]);
-    expect(() => writePdf(doc, { compress: false })).toThrow(/nowhere/);
+    expect(() => writePdf(doc, { compress: false })).toThrow(
+      /internal link.*nowhere/,
+    );
+  });
+
+  it("resolves a destination by its own name, not merely the first entry in the destinations table", () => {
+    const doc = docWithPages([
+      { widthPt: 300, heightPt: 200, items: [] },
+      { widthPt: 300, heightPt: 200, items: [] },
+      { widthPt: 300, heightPt: 200, items: [] },
+    ]);
+    doc.destinations = [
+      { name: "decoy", pageIndex: 0, target: { kind: "fit" } },
+      { name: "real-target", pageIndex: 2, target: { kind: "fit" } },
+    ];
+    doc.pages[0]!.items.push({
+      kind: "internalLink",
+      destination: "real-target",
+      xPt: 0,
+      yPt: 0,
+      widthPt: 10,
+      heightPt: 10,
+    });
+    const result = readPdf(writePdf(doc, { compress: false }));
+    const link = result.pages[0]!.items.find((i) => i.kind === "internalLink");
+    if (link?.kind !== "internalLink") {
+      throw new Error("expected an internalLink item");
+    }
+    // A wrongly permissive lookup (matching the first destination regardless of name) would resolve to page index 0 (decoy) instead of 2 (real-target).
+    const resolved = result.destinations?.find(
+      (d) => d.name === link.destination,
+    );
+    expect(resolved?.pageIndex).toBe(2);
+  });
+
+  it("writes an internal link's own /Type /Annot and zero-width /Border, matching an ordinary link's", () => {
+    const doc = docWithPages([{ widthPt: 300, heightPt: 200, items: [] }]);
+    doc.destinations = [
+      { name: "target", pageIndex: 0, target: { kind: "fit" } },
+    ];
+    doc.pages[0]!.items.push({
+      kind: "internalLink",
+      destination: "target",
+      xPt: 0,
+      yPt: 0,
+      widthPt: 10,
+      heightPt: 10,
+    });
+    const text = new TextDecoder().decode(writePdf(doc, { compress: false }));
+    expect(text).toContain("/Type /Annot");
+    expect(text).toContain("/Border [0 0 0]");
   });
 });

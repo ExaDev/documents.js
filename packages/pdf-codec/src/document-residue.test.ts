@@ -2,9 +2,30 @@ import { describe, expect, it } from "vitest";
 import { readPdf } from "./read";
 import { metadataResiduePdf, minimalClassicXrefPdf } from "./test-support/pdf";
 
+// A separately-typed copy of metadataResiduePdf's own XMP packet, not imported from the fixture: comparing the raw residue against the fixture's own source string would make the assertion trivially true under any change to that shared string, since both sides would mutate together. Independent duplication here is what lets the check actually verify byte-for-byte preservation rather than tautologically agreeing with itself.
+const EXPECTED_METADATA_RESIDUE_XMP = [
+  '<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>',
+  '<x:xmpmeta xmlns:x="adobe:ns:meta/">',
+  '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">',
+  '<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:pdf="http://ns.adobe.com/pdf/1.3/">',
+  '<dc:title><rdf:Alt><rdf:li xml:lang="x-default">From XMP</rdf:li></rdf:Alt></dc:title>',
+  '<dc:description><rdf:Alt><rdf:li xml:lang="x-default">The XMP description</rdf:li></rdf:Alt></dc:description>',
+  "<dc:subject><rdf:Bag><rdf:li>xmp</rdf:li><rdf:li>metadata</rdf:li></rdf:Bag></dc:subject>",
+  "<dc:creator><rdf:Seq><rdf:li>XMP Author</rdf:li></rdf:Seq></dc:creator>",
+  "<pdf:Producer>XMP Producer 9.9</pdf:Producer>",
+  "</rdf:Description>",
+  "</rdf:RDF>",
+  "</x:xmpmeta>",
+  '<?xpacket end="w"?>',
+].join("\n");
+
 // The metadata/residue cluster (#721 phase 6): catalog /Lang as the document language, the XMP /Metadata stream split into a semantic Dublin Core mirror (filling only fields /Info does not carry -- in a PDF/A file these live ONLY in XMP) and a raw-packet residue entry, and the package-level residue rows for the catalog and trailer facts no content node owns (viewer/session behaviour, output intents, private/application data, the trailer /ID).
 
 describe("readPdf: document language and XMP", () => {
+  it("reads the fixture's own single page alongside its metadata and residue facts", () => {
+    expect(readPdf(metadataResiduePdf()).pages).toHaveLength(1);
+  });
+
   it("reads catalog /Lang as metadata.language", () => {
     const doc = readPdf(metadataResiduePdf());
     expect(doc.metadata.language).toBe("en-GB");
@@ -25,8 +46,7 @@ describe("readPdf: document language and XMP", () => {
   it("keeps the whole raw XMP packet as package-level residue", () => {
     const doc = readPdf(metadataResiduePdf());
     expect(doc.source?.xmp?.format).toBe("pdf");
-    expect(doc.source?.xmp?.xml).toContain("dc:title");
-    expect(doc.source?.xmp?.xml).toContain("pdf:Producer");
+    expect(doc.source?.xmp?.xml).toBe(EXPECTED_METADATA_RESIDUE_XMP);
   });
 });
 
