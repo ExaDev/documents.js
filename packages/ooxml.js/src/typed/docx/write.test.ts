@@ -5747,6 +5747,13 @@ describe("buildDocxPackageFromContent: cross-part payload sharing, minting order
     const runs = runChildren.filter((child) => child.tag === "w:r");
     const lastRun = runs[runs.length - 1]!;
     expect(elementsWithTag([lastRun], "w:drawing")).toHaveLength(1);
+    // The drawing reuses the paragraph's own trailing empty run: no fresh run is minted beside it, so the paragraph still carries exactly its two direct w:r children (the hyperlink wrapper holds the third).
+    expect(
+      paragraph.children.filter(
+        (child): child is XmlElement =>
+          child.type === "element" && child.tag === "w:r",
+      ),
+    ).toHaveLength(2);
   });
 
   it("never reuses an empty hyperlink-wrapped run itself for a lifted image, only plain empty runs", () => {
@@ -6134,5 +6141,33 @@ describe("buildDocxPackageFromContent: cross-part payload sharing, minting order
             (override) => attr(override, "PartName") ?? "",
           ),
     ).toContain("/word/embeddings/oleObject1.docx");
+  });
+});
+
+describe("buildDocxPackageFromContent: note part body structure", () => {
+  it("writes each note's text as its own paragraph-run-text triple inside the note element", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [{ ...emptyBodySection(), blocks: [] }],
+      footnotes: [{ id: "4", text: "the note body" }],
+    });
+    const notesRoot = rootElement(written.parts["word/footnotes.xml"]);
+    if (notesRoot === undefined) {
+      throw new Error("expected footnotes root");
+    }
+    const note = elementsWithTag([notesRoot], "w:footnote").find(
+      (entry) => attr(entry, "w:id") === "4",
+    );
+    if (note === undefined) {
+      throw new Error("expected the carried note");
+    }
+    const paragraph = childrenWithTag(note, "w:p")[0]!;
+    const run = childrenWithTag(paragraph, "w:r")[0]!;
+    expect(
+      elementsWithTag([run], "w:t").map((t) =>
+        t.children
+          .map((child) => (child.type === "text" ? child.value : ""))
+          .join(""),
+      ),
+    ).toEqual(["the note body"]);
   });
 });
