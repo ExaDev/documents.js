@@ -2706,7 +2706,7 @@ describe("buildDocxPackageFromContent: optional part emission, relationships, an
           blocks: [{ kind: "paragraph", runs: [{ text: "running head" }] }],
         },
         {
-          path: "word/footer1.xml",
+          path: "word/footer2.xml",
           kind: "footer",
           blocks: [{ kind: "paragraph", runs: [{ text: "running foot" }] }],
         },
@@ -3355,5 +3355,2202 @@ describe("buildDocxPackageFromContent: run content, styles part, note parts, and
         .filter((child): child is XmlElement => child.type === "element")
         .map((child) => child.tag),
     ).toContain("w:text");
+  });
+});
+
+describe("buildDocxPackageFromContent: internal link wrap boundary shapes", () => {
+  function paragraphWithLinks(
+    runs: { text: string; hyperlink?: string }[],
+    constructs: {
+      anchor: string;
+      startRun: number;
+      endRun: number;
+    }[],
+  ): Package {
+    return buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            {
+              kind: "paragraph",
+              runs,
+              constructs: constructs.map((extent) => ({
+                descriptor: {
+                  kind: "link" as const,
+                  target: { kind: "internal" as const, anchor: extent.anchor },
+                },
+                startRun: extent.startRun,
+                endRun: extent.endRun,
+              })),
+            },
+          ],
+        },
+      ],
+    });
+  }
+
+  function anchorHyperlinks(
+    written: Package,
+  ): { anchor: string; runs: string }[] {
+    const documentRoot = rootElement(written.parts["word/document.xml"]);
+    return elementsWithTag(
+      documentRoot === undefined ? [] : [documentRoot],
+      "w:hyperlink",
+    )
+      .filter((hyperlink) =>
+        hyperlink.attributes.some((a) => a.name === "w:anchor"),
+      )
+      .map((hyperlink) => ({
+        anchor:
+          hyperlink.attributes.find((a) => a.name === "w:anchor")?.value ?? "",
+        runs: hyperlink.children
+          .filter(
+            (child): child is XmlElement =>
+              child.type === "element" && child.tag === "w:r",
+          )
+          .map((run) =>
+            run.children
+              .filter(
+                (c): c is XmlElement => c.type === "element" && c.tag === "w:t",
+              )
+              .map((t) =>
+                t.children
+                  .map((x) => (x.type === "text" ? x.value : ""))
+                  .join(""),
+              )
+              .join(""),
+          )
+          .join(","),
+      }));
+  }
+
+  const runs4 = [{ text: "a" }, { text: "b" }, { text: "c" }, { text: "d" }];
+
+  it("wraps each of two adjacent internal links, losing neither descriptor", () => {
+    const written = paragraphWithLinks(runs4, [
+      { anchor: "one", startRun: 0, endRun: 2 },
+      { anchor: "two", startRun: 2, endRun: 4 },
+    ]);
+    expect(anchorHyperlinks(written)).toEqual([
+      { anchor: "one", runs: "a,b" },
+      { anchor: "two", runs: "c,d" },
+    ]);
+  });
+
+  it("leaves a crossing internal link plain while the earlier-starting extent wraps", () => {
+    const written = paragraphWithLinks(runs4, [
+      { anchor: "one", startRun: 0, endRun: 2 },
+      { anchor: "crosses", startRun: 1, endRun: 3 },
+    ]);
+    expect(anchorHyperlinks(written)).toEqual([{ anchor: "one", runs: "a,b" }]);
+  });
+
+  it("writes a zero-width internal link plain, both at a run boundary and at the paragraph's start", () => {
+    // A zero-width extent covers no run at all: at startRun 0 its end's position lookup (endRun - 1) names no run, and at startRun 1 its end resolves to the run BEFORE its own start, so either way there is no slice to wrap and the descriptor alone is lost.
+    const atStart = paragraphWithLinks(
+      [{ text: "a" }, { text: "b" }],
+      [{ anchor: "zero-at-start", startRun: 0, endRun: 0 }],
+    );
+    expect(anchorHyperlinks(atStart)).toEqual([]);
+    const betweenRuns = paragraphWithLinks(
+      [{ text: "a" }, { text: "b" }],
+      [{ anchor: "zero-between", startRun: 1, endRun: 1 }],
+    );
+    expect(anchorHyperlinks(betweenRuns)).toEqual([]);
+  });
+
+  it("writes an internal link whose start names no run plain rather than wrapping the tail", () => {
+    // startRun === endRun === runs.length passes the extent contract (only endRun > runs.length is beyond it), so the start's lookup finds no element and the link is dropped rather than wrapping a tail slice it never named.
+    const written = paragraphWithLinks(
+      [{ text: "a" }, { text: "b" }],
+      [{ anchor: "past-the-end", startRun: 2, endRun: 2 }],
+    );
+    expect(anchorHyperlinks(written)).toEqual([]);
+  });
+
+  it("wraps an internal link covering exactly one run", () => {
+    const written = paragraphWithLinks(
+      [{ text: "a" }, { text: "b" }],
+      [{ anchor: "solo", startRun: 1, endRun: 2 }],
+    );
+    expect(anchorHyperlinks(written)).toEqual([{ anchor: "solo", runs: "b" }]);
+  });
+});
+
+describe("buildDocxPackageFromContent: media and embedded-object emission", () => {
+  function imageBlock(
+    format: "png" | "jpeg" | "gif",
+    base64: string,
+  ): Extract<ContentBlock, { kind: "image" }> {
+    return { kind: "image", format, base64, widthPt: 72, heightPt: 36 };
+  }
+
+  function documentRels(written: Package): XmlElement[] {
+    const relsRoot = rootElement(written.parts["word/_rels/document.xml.rels"]);
+    if (relsRoot === undefined) {
+      throw new Error("expected document rels part");
+    }
+    return elementsWithTag([relsRoot], "Relationship");
+  }
+
+  function contentTypesDefaults(
+    written: Package,
+  ): { extension: string; contentType: string }[] {
+    const typesRoot = rootElement(written.parts["[Content_Types].xml"]);
+    if (typesRoot === undefined) {
+      throw new Error("expected content types part");
+    }
+    return elementsWithTag([typesRoot], "Default").map((entry) => ({
+      extension: attr(entry, "Extension") ?? "",
+      contentType: attr(entry, "ContentType") ?? "",
+    }));
+  }
+
+  function blipEmbeds(written: Package): string[] {
+    const documentRoot = rootElement(written.parts["word/document.xml"]);
+    return elementsWithTag(
+      documentRoot === undefined ? [] : [documentRoot],
+      "a:blip",
+    ).map((blip) => attr(blip, "r:embed") ?? "");
+  }
+
+  it("names each raster format's media file with its own extension and declares the matching content-type Default", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            imageBlock("jpeg", "jpegbytes"),
+            imageBlock("gif", "gifbytes"),
+          ],
+        },
+      ],
+    });
+    expect(Object.keys(written.parts)).toEqual(
+      expect.arrayContaining([
+        "word/media/image1.jpeg",
+        "word/media/image2.gif",
+      ]),
+    );
+    const defaults = contentTypesDefaults(written);
+    expect(defaults).toContainEqual({
+      extension: "jpeg",
+      contentType: "image/jpeg",
+    });
+    expect(defaults).toContainEqual({
+      extension: "gif",
+      contentType: "image/gif",
+    });
+    expect(defaults.filter((entry) => entry.extension === "png")).toEqual([]);
+    const imageRels = documentRels(written).filter(
+      (rel) => attr(rel, "Type") === IMAGE_REL,
+    );
+    expect(imageRels.map((rel) => attr(rel, "Target"))).toEqual([
+      "media/image1.jpeg",
+      "media/image2.gif",
+    ]);
+  });
+
+  it("shares one media file and one relationship across an image repeated in the document", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            imageBlock("png", TINY_PNG_BASE64),
+            imageBlock("png", TINY_PNG_BASE64),
+          ],
+        },
+      ],
+    });
+    const mediaFiles = Object.keys(written.parts).filter((name) =>
+      name.startsWith("word/media/"),
+    );
+    expect(mediaFiles).toEqual(["word/media/image1.png"]);
+    expect(new Set(blipEmbeds(written)).size).toBe(1);
+    expect(
+      documentRels(written).filter((rel) => attr(rel, "Type") === IMAGE_REL),
+    ).toHaveLength(1);
+  });
+
+  it("refuses an svg image block rather than writing a blip no Word can render", () => {
+    expect(() =>
+      buildDocxPackageFromContent({
+        sections: [
+          {
+            ...emptyBodySection(),
+            blocks: [
+              imageBlock("png", TINY_PNG_BASE64),
+              { ...imageBlock("png", TINY_PNG_BASE64), format: "svg" },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(
+      /an image block in svg format has no OOXML blip this writer can produce/,
+    );
+  });
+
+  const embeddedWordprocessing = (): Extract<
+    ContentBlock,
+    { kind: "embeddedObject" }
+  >["document"] => ({
+    kind: "wordprocessing",
+    metadata: {},
+    sections: [
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+        blocks: [{ kind: "paragraph", runs: [{ text: "nested" }] }],
+      },
+    ],
+  });
+
+  function embeddedObjectBlock(
+    document: ReturnType<typeof embeddedWordprocessing>,
+    widthPt = 100,
+  ): Extract<ContentBlock, { kind: "embeddedObject" }> {
+    return {
+      kind: "embeddedObject",
+      objectKind: "wordprocessing",
+      document,
+      frame: { widthPt, heightPt: 60 },
+    };
+  }
+
+  function oleObjects(written: Package): XmlElement[] {
+    const documentRoot = rootElement(written.parts["word/document.xml"]);
+    return elementsWithTag(
+      documentRoot === undefined ? [] : [documentRoot],
+      "o:OLEObject",
+    );
+  }
+
+  it("serialises an embedded wordprocessing document into one shared payload part with Word's own activation attributes", () => {
+    const nested = embeddedWordprocessing();
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [embeddedObjectBlock(nested), embeddedObjectBlock(nested)],
+        },
+      ],
+    });
+    const embeddingFiles = Object.keys(written.parts).filter((name) =>
+      name.startsWith("word/embeddings/"),
+    );
+    expect(embeddingFiles).toEqual(["word/embeddings/oleObject1.docx"]);
+    const objects = oleObjects(written);
+    expect(objects).toHaveLength(2);
+    for (const object of objects) {
+      expect(attr(object, "Type")).toBe("Embed");
+      expect(attr(object, "ProgID")).toBe("Word.Document.12");
+      expect(attr(object, "DrawAspect")).toBe("Content");
+      expect(attr(object, "r:id")).toBe(
+        objects[0] === undefined ? "" : attr(objects[0], "r:id"),
+      );
+    }
+    const objectElements = elementsWithTag(
+      rootElement(written.parts["word/document.xml"]) === undefined
+        ? []
+        : [rootElement(written.parts["word/document.xml"])!],
+      "w:object",
+    );
+    expect(objectElements.map((element) => attr(element, "w:dxaOrig"))).toEqual(
+      ["2000", "2000"],
+    );
+    expect(objectElements.map((element) => attr(element, "w:dyaOrig"))).toEqual(
+      ["1200", "1200"],
+    );
+    const typesRoot = rootElement(written.parts["[Content_Types].xml"]);
+    const overrides =
+      typesRoot === undefined
+        ? []
+        : elementsWithTag([typesRoot], "Override").map((o) => [
+            attr(o, "PartName") ?? "",
+            attr(o, "ContentType") ?? "",
+          ]);
+    expect(overrides).toContainEqual([
+      "/word/embeddings/oleObject1.docx",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ]);
+  });
+
+  it("numbers distinct embedded payloads sequentially", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            embeddedObjectBlock(embeddedWordprocessing(), 100),
+            embeddedObjectBlock(
+              {
+                kind: "wordprocessing",
+                metadata: {},
+                sections: [
+                  {
+                    pageSize: { widthPt: 612, heightPt: 792 },
+                    margins: {
+                      topPt: 72,
+                      rightPt: 72,
+                      bottomPt: 72,
+                      leftPt: 72,
+                    },
+                    blocks: [{ kind: "paragraph", runs: [{ text: "other" }] }],
+                  },
+                ],
+              },
+              120,
+            ),
+          ],
+        },
+      ],
+    });
+    const embeddingFiles = Object.keys(written.parts).filter((name) =>
+      name.startsWith("word/embeddings/"),
+    );
+    expect(embeddingFiles).toEqual([
+      "word/embeddings/oleObject1.docx",
+      "word/embeddings/oleObject2.docx",
+    ]);
+  });
+
+  it("refuses an embedded drawing document with the exact reason", () => {
+    expect(() =>
+      buildDocxPackageFromContent({
+        sections: [
+          {
+            ...emptyBodySection(),
+            blocks: [
+              {
+                kind: "embeddedObject",
+                objectKind: "drawing",
+                document: { kind: "drawing", metadata: {}, pages: [] },
+                frame: { widthPt: 100, heightPt: 60 },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(
+      /an embedded object carrying a drawing document has no OOXML OLE payload this writer can produce/,
+    );
+  });
+
+  it("refuses an embedded presentation with no injected serialiser, and serialises it through the port when one is injected", () => {
+    const presentation = {
+      kind: "presentation",
+      metadata: {},
+      slides: [],
+    } as const;
+    const block = {
+      kind: "embeddedObject",
+      objectKind: "presentation",
+      document: presentation,
+      frame: { widthPt: 100, heightPt: 60 },
+    } as const;
+    expect(() =>
+      buildDocxPackageFromContent({
+        sections: [{ ...emptyBodySection(), blocks: [block] }],
+      }),
+    ).toThrow(
+      /an embedded object carrying a presentation document has no serialiser/,
+    );
+    const written = buildDocxPackageFromContent(
+      { sections: [{ ...emptyBodySection(), blocks: [block] }] },
+      {
+        serialiseEmbeddedPresentation: () =>
+          new Uint8Array([1, 2, 3, 4]).slice(),
+      },
+    );
+    expect(Object.keys(written.parts)).toContain(
+      "word/embeddings/oleObject1.pptx",
+    );
+    const object = oleObjects(written)[0];
+    expect(object === undefined ? "" : attr(object, "ProgID")).toBe(
+      "PowerPoint.Show.12",
+    );
+  });
+});
+
+describe("buildDocxPackageFromContent: run and paragraph property XML exactness", () => {
+  function singleParagraph(written: Package): XmlElement {
+    const documentRoot = rootElement(written.parts["word/document.xml"]);
+    const body =
+      documentRoot === undefined
+        ? undefined
+        : childrenWithTag(documentRoot, "w:body")[0];
+    const paragraph =
+      body === undefined
+        ? undefined
+        : body.children.find(
+            (child): child is XmlElement =>
+              child.type === "element" && child.tag === "w:p",
+          );
+    if (paragraph === undefined) {
+      throw new Error("expected a body paragraph");
+    }
+    return paragraph;
+  }
+
+  function runProperties(
+    written: Package,
+  ): { tag: string; val: string | undefined }[] {
+    const paragraph = singleParagraph(written);
+    const run = childrenWithTag(paragraph, "w:r")[0];
+    if (run === undefined) {
+      throw new Error("expected a run");
+    }
+    const rPr = childrenWithTag(run, "w:rPr")[0];
+    if (rPr === undefined) {
+      throw new Error("expected run properties");
+    }
+    return rPr.children
+      .filter((child): child is XmlElement => child.type === "element")
+      .map((child) => ({ tag: child.tag, val: attr(child, "w:val") }));
+  }
+
+  function paragraphProperties(
+    written: Package,
+  ): { tag: string; attrs: Record<string, string> }[] {
+    const paragraph = singleParagraph(written);
+    const pPr = childrenWithTag(paragraph, "w:pPr")[0];
+    if (pPr === undefined) {
+      throw new Error("expected paragraph properties");
+    }
+    return pPr.children
+      .filter((child): child is XmlElement => child.type === "element")
+      .map((child) => ({
+        tag: child.tag,
+        attrs: Object.fromEntries(
+          child.attributes.map((attribute) => [
+            attribute.name,
+            attribute.value,
+          ]),
+        ),
+      }));
+  }
+
+  it("spells every resolved run toggle with its own on/off w:val, including the explicit off spellings", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [
+                {
+                  text: "styled",
+                  bold: true,
+                  italic: false,
+                  strike: true,
+                  underline: true,
+                  direction: "rtl",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(runProperties(written)).toEqual([
+      { tag: "w:b", val: "1" },
+      { tag: "w:i", val: "0" },
+      { tag: "w:strike", val: "1" },
+      { tag: "w:u", val: "single" },
+      { tag: "w:rtl", val: "1" },
+    ]);
+  });
+
+  it("spells a resolved left-to-right run's direction with the rtl off spelling and an absent underline as none", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [{ text: "plain", underline: false, direction: "ltr" }],
+            },
+          ],
+        },
+      ],
+    });
+    expect(runProperties(written)).toEqual([
+      { tag: "w:u", val: "none" },
+      { tag: "w:rtl", val: "0" },
+    ]);
+  });
+
+  it("writes a positive first-line indent as w:firstLine, a negative one as the signed inverse w:hanging, and zero as firstLine zero", () => {
+    const build = (indentFirstLinePt: number) =>
+      buildDocxPackageFromContent({
+        sections: [
+          {
+            ...emptyBodySection(),
+            blocks: [
+              {
+                kind: "paragraph",
+                runs: [{ text: "indented" }],
+                indentFirstLinePt,
+              },
+            ],
+          },
+        ],
+      });
+    const positive = paragraphProperties(build(24));
+    expect(positive.find((child) => child.tag === "w:ind")?.attrs).toEqual({
+      "w:firstLine": "480",
+    });
+    const negative = paragraphProperties(build(-24));
+    expect(negative.find((child) => child.tag === "w:ind")?.attrs).toEqual({
+      "w:hanging": "480",
+    });
+    const zero = paragraphProperties(build(0));
+    expect(zero.find((child) => child.tag === "w:ind")?.attrs).toEqual({
+      "w:firstLine": "0",
+    });
+  });
+
+  it("spells a paragraph's line spacing with the auto rule and its direction with the bidi on/off spelling", () => {
+    const rtl = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [{ text: " rtl" }],
+              lineSpacing: 1.5,
+              direction: "rtl",
+            },
+          ],
+        },
+      ],
+    });
+    expect(paragraphProperties(rtl)).toEqual([
+      { tag: "w:bidi", attrs: { "w:val": "1" } },
+      { tag: "w:spacing", attrs: { "w:line": "360", "w:lineRule": "auto" } },
+    ]);
+    const ltr = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [{ text: "ltr" }],
+              lineSpacing: 2,
+              direction: "ltr",
+            },
+          ],
+        },
+      ],
+    });
+    expect(paragraphProperties(ltr)).toEqual([
+      { tag: "w:bidi", attrs: { "w:val": "0" } },
+      { tag: "w:spacing", attrs: { "w:line": "480", "w:lineRule": "auto" } },
+    ]);
+  });
+});
+
+describe("buildDocxPackageFromContent: run-level construct marker XML exactness", () => {
+  function bodyParagraph(written: Package): XmlElement {
+    const documentRoot = rootElement(written.parts["word/document.xml"]);
+    const body =
+      documentRoot === undefined
+        ? undefined
+        : childrenWithTag(documentRoot, "w:body")[0];
+    const paragraph =
+      body === undefined
+        ? undefined
+        : body.children.find(
+            (child): child is XmlElement =>
+              child.type === "element" && child.tag === "w:p",
+          );
+    if (paragraph === undefined) {
+      throw new Error("expected a body paragraph");
+    }
+    return paragraph;
+  }
+
+  function childTags(paragraph: XmlElement): string[] {
+    return paragraph.children
+      .filter((child): child is XmlElement => child.type === "element")
+      .map((child) => child.tag);
+  }
+
+  it("mints increasing bookmark ids across two point bookmarks in one paragraph", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [{ text: "marked" }],
+              constructs: [
+                {
+                  descriptor: {
+                    kind: "anchor",
+                    anchorType: "bookmark",
+                    name: "one",
+                  },
+                  startRun: 0,
+                  endRun: 0,
+                },
+                {
+                  descriptor: {
+                    kind: "anchor",
+                    anchorType: "bookmark",
+                    name: "two",
+                  },
+                  startRun: 0,
+                  endRun: 0,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const paragraph = bodyParagraph(written);
+    expect(childTags(paragraph)).toEqual([
+      "w:bookmarkStart",
+      "w:bookmarkEnd",
+      "w:bookmarkStart",
+      "w:bookmarkEnd",
+      "w:r",
+    ]);
+    const ids = paragraph.children
+      .filter((child): child is XmlElement => child.type === "element")
+      .map((child) => attr(child, "w:id"))
+      .filter((id): id is string => id !== undefined);
+    expect(ids).toEqual(["1", "1", "2", "2"]);
+    const names = paragraph.children
+      .filter(
+        (child): child is XmlElement =>
+          child.type === "element" && child.tag === "w:bookmarkStart",
+      )
+      .map((child) => attr(child, "w:name"));
+    expect(names).toEqual(["one", "two"]);
+    // A point bookmark mutates nothing about the run it sits at: the run keeps exactly its own text child.
+    const run = childrenWithTag(paragraph, "w:r")[0]!;
+    expect(
+      run.children
+        .filter((child): child is XmlElement => child.type === "element")
+        .map((child) => child.tag),
+    ).toEqual(["w:t"]);
+  });
+
+  it("writes a run-level field's characters with the begin/instruction/separate group at its opening boundary and the typed end at its closing boundary", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [{ text: "result" }, { text: "after" }],
+              constructs: [
+                {
+                  descriptor: { kind: "field", instruction: " PAGE " },
+                  startRun: 0,
+                  endRun: 1,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const paragraph = bodyParagraph(written);
+    expect(childTags(paragraph)).toEqual([
+      "w:r",
+      "w:r",
+      "w:r",
+      "w:r",
+      "w:r",
+      "w:r",
+    ]);
+    const fldChars = elementsWithTag([paragraph], "w:fldChar").map((run) =>
+      attr(run, "w:fldCharType"),
+    );
+    expect(fldChars).toEqual(["begin", "separate", "end"]);
+    const instr = elementsWithTag([paragraph], "w:instrText")[0]!;
+    expect(attr(instr, "xml:space")).toBe("preserve");
+    expect(
+      instr.children
+        .map((child) => (child.type === "text" ? child.value : ""))
+        .join(""),
+    ).toBe(" PAGE ");
+  });
+
+  it("writes a point field's four characters as one adjacent group before the run at its own position", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [{ text: "first" }, { text: "second" }],
+              constructs: [
+                {
+                  descriptor: { kind: "field", instruction: "x" },
+                  startRun: 1,
+                  endRun: 1,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const paragraph = bodyParagraph(written);
+    // The four characters all precede the second run, begin to end in order.
+    const described = paragraph.children
+      .filter((child): child is XmlElement => child.type === "element")
+      .map((child) => {
+        if (child.tag !== "w:r") {
+          return child.tag;
+        }
+        const fldChar = childrenWithTag(child, "w:fldChar")[0];
+        if (fldChar !== undefined) {
+          return `fld:${attr(fldChar, "w:fldCharType")}`;
+        }
+        if (childrenWithTag(child, "w:instrText").length > 0) {
+          return "instr";
+        }
+        return "run";
+      });
+    expect(described).toEqual([
+      "run",
+      "fld:begin",
+      "instr",
+      "fld:separate",
+      "fld:end",
+      "run",
+    ]);
+  });
+
+  it("injects a note reference mark into the run at its own index and refuses one that names no run", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [{ text: "before" }, { text: "" }],
+              constructs: [
+                {
+                  descriptor: {
+                    kind: "anchor",
+                    anchorType: "footnote",
+                    name: "3",
+                  },
+                  startRun: 1,
+                  endRun: 1,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const paragraph = bodyParagraph(written);
+    const secondRun = childrenWithTag(paragraph, "w:r")[1]!;
+    expect(
+      secondRun.children
+        .filter((child): child is XmlElement => child.type === "element")
+        .map((child) => child.tag),
+    ).toEqual(["w:t", "w:footnoteReference"]);
+    const reference = childrenWithTag(secondRun, "w:footnoteReference")[0]!;
+    expect(attr(reference, "w:id")).toBe("3");
+    expect(() =>
+      buildDocxPackageFromContent({
+        sections: [
+          {
+            ...emptyBodySection(),
+            blocks: [
+              {
+                kind: "paragraph",
+                runs: [{ text: "only" }],
+                constructs: [
+                  {
+                    descriptor: {
+                      kind: "anchor",
+                      anchorType: "comment",
+                      name: "9",
+                    },
+                    startRun: 1,
+                    endRun: 1,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(
+      /a comment reference at run index 1 of a paragraph does not name a real run/,
+    );
+  });
+
+  it("writes a comment extent's halves with the comments.xml id verbatim", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [{ text: "a" }, { text: "b" }],
+              constructs: [
+                {
+                  descriptor: {
+                    kind: "anchor",
+                    anchorType: "comment",
+                    name: "4",
+                  },
+                  startRun: 0,
+                  endRun: 2,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const paragraph = bodyParagraph(written);
+    expect(childTags(paragraph)).toEqual([
+      "w:commentRangeStart",
+      "w:r",
+      "w:r",
+      "w:commentRangeEnd",
+    ]);
+    expect(
+      attr(childrenWithTag(paragraph, "w:commentRangeStart")[0]!, "w:id"),
+    ).toBe("4");
+    expect(
+      attr(childrenWithTag(paragraph, "w:commentRangeEnd")[0]!, "w:id"),
+    ).toBe("4");
+  });
+});
+
+describe("buildDocxPackageFromContent: table grid and vertical-merge arithmetic", () => {
+  interface TableFixtureCell {
+    blocks: ContentBlock[];
+    rowSpan?: number;
+    colSpan?: number;
+    borders?: Extract<
+      ContentBlock,
+      { kind: "table" }
+    >["rows"][number]["cells"][number]["borders"];
+  }
+
+  interface TableFixtureRow {
+    cells: TableFixtureCell[];
+    heightPt?: number;
+  }
+
+  function tableOf(
+    rows: TableFixtureRow[],
+    columnWidthsPt: number[] = [100, 100],
+  ): Extract<ContentBlock, { kind: "table" }> {
+    return { kind: "table", rows, columnWidthsPt };
+  }
+
+  function writtenTable(written: Package): XmlElement {
+    const documentRoot = rootElement(written.parts["word/document.xml"]);
+    const table =
+      documentRoot === undefined
+        ? undefined
+        : elementsWithTag([documentRoot], "w:tbl")[0];
+    if (table === undefined) {
+      throw new Error("expected a table");
+    }
+    return table;
+  }
+
+  function cellShapes(
+    written: Package,
+  ): { span: string | undefined; merge: string | undefined }[][] {
+    const rows = elementsWithTag([writtenTable(written)], "w:tr");
+    return rows.map((row) =>
+      elementsWithTag([row], "w:tc").map((cell) => {
+        const tcPr = childrenWithTag(cell, "w:tcPr")[0];
+        if (tcPr === undefined) {
+          return { span: undefined, merge: undefined };
+        }
+        const gridSpan = childrenWithTag(tcPr, "w:gridSpan")[0];
+        const vMerge = childrenWithTag(tcPr, "w:vMerge")[0];
+        return {
+          span: gridSpan === undefined ? undefined : attr(gridSpan, "w:val"),
+          merge:
+            vMerge === undefined
+              ? undefined
+              : (attr(vMerge, "w:val") ?? "(bare)"),
+        };
+      }),
+    );
+  }
+
+  it("restarts a vertical merge's anchor, continues its covered rows, and treats the row after the merge as a fresh anchor", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            tableOf([
+              { cells: [{ blocks: [], rowSpan: 2 }, { blocks: [] }] },
+              { cells: [{ blocks: [] }, { blocks: [] }] },
+              { cells: [{ blocks: [] }, { blocks: [] }] },
+            ]),
+          ],
+        },
+      ],
+    });
+    expect(cellShapes(written)).toEqual([
+      [
+        { merge: "restart", span: undefined },
+        { merge: undefined, span: undefined },
+      ],
+      [
+        { merge: "(bare)", span: undefined },
+        { merge: undefined, span: undefined },
+      ],
+      [
+        { merge: undefined, span: undefined },
+        { merge: undefined, span: undefined },
+      ],
+    ]);
+  });
+
+  it("continues both columns of two side-by-side vertical merges at their own grid columns", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            tableOf([
+              {
+                cells: [
+                  { blocks: [], rowSpan: 2 },
+                  { blocks: [], rowSpan: 2 },
+                ],
+              },
+              { cells: [{ blocks: [] }, { blocks: [] }] },
+            ]),
+          ],
+        },
+      ],
+    });
+    expect(cellShapes(written)).toEqual([
+      [
+        { merge: "restart", span: undefined },
+        { merge: "restart", span: undefined },
+      ],
+      [
+        { merge: "(bare)", span: undefined },
+        { merge: "(bare)", span: undefined },
+      ],
+    ]);
+  });
+
+  it("continues a merge at the grid column a leading colSpan anchor skips past", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            tableOf(
+              [
+                {
+                  cells: [
+                    { blocks: [], colSpan: 2, rowSpan: 2 },
+                    { blocks: [], rowSpan: 2 },
+                  ],
+                },
+                { cells: [{ blocks: [] }, { blocks: [] }] },
+              ],
+              [100, 100, 100],
+            ),
+          ],
+        },
+      ],
+    });
+    expect(cellShapes(written)).toEqual([
+      [
+        { merge: "restart", span: "2" },
+        { merge: "restart", span: undefined },
+      ],
+      [
+        { merge: "(bare)", span: "2" },
+        { merge: "(bare)", span: undefined },
+      ],
+    ]);
+  });
+
+  it("writes each of a cell's four border edges under its own side tag", () => {
+    const border = (style?: "solid" | "dashed" | "dotted" | "double") => ({
+      style,
+      widthPt: 1,
+      color: { red: 17, green: 34, blue: 51 },
+    });
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            tableOf([
+              {
+                cells: [
+                  {
+                    blocks: [],
+                    borders: {
+                      top: border(),
+                      left: border("dashed"),
+                      bottom: border("dotted"),
+                      right: border("double"),
+                    },
+                  },
+                ],
+              },
+            ]),
+          ],
+        },
+      ],
+    });
+    const edges = elementsWithTag([writtenTable(written)], "w:tcBorders");
+    expect(edges).toHaveLength(1);
+    expect(
+      edges[0]!.children
+        .filter((child): child is XmlElement => child.type === "element")
+        .map((child) => [child.tag, attr(child, "w:val"), attr(child, "w:sz")]),
+    ).toEqual([
+      ["w:top", "single", "8"],
+      ["w:left", "dashed", "8"],
+      ["w:bottom", "dotted", "8"],
+      ["w:right", "double", "8"],
+    ]);
+  });
+
+  it("writes a row's own height in the trPr/trHeight spelling and the grid's column widths in twips", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            tableOf([{ cells: [{ blocks: [] }], heightPt: 30 }], [72, 144]),
+          ],
+        },
+      ],
+    });
+    const table = writtenTable(written);
+    const row = elementsWithTag([table], "w:tr")[0]!;
+    const trPr = childrenWithTag(row, "w:trPr")[0]!;
+    expect(attr(childrenWithTag(trPr, "w:trHeight")[0]!, "w:val")).toBe("600");
+    const grid = childrenWithTag(table, "w:tblGrid")[0]!;
+    expect(
+      elementsWithTag([grid], "w:gridCol").map((col) => attr(col, "w:w")),
+    ).toEqual(["1440", "2880"]);
+  });
+});
+
+describe("buildDocxPackageFromContent: tracked-change paragraph marks and ids", () => {
+  function bodyParagraphs(written: Package): XmlElement[] {
+    const documentRoot = rootElement(written.parts["word/document.xml"]);
+    const body =
+      documentRoot === undefined
+        ? undefined
+        : childrenWithTag(documentRoot, "w:body")[0];
+    if (body === undefined) {
+      throw new Error("expected body");
+    }
+    return body.children.filter(
+      (child): child is XmlElement =>
+        child.type === "element" && child.tag === "w:p",
+    );
+  }
+
+  const insertion = {
+    kind: "provenance" as const,
+    change: "insertion" as const,
+    author: "Editor",
+    dateIso: "2026-09-16T10:00:00Z",
+  };
+
+  it("marks both the paragraph mark and the runs of every paragraph in a tracked-change extent, minting one id per element", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            { kind: "constructStart", descriptor: insertion },
+            { kind: "paragraph", runs: [{ text: "first" }] },
+            { kind: "paragraph", runs: [{ text: "second" }] },
+            { kind: "constructEnd" },
+          ],
+        },
+      ],
+    });
+    const paragraphs = bodyParagraphs(written);
+    expect(paragraphs).toHaveLength(2);
+    const ids: string[] = [];
+    for (const paragraph of paragraphs) {
+      const pPr = childrenWithTag(paragraph, "w:pPr")[0]!;
+      const rPr = childrenWithTag(pPr, "w:rPr")[0]!;
+      const markChange = elementsWithTag([rPr], "w:ins")[0]!;
+      expect(attr(markChange, "w:author")).toBe("Editor");
+      expect(attr(markChange, "w:date")).toBe("2026-09-16T10:00:00Z");
+      ids.push(attr(markChange, "w:id") ?? "");
+      const runWrapper = childrenWithTag(paragraph, "w:ins")[0]!;
+      expect(attr(runWrapper, "w:author")).toBe("Editor");
+      ids.push(attr(runWrapper, "w:id") ?? "");
+    }
+    expect(ids).toEqual(["1", "2", "3", "4"]);
+  });
+
+  it("gives a tracked paragraph with no other properties an empty pPr carrying only the change", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            { kind: "constructStart", descriptor: insertion },
+            { kind: "paragraph", runs: [{ text: "bare" }] },
+            { kind: "constructEnd" },
+          ],
+        },
+      ],
+    });
+    const paragraph = bodyParagraphs(written)[0]!;
+    const pPr = childrenWithTag(paragraph, "w:pPr")[0]!;
+    expect(
+      pPr.children
+        .filter((child): child is XmlElement => child.type === "element")
+        .map((child) => child.tag),
+    ).toEqual(["w:rPr"]);
+  });
+
+  it("falls back to the unknown author spelling when a change carries none, and omits w:date when there is no date", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            {
+              kind: "constructStart",
+              descriptor: {
+                ...insertion,
+                author: undefined,
+                dateIso: undefined,
+              },
+            },
+            { kind: "paragraph", runs: [{ text: "anon" }] },
+            { kind: "constructEnd" },
+          ],
+        },
+      ],
+    });
+    const paragraph = bodyParagraphs(written)[0]!;
+    const wrapper = childrenWithTag(paragraph, "w:ins")[0]!;
+    expect(attr(wrapper, "w:author")).toBe("Unknown");
+    expect(
+      wrapper.attributes.find((attribute) => attribute.name === "w:date"),
+    ).toBeUndefined();
+  });
+
+  it("writes a moveFrom change under its own tag and leaves a formatChange extent's content unwrapped", () => {
+    const moveWritten = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            {
+              kind: "constructStart",
+              descriptor: { ...insertion, change: "moveFrom" },
+            },
+            { kind: "paragraph", runs: [{ text: "moved" }] },
+            { kind: "constructEnd" },
+          ],
+        },
+      ],
+    });
+    const moveParagraph = bodyParagraphs(moveWritten)[0]!;
+    expect(childrenWithTag(moveParagraph, "w:moveFrom")).toHaveLength(1);
+
+    const formatWritten = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            {
+              kind: "constructStart",
+              descriptor: { ...insertion, change: "formatChange" },
+            },
+            {
+              kind: "paragraph",
+              styleId: "Styled",
+              runs: [{ text: "reformatted" }],
+            },
+            { kind: "constructEnd" },
+          ],
+        },
+      ],
+    });
+    const formatParagraph = bodyParagraphs(formatWritten)[0]!;
+    expect(childrenWithTag(formatParagraph, "w:ins")).toHaveLength(0);
+    expect(childrenWithTag(formatParagraph, "w:del")).toHaveLength(0);
+    const pPr = childrenWithTag(formatParagraph, "w:pPr")[0]!;
+    expect(
+      elementsWithTag([pPr], "w:pStyle").map((style) => attr(style, "w:val")),
+    ).toEqual(["Styled"]);
+    expect(childrenWithTag(pPr, "w:rPr")).toHaveLength(0);
+  });
+
+  it("deletes a tracked deletion's runs through the delText spelling", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            {
+              kind: "constructStart",
+              descriptor: { ...insertion, change: "deletion" },
+            },
+            { kind: "paragraph", runs: [{ text: "gone" }] },
+            { kind: "constructEnd" },
+          ],
+        },
+      ],
+    });
+    const paragraph = bodyParagraphs(written)[0]!;
+    const wrapper = childrenWithTag(paragraph, "w:del")[0]!;
+    expect(
+      elementsWithTag([wrapper], "w:delText").map((t) =>
+        t.children
+          .map((child) => (child.type === "text" ? child.value : ""))
+          .join(""),
+      ),
+    ).toEqual(["gone"]);
+  });
+});
+
+describe("buildDocxPackageFromContent: content-control property edges", () => {
+  function sdtProperties(written: Package): XmlElement[] {
+    const documentRoot = rootElement(written.parts["word/document.xml"]);
+    return elementsWithTag(
+      documentRoot === undefined ? [] : [documentRoot],
+      "w:sdtPr",
+    );
+  }
+
+  function controlBlocks(descriptor: ConstructDescriptor): ContentBlock[] {
+    return [
+      { kind: "constructStart", descriptor },
+      { kind: "paragraph", runs: [{ text: "inside" }] },
+      { kind: "constructEnd" },
+    ];
+  }
+
+  it("writes the alias, tag, and each lock spelling under their own elements", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            ...controlBlocks({
+              kind: "contentControl",
+              controlType: "richText",
+              alias: "Named",
+              tag: "tagged",
+              lock: "both",
+            }),
+          ],
+        },
+      ],
+    });
+    const sdtPr = sdtProperties(written)[0]!;
+    expect(
+      sdtPr.children
+        .filter((child): child is XmlElement => child.type === "element")
+        .map((child) => [child.tag, attr(child, "w:val")]),
+    ).toEqual([
+      ["w:alias", "Named"],
+      ["w:tag", "tagged"],
+      ["w:lock", "sdtContentLocked"],
+      ["w:richText", undefined],
+    ]);
+  });
+
+  it("spells an index control as the table-of-contents docPartObj gallery with its unique marker", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            ...controlBlocks({ kind: "contentControl", controlType: "index" }),
+          ],
+        },
+      ],
+    });
+    const sdtPr = sdtProperties(written)[0]!;
+    const docPartObj = childrenWithTag(sdtPr, "w:docPartObj")[0]!;
+    expect(
+      elementsWithTag([docPartObj], "w:docPartGallery").map((gallery) =>
+        attr(gallery, "w:val"),
+      ),
+    ).toEqual(["Table of Contents"]);
+    expect(childrenWithTag(docPartObj, "w:docPartUnique")).toHaveLength(1);
+  });
+
+  it("spells a combo box under its own tag with the same list items a drop-down carries", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            ...controlBlocks({
+              kind: "contentControl",
+              controlType: "comboBox",
+              options: ["alpha", "beta"],
+            }),
+          ],
+        },
+      ],
+    });
+    const sdtPr = sdtProperties(written)[0]!;
+    const comboBox = childrenWithTag(sdtPr, "w:comboBox")[0]!;
+    expect(comboBox).toBeDefined();
+    expect(
+      elementsWithTag([comboBox], "w:listItem").map((item) => [
+        attr(item, "w:displayText"),
+        attr(item, "w:value"),
+      ]),
+    ).toEqual([
+      ["alpha", "alpha"],
+      ["beta", "beta"],
+    ]);
+  });
+
+  it("writes a date control's full date when carried and no attribute when absent", () => {
+    const withDate = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            ...controlBlocks({
+              kind: "contentControl",
+              controlType: "date",
+              value: "2026-09-16T09:00:00Z",
+            }),
+          ],
+        },
+      ],
+    });
+    const dateElement = childrenWithTag(
+      sdtProperties(withDate)[0]!,
+      "w:date",
+    )[0]!;
+    expect(attr(dateElement, "w:fullDate")).toBe("2026-09-16T09:00:00Z");
+    const withoutDate = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            ...controlBlocks({ kind: "contentControl", controlType: "date" }),
+          ],
+        },
+      ],
+    });
+    const bareDate = childrenWithTag(
+      sdtProperties(withoutDate)[0]!,
+      "w:date",
+    )[0]!;
+    expect(bareDate.attributes).toEqual([]);
+  });
+
+  it("re-emits a degraded gallery's docPartObj residue in place of the richText element and refuses residue that is not XML", () => {
+    const galleryResidue = `<w:docPartObj><w:docPartGallery w:val="Table of Contents"/><w:docPartUnique/></w:docPartObj>`;
+    const restored = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            ...controlBlocks({
+              kind: "contentControl",
+              controlType: "richText",
+              source: { format: "docx", xml: galleryResidue },
+            }),
+          ],
+        },
+      ],
+    });
+    const sdtPr = sdtProperties(restored)[0]!;
+    const docPartObj = childrenWithTag(sdtPr, "w:docPartObj")[0]!;
+    expect(
+      elementsWithTag([docPartObj], "w:docPartGallery").map((gallery) =>
+        attr(gallery, "w:val"),
+      ),
+    ).toEqual(["Table of Contents"]);
+
+    expect(() =>
+      buildDocxPackageFromContent({
+        sections: [
+          {
+            ...emptyBodySection(),
+            blocks: [
+              ...controlBlocks({
+                kind: "contentControl",
+                controlType: "richText",
+                source: { format: "docx", xml: "not xml <" },
+              }),
+            ],
+          },
+        ],
+      }),
+    ).toThrow(/carries docx residue that does not parse as XML: not xml </);
+  });
+
+  it("keeps the semantic type element for residue that is not a restorable gallery shape", () => {
+    const build = (xml: string) =>
+      buildDocxPackageFromContent({
+        sections: [
+          {
+            ...emptyBodySection(),
+            blocks: [
+              ...controlBlocks({
+                kind: "contentControl",
+                controlType: "richText",
+                source: { format: "docx", xml },
+              }),
+            ],
+          },
+        ],
+      });
+    // Two top-level nodes: not the single element a restoration requires.
+    const twoNodes = build("<w:docPartObj/><w:docPartObj/>");
+    expect(
+      sdtProperties(twoNodes)[0]!
+        .children.filter(
+          (child): child is XmlElement => child.type === "element",
+        )
+        .map((child) => child.tag),
+    ).toEqual(["w:richText"]);
+    // One element of the wrong tag: same fallback.
+    const wrongTag = build("<w:alias/>");
+    expect(
+      sdtProperties(wrongTag)[0]!
+        .children.filter(
+          (child): child is XmlElement => child.type === "element",
+        )
+        .map((child) => child.tag),
+    ).toEqual(["w:richText"]);
+  });
+
+  it("ignores docx residue on a control that is not richText, since the gate is the mint condition", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            ...controlBlocks({
+              kind: "contentControl",
+              controlType: "plainText",
+              source: {
+                format: "docx",
+                xml: '<w:docPartObj><w:docPartGallery w:val="Table of Contents"/></w:docPartObj>',
+              },
+            }),
+          ],
+        },
+      ],
+    });
+    expect(
+      sdtProperties(written)[0]!
+        .children.filter(
+          (child): child is XmlElement => child.type === "element",
+        )
+        .map((child) => child.tag),
+    ).toEqual(["w:text"]);
+  });
+});
+
+describe("buildDocxPackageFromContent: flow assembly and section breaks", () => {
+  function bodyElements(written: Package): { tag: string; summary: string }[] {
+    const documentRoot = rootElement(written.parts["word/document.xml"]);
+    const body =
+      documentRoot === undefined
+        ? undefined
+        : childrenWithTag(documentRoot, "w:body")[0];
+    if (body === undefined) {
+      throw new Error("expected body");
+    }
+    return body.children
+      .filter((child): child is XmlElement => child.type === "element")
+      .map((child) => {
+        if (child.tag === "w:p") {
+          const pPr = childrenWithTag(child, "w:pPr")[0];
+          const breakBefore =
+            pPr !== undefined &&
+            childrenWithTag(pPr, "w:pageBreakBefore").length > 0;
+          const hasSectPr =
+            pPr !== undefined && childrenWithTag(pPr, "w:sectPr").length > 0;
+          const runCount = childrenWithTag(child, "w:r").length;
+          const objectCount = elementsWithTag([child], "w:object").length;
+          const drawingCount = elementsWithTag([child], "w:drawing").length;
+          return {
+            tag: "w:p",
+            summary: `p${breakBefore ? "+break" : ""}${hasSectPr ? "+sectPr" : ""}:r${runCount}:o${objectCount}:d${drawingCount}`,
+          };
+        }
+        return { tag: child.tag, summary: "" };
+      });
+  }
+
+  it("clears the pending page break once the table before the next paragraph has carried it", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            { kind: "pageBreak" },
+            {
+              kind: "table",
+              rows: [{ cells: [{ blocks: [] }] }],
+              columnWidthsPt: [100],
+            },
+            { kind: "paragraph", runs: [{ text: "after" }] },
+          ],
+        },
+      ],
+    });
+    expect(bodyElements(written)).toEqual([
+      { tag: "w:p", summary: "p+break:r0:o0:d0" },
+      { tag: "w:tbl", summary: "" },
+      { tag: "w:p", summary: "p:r1:o0:d0" },
+      { tag: "w:sectPr", summary: "" },
+    ]);
+  });
+
+  it("materialises a pending break before an embedded object, then places the object inside that break paragraph", () => {
+    const nested = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [],
+    } as const;
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            { kind: "pageBreak" },
+            {
+              kind: "embeddedObject",
+              objectKind: "wordprocessing",
+              document: nested,
+              frame: { widthPt: 100, heightPt: 60 },
+            },
+          ],
+        },
+      ],
+    });
+    expect(bodyElements(written)).toEqual([
+      { tag: "w:p", summary: "p+break:r1:o1:d0" },
+      { tag: "w:sectPr", summary: "" },
+    ]);
+  });
+
+  it("appends an embedded object with no trailing empty run to its preceding paragraph, and one with no paragraph at all to a fresh paragraph", () => {
+    const nested = (text: string) =>
+      ({
+        kind: "wordprocessing",
+        metadata: {},
+        sections: [
+          {
+            pageSize: { widthPt: 612, heightPt: 792 },
+            margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+            blocks: [{ kind: "paragraph", runs: [{ text }] }],
+          },
+        ],
+      }) as const;
+    const object = (text: string) =>
+      ({
+        kind: "embeddedObject",
+        objectKind: "wordprocessing",
+        document: nested(text),
+        frame: { widthPt: 100, heightPt: 60 },
+      }) as const;
+    const attached = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            { kind: "paragraph", runs: [{ text: "host" }] },
+            object("first"),
+          ],
+        },
+      ],
+    });
+    expect(bodyElements(attached)).toEqual([
+      { tag: "w:p", summary: "p:r2:o1:d0" },
+      { tag: "w:sectPr", summary: "" },
+    ]);
+    const fresh = buildDocxPackageFromContent({
+      sections: [{ ...emptyBodySection(), blocks: [object("second")] }],
+    });
+    expect(bodyElements(fresh)).toEqual([
+      { tag: "w:p", summary: "p:r1:o1:d0" },
+      { tag: "w:sectPr", summary: "" },
+    ]);
+  });
+
+  it("collects a paragraph styleId referenced only inside a table cell into the styles part", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            {
+              kind: "table",
+              rows: [
+                {
+                  cells: [
+                    {
+                      blocks: [
+                        {
+                          kind: "paragraph",
+                          styleId: "CellStyle",
+                          runs: [{ text: "cell" }],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+              columnWidthsPt: [100],
+            },
+          ],
+        },
+      ],
+    });
+    const stylesRoot = rootElement(written.parts["word/styles.xml"]);
+    expect(
+      stylesRoot === undefined
+        ? []
+        : elementsWithTag([stylesRoot], "w:style").map((style) =>
+            attr(style, "w:styleId"),
+          ),
+    ).toEqual(["Normal", "DefaultParagraphFont", "CellStyle"]);
+  });
+
+  it("writes a block-scoped comment extent as the same-id range pair around its paragraphs", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            {
+              kind: "constructStart",
+              descriptor: { kind: "anchor", anchorType: "comment", name: "7" },
+            },
+            { kind: "paragraph", runs: [{ text: "commented" }] },
+            { kind: "constructEnd" },
+          ],
+        },
+      ],
+    });
+    const documentRoot = rootElement(written.parts["word/document.xml"]);
+    const body =
+      documentRoot === undefined ? [] : childrenWithTag(documentRoot, "w:body");
+    const bodyChildren =
+      body[0] === undefined
+        ? []
+        : body[0].children.filter(
+            (child): child is XmlElement => child.type === "element",
+          );
+    expect(bodyChildren.map((child) => child.tag)).toEqual([
+      "w:commentRangeStart",
+      "w:p",
+      "w:commentRangeEnd",
+      "w:sectPr",
+    ]);
+    expect(attr(bodyChildren[0]!, "w:id")).toBe("7");
+    const rangeEnd = bodyChildren.find(
+      (child) => child.tag === "w:commentRangeEnd",
+    )!;
+    expect(attr(rangeEnd, "w:id")).toBe("7");
+  });
+
+  it("places a field's characters inside the sdt-wrapped paragraph its extent contains", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            {
+              kind: "constructStart",
+              descriptor: { kind: "field", instruction: "f" },
+            },
+            {
+              kind: "constructStart",
+              descriptor: { kind: "contentControl", controlType: "richText" },
+            },
+            { kind: "paragraph", runs: [{ text: "inner" }] },
+            { kind: "constructEnd" },
+            { kind: "constructEnd" },
+          ],
+        },
+      ],
+    });
+    const documentRoot = rootElement(written.parts["word/document.xml"]);
+    const body =
+      documentRoot === undefined
+        ? undefined
+        : childrenWithTag(documentRoot, "w:body")[0];
+    const sdt =
+      body === undefined ? undefined : childrenWithTag(body, "w:sdt")[0];
+    if (sdt === undefined) {
+      throw new Error("expected an sdt");
+    }
+    const paragraph = elementsWithTag([sdt], "w:p")[0]!;
+    const described = paragraph.children
+      .filter((child): child is XmlElement => child.type === "element")
+      .map((child) => {
+        if (child.tag !== "w:r") {
+          return child.tag;
+        }
+        const fldChar = childrenWithTag(child, "w:fldChar")[0];
+        if (fldChar !== undefined) {
+          return `fld:${attr(fldChar, "w:fldCharType")}`;
+        }
+        if (childrenWithTag(child, "w:instrText").length > 0) {
+          return "instr";
+        }
+        return "run";
+      });
+    expect(described).toEqual([
+      "fld:begin",
+      "instr",
+      "fld:separate",
+      "run",
+      "fld:end",
+    ]);
+  });
+
+  it("wraps a field extent with no paragraph in its own minted opening and closing paragraphs", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            {
+              kind: "constructStart",
+              descriptor: { kind: "field", instruction: "empty" },
+            },
+            { kind: "constructEnd" },
+          ],
+        },
+      ],
+    });
+    const described = bodyElements(written);
+    expect(described).toEqual([
+      { tag: "w:p", summary: "p:r3:o0:d0" },
+      { tag: "w:p", summary: "p:r1:o0:d0" },
+      { tag: "w:sectPr", summary: "" },
+    ]);
+  });
+
+  it("keeps a section break's fldChar-free paragraph choice away from a trailing table's cell paragraphs", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            { kind: "paragraph", runs: [{ text: "last of section one" }] },
+            {
+              kind: "table",
+              rows: [{ cells: [{ blocks: [] }] }],
+              columnWidthsPt: [100],
+            },
+          ],
+        },
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [{ kind: "paragraph", runs: [{ text: "section two" }] }],
+        },
+      ],
+    });
+    const documentRoot = rootElement(written.parts["word/document.xml"]);
+    const body =
+      documentRoot === undefined
+        ? undefined
+        : childrenWithTag(documentRoot, "w:body")[0];
+    if (body === undefined) {
+      throw new Error("expected body");
+    }
+    // The first section's sectPr rides the paragraph before the table, never a cell's paragraph inside it; the final section's sectPr is a direct body child.
+    const table = childrenWithTag(body, "w:tbl")[0]!;
+    expect(elementsWithTag([table], "w:sectPr")).toEqual([]);
+    const paragraphs = body.children.filter(
+      (child): child is XmlElement =>
+        child.type === "element" && child.tag === "w:p",
+    );
+    const firstParagraphPPr = childrenWithTag(paragraphs[0]!, "w:pPr")[0]!;
+    expect(childrenWithTag(firstParagraphPPr, "w:sectPr")).toHaveLength(1);
+    const directSectPr = childrenWithTag(body, "w:sectPr");
+    expect(directSectPr).toHaveLength(1);
+  });
+
+  it("appends the section break into a closing paragraph's existing properties and mints a pPr for one carrying none", () => {
+    const styledSection = (
+      paragraphBlock: ContentBlock,
+    ): ReturnType<typeof buildDocxPackageFromContent> extends never
+      ? never
+      : Package => {
+      return buildDocxPackageFromContent({
+        sections: [
+          {
+            pageSize: { widthPt: 612, heightPt: 792 },
+            margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+            blocks: [paragraphBlock],
+          },
+          {
+            pageSize: { widthPt: 612, heightPt: 792 },
+            margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+            blocks: [{ kind: "paragraph", runs: [{ text: "tail" }] }],
+          },
+        ],
+      });
+    };
+    const styled = styledSection({
+      kind: "paragraph",
+      styleId: "Tail",
+      runs: [{ text: "closing" }],
+    });
+    const styledRoot = rootElement(styled.parts["word/document.xml"]);
+    const styledBody =
+      styledRoot === undefined
+        ? undefined
+        : childrenWithTag(styledRoot, "w:body")[0];
+    const styledParagraph =
+      styledBody === undefined
+        ? undefined
+        : styledBody.children.find(
+            (child): child is XmlElement =>
+              child.type === "element" && child.tag === "w:p",
+          );
+    if (styledParagraph === undefined) {
+      throw new Error("expected a paragraph");
+    }
+    const styledPPr = childrenWithTag(styledParagraph, "w:pPr")[0]!;
+    expect(
+      styledPPr.children
+        .filter((child): child is XmlElement => child.type === "element")
+        .map((child) => child.tag),
+    ).toEqual(["w:pStyle", "w:sectPr"]);
+
+    const plain = styledSection({
+      kind: "paragraph",
+      runs: [{ text: "closing" }],
+    });
+    const plainRoot = rootElement(plain.parts["word/document.xml"]);
+    const plainBody =
+      plainRoot === undefined
+        ? undefined
+        : childrenWithTag(plainRoot, "w:body")[0];
+    const plainParagraph =
+      plainBody === undefined
+        ? undefined
+        : plainBody.children.find(
+            (child): child is XmlElement =>
+              child.type === "element" && child.tag === "w:p",
+          );
+    if (plainParagraph === undefined) {
+      throw new Error("expected a paragraph");
+    }
+    const plainPPr = childrenWithTag(plainParagraph, "w:pPr")[0]!;
+    expect(
+      plainPPr.children
+        .filter((child): child is XmlElement => child.type === "element")
+        .map((child) => child.tag),
+    ).toEqual(["w:sectPr"]);
+  });
+
+  it("gives a mid-document section with no paragraph of its own an empty paragraph carrying the break", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "table",
+              rows: [{ cells: [{ blocks: [] }] }],
+              columnWidthsPt: [100],
+            },
+          ],
+        },
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [{ kind: "paragraph", runs: [{ text: "after" }] }],
+        },
+      ],
+    });
+    const documentRoot = rootElement(written.parts["word/document.xml"]);
+    const body =
+      documentRoot === undefined
+        ? undefined
+        : childrenWithTag(documentRoot, "w:body")[0];
+    if (body === undefined) {
+      throw new Error("expected body");
+    }
+    const children = body.children.filter(
+      (child): child is XmlElement => child.type === "element",
+    );
+    expect(children.map((child) => child.tag)).toEqual([
+      "w:tbl",
+      "w:p",
+      "w:p",
+      "w:sectPr",
+    ]);
+    const empty = children[1]!;
+    expect(childrenWithTag(empty, "w:r")).toHaveLength(0);
+    const pPr = childrenWithTag(empty, "w:pPr")[0]!;
+    expect(childrenWithTag(pPr, "w:sectPr")).toHaveLength(1);
+  });
+});
+
+describe("buildDocxPackageFromContent: part scaffolding XML exactness", () => {
+  function partNodes(written: Package, name: string): XmlNode[] {
+    const part = written.parts[name];
+    if (part?.kind !== "xml") {
+      throw new Error(`expected xml part ${name}`);
+    }
+    return part.nodes;
+  }
+
+  function declarationOf(
+    written: Package,
+    name: string,
+  ): { name: string; value: string }[] {
+    const declaration = partNodes(written, name)[0];
+    if (declaration?.type !== "declaration") {
+      throw new Error(`expected a declaration in ${name}`);
+    }
+    return declaration.attributes;
+  }
+
+  it("leads every xml part with the standalone UTF-8 declaration", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }],
+        },
+      ],
+    });
+    expect(declarationOf(written, "word/document.xml")).toEqual([
+      { name: "version", value: "1.0" },
+      { name: "encoding", value: "UTF-8" },
+      { name: "standalone", value: "yes" },
+    ]);
+    expect(declarationOf(written, "word/styles.xml")).toEqual([
+      { name: "version", value: "1.0" },
+      { name: "encoding", value: "UTF-8" },
+      { name: "standalone", value: "yes" },
+    ]);
+  });
+
+  it("declares the document root's namespace set and ignorable extensions exactly, with the body as its one child", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [{ ...emptyBodySection(), blocks: [] }],
+    });
+    const root = rootElement(written.parts["word/document.xml"]);
+    if (root === undefined) {
+      throw new Error("expected document root");
+    }
+    expect(root.tag).toBe("w:document");
+    expect(attr(root, "mc:Ignorable")).toBe("w14 w15");
+    expect(attr(root, "xmlns:w")).toBe(
+      "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+    );
+    expect(attr(root, "xmlns:r")).toBe(
+      "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+    );
+    expect(attr(root, "xmlns:w14")).toBe(
+      "http://schemas.microsoft.com/office/word/2010/wordml",
+    );
+    expect(
+      root.children
+        .filter((child): child is XmlElement => child.type === "element")
+        .map((child) => child.tag),
+    ).toEqual(["w:body"]);
+  });
+
+  it("writes each header and footer part under its own root tag and namespace set, and registers its document relationship", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [{ ...emptyBodySection(), blocks: [] }],
+      headerFooterParts: [
+        {
+          path: "word/header1.xml",
+          kind: "header",
+          blocks: [{ kind: "paragraph", runs: [{ text: "head" }] }],
+        },
+        {
+          path: "word/footer2.xml",
+          kind: "footer",
+          blocks: [{ kind: "paragraph", runs: [{ text: "foot" }] }],
+        },
+      ],
+    });
+    const headerRoot = rootElement(written.parts["word/header1.xml"]);
+    const footerRoot = rootElement(written.parts["word/footer2.xml"]);
+    if (headerRoot === undefined || footerRoot === undefined) {
+      throw new Error("expected header and footer parts");
+    }
+    expect(headerRoot.tag).toBe("w:hdr");
+    expect(footerRoot.tag).toBe("w:ftr");
+    for (const partRoot of [headerRoot, footerRoot]) {
+      expect(attr(partRoot, "xmlns:w")).toBe(
+        "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+      );
+      expect(attr(partRoot, "xmlns:pic")).toBe(
+        "http://schemas.openxmlformats.org/drawingml/2006/picture",
+      );
+      expect(attr(partRoot, "mc:Ignorable")).toBe("w14 w15");
+    }
+    const relsRoot = rootElement(written.parts["word/_rels/document.xml.rels"]);
+    const headerFooterRels =
+      relsRoot === undefined
+        ? []
+        : elementsWithTag([relsRoot], "Relationship").map((rel) => ({
+            type: attr(rel, "Type") ?? "",
+            target: attr(rel, "Target") ?? "",
+          }));
+    expect(headerFooterRels).toContainEqual({
+      type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header",
+      target: "header1.xml",
+    });
+    expect(headerFooterRels).toContainEqual({
+      type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer",
+      target: "footer2.xml",
+    });
+  });
+
+  it("emits a header-only image's media file, part-local relationships, and content-type default", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [{ ...emptyBodySection(), blocks: [] }],
+      headerFooterParts: [
+        {
+          path: "word/header1.xml",
+          kind: "header",
+          blocks: [
+            {
+              kind: "image",
+              format: "png",
+              base64: TINY_PNG_BASE64,
+              widthPt: 72,
+              heightPt: 36,
+            },
+          ],
+        },
+      ],
+    });
+    expect(Object.keys(written.parts)).toContain("word/media/image1.png");
+    expect(Object.keys(written.parts)).toContain("word/_rels/header1.xml.rels");
+    const headerRels = rootElement(
+      written.parts["word/_rels/header1.xml.rels"],
+    );
+    const imageRels =
+      headerRels === undefined
+        ? []
+        : elementsWithTag([headerRels], "Relationship").filter(
+            (rel) => attr(rel, "Type") === IMAGE_REL,
+          );
+    expect(imageRels).toHaveLength(1);
+    expect(attr(imageRels[0]!, "Target")).toBe("media/image1.png");
+    const typesRoot = rootElement(written.parts["[Content_Types].xml"]);
+    expect(
+      typesRoot === undefined
+        ? []
+        : elementsWithTag([typesRoot], "Default").map((entry) => [
+            attr(entry, "Extension") ?? "",
+            attr(entry, "ContentType") ?? "",
+          ]),
+    ).toContainEqual(["png", "image/png"]);
+  });
+
+  it("writes a comment's author attribute and body paragraph under the comments root", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [{ ...emptyBodySection(), blocks: [] }],
+      comments: [{ id: "1", author: "Reviewer", text: "body text" }],
+    });
+    const commentsRoot = rootElement(written.parts["word/comments.xml"]);
+    if (commentsRoot === undefined) {
+      throw new Error("expected comments part");
+    }
+    const comment = elementsWithTag([commentsRoot], "w:comment")[0]!;
+    expect(attr(comment, "w:author")).toBe("Reviewer");
+    const paragraph = childrenWithTag(comment, "w:p")[0]!;
+    const run = childrenWithTag(paragraph, "w:r")[0]!;
+    expect(
+      elementsWithTag([run], "w:t").map((t) =>
+        t.children
+          .map((child) => (child.type === "text" ? child.value : ""))
+          .join(""),
+      ),
+    ).toEqual(["body text"]);
+  });
+
+  it("writes the footnotes part under its own root, minting successive ids past nothing when none is explicit", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [{ ...emptyBodySection(), blocks: [] }],
+      footnotes: [{ text: "first minted" }, { text: "second minted" }],
+    });
+    const notesRoot = rootElement(written.parts["word/footnotes.xml"]);
+    if (notesRoot === undefined) {
+      throw new Error("expected footnotes part");
+    }
+    expect(notesRoot.tag).toBe("w:footnotes");
+    const entries = elementsWithTag([notesRoot], "w:footnote");
+    expect(entries.map((entry) => attr(entry, "w:id"))).toEqual([
+      "-1",
+      "0",
+      "1",
+      "2",
+    ]);
+    expect(entries.map((entry) => attr(entry, "w:type"))).toEqual([
+      "separator",
+      "continuationSeparator",
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it("writes the created and modified timestamps with the W3CDTF type attribute", () => {
+    const written = buildDocxPackageFromContent({
+      metadata: {
+        createdIso: "2026-09-16T08:00:00Z",
+        modifiedIso: "2026-09-16T09:00:00Z",
+      },
+      sections: [{ ...emptyBodySection(), blocks: [] }],
+    });
+    const coreRoot = rootElement(written.parts["docProps/core.xml"]);
+    if (coreRoot === undefined) {
+      throw new Error("expected core properties part");
+    }
+    const created = elementsWithTag([coreRoot], "dcterms:created")[0]!;
+    expect(attr(created, "xsi:type")).toBe("dcterms:W3CDTF");
+    const modified = elementsWithTag([coreRoot], "dcterms:modified")[0]!;
+    expect(attr(modified, "xsi:type")).toBe("dcterms:W3CDTF");
   });
 });
