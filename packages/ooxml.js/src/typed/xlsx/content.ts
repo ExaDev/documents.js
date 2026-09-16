@@ -181,6 +181,7 @@ function deriveDisplayText(value: ContentCellValue): string {
     case "time":
     case "dateTime":
       return value.value;
+    // This branch is genuinely unreachable through either of this function's own two call sites (both below): the boolean case always passes a value of kind "boolean", and the numeric case always passes whatever resolveNumericValue itself returns, which is one of number/percentage/currency/date/time/dateTime/elapsedTime -- never "empty". It stays here, and its own return value stays untestable, purely because ContentCellValue's declared type still includes "empty" as a member: removing this case would make the switch non-exhaustive over that type and this function would no longer type-check as returning `string` unconditionally. This is the same shape of irreducible gap as localName's own "no colon" branch (comments.ts) -- a case the type system requires but no real call site can ever actually reach.
     case "empty":
       return "";
   }
@@ -480,10 +481,9 @@ function applyCellResidueRules(
     const sqref = attr(rule, "sqref");
     // The regex's own "+" (one-or-more, versus a single whitespace character) is a genuinely irreducible equivalent mutation opportunity here, not merely an untested one: only index [0] of the split result is ever read, and the substring BEFORE the first regex match is identical regardless of how many whitespace characters that first match itself consumes -- \s and \s+ always start matching at the same position, so [0] can never differ between them for any input, only the LATER elements of the split array (never read here) can.
     const firstToken = sqref === undefined ? undefined : sqref.split(/\s+/)[0];
+    // No "firstToken === ''" disjunct: parseRangeReference('') already returns undefined rather than throwing (verified directly against document-schema.js's own implementation), so an empty firstToken already falls through to the identical `range === undefined` outcome this disjunct would have short-circuited to. The `undefined` check alone stays load-bearing: parseRangeReference(undefined) throws, unlike the empty-string case.
     const range =
-      firstToken === undefined || firstToken === ""
-        ? undefined
-        : parseRangeReference(firstToken);
+      firstToken === undefined ? undefined : parseRangeReference(firstToken);
     if (range === undefined) {
       continue;
     }

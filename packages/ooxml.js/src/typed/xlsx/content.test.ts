@@ -1092,6 +1092,7 @@ describe("readXlsxContent: readCellValue's boolean/numeric branch precision (syn
         ]),
       );
       expect(cells[0]?.value).toEqual({ kind: "boolean", value: true });
+      expect(cells[0]?.displayText).toBe("TRUE");
     }
   });
 
