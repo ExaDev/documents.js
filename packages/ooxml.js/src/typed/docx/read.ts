@@ -222,7 +222,8 @@ function readToggle(el: XmlElement | undefined): boolean {
     return false;
   }
   const val = attr(el, "w:val");
-  return val === undefined || (val !== "0" && val !== "false" && val !== "off");
+  // An absent @w:val needs no explicit disjunct: undefined !== "0" (and "false"/"off") are all true, so the conjunction alone already spells "absent means on".
+  return val !== "0" && val !== "false" && val !== "off";
 }
 
 function hasPageBreakBefore(paragraph: XmlElement): boolean {
@@ -624,24 +625,22 @@ function readParagraphRuns(
     formControl: ContentControlDescriptor | undefined;
   }[] = [];
 
+  // `name` is passed in rather than read here because only a bookmark's start half carries one: every other call site passes undefined, so the "which halves have a name" knowledge stays at the call sites instead of as a condition the body re-derives.
   const recordRangeMarkerHalf = (
     node: XmlElement,
     family: RangeMarkerFamily,
     start: boolean,
+    name: string | undefined,
   ): void => {
     const id = attr(node, "w:id");
     if (id === undefined) {
       return;
     }
-    const name = attr(node, "w:name");
     events.halves.push({
       element: node,
       family,
       id,
-      name:
-        start && family === "bookmark" && name !== undefined
-          ? decodeEntities(name)
-          : undefined,
+      name,
       kind: start ? "start" : "end",
       runPosition: runs.length,
     });
@@ -653,16 +652,21 @@ function readParagraphRuns(
       if (child.type !== "element") {
         continue;
       }
-      const anchorType =
+      if (
+        child.tag !== "w:footnoteReference" &&
+        child.tag !== "w:endnoteReference" &&
+        child.tag !== "w:commentReference"
+      ) {
+        continue;
+      }
+      const anchorType: "footnote" | "endnote" | "comment" =
         child.tag === "w:footnoteReference"
           ? "footnote"
           : child.tag === "w:endnoteReference"
             ? "endnote"
-            : child.tag === "w:commentReference"
-              ? "comment"
-              : undefined;
-      const id = anchorType === undefined ? undefined : attr(child, "w:id");
-      if (anchorType !== undefined && id !== undefined) {
+            : "comment";
+      const id = attr(child, "w:id");
+      if (id !== undefined) {
         events.pointAnchors.push({
           descriptor: { kind: "anchor", anchorType, name: id },
           runPosition: runs.length - 1,
@@ -692,7 +696,8 @@ function readParagraphRuns(
             });
           } else if (type === "separate") {
             fieldState = "result";
-          } else if (type === "end") {
+          } else {
+            // fieldCharType returns exactly begin/separate/end/undefined, and undefined returned early above, so this else IS the end case.
             fieldState = "none";
             const open = openFields.pop();
             if (open !== undefined) {
@@ -775,11 +780,16 @@ function readParagraphRuns(
         if (sdtContent !== undefined) {
           walk(sdtContent.children, hyperlinkTarget);
         }
-      } else if (
-        node.tag === "w:bookmarkStart" ||
-        node.tag === "w:bookmarkEnd"
-      ) {
-        recordRangeMarkerHalf(node, "bookmark", node.tag === "w:bookmarkStart");
+      } else if (node.tag === "w:bookmarkStart") {
+        const name = attr(node, "w:name");
+        recordRangeMarkerHalf(
+          node,
+          "bookmark",
+          true,
+          name === undefined ? undefined : decodeEntities(name),
+        );
+      } else if (node.tag === "w:bookmarkEnd") {
+        recordRangeMarkerHalf(node, "bookmark", false, undefined);
       } else if (
         node.tag === "w:commentRangeStart" ||
         node.tag === "w:commentRangeEnd"
@@ -788,6 +798,7 @@ function readParagraphRuns(
           node,
           "comment",
           node.tag === "w:commentRangeStart",
+          undefined,
         );
       }
     }
@@ -797,31 +808,24 @@ function readParagraphRuns(
   return runs;
 }
 
-// A complex field is block-scoped exactly when its begin run is the paragraph's first content-bearing child and its end run the last -- the whole-paragraph shape scanParagraphFields brackets as a marker pair, which this assembly must therefore not also encode as a run extent. A begin or end nested inside a container (w:hyperlink, w:ins) is never a direct child, so it cannot be block-scoped -- and scanParagraphFields, which walks only direct children, never saw it either: the two paths partition the occurrences between them by construction.
+// A complex field is block-scoped exactly when its begin run is the paragraph's first content-bearing child and its end run the last -- the whole-paragraph shape scanParagraphFields brackets as a marker pair, which this assembly must therefore not also encode as a run extent. A begin or end nested inside a container (w:hyperlink, w:ins) is never a direct child, so it cannot be block-scoped -- and scanParagraphFields, which walks only direct children, never saw it either: the two paths partition the occurrences between them by construction. No "found among direct children" guard is needed on the indexOf lookups: the walk that produced this event only reaches a begin through containers that are all themselves content-bearing (w:hyperlink, w:fldSimple, w:ins, w:sdt), so a paragraph with a field event always has a content-bearing direct child and firstContentIndex/lastContentIndex are never -1 here -- an unfound element indexes at -1 and simply fails the equality that follows.
 function isBlockScopedField(
   event: RunFieldEvent,
   index: ParagraphContentIndex,
 ): boolean {
   const begin = index.elements.indexOf(event.beginElement);
   const end = index.elements.indexOf(event.endElement);
-  return (
-    begin !== -1 &&
-    end !== -1 &&
-    begin === index.firstContentIndex &&
-    end === index.lastContentIndex
-  );
+  return begin === index.firstContentIndex && end === index.lastContentIndex;
 }
 
-// A w:fldSimple is block-scoped when it is its paragraph's only content-bearing child -- scanParagraphFields' own test for the simple spelling.
+// A w:fldSimple is block-scoped when it is its paragraph's only content-bearing child -- scanParagraphFields' own test for the simple spelling. The same no-indexOf-guard reasoning as isBlockScopedField applies: a fldSimple the walk saw is either a direct content-bearing child itself or nested inside one.
 function isBlockScopedSimpleField(
   event: RunSimpleFieldEvent,
   index: ParagraphContentIndex,
 ): boolean {
   const position = index.elements.indexOf(event.element);
   return (
-    position !== -1 &&
-    index.firstContentIndex === position &&
-    index.lastContentIndex === position
+    index.firstContentIndex === position && index.lastContentIndex === position
   );
 }
 
@@ -1065,15 +1069,12 @@ function readCellBorderEdge(
   };
 }
 
-// w:left/w:right also accept the RTL-neutral w:start/w:end aliases, mirroring resolveParagraphProperties' own w:ind/@w:left-vs-@w:start handling in styles.ts. Returns undefined (rather than an all-undefined object) when the cell declares no w:tcBorders at all, or declares one with every edge nil/none -- distinguishing "no border information present" from "borders explicitly present but empty" isn't meaningful here, so both collapse to the same absent result.
+// w:left/w:right also accept the RTL-neutral w:start/w:end aliases, mirroring resolveParagraphProperties' own w:ind/@w:left-vs-@w:start handling in styles.ts. Returns undefined (rather than an all-undefined object) when the cell declares no w:tcBorders at all, or declares one with every edge nil/none -- distinguishing "no border information present" from "borders explicitly present but empty" isn't meaningful here, so both collapse to the same absent result (readCellBorderEdge already takes XmlElement | undefined, so an absent w:tcBorders needs no early return of its own: every edge reads undefined and the empty-borders check below returns the same undefined).
 function readCellBorders(
   tcPr: XmlElement | undefined,
 ): ContentCellBorders | undefined {
   const tcBorders =
     tcPr === undefined ? undefined : childrenWithTag(tcPr, "w:tcBorders")[0];
-  if (tcBorders === undefined) {
-    return undefined;
-  }
   const borders: ContentCellBorders = {};
   const left =
     readCellBorderEdge(tcBorders, "w:left") ??
@@ -1104,9 +1105,7 @@ function readParagraphBorders(
 ): ContentParagraphBorders | undefined {
   const pBdr =
     pPr === undefined ? undefined : childrenWithTag(pPr, "w:pBdr")[0];
-  if (pBdr === undefined) {
-    return undefined;
-  }
+  // The same absent-parent reasoning as readCellBorders: an absent w:pBdr needs no early return, every edge reads undefined, and the empty-borders check returns the same undefined.
   const borders: ContentParagraphBorders = {};
   const left = readCellBorderEdge(pBdr, "w:left");
   const right = readCellBorderEdge(pBdr, "w:right");
@@ -1182,7 +1181,7 @@ function readTable(
     tblGrid === undefined
       ? []
       : childrenWithTag(tblGrid, "w:gridCol").map((col) =>
-          twipsToPt(Number(attr(col, "w:w") ?? "0")),
+          twipsToPt(Number(attr(col, "w:w") ?? 0)),
         );
 
   const trs = childrenWithTag(tbl, "w:tr");
@@ -1211,8 +1210,8 @@ function readTable(
       let rowSpan = 1;
       for (let r = rowIndex + 1; r < rawRows.length; r++) {
         const matchIndex = rowColumnIndices[r]!.indexOf(colIndex);
-        const matchCell =
-          matchIndex === -1 ? undefined : rawRows[r]![matchIndex];
+        // Indexing with indexOf's -1 miss already yields undefined, so no ternary is needed -- matchCell is RawCell | undefined either way.
+        const matchCell = rawRows[r]![matchIndex];
         if (!matchCell?.isVMergeContinuation) {
           break;
         }
@@ -1379,17 +1378,16 @@ function recordParagraphRangeMarkers(
       element.tag === "w:commentRangeStart";
     const leading =
       index.firstContentIndex === -1 || position < index.firstContentIndex;
-    const trailing =
-      index.lastContentIndex === -1 || position > index.lastContentIndex;
+    // No "lastContentIndex === -1 ||" shortcut here, mirroring constructs.ts's own isBlockScopedHalf reasoning: position is always >= 0 at this point, so position > -1 is already true whenever lastContentIndex is -1 and the right-hand side covers the empty-paragraph case unaided.
+    const trailing = position > index.lastContentIndex;
     if (start) {
-      const name = attr(element, "w:name");
+      // Only a bookmark's start half carries a @w:name; a comment extent is named by its own w:id, so the name is read for the bookmark tag rather than re-derived from the family.
+      const name =
+        element.tag === "w:bookmarkStart" ? attr(element, "w:name") : undefined;
       state.rangeMarkerEvents.push({
         family,
         id,
-        name:
-          family === "bookmark" && name !== undefined
-            ? decodeEntities(name)
-            : undefined,
+        name: name === undefined ? undefined : decodeEntities(name),
         kind: "start",
         index: leading ? paragraphIndex : endIndex,
         qualified: leading || trailing,
@@ -1584,15 +1582,14 @@ function collectFlowNodes(
     }
     if (node.tag === "w:bookmarkStart" || node.tag === "w:commentRangeStart") {
       const id = attr(node, "w:id");
-      const name = attr(node, "w:name");
+      // Only a bookmark start carries a @w:name; a comment extent is named by its own w:id (mirroring recordParagraphRangeMarkers above).
+      const name =
+        node.tag === "w:bookmarkStart" ? attr(node, "w:name") : undefined;
       if (id !== undefined) {
         state.rangeMarkerEvents.push({
           family: node.tag === "w:bookmarkStart" ? "bookmark" : "comment",
           id,
-          name:
-            node.tag === "w:bookmarkStart" && name !== undefined
-              ? decodeEntities(name)
-              : undefined,
+          name: name === undefined ? undefined : decodeEntities(name),
           kind: "start",
           index: state.blocks.length,
           qualified: true,
