@@ -1,7 +1,7 @@
 import { Box, Text, useInput } from "ink";
 import { useState, type ReactElement } from "react";
 import type { ContentCellValue } from "documents.js";
-import { ListView } from "../../../components/list-view.js";
+import { ListView, selectedColor } from "../../../components/list-view.js";
 import { TextField } from "../../../components/text-field.js";
 import { useNavigationInput } from "../../../keybindings/use-navigation-input.js";
 import { useAppDispatch, useAppState } from "../../../state/context.js";
@@ -86,7 +86,7 @@ export function XlsSheetListScreen(): ReactElement {
         selectedIndex={selectedIndex}
         emptyMessage="This workbook has no sheets yet -- press 'a' to add one."
         renderItem={(row, isSelected) => (
-          <Text color={isSelected ? "cyan" : undefined} inverse={isSelected}>
+          <Text color={selectedColor(isSelected)} inverse={isSelected}>
             {row.name}
           </Text>
         )}

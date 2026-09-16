@@ -1,7 +1,7 @@
 import { Box, Text } from "ink";
 import { useState, type Dispatch, type ReactElement } from "react";
 import type { Box as GeometryBox, ContentStroke } from "documents.js";
-import { ListView } from "../../../components/list-view.js";
+import { ListView, selectedColor } from "../../../components/list-view.js";
 import { useNavigationInput } from "../../../keybindings/use-navigation-input.js";
 import { describeError } from "../../../errors.js";
 import { readInput } from "../../../../runtime/io.js";
@@ -275,7 +275,7 @@ function AddItemFlow(props: {
           selectedIndex={selectedIndex}
           reservedRows={6}
           renderItem={(option, isSelected) => (
-            <Text color={isSelected ? "cyan" : undefined}>
+            <Text color={selectedColor(isSelected)}>
               {isSelected ? "> " : "  "}
               {option.label}
             </Text>
@@ -393,7 +393,7 @@ export function OdgPageDetailScreen(): ReactElement {
         selectedIndex={selectedIndex}
         emptyMessage="No items yet -- press 'a' to add one"
         renderItem={(row, isSelected) => (
-          <Text color={isSelected ? "cyan" : undefined}>
+          <Text color={selectedColor(isSelected)}>
             {isSelected ? "> " : "  "}
             {describeItem(row.item)}
           </Text>

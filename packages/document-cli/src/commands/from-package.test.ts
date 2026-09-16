@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   createDocx,
+  createOdg,
   createOds,
   decodeDocumentPackage,
   openDocx,
@@ -256,6 +257,203 @@ describe("from-package", () => {
       kind: "string",
       value: SHEET_CELL_TEXT,
     });
+  });
+
+  it("fails with a usage error when the positional output and --out disagree, and succeeds when they agree", async () => {
+    const packagePath = join(workspace, "dumped-for-conflict.package.json");
+    await runCli([
+      "docx-to-pdf",
+      join(workspace, "source.docx"),
+      join(workspace, "unused-conflict.pdf"),
+      "--dump-package",
+      packagePath,
+    ]);
+
+    const disagreeing = await runCli([
+      "from-package",
+      packagePath,
+      join(workspace, "one.docx"),
+      "--out",
+      join(workspace, "other.docx"),
+    ]);
+    expect(disagreeing.exitCode).not.toBe(EXIT_SUCCESS);
+    expect(disagreeing.stderr).toContain("[from-package]");
+    expect(disagreeing.stderr).toContain("conflicting output destinations");
+
+    const agreedPath = join(workspace, "agreed.docx");
+    const agreeing = await runCli([
+      "from-package",
+      packagePath,
+      agreedPath,
+      "--out",
+      agreedPath,
+    ]);
+    expect(agreeing.exitCode).toBe(EXIT_SUCCESS);
+    expect(agreeing.stderr).not.toContain("conflicting output destinations");
+  });
+
+  it("writes to the path named by --out when no positional output is given", async () => {
+    const packagePath = join(workspace, "dumped-for-out-flag.package.json");
+    await runCli([
+      "docx-to-pdf",
+      join(workspace, "source.docx"),
+      join(workspace, "unused-out-flag.pdf"),
+      "--dump-package",
+      packagePath,
+    ]);
+
+    const output = join(workspace, "via-out-flag.docx");
+    const { exitCode } = await runCli([
+      "from-package",
+      packagePath,
+      "--out",
+      output,
+    ]);
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    const rebuilt = openDocx(new Uint8Array(await readFile(output)));
+    expect(
+      rebuilt
+        .paragraphs()
+        .some((paragraph) => paragraph.text === PARAGRAPH_TEXT),
+    ).toBe(true);
+  });
+
+  it("builds real csv output from a spreadsheet-kind DocumentTree, threading --delimiter through", async () => {
+    const sheetPath = join(workspace, "source-for-csv.ods");
+    const editor = createOds();
+    const sheet = editor.sheets()[0];
+    if (sheet === undefined) {
+      throw new Error("createOds() did not produce a default sheet");
+    }
+    sheet.cell(0, 0).value = { kind: "string", value: "A" };
+    sheet.cell(0, 1).value = { kind: "string", value: "B" };
+    sheet.setColumnWidth(0, 72);
+    sheet.setColumnWidth(1, 72);
+    sheet.setRowHeight(0, 14);
+    await writeFile(sheetPath, editor.toBytes());
+
+    const packagePath = join(workspace, "dumped-for-csv.package.json");
+    await runCli([
+      "ods-to-pdf",
+      sheetPath,
+      join(workspace, "unused-csv.pdf"),
+      "--dump-package",
+      packagePath,
+    ]);
+
+    const csvPath = join(workspace, "rebuilt.csv");
+    const csvRun = await runCli([
+      "from-package",
+      packagePath,
+      csvPath,
+      "--delimiter",
+      ";",
+    ]);
+    expect(csvRun.exitCode).toBe(EXIT_SUCCESS);
+    const csvText = await readFile(csvPath, "utf-8");
+    expect(csvText).toContain("A;B");
+  });
+
+  it("builds real svg output from a drawing-kind DocumentTree, threading --page through", async () => {
+    const drawingPath = join(workspace, "source-for-svg.odg");
+    const editor = createOdg();
+    editor.addPage();
+    editor.pages()[0]?.addRect({
+      frame: { xPt: 5, yPt: 5, widthPt: 40, heightPt: 30 },
+      fill: { r: 1, g: 0, b: 0 },
+    });
+    await writeFile(drawingPath, editor.toBytes());
+
+    const packagePath = join(workspace, "dumped-for-svg.package.json");
+    await runCli([
+      "odg-to-pdf",
+      drawingPath,
+      join(workspace, "unused-svg.pdf"),
+      "--dump-package",
+      packagePath,
+    ]);
+
+    const svgPath = join(workspace, "rebuilt.svg");
+    const svgRun = await runCli([
+      "from-package",
+      packagePath,
+      svgPath,
+      "--page",
+      "0",
+    ]);
+    expect(svgRun.exitCode).toBe(EXIT_SUCCESS);
+    const svgText = await readFile(svgPath, "utf-8");
+    expect(svgText).toContain("<svg");
+  });
+
+  it("emits a JSON summary under --json and stays silent under --quiet", async () => {
+    const packagePath = join(workspace, "dumped-for-json-quiet.package.json");
+    await runCli([
+      "docx-to-pdf",
+      join(workspace, "source.docx"),
+      join(workspace, "unused-json-quiet.pdf"),
+      "--dump-package",
+      packagePath,
+    ]);
+
+    const jsonOutput = join(workspace, "via-json.docx");
+    const jsonRun = await runCli([
+      "from-package",
+      packagePath,
+      jsonOutput,
+      "--json",
+    ]);
+    expect(jsonRun.exitCode).toBe(EXIT_SUCCESS);
+    const summary: unknown = JSON.parse(jsonRun.stderr);
+    expect(summary).toMatchObject({ output: jsonOutput });
+
+    const quietOutput = join(workspace, "via-quiet.docx");
+    const quietRun = await runCli([
+      "from-package",
+      packagePath,
+      quietOutput,
+      "--quiet",
+    ]);
+    expect(quietRun.exitCode).toBe(EXIT_SUCCESS);
+    expect(quietRun.stderr).toBe("");
+  });
+
+  it("rejects input bytes that are not valid UTF-8", async () => {
+    const invalidUtf8Path = join(workspace, "invalid-utf8.package.json");
+    // A lone continuation byte (0x80) is never valid at the start of a UTF-8 sequence -- TextDecoder("utf-8", { fatal: true }) throws on it rather than silently substituting U+FFFD.
+    await writeFile(invalidUtf8Path, new Uint8Array([0x7b, 0x80, 0x7d]));
+
+    const { exitCode, stderr } = await runCli([
+      "from-package",
+      invalidUtf8Path,
+      join(workspace, "never-written-utf8.docx"),
+    ]);
+
+    expect(exitCode).not.toBe(EXIT_SUCCESS);
+    expect(stderr).toContain("not valid");
+  });
+
+  it("rejects a DocumentTree dump whose $schema pins a document-schema.js major other than the installed one", async () => {
+    const mismatchPath = join(workspace, "version-mismatch.package.json");
+    // A real document-tree.schema.json $schema URI (so it clears the rename/demotion tombstones and reaches the version gate) pinned to major 6 -- a major this workspace's installed document-schema.js (7.x) never was, so it can never accidentally stop mismatching the way a hardcoded "installed - 1" could coincide with a real future install.
+    const mismatchDump = {
+      $schema:
+        "https://cdn.jsdelivr.net/npm/document-schema.js@6.0.0/schemas/document-tree.schema.json",
+      children: [],
+    };
+    await writeFile(mismatchPath, JSON.stringify(mismatchDump, undefined, 2));
+
+    const { exitCode, stderr } = await runCli([
+      "from-package",
+      mismatchPath,
+      join(workspace, "never-written-mismatch.docx"),
+    ]);
+
+    expect(exitCode).not.toBe(EXIT_SUCCESS);
+    expect(stderr).toContain("document-schema.js@6.0.0");
+    expect(stderr).toContain("reads only @");
+    expect(stderr).toContain("-major dumps");
+    expect(stderr).toContain("--dump-package");
   });
 
   it("rejects a plain JSON file with no recognised $schema", async () => {

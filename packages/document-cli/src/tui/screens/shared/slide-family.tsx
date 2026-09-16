@@ -7,7 +7,7 @@ import type {
   PptEditor,
   PptxEditor,
 } from "documents.js";
-import { ListView } from "../../components/list-view.js";
+import { ListView, selectedColor } from "../../components/list-view.js";
 import { useNavigationInput } from "../../keybindings/use-navigation-input.js";
 import { useAppDispatch, useAppState } from "../../state/context.js";
 import {
@@ -149,7 +149,7 @@ function SlideRowView({
 }): ReactElement {
   return (
     <Box flexDirection="column">
-      <Text color={isSelected ? "cyan" : undefined} inverse={isSelected} bold>
+      <Text color={selectedColor(isSelected)} inverse={isSelected} bold>
         Slide {row.index + 1} ({row.shapes.length} shape
         {row.shapes.length === 1 ? "" : "s"}
         {row.notes.trim().length > 0 ? ", has notes" : ""})

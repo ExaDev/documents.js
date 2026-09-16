@@ -177,4 +177,19 @@ describe("fonts", () => {
     expect(stderr).toContain("xlsx");
     expect(stderr).toContain("docx, pptx, odt, odp, ods, odg");
   });
+
+  it("describes the command and its --json option", () => {
+    const command = createProgram().commands.find(
+      (candidate) => candidate.name() === "fonts",
+    );
+    expect(command?.description()).toBe(
+      "list every source-embedded font face a docx/pptx/odt/odp/ods/odg document carries (family, weight/style, byte length)",
+    );
+    const jsonOption = command?.options.find(
+      (option) => option.long === "--json",
+    );
+    expect(jsonOption?.description).toBe(
+      "emit the face list as a JSON array instead of a human-readable report",
+    );
+  });
 });

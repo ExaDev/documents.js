@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createOds, odsToXlsx, openMarkdown } from "documents.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { FORM_AND_REPORT_ODB_PATH } from "../../test-support/odb-fixture.js";
 import { appReducer, createInitialState } from "../state/reducer.js";
 import type { AppState, Diagnostic } from "../state/types.js";
 import { openDocumentAtPath, saveDocumentTo } from "./open-document.js";
@@ -24,6 +25,46 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await rm(workspace, { recursive: true, force: true });
+});
+
+describe("openDocumentAtPath for .odb", () => {
+  it("decodes the package once and reads tables, forms, and reports eagerly rather than opening a live-view editor", async () => {
+    const doc = await openDocumentAtPath(FORM_AND_REPORT_ODB_PATH);
+    if (doc.format !== "odb") throw new Error("expected odb");
+    expect(doc.tables.length).toBeGreaterThan(0);
+    expect(doc.forms.length).toBeGreaterThan(0);
+    expect(doc.reports.length).toBeGreaterThan(0);
+    expect(doc.path).toBe(FORM_AND_REPORT_ODB_PATH);
+  });
+
+  it("recognises the .odb extension case-insensitively", async () => {
+    const upperCasePath = join(workspace, "FIXTURE.ODB");
+    await writeFile(upperCasePath, await readFile(FORM_AND_REPORT_ODB_PATH));
+    const doc = await openDocumentAtPath(upperCasePath);
+    expect(doc.format).toBe("odb");
+  });
+});
+
+describe("openDocumentAtPath for an unrecognised extension", () => {
+  it("throws naming the path, rather than falling through to some format's own decoder", async () => {
+    const path = join(workspace, "mystery.unknownext");
+    await writeFile(path, "irrelevant");
+
+    await expect(openDocumentAtPath(path)).rejects.toThrow(
+      `Cannot tell what kind of document ${path} is from its extension`,
+    );
+  });
+});
+
+describe("openDocumentAtPath for .odf", () => {
+  it("throws explaining a standalone formula document has no editor, rather than opening one", async () => {
+    const path = join(workspace, "formula.odf");
+    await writeFile(path, "irrelevant");
+
+    await expect(openDocumentAtPath(path)).rejects.toThrow(
+      "A standalone .odf formula document has no editor; convert it to PDF (odfToPdf) instead",
+    );
+  });
 });
 
 describe("openDocumentAtPath for .xlsx", () => {
