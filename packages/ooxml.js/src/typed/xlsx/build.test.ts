@@ -2699,3 +2699,392 @@ describe("buildXlsxPackageFromContent: xl/sharedStrings.xml carries the exact co
     expect(textContent(childrenWithTag(sharedStrings, "si")[0]!)).toBe("Alpha");
   });
 });
+
+// --- computeDimension, buildColsElement, cell/row assembly ---------------------------------------------------------
+
+describe("computeDimension: each of cells, columns, and rows independently extends the dimension, never overwriting a larger extent with a smaller one", () => {
+  function sheetOf(
+    overrides: Partial<Pick<ContentSheet, "cells" | "columns" | "rows">>,
+  ): ContentDocument {
+    return {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+          ...overrides,
+        },
+      ],
+    };
+  }
+
+  function dimensionRefOf(pkg: Package): string | undefined {
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    return attr(requireChild(worksheet, "dimension"), "ref");
+  }
+
+  it("extends the dimension from columns alone, with no cells or rows, down to row 1 only", () => {
+    const pkg = buildXlsxPackageFromContent(
+      sheetOf({ columns: [{ index: 4 }] }),
+    );
+    expect(dimensionRefOf(pkg)).toBe("A1:E1");
+  });
+
+  it("extends the dimension from rows alone, with no cells or columns, out to column A only", () => {
+    const pkg = buildXlsxPackageFromContent(sheetOf({ rows: [{ index: 4 }] }));
+    expect(dimensionRefOf(pkg)).toBe("A1:A5");
+  });
+
+  it("takes the larger of cells' and rows'/columns' own extents, not the smaller -- a column/row entry past the last cell still widens the dimension", () => {
+    const pkg = buildXlsxPackageFromContent(
+      sheetOf({
+        cells: [
+          {
+            row: 0,
+            column: 0,
+            value: { kind: "string", value: "x" },
+            displayText: "x",
+          },
+        ],
+        columns: [{ index: 9 }],
+        rows: [{ index: 9 }],
+      }),
+    );
+    expect(dimensionRefOf(pkg)).toBe("A1:J10");
+  });
+});
+
+describe("buildColsElement: width and hidden are independent, either can be written alone", () => {
+  it("writes a hidden column with no width attribute at all, when only `hidden` is declared", () => {
+    const hiddenOnly = buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [{ index: 0, hidden: true }],
+          rows: [],
+          images: [],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+        },
+      ],
+    });
+    const worksheet = rootElement(hiddenOnly.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const col = requireChild(requireChild(worksheet, "cols"), "col");
+    expect(attr(col, "hidden")).toBe("true");
+    expect(attr(col, "width")).toBeUndefined();
+    expect(attr(col, "customWidth")).toBeUndefined();
+    expect(attr(col, "min")).toBe("1");
+    expect(attr(col, "max")).toBe("1");
+  });
+
+  it("writes a visible column with width/customWidth and no hidden attribute at all, when only `widthPt` is declared", () => {
+    const widthOnly = buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [{ index: 2, widthPt: 80 }],
+          rows: [],
+          images: [],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+        },
+      ],
+    });
+    const worksheet = rootElement(widthOnly.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const col = requireChild(requireChild(worksheet, "cols"), "col");
+    expect(attr(col, "customWidth")).toBe("true");
+    expect(attr(col, "hidden")).toBeUndefined();
+    expect(attr(col, "min")).toBe("3");
+    expect(attr(col, "max")).toBe("3");
+  });
+});
+
+describe("buildSheetDataElement: rows and cells are written in ascending order regardless of input order, and a row with no ContentSheetRow entry carries only its own r attribute", () => {
+  it("writes rows in ascending row-index order and, within a row, cells in ascending column order, even when supplied in reverse", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 5,
+          column: 2,
+          value: { kind: "string", value: "e" },
+          displayText: "e",
+        },
+        {
+          row: 2,
+          column: 0,
+          value: { kind: "string", value: "b" },
+          displayText: "b",
+        },
+        {
+          row: 2,
+          column: 3,
+          value: { kind: "string", value: "d" },
+          displayText: "d",
+        },
+        {
+          row: 0,
+          column: 1,
+          value: { kind: "string", value: "a" },
+          displayText: "a",
+        },
+      ]),
+    );
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const sheetData = requireChild(worksheet, "sheetData");
+    const rows = elementsOf(sheetData, "row");
+    expect(rows.map((row) => attr(row, "r"))).toEqual(["1", "3", "6"]);
+    const middleRow = rows[1];
+    if (middleRow === undefined) {
+      throw new Error("expected the row at index 1 (row 3)");
+    }
+    expect(elementsOf(middleRow, "c").map((cell) => attr(cell, "r"))).toEqual([
+      "A3",
+      "D3",
+    ]);
+  });
+
+  it("writes a row's own r attribute alone, with no ht/customHeight/hidden, when the sheet declares no matching ContentSheetRow", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 3,
+          column: 0,
+          value: { kind: "string", value: "x" },
+          displayText: "x",
+        },
+      ]),
+    );
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const row = requireChild(requireChild(worksheet, "sheetData"), "row");
+    expect(attr(row, "r")).toBe("4");
+    expect(attr(row, "ht")).toBeUndefined();
+    expect(attr(row, "customHeight")).toBeUndefined();
+    expect(attr(row, "hidden")).toBeUndefined();
+  });
+});
+
+describe("buildMergeCellsElement: colSpan and rowSpan trigger a merge independently of each other", () => {
+  function pkgWith(cells: ContentSheet["cells"]): Package {
+    return buildXlsxPackageFromContent(singleSheetDocument(cells));
+  }
+
+  it("treats colSpan alone (rowSpan defaulting to 1) as a merge", () => {
+    const pkg = pkgWith([
+      {
+        row: 0,
+        column: 0,
+        value: { kind: "string", value: "x" },
+        displayText: "x",
+        colSpan: 3,
+      },
+    ]);
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const mergeCells = requireChild(worksheet, "mergeCells");
+    expect(attr(mergeCells, "count")).toBe("1");
+    const mergeCell = requireChild(mergeCells, "mergeCell");
+    expect(attr(mergeCell, "ref")).toBe("A1:C1");
+  });
+
+  it("treats rowSpan alone (colSpan defaulting to 1) as a merge", () => {
+    const pkg = pkgWith([
+      {
+        row: 0,
+        column: 0,
+        value: { kind: "string", value: "x" },
+        displayText: "x",
+        rowSpan: 3,
+      },
+    ]);
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const mergeCell = requireChild(
+      requireChild(worksheet, "mergeCells"),
+      "mergeCell",
+    );
+    expect(attr(mergeCell, "ref")).toBe("A1:A3");
+  });
+
+  it("writes no <mergeCells> element at all when every cell's colSpan/rowSpan is exactly 1 or absent", () => {
+    const pkg = pkgWith([
+      {
+        row: 0,
+        column: 0,
+        value: { kind: "string", value: "x" },
+        displayText: "x",
+        colSpan: 1,
+        rowSpan: 1,
+      },
+    ]);
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    expect(childrenWithTag(worksheet, "mergeCells")).toHaveLength(0);
+  });
+});
+
+describe("buildCellElement: the decoration/format branches that decide styleIndex, and the exact t/f/v children written", () => {
+  it("writes a cell carrying alignment alone (no font/background/borders/verticalAlignment) as decorated, not left at the default style index", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "left" },
+          displayText: "left",
+          alignment: "left",
+        },
+        {
+          row: 0,
+          column: 1,
+          value: { kind: "string", value: "plain" },
+          displayText: "plain",
+        },
+      ]),
+    );
+    const leftIndex = attr(writtenCell(pkg, "A1"), "s");
+    const plainIndex = attr(writtenCell(pkg, "B1"), "s");
+    expect(leftIndex).not.toBe(plainIndex);
+    expect(plainIndex).toBe("0");
+  });
+
+  it("writes both <f> and <v> for a formula cell, in that order, and no t attribute for its numeric cached result", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "number", value: 5 },
+          formula: "2+3",
+          displayText: "5",
+        },
+      ]),
+    );
+    const cell = writtenCell(pkg, "A1");
+    expect(
+      cell.children.map((c) => (c.type === "element" ? c.tag : c.type)),
+    ).toEqual(["f", "v"]);
+    expect(textContent(requireChild(cell, "f"))).toBe("2+3");
+    expect(attr(cell, "t")).toBeUndefined();
+  });
+
+  it("writes no <f> element at all for a cell with no formula", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "number", value: 5 },
+          displayText: "5",
+        },
+      ]),
+    );
+    expect(childrenWithTag(writtenCell(pkg, "A1"), "f")).toHaveLength(0);
+  });
+});
+
+describe("renderString/renderTemporal: the formula-result and undefined-serial branches", () => {
+  it('writes a formula\'s own cached STRING result inline as t="str", never shared-string-indexed, even for a repeated value', () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "same" },
+          formula: '"same"',
+          displayText: "same",
+        },
+        {
+          row: 0,
+          column: 1,
+          value: { kind: "string", value: "same" },
+          displayText: "same",
+        },
+      ]),
+    );
+    expect(attr(writtenCell(pkg, "A1"), "t")).toBe("str");
+    expect(attr(writtenCell(pkg, "B1"), "t")).toBe("s");
+    // Only the literal cell interned into sharedStrings -- the formula's own cached text did not.
+    const sharedStrings = rootElement(pkg.parts["xl/sharedStrings.xml"]);
+    if (sharedStrings === undefined) {
+      throw new Error("expected xl/sharedStrings.xml to have a root element");
+    }
+    expect(childrenWithTag(sharedStrings, "si")).toHaveLength(1);
+  });
+
+  it("degrades an unparseable date to text via renderString's OWN formula-result branch, writing t=\"str\" when the temporal value is itself a formula's cached result", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "date", value: "not-a-real-date" },
+          formula: "TODAY()",
+          displayText: "not-a-real-date",
+        },
+      ]),
+    );
+    const cell = writtenCell(pkg, "A1");
+    expect(attr(cell, "t")).toBe("str");
+    expect(textContent(requireChild(cell, "v"))).toBe("not-a-real-date");
+  });
+});
+
+describe("buildSheetPrElement: fitToPage reflects whether fitToPages is actually present", () => {
+  it('writes pageSetUpPr fitToPage="true" when the sheet declares fitToPages', () => {
+    const pkg = buildXlsxPackageFromContent(SUMMARY_ONLY_DOCUMENT());
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const sheetPr = requireChild(worksheet, "sheetPr");
+    expect(attr(requireChild(sheetPr, "pageSetUpPr"), "fitToPage")).toBe(
+      "true",
+    );
+  });
+
+  it('writes pageSetUpPr fitToPage="false" when the sheet declares no fitToPages', () => {
+    const pkg = buildXlsxPackageFromContent(singleSheetDocument([]));
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const sheetPr = requireChild(worksheet, "sheetPr");
+    expect(attr(requireChild(sheetPr, "pageSetUpPr"), "fitToPage")).toBe(
+      "false",
+    );
+  });
+});
+
+function SUMMARY_ONLY_DOCUMENT(): ContentDocument {
+  return { kind: "spreadsheet", metadata: {}, sheets: [SUMMARY_SHEET] };
+}
