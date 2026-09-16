@@ -2083,3 +2083,143 @@ describe("readPptxContent: paragraph outline levels", () => {
     ]);
   });
 });
+
+// A single-slide deck with no layout/master/theme at all -- readSlide tolerates a slide whose own relationships name no slideLayout, simply resolving no cascade/geometry inheritance, so these minimal packages isolate one shape's own paragraph/run/table-cell properties without needing the full cascade chain buildFixturePackage sets up.
+function minimalSlidePackage(shapes: ReturnType<typeof el>[]): Package {
+  const slide = el("p:sld", {}, [
+    el("p:cSld", {}, [el("p:spTree", {}, shapes)]),
+  ]);
+  const presentation = el("p:presentation", {}, [
+    el("p:sldIdLst", {}, [el("p:sldId", { id: "256", "r:id": "rIdSlide1" })]),
+    el("p:sldSz", { cx: "9144000", cy: "6858000" }),
+  ]);
+  const presentationRels = rels([
+    { id: "rIdSlide1", type: SLIDE_REL, target: "slides/slide1.xml" },
+  ]);
+  return {
+    parts: {
+      "ppt/presentation.xml": { kind: "xml", nodes: [presentation] },
+      "ppt/_rels/presentation.xml.rels": {
+        kind: "xml",
+        nodes: [presentationRels],
+      },
+      "ppt/slides/slide1.xml": { kind: "xml", nodes: [slide] },
+      "ppt/slides/_rels/slide1.xml.rels": {
+        kind: "xml",
+        nodes: [rels([])],
+      },
+    },
+  };
+}
+
+function firstShapeParagraph(
+  shapes: ReturnType<typeof el>[],
+): ContentParagraph {
+  const doc = readPptxContent(minimalSlidePackage(shapes));
+  return asParagraph(doc.slides[0]?.shapes[0]?.blocks[0]);
+}
+
+function textShape(paragraph: ReturnType<typeof el>): ReturnType<typeof el> {
+  return el("p:sp", {}, [
+    el("p:nvSpPr", {}, [
+      el("p:cNvPr", { id: "2", name: "Shape 1" }),
+      el("p:cNvSpPr"),
+      el("p:nvPr"),
+    ]),
+    // An explicit xfrm, not inherited placeholder geometry: this minimal package has no layout/master chain for resolveShapeFrame to inherit from, so a shape with no own frame at all resolves to no frame and is dropped from the slide entirely.
+    el("p:spPr", {}, [
+      el("a:xfrm", {}, [
+        el("a:off", { x: "0", y: "0" }),
+        el("a:ext", { cx: "914400", cy: "914400" }),
+      ]),
+    ]),
+    el("p:txBody", {}, [paragraph]),
+  ]);
+}
+
+describe("readPptxContent: slide size falls back to the widescreen default when cx/cy is missing", () => {
+  it("reads the widescreen default (960x540pt), not the real sldSz value, when p:sldSz carries no cx", () => {
+    const pkg = minimalSlidePackage([
+      textShape(el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("x")])])])),
+    ]);
+    // Overwrite the presentation part with one whose sldSz has no cx, after construction, to isolate exactly this one field -- a real cx of 9144000 EMU (720pt) would be observably different from the 960pt default this missing-cx case must fall back to.
+    const presentation = el("p:presentation", {}, [
+      el("p:sldIdLst", {}, [el("p:sldId", { id: "256", "r:id": "rIdSlide1" })]),
+      el("p:sldSz", { cy: "6858000" }),
+    ]);
+    pkg.parts["ppt/presentation.xml"] = { kind: "xml", nodes: [presentation] };
+    const result = readPptxContent(pkg);
+    expect(result.slides[0]?.size).toEqual({ widthPt: 960, heightPt: 540 });
+  });
+});
+
+describe("readPptxContent: paragraph alignment, every token distinctly", () => {
+  function alignmentOf(algn: string): string | undefined {
+    const para = firstShapeParagraph([
+      textShape(
+        el("a:p", {}, [
+          el("a:pPr", { algn }),
+          el("a:r", {}, [el("a:t", {}, [txt("x")])]),
+        ]),
+      ),
+    ]);
+    return para.alignment;
+  }
+
+  it('reads algn="l" as "left"', () => {
+    expect(alignmentOf("l")).toBe("left");
+  });
+
+  it('reads algn="ctr" as "center"', () => {
+    expect(alignmentOf("ctr")).toBe("center");
+  });
+
+  it('reads algn="r" as "right"', () => {
+    expect(alignmentOf("r")).toBe("right");
+  });
+
+  it('reads algn="just" as "justify"', () => {
+    expect(alignmentOf("just")).toBe("justify");
+  });
+
+  it('reads algn="justLow" as "justify" too', () => {
+    expect(alignmentOf("justLow")).toBe("justify");
+  });
+
+  it("reads no alignment at all for an unrecognised token", () => {
+    expect(alignmentOf("dist")).toBeUndefined();
+  });
+});
+
+describe("readPptxContent: run underline/strikethrough exact val tokens", () => {
+  function runProps(rPrAttrs: Record<string, string>) {
+    const para = firstShapeParagraph([
+      textShape(
+        el("a:p", {}, [
+          el("a:r", {}, [el("a:rPr", rPrAttrs), el("a:t", {}, [txt("x")])]),
+        ]),
+      ),
+    ]);
+    return para.runs[0];
+  }
+
+  it('reads u="none" as underline: false, not true', () => {
+    expect(runProps({ u: "none" })?.underline).toBe(false);
+  });
+
+  it("reads no u attribute at all as underline: undefined", () => {
+    expect(runProps({})?.underline).toBeUndefined();
+  });
+
+  it('reads u="sng" as underline: true', () => {
+    expect(runProps({ u: "sng" })?.underline).toBe(true);
+  });
+
+  it('reads strike="noStrike" as strike: false, not true', () => {
+    expect(runProps({ strike: "noStrike" })?.strike).toBe(false);
+  });
+
+  it("reads no strike attribute at all as strike: undefined", () => {
+    expect(runProps({})?.strike).toBeUndefined();
+  });
+});
