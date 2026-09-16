@@ -3388,3 +3388,176 @@ describe("buildWorksheetPart: element presence for cols, mergeCells, drawing, an
     expect(childrenWithTag(worksheet, "tableParts")).toHaveLength(0);
   });
 });
+
+// --- entry point: per-sheet table filtering, sequential relationship ids, and multi-format image usage ------------
+
+describe("buildXlsxPackageFromContent: a table definitions entry attaches only to its own named sheet, never to any other", () => {
+  it("writes tableParts and xl/tables/table1.xml for the sheet the table names, and neither for a second, unrelated sheet", () => {
+    const pkg = buildXlsxPackageFromContent(
+      {
+        kind: "spreadsheet",
+        metadata: {},
+        sheets: [
+          {
+            name: "Sheet1",
+            cells: [],
+            columns: [],
+            rows: [],
+            images: [],
+            printSettings: DEFAULT_PRINT_SETTINGS,
+          },
+          {
+            name: "Other",
+            cells: [],
+            columns: [],
+            rows: [],
+            images: [],
+            printSettings: DEFAULT_PRINT_SETTINGS,
+          },
+        ],
+      },
+      { definitions: tableDefinitions() },
+    );
+    const sheet1 = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    const sheet2 = rootElement(pkg.parts["xl/worksheets/sheet2.xml"]);
+    if (sheet1 === undefined || sheet2 === undefined) {
+      throw new Error("expected both worksheet root elements");
+    }
+    expect(childrenWithTag(sheet1, "tableParts")).toHaveLength(1);
+    expect(childrenWithTag(sheet2, "tableParts")).toHaveLength(0);
+    expect(Object.keys(pkg.parts)).not.toContain(
+      "xl/worksheets/_rels/sheet2.xml.rels",
+    );
+  });
+});
+
+describe("buildXlsxPackageFromContent: worksheet relationships are numbered sequentially across comments, drawing, and tables on the same sheet", () => {
+  it("assigns rId1/rId2/rId3 in the order comments, drawing, and table relationships are added, with no gap or repeat", () => {
+    const pkg = buildXlsxPackageFromContent(
+      {
+        kind: "spreadsheet",
+        metadata: {},
+        sheets: [
+          {
+            name: "Sheet1",
+            cells: [
+              {
+                row: 0,
+                column: 0,
+                value: { kind: "string", value: "x" },
+                displayText: "x",
+                comment: { text: "note" },
+              },
+            ],
+            columns: [],
+            rows: [],
+            images: [
+              {
+                kind: "image",
+                format: "png",
+                base64: TINY_PNG_BASE64,
+                widthPt: 10,
+                heightPt: 10,
+                anchorRow: 0,
+                anchorColumn: 0,
+                offsetXPt: 0,
+                offsetYPt: 0,
+              },
+            ],
+            printSettings: DEFAULT_PRINT_SETTINGS,
+          },
+        ],
+      },
+      { definitions: tableDefinitions() },
+    );
+    const rels = rootElement(pkg.parts["xl/worksheets/_rels/sheet1.xml.rels"]);
+    if (rels === undefined) {
+      throw new Error(
+        "expected the worksheet rels part to have a root element",
+      );
+    }
+    const relationships = childrenWithTag(rels, "Relationship");
+    expect(relationships.map((el) => attr(el, "Id"))).toEqual([
+      "rId1",
+      "rId2",
+      "rId3",
+    ]);
+    const types = relationships.map((el) => attr(el, "Type"));
+    expect(types[0]).toContain("threadedComment");
+    expect(types[1]).toContain("/drawing");
+    expect(types[2]).toContain("/table");
+  });
+});
+
+describe("buildXlsxPackageFromContent: usedImageFormats collects every distinct image format actually used, and only those", () => {
+  it("declares a Default entry for both png and jpeg when a sheet carries one image of each, and none for gif", () => {
+    const pkg = buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [
+            {
+              kind: "image",
+              format: "png",
+              base64: TINY_PNG_BASE64,
+              widthPt: 10,
+              heightPt: 10,
+              anchorRow: 0,
+              anchorColumn: 0,
+              offsetXPt: 0,
+              offsetYPt: 0,
+            },
+            {
+              kind: "image",
+              format: "jpeg",
+              base64: TINY_PNG_BASE64,
+              widthPt: 10,
+              heightPt: 10,
+              anchorRow: 1,
+              anchorColumn: 0,
+              offsetXPt: 0,
+              offsetYPt: 0,
+            },
+          ],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+        },
+      ],
+    });
+    const contentTypes = rootElement(pkg.parts["[Content_Types].xml"]);
+    if (contentTypes === undefined) {
+      throw new Error("expected [Content_Types].xml to have a root element");
+    }
+    const extensions = childrenWithTag(contentTypes, "Default").map((el) =>
+      attr(el, "Extension"),
+    );
+    expect(extensions).toContain("png");
+    expect(extensions).toContain("jpeg");
+    expect(extensions).not.toContain("gif");
+    expect(Object.keys(pkg.parts)).toContain("xl/media/image1.png");
+    expect(Object.keys(pkg.parts)).toContain("xl/media/image2.jpeg");
+  });
+});
+
+describe("buildXlsxPackageFromContent: [Content_Types].xml carries no chart/table overrides at all for a document with neither", () => {
+  it("writes no /xl/charts/ or /xl/tables/ Override, and no chart/table Default extensions, for a plain document", () => {
+    const pkg = buildXlsxPackageFromContent(DOCUMENT);
+    const contentTypes = rootElement(pkg.parts["[Content_Types].xml"]);
+    if (contentTypes === undefined) {
+      throw new Error("expected [Content_Types].xml to have a root element");
+    }
+    const overrides = childrenWithTag(contentTypes, "Override").map((el) =>
+      attr(el, "PartName"),
+    );
+    expect(overrides.some((name) => name?.startsWith("/xl/charts/"))).toBe(
+      false,
+    );
+    expect(overrides.some((name) => name?.startsWith("/xl/tables/"))).toBe(
+      false,
+    );
+  });
+});
