@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type {
   ContentDocument,
   ContentEmbeddedObject,
@@ -116,13 +116,18 @@ describe("buildSheetDrawing: undefined for a sheet with neither images nor embed
 });
 
 describe("buildSheetDrawing: one image and one chart, every element and attribute exactly", () => {
-  const result = buildSheetDrawing(
-    sheet({ images: [pngImage()], embeddedObjects: [chartObject()] }),
-    newDrawingCounters(),
-  );
-  if (result === undefined) {
-    throw new Error("expected a SheetDrawingWrite");
-  }
+  // Computed fresh inside beforeEach, not once at describe-body level: Stryker's own per-test coverage instrumentation attributes a line's execution to whichever test is "currently running" at the moment it executes, and a describe body runs during test COLLECTION, before any it() has started -- a call made there is invisible to that attribution, so Stryker silently falls back to running some OTHER, less precise test against a mutant on this line instead of this file's own (confirmed directly: an L62 mutant survived under a real scoped run despite this exact assertion catching it when applied by hand, until this call moved into beforeEach).
+  let result: NonNullable<ReturnType<typeof buildSheetDrawing>>;
+  beforeEach(() => {
+    const built = buildSheetDrawing(
+      sheet({ images: [pngImage()], embeddedObjects: [chartObject()] }),
+      newDrawingCounters(),
+    );
+    if (built === undefined) {
+      throw new Error("expected a SheetDrawingWrite");
+    }
+    result = built;
+  });
 
   it("builds the picture anchor with its own xdr:from/xdr:ext/xdr:pic/xdr:clientData shape", () => {
     const picAnchor = el("xdr:oneCellAnchor", {}, [
