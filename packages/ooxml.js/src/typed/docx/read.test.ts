@@ -9,6 +9,7 @@ import type {
   ContentParagraph,
   ContentTable,
 } from "document-schema.js";
+import { rgbHexToColor } from "document-schema.js";
 import { el, txt } from "../../xml/fragment";
 import { bytesToBase64 } from "../../util/base64";
 import { zipPackage } from "../../zip";
@@ -18,6 +19,7 @@ import {
   minimalPptxBytes,
   minimalXlsxBytes,
 } from "../../test-support/embedded";
+import { eighthPointsToPt } from "../shared/units";
 import { attr, childrenWithTag, elementsWithTag, rootElement } from "../util";
 import { readDocxContent } from "./read";
 import { buildDocxPackageFromContent } from "./write";
@@ -2722,5 +2724,702 @@ describe("readDocxContent: header/footer structure", () => {
       },
       { header: { default: "word/header1.xml", first: "word/header2.xml" } },
     ]);
+  });
+});
+
+// A single-section, sectPr-only body: readSections closes the one implicit section entirely from that sectPr, with no paragraphs at all, so readPageSize/readMargins' own fallback branches are exercised in isolation from every other section-level concern.
+function sectionOnlyPackage(sectPr: XmlElement): Package {
+  const body = el("w:body", {}, [sectPr]);
+  return {
+    parts: {
+      "word/document.xml": {
+        kind: "xml",
+        nodes: [el("w:document", {}, [body])],
+      },
+      "word/_rels/document.xml.rels": { kind: "xml", nodes: [rels([])] },
+    },
+  };
+}
+
+describe("readDocxContent: page size and margin fallbacks", () => {
+  it("falls back to the Letter default page size when w:pgSz is entirely absent", () => {
+    const doc = readDocxContent(sectionOnlyPackage(el("w:sectPr", {}, [])));
+    expect(doc.sections[0]?.pageSize).toEqual({ widthPt: 612, heightPt: 792 });
+  });
+
+  it("falls back to the Letter default page size when w:pgSz carries only @w:w or only @w:h", () => {
+    const widthOnly = readDocxContent(
+      sectionOnlyPackage(
+        el("w:sectPr", {}, [el("w:pgSz", { "w:w": "11906" })]),
+      ),
+    );
+    expect(widthOnly.sections[0]?.pageSize).toEqual({
+      widthPt: 612,
+      heightPt: 792,
+    });
+    const heightOnly = readDocxContent(
+      sectionOnlyPackage(
+        el("w:sectPr", {}, [el("w:pgSz", { "w:h": "16838" })]),
+      ),
+    );
+    expect(heightOnly.sections[0]?.pageSize).toEqual({
+      widthPt: 612,
+      heightPt: 792,
+    });
+  });
+
+  it("falls back to the default 1in margins entirely when the section carries no w:pgMar at all", () => {
+    const doc = readDocxContent(sectionOnlyPackage(el("w:sectPr", {}, [])));
+    expect(doc.sections[0]?.margins).toEqual({
+      topPt: 72,
+      rightPt: 72,
+      bottomPt: 72,
+      leftPt: 72,
+    });
+  });
+
+  it("fills in only the edges w:pgMar omits, converting whichever edges it does spell", () => {
+    const doc = readDocxContent(
+      sectionOnlyPackage(
+        el("w:sectPr", {}, [
+          el("w:pgMar", { "w:top": "2880", "w:left": "720" }),
+        ]),
+      ),
+    );
+    expect(doc.sections[0]?.margins).toEqual({
+      topPt: 144,
+      rightPt: 72,
+      bottomPt: 72,
+      leftPt: 36,
+    });
+  });
+
+  it("recognises every w:sectPr/w:type value, not just continuous", () => {
+    for (const val of ["nextPage", "evenPage", "oddPage"] as const) {
+      const doc = readDocxContent(
+        sectionOnlyPackage(
+          el("w:sectPr", {}, [el("w:type", { "w:val": val })]),
+        ),
+      );
+      expect(doc.sections[0]?.breakType).toBe(val);
+    }
+  });
+
+  it("leaves breakType absent for an unrecognised w:type value", () => {
+    const doc = readDocxContent(
+      sectionOnlyPackage(
+        el("w:sectPr", {}, [el("w:type", { "w:val": "nonsense" })]),
+      ),
+    );
+    expect(doc.sections[0]?.breakType).toBeUndefined();
+  });
+});
+
+describe("readDocxContent: w:pageBreakBefore toggle values", () => {
+  function pageBreakBeforeDoc(val: string | undefined) {
+    const pPrChildren =
+      val === undefined
+        ? [el("w:pageBreakBefore")]
+        : [el("w:pageBreakBefore", { "w:val": val })];
+    const paragraph = el("w:p", {}, [
+      el("w:pPr", {}, pPrChildren),
+      textRun("text"),
+    ]);
+    return readDocxContent(paragraphPackage(paragraph));
+  }
+
+  it("treats w:val of 0, false, or off as explicitly disabling the page break", () => {
+    for (const val of ["0", "false", "off"]) {
+      expect(pageBreakBeforeDoc(val).sections[0]?.blocks[0]?.kind).toBe(
+        "paragraph",
+      );
+    }
+  });
+
+  it("treats any other w:val as enabling the page break, same as an absent @w:val", () => {
+    expect(pageBreakBeforeDoc("1").sections[0]?.blocks[0]?.kind).toBe(
+      "pageBreak",
+    );
+    expect(pageBreakBeforeDoc(undefined).sections[0]?.blocks[0]?.kind).toBe(
+      "pageBreak",
+    );
+  });
+});
+
+describe("readDocxContent: list membership edge cases", () => {
+  it("leaves list undefined when w:numPr carries no w:numId", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:pPr", {}, [el("w:numPr", {}, [el("w:ilvl", { "w:val": "0" })])]),
+      textRun("no numId"),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    expect(firstParagraph(doc).list).toBeUndefined();
+  });
+
+  it("defaults level to 0 when w:numPr carries a w:numId but no w:ilvl", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:pPr", {}, [el("w:numPr", {}, [el("w:numId", { "w:val": "5" })])]),
+      textRun("top-level item"),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    expect(firstParagraph(doc).list).toEqual({ numId: "5", level: 0 });
+  });
+});
+
+describe("readDocxContent: findRunPageBreakOffset's own accounting for w:tab/w:br/w:cr/w:delText", () => {
+  it("counts a preceding w:tab as one character when locating a mid-run page break", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:r", {}, [
+        el("w:t", { "xml:space": "preserve" }, [txt("a")]),
+        el("w:tab"),
+        el("w:br", { "w:type": "page" }),
+        el("w:t", { "xml:space": "preserve" }, [txt("after")]),
+      ]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const blocks = doc.sections[0]?.blocks ?? [];
+    expect(asParagraph(blocks[0]).runs.map((r) => r.text)).toEqual(["a\t"]);
+    expect(blocks[1]?.kind).toBe("pageBreak");
+    expect(asParagraph(blocks[2]).runs.map((r) => r.text)).toEqual(["after"]);
+  });
+
+  it("counts a preceding non-page w:br and a preceding w:cr as one character each when locating a mid-run page break", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:r", {}, [
+        el("w:t", { "xml:space": "preserve" }, [txt("a")]),
+        el("w:br"),
+        el("w:cr"),
+        el("w:br", { "w:type": "page" }),
+        el("w:t", { "xml:space": "preserve" }, [txt("after")]),
+      ]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const blocks = doc.sections[0]?.blocks ?? [];
+    expect(asParagraph(blocks[0]).runs.map((r) => r.text)).toEqual(["a\n\n"]);
+    expect(blocks[1]?.kind).toBe("pageBreak");
+    expect(asParagraph(blocks[2]).runs.map((r) => r.text)).toEqual(["after"]);
+  });
+
+  it("counts a preceding w:delText's own length when locating a mid-run page break inside a wholly deleted paragraph", () => {
+    const paragraph = el("w:del", { "w:id": "9" }, [
+      el("w:p", {}, [
+        el("w:r", {}, [
+          el("w:delText", { "xml:space": "preserve" }, [txt("gone")]),
+          el("w:br", { "w:type": "page" }),
+          el("w:delText", { "xml:space": "preserve" }, [txt("more")]),
+        ]),
+      ]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const blocks = doc.sections[0]?.blocks ?? [];
+    expect(asParagraph(blocks[1]).runs.map((r) => r.text)).toEqual(["gone"]);
+    expect(blocks[2]?.kind).toBe("pageBreak");
+    expect(asParagraph(blocks[3]).runs.map((r) => r.text)).toEqual(["more"]);
+  });
+});
+
+describe("readDocxContent: readObjectEmbeddedObject malformed geometry", () => {
+  it("skips a w:object whose w:dyaOrig is not numeric, rather than emitting a NaN-sized frame", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:r", {}, [
+        el("w:object", { "w:dxaOrig": "1920", "w:dyaOrig": "not-a-number" }, [
+          el("o:OLEObject", { Type: "Embed", "r:id": "rIdOle" }),
+        ]),
+      ]),
+    ]);
+    const doc = readDocxContent(
+      paragraphPackage(paragraph, {
+        "word/embeddings/oleObject1.xlsx": {
+          kind: "binary",
+          base64: bytesToBase64(minimalXlsxBytes()),
+        },
+      }),
+    );
+    // No dxaOrig/dyaOrig pair passes the finiteness check, so the object contributes no block at all.
+    expect(doc.sections[0]?.blocks).toHaveLength(1);
+  });
+});
+
+describe("readDocxContent: lifted media inside a w:object's own children, and deletion-scoped lifting", () => {
+  it("recurses into a w:object's own children to lift a nested w:drawing, anchored at the object's own run position", () => {
+    const paragraph = el("w:p", {}, [
+      textRun("before "),
+      el("w:r", {}, [
+        el("w:object", { "w:dxaOrig": "1920", "w:dyaOrig": "1200" }, [
+          drawingElement("wp:inline", "rIdNestedPreview", "Nested preview"),
+          el("o:OLEObject", { Type: "Embed", "r:id": "rIdMissingOle" }),
+        ]),
+      ]),
+    ]);
+    const pkg = paragraphPackage(paragraph, {
+      "word/media/nestedPreview.png": {
+        kind: "binary",
+        base64: TINY_PNG_BASE64,
+      },
+    });
+    pkg.parts["word/_rels/document.xml.rels"] = {
+      kind: "xml",
+      nodes: [
+        rels([
+          {
+            id: "rIdNestedPreview",
+            type: IMAGE_REL,
+            target: "media/nestedPreview.png",
+          },
+        ]),
+      ],
+    };
+    const doc = readDocxContent(pkg);
+    // The object's own OLE payload never resolves (rIdMissingOle has no relationship), so only the nested drawing surfaces as a lifted image, anchored to where the run before it ends.
+    expect(doc.sections[0]?.blocks).toHaveLength(2);
+    const image = asImage(doc.sections[0]?.blocks[1]);
+    expect(image.altText).toBe("Nested preview");
+    expect(image.anchorRunIndex).toBe(0);
+    expect(image.anchorOffset).toBe("before ".length);
+  });
+
+  it("excludes a drawing nested inside a mid-paragraph w:del when the paragraph itself is not wholly deleted", () => {
+    const paragraph = el("w:p", {}, [
+      textRun("kept "),
+      el("w:del", { "w:id": "3" }, [
+        el("w:r", {}, [
+          drawingElement("wp:inline", "rIdDeletedImg", "Deleted"),
+        ]),
+      ]),
+    ]);
+    const pkg = paragraphPackage(paragraph, {
+      "word/media/deleted.png": { kind: "binary", base64: TINY_PNG_BASE64 },
+    });
+    pkg.parts["word/_rels/document.xml.rels"] = {
+      kind: "xml",
+      nodes: [
+        rels([
+          { id: "rIdDeletedImg", type: IMAGE_REL, target: "media/deleted.png" },
+        ]),
+      ],
+    };
+    const doc = readDocxContent(pkg);
+    expect(doc.sections[0]?.blocks).toHaveLength(1);
+    expect(
+      asParagraph(doc.sections[0]?.blocks[0]).runs.map((r) => r.text),
+    ).toEqual(["kept "]);
+  });
+
+  it("includes a drawing nested inside a mid-paragraph w:del when the whole paragraph is itself a tracked deletion", () => {
+    const paragraph = el("w:del", { "w:id": "4" }, [
+      el("w:p", {}, [
+        el("w:del", { "w:id": "5" }, [
+          el("w:r", {}, [drawingElement("wp:inline", "rIdKeptImg", "Kept")]),
+        ]),
+      ]),
+    ]);
+    const pkg = paragraphPackage(paragraph, {
+      "word/media/kept.png": { kind: "binary", base64: TINY_PNG_BASE64 },
+    });
+    pkg.parts["word/_rels/document.xml.rels"] = {
+      kind: "xml",
+      nodes: [
+        rels([{ id: "rIdKeptImg", type: IMAGE_REL, target: "media/kept.png" }]),
+      ],
+    };
+    const doc = readDocxContent(pkg);
+    const image = asImage(
+      doc.sections[0]?.blocks.find((b) => b.kind === "image"),
+    );
+    expect(image.altText).toBe("Kept");
+  });
+});
+
+describe("readDocxContent: field block-scope boundary checks", () => {
+  it("encodes a field as a run extent, not a block marker, when text follows its end within the same paragraph", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:r", {}, [el("w:fldChar", { "w:fldCharType": "begin" })]),
+      el("w:r", {}, [
+        el("w:instrText", { "xml:space": "preserve" }, [txt(" PAGE ")]),
+      ]),
+      el("w:r", {}, [el("w:fldChar", { "w:fldCharType": "separate" })]),
+      textRun("1"),
+      el("w:r", {}, [el("w:fldChar", { "w:fldCharType": "end" })]),
+      textRun(" of 10"),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const para = firstParagraph(doc);
+    expect(para.constructs).toEqual([
+      {
+        descriptor: { kind: "field", instruction: " PAGE " },
+        startRun: 0,
+        endRun: 1,
+      },
+    ]);
+    expect(para.runs.map((r) => r.text)).toEqual(["1", " of 10"]);
+  });
+
+  it("encodes a w:fldSimple as a run extent, not a block marker, when other content shares its paragraph", () => {
+    const paragraph = el("w:p", {}, [
+      textRun("See "),
+      el("w:fldSimple", { "w:instr": " PAGE " }, [textRun("1")]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const para = firstParagraph(doc);
+    expect(para.constructs).toEqual([
+      {
+        descriptor: { kind: "field", instruction: " PAGE " },
+        startRun: 1,
+        endRun: 2,
+      },
+    ]);
+  });
+});
+
+describe("readDocxContent: a complex field spanning multiple paragraphs (the TOC shape)", () => {
+  it("brackets a field whose begin is one paragraph's only content and whose end is a later paragraph's only content", () => {
+    const beginPara = el("w:p", {}, [
+      el("w:r", {}, [el("w:fldChar", { "w:fldCharType": "begin" })]),
+    ]);
+    const codePara = el("w:p", {}, [
+      el("w:r", {}, [
+        el("w:instrText", { "xml:space": "preserve" }, [txt(" TOC ")]),
+      ]),
+    ]);
+    const separatePara = el("w:p", {}, [
+      el("w:r", {}, [el("w:fldChar", { "w:fldCharType": "separate" })]),
+    ]);
+    const resultPara = el("w:p", {}, [textRun("Chapter 1 ... 1")]);
+    const endPara = el("w:p", {}, [
+      el("w:r", {}, [el("w:fldChar", { "w:fldCharType": "end" })]),
+    ]);
+    const body = el("w:body", {}, [
+      beginPara,
+      codePara,
+      separatePara,
+      resultPara,
+      endPara,
+      el("w:sectPr", {}, [el("w:pgSz", { "w:w": "12240", "w:h": "15840" })]),
+    ]);
+    const doc = readDocxContent({
+      parts: {
+        "word/document.xml": {
+          kind: "xml",
+          nodes: [el("w:document", {}, [body])],
+        },
+      },
+    });
+    const blocks = doc.sections[0]?.blocks ?? [];
+    expect(asConstructStart(blocks[0]).descriptor).toEqual({
+      kind: "field",
+      instruction: " TOC ",
+    });
+    // Every paragraph between begin and end -- including the begin/code/separate/end paragraphs' own, mostly-empty, paragraph blocks -- stays inside the marker pair; only the result paragraph carries real text.
+    const resultParagraph = blocks.find(
+      (block) =>
+        block.kind === "paragraph" && block.runs[0]?.text === "Chapter 1 ... 1",
+    );
+    expect(resultParagraph).toBeDefined();
+    expect(blocks[blocks.length - 1]?.kind).toBe("constructEnd");
+  });
+});
+
+describe("readDocxContent: cell border w:start/w:end aliases, default width, and empty-borders collapse", () => {
+  function tableWithCellBorders(tcBorders: XmlElement): ContentTable {
+    const table = el("w:tbl", {}, [
+      el("w:tblGrid", {}, [el("w:gridCol", { "w:w": "1440" })]),
+      el("w:tr", {}, [
+        el("w:tc", {}, [
+          el("w:tcPr", {}, [tcBorders]),
+          el("w:p", {}, [textRun("cell")]),
+        ]),
+      ]),
+    ]);
+    return asTable(
+      readDocxContent(paragraphPackage(table)).sections[0]?.blocks[0],
+    );
+  }
+
+  it("falls back to w:start/w:end when w:left/w:right are absent, and defaults a missing @w:sz to half a point", () => {
+    const table = tableWithCellBorders(
+      el("w:tcBorders", {}, [
+        el("w:start", { "w:val": "single", "w:color": "112233" }),
+        el("w:end", { "w:val": "single", "w:color": "445566" }),
+      ]),
+    );
+    expect(table.rows[0]?.cells[0]?.borders?.left).toEqual({
+      color: rgbHexToColor("112233"),
+      widthPt: eighthPointsToPt(4),
+      style: "solid",
+    });
+    expect(table.rows[0]?.cells[0]?.borders?.right).toEqual({
+      color: rgbHexToColor("445566"),
+      widthPt: eighthPointsToPt(4),
+      style: "solid",
+    });
+  });
+
+  it("prefers w:left/w:right over the w:start/w:end aliases when both are spelled", () => {
+    const table = tableWithCellBorders(
+      el("w:tcBorders", {}, [
+        el("w:left", { "w:val": "single", "w:color": "AAAAAA" }),
+        el("w:start", { "w:val": "single", "w:color": "BBBBBB" }),
+      ]),
+    );
+    expect(table.rows[0]?.cells[0]?.borders?.left?.color).toEqual(
+      rgbHexToColor("AAAAAA"),
+    );
+  });
+
+  it("collapses to no borders at all when every edge is nil or none", () => {
+    const table = tableWithCellBorders(
+      el("w:tcBorders", {}, [
+        el("w:top", { "w:val": "nil" }),
+        el("w:bottom", { "w:val": "none" }),
+      ]),
+    );
+    expect(table.rows[0]?.cells[0]?.borders).toBeUndefined();
+  });
+
+  it("reads a right-only border edge with an explicit @w:sz", () => {
+    const table = tableWithCellBorders(
+      el("w:tcBorders", {}, [
+        el("w:right", { "w:val": "single", "w:sz": "16", "w:color": "010203" }),
+      ]),
+    );
+    expect(table.rows[0]?.cells[0]?.borders).toEqual({
+      right: {
+        color: rgbHexToColor("010203"),
+        widthPt: eighthPointsToPt(16),
+        style: "solid",
+      },
+    });
+  });
+});
+
+describe("readDocxContent: table span and row-height edge cases", () => {
+  it("leaves colSpan and rowSpan undefined for an ordinary, unmerged cell", () => {
+    const doc = readDocxContent(buildFixturePackage());
+    const table = asTable(doc.sections[0]?.blocks[19]);
+    expect(table.rows[1]?.cells[1]?.colSpan).toBeUndefined();
+    expect(table.rows[1]?.cells[1]?.rowSpan).toBeUndefined();
+  });
+
+  it("leaves a row's own heightPt undefined when it carries no w:trPr at all, and when w:trPr carries no w:trHeight", () => {
+    const noTrPr = el("w:tbl", {}, [
+      el("w:tblGrid", {}, [el("w:gridCol", { "w:w": "1440" })]),
+      el("w:tr", {}, [el("w:tc", {}, [el("w:p", {}, [textRun("a")])])]),
+    ]);
+    const noTrHeight = el("w:tbl", {}, [
+      el("w:tblGrid", {}, [el("w:gridCol", { "w:w": "1440" })]),
+      el("w:tr", {}, [
+        el("w:trPr", {}, []),
+        el("w:tc", {}, [el("w:p", {}, [textRun("b")])]),
+      ]),
+    ]);
+    expect(
+      asTable(readDocxContent(paragraphPackage(noTrPr)).sections[0]?.blocks[0])
+        .rows[0]?.heightPt,
+    ).toBeUndefined();
+    expect(
+      asTable(
+        readDocxContent(paragraphPackage(noTrHeight)).sections[0]?.blocks[0],
+      ).rows[0]?.heightPt,
+    ).toBeUndefined();
+  });
+});
+
+describe("readDocxContent: block-level bookmarks, duplicate ids, and out-of-order halves", () => {
+  function flowDoc(children: XmlElement[]) {
+    const body = el("w:body", {}, [
+      ...children,
+      el("w:sectPr", {}, [el("w:pgSz", { "w:w": "12240", "w:h": "15840" })]),
+    ]);
+    return readDocxContent({
+      parts: {
+        "word/document.xml": {
+          kind: "xml",
+          nodes: [el("w:document", {}, [body])],
+        },
+      },
+    });
+  }
+
+  it("brackets a whole block-level bookmark with a name, and drops one with no @w:name at all", () => {
+    const doc = flowDoc([
+      el("w:bookmarkStart", { "w:id": "1", "w:name": "Target" }),
+      el("w:p", {}, [textRun("Bookmarked paragraph")]),
+      el("w:bookmarkEnd", { "w:id": "1" }),
+      el("w:bookmarkStart", { "w:id": "2" }),
+      el("w:p", {}, [textRun("Unnamed bookmark paragraph")]),
+      el("w:bookmarkEnd", { "w:id": "2" }),
+    ]);
+    expect(asConstructStart(doc.sections[0]?.blocks[0]).descriptor).toEqual({
+      kind: "anchor",
+      anchorType: "bookmark",
+      name: "Target",
+    });
+    expect(doc.sections[0]?.blocks[2]?.kind).toBe("constructEnd");
+    expect(asParagraph(doc.sections[0]?.blocks[3]).runs[0]?.text).toBe(
+      "Unnamed bookmark paragraph",
+    );
+    expect(doc.sections[0]?.blocks).toHaveLength(4);
+  });
+
+  it("drops a range marker pair with a duplicate id (two starts sharing one id)", () => {
+    const doc = flowDoc([
+      el("w:bookmarkStart", { "w:id": "1", "w:name": "First" }),
+      el("w:bookmarkStart", { "w:id": "1", "w:name": "Duplicate" }),
+      el("w:p", {}, [textRun("Ambiguous")]),
+      el("w:bookmarkEnd", { "w:id": "1" }),
+    ]);
+    expect(
+      doc.sections[0]?.blocks.every((b) => b.kind !== "constructStart"),
+    ).toBe(true);
+  });
+
+  it("drops a comment range whose end sits before its start in document order", () => {
+    const doc = flowDoc([
+      el("w:p", {}, [textRun("Before")]),
+      el("w:commentRangeEnd", { "w:id": "7" }),
+      el("w:p", {}, [textRun("Between")]),
+      el("w:commentRangeStart", { "w:id": "7" }),
+      el("w:p", {}, [textRun("After")]),
+    ]);
+    expect(
+      doc.sections[0]?.blocks.every((b) => b.kind !== "constructStart"),
+    ).toBe(true);
+  });
+});
+
+describe("readDocxContent: paragraph-scoped bookmark markers", () => {
+  it("brackets a whole paragraph in a bookmark marker pair when both halves sit inside it but outside its own runs", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:bookmarkStart", { "w:id": "3", "w:name": "WholeParaBookmark" }),
+      textRun("Bookmarked text"),
+      el("w:bookmarkEnd", { "w:id": "3" }),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    expect(asConstructStart(doc.sections[0]?.blocks[0]).descriptor).toEqual({
+      kind: "anchor",
+      anchorType: "bookmark",
+      name: "WholeParaBookmark",
+    });
+    expect(asParagraph(doc.sections[0]?.blocks[1]).runs[0]?.text).toBe(
+      "Bookmarked text",
+    );
+    expect(doc.sections[0]?.blocks[2]?.kind).toBe("constructEnd");
+  });
+});
+
+describe("readDocxContent: sections fallback for a document with no w:sectPr anywhere", () => {
+  it("still produces one empty default section for a body with no content and no w:sectPr at all", () => {
+    const body = el("w:body", {}, []);
+    const doc = readDocxContent({
+      parts: {
+        "word/document.xml": {
+          kind: "xml",
+          nodes: [el("w:document", {}, [body])],
+        },
+      },
+    });
+    expect(doc.sections).toHaveLength(1);
+    expect(doc.sections[0]?.blocks).toEqual([]);
+    expect(doc.sections[0]?.pageSize).toEqual({ widthPt: 612, heightPt: 792 });
+  });
+});
+
+describe("readDocxContent: comment/footnote optional id, author, and type fields", () => {
+  it("carries a comment's own id and author when both are present, and omits id/author when absent", () => {
+    const pkg = buildFixturePackage();
+    pkg.parts["word/comments.xml"] = {
+      kind: "xml",
+      nodes: [
+        el("w:comments", {}, [
+          el("w:comment", { "w:id": "9", "w:author": "Reviewer" }, [
+            el("w:p", {}, [textRun("with id")]),
+          ]),
+          el("w:comment", {}, [el("w:p", {}, [textRun("no id or author")])]),
+        ]),
+      ],
+    };
+    const doc = readDocxContent(pkg);
+    expect(doc.comments[0]).toEqual({
+      id: "9",
+      author: "Reviewer",
+      text: "with id",
+    });
+    expect(doc.comments[1]).toEqual({ text: "no id or author" });
+  });
+
+  it("carries a footnote's own id, and its own w:type when present", () => {
+    const pkg = buildFixturePackage();
+    pkg.parts["word/footnotes.xml"] = {
+      kind: "xml",
+      nodes: [
+        el("w:footnotes", {}, [
+          el("w:footnote", { "w:id": "4", "w:type": "continuationNotice" }, [
+            el("w:p", {}, [textRun("typed note")]),
+          ]),
+        ]),
+      ],
+    };
+    const doc = readDocxContent(pkg);
+    expect(doc.footnotes[0]).toEqual({
+      id: "4",
+      type: "continuationNotice",
+      text: "typed note",
+    });
+  });
+});
+
+describe("readDocxContent: header/footer reference edge cases", () => {
+  it("skips a header reference whose @w:type is unrecognised, and one whose r:id does not resolve to a relationship", () => {
+    const HEADER_REFERENCE_REL =
+      "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header";
+    const body = el("w:body", {}, [
+      el("w:p", {}, [
+        el("w:pPr", {}, [
+          el("w:sectPr", {}, [
+            el("w:headerReference", { "w:type": "bogus", "r:id": "rIdA" }),
+            el("w:headerReference", {
+              "w:type": "default",
+              "r:id": "rIdMissing",
+            }),
+            el("w:pgSz", { "w:w": "12240", "w:h": "15840" }),
+          ]),
+        ]),
+      ]),
+      el("w:sectPr", {}, [el("w:pgSz", { "w:w": "12240", "w:h": "15840" })]),
+    ]);
+    const pkg: Package = {
+      parts: {
+        "word/document.xml": {
+          kind: "xml",
+          nodes: [el("w:document", {}, [body])],
+        },
+        "word/_rels/document.xml.rels": {
+          kind: "xml",
+          nodes: [
+            rels([
+              { id: "rIdA", type: HEADER_REFERENCE_REL, target: "header1.xml" },
+            ]),
+          ],
+        },
+      },
+    };
+    const doc = readDocxContent(pkg);
+    expect(doc.sectionHeaderFooters[0]?.header).toBeUndefined();
+  });
+});
+
+describe("readDocxContent: word/document.xml missing w:body", () => {
+  it("throws with the part path named in the message", () => {
+    const pkg: Package = {
+      parts: {
+        "word/document.xml": {
+          kind: "xml",
+          nodes: [el("w:document", {}, [])],
+        },
+      },
+    };
+    expect(() => readDocxContent(pkg)).toThrow(
+      "readDocxContent: word/document.xml has no w:body element",
+    );
   });
 });
