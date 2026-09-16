@@ -1,3 +1,9 @@
+## [1.5.6](https://github.com/ExaDev/documents.js/compare/epub-codec%401.5.5...epub-codec%401.5.6) (2026-09-16)
+
+### Miscellaneous Chores
+
+* **epub-codec:** raise the mutation break threshold to 100 ([64ea8c2](https://github.com/ExaDev/documents.js/commit/64ea8c2069ccaf6ad9abaee4d0e4dc254e1eb69b))
+
 ## [1.5.5](https://github.com/ExaDev/documents.js/compare/epub-codec%401.5.4...epub-codec%401.5.5) (2026-09-14)
 
 ### Code Refactoring
