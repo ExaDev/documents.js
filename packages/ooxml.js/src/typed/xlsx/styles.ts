@@ -98,14 +98,15 @@ function readFontTableEntry(font: XmlElement): FontTableEntry {
   const name = childrenWithTag(font, "name")[0];
   const sz = childrenWithTag(font, "sz")[0];
   const szVal = sz === undefined ? undefined : attr(sz, "val");
-  const szNum = szVal === undefined ? undefined : Number(szVal);
+  // No "szVal === undefined" guard: Number(undefined) is NaN, so an absent <sz val> already falls through the Number.isFinite check below to the same "no sizePt" outcome this guard would have selected directly.
+  const szNum = Number(szVal);
   return {
     bold: readFontToggle(childrenWithTag(font, "b")[0]),
     italic: readFontToggle(childrenWithTag(font, "i")[0]),
     underline: readFontUnderline(childrenWithTag(font, "u")[0]),
     strike: readFontToggle(childrenWithTag(font, "strike")[0]),
     fontFamily: name === undefined ? undefined : attr(name, "val"),
-    sizePt: szNum !== undefined && Number.isFinite(szNum) ? szNum : undefined,
+    sizePt: Number.isFinite(szNum) ? szNum : undefined,
     color: readColorRgb(font, "color"),
   };
 }
@@ -237,8 +238,9 @@ export function colorFromElement(
   if (raw === undefined) {
     return undefined;
   }
-  // Excel writes "FFRRGGBB" (alpha + RGB); a 6-digit "RRGGBB" is also spec-legal. Take the LAST six hex digits in both cases, since the alpha channel has no ContentSheetCell.background representation and a leading "FF" is the only prefix real producers emit.
+  // Excel writes "FFRRGGBB" (alpha + RGB); a 6-digit "RRGGBB" is also spec-legal. Take the LAST six hex digits in both cases, since the alpha channel has no ContentSheetCell.background representation and a leading "FF" is the only prefix real producers emit. The boundary here (">=" rather than ">") is a genuinely irreducible equivalent mutation opportunity: at raw.length exactly 6, slice(-6) returns the whole, unchanged string -- identical to what the ">" branch's bare `raw` would have returned directly -- so the two operators can never be told apart by this result for any input.
   const hex = raw.length >= 6 ? raw.slice(-6) : raw;
+  // The regex's own "^"/"$" anchors are equally irreducible: `hex` is always either exactly 6 characters (the slice above) or fewer (raw itself, when shorter) -- never more. A {6}-quantified pattern can only ever match a 6-character string across its entire length regardless of anchors, and can never match a shorter one at all, so no possible `hex` value can tell an anchored and an unanchored match apart here.
   if (!/^[0-9a-fA-F]{6}$/.test(hex)) {
     return undefined;
   }
