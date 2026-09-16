@@ -812,6 +812,334 @@ describe("buildXlsxPackageFromContent: a workbook needing no number formats writ
       ),
     ).toEqual([undefined]);
   });
+
+  it("writes the exact fixed scaffolding: one default font, the two reserved fills, the one reserved border, and a single default cellStyleXfs/cellXfs/cellStyles entry, none of them apply*-flagged", () => {
+    const styles = styleSheetOf(pkg);
+
+    const fontsEl = requireChild(styles, "fonts");
+    expect(attributeOf(fontsEl, "count")).toBe("1");
+    const fonts = elementsOf(fontsEl, "font");
+    expect(fonts).toHaveLength(1);
+    const defaultFont = fonts[0];
+    if (defaultFont === undefined) {
+      throw new Error("expected a default <font>");
+    }
+    expect(attributeOf(requireChild(defaultFont, "sz"), "val")).toBe("11");
+    expect(attributeOf(requireChild(defaultFont, "name"), "val")).toBe(
+      "Calibri",
+    );
+    expect(elementsOf(defaultFont, "color")).toHaveLength(0);
+    expect(elementsOf(defaultFont, "b")).toHaveLength(0);
+    expect(elementsOf(defaultFont, "i")).toHaveLength(0);
+    expect(elementsOf(defaultFont, "strike")).toHaveLength(0);
+    expect(elementsOf(defaultFont, "u")).toHaveLength(0);
+
+    const fillsEl = requireChild(styles, "fills");
+    expect(attributeOf(fillsEl, "count")).toBe("2");
+    const fills = elementsOf(fillsEl, "fill");
+    expect(
+      fills.map((fill) =>
+        attributeOf(requireChild(fill, "patternFill"), "patternType"),
+      ),
+    ).toEqual(["none", "gray125"]);
+
+    const bordersEl = requireChild(styles, "borders");
+    expect(attributeOf(bordersEl, "count")).toBe("1");
+    const borders = elementsOf(bordersEl, "border");
+    expect(borders).toHaveLength(1);
+    const reserved = borders[0];
+    if (reserved === undefined) {
+      throw new Error("expected the reserved <border>");
+    }
+    expect(reserved.tag).toBe("border");
+    for (const edge of ["left", "right", "top", "bottom", "diagonal"]) {
+      const edgeEl = requireChild(reserved, edge);
+      expect(attributeOf(edgeEl, "style")).toBeUndefined();
+      expect(elementsOf(edgeEl, "color")).toHaveLength(0);
+    }
+
+    const cellStyleXfsEl = requireChild(styles, "cellStyleXfs");
+    expect(attributeOf(cellStyleXfsEl, "count")).toBe("1");
+    const cellStyleXf = elementsOf(cellStyleXfsEl, "xf")[0];
+    if (cellStyleXf === undefined) {
+      throw new Error("expected a <xf> inside <cellStyleXfs>");
+    }
+    expect(attributeOf(cellStyleXf, "numFmtId")).toBe("0");
+    expect(attributeOf(cellStyleXf, "fontId")).toBe("0");
+    expect(attributeOf(cellStyleXf, "fillId")).toBe("0");
+    expect(attributeOf(cellStyleXf, "borderId")).toBe("0");
+
+    const cellXfs = requireChild(styles, "cellXfs");
+    const xf = elementsOf(cellXfs, "xf")[0];
+    if (xf === undefined) {
+      throw new Error("expected the default <xf>");
+    }
+    expect(attributeOf(xf, "fontId")).toBe("0");
+    expect(attributeOf(xf, "fillId")).toBe("0");
+    expect(attributeOf(xf, "borderId")).toBe("0");
+    expect(attributeOf(xf, "xfId")).toBe("0");
+    for (const flag of [
+      "applyFont",
+      "applyFill",
+      "applyBorder",
+      "applyAlignment",
+    ]) {
+      expect(xf.attributes.map((a) => a.name)).not.toContain(flag);
+    }
+
+    const cellStylesEl = requireChild(styles, "cellStyles");
+    expect(attributeOf(cellStylesEl, "count")).toBe("1");
+    const cellStyle = elementsOf(cellStylesEl, "cellStyle")[0];
+    if (cellStyle === undefined) {
+      throw new Error("expected a <cellStyle>");
+    }
+    expect(attributeOf(cellStyle, "name")).toBe("Normal");
+    expect(attributeOf(cellStyle, "xfId")).toBe("0");
+    expect(attributeOf(cellStyle, "builtinId")).toBe("0");
+
+    expect(childrenWithTag(styles, "dxfs")).toHaveLength(0);
+    expect(styles.tag).toBe("styleSheet");
+    expect(attr(styles, "xmlns")).toBe(
+      "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+    );
+  });
+
+  it("writes numFmts with the exact declared numFmtId/formatCode and count, for a document needing a custom format", () => {
+    const withCustomFormat = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "boolean", value: true },
+          displayText: "TRUE",
+        },
+      ]),
+    );
+    const styles = styleSheetOf(withCustomFormat);
+    const numFmts = requireChild(styles, "numFmts");
+    expect(attributeOf(numFmts, "count")).toBe("1");
+    const declared = elementsOf(numFmts, "numFmt");
+    expect(declared).toHaveLength(1);
+    expect(attributeOf(declared[0]!, "numFmtId")).toBe("164");
+  });
+});
+
+describe("buildXlsxPackageFromContent: xl/styles.xml carries every font toggle, per-edge border mixing, and a one-sided pattern fill exactly", () => {
+  const pkg = buildXlsxPackageFromContent(
+    singleSheetDocument([
+      // A font using EVERY toggle at once, to prove each one writes its own element independently of the others.
+      {
+        row: 0,
+        column: 0,
+        value: { kind: "string", value: "x" },
+        displayText: "x",
+        font: { bold: true, italic: true, strike: true, underline: true },
+      },
+      // A border carrying only its top edge, so left/right/bottom must fall back to the bare, style-less branch while top alone carries real data.
+      {
+        row: 1,
+        column: 0,
+        value: { kind: "string", value: "y" },
+        displayText: "y",
+        borders: { top: { color: { r: 0, g: 1, b: 0 }, widthPt: 1.5 } },
+      },
+      // A cell whose alignment.vertical is 'top', the one branch neither 'middle' nor the default omission exercises.
+      {
+        row: 2,
+        column: 0,
+        value: { kind: "string", value: "z" },
+        displayText: "z",
+        alignment: "left",
+        verticalAlignment: "top",
+      },
+      // A pattern fill with only its foreground colour set.
+      {
+        row: 3,
+        column: 0,
+        value: { kind: "string", value: "fg" },
+        displayText: "fg",
+        background: {
+          kind: "pattern",
+          patternType: "lightGray",
+          foregroundColor: { r: 1, g: 0, b: 1 },
+        },
+      },
+      // A pattern fill with only its background colour set.
+      {
+        row: 4,
+        column: 0,
+        value: { kind: "string", value: "bg" },
+        displayText: "bg",
+        background: {
+          kind: "pattern",
+          patternType: "lightGray",
+          backgroundColor: { r: 0, g: 1, b: 1 },
+        },
+      },
+    ]),
+  );
+  const styles = styleSheetOf(pkg);
+
+  it("writes bold/italic/strike/underline as four independent elements on the same <font>", () => {
+    const font = elementsOf(requireChild(styles, "fonts"), "font")[1];
+    if (font === undefined) {
+      throw new Error("expected the all-toggles <font> at index 1");
+    }
+    expect(elementsOf(font, "b")).toHaveLength(1);
+    expect(elementsOf(font, "i")).toHaveLength(1);
+    expect(elementsOf(font, "strike")).toHaveLength(1);
+    const underline = elementsOf(font, "u")[0];
+    expect(underline).toBeDefined();
+    expect(attributeOf(underline!, "val")).toBe("single");
+  });
+
+  it("writes only the top edge with real style/colour data, leaving left/right/bottom bare and the diagonal always empty", () => {
+    const border = elementsOf(requireChild(styles, "borders"), "border")[1];
+    if (border === undefined) {
+      throw new Error("expected the top-only <border> at index 1");
+    }
+    expect(border.tag).toBe("border");
+    const top = requireChild(border, "top");
+    expect(attributeOf(top, "style")).toBe("medium");
+    expect(attributeOf(requireChild(top, "color"), "rgb")).toBe("FF00ff00");
+    for (const edge of ["left", "right", "bottom"]) {
+      const edgeEl = requireChild(border, edge);
+      expect(attributeOf(edgeEl, "style")).toBeUndefined();
+      expect(elementsOf(edgeEl, "color")).toHaveLength(0);
+    }
+    expect(elementsOf(requireChild(border, "diagonal"), "color")).toHaveLength(
+      0,
+    );
+  });
+
+  it("writes verticalAlignment 'top' as alignment vertical=\"top\", distinct from 'middle' and the default omission", () => {
+    const cellXfs = requireChild(styles, "cellXfs");
+    const topStyleIndex = attributeOf(writtenCell(pkg, "A3"), "s");
+    const xf = elementsOf(cellXfs, "xf")[Number(topStyleIndex)];
+    if (xf === undefined) {
+      throw new Error("expected an <xf> for the top-aligned cell");
+    }
+    const alignment = requireChild(xf, "alignment");
+    expect(attributeOf(alignment, "vertical")).toBe("top");
+  });
+
+  it("writes a foreground-only pattern fill with fgColor and no bgColor", () => {
+    const fills = elementsOf(requireChild(styles, "fills"), "fill");
+    const fgOnly = fills.find((fill) => {
+      const patternFill = childElement(fill, "patternFill");
+      return (
+        patternFill !== undefined &&
+        attributeOf(patternFill, "patternType") === "lightGray" &&
+        elementsOf(patternFill, "fgColor").length > 0 &&
+        elementsOf(patternFill, "bgColor").length === 0
+      );
+    });
+    expect(fgOnly).toBeDefined();
+    const patternFill = requireChild(fgOnly!, "patternFill");
+    expect(attributeOf(requireChild(patternFill, "fgColor"), "rgb")).toBe(
+      "FFff00ff",
+    );
+  });
+
+  it("writes a background-only pattern fill with bgColor and no fgColor", () => {
+    const fills = elementsOf(requireChild(styles, "fills"), "fill");
+    const bgOnly = fills.find((fill) => {
+      const patternFill = childElement(fill, "patternFill");
+      return (
+        patternFill !== undefined &&
+        attributeOf(patternFill, "patternType") === "lightGray" &&
+        elementsOf(patternFill, "bgColor").length > 0 &&
+        elementsOf(patternFill, "fgColor").length === 0
+      );
+    });
+    expect(bgOnly).toBeDefined();
+    const patternFill = requireChild(bgOnly!, "patternFill");
+    expect(attributeOf(requireChild(patternFill, "bgColor"), "rgb")).toBe(
+      "FF00ffff",
+    );
+  });
+});
+
+describe("buildXlsxPackageFromContent: docProps/core.xml and docProps/app.xml carry every metadata field", () => {
+  const pkg = buildXlsxPackageFromContent({
+    kind: "spreadsheet",
+    metadata: {
+      title: "T",
+      author: "A",
+      subject: "S",
+      keywords: ["k1", "k2"],
+      creator: "C",
+      createdIso: "2026-01-01T00:00:00Z",
+      modifiedIso: "2026-02-02T00:00:00Z",
+    },
+    sheets: [
+      {
+        name: "Sheet1",
+        cells: [],
+        columns: [],
+        rows: [],
+        images: [],
+        printSettings: DEFAULT_PRINT_SETTINGS,
+      },
+    ],
+  });
+
+  it("writes every core-properties field, including subject and modified date, into docProps/core.xml with the correct namespaces", () => {
+    const core = rootElement(pkg.parts["docProps/core.xml"]);
+    if (core === undefined) {
+      throw new Error("expected docProps/core.xml to have a root element");
+    }
+    expect(core.tag).toBe("cp:coreProperties");
+    expect(attr(core, "xmlns:cp")).toBe(
+      "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
+    );
+    expect(attr(core, "xmlns:dc")).toBe("http://purl.org/dc/elements/1.1/");
+    expect(attr(core, "xmlns:dcterms")).toBe("http://purl.org/dc/terms/");
+    expect(attr(core, "xmlns:xsi")).toBe(
+      "http://www.w3.org/2001/XMLSchema-instance",
+    );
+    expect(textContent(requireChild(core, "dc:subject"))).toBe("S");
+    const modified = requireChild(core, "dcterms:modified");
+    expect(attr(modified, "xsi:type")).toBe("dcterms:W3CDTF");
+    expect(textContent(modified)).toBe("2026-02-02T00:00:00Z");
+  });
+
+  it("writes the creator into docProps/app.xml's <Application>", () => {
+    const app = rootElement(pkg.parts["docProps/app.xml"]);
+    if (app === undefined) {
+      throw new Error("expected docProps/app.xml to have a root element");
+    }
+    expect(app.tag).toBe("Properties");
+    expect(textContent(requireChild(app, "Application"))).toBe("C");
+  });
+
+  it("writes no dc:subject, no cp:keywords, and no <Application> at all when those fields are absent, keywords is an empty array", () => {
+    const bare = buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: { keywords: [] },
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+        },
+      ],
+    });
+    const core = rootElement(bare.parts["docProps/core.xml"]);
+    if (core === undefined) {
+      throw new Error("expected docProps/core.xml to have a root element");
+    }
+    expect(childrenWithTag(core, "dc:subject")).toHaveLength(0);
+    expect(childrenWithTag(core, "cp:keywords")).toHaveLength(0);
+    const app = rootElement(bare.parts["docProps/app.xml"]);
+    if (app === undefined) {
+      throw new Error("expected docProps/app.xml to have a root element");
+    }
+    expect(childrenWithTag(app, "Application")).toHaveLength(0);
+  });
 });
 
 describe('buildXlsxPackageFromContent: a formula cell with a cached STRING result writes t="str" literally, never shared-string-indexed', () => {
@@ -1945,6 +2273,7 @@ describe("buildXlsxPackageFromContent: the definitions option (Table objects) an
     }
     expect(attr(printArea, "name")).toBe("_xlnm.Print_Area");
     expect(attr(printArea, "localSheetId")).toBe("0");
+    expect(textContent(printArea)).toBe("Sheet1!$A$1:$B$10");
   });
 
   it("writes no <definedNames> container and no xl/tables part at all when no definitions are supplied and the document carries no names", () => {
@@ -1955,5 +2284,1285 @@ describe("buildXlsxPackageFromContent: the definitions option (Table objects) an
     }
     expect(childrenWithTag(workbook, "definedNames")).toHaveLength(0);
     expect(Object.keys(pkg.parts)).not.toContain("xl/tables/table1.xml");
+  });
+});
+
+// --- exact scaffolding: the XML declaration, [Content_Types].xml, package/workbook relationships -----------------
+
+describe("buildXlsxPackageFromContent: every XML part carries the same declaration prolog", () => {
+  it('declares version="1.0" encoding="UTF-8" standalone="yes" on the [Content_Types].xml part', () => {
+    const part = buildXlsxPackageFromContent(singleSheetDocument([])).parts[
+      "[Content_Types].xml"
+    ];
+    if (part?.kind !== "xml") {
+      throw new Error("expected an xml part");
+    }
+    const declaration = part.nodes[0];
+    if (declaration?.type !== "declaration") {
+      throw new Error("expected a declaration node first");
+    }
+    const attrOf = (name: string): string | undefined =>
+      declaration.attributes.find((a) => a.name === name)?.value;
+    expect(attrOf("version")).toBe("1.0");
+    expect(attrOf("encoding")).toBe("UTF-8");
+    expect(attrOf("standalone")).toBe("yes");
+  });
+});
+
+describe("buildXlsxPackageFromContent: [Content_Types].xml carries every part's exact Override, for a document exercising every content kind", () => {
+  function fullDocument(): ContentDocument {
+    const chart = chartEmbeddedObject();
+    return {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [
+            {
+              row: 0,
+              column: 0,
+              value: { kind: "string", value: "x" },
+              displayText: "x",
+              comment: { text: "note" },
+            },
+          ],
+          columns: [],
+          rows: [],
+          images: [
+            {
+              kind: "image",
+              format: "png",
+              base64: TINY_PNG_BASE64,
+              widthPt: 10,
+              heightPt: 10,
+              anchorRow: 0,
+              anchorColumn: 0,
+              offsetXPt: 0,
+              offsetYPt: 0,
+            },
+          ],
+          embeddedObjects: [chart],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+        },
+        {
+          name: "Sheet2",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+        },
+      ],
+    };
+  }
+
+  it("writes the fixed workbook/styles/sharedStrings overrides, one worksheet override per sheet, and the media/comments/drawing/chart/table overrides for the parts a fuller document actually carries", () => {
+    const pkg = buildXlsxPackageFromContent(fullDocument(), {
+      definitions: tableDefinitions(),
+    });
+    const contentTypes = rootElement(pkg.parts["[Content_Types].xml"]);
+    if (contentTypes === undefined) {
+      throw new Error("expected [Content_Types].xml to have a root element");
+    }
+    const defaults = childrenWithTag(contentTypes, "Default").map((el) => ({
+      extension: attr(el, "Extension"),
+      contentType: attr(el, "ContentType"),
+    }));
+    expect(defaults).toContainEqual({
+      extension: "rels",
+      contentType: "application/vnd.openxmlformats-package.relationships+xml",
+    });
+    expect(defaults).toContainEqual({
+      extension: "xml",
+      contentType: "application/xml",
+    });
+    expect(defaults).toContainEqual({
+      extension: "png",
+      contentType: "image/png",
+    });
+
+    const overrides = childrenWithTag(contentTypes, "Override").map((el) => ({
+      partName: attr(el, "PartName"),
+      contentType: attr(el, "ContentType"),
+    }));
+    expect(overrides).toContainEqual({
+      partName: "/xl/workbook.xml",
+      contentType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+    });
+    expect(overrides).toContainEqual({
+      partName: "/xl/styles.xml",
+      contentType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml",
+    });
+    expect(overrides).toContainEqual({
+      partName: "/xl/sharedStrings.xml",
+      contentType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml",
+    });
+    // One worksheet override per sheet, not one fewer or one more.
+    expect(overrides).toContainEqual({
+      partName: "/xl/worksheets/sheet1.xml",
+      contentType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
+    });
+    expect(overrides).toContainEqual({
+      partName: "/xl/worksheets/sheet2.xml",
+      contentType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
+    });
+    expect(
+      overrides.filter((o) => o.partName?.startsWith("/xl/worksheets/sheet")),
+    ).toHaveLength(2);
+    // Only sheet 1 carries a comment, a drawing, and a table -- indices must not leak onto sheet 2.
+    expect(overrides).toContainEqual({
+      partName: "/xl/threadedComments/threadedComment1.xml",
+      contentType: "application/vnd.ms-excel.threadedcomments+xml",
+    });
+    expect(overrides).not.toContainEqual(
+      expect.objectContaining({
+        partName: "/xl/threadedComments/threadedComment2.xml",
+      }),
+    );
+    expect(overrides).toContainEqual({
+      partName: "/xl/drawings/drawing1.xml",
+      contentType: "application/vnd.openxmlformats-officedocument.drawing+xml",
+    });
+    expect(overrides).not.toContainEqual(
+      expect.objectContaining({ partName: "/xl/drawings/drawing2.xml" }),
+    );
+    expect(overrides).toContainEqual({
+      partName: "/xl/charts/chart1.xml",
+      contentType:
+        "application/vnd.openxmlformats-officedocument.drawingml.chart+xml",
+    });
+    expect(overrides).toContainEqual({
+      partName: "/xl/tables/table1.xml",
+      contentType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml",
+    });
+    expect(overrides).toContainEqual({
+      partName: "/docProps/core.xml",
+      contentType: "application/vnd.openxmlformats-package.core-properties+xml",
+    });
+    expect(overrides).toContainEqual({
+      partName: "/docProps/app.xml",
+      contentType:
+        "application/vnd.openxmlformats-officedocument.extended-properties+xml",
+    });
+  });
+
+  it("declares no jpeg/gif media default when only a png is actually used", () => {
+    const pkg = buildXlsxPackageFromContent(fullDocument());
+    const contentTypes = rootElement(pkg.parts["[Content_Types].xml"]);
+    if (contentTypes === undefined) {
+      throw new Error("expected [Content_Types].xml to have a root element");
+    }
+    const extensions = childrenWithTag(contentTypes, "Default").map((el) =>
+      attr(el, "Extension"),
+    );
+    expect(extensions).not.toContain("jpeg");
+    expect(extensions).not.toContain("gif");
+  });
+});
+
+describe("buildXlsxPackageFromContent: _rels/.rels carries exactly the three fixed package relationships", () => {
+  it("writes rId1/rId2/rId3 pointing at the workbook, core properties, and extended properties, in that order", () => {
+    const pkg = buildXlsxPackageFromContent(singleSheetDocument([]));
+    const rels = rootElement(pkg.parts["_rels/.rels"]);
+    if (rels === undefined) {
+      throw new Error("expected _rels/.rels to have a root element");
+    }
+    const relationships = childrenWithTag(rels, "Relationship").map((el) => ({
+      id: attr(el, "Id"),
+      type: attr(el, "Type"),
+      target: attr(el, "Target"),
+    }));
+    expect(relationships).toEqual([
+      {
+        id: "rId1",
+        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument",
+        target: "xl/workbook.xml",
+      },
+      {
+        id: "rId2",
+        type: "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties",
+        target: "docProps/core.xml",
+      },
+      {
+        id: "rId3",
+        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties",
+        target: "docProps/app.xml",
+      },
+    ]);
+  });
+});
+
+describe("buildXlsxPackageFromContent: xl/_rels/workbook.xml.rels numbers worksheet relationships before styles/sharedStrings, exactly one id past the sheet count", () => {
+  it("writes one worksheet relationship per sheet (rId1..rIdN), then styles at rId(N+1) and sharedStrings at rId(N+2), for a 2-sheet workbook", () => {
+    const pkg = buildXlsxPackageFromContent(DOCUMENT);
+    const rels = rootElement(pkg.parts["xl/_rels/workbook.xml.rels"]);
+    if (rels === undefined) {
+      throw new Error(
+        "expected xl/_rels/workbook.xml.rels to have a root element",
+      );
+    }
+    const relationships = childrenWithTag(rels, "Relationship").map((el) => ({
+      id: attr(el, "Id"),
+      type: attr(el, "Type"),
+      target: attr(el, "Target"),
+    }));
+    expect(relationships).toEqual([
+      {
+        id: "rId1",
+        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
+        target: "worksheets/sheet1.xml",
+      },
+      {
+        id: "rId2",
+        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
+        target: "worksheets/sheet2.xml",
+      },
+      {
+        id: "rId3",
+        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles",
+        target: "styles.xml",
+      },
+      {
+        id: "rId4",
+        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings",
+        target: "sharedStrings.xml",
+      },
+    ]);
+  });
+
+  it("writes exactly one worksheet relationship, at rId1, for a single-sheet workbook -- proving the loop runs sheetCount times, not one more or fewer", () => {
+    const pkg = buildXlsxPackageFromContent(singleSheetDocument([]));
+    const rels = rootElement(pkg.parts["xl/_rels/workbook.xml.rels"]);
+    if (rels === undefined) {
+      throw new Error(
+        "expected xl/_rels/workbook.xml.rels to have a root element",
+      );
+    }
+    const worksheetRels = childrenWithTag(rels, "Relationship").filter(
+      (el) =>
+        attr(el, "Type") ===
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
+    );
+    expect(worksheetRels).toHaveLength(1);
+    const [worksheetRel] = worksheetRels;
+    if (worksheetRel === undefined) {
+      throw new Error("expected exactly one worksheet relationship");
+    }
+    expect(attr(worksheetRel, "Id")).toBe("rId1");
+  });
+});
+
+describe("buildXlsxPackageFromContent: xl/workbook.xml sheet elements carry the correct sheetId and r:id per index", () => {
+  it("numbers sheetId from 1 and r:id via worksheetRelId, matching the sheet's own position, for a 2-sheet workbook", () => {
+    const pkg = buildXlsxPackageFromContent(DOCUMENT);
+    const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
+    if (workbook === undefined) {
+      throw new Error("expected xl/workbook.xml to have a root element");
+    }
+    expect(attr(workbook, "xmlns:r")).toBe(
+      "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+    );
+    const sheetsEl = requireChild(workbook, "sheets");
+    const sheetElements = elementsOf(sheetsEl, "sheet").map((el) => ({
+      name: attributeOf(el, "name"),
+      sheetId: attributeOf(el, "sheetId"),
+      rId: attributeOf(el, "r:id"),
+    }));
+    expect(sheetElements).toEqual([
+      { name: "Data", sheetId: "1", rId: "rId1" },
+      { name: "Summary", sheetId: "2", rId: "rId2" },
+    ]);
+  });
+});
+
+describe("buildXlsxPackageFromContent: derives _xlnm.Print_Titles from EITHER repeatRows or repeatColumns alone, not only when both are present", () => {
+  function documentWithRepeat(
+    repeat: Partial<
+      Pick<ContentSheet["printSettings"], "repeatRows" | "repeatColumns">
+    >,
+  ): ContentDocument {
+    return {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: { ...DEFAULT_PRINT_SETTINGS, ...repeat },
+        },
+      ],
+    };
+  }
+
+  it("derives Print_Titles from repeatRows alone, with no repeatColumns set", () => {
+    const pkg = buildXlsxPackageFromContent(
+      documentWithRepeat({ repeatRows: { start: 0, end: 1 } }),
+    );
+    const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
+    if (workbook === undefined) {
+      throw new Error("expected xl/workbook.xml to have a root element");
+    }
+    const definedNames = requireChild(workbook, "definedNames");
+    const printTitles = elementsOf(definedNames, "definedName").find(
+      (el) => attributeOf(el, "name") === "_xlnm.Print_Titles",
+    );
+    expect(printTitles).toBeDefined();
+  });
+
+  it("derives Print_Titles from repeatColumns alone, with no repeatRows set", () => {
+    const pkg = buildXlsxPackageFromContent(
+      documentWithRepeat({ repeatColumns: { start: 0, end: 1 } }),
+    );
+    const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
+    if (workbook === undefined) {
+      throw new Error("expected xl/workbook.xml to have a root element");
+    }
+    const definedNames = requireChild(workbook, "definedNames");
+    const printTitles = elementsOf(definedNames, "definedName").find(
+      (el) => attributeOf(el, "name") === "_xlnm.Print_Titles",
+    );
+    expect(printTitles).toBeDefined();
+  });
+
+  it("derives no Print_Titles at all when neither repeatRows nor repeatColumns is set", () => {
+    const pkg = buildXlsxPackageFromContent(documentWithRepeat({}));
+    const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
+    if (workbook === undefined) {
+      throw new Error("expected xl/workbook.xml to have a root element");
+    }
+    expect(childrenWithTag(workbook, "definedNames")).toHaveLength(0);
+  });
+
+  it("does not duplicate Print_Titles when the names array already carries it verbatim for that sheet", () => {
+    const wide = documentWithRepeat({ repeatRows: { start: 0, end: 1 } });
+    if (wide.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    wide.names = [
+      {
+        name: "_xlnm.Print_Titles",
+        refersTo: "Sheet1!$1:$1",
+        scopeSheetIndex: 0,
+      },
+    ];
+    const pkg = buildXlsxPackageFromContent(wide);
+    const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
+    if (workbook === undefined) {
+      throw new Error("expected xl/workbook.xml to have a root element");
+    }
+    const definedNames = requireChild(workbook, "definedNames");
+    const printTitlesEntries = elementsOf(definedNames, "definedName").filter(
+      (el) => attributeOf(el, "name") === "_xlnm.Print_Titles",
+    );
+    expect(printTitlesEntries).toHaveLength(1);
+    expect(textContent(printTitlesEntries[0]!)).toBe("Sheet1!$1:$1");
+  });
+});
+
+describe("buildXlsxPackageFromContent: xl/sharedStrings.xml carries the exact count/uniqueCount and per-entry xml:space", () => {
+  it('writes count and uniqueCount equal to the number of distinct strings, and xml:space="preserve" on every <t>', () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "Alpha" },
+          displayText: "Alpha",
+        },
+        {
+          row: 0,
+          column: 1,
+          value: { kind: "string", value: "Beta" },
+          displayText: "Beta",
+        },
+      ]),
+    );
+    const sharedStrings = rootElement(pkg.parts["xl/sharedStrings.xml"]);
+    if (sharedStrings === undefined) {
+      throw new Error("expected xl/sharedStrings.xml to have a root element");
+    }
+    expect(attr(sharedStrings, "count")).toBe("2");
+    expect(attr(sharedStrings, "uniqueCount")).toBe("2");
+    const tElements = childrenWithTag(sharedStrings, "si").map(
+      (si) => childrenWithTag(si, "t")[0],
+    );
+    for (const t of tElements) {
+      expect(t === undefined ? undefined : attr(t, "xml:space")).toBe(
+        "preserve",
+      );
+    }
+    expect(textContent(childrenWithTag(sharedStrings, "si")[0]!)).toBe("Alpha");
+  });
+});
+
+// --- computeDimension, buildColsElement, cell/row assembly ---------------------------------------------------------
+
+describe("computeDimension: each of cells, columns, and rows independently extends the dimension, never overwriting a larger extent with a smaller one", () => {
+  function sheetOf(
+    overrides: Partial<Pick<ContentSheet, "cells" | "columns" | "rows">>,
+  ): ContentDocument {
+    return {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+          ...overrides,
+        },
+      ],
+    };
+  }
+
+  function dimensionRefOf(pkg: Package): string | undefined {
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    return attr(requireChild(worksheet, "dimension"), "ref");
+  }
+
+  it("extends the dimension from columns alone, with no cells or rows, down to row 1 only", () => {
+    const pkg = buildXlsxPackageFromContent(
+      sheetOf({ columns: [{ index: 4 }] }),
+    );
+    expect(dimensionRefOf(pkg)).toBe("A1:E1");
+  });
+
+  it("extends the dimension from rows alone, with no cells or columns, out to column A only", () => {
+    const pkg = buildXlsxPackageFromContent(sheetOf({ rows: [{ index: 4 }] }));
+    expect(dimensionRefOf(pkg)).toBe("A1:A5");
+  });
+
+  it("takes the larger of cells' and rows'/columns' own extents, not the smaller -- a column/row entry past the last cell still widens the dimension", () => {
+    const pkg = buildXlsxPackageFromContent(
+      sheetOf({
+        cells: [
+          {
+            row: 0,
+            column: 0,
+            value: { kind: "string", value: "x" },
+            displayText: "x",
+          },
+        ],
+        columns: [{ index: 9 }],
+        rows: [{ index: 9 }],
+      }),
+    );
+    expect(dimensionRefOf(pkg)).toBe("A1:J10");
+  });
+});
+
+describe("buildColsElement: width and hidden are independent, either can be written alone", () => {
+  it("writes a hidden column with no width attribute at all, when only `hidden` is declared", () => {
+    const hiddenOnly = buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [{ index: 0, hidden: true }],
+          rows: [],
+          images: [],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+        },
+      ],
+    });
+    const worksheet = rootElement(hiddenOnly.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const col = requireChild(requireChild(worksheet, "cols"), "col");
+    expect(attr(col, "hidden")).toBe("true");
+    expect(attr(col, "width")).toBeUndefined();
+    expect(attr(col, "customWidth")).toBeUndefined();
+    expect(attr(col, "min")).toBe("1");
+    expect(attr(col, "max")).toBe("1");
+  });
+
+  it("writes a visible column with width/customWidth and no hidden attribute at all, when only `widthPt` is declared", () => {
+    const widthOnly = buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [{ index: 2, widthPt: 80 }],
+          rows: [],
+          images: [],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+        },
+      ],
+    });
+    const worksheet = rootElement(widthOnly.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const col = requireChild(requireChild(worksheet, "cols"), "col");
+    expect(attr(col, "customWidth")).toBe("true");
+    expect(attr(col, "hidden")).toBeUndefined();
+    expect(attr(col, "min")).toBe("3");
+    expect(attr(col, "max")).toBe("3");
+  });
+});
+
+describe("buildSheetDataElement: rows and cells are written in ascending order regardless of input order, and a row with no ContentSheetRow entry carries only its own r attribute", () => {
+  it("writes rows in ascending row-index order and, within a row, cells in ascending column order, even when supplied in reverse", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 5,
+          column: 2,
+          value: { kind: "string", value: "e" },
+          displayText: "e",
+        },
+        {
+          row: 2,
+          column: 0,
+          value: { kind: "string", value: "b" },
+          displayText: "b",
+        },
+        {
+          row: 2,
+          column: 3,
+          value: { kind: "string", value: "d" },
+          displayText: "d",
+        },
+        {
+          row: 0,
+          column: 1,
+          value: { kind: "string", value: "a" },
+          displayText: "a",
+        },
+      ]),
+    );
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const sheetData = requireChild(worksheet, "sheetData");
+    const rows = elementsOf(sheetData, "row");
+    expect(rows.map((row) => attr(row, "r"))).toEqual(["1", "3", "6"]);
+    const middleRow = rows[1];
+    if (middleRow === undefined) {
+      throw new Error("expected the row at index 1 (row 3)");
+    }
+    expect(elementsOf(middleRow, "c").map((cell) => attr(cell, "r"))).toEqual([
+      "A3",
+      "D3",
+    ]);
+  });
+
+  it("writes a row's own r attribute alone, with no ht/customHeight/hidden, when the sheet declares no matching ContentSheetRow", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 3,
+          column: 0,
+          value: { kind: "string", value: "x" },
+          displayText: "x",
+        },
+      ]),
+    );
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const row = requireChild(requireChild(worksheet, "sheetData"), "row");
+    expect(attr(row, "r")).toBe("4");
+    expect(attr(row, "ht")).toBeUndefined();
+    expect(attr(row, "customHeight")).toBeUndefined();
+    expect(attr(row, "hidden")).toBeUndefined();
+  });
+});
+
+describe("buildMergeCellsElement: colSpan and rowSpan trigger a merge independently of each other", () => {
+  function pkgWith(cells: ContentSheet["cells"]): Package {
+    return buildXlsxPackageFromContent(singleSheetDocument(cells));
+  }
+
+  it("treats colSpan alone (rowSpan defaulting to 1) as a merge", () => {
+    const pkg = pkgWith([
+      {
+        row: 0,
+        column: 0,
+        value: { kind: "string", value: "x" },
+        displayText: "x",
+        colSpan: 3,
+      },
+    ]);
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const mergeCells = requireChild(worksheet, "mergeCells");
+    expect(attr(mergeCells, "count")).toBe("1");
+    const mergeCell = requireChild(mergeCells, "mergeCell");
+    expect(attr(mergeCell, "ref")).toBe("A1:C1");
+  });
+
+  it("treats rowSpan alone (colSpan defaulting to 1) as a merge", () => {
+    const pkg = pkgWith([
+      {
+        row: 0,
+        column: 0,
+        value: { kind: "string", value: "x" },
+        displayText: "x",
+        rowSpan: 3,
+      },
+    ]);
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const mergeCell = requireChild(
+      requireChild(worksheet, "mergeCells"),
+      "mergeCell",
+    );
+    expect(attr(mergeCell, "ref")).toBe("A1:A3");
+  });
+
+  it("writes no <mergeCells> element at all when every cell's colSpan/rowSpan is exactly 1 or absent", () => {
+    const pkg = pkgWith([
+      {
+        row: 0,
+        column: 0,
+        value: { kind: "string", value: "x" },
+        displayText: "x",
+        colSpan: 1,
+        rowSpan: 1,
+      },
+    ]);
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    expect(childrenWithTag(worksheet, "mergeCells")).toHaveLength(0);
+  });
+});
+
+describe("buildCellElement: the decoration/format branches that decide styleIndex, and the exact t/f/v children written", () => {
+  it("writes a cell carrying alignment alone (no font/background/borders/verticalAlignment) as decorated, not left at the default style index", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "left" },
+          displayText: "left",
+          alignment: "left",
+        },
+        {
+          row: 0,
+          column: 1,
+          value: { kind: "string", value: "plain" },
+          displayText: "plain",
+        },
+      ]),
+    );
+    const leftIndex = attr(writtenCell(pkg, "A1"), "s");
+    const plainIndex = attr(writtenCell(pkg, "B1"), "s");
+    expect(leftIndex).not.toBe(plainIndex);
+    expect(plainIndex).toBe("0");
+  });
+
+  it("writes both <f> and <v> for a formula cell, in that order, and no t attribute for its numeric cached result", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "number", value: 5 },
+          formula: "2+3",
+          displayText: "5",
+        },
+      ]),
+    );
+    const cell = writtenCell(pkg, "A1");
+    expect(
+      cell.children.map((c) => (c.type === "element" ? c.tag : c.type)),
+    ).toEqual(["f", "v"]);
+    expect(textContent(requireChild(cell, "f"))).toBe("2+3");
+    expect(attr(cell, "t")).toBeUndefined();
+  });
+
+  it("writes no <f> element at all for a cell with no formula", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "number", value: 5 },
+          displayText: "5",
+        },
+      ]),
+    );
+    expect(childrenWithTag(writtenCell(pkg, "A1"), "f")).toHaveLength(0);
+  });
+});
+
+describe("renderString/renderTemporal: the formula-result and undefined-serial branches", () => {
+  it('writes a formula\'s own cached STRING result inline as t="str", never shared-string-indexed, even for a repeated value', () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "same" },
+          formula: '"same"',
+          displayText: "same",
+        },
+        {
+          row: 0,
+          column: 1,
+          value: { kind: "string", value: "same" },
+          displayText: "same",
+        },
+      ]),
+    );
+    expect(attr(writtenCell(pkg, "A1"), "t")).toBe("str");
+    expect(attr(writtenCell(pkg, "B1"), "t")).toBe("s");
+    // Only the literal cell interned into sharedStrings -- the formula's own cached text did not.
+    const sharedStrings = rootElement(pkg.parts["xl/sharedStrings.xml"]);
+    if (sharedStrings === undefined) {
+      throw new Error("expected xl/sharedStrings.xml to have a root element");
+    }
+    expect(childrenWithTag(sharedStrings, "si")).toHaveLength(1);
+  });
+
+  it("degrades an unparseable date to text via renderString's OWN formula-result branch, writing t=\"str\" when the temporal value is itself a formula's cached result", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "date", value: "not-a-real-date" },
+          formula: "TODAY()",
+          displayText: "not-a-real-date",
+        },
+      ]),
+    );
+    const cell = writtenCell(pkg, "A1");
+    expect(attr(cell, "t")).toBe("str");
+    expect(textContent(requireChild(cell, "v"))).toBe("not-a-real-date");
+  });
+});
+
+describe("buildSheetPrElement: fitToPage reflects whether fitToPages is actually present", () => {
+  it('writes pageSetUpPr fitToPage="true" when the sheet declares fitToPages', () => {
+    const pkg = buildXlsxPackageFromContent(SUMMARY_ONLY_DOCUMENT());
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const sheetPr = requireChild(worksheet, "sheetPr");
+    expect(attr(requireChild(sheetPr, "pageSetUpPr"), "fitToPage")).toBe(
+      "true",
+    );
+  });
+
+  it('writes pageSetUpPr fitToPage="false" when the sheet declares no fitToPages', () => {
+    const pkg = buildXlsxPackageFromContent(singleSheetDocument([]));
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const sheetPr = requireChild(worksheet, "sheetPr");
+    expect(attr(requireChild(sheetPr, "pageSetUpPr"), "fitToPage")).toBe(
+      "false",
+    );
+  });
+});
+
+function SUMMARY_ONLY_DOCUMENT(): ContentDocument {
+  return { kind: "spreadsheet", metadata: {}, sheets: [SUMMARY_SHEET] };
+}
+
+// --- print settings: margins, page setup, and manual breaks --------------------------------------------------------
+
+describe("buildPageMarginsElement/ptToInches: writes the genuine points-to-inches conversion, not a fabricated one", () => {
+  it("converts 72pt margins to exactly 1 inch on every side, and the fixed 0.5in header/footer margin", () => {
+    const pkg = buildXlsxPackageFromContent(singleSheetDocument([]));
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const margins = requireChild(worksheet, "pageMargins");
+    expect(attr(margins, "left")).toBe("1");
+    expect(attr(margins, "right")).toBe("1");
+    expect(attr(margins, "top")).toBe("1");
+    expect(attr(margins, "bottom")).toBe("1");
+    expect(attr(margins, "header")).toBe("0.3");
+    expect(attr(margins, "footer")).toBe("0.3");
+  });
+
+  it("converts non-72pt margins proportionally, not with a fixed or fabricated ratio", () => {
+    const pkg = buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: {
+            ...DEFAULT_PRINT_SETTINGS,
+            margins: { topPt: 36, rightPt: 18, bottomPt: 144, leftPt: 9 },
+          },
+        },
+      ],
+    });
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const margins = requireChild(worksheet, "pageMargins");
+    expect(attr(margins, "top")).toBe("0.5");
+    expect(attr(margins, "right")).toBe("0.25");
+    expect(attr(margins, "bottom")).toBe("2");
+    expect(attr(margins, "left")).toBe("0.125");
+  });
+});
+
+describe("buildPageSetupElement: paperSize vs paperWidth/paperHeight, orientation, and scale/fitToWidth/fitToHeight defaults", () => {
+  function pageSetupOf(pageSize: {
+    widthPt: number;
+    heightPt: number;
+  }): XmlElement {
+    const pkg = buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: { ...DEFAULT_PRINT_SETTINGS, pageSize },
+        },
+      ],
+    });
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    return requireChild(worksheet, "pageSetup");
+  }
+
+  it('writes paperSize (the recognised code), no paperWidth/paperHeight, and orientation="portrait" for a standard, taller-than-wide page', () => {
+    const pageSetup = pageSetupOf({ widthPt: 612, heightPt: 792 }); // US Letter
+    expect(attr(pageSetup, "paperSize")).toBe("1");
+    expect(attr(pageSetup, "paperWidth")).toBeUndefined();
+    expect(attr(pageSetup, "paperHeight")).toBeUndefined();
+    expect(attr(pageSetup, "orientation")).toBe("portrait");
+  });
+
+  it('writes paperWidth/paperHeight, no paperSize, and orientation="landscape" for a custom, wider-than-tall page', () => {
+    const pageSetup = pageSetupOf({ widthPt: 500, heightPt: 300 });
+    expect(attr(pageSetup, "paperSize")).toBeUndefined();
+    expect(attr(pageSetup, "paperWidth")).toBeDefined();
+    expect(attr(pageSetup, "paperHeight")).toBeDefined();
+    expect(attr(pageSetup, "orientation")).toBe("landscape");
+  });
+
+  it('writes scale="100", fitToWidth="1", fitToHeight="1" as the genuine defaults when neither scalePercent nor fitToPages is declared', () => {
+    const pageSetup = pageSetupOf({ widthPt: 612, heightPt: 792 });
+    expect(attr(pageSetup, "scale")).toBe("100");
+    expect(attr(pageSetup, "fitToWidth")).toBe("1");
+    expect(attr(pageSetup, "fitToHeight")).toBe("1");
+  });
+
+  it("writes the declared scalePercent and fitToPages verbatim when they are present, not the defaults", () => {
+    const pkg = buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: {
+            ...DEFAULT_PRINT_SETTINGS,
+            scalePercent: 80,
+            fitToPages: { width: 2, height: 5 },
+          },
+        },
+      ],
+    });
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const pageSetup = requireChild(worksheet, "pageSetup");
+    expect(attr(pageSetup, "scale")).toBe("80");
+    expect(attr(pageSetup, "fitToWidth")).toBe("2");
+    expect(attr(pageSetup, "fitToHeight")).toBe("5");
+  });
+});
+
+describe("buildBreaksElements: manual row and column breaks are written independently of each other", () => {
+  function pkgWithBreaks(manualBreaks: {
+    rows: number[];
+    columns: number[];
+  }): Package {
+    return buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: { ...DEFAULT_PRINT_SETTINGS, manualBreaks },
+        },
+      ],
+    });
+  }
+
+  it("writes rowBreaks with the exact id/min/max/man attributes and count/manualBreakCount, no colBreaks at all, for row breaks alone", () => {
+    const pkg = pkgWithBreaks({ rows: [3, 7], columns: [] });
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    expect(childrenWithTag(worksheet, "colBreaks")).toHaveLength(0);
+    const rowBreaks = requireChild(worksheet, "rowBreaks");
+    expect(attr(rowBreaks, "count")).toBe("2");
+    expect(attr(rowBreaks, "manualBreakCount")).toBe("2");
+    const brks = elementsOf(rowBreaks, "brk");
+    expect(brks.map((brk) => attributeOf(brk, "id"))).toEqual(["3", "7"]);
+    const first = brks[0];
+    if (first === undefined) {
+      throw new Error("expected the first <brk>");
+    }
+    expect(attributeOf(first, "min")).toBe("0");
+    expect(attributeOf(first, "max")).toBe("16383");
+    expect(attributeOf(first, "man")).toBe("1");
+  });
+
+  it("writes colBreaks with the exact id/min/max/man attributes and count/manualBreakCount, no rowBreaks at all, for column breaks alone", () => {
+    const pkg = pkgWithBreaks({ rows: [], columns: [2] });
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    expect(childrenWithTag(worksheet, "rowBreaks")).toHaveLength(0);
+    const colBreaks = requireChild(worksheet, "colBreaks");
+    expect(attr(colBreaks, "count")).toBe("1");
+    expect(attr(colBreaks, "manualBreakCount")).toBe("1");
+    const brk = elementsOf(colBreaks, "brk")[0];
+    if (brk === undefined) {
+      throw new Error("expected a <brk>");
+    }
+    expect(attributeOf(brk, "id")).toBe("2");
+    expect(attributeOf(brk, "min")).toBe("0");
+    expect(attributeOf(brk, "max")).toBe("1048575");
+    expect(attributeOf(brk, "man")).toBe("1");
+  });
+
+  it("writes neither rowBreaks nor colBreaks when manualBreaks is undefined, and neither when both arrays are empty", () => {
+    const noBreaks = rootElement(
+      buildXlsxPackageFromContent(singleSheetDocument([])).parts[
+        "xl/worksheets/sheet1.xml"
+      ],
+    );
+    if (noBreaks === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    expect(childrenWithTag(noBreaks, "rowBreaks")).toHaveLength(0);
+    expect(childrenWithTag(noBreaks, "colBreaks")).toHaveLength(0);
+
+    const emptyBreaks = rootElement(
+      pkgWithBreaks({ rows: [], columns: [] }).parts[
+        "xl/worksheets/sheet1.xml"
+      ],
+    );
+    if (emptyBreaks === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    expect(childrenWithTag(emptyBreaks, "rowBreaks")).toHaveLength(0);
+    expect(childrenWithTag(emptyBreaks, "colBreaks")).toHaveLength(0);
+  });
+});
+
+describe("buildWorksheetPart: element presence for cols, mergeCells, drawing, and tableParts, and buildWorksheetRelsPart's own root", () => {
+  it("writes cols, mergeCells, drawing, and tableParts all together, and no more than one of each, for a sheet carrying every optional feature", () => {
+    const pkg = buildXlsxPackageFromContent(
+      {
+        kind: "spreadsheet",
+        metadata: {},
+        sheets: [
+          {
+            name: "Sheet1",
+            cells: [
+              {
+                row: 0,
+                column: 0,
+                value: { kind: "string", value: "x" },
+                displayText: "x",
+                colSpan: 2,
+              },
+            ],
+            columns: [{ index: 0, widthPt: 50 }],
+            rows: [],
+            images: [
+              {
+                kind: "image",
+                format: "png",
+                base64: TINY_PNG_BASE64,
+                widthPt: 10,
+                heightPt: 10,
+                anchorRow: 1,
+                anchorColumn: 0,
+                offsetXPt: 0,
+                offsetYPt: 0,
+              },
+            ],
+            printSettings: DEFAULT_PRINT_SETTINGS,
+          },
+        ],
+      },
+      { definitions: tableDefinitions() },
+    );
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    expect(worksheet.tag).toBe("worksheet");
+    expect(attr(worksheet, "xmlns")).toBe(
+      "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+    );
+    expect(attr(worksheet, "xmlns:r")).toBe(
+      "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+    );
+    expect(childrenWithTag(worksheet, "cols")).toHaveLength(1);
+    expect(childrenWithTag(worksheet, "mergeCells")).toHaveLength(1);
+    const drawing = requireChild(worksheet, "drawing");
+    expect(attr(drawing, "r:id")).toBeDefined();
+    const tableParts = requireChild(worksheet, "tableParts");
+    expect(attr(tableParts, "count")).toBe("1");
+    expect(attr(requireChild(tableParts, "tablePart"), "r:id")).toBeDefined();
+
+    const rels = rootElement(pkg.parts["xl/worksheets/_rels/sheet1.xml.rels"]);
+    if (rels === undefined) {
+      throw new Error(
+        "expected the worksheet rels part to have a root element",
+      );
+    }
+    expect(rels.tag).toBe("Relationships");
+    expect(attr(rels, "xmlns")).toBe(
+      "http://schemas.openxmlformats.org/package/2006/relationships",
+    );
+  });
+
+  it("writes no cols, mergeCells, drawing, or tableParts at all for a plain sheet with none of those features", () => {
+    const worksheet = rootElement(
+      buildXlsxPackageFromContent(singleSheetDocument([])).parts[
+        "xl/worksheets/sheet1.xml"
+      ],
+    );
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    expect(childrenWithTag(worksheet, "cols")).toHaveLength(0);
+    expect(childrenWithTag(worksheet, "mergeCells")).toHaveLength(0);
+    expect(childrenWithTag(worksheet, "drawing")).toHaveLength(0);
+    expect(childrenWithTag(worksheet, "tableParts")).toHaveLength(0);
+  });
+});
+
+// --- entry point: per-sheet table filtering, sequential relationship ids, and multi-format image usage ------------
+
+describe("buildXlsxPackageFromContent: a table definitions entry attaches only to its own named sheet, never to any other", () => {
+  it("writes tableParts and xl/tables/table1.xml for the sheet the table names, and neither for a second, unrelated sheet", () => {
+    const pkg = buildXlsxPackageFromContent(
+      {
+        kind: "spreadsheet",
+        metadata: {},
+        sheets: [
+          {
+            name: "Sheet1",
+            cells: [],
+            columns: [],
+            rows: [],
+            images: [],
+            printSettings: DEFAULT_PRINT_SETTINGS,
+          },
+          {
+            name: "Other",
+            cells: [],
+            columns: [],
+            rows: [],
+            images: [],
+            printSettings: DEFAULT_PRINT_SETTINGS,
+          },
+        ],
+      },
+      { definitions: tableDefinitions() },
+    );
+    const sheet1 = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    const sheet2 = rootElement(pkg.parts["xl/worksheets/sheet2.xml"]);
+    if (sheet1 === undefined || sheet2 === undefined) {
+      throw new Error("expected both worksheet root elements");
+    }
+    expect(childrenWithTag(sheet1, "tableParts")).toHaveLength(1);
+    expect(childrenWithTag(sheet2, "tableParts")).toHaveLength(0);
+    expect(Object.keys(pkg.parts)).not.toContain(
+      "xl/worksheets/_rels/sheet2.xml.rels",
+    );
+  });
+});
+
+describe("buildXlsxPackageFromContent: worksheet relationships are numbered sequentially across comments, drawing, and tables on the same sheet", () => {
+  it("assigns rId1/rId2/rId3 in the order comments, drawing, and table relationships are added, with no gap or repeat", () => {
+    const pkg = buildXlsxPackageFromContent(
+      {
+        kind: "spreadsheet",
+        metadata: {},
+        sheets: [
+          {
+            name: "Sheet1",
+            cells: [
+              {
+                row: 0,
+                column: 0,
+                value: { kind: "string", value: "x" },
+                displayText: "x",
+                comment: { text: "note" },
+              },
+            ],
+            columns: [],
+            rows: [],
+            images: [
+              {
+                kind: "image",
+                format: "png",
+                base64: TINY_PNG_BASE64,
+                widthPt: 10,
+                heightPt: 10,
+                anchorRow: 0,
+                anchorColumn: 0,
+                offsetXPt: 0,
+                offsetYPt: 0,
+              },
+            ],
+            printSettings: DEFAULT_PRINT_SETTINGS,
+          },
+        ],
+      },
+      { definitions: tableDefinitions() },
+    );
+    const rels = rootElement(pkg.parts["xl/worksheets/_rels/sheet1.xml.rels"]);
+    if (rels === undefined) {
+      throw new Error(
+        "expected the worksheet rels part to have a root element",
+      );
+    }
+    const relationships = childrenWithTag(rels, "Relationship");
+    expect(relationships.map((el) => attr(el, "Id"))).toEqual([
+      "rId1",
+      "rId2",
+      "rId3",
+    ]);
+    const types = relationships.map((el) => attr(el, "Type"));
+    expect(types[0]).toContain("threadedComment");
+    expect(types[1]).toContain("/drawing");
+    expect(types[2]).toContain("/table");
+  });
+});
+
+describe("buildXlsxPackageFromContent: usedImageFormats collects every distinct image format actually used, and only those", () => {
+  it("declares a Default entry for both png and jpeg when a sheet carries one image of each, and none for gif", () => {
+    const pkg = buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [
+            {
+              kind: "image",
+              format: "png",
+              base64: TINY_PNG_BASE64,
+              widthPt: 10,
+              heightPt: 10,
+              anchorRow: 0,
+              anchorColumn: 0,
+              offsetXPt: 0,
+              offsetYPt: 0,
+            },
+            {
+              kind: "image",
+              format: "jpeg",
+              base64: TINY_PNG_BASE64,
+              widthPt: 10,
+              heightPt: 10,
+              anchorRow: 1,
+              anchorColumn: 0,
+              offsetXPt: 0,
+              offsetYPt: 0,
+            },
+          ],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+        },
+      ],
+    });
+    const contentTypes = rootElement(pkg.parts["[Content_Types].xml"]);
+    if (contentTypes === undefined) {
+      throw new Error("expected [Content_Types].xml to have a root element");
+    }
+    const extensions = childrenWithTag(contentTypes, "Default").map((el) =>
+      attr(el, "Extension"),
+    );
+    expect(extensions).toContain("png");
+    expect(extensions).toContain("jpeg");
+    expect(extensions).not.toContain("gif");
+    expect(Object.keys(pkg.parts)).toContain("xl/media/image1.png");
+    expect(Object.keys(pkg.parts)).toContain("xl/media/image2.jpeg");
+  });
+});
+
+describe("buildXlsxPackageFromContent: [Content_Types].xml carries no chart/table overrides at all for a document with neither", () => {
+  it("writes no /xl/charts/ or /xl/tables/ Override, and no chart/table Default extensions, for a plain document", () => {
+    const pkg = buildXlsxPackageFromContent(DOCUMENT);
+    const contentTypes = rootElement(pkg.parts["[Content_Types].xml"]);
+    if (contentTypes === undefined) {
+      throw new Error("expected [Content_Types].xml to have a root element");
+    }
+    const overrides = childrenWithTag(contentTypes, "Override").map((el) =>
+      attr(el, "PartName"),
+    );
+    expect(overrides.some((name) => name?.startsWith("/xl/charts/"))).toBe(
+      false,
+    );
+    expect(overrides.some((name) => name?.startsWith("/xl/tables/"))).toBe(
+      false,
+    );
   });
 });

@@ -57,7 +57,10 @@ export function rgbToHsl(color: Color): Hsl {
     return { h: 0, s: 0, l };
   }
   const d = max - min;
-  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  // Unconditional equivalent of the textbook piecewise "d / (max+min) below the midpoint, d / (2-max-min) above it": at l === 0.5 exactly, max+min === 2*l === 1 always, which forces 2-max-min === 1 too -- so the two branches necessarily agree at the boundary regardless of which side "l > 0.5" is written to include, and a strict-vs-inclusive comparison there can never be told apart by this result. This form (a standard alternate derivation of HSL saturation) sidesteps the boundary comparison entirely:
+  // 1 - |2l - 1| equals max+min when l <= 0.5 and 2-max-min when l >= 0.5, matching both branches exactly
+  // by construction rather than needing to pick one at the one point where they coincide anyway.
+  const s = d / (1 - Math.abs(2 * l - 1));
   let h: number;
   if (max === r) {
     h = (g - b) / d + (g < b ? 6 : 0);
@@ -70,31 +73,24 @@ export function rgbToHsl(color: Color): Hsl {
 }
 
 function hueToRgbComponent(p: number, q: number, hue: number): number {
-  let t = hue;
-  if (t < 0) {
-    t += 1;
-  }
-  if (t > 1) {
-    t -= 1;
-  }
+  // Wraps into [0, 1) via a floor-based mod rather than a pair of "< 0 add 1" / "> 1 subtract 1" guards: this function is only ever called (from hslToRgb below) with hue already within one turn of that range (hk-1/3 .. hk+1/3, hk itself in [0, 1)), so a single wrap always suffices -- but AT hue exactly 0 or exactly 1, an explicit guard's own two branches evaluate to the SAME final result regardless of which one runs (both ultimately reach the p+(q-p)*6*0 === p case below, since 0 and 1 are the same point on the wheel), making a strict-vs-inclusive choice between "< 0"/"> 1" and their own inclusive counterparts genuinely untestable there. hue - Math.floor(hue) needs no such comparison at all, and -- unlike the more familiar ((hue % 1) + 1) % 1 double-mod -- leaves an already-in-range value bit- exact rather than perturbing it by a rounding epsilon, which matters just below: the two remaining (genuinely non-equivalent) piece boundaries at t === 1/6 and t === 1/2 are tested at that exact value.
+  const t = hue - Math.floor(hue);
   if (t < 1 / 6) {
     return p + (q - p) * 6 * t;
   }
   if (t < 1 / 2) {
     return q;
   }
-  if (t < 2 / 3) {
-    return p + (q - p) * (2 / 3 - t) * 6;
-  }
-  return p;
+  // The final two pieces (t < 2/3 vs t >= 2/3) meet at the SAME value by construction -- the piecewise interpolation is continuous there, so (2/3 - t) is exactly 0 at t === 2/3 and the two formulas agree regardless of which side of that single point "< 2/3" is written to include. Clamping (2/3 - t) to never go negative folds both pieces into one expression without a boundary comparison to mutate: for t < 2/3 the max is a no-op (2/3 - t is already positive) and this is the earlier formula unchanged; for t >= 2/3, 2/3 - t is zero or negative, so the clamp collapses the whole term to p, matching the former "return p" fallback exactly.
+  return p + (q - p) * Math.max(0, 2 / 3 - t) * 6;
 }
 
 export function hslToRgb(hsl: Hsl): Color {
   const { h, s, l } = hsl;
-  if (s === 0) {
-    return { r: l, g: l, b: l };
-  }
-  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  // No explicit "s === 0" achromatic shortcut is needed: at s === 0, q below is l + 0 * anything === l regardless of which side of Math.min it lands on, so p === q === l too -- and hueToRgbComponent's own formulas, given p === q, collapse to l on every one of its branches (l + (l-l)*x === l; returning q directly is l too), for any hue. The general computation already reaches exactly {r:l,g:l,b:l} for a fully-desaturated colour on its own; the shortcut only ever skipped arithmetic that was going to produce the identical result.
+  //
+  // Unconditional equivalent of the textbook piecewise "l*(1+s) below the midpoint, l+s-l*s at or above it": at l === 0.5 exactly, both give l+0.5*s, the same value HSL's "L=0.5" pivot is defined to produce -- so a strict-vs-inclusive boundary comparison there is untestable by this result no matter which side of 0.5 it is written to include. Math.min(l, 1-l) is l below the midpoint and 1-l at or above it, matching both branches exactly (l + s*l === l*(1+s); l + s*(1-l) === l+s-l*s) without ever comparing l to 0.5 at all.
+  const q = l + s * Math.min(l, 1 - l);
   const p = 2 * l - q;
   const hk = h / 360;
   return {

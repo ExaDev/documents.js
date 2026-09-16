@@ -778,6 +778,8 @@ describe("readXlsx / buildXlsxPackage: the xlsx DocumentTree boundary", () => {
       throw new Error("expected a spreadsheet DocumentTree");
     }
     expect(wide.definitions).toBeUndefined();
+    // Distinct from a plain property-read undefined: readXlsx must not spread a `definitions: undefined` key onto the tree at all when readWorkbookDefinitions itself found none, or this same assertion above would still pass for that (wrong) shape too.
+    expect(Object.hasOwn(wide, "definitions")).toBe(false);
     expect(wide.names).toEqual([
       {
         name: "_xlnm.Print_Area",

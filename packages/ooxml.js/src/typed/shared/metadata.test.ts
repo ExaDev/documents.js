@@ -71,6 +71,28 @@ describe("readCoreProperties", () => {
     const metadata = readCoreProperties(packageWith(core, undefined));
     expect(metadata.keywords).toBeUndefined();
   });
+
+  it("treats a present but empty-text element as no value, not an empty string", () => {
+    const core = el("cp:coreProperties", {}, [el("dc:title")]);
+    const metadata = readCoreProperties(packageWith(core, undefined));
+    expect(metadata.title).toBeUndefined();
+  });
+
+  it("drops blank entries a doubled or trailing comma produces, rather than keeping them as empty strings", () => {
+    const core = el("cp:coreProperties", {}, [
+      el("cp:keywords", {}, [txt("alpha,,beta,")]),
+    ]);
+    const metadata = readCoreProperties(packageWith(core, undefined));
+    expect(metadata.keywords).toEqual(["alpha", "beta"]);
+  });
+
+  it("treats keywords text that is comma/whitespace only, with no real entries, as no keywords at all", () => {
+    const core = el("cp:coreProperties", {}, [
+      el("cp:keywords", {}, [txt(" , , ")]),
+    ]);
+    const metadata = readCoreProperties(packageWith(core, undefined));
+    expect(metadata.keywords).toBeUndefined();
+  });
 });
 
 describe("hasCoreProperties", () => {
@@ -143,6 +165,51 @@ describe("patchCoreProperties", () => {
 
     patchCoreProperties(pkg, { keywords: [] });
     expect(readCoreProperties(pkg).keywords).toBeUndefined();
+  });
+
+  it("removes the cp:keywords element from the XML entirely for an empty array, rather than writing an empty one", () => {
+    const pkg = packageWithCore([el("cp:keywords", {}, [txt("alpha, beta")])]);
+
+    patchCoreProperties(pkg, { keywords: [] });
+
+    const part = pkg.parts["docProps/core.xml"];
+    if (part?.kind !== "xml") {
+      throw new Error("expected an xml part");
+    }
+    expect(buildXml(part.nodes)).not.toContain("cp:keywords");
+  });
+
+  it("removing keywords leaves every other element in place", () => {
+    const pkg = packageWithCore([
+      el("dc:title", {}, [txt("Kept Title")]),
+      el("cp:keywords", {}, [txt("alpha, beta")]),
+    ]);
+
+    patchCoreProperties(pkg, { keywords: [] });
+
+    expect(readCoreProperties(pkg).title).toBe("Kept Title");
+    expect(readCoreProperties(pkg).keywords).toBeUndefined();
+  });
+
+  it("sets the author independently of every other field", () => {
+    const pkg = packageWithCore([]);
+    patchCoreProperties(pkg, { author: "New Author" });
+    expect(readCoreProperties(pkg).author).toBe("New Author");
+  });
+
+  it("sets the subject independently of every other field", () => {
+    const pkg = packageWithCore([]);
+    patchCoreProperties(pkg, { subject: "New Subject" });
+    expect(readCoreProperties(pkg).subject).toBe("New Subject");
+  });
+
+  it("throws when the existing docProps/core.xml XML part has no root element", () => {
+    const pkg: Package = {
+      parts: { "docProps/core.xml": { kind: "xml", nodes: [] } },
+    };
+    expect(() => {
+      patchCoreProperties(pkg, { title: "x" });
+    }).toThrow(/no root element/);
   });
 
   it("leaves every field untouched when overrides names none of them", () => {

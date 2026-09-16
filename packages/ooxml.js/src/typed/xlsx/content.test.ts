@@ -14,13 +14,23 @@ import type {
   ContentSheetDataValidation,
 } from "document-schema.js";
 import type { Package } from "../../model/package";
+import type { XmlElement, XmlNode } from "../../model/node";
 import { el, txt } from "../../xml/fragment";
 import { decodePackage, encodePackage } from "../../codec";
 import { parsePackage } from "../../package-io/read";
 import { attr, childrenWithTag, rootElement } from "../util";
 import { buildXlsxPackageFromContent } from "./build";
-import { columnWidthCharsToPt } from "./units";
+import {
+  columnWidthCharsToPt,
+  DEFAULT_COLUMN_WIDTH_CHARS,
+  DEFAULT_ROW_HEIGHT_PT,
+} from "./units";
 import { readXlsxContent, resolveSheetEntries } from "./content";
+
+// True precisely when `key` is an own property of `obj`, regardless of whether its value is `undefined` -- unlike `toBeUndefined()`, which is satisfied identically by a key holding `undefined` and by the key's own absence, and so cannot distinguish "never assigned" from "assigned undefined". Several of readCell's own optional-field copies (font/background/borders/alignment/verticalAlignment/numberFormatCode) are guarded by a presence check specifically to avoid ever assigning the key at all when the source has nothing to offer, and only a key-existence assertion can prove that guard is doing real work rather than being a no-op the object shape would be identical without.
+function hasOwn(obj: object, key: string): boolean {
+  return Object.hasOwn(obj, key);
+}
 
 // This suite reads real, unmodified LibreOffice-generated .xlsx fixtures (src/typed/xlsx/fixtures/*.xlsx). Both fixtures are genuine LibreOffice xlsx-exports (`soffice --headless --convert-to xlsx`) of odf.js's own src/typed/ods/fixtures/{kitchen-sink,minimal}.ods -- the same feature set that package's own readOds test suite already validates against ODF's equivalent mechanisms, run back through LibreOffice's real SpreadsheetML export filter so this suite exercises genuine, LibreOffice-authored xlsx markup (column-width character units, row heights, hidden rows/columns, every value-type LibreOffice's own xlsx exporter distinguishes, a real merged range, a real cross-sheet formula, and real print settings including Print_Area/Print_Titles defined names) rather than a hand-built approximation of what that markup might look like. A handful of narrow scope-boundary/error-path tests at the end use small, synthetic, hand-built packages instead (via el/txt), mirroring readOds's own established convention for the identical reason.
 
@@ -845,6 +855,332 @@ describe("readXlsxContent: cell decoration (background/borders/alignment/vertica
       )?.background,
     ).toBeUndefined();
   });
+
+  it("omits the font/background/borders/alignment/verticalAlignment keys entirely on a cell whose s index carries none of them -- not merely assigned undefined", () => {
+    const cell = readDecoratedCell(
+      styledSheet,
+      el("c", { r: "A1", s: "0" }, [el("v", {}, [txt("42")])]),
+    );
+    expect(cell).toBeDefined();
+    if (cell === undefined) {
+      throw new Error("expected a cell");
+    }
+    expect(hasOwn(cell, "font")).toBe(false);
+    expect(hasOwn(cell, "background")).toBe(false);
+    expect(hasOwn(cell, "borders")).toBe(false);
+    expect(hasOwn(cell, "alignment")).toBe(false);
+    expect(hasOwn(cell, "verticalAlignment")).toBe(false);
+  });
+
+  it("sets the numberFormatCode key when the cell's style resolves one, verbatim", () => {
+    const cell = readDecoratedCell(
+      styledSheet,
+      el("c", { r: "A1", s: "1" }, [el("v", {}, [txt("42")])]),
+    );
+    expect(hasOwn(cell ?? {}, "numberFormatCode")).toBe(true);
+  });
+
+  it("omits numberFormatCode entirely (not merely as undefined) for an out-of-range style index that resolves to no entry at all", () => {
+    const cell = readDecoratedCell(
+      styledSheet,
+      el("c", { r: "A1", s: "99" }, [el("v", {}, [txt("42")])]),
+    );
+    expect(hasOwn(cell ?? {}, "numberFormatCode")).toBe(false);
+  });
+
+  it("omits numberFormatCode entirely (not merely as undefined) for a resolvable style entry whose own numFmtId names no code anywhere", () => {
+    const noCodeSheet = el("styleSheet", {}, [
+      el("cellXfs", {}, [
+        el("xf", { numFmtId: "0" }),
+        el("xf", { numFmtId: "999" }),
+      ]),
+    ]);
+    const cell = readDecoratedCell(
+      noCodeSheet,
+      el("c", { r: "A1", s: "1" }, [el("v", {}, [txt("42")])]),
+    );
+    expect(hasOwn(cell ?? {}, "numberFormatCode")).toBe(false);
+  });
+});
+
+// Every one of readColumns/readRows/sheetFormatDefaultRowHeightPt's own conditional branches and index arithmetic, exercised directly against small synthetic worksheets -- the kitchen-sink fixture's own real rows/columns don't happen to visit every boundary (a 0-based min, a non-numeric width, a row number exactly at its own lower bound) these functions guard against.
+function readSheetFromWorksheet(
+  worksheet: ReturnType<typeof el>,
+): ContentSheet {
+  const result = readXlsxContent(buildMinimalPackage(worksheet));
+  if (result.kind !== "spreadsheet") {
+    throw new Error("expected a spreadsheet ContentDocument");
+  }
+  const sheet = result.sheets[0];
+  if (sheet === undefined) {
+    throw new Error("expected a sheet");
+  }
+  return sheet;
+}
+
+describe("readXlsxContent: row/column geometry edge cases (synthetic packages)", () => {
+  it("falls back to DEFAULT_ROW_HEIGHT_PT for a row with no ht attribute when the worksheet carries no sheetFormatPr at all", () => {
+    const worksheet = el("worksheet", {}, [
+      el("sheetData", {}, [el("row", { r: "1" })]),
+    ]);
+    expect(readSheetFromWorksheet(worksheet).rows).toEqual([
+      { index: 0, heightPt: DEFAULT_ROW_HEIGHT_PT },
+    ]);
+  });
+
+  it("falls back to the sheetFormatPr's own declared defaultRowHeight, not the package-wide default, for a row with no ht of its own", () => {
+    const worksheet = el("worksheet", {}, [
+      el("sheetFormatPr", { defaultRowHeight: "22.5" }),
+      el("sheetData", {}, [el("row", { r: "1" })]),
+    ]);
+    expect(readSheetFromWorksheet(worksheet).rows).toEqual([
+      { index: 0, heightPt: 22.5 },
+    ]);
+  });
+
+  it("prefers a row's own ht over the sheetFormatPr default", () => {
+    const worksheet = el("worksheet", {}, [
+      el("sheetFormatPr", { defaultRowHeight: "22.5" }),
+      el("sheetData", {}, [el("row", { r: "1", ht: "30" })]),
+    ]);
+    expect(readSheetFromWorksheet(worksheet).rows).toEqual([
+      { index: 0, heightPt: 30 },
+    ]);
+  });
+
+  it("drops a row whose own r is 0 (below CT_Row/@r's 1-based lower bound) but keeps one whose r is exactly 1", () => {
+    const worksheet = el("worksheet", {}, [
+      el("sheetData", {}, [el("row", { r: "0" }), el("row", { r: "1" })]),
+    ]);
+    expect(readSheetFromWorksheet(worksheet).rows).toEqual([
+      { index: 0, heightPt: DEFAULT_ROW_HEIGHT_PT },
+    ]);
+  });
+
+  it('recovers row index 4 -- not 6 -- from r="5", proving the 1-based-to-0-based conversion subtracts rather than adds', () => {
+    const worksheet = el("worksheet", {}, [
+      el("sheetData", {}, [el("row", { r: "5" })]),
+    ]);
+    expect(readSheetFromWorksheet(worksheet).rows[0]?.index).toBe(4);
+  });
+
+  it("marks a row hidden only when its own hidden attribute reads true, never as a side effect of any other attribute", () => {
+    const worksheet = el("worksheet", {}, [
+      el("sheetData", {}, [
+        el("row", { r: "1", hidden: "true" }),
+        el("row", { r: "2" }),
+      ]),
+    ]);
+    const rows = readSheetFromWorksheet(worksheet).rows;
+    expect(rows[0]).toEqual({
+      index: 0,
+      heightPt: DEFAULT_ROW_HEIGHT_PT,
+      hidden: true,
+    });
+    expect(hasOwn(rows[1] ?? {}, "hidden")).toBe(false);
+  });
+
+  it("drops a <col> whose min is 0 (below CT_Col/@min's 1-based lower bound) but keeps one whose min is exactly 1", () => {
+    const worksheet = el("worksheet", {}, [
+      el("cols", {}, [
+        el("col", { min: "0", max: "0" }),
+        el("col", { min: "1", max: "1" }),
+      ]),
+      el("sheetData", {}),
+    ]);
+    expect(readSheetFromWorksheet(worksheet).columns).toEqual([{ index: 0 }]);
+  });
+
+  it("sets widthPt from a numeric width attribute, and omits the key entirely when width is absent", () => {
+    const worksheet = el("worksheet", {}, [
+      el("cols", {}, [
+        el("col", { min: "1", max: "1", width: "20" }),
+        el("col", { min: "2", max: "2" }),
+      ]),
+      el("sheetData", {}),
+    ]);
+    const columns = readSheetFromWorksheet(worksheet).columns;
+    expect(columns[0]?.widthPt).toBeCloseTo(columnWidthCharsToPt(20), 10);
+    expect(hasOwn(columns[1] ?? {}, "widthPt")).toBe(false);
+  });
+
+  it("omits widthPt for a non-numeric width attribute, rather than reporting a NaN width", () => {
+    const worksheet = el("worksheet", {}, [
+      el("cols", {}, [
+        el("col", { min: "1", max: "1", width: "not-a-number" }),
+      ]),
+      el("sheetData", {}),
+    ]);
+    expect(
+      hasOwn(readSheetFromWorksheet(worksheet).columns[0] ?? {}, "widthPt"),
+    ).toBe(false);
+  });
+
+  it("marks a column hidden only when its own hidden attribute reads true", () => {
+    const worksheet = el("worksheet", {}, [
+      el("cols", {}, [
+        el("col", { min: "1", max: "1", hidden: "true" }),
+        el("col", { min: "2", max: "2" }),
+      ]),
+      el("sheetData", {}),
+    ]);
+    const columns = readSheetFromWorksheet(worksheet).columns;
+    expect(columns[0]).toEqual({ index: 0, hidden: true });
+    expect(hasOwn(columns[1] ?? {}, "hidden")).toBe(false);
+  });
+});
+
+describe("readXlsxContent: readSheet's own optional-field keys are absent, not undefined, when a sheet carries none of them", () => {
+  it("omits embeddedObjects/dataValidations/conditionalFormats entirely from a sheet with no drawing, validation, or conditional format at all", () => {
+    const sheet = readSheetFromWorksheet(
+      el("worksheet", {}, [el("sheetData", {})]),
+    );
+    expect(hasOwn(sheet, "embeddedObjects")).toBe(false);
+    expect(hasOwn(sheet, "dataValidations")).toBe(false);
+    expect(hasOwn(sheet, "conditionalFormats")).toBe(false);
+  });
+});
+
+describe("readXlsxContent: deriveDisplayText/resolveNumericValue exact per-kind coverage (synthetic packages)", () => {
+  it("renders a numeric-format dateTime cell's displayText as its ISO spelling, not the boolean-branch TRUE/FALSE fallthrough text", () => {
+    const cell = readStyledCell(
+      "yyyy-mm-dd hh:mm:ss",
+      numericCell("46234.604166666666667"),
+    );
+    expect(cell?.displayText).toBe("2026-07-31T14:30:00");
+  });
+
+  it("renders a percentage cell's displayText as the raw stored fraction, not TRUE", () => {
+    const cell = readStyledCell("0.00%", numericCell("0.4256"));
+    expect(cell?.displayText).toBe("0.4256");
+  });
+
+  it("omits the currency key entirely (not merely as undefined) when the format names money by symbol alone", () => {
+    const cell = readStyledCell("[$£-809]#,##0.00", numericCell("99.99"));
+    expect(cell?.value.kind).toBe("currency");
+    expect(hasOwn(cell?.value ?? {}, "currency")).toBe(false);
+  });
+
+  it('renders FALSE, not just "not TRUE", for a false boolean cell', () => {
+    expect(
+      readFirstCell(
+        el("worksheet", {}, [
+          el("sheetData", {}, [
+            el("row", { r: "1" }, [
+              el("c", { r: "A1", t: "b" }, [el("v", {}, [txt("0")])]),
+            ]),
+          ]),
+        ]),
+      ).cells[0],
+    ).toMatchObject({
+      value: { kind: "boolean", value: false },
+      displayText: "FALSE",
+    });
+  });
+});
+
+describe("readXlsxContent: readCellValue's boolean/numeric branch precision (synthetic packages)", () => {
+  it('reads t="b" true from an upper-, lower-, or mixed-case spelling of "true", not just the literal "1"', () => {
+    for (const raw of ["TRUE", "True", "true"]) {
+      const { cells } = readFirstCell(
+        el("worksheet", {}, [
+          el("sheetData", {}, [
+            el("row", { r: "1" }, [
+              el("c", { r: "A1", t: "b" }, [el("v", {}, [txt(raw)])]),
+            ]),
+          ]),
+        ]),
+      );
+      expect(cells[0]?.value).toEqual({ kind: "boolean", value: true });
+      expect(cells[0]?.displayText).toBe("TRUE");
+    }
+  });
+
+  it('reads t="b" as false for any raw text that is neither "1" nor a case-insensitive "true"', () => {
+    const { cells } = readFirstCell(
+      el("worksheet", {}, [
+        el("sheetData", {}, [
+          el("row", { r: "1" }, [
+            el("c", { r: "A1", t: "b" }, [el("v", {}, [txt("false")])]),
+          ]),
+        ]),
+      ]),
+    );
+    expect(cells[0]?.value).toEqual({ kind: "boolean", value: false });
+  });
+
+  it("drops an untyped cell whose <v> text is not a parseable number at all, rather than reporting NaN", () => {
+    const { cells } = readFirstCell(
+      el("worksheet", {}, [
+        el("sheetData", {}, [
+          el("row", { r: "1" }, [
+            el("c", { r: "A1" }, [el("v", {}, [txt("not-a-number")])]),
+          ]),
+        ]),
+      ]),
+    );
+    expect(cells).toEqual([]);
+  });
+});
+
+describe("readXlsxContent: readCell's formula key presence (synthetic packages)", () => {
+  it("omits the formula key entirely for a plain value cell with no <f> child", () => {
+    const { cells } = readFirstCell(
+      el("worksheet", {}, [
+        el("sheetData", {}, [
+          el("row", { r: "1" }, [
+            el("c", { r: "A1" }, [el("v", {}, [txt("42")])]),
+          ]),
+        ]),
+      ]),
+    );
+    expect(hasOwn(cells[0] ?? {}, "formula")).toBe(false);
+  });
+});
+
+describe("readXlsxContent: merged-range span arithmetic (synthetic packages)", () => {
+  // Anchored at B2, not A1: with a zero-valued start, endColumn-startColumn and endColumn+startColumn (the ArithmeticOperator mutant's own replacement) coincide, so a genuine test needs a nonzero start on both axes to actually distinguish subtraction from addition.
+  function mergedWorksheet(
+    ref: string,
+    anchorRef: string,
+  ): ReturnType<typeof el> {
+    return el("worksheet", {}, [
+      el("sheetData", {}, [
+        el("row", { r: "2" }, [
+          el("c", { r: anchorRef }, [el("v", {}, [txt("1")])]),
+        ]),
+      ]),
+      el("mergeCells", {}, [el("mergeCell", { ref })]),
+    ]);
+  }
+
+  it("computes colSpan and rowSpan from the true end-minus-start distance, not an end-plus-start sum, for a merge anchored away from row/column 0", () => {
+    const { cells } = readFirstCell(mergedWorksheet("B2:D4", "B2"));
+    const anchor = cells[0];
+    expect(anchor?.colSpan).toBe(3);
+    expect(anchor?.rowSpan).toBe(3);
+  });
+
+  it("sets colSpan alone for a 1-row, multi-column merge, never fabricating a rowSpan", () => {
+    const { cells } = readFirstCell(mergedWorksheet("B2:D2", "B2"));
+    const anchor = cells[0];
+    expect(anchor?.colSpan).toBe(3);
+    expect(hasOwn(anchor ?? {}, "rowSpan")).toBe(false);
+  });
+
+  it("sets rowSpan alone for a 1-column, multi-row merge, never fabricating a colSpan", () => {
+    const { cells } = readFirstCell(mergedWorksheet("B2:B4", "B2"));
+    const anchor = cells[0];
+    expect(anchor?.rowSpan).toBe(3);
+    expect(hasOwn(anchor ?? {}, "colSpan")).toBe(false);
+  });
+
+  it("sets neither colSpan nor rowSpan for a single-cell 'merge' (B2:B2) -- a span of exactly 1 on both axes", () => {
+    const { cells } = readFirstCell(mergedWorksheet("B2:B2", "B2"));
+    const anchor = cells[0];
+    expect(hasOwn(anchor ?? {}, "colSpan")).toBe(false);
+    expect(hasOwn(anchor ?? {}, "rowSpan")).toBe(false);
+  });
 });
 
 // A chart graphic frame reached the way a real workbook reaches one: the worksheet's own <drawing r:id> names a drawing part through the worksheet's relationships, the drawing's xdr:twoCellAnchor carries an xdr:graphicFrame whose a:graphicData names the chart part through the DRAWING's relationships. The anchor geometry resolves through the sheet's own declared column widths and row heights, exactly as a spreadsheet renderer would place it.
@@ -1008,6 +1344,8 @@ describe("readXlsxContent: chart graphic frames", () => {
       chart?.document.kind === "spreadsheet"
         ? chart.document.sheets[0]
         : undefined;
+    // The graphic frame's own xdr:cNvPr/@name ("Chart 1"), not the "Chart" fallback -- the payload sheet is named after the shape that actually held it.
+    expect(sheet?.name).toBe("Chart 1");
     expect(sheet?.cells).toEqual([
       {
         row: 0,
@@ -1430,6 +1768,8 @@ describe("readXlsxContent: drawing pictures", () => {
     expect(image?.offsetYPt).toBe(0);
     expect(image?.widthPt).toBeCloseTo(col0 + col1 - offsetX, 5);
     expect(image?.heightPt).toBeCloseTo(45, 5);
+    // A drawing carrying only a picture, no chart graphic frame at all, leaves embeddedObjects absent rather than an empty array -- the same "undefined means none, [] means none for images specifically" split the module doc comment states.
+    expect(document.sheets[0]?.embeddedObjects).toBeUndefined();
   });
 
   it("leaves a picture whose media bytes do not sniff as PNG/JPEG unread rather than emitting an unsniffable image", () => {
@@ -1614,7 +1954,12 @@ describe("readXlsxContent: drawing pictures (oneCellAnchor)", () => {
 });
 
 // The absoluteAnchor spelling: xdr:pos (x/y EMU, page-absolute) plus xdr:ext sizing, no markers at all. ContentSheetImage's anchor vocabulary is cell-relative, so the landing #776 decides on is the nearest-cell re-basing -- the grid geometry's own inverse maps the absolute position onto a containing column/row plus the offset within it, exactly the fields a from-marker spells directly. The fixture grid: column 0 is 10 chars (52.5 pt), column 1 is 20 chars (105 pt), rows default 15 pt; pos 762000 x 190500 EMU is 60 x 15 pt, so column 1 offset 7.5 pt (52.5 + 7.5 = 60) and row 1 offset 0 (15 sits exactly on the row-1 boundary).
-function absolutePicturePackage(extCx = "1828800", extCy = "914400"): Package {
+function absolutePicturePackage(
+  extCx = "1828800",
+  extCy = "914400",
+  posX = "762000",
+  posY = "190500",
+): Package {
   const picture = el("xdr:pic", {}, [
     el("xdr:nvPicPr", {}, [el("xdr:cNvPr", { id: "2", name: "Picture 1" })]),
     el("xdr:blipFill", {}, [el("a:blip", { "r:embed": "rIdImage" })]),
@@ -1628,7 +1973,7 @@ function absolutePicturePackage(extCx = "1828800", extCy = "914400"): Package {
   ]);
   const drawing = el("xdr:wsDr", {}, [
     el("xdr:absoluteAnchor", {}, [
-      el("xdr:pos", { x: "762000", y: "190500" }),
+      el("xdr:pos", { x: posX, y: posY }),
       el("xdr:ext", { cx: extCx, cy: extCy }),
       picture,
       el("xdr:clientData"),
@@ -1727,6 +2072,21 @@ describe("readXlsxContent: drawing pictures (absoluteAnchor)", () => {
       throw new Error("expected a spreadsheet ContentDocument");
     }
     expect(document.sheets[0]?.images).toEqual([]);
+  });
+
+  it("locates a position sitting exactly on a column boundary as the start of the next column, not an offset into the previous one", () => {
+    // Column 0 is 10 chars = columnWidthCharsToPt(10) pt exactly, i.e. that many EMU at 12700 EMU/pt -- pos x lands exactly on the column 0/1 boundary, pos y at 0 keeps the row/height math out of it entirely.
+    const boundaryEmu = Math.round(columnWidthCharsToPt(10) * 12700);
+    const document = readXlsxContent(
+      absolutePicturePackage("1828800", "914400", String(boundaryEmu), "0"),
+    );
+    if (document.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    const image = document.sheets[0]?.images[0];
+    // A position exactly at the boundary belongs to the column it starts (column 1, offset 0), not the tail end of column 0 (column 0, offset = the whole column width).
+    expect(image?.anchorColumn).toBe(1);
+    expect(image?.offsetXPt).toBeCloseTo(0, 5);
   });
 
   it("round-trips the whole document through ContentDocumentSchema, so the absolute-anchored sheet image is schema-valid as read", () => {
@@ -2038,6 +2398,424 @@ describe("readXlsxContent: drawing pictures (mixed anchor spellings)", () => {
   });
 });
 
+// A drawing-bearing package for SheetGridGeometry and anchor-walk edge cases the fixtures above don't happen to exercise: the caller supplies the worksheet's own children (cols/sheetFormatPr/sheetData) and the drawing's own single anchor element directly, everything else (workbook, every relationship, the one media part) fixed to the same tiny PNG the picture fixtures above already use.
+function customDrawingPackage(
+  worksheetChildren: XmlNode[],
+  anchor: XmlElement,
+): Package {
+  const worksheet = el("worksheet", {}, [
+    ...worksheetChildren,
+    el("drawing", { "r:id": "rIdDrawing" }),
+  ]);
+  const drawing = el("xdr:wsDr", {}, [anchor]);
+  const relationship = (id: string, type: string, target: string) =>
+    el("Relationship", { Id: id, Type: type, Target: target });
+  return {
+    parts: {
+      "xl/workbook.xml": {
+        kind: "xml",
+        nodes: [
+          el("workbook", {}, [
+            el("sheets", {}, [
+              el("sheet", { name: "Data", sheetId: "1", "r:id": "rIdSheet" }),
+            ]),
+          ]),
+        ],
+      },
+      "xl/_rels/workbook.xml.rels": {
+        kind: "xml",
+        nodes: [
+          el("Relationships", {}, [
+            relationship(
+              "rIdSheet",
+              "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
+              "worksheets/sheet1.xml",
+            ),
+          ]),
+        ],
+      },
+      "xl/worksheets/sheet1.xml": { kind: "xml", nodes: [worksheet] },
+      "xl/worksheets/_rels/sheet1.xml.rels": {
+        kind: "xml",
+        nodes: [
+          el("Relationships", {}, [
+            relationship(
+              "rIdDrawing",
+              "http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing",
+              "../drawings/drawing1.xml",
+            ),
+          ]),
+        ],
+      },
+      "xl/drawings/drawing1.xml": { kind: "xml", nodes: [drawing] },
+      "xl/drawings/_rels/drawing1.xml.rels": {
+        kind: "xml",
+        nodes: [
+          el("Relationships", {}, [
+            relationship(
+              "rIdImage",
+              "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "../media/image1.png",
+            ),
+            relationship(
+              "rIdChart",
+              "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart",
+              "../charts/chart1.xml",
+            ),
+          ]),
+        ],
+      },
+      "xl/media/image1.png": { kind: "binary", base64: TINY_PNG_BASE64 },
+      "xl/charts/chart1.xml": {
+        kind: "xml",
+        nodes: [
+          el("c:chartSpace", {}, [
+            el("c:chart", {}, [el("c:plotArea", {}, [el("c:barChart", {})])]),
+          ]),
+        ],
+      },
+    },
+  };
+}
+
+// A twoCellAnchor carrying a single xdr:pic, from col0/row0 (offset 0) to col1/row1 (offset 0) unless overridden -- the minimal shape for exercising SheetGridGeometry's own column/row reading via the resulting frame size, independent of the anchor-placement arithmetic the fixtures above already cover.
+function onePicTwoCellAnchor(
+  opts: {
+    toCol?: number;
+    toRow?: number;
+    editAs?: string;
+    fromColOffEmu?: number;
+    fromRowOffEmu?: number;
+    fromColNodes?: XmlNode[];
+  } = {},
+): XmlElement {
+  const {
+    toCol = 1,
+    toRow = 1,
+    editAs,
+    fromColOffEmu = 0,
+    fromRowOffEmu = 0,
+    fromColNodes,
+  } = opts;
+  const picture = el("xdr:pic", {}, [
+    el("xdr:nvPicPr", {}, [el("xdr:cNvPr", { id: "2", name: "Picture 1" })]),
+    el("xdr:blipFill", {}, [el("a:blip", { "r:embed": "rIdImage" })]),
+    el("xdr:spPr", {}, [
+      el("a:xfrm", {}, [
+        el("a:off", { x: "0", y: "0" }),
+        el("a:ext", { cx: "914400", cy: "914400" }),
+      ]),
+      el("a:prstGeom", { prst: "rect" }, [el("a:avLst")]),
+    ]),
+  ]);
+  return el("xdr:twoCellAnchor", editAs === undefined ? {} : { editAs }, [
+    el("xdr:from", {}, [
+      el("xdr:col", {}, fromColNodes ?? [txt("0")]),
+      el("xdr:colOff", {}, [txt(String(fromColOffEmu))]),
+      el("xdr:row", {}, [txt("0")]),
+      el("xdr:rowOff", {}, [txt(String(fromRowOffEmu))]),
+    ]),
+    el("xdr:to", {}, [
+      el("xdr:col", {}, [txt(String(toCol))]),
+      el("xdr:colOff", {}, [txt("0")]),
+      el("xdr:row", {}, [txt(String(toRow))]),
+      el("xdr:rowOff", {}, [txt("0")]),
+    ]),
+    picture,
+    el("xdr:clientData"),
+  ]);
+}
+
+function imagesOf(pkg: Package): ContentSheet["images"] {
+  const document = readXlsxContent(pkg);
+  if (document.kind !== "spreadsheet") {
+    throw new Error("expected a spreadsheet ContentDocument");
+  }
+  return document.sheets[0]?.images ?? [];
+}
+
+describe("readXlsxContent: SheetGridGeometry (synthetic packages)", () => {
+  it("ignores a declared column range whose min is below 1, falling back to the default column width", () => {
+    const images = imagesOf(
+      customDrawingPackage(
+        [
+          el("cols", {}, [el("col", { min: "0", max: "1", width: "999" })]),
+          el("sheetData", {}, []),
+        ],
+        onePicTwoCellAnchor({ toCol: 1 }),
+      ),
+    );
+    // Column 0 must fall back to the default width, not the malformed range's huge declared one.
+    expect(images[0]?.widthPt).toBeCloseTo(
+      columnWidthCharsToPt(DEFAULT_COLUMN_WIDTH_CHARS),
+      5,
+    );
+  });
+
+  it("prefers a covering column range's own declared width over a narrower range with no width at all", () => {
+    // Two declared ranges both cover column 0 -- an outer 1..5 range with no width (a real producer's habit for "these columns use the sheet default"), and an inner 1..1 range that actually states one. The inner range's real width must win, not the wider range's undefined one merely because .find() met it first.
+    const images = imagesOf(
+      customDrawingPackage(
+        [
+          el("cols", {}, [
+            el("col", { min: "1", max: "5" }),
+            el("col", { min: "1", max: "1", width: "40" }),
+          ]),
+          el("sheetData", {}, []),
+        ],
+        onePicTwoCellAnchor({ toCol: 1 }),
+      ),
+    );
+    expect(images[0]?.widthPt).toBeCloseTo(columnWidthCharsToPt(40), 5);
+  });
+
+  it("reads a real sheetFormatPr defaultRowHeight rather than falling back to the built-in default", () => {
+    const images = imagesOf(
+      customDrawingPackage(
+        [
+          el("sheetFormatPr", { defaultRowHeight: "30" }),
+          el("sheetData", {}, []),
+        ],
+        onePicTwoCellAnchor({ toRow: 1 }),
+      ),
+    );
+    expect(images[0]?.heightPt).toBeCloseTo(30, 5);
+  });
+
+  it("reads a declared row's own height, offset by one from its 1-based r, in preference to the default", () => {
+    const images = imagesOf(
+      customDrawingPackage(
+        [
+          el("sheetFormatPr", { defaultRowHeight: "15" }),
+          el("sheetData", {}, [el("row", { r: "1", ht: "50" })]),
+        ],
+        onePicTwoCellAnchor({ toRow: 1 }),
+      ),
+    );
+    // r="1" names the FIRST row (0-based index 0) -- the very row this anchor spans, not the one after it.
+    expect(images[0]?.heightPt).toBeCloseTo(50, 5);
+  });
+
+  it("ignores a declared row whose r is below 1, or whose ht does not parse, falling back to the default height", () => {
+    const images = imagesOf(
+      customDrawingPackage(
+        [
+          el("sheetFormatPr", { defaultRowHeight: "15" }),
+          el("sheetData", {}, [
+            el("row", { r: "0", ht: "999" }),
+            el("row", { r: "1", ht: "not a number" }),
+          ]),
+        ],
+        onePicTwoCellAnchor({ toRow: 1 }),
+      ),
+    );
+    expect(images[0]?.heightPt).toBeCloseTo(15, 5);
+  });
+
+  it("defaults editAs to twoCell (sizing from the to-marker) when the attribute is absent, and reads it when present", () => {
+    const defaulted = imagesOf(
+      customDrawingPackage(
+        [el("sheetData", {}, [])],
+        onePicTwoCellAnchor({ toCol: 2 }),
+      ),
+    );
+    // No editAs at all: sized from the to-marker difference (2 default-width columns), not the picture's own 1"x1" (72pt) xdr:ext.
+    expect(defaulted[0]?.widthPt).toBeCloseTo(
+      2 * columnWidthCharsToPt(DEFAULT_COLUMN_WIDTH_CHARS),
+      5,
+    );
+
+    const oneCell = imagesOf(
+      customDrawingPackage(
+        [el("sheetData", {}, [])],
+        onePicTwoCellAnchor({ toCol: 2, editAs: "oneCell" }),
+      ),
+    );
+    // editAs="oneCell" on a twoCellAnchor (Excel's real spelling for "move but don't size with cells"): sized from the shape's own transform extent (1in = 72pt) instead, ignoring the to-marker entirely.
+    expect(oneCell[0]?.widthPt).toBeCloseTo(72, 5);
+  });
+
+  it("never applies a declared column range to an index below its own min, even when that index is within the range's max", () => {
+    const images = imagesOf(
+      customDrawingPackage(
+        [
+          el("cols", {}, [el("col", { min: "3", max: "5", width: "999" })]),
+          el("sheetData", {}, []),
+        ],
+        onePicTwoCellAnchor({ toCol: 1 }),
+      ),
+    );
+    // Column 0 sits below the declared range's own min (2, 0-based) -- it must fall back to the default width, not the range's huge declared one merely because 0 <= the range's own max.
+    expect(images[0]?.widthPt).toBeCloseTo(
+      columnWidthCharsToPt(DEFAULT_COLUMN_WIDTH_CHARS),
+      5,
+    );
+  });
+});
+
+describe("readXlsxContent: anchor marker fields (synthetic packages)", () => {
+  it("reads a marker's own rowOff distinctly from its colOff, rather than one child tag's value doing double duty for both", () => {
+    const images = imagesOf(
+      customDrawingPackage(
+        [el("sheetData", {}, [])],
+        // Small enough to stay well inside the default 15pt row height, so the anchor's own height stays positive (4pt = 50800 EMU).
+        onePicTwoCellAnchor({ fromRowOffEmu: 50_800 }),
+      ),
+    );
+    // The row axis carries a real offset; the column axis stays at its own default (0).
+    expect(images[0]?.offsetXPt).toBe(0);
+    expect(images[0]?.offsetYPt).toBeCloseTo(4, 5);
+  });
+
+  it("extracts a marker child's numeric text past a non-text sibling node, rather than letting that sibling corrupt the joined value", () => {
+    const images = imagesOf(
+      customDrawingPackage(
+        [el("sheetData", {}, [])],
+        onePicTwoCellAnchor({
+          fromColNodes: [{ type: "comment", value: "producer note" }, txt("5")],
+          toCol: 6,
+        }),
+      ),
+    );
+    // The comment sibling contributes nothing to the joined text; the real numeric value is "5", not corrupted by whatever a non-text node's own placeholder text would join in as.
+    expect(images[0]?.anchorColumn).toBe(5);
+  });
+});
+
+describe("readXlsxContent: chart graphic frame structural gaps (synthetic packages)", () => {
+  function chartGraphicFrame(
+    opts: {
+      withCNvPr?: boolean;
+      name?: string;
+      graphicUri?: string;
+    } = {},
+  ): XmlElement {
+    const {
+      withCNvPr = true,
+      graphicUri = "http://schemas.openxmlformats.org/drawingml/2006/chart",
+    } = opts;
+    // "name" in opts (not a destructured default) distinguishes "caller omitted the option, use the real default" from "caller explicitly asked for no name attribute at all" -- a destructured default would treat {name: undefined} identically to {}, which defeats the one test below that needs a cNvPr with genuinely no name attribute.
+    const name = "name" in opts ? opts.name : "Chart 1";
+    const nvGraphicFramePrChildren = withCNvPr
+      ? [
+          el(
+            "xdr:cNvPr",
+            name === undefined ? { id: "2" } : { id: "2", name },
+            [],
+          ),
+        ]
+      : [];
+    return el("xdr:graphicFrame", {}, [
+      el("xdr:nvGraphicFramePr", {}, nvGraphicFramePrChildren),
+      el("a:graphic", {}, [
+        el("a:graphicData", { uri: graphicUri }, [
+          el("c:chart", { "r:id": "rIdChart" }),
+        ]),
+      ]),
+    ]);
+  }
+
+  function chartFrameAnchor(frame: XmlElement): XmlElement {
+    return el("xdr:twoCellAnchor", {}, [
+      el("xdr:from", {}, [
+        el("xdr:col", {}, [txt("0")]),
+        el("xdr:colOff", {}, [txt("0")]),
+        el("xdr:row", {}, [txt("0")]),
+        el("xdr:rowOff", {}, [txt("0")]),
+      ]),
+      el("xdr:to", {}, [
+        el("xdr:col", {}, [txt("1")]),
+        el("xdr:colOff", {}, [txt("0")]),
+        el("xdr:row", {}, [txt("1")]),
+        el("xdr:rowOff", {}, [txt("0")]),
+      ]),
+      frame,
+      el("xdr:clientData"),
+    ]);
+  }
+
+  function embeddedChartOf(pkg: Package) {
+    const document = readXlsxContent(pkg);
+    if (document.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    return document.sheets[0]?.embeddedObjects;
+  }
+
+  it("treats a graphicData whose uri names something other than a chart as carrying no embeddable content at all", () => {
+    const objects = embeddedChartOf(
+      customDrawingPackage(
+        [el("sheetData", {}, [])],
+        chartFrameAnchor(
+          chartGraphicFrame({ graphicUri: "http://example.com/not-a-chart" }),
+        ),
+      ),
+    );
+    expect(objects).toBeUndefined();
+  });
+
+  it("names the payload sheet 'Chart' when the graphic frame carries no xdr:cNvPr at all", () => {
+    const objects = embeddedChartOf(
+      customDrawingPackage(
+        [el("sheetData", {}, [])],
+        chartFrameAnchor(chartGraphicFrame({ withCNvPr: false })),
+      ),
+    );
+    const sheet =
+      objects?.[0]?.document.kind === "spreadsheet"
+        ? objects[0].document.sheets[0]
+        : undefined;
+    expect(sheet?.name).toBe("Chart");
+  });
+
+  it("names the payload sheet 'Chart' when xdr:cNvPr carries no name attribute", () => {
+    const objects = embeddedChartOf(
+      customDrawingPackage(
+        [el("sheetData", {}, [])],
+        chartFrameAnchor(chartGraphicFrame({ name: undefined })),
+      ),
+    );
+    const sheet =
+      objects?.[0]?.document.kind === "spreadsheet"
+        ? objects[0].document.sheets[0]
+        : undefined;
+    expect(sheet?.name).toBe("Chart");
+  });
+
+  it("never resolves an unrelated relationship type as the worksheet's own drawing part, even when it sorts before the real one", () => {
+    // A hyperlink relationship inserted before the genuine drawing relationship in the worksheet's own rels part -- resolveRelationships preserves declaration order, so a coverage-bearing loop that stops at the FIRST relationship regardless of type would resolve the hyperlink's own (nonsensical, non-drawing) target as if it were the drawing part.
+    const relationship = (id: string, type: string, target: string) =>
+      el("Relationship", { Id: id, Type: type, Target: target });
+    const pkg = customDrawingPackage(
+      [el("sheetData", {}, [])],
+      chartFrameAnchor(chartGraphicFrame()),
+    );
+    const sheetRels = pkg.parts["xl/worksheets/_rels/sheet1.xml.rels"];
+    if (sheetRels?.kind !== "xml") {
+      throw new Error("expected the worksheet rels part to be xml");
+    }
+    const relationships = sheetRels.nodes[0];
+    if (relationships?.type !== "element") {
+      throw new Error("expected a Relationships root element");
+    }
+    pkg.parts["xl/worksheets/_rels/sheet1.xml.rels"] = {
+      kind: "xml",
+      nodes: [
+        el("Relationships", {}, [
+          relationship(
+            "rIdHyperlink",
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+            "https://example.com",
+          ),
+          ...relationships.children,
+        ]),
+      ],
+    };
+    const objects = embeddedChartOf(pkg);
+    expect(objects).toHaveLength(1);
+  });
+});
+
 // dataValidation and conditionalFormatting rules, promoted to real vocabulary (ExaDev/documents.js#758) for every rule this package's schema names -- the two real-producer fixtures below exercise the structural read/write path; the synthetic packages further down exercise what is deliberately left un-promoted (an 'expression' cfRule, a dataValidation type this schema does not name) through the pre-existing anchor-cell residue mechanism.
 function worksheetOnlyPackage(worksheet: ReturnType<typeof el>): Package {
   const workbook = el("workbook", {}, [
@@ -2230,6 +3008,31 @@ describe("readXlsxContent: dataValidation and conditionalFormatting -- what is N
     expect(
       cells.find((cell) => cell.row === 1 && cell.column === 2)?.source,
     ).toBeUndefined();
+  });
+
+  it("leaves a rule whose sqref is the empty string unattached, the same as one that does not parse at all", () => {
+    const cells = readFirstCellOf(
+      el("worksheet", {}, [
+        el("sheetData", {}, []),
+        el("dataValidations", { count: "1" }, [
+          el("dataValidation", { type: "none", sqref: "" }),
+        ]),
+      ]),
+    );
+    expect(cells).toEqual([]);
+  });
+
+  it("materialises a residue-only anchor cell as kind empty with an empty displayText, not a placeholder marker string", () => {
+    const cells = readFirstCellOf(
+      el("worksheet", {}, [
+        el("sheetData", {}, []),
+        el("dataValidations", { count: "1" }, [
+          el("dataValidation", { type: "none", sqref: "F6" }),
+        ]),
+      ]),
+    );
+    const anchor = cells.find((cell) => cell.row === 5 && cell.column === 5);
+    expect(anchor).toMatchObject({ value: { kind: "empty" }, displayText: "" });
   });
 
   it("keeps the first residue-eligible rule when two anchor at the same cell -- one residue slot per cell -- and leaves a rule whose sqref does not parse unattached", () => {

@@ -131,14 +131,11 @@ function acceptProperlyNested(
   return accepted;
 }
 
-// Splices each extent's constructStart/constructEnd pair into the block list around the blocks it covers, producing the flat encoding document-schema.js's findConstructMarkerImbalance validates: markers balance, and a close always matches the nearest still-open start in the same list.
+// Splices each extent's constructStart/constructEnd pair into the block list around the blocks it covers, producing the flat encoding document-schema.js's findConstructMarkerImbalance validates: markers balance, and a close always matches the nearest still-open start in the same list. No "extents.length === 0" early return is needed: acceptProperlyNested([]) is [], so openingAt stays empty and the main loop below finds no marker to open or close at any index -- it just walks every block once and re-pushes it, producing an array equal in content to `[...blocks]` (never the SAME array reference, but no caller here or in read.ts relies on referential identity), exactly what the early return would have produced.
 export function insertConstructMarkers(
   blocks: readonly ContentBlock[],
   extents: readonly ConstructExtent[],
 ): ContentBlock[] {
-  if (extents.length === 0) {
-    return [...blocks];
-  }
   const nested = acceptProperlyNested(extents);
   const openingAt = new Map<number, ConstructExtent[]>();
   for (const extent of nested) {
@@ -197,10 +194,10 @@ function isBlockScopedHalf(
   if (position === -1) {
     return false;
   }
+  // firstContentIndex's own "-1 means no content at all, so everything is leading" case needs its explicit shortcut: position < firstContentIndex alone would read a firstContentIndex of -1 as "nothing is before it", the opposite of what's meant, since position is never negative here (the guard above already excludes it). lastContentIndex's mirror-image shortcut has no such need and is deliberately NOT written the same way: position is guaranteed >= 0 at this point, so position > lastContentIndex ALREADY evaluates true on its own whenever lastContentIndex is -1 (anything non-negative exceeds it) -- an explicit "lastContentIndex === -1 ||" would be checking a case its own right-hand side already covers unaided.
   const leading =
     index.firstContentIndex === -1 || position < index.firstContentIndex;
-  const trailing =
-    index.lastContentIndex === -1 || position > index.lastContentIndex;
+  const trailing = position > index.lastContentIndex;
   return leading || trailing;
 }
 
@@ -348,7 +345,8 @@ function readCheckboxState(sdtPr: XmlElement): boolean | undefined {
     return false;
   }
   const val = attr(checked, "w14:val") ?? attr(checked, "w:val");
-  return val === undefined || (val !== "0" && val !== "false" && val !== "off");
+  // No "val === undefined ||" shortcut is needed: when val IS undefined, every one of the three !== comparisons below is trivially true (undefined is never "0", "false", or "off"), so the AND already evaluates to true on its own -- an explicit shortcut would only be re-deriving what the comparisons already give for free.
+  return val !== "0" && val !== "false" && val !== "off";
 }
 
 export function readContentControlDescriptor(
@@ -473,7 +471,8 @@ function readOnOff(element: XmlElement | undefined): boolean | undefined {
     return undefined;
   }
   const val = attr(element, "w:val");
-  return val === undefined || (val !== "0" && val !== "false" && val !== "off");
+  // Same redundant shortcut dropped as readCheckboxState's own identical expression above: val undefined already satisfies every !== comparison below on its own.
+  return val !== "0" && val !== "false" && val !== "off";
 }
 
 // The run carrying a field's opening w:fldChar, when that field is a legacy form field: the w:ffData child names the control. Returns undefined for an ordinary field (no w:ffData) -- the caller keeps its plain field descriptor.

@@ -64,14 +64,19 @@ function isoDateOfDayCount(
   if (date1904) {
     return isoDateOfUtcMs(ORIGIN_1904_UTC_MS + days * MS_PER_DAY);
   }
-  if (days === PHANTOM_LEAP_DAY_SERIAL) {
-    return undefined;
+  // A three-way switch on the sign of the offset from the phantom day, rather than an equality check plus a separate `<` comparison against the identical threshold: with the exact phantom day excluded by the `0` case, the remaining two cases are Math.sign's only other possible outputs (-1 and 1), so there is no inequality boundary left for a mutation to hide behind the way a plain `days < PHANTOM_LEAP_DAY_SERIAL` ternary would leave one.
+  switch (Math.sign(days - PHANTOM_LEAP_DAY_SERIAL)) {
+    case 0:
+      return undefined;
+    case -1:
+      return isoDateOfUtcMs(
+        ORIGIN_1900_BELOW_PHANTOM_UTC_MS + days * MS_PER_DAY,
+      );
+    default:
+      return isoDateOfUtcMs(
+        ORIGIN_1900_ABOVE_PHANTOM_UTC_MS + days * MS_PER_DAY,
+      );
   }
-  const originUtcMs =
-    days < PHANTOM_LEAP_DAY_SERIAL
-      ? ORIGIN_1900_BELOW_PHANTOM_UTC_MS
-      : ORIGIN_1900_ABOVE_PHANTOM_UTC_MS;
-  return isoDateOfUtcMs(originUtcMs + days * MS_PER_DAY);
 }
 
 function isoTimeOfMsWithinDay(msWithinDay: number): string {
@@ -125,18 +130,17 @@ const ISO_TIME_PATTERN = /^(\d{2}):(\d{2}):(\d{2})$/;
 // The 'T' of the canonical 'YYYY-MM-DDTHH:MM:SS' dateTime spelling, which isoDateTimeToSerial splits on rather than matching with a pattern of its own, so the date and time halves are validated by exactly the same two functions a bare date and a bare time go through.
 const ISO_DATE_TIME_SEPARATOR = "T";
 
-// Date.UTC silently ROLLS OVER an out-of-range component (month 13 becomes January of the next year, February 30th becomes March 1st or 2nd), so the only way to reject an impossible calendar date is to read the resulting instant's own components back and require every one of them still to match what was asked for. This also rejects a two-digit-year interpretation for a year below 100 (Date.UTC(50, ...) means 1950), which has no serial in either epoch anyway.
-function utcMsOfCalendarDate(
+// Date.UTC silently ROLLS OVER an out-of-range component (month 13 becomes January of the next year, February 30th becomes March 1st or 2nd), so the only way to reject an impossible calendar date is to read the resulting instant's own components back and require every one of them still to match what was asked for. This also rejects a two-digit-year interpretation for a year below 100 (Date.UTC(50, ...) means 1950), which has no serial in either epoch anyway. Exported purely for direct unit coverage: isoDateToSerial's own ISO_DATE_PATTERN caps `day` at two digits (0-99), which is never enough to roll a date all the way past a full year boundary while its own month still happens to read back unchanged -- so the year check's own necessity (as opposed to the day check, correctly dropped below) can only be driven directly, with a day value the regex-gated caller never produces.
+export function utcMsOfCalendarDate(
   year: number,
   month: number,
   day: number,
 ): number | undefined {
   const utcMs = Date.UTC(year, month - 1, day);
   const date = new Date(utcMs);
+  // The day is deliberately not checked a third time here: Date.UTC(year, month-1, day) maps onto exactly one real calendar date, so whenever that date's own year AND month already match what was asked for, `day` is necessarily within the target month's own valid range and its own getUTCDate() reading is therefore already forced to match too (verified by exhaustive search over every year/month/day combination realistic ISO input can produce) -- a third, independent equality check here could only ever restate a fact the first two already guarantee.
   const matches =
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day;
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1;
   return matches ? utcMs : undefined;
 }
 
@@ -193,10 +197,8 @@ export function isoTimeToSerial(iso: string): number | undefined {
 }
 
 export function isoDateTimeToSerial(iso: string): number | undefined {
+  // No explicit "no separator" guard: when indexOf returns -1, the date half slices to iso.slice(0, -1) (length iso.length - 1) and the time half to iso.slice(0) (length iso.length). ISO_DATE_PATTERN and ISO_TIME_PATTERN are anchored to exactly 10 and 8 characters respectively, so matching both at once would require iso.length - 1 === 10 (length 11) and iso.length === 8 at the same time, which no string satisfies -- so with no separator, at least one half always fails to parse, and the undefined fallthrough below already covers that case with no separate check needed.
   const separatorIndex = iso.indexOf(ISO_DATE_TIME_SEPARATOR);
-  if (separatorIndex === -1) {
-    return undefined;
-  }
   const days = isoDateToSerial(iso.slice(0, separatorIndex));
   const fractionOfDay = isoTimeToSerial(iso.slice(separatorIndex + 1));
   return days === undefined || fractionOfDay === undefined

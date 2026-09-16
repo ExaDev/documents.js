@@ -1,5 +1,4 @@
 import {
-  isCompoundFile,
   isZipArchive,
   readCompoundFile,
   readOlePackage,
@@ -17,7 +16,7 @@ import { readPptxContent } from "./pptx/read";
 import { readXlsxContent } from "./xlsx/content";
 import { childrenWithTag, rootElement } from "./util";
 
-// The shared embedded-object decode: an OOXML package's OLE embeddings (pptx's p:oleObj/@r:id target part, docx's o:OLEObject/@r:id target part) hold either a whole nested OOXML package zipped into the part's bytes (every modern producer's spelling), or a classic OLE compound-file blob (.bin) whose root storage carries the real file as an OLE-packaged 'Package' stream. This module recovers both: payload magic checked up front (archive-codec's isZipArchive and isCompoundFile -- byte checks, never a parse-and-catch), a .bin unwrapped through archive-codec's CFB reader and OLE-package parser to the ZIP a modern embed packages, the ZIP bytes walked through archive-codec's guarded recursive walk (the bounded inflate -- see readEmbeddedOoxmlPayload's own comment) with the walk's root entries assembled into a nested Package, the flavour detected from the nested package's own entry part, and the matching typed reader run to produce the nested ContentDocument that ContentEmbeddedObject.document carries.
+// The shared embedded-object decode: an OOXML package's OLE embeddings (pptx's p:oleObj/@r:id target part, docx's o:OLEObject/@r:id target part) hold either a whole nested OOXML package zipped into the part's bytes (every modern producer's spelling), or a classic OLE compound-file blob (.bin) whose root storage carries the real file as an OLE-packaged 'Package' stream. This module recovers both: payload shape distinguished by archive-codec's isZipArchive (a byte check, never a parse-and-catch) with the compound-file alternative left to readCompoundFile's own equivalent magic check inside the try below, a .bin unwrapped through archive-codec's CFB reader and OLE-package parser to the ZIP a modern embed packages, the ZIP bytes walked through archive-codec's guarded recursive walk (the bounded inflate -- see readEmbeddedOoxmlPayload's own comment) with the walk's root entries assembled into a nested Package, the flavour detected from the nested package's own entry part, and the matching typed reader run to produce the nested ContentDocument that ContentEmbeddedObject.document carries.
 //
 // Flavour detection is by entry-part path, not [Content_Types].xml overrides, for two reasons: the three entry paths are exactly what the readers themselves dispatch on (readDocxContent throws without word/document.xml, readSlidePathsInOrder reads ppt/presentation.xml, resolveSheetEntries reads xl/workbook.xml), so detection by the same paths -- plus the one further precondition a reader of the three has, readDocxContent's w:body (hasDocxBody below) -- guarantees the chosen reader's precondition already holds; and the macro-enabled variants (docm/pptm/xlsm) share these exact paths -- the macro payload is an extra vbaProject.bin part, not a different entry -- so they map onto the same three content kinds with no separate case.
 //
@@ -34,8 +33,8 @@ export interface EmbeddedOoxmlPayload {
   readonly document: ContentDocument;
 }
 
-// readDocxContent is the only one of the three readers with a precondition beyond its entry part existing: it throws when word/document.xml carries no w:body to walk. Detection verifies that precondition up front, so a malformed nested docx degrades to no flavour at detection time rather than reaching a dispatch that would throw. The presentation and spreadsheet readers have no throw preconditions of their own.
-function hasDocxBody(root: XmlElement): boolean {
+// readDocxContent is the only one of the three readers with a precondition beyond its entry part existing: it throws when word/document.xml carries no w:body to walk. Detection verifies that precondition up front, so a malformed nested docx degrades to no flavour at detection time rather than reaching a dispatch that would throw. The presentation and spreadsheet readers have no throw preconditions of their own. Exported (alongside detectFlavour below) purely for direct unit coverage: readEmbeddedOoxmlPayload's own outer catch would swallow either function's own precondition mistakes just as gracefully as a genuine no-flavour result, so testing only through that public entry point cannot tell "correctly detected no flavour" apart from "wrongly detected a flavour, then threw reading it."
+export function hasDocxBody(root: XmlElement): boolean {
   return childrenWithTag(root, "w:body").length > 0;
 }
 
@@ -54,7 +53,7 @@ const ENTRY_PARTS: readonly {
 ];
 
 // A real OOXML package has exactly one main document part, so at most one entry part is ever present; a fixed probe order keeps detection deterministic even for a hand-built package that somehow carries two. A row only matches when its reader's own precondition holds too, so flavour detection genuinely guarantees the chosen reader's precondition already holds and the dispatch below cannot throw for precondition reasons.
-function detectFlavour(nested: Package): EmbeddedOoxmlKind | undefined {
+export function detectFlavour(nested: Package): EmbeddedOoxmlKind | undefined {
   return ENTRY_PARTS.find((candidate) => {
     const root = rootElement(nested.parts[candidate.partPath]);
     return (
@@ -82,9 +81,7 @@ function rootEntriesOf(
 export function readEmbeddedOoxmlPayload(
   bytes: Uint8Array<ArrayBuffer>,
 ): EmbeddedOoxmlPayload | undefined {
-  if (!isZipArchive(bytes) && !isCompoundFile(bytes)) {
-    return undefined;
-  }
+  // No separate "is this even a ZIP or a compound file" gate ahead of the try below: bytes carrying neither magic reach zipBytesOfPayload, fail isZipArchive, and then fail readCompoundFile's own magic check with a thrown CompoundFileFormatError -- caught by the same catch every other undecodable payload already degrades through, so a dedicated early exit changes which line produces `undefined`, never whether the caller sees it.
   try {
     // The nested inflate runs behind archive-codec's recursive-walk guards rather than through this package's own unbounded unzip: fflate's unzipSync carries no size cap, an embeddings part is untrusted second-order bytes in which a small host entry can declare an unbounded decompressed body, and a bomb's leverage is exactly what the walk's one shared cumulative decompressed-bytes budget (MAX_WALK_TOTAL_BYTES) and depth cap bound -- the outer package parse keeps its own direct unzip because that is the file the caller chose to open. A walk that hits a guard throws (the guards truncate nothing), which the catch below degrades like any other undecodable payload; building the nested Package from the walk's own root entries (packageFromEntries) means the bytes are inflated exactly once, not once for the walk and again for the parse.
     const zipBytes = zipBytesOfPayload(bytes);

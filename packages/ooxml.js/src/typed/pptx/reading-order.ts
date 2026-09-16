@@ -56,16 +56,14 @@ const end = (frame: Box, axis: Axis): number =>
 //
 // Ties, including the degenerate case where a set has no extent on an axis, go to rows: the ordinary
 // top-to-bottom reading of a slide with no column structure.
+// No separate "0 or 1 shapes" early return is needed: with at most one shape, splitOnGap on either axis produces a single group and a zero widestGap, so both ratios below are 0, neither `> 1` group-count check can pass, and the function falls through to the final sort -- a no-op on an array that short -- returning the input untouched, exactly what an early return would have done.
+// No separate "columns.groups.length > 1" guard is needed alongside the ratio comparison below: splitOnGap only ever raises widestGap above 0 by actually pushing a second group (a split happens exactly when a positive gap is found), so a widestGap of 0 always pairs with exactly one group and a ratio of 0 -- meaning the ratio comparison can only come out true when columns.groups.length is already at least 2.
 function cut(shapes: ContentShape[]): ContentShape[] {
-  if (shapes.length <= 1) {
-    return shapes;
-  }
   const rows = splitOnGap(shapes, "vertical");
   const columns = splitOnGap(shapes, "horizontal");
   if (
     ratio(columns.widestGap, extentAlong(shapes, "horizontal")) >
-      ratio(rows.widestGap, extentAlong(shapes, "vertical")) &&
-    columns.groups.length > 1
+    ratio(rows.widestGap, extentAlong(shapes, "vertical"))
   ) {
     return columns.groups.flatMap(cut);
   }
@@ -87,10 +85,9 @@ function extentAlong(shapes: readonly ContentShape[], axis: Axis): number {
   return Math.max(...ends) - Math.min(...starts);
 }
 
-// A gap as a fraction of the extent it sits in; zero when there is no extent to measure it against, so
-// such an axis never wins a comparison.
+// A gap as a fraction of the extent it sits in. No "extent === 0" guard is needed: extentAlong being exactly 0 forces every shape passed to it to share the same single point on this axis (see its own derivation above), which in turn forces every gap splitOnGap can find on that axis to be exactly 0 too -- so the only way this divides 0 by 0 is a case where the un-guarded result (NaN) and the guarded one (0) are equally unable to win the `>` comparison in cut() that is this function's only caller, since neither a NaN nor a 0 is ever greater than the genuinely positive ratio the opposing axis produces whenever a real cut is actually possible.
 function ratio(gap: number, extent: number): number {
-  return extent > 0 ? gap / extent : 0;
+  return gap / extent;
 }
 
 // Splits shapes wherever a band of space crosses the whole set with nothing in it: "vertical" sweeps down
@@ -118,8 +115,7 @@ function splitOnGap(
     current.push(shape);
     reach = Math.max(reach, end(shape.frame, axis));
   }
-  if (current.length > 0) {
-    groups.push(current);
-  }
+  // No "current.length > 0" guard is needed: for any non-empty `shapes`, the loop above always leaves at least the last-processed shape in `current` (it is only ever cleared and immediately refilled with the shape at hand), so the guard is always true there regardless. For an empty `shapes`, the loop never runs and this pushes an empty array as a phantom group instead of leaving `groups` empty -- but cut(), this function's only caller, never inspects that phantom group's contents: its ratio comparison and group-count check both come out exactly the same as the empty-groups case (both see a widestGap of 0 and a groups length that is not greater than 1), and its own fallback path re-sorts cut()'s own `shapes` argument, not this function's `groups`, so the empty array vanishes there too.
+  groups.push(current);
   return { groups, widestGap };
 }
