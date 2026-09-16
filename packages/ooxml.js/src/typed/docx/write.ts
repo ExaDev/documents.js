@@ -716,9 +716,7 @@ function wrapInternalLinks(
   positions: RunPositions,
   links: readonly InternalLinkExtent[],
 ): XmlElement[] {
-  if (links.length === 0) {
-    return elements;
-  }
+  // No links-length early return: the loop below handles an empty list identically (zero iterations, out still the input array), so the guard would only be a second spelling of the same fact.
   let out = elements;
   const wrapped: { first: number; last: number }[] = [];
   for (const link of [...links].sort(
