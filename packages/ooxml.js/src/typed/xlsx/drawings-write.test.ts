@@ -412,6 +412,78 @@ describe("buildSheetDrawing: one image and one chart, every element and attribut
   });
 });
 
+describe("buildSheetDrawing: chartSeriesFromDocument's own sparse-cell fallback", () => {
+  it("reads a missing cell (one chartCells never materialised, e.g. an absent point) back as an empty string, not undefined", () => {
+    const document: ContentDocument = {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Data",
+          // No (0,1) series-name cell at all, and no (1,1) value cell -- both genuinely absent from the sparse array, the same shape chartCells leaves for a missing point. (2,1) forces maxColumn to 1 so a series column genuinely exists to read the missing (0,1)/(1,1) cells back through.
+          cells: [
+            {
+              row: 1,
+              column: 0,
+              value: { kind: "string", value: "Q1" },
+              displayText: "Q1",
+            },
+            {
+              row: 2,
+              column: 1,
+              value: { kind: "string", value: "42" },
+              displayText: "42",
+            },
+          ],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: PRINT_SETTINGS,
+        },
+      ],
+    };
+    const result = buildSheetDrawing(
+      sheet({ embeddedObjects: [chartObject({ document })] }),
+      newDrawingCounters(),
+    );
+    if (result === undefined) {
+      throw new Error("expected a SheetDrawingWrite");
+    }
+    const chartPart = result.extraParts["xl/charts/chart1.xml"];
+    if (chartPart?.kind !== "xml") {
+      throw new Error("expected an xml part");
+    }
+    const root = chartPart.nodes[1];
+    if (root?.type !== "element") {
+      throw new Error("expected an element");
+    }
+    const findFirst = (
+      tag: string,
+      node: typeof root,
+    ): typeof root | undefined => {
+      if (node.tag === tag) {
+        return node;
+      }
+      for (const child of node.children) {
+        if (child.type === "element") {
+          const found = findFirst(tag, child);
+          if (found !== undefined) {
+            return found;
+          }
+        }
+      }
+      return undefined;
+    };
+    const tx = findFirst("c:tx", root);
+    const seriesNameValue = tx?.children[0];
+    if (seriesNameValue?.type !== "element") {
+      throw new Error("expected c:v");
+    }
+    const seriesNameText = seriesNameValue.children[0];
+    expect(seriesNameText?.type === "text" && seriesNameText.value).toBe("");
+  });
+});
+
 describe("buildSheetDrawing: series/category range arithmetic against a second, non-trivial category count", () => {
   it("closes the cache range at categories.length + 1, and derives each column's own letters from index + 1", () => {
     const document: ContentDocument = {
@@ -557,6 +629,39 @@ describe("buildSheetDrawing: object-id and relationship-id counters advance forw
       throw new Error("expected xdr:nvPicPr");
     }
     const cNvPr = nvPicPr.children[0];
+    expect(cNvPr?.type === "element" && cNvPr.attributes).toContainEqual({
+      name: "id",
+      value: "3",
+    });
+  });
+
+  it("assigns cNvPr id 2 then 3 to two charts in document order -- the object-id counter advances for charts too, not just images", () => {
+    const result = buildSheetDrawing(
+      sheet({
+        embeddedObjects: [chartObject(), chartObject({ anchorColumn: 5 })],
+      }),
+      newDrawingCounters(),
+    );
+    if (result === undefined) {
+      throw new Error("expected a SheetDrawingWrite");
+    }
+    const secondAnchor = result.drawingRoot.children[1];
+    if (secondAnchor?.type !== "element") {
+      throw new Error("expected an element");
+    }
+    const frame = secondAnchor.children.find(
+      (n) => n.type === "element" && n.tag === "xdr:graphicFrame",
+    );
+    if (frame?.type !== "element") {
+      throw new Error("expected xdr:graphicFrame");
+    }
+    const nvPr = frame.children.find(
+      (n) => n.type === "element" && n.tag === "xdr:nvGraphicFramePr",
+    );
+    if (nvPr?.type !== "element") {
+      throw new Error("expected xdr:nvGraphicFramePr");
+    }
+    const cNvPr = nvPr.children[0];
     expect(cNvPr?.type === "element" && cNvPr.attributes).toContainEqual({
       name: "id",
       value: "3",
