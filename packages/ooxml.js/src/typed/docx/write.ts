@@ -711,6 +711,8 @@ interface InternalLinkExtent {
 }
 
 // Wraps each internal link extent's runs in one w:hyperlink/@w:anchor element -- the inverse of the reader's internal-hyperlink walk. A link whose slice cannot be wrapped -- it crosses another link's (WordprocessingML has no nested w:hyperlink, and Word itself cannot produce the shape), or it covers a run carrying an external hyperlink of its own (already a w:hyperlink) -- writes its runs plain and loses only the descriptor, the content-preserving policy every unwritable construct kind here follows.
+//
+// No wrap-overlap bookkeeping is needed for the internal-link wraps themselves, and an earlier version that tracked wrapped index ranges was removed: nesting is already impossible by construction here. A link crossing or contained in an earlier link's wrap has its start or end run sitting inside that wrap's w:hyperlink element, so `first`/`last` never both resolve and the guard below skips it; a link CONTAINING an earlier one cannot be processed after it, because the sort order (ascending start, then longer extent first at a shared start) always reaches the containing extent first. Index-range overlap tracking in addition to that could only ever fire on links whose slices are genuinely disjoint (adjacent links, whose stale pre-wrap indices still intersect), losing a descriptor the writer could have written.
 function wrapInternalLinks(
   elements: XmlElement[],
   positions: RunPositions,
@@ -718,7 +720,6 @@ function wrapInternalLinks(
 ): XmlElement[] {
   // No links-length early return: the loop below handles an empty list identically (zero iterations, out still the input array), so the guard would only be a second spelling of the same fact.
   let out = elements;
-  const wrapped: { first: number; last: number }[] = [];
   for (const link of [...links].sort(
     (a, b) => a.startRun - b.startRun || b.endRun - a.endRun,
   )) {
@@ -737,17 +738,13 @@ function wrapInternalLinks(
       continue;
     }
     const slice = out.slice(first, last + 1);
-    // No nesting a hyperlink inside a hyperlink -- neither another internal link's wrap (tracked in `wrapped`) nor a run's own external-target wrapper element.
-    const overlapsWrapped = wrapped.some(
-      (range) => first <= range.last && range.first <= last,
-    );
+    // No nesting a hyperlink inside a hyperlink -- the only shape that can still reach this test is a slice carrying a run's own external-target wrapper element, since internal-link overlap is unreachable by the sort-and-lookup argument above.
     const carriesHyperlink = slice.some(
       (element) => element.tag === "w:hyperlink",
     );
-    if (overlapsWrapped || carriesHyperlink) {
+    if (carriesHyperlink) {
       continue;
     }
-    wrapped.push({ first, last });
     out = [
       ...out.slice(0, first),
       el("w:hyperlink", { "w:anchor": encodeXmlText(link.anchor) }, slice),
