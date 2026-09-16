@@ -1180,16 +1180,18 @@ export function buildXlsxPackageFromContent(
   });
 
   // Building every worksheet part first, before touching xl/sharedStrings.xml or xl/styles.xml, is load-bearing: buildCellElement interns every literal string value into `sharedStrings` and every non-General number format into `cellFormats` as a side effect while it walks each sheet's cells, buildConditionalFormattingElements interns every styled conditional-format rule into `dxfTable` the same way, and buildSharedStringsPart/buildStylesPart below must all see the FULLY populated tables.
-  const worksheetParts = sheets.map((sheet, index) =>
-    buildWorksheetPart(
+  // No optional chain or ?? fallback on the extras lookup: sheetExtras is index-aligned with the very sheets this map walks (both derive from the one sheets array), so the lookup always resolves and the fallbacks were dead spellings -- the non-null assertion is the same index-invariant spelling parseFlow's own stack top uses.
+  const worksheetParts = sheets.map((sheet, index) => {
+    const extras = sheetExtras[index]!;
+    return buildWorksheetPart(
       sheet,
       sharedStrings,
       cellFormats,
       dxfTable,
-      sheetExtras[index]?.drawingRelId,
-      sheetExtras[index]?.tableRelIds ?? [],
-    ),
-  );
+      extras.drawingRelId,
+      extras.tableRelIds,
+    );
+  });
 
   const parts: Package["parts"] = {
     "[Content_Types].xml": buildContentTypesPart(
