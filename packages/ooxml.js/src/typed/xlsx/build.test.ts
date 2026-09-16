@@ -3998,3 +3998,75 @@ describe("buildXlsxPackageFromContent: styles part scaffolding counts and exact 
     expect(attr(requireChild(arial, "name"), "val")).toBe("Arial");
   });
 });
+
+describe("buildXlsxPackageFromContent: the names array and the derived print names reconcile by name and scope", () => {
+  function workbookWithNames(names: ContentDefinedName[]): Package {
+    return buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: {},
+      names,
+      sheets: [
+        {
+          name: "Printed",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: {
+            ...DEFAULT_PRINT_SETTINGS,
+            printRange: {
+              startRow: 0,
+              startColumn: 0,
+              endRow: 4,
+              endColumn: 1,
+            },
+          },
+        },
+      ],
+    });
+  }
+
+  function definedNameRows(
+    pkg: Package,
+  ): [string, string | undefined, string][] {
+    const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
+    if (workbook === undefined) {
+      throw new Error("expected workbook root");
+    }
+    const definedNames = requireChild(workbook, "definedNames");
+    return elementsOf(definedNames, "definedName").map((name) => [
+      attributeOf(name, "name") ?? "",
+      attributeOf(name, "localSheetId"),
+      textContent(name),
+    ]);
+  }
+
+  it("writes a carried sheet-scoped Print_Area verbatim and suppresses the structured derivation for the same scope", () => {
+    const pkg = workbookWithNames([
+      {
+        name: "_xlnm.Print_Area",
+        refersTo: "Printed!$C$3:$D$9",
+        scopeSheetIndex: 0,
+      },
+    ]);
+    expect(definedNameRows(pkg)).toEqual([
+      ["_xlnm.Print_Area", "0", "Printed!$C$3:$D$9"],
+    ]);
+  });
+
+  it("derives the print area beside a carried name of a different scope or a different name", () => {
+    const pkg = workbookWithNames([
+      { name: "MyRange", refersTo: "Printed!$A$1" },
+      {
+        name: "_xlnm.Print_Area",
+        refersTo: "Other!$A$1:$B$2",
+        scopeSheetIndex: 3,
+      },
+    ]);
+    expect(definedNameRows(pkg)).toEqual([
+      ["MyRange", undefined, "Printed!$A$1"],
+      ["_xlnm.Print_Area", "3", "Other!$A$1:$B$2"],
+      ["_xlnm.Print_Area", "0", "Printed!$A$1:$B$5"],
+    ]);
+  });
+});
