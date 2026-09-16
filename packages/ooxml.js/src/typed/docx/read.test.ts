@@ -4615,3 +4615,185 @@ describe("readDocxContent: lifted-image anchor offsets across tab, break, and de
     expect(image.anchorOffset).toBe(2);
   });
 });
+
+describe("readDocxContent: run-walk guard edges for marker halves, reference ids, and anchor offsets", () => {
+  function imageParts(): Package["parts"] {
+    return {
+      "word/_rels/document.xml.rels": {
+        kind: "xml",
+        nodes: [
+          rels([{ id: "rIdImg", type: IMAGE_REL, target: "media/image1.png" }]),
+        ],
+      },
+      "word/media/image1.png": { kind: "binary", base64: TINY_PNG_BASE64 },
+    };
+  }
+
+  it("keeps a mid-paragraph comment range's run extent when a permission start shares its id", () => {
+    const paragraph = el("w:p", {}, [
+      textRun("lead"),
+      el("w:commentRangeStart", { "w:id": "7" }),
+      el("w:permStart", { "w:id": "7" }),
+      textRun("annotated"),
+      el("w:commentRangeEnd", { "w:id": "7" }),
+      textRun("tail"),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    expect(firstParagraph(doc).constructs).toEqual([
+      {
+        descriptor: { kind: "anchor", anchorType: "comment", name: "7" },
+        startRun: 1,
+        endRun: 2,
+      },
+    ]);
+  });
+
+  it("records no point anchor for a footnote reference carrying no @w:id", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:r", {}, [el("w:footnoteReference", {})]),
+      textRun("after"),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    expect(firstParagraph(doc).constructs).toBeUndefined();
+  });
+
+  it("does not count a run-properties child toward a lifted image's anchor offset", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:r", {}, [
+        el("w:rPr", {}, [el("w:b", {})]),
+        el("w:t", { "xml:space": "preserve" }, [txt("ab")]),
+        drawingElement("wp:inline", "rIdImg", "rPr alt"),
+      ]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph, imageParts()));
+    const image = asImage(doc.sections[0]?.blocks[1]);
+    expect(image.anchorRunIndex).toBe(0);
+    expect(image.anchorOffset).toBe(2);
+  });
+});
+
+describe("readDocxContent: flow-level tracked-change carry and stray body children", () => {
+  const ED = {
+    "w:id": "1",
+    "w:author": "Ed",
+    "w:date": "2024-01-01T00:00:00Z",
+  };
+
+  function flowDoc(children: XmlElement[]): ReturnType<typeof readDocxContent> {
+    const body = el("w:body", {}, [
+      ...children,
+      el("w:sectPr", {}, [el("w:pgSz", { "w:w": "12240", "w:h": "15840" })]),
+    ]);
+    return readDocxContent({
+      parts: {
+        "word/document.xml": {
+          kind: "xml",
+          nodes: [el("w:document", {}, [body])],
+        },
+      },
+    });
+  }
+
+  it("carries a nested run-level deletion inside a flow-level w:del", () => {
+    const doc = flowDoc([
+      el("w:del", { ...ED, "w:id": "1" }, [
+        el("w:p", {}, [
+          textRun("kept"),
+          el("w:del", { ...ED, "w:id": "2" }, [
+            el("w:r", {}, [el("w:delText", {}, [txt("gone")])]),
+          ]),
+        ]),
+      ]),
+    ]);
+    expect(
+      asParagraph(doc.sections[0]?.blocks[1]).runs.map((r) => r.text),
+    ).toEqual(["kept", "gone"]);
+  });
+
+  it("drops a nested run-level deletion inside a flow-level w:ins", () => {
+    const doc = flowDoc([
+      el("w:ins", { ...ED, "w:id": "3" }, [
+        el("w:p", {}, [
+          textRun("kept"),
+          el("w:del", { ...ED, "w:id": "4" }, [
+            el("w:r", {}, [el("w:delText", {}, [txt("gone")])]),
+          ]),
+        ]),
+      ]),
+    ]);
+    expect(
+      asParagraph(doc.sections[0]?.blocks[1]).runs.map((r) => r.text),
+    ).toEqual(["kept"]);
+  });
+
+  it("unwraps an alternate-content block whose only branch is a Choice", () => {
+    const doc = flowDoc([
+      el("mc:AlternateContent", {}, [
+        el("mc:Choice", { Requires: "wps" }, [
+          el("w:p", {}, [textRun("chosen")]),
+        ]),
+      ]),
+    ]);
+    expect(asParagraph(doc.sections[0]?.blocks[0]).runs[0]?.text).toBe(
+      "chosen",
+    );
+  });
+
+  it("treats a stray body-level proofErr as content-less, never as a section break", () => {
+    const doc = flowDoc([
+      el("w:p", {}, [textRun("One")]),
+      el("w:proofErr", { "w:type": "spellStart" }),
+      el("w:p", {}, [textRun("Two")]),
+    ]);
+    expect(doc.sections).toHaveLength(1);
+    expect(
+      (doc.sections[0]?.blocks ?? []).map((b) =>
+        b.kind === "paragraph" ? b.runs[0]?.text : b.kind,
+      ),
+    ).toEqual(["One", "Two"]);
+  });
+});
+
+describe("readDocxContent: section-crossing construct extents", () => {
+  it("drops a bookmark crossing a section break without eating the bookmark wholly inside the later section", () => {
+    const body = el("w:body", {}, [
+      el("w:bookmarkStart", { "w:id": "1", "w:name": "Wide" }),
+      el("w:p", {}, [
+        el("w:pPr", {}, [
+          el("w:sectPr", {}, [
+            el("w:pgSz", { "w:w": "12240", "w:h": "15840" }),
+          ]),
+        ]),
+        textRun("first"),
+      ]),
+      el("w:bookmarkStart", { "w:id": "2", "w:name": "Inner" }),
+      el("w:p", {}, [textRun("second")]),
+      el("w:bookmarkEnd", { "w:id": "1" }),
+      el("w:p", {}, [textRun("third")]),
+      el("w:bookmarkEnd", { "w:id": "2" }),
+      el("w:sectPr", {}, [el("w:pgSz", { "w:w": "12240", "w:h": "15840" })]),
+    ]);
+    const doc = readDocxContent({
+      parts: {
+        "word/document.xml": {
+          kind: "xml",
+          nodes: [el("w:document", {}, [body])],
+        },
+      },
+    });
+    expect(doc.sections).toHaveLength(2);
+    // The wide bookmark's start must not leak into the first section either: its extent crosses the break, so no marker at all.
+    expect(
+      (doc.sections[0]?.blocks ?? []).every((b) => b.kind !== "constructStart"),
+    ).toBe(true);
+    const second = doc.sections[1]?.blocks ?? [];
+    expect(asConstructStart(second[0]).descriptor).toEqual({
+      kind: "anchor",
+      anchorType: "bookmark",
+      name: "Inner",
+    });
+    expect(asParagraph(second[1]).runs[0]?.text).toBe("second");
+    expect(asParagraph(second[2]).runs[0]?.text).toBe("third");
+    expect(second[3]?.kind).toBe("constructEnd");
+  });
+});
