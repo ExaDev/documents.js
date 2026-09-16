@@ -445,6 +445,10 @@ describe("buildDocxPackageFromContent: fixed package-scaffolding parts", () => {
       sections: [emptyBodySection()],
     });
     const root = rootElement(written.parts["_rels/.rels"]);
+    expect(root?.tag).toBe("Relationships");
+    expect(root === undefined ? undefined : attr(root, "xmlns")).toBe(
+      "http://schemas.openxmlformats.org/package/2006/relationships",
+    );
     const rels =
       root === undefined ? [] : childrenWithTag(root, "Relationship");
     expect(
@@ -477,6 +481,10 @@ describe("buildDocxPackageFromContent: fixed package-scaffolding parts", () => {
       sections: [emptyBodySection()],
     });
     const root = rootElement(written.parts["[Content_Types].xml"]);
+    expect(root?.tag).toBe("Types");
+    expect(root === undefined ? undefined : attr(root, "xmlns")).toBe(
+      "http://schemas.openxmlformats.org/package/2006/content-types",
+    );
     const defaults = root === undefined ? [] : childrenWithTag(root, "Default");
     expect(
       defaults.map((entry) => ({
@@ -510,6 +518,100 @@ describe("buildDocxPackageFromContent: fixed package-scaffolding parts", () => {
     );
     expect(overrideFor("/word/styles.xml")).toBe(
       "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml",
+    );
+  });
+
+  it("declares a Default entry for every media format actually used, jpeg and gif included, never one that was not", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "image",
+              format: "jpeg",
+              base64: "AAAA",
+              widthPt: 10,
+              heightPt: 10,
+            },
+            {
+              kind: "image",
+              format: "gif",
+              base64: "BBBB",
+              widthPt: 10,
+              heightPt: 10,
+            },
+          ],
+        },
+      ],
+    });
+    const root = rootElement(written.parts["[Content_Types].xml"]);
+    const defaultFor = (extension: string): string | undefined => {
+      const found = (
+        root === undefined ? [] : childrenWithTag(root, "Default")
+      ).find((entry) => attr(entry, "Extension") === extension);
+      return found === undefined ? undefined : attr(found, "ContentType");
+    };
+    expect(defaultFor("jpeg")).toBe("image/jpeg");
+    expect(defaultFor("gif")).toBe("image/gif");
+    expect(defaultFor("png")).toBeUndefined();
+  });
+
+  it("writes word/_rels/document.xml.rels with the Relationships root tag and namespace", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [{ text: "link", hyperlink: "https://example.com" }],
+            },
+          ],
+        },
+      ],
+    });
+    const root = rootElement(written.parts["word/_rels/document.xml.rels"]);
+    expect(root?.tag).toBe("Relationships");
+    expect(root === undefined ? undefined : attr(root, "xmlns")).toBe(
+      "http://schemas.openxmlformats.org/package/2006/relationships",
+    );
+  });
+
+  it("writes docProps/core.xml and docProps/app.xml's exact XML, including an empty keywords list and a modifiedIso date", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [emptyBodySection()],
+      metadata: {
+        title: "T",
+        author: "A",
+        subject: "S",
+        keywords: [],
+        createdIso: "2026-01-01T00:00:00Z",
+        modifiedIso: "2026-02-02T00:00:00Z",
+        creator: "ooxml.js",
+      },
+    });
+    const core = rootElement(written.parts["docProps/core.xml"]);
+    expect(core?.tag).toBe("cp:coreProperties");
+    expect(core === undefined ? undefined : attr(core, "xmlns:cp")).toBe(
+      "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
+    );
+    // An empty keywords array is not undefined, but the writer's own length>0 guard means a present-but-empty list is treated the same as an absent one: no cp:keywords element at all, not an empty one.
+    expect(childrenWithTag(core!, "cp:keywords")).toHaveLength(0);
+    expect(childrenWithTag(core!, "dcterms:modified")[0]).toEqual(
+      el("dcterms:modified", { "xsi:type": "dcterms:W3CDTF" }, [
+        txt("2026-02-02T00:00:00Z"),
+      ]),
+    );
+    const app = rootElement(written.parts["docProps/app.xml"]);
+    expect(app?.tag).toBe("Properties");
+    expect(app === undefined ? undefined : attr(app, "xmlns")).toBe(
+      "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties",
+    );
+    expect(childrenWithTag(app!, "Application")[0]).toEqual(
+      el("Application", {}, [txt("ooxml.js")]),
     );
   });
 
@@ -762,6 +864,114 @@ describe("buildDocxPackageFromContent: content round trip", () => {
     }
     expect(written.rows[1]?.cells[0]?.rowSpan).toBe(2);
     expect(written.rows[0]?.cells[0]?.colSpan).toBe(2);
+  });
+
+  it("writes a table's exact tblPr, tblGrid, gridSpan, vMerge, and trHeight XML, not just a round-trippable one", () => {
+    // A round trip through readTable can mask a writer defect the reader happens to tolerate (a wrong tag name it still recognises, a swapped constant it still parses back the same way), so this asserts the actual written XML shape directly rather than only the read-back content.
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "table" as const,
+              columnWidthsPt: [100, 50],
+              rows: [
+                {
+                  heightPt: 30,
+                  cells: [
+                    {
+                      blocks: [
+                        { kind: "paragraph" as const, runs: [{ text: "top" }] },
+                      ],
+                      colSpan: 2,
+                    },
+                  ],
+                },
+                {
+                  cells: [
+                    {
+                      blocks: [
+                        {
+                          kind: "paragraph" as const,
+                          runs: [{ text: "left" }],
+                        },
+                      ],
+                      rowSpan: 2,
+                    },
+                    {
+                      blocks: [
+                        {
+                          kind: "paragraph" as const,
+                          runs: [{ text: "right1" }],
+                        },
+                      ],
+                    },
+                  ],
+                },
+                {
+                  cells: [
+                    { blocks: [] },
+                    {
+                      blocks: [
+                        {
+                          kind: "paragraph" as const,
+                          runs: [{ text: "right2" }],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const document = rootElement(written.parts["word/document.xml"]);
+    const table = elementsWithTag(
+      document === undefined ? [] : [document],
+      "w:tbl",
+    )[0];
+    if (table === undefined) {
+      throw new Error("expected a w:tbl element");
+    }
+    expect(table.children[0]).toEqual(
+      el("w:tblPr", {}, [el("w:tblW", { "w:w": "0", "w:type": "auto" })]),
+    );
+    expect(table.children[1]).toEqual(
+      el("w:tblGrid", {}, [
+        el("w:gridCol", { "w:w": "2000" }),
+        el("w:gridCol", { "w:w": "1000" }),
+      ]),
+    );
+    const rows = childrenWithTag(table, "w:tr");
+    expect(rows).toHaveLength(3);
+    expect(childrenWithTag(rows[0]!, "w:trPr")[0]).toEqual(
+      el("w:trPr", {}, [el("w:trHeight", { "w:val": "600" })]),
+    );
+    const row0Cells = childrenWithTag(rows[0]!, "w:tc");
+    expect(row0Cells).toHaveLength(1);
+    expect(childrenWithTag(row0Cells[0]!, "w:tcPr")[0]).toEqual(
+      el("w:tcPr", {}, [el("w:gridSpan", { "w:val": "2" })]),
+    );
+    const row1Cells = childrenWithTag(rows[1]!, "w:tc");
+    expect(row1Cells).toHaveLength(2);
+    expect(childrenWithTag(row1Cells[0]!, "w:tcPr")[0]).toEqual(
+      el("w:tcPr", {}, [el("w:vMerge", { "w:val": "restart" })]),
+    );
+    expect(childrenWithTag(row1Cells[1]!, "w:tcPr")).toHaveLength(0);
+    const row2Cells = childrenWithTag(rows[2]!, "w:tc");
+    expect(row2Cells).toHaveLength(2);
+    expect(childrenWithTag(row2Cells[0]!, "w:tcPr")[0]).toEqual(
+      el("w:tcPr", {}, [el("w:vMerge", {})]),
+    );
+    // The vMerge continuation cell carries no blocks of its own, but ECMA-376 still requires a trailing block-level element, so it still gets the empty paragraph every genuinely empty cell gets.
+    expect(row2Cells[0]!.children.filter((c) => c.type === "element")).toEqual([
+      el("w:tcPr", {}, [el("w:vMerge", {})]),
+      el("w:p"),
+    ]);
   });
 
   it("round-trips a genuine two-colour pattern fill instead of dropping it (ExaDev/documents.js#951)", () => {
@@ -1597,6 +1807,113 @@ describe("buildDocxPackageFromContent: construct round trip", () => {
     ).toBe("abc");
   });
 
+  it("resolves two overlapping internal links by the earliest-starting extent, regardless of the constructs array's own order", () => {
+    // The winner is decided by sorting the extents by startRun (ties broken by the LONGER extent first), never by the order they happen to appear in `constructs` -- this paragraph lists the later-starting, shorter link FIRST specifically to prove the sort, not the array order, decides the winner.
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [{ text: "a" }, { text: "b" }, { text: "c" }],
+              constructs: [
+                {
+                  descriptor: {
+                    kind: "link",
+                    target: { kind: "internal", anchor: "later-shorter" },
+                  },
+                  startRun: 1,
+                  endRun: 3,
+                },
+                {
+                  descriptor: {
+                    kind: "link",
+                    target: { kind: "internal", anchor: "earlier-longer" },
+                  },
+                  startRun: 0,
+                  endRun: 2,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const document = rootElement(written.parts["word/document.xml"]);
+    const hyperlinks = elementsWithTag(
+      document === undefined ? [] : [document],
+      "w:hyperlink",
+    );
+    expect(hyperlinks).toHaveLength(1);
+    expect(
+      hyperlinks[0]?.type === "element"
+        ? hyperlinks[0].attributes.find((a) => a.name === "w:anchor")?.value
+        : undefined,
+    ).toBe("earlier-longer");
+  });
+
+  it("wraps two non-overlapping internal links independently, without one's own wrap falsely blocking the other", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [
+                { text: "a" },
+                { text: "b" },
+                { text: "between" },
+                { text: "c" },
+                { text: "d" },
+              ],
+              constructs: [
+                {
+                  descriptor: {
+                    kind: "link",
+                    target: { kind: "internal", anchor: "first-pair" },
+                  },
+                  startRun: 0,
+                  endRun: 2,
+                },
+                {
+                  descriptor: {
+                    kind: "link",
+                    target: { kind: "internal", anchor: "second-pair" },
+                  },
+                  startRun: 3,
+                  endRun: 5,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const document = rootElement(written.parts["word/document.xml"]);
+    const hyperlinks = elementsWithTag(
+      document === undefined ? [] : [document],
+      "w:hyperlink",
+    );
+    expect(hyperlinks).toHaveLength(2);
+    expect(
+      hyperlinks.map(
+        (h) => h.attributes.find((a) => a.name === "w:anchor")?.value,
+      ),
+    ).toEqual(["first-pair", "second-pair"]);
+    expect(
+      hyperlinks.map(
+        (h) =>
+          h.children.filter(
+            (child) => child.type === "element" && child.tag === "w:r",
+          ).length,
+      ),
+    ).toEqual([2, 2]);
+  });
+
   it("refuses a run-level extent whose range does not name real runs, rather than writing markers at a made-up position", () => {
     const faulty = {
       sections: [
@@ -1856,6 +2173,65 @@ describe("buildDocxPackageFromContent: styles, numbering, comments, footnotes, e
       { id: "7", author: "A Reviewer", text: "a note" },
     ]);
     expect(after.sections).toEqual(before.sections);
+  });
+
+  it("mints a comment id past the highest explicit numeric id, leaving a non-numeric id untouched", () => {
+    // A hand-built DocxContent, not a round trip: readDocxContent always carries every comment's own real w:id, so the minting path (comment.id undefined) is only ever exercised by content built by hand.
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [],
+        },
+      ],
+      comments: [
+        { id: "5", author: "A", text: "first" },
+        { text: "second" },
+        { id: "abc", text: "third" },
+      ],
+    });
+    const root = rootElement(written.parts["word/comments.xml"]);
+    const comments = childrenWithTag(root!, "w:comment");
+    expect(comments.map((c) => attr(c, "w:id"))).toEqual(["5", "6", "abc"]);
+  });
+
+  it("writes the exact footnotes.xml/endnotes.xml boilerplate, and mints a footnote id past the highest explicit numeric id", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [],
+        },
+      ],
+      footnotes: [
+        { id: "2", text: "a" },
+        { text: "b" },
+        { id: "9", type: "custom", text: "c" },
+      ],
+    });
+    const root = rootElement(written.parts["word/footnotes.xml"]);
+    if (root === undefined) {
+      throw new Error("expected a word/footnotes.xml root element");
+    }
+    expect(root.children[0]).toEqual(
+      el("w:footnote", { "w:type": "separator", "w:id": "-1" }, [
+        el("w:p", {}, [el("w:r", {}, [el("w:separator")])]),
+      ]),
+    );
+    expect(root.children[1]).toEqual(
+      el("w:footnote", { "w:type": "continuationSeparator", "w:id": "0" }, [
+        el("w:p", {}, [el("w:r", {}, [el("w:continuationSeparator")])]),
+      ]),
+    );
+    const notes = childrenWithTag(root, "w:footnote").slice(2);
+    // Explicit ids are 2 and 9, so the minted id for the id-less middle note is 10, not one past 2 -- every explicit id counts toward the floor, regardless of array position.
+    expect(notes.map((n) => attr(n, "w:id"))).toEqual(["2", "10", "9"]);
+    // w:type is written only when the source recorded one other than the ordinary "normal" implied by its absence.
+    expect(notes[0]?.attributes.some((a) => a.name === "w:type")).toBe(false);
+    expect(notes[1]?.attributes.some((a) => a.name === "w:type")).toBe(false);
+    expect(attr(notes[2]!, "w:type")).toBe("custom");
   });
 
   it("round-trips a footnote and an endnote reference mark and body through their own parts", () => {
