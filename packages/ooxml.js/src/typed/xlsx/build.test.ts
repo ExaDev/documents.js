@@ -2273,6 +2273,7 @@ describe("buildXlsxPackageFromContent: the definitions option (Table objects) an
     }
     expect(attr(printArea, "name")).toBe("_xlnm.Print_Area");
     expect(attr(printArea, "localSheetId")).toBe("0");
+    expect(textContent(printArea)).toBe("Sheet1!$A$1:$B$10");
   });
 
   it("writes no <definedNames> container and no xl/tables part at all when no definitions are supplied and the document carries no names", () => {
