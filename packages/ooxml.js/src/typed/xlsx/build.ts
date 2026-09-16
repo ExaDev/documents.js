@@ -315,10 +315,8 @@ function buildDefinedNameElements(
         ),
       );
     }
-    if (
-      (repeatRows !== undefined || repeatColumns !== undefined) &&
-      !carriedNames.has(definedNameKey(XLNM_PRINT_TITLES, sheetIndex))
-    ) {
+    // No repeatRows/repeatColumns presence guard ahead of this call: buildPrintTitlesValue itself returns undefined when neither is present, and the value check below skips that, so a separate presence spelling stated the same fact twice.
+    if (!carriedNames.has(definedNameKey(XLNM_PRINT_TITLES, sheetIndex))) {
       const value = buildPrintTitlesValue(
         sheet.name,
         repeatRows,
