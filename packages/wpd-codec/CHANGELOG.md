@@ -1,3 +1,9 @@
+## [3.5.6](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.5.5...wpd-codec%403.5.6) (2026-09-16)
+
+### Miscellaneous Chores
+
+* **wpd-codec:** raise the mutation break threshold to 100 ([d616f2c](https://github.com/ExaDev/documents.js/commit/d616f2c0cf30462afb293f4f3b4f73de16494374))
+
 ## [3.5.5](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.5.4...wpd-codec%403.5.5) (2026-09-14)
 
 ### Miscellaneous Chores
