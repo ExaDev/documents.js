@@ -772,11 +772,11 @@ function trailingEmptyRunElements(
   for (let index = paragraph.runs.length - 1; index >= 0; index--) {
     const run = paragraph.runs[index];
     const runElement = runElements[index];
+    // No separate run.hyperlink check: buildRun always wraps a hyperlink-carrying run in its own w:hyperlink element, so the structural tag test below already states that fact -- spelling it twice left each spelling unobservable (either one alone still caught the case).
     if (
       run === undefined ||
       runElement === undefined ||
       run.text !== "" ||
-      run.hyperlink !== undefined ||
       runElement.tag !== "w:r"
     ) {
       break;
