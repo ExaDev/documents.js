@@ -344,12 +344,9 @@ function readDrawingImage(
   const extent = childrenWithTag(container, "wp:extent")[0];
   const cx = extent === undefined ? undefined : attr(extent, "cx");
   const cy = extent === undefined ? undefined : attr(extent, "cy");
-  if (cx === undefined || cy === undefined) {
-    return undefined;
-  }
   const widthPt = emuToPt(Number(cx));
   const heightPt = emuToPt(Number(cy));
-  // Malformed geometry (a non-numeric EMU value) degrades to no image, the same tier readObjectEmbeddedObject applies below and every other numeric attribute reader here degrades on: a NaN widthPt would emit a block no geometry schema accepts, poisoning the whole section for downstream validators.
+  // Malformed geometry (a non-numeric or absent EMU value -- Number(undefined) is NaN, so a missing attribute or a missing wp:extent both land here) degrades to no image, the same tier readObjectEmbeddedObject applies below and every other numeric attribute reader here degrades on: a NaN widthPt would emit a block no geometry schema accepts, poisoning the whole section for downstream validators.
   if (!Number.isFinite(widthPt) || !Number.isFinite(heightPt)) {
     return undefined;
   }
@@ -396,12 +393,9 @@ function readObjectEmbeddedObject(
 ): ContentEmbeddedObjectBlock | undefined {
   const dxaOrig = attr(object, "w:dxaOrig");
   const dyaOrig = attr(object, "w:dyaOrig");
-  if (dxaOrig === undefined || dyaOrig === undefined) {
-    return undefined;
-  }
   const widthPt = twipsToPt(Number(dxaOrig));
   const heightPt = twipsToPt(Number(dyaOrig));
-  // Malformed geometry (a non-numeric ST_TwipsMeasure) degrades to no block, the same tier readDrawingImage above applies and readOutlineLevel's malformed @lvl is the family's own example of: a NaN widthPt would emit a block no geometry schema accepts, poisoning the whole section for downstream validators. Checked before any relationship resolution, so a doomed object never decodes its payload.
+  // Malformed geometry (a non-numeric or absent ST_TwipsMeasure -- Number(undefined) is NaN, so a missing attribute lands here too) degrades to no block, the same tier readDrawingImage above applies and readOutlineLevel's malformed @lvl is the family's own example of: a NaN widthPt would emit a block no geometry schema accepts, poisoning the whole section for downstream validators. Checked before any relationship resolution, so a doomed object never decodes its payload.
   if (!Number.isFinite(widthPt) || !Number.isFinite(heightPt)) {
     return undefined;
   }
@@ -949,10 +943,8 @@ function splitParagraphAtPageBreak(
   paragraph: ContentParagraph,
   pageBreak: ParagraphPageBreakEvent,
 ): ContentBlock[] {
-  const splitRun = paragraph.runs[pageBreak.runIndex];
-  if (splitRun === undefined) {
-    return [paragraph];
-  }
+  // The event's runIndex is the index the run walk assigned the break's own run as it pushed it, and the runs array is append-only from that point to this assembly, so the index always names a real run -- no undefined fallback exists to take.
+  const splitRun = paragraph.runs[pageBreak.runIndex]!;
   const { before: beforeHalf, after: afterHalf } = splitRunAtOffset(
     splitRun,
     pageBreak.charIndex,
