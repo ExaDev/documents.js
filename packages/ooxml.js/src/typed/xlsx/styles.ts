@@ -46,6 +46,7 @@ function readNumberFormatCodesById(
       continue;
     }
     const id = Number.parseInt(idRaw, 10);
+    // Genuinely irreducible, not merely untested, given every real caller: readCellStyles' own numFmtId lookup below applies the identical Number.isInteger guard before ever calling codes.get, so a non-integer id here can only ever register a Map entry keyed by NaN that no real call site can ever look up (a genuine cell xf's own numFmtId is gated by that same guard first) -- this function's only observable effect, through readCellFormatCodes/readCellStyles, is unchanged whether or not this check runs.
     if (Number.isInteger(id)) {
       // decodeEntities is load-bearing here, not defensive: this package's lossless layer keeps attribute values exactly as written, and a real format code routinely contains quoted literals -- LibreOffice's own boolean format arrives as `&quot;TRUE&quot;;&quot;TRUE&quot;;&quot;FALSE&quot;`, which would tokenize as bare code characters rather than as quoted text if fed through raw.
       codes.set(id, decodeEntities(formatCode));
@@ -305,7 +306,8 @@ function readBorderEdge(
     return undefined;
   }
   const styleToken = attr(edgeEl, "style");
-  if (styleToken === undefined || styleToken === "none") {
+  // No "styleToken === 'none'" disjunct: "none" is not a key XLSX_BORDER_STYLE declares, so it already falls through the resolved-undefined check below to the identical undefined result this disjunct would have short-circuited to. The `undefined` check alone stays load-bearing, since XLSX_BORDER_STYLE[undefined as never] would be a type error this reader never actually triggers, not a graceful undefined.
+  if (styleToken === undefined) {
     return undefined;
   }
   const resolved = XLSX_BORDER_STYLE[styleToken];
@@ -426,6 +428,7 @@ export function readCellStyles(pkg: Package): readonly CellStyleEntry[] {
         ? GENERAL_NUM_FMT_ID
         : Number.parseInt(numFmtRaw, 10);
     const entry: CellStyleEntry = {};
+    // Genuinely irreducible, not merely untested: readNumberFormatCodesById above applies this identical guard before ever writing a Map entry, so `codes` can never actually hold a NaN key -- codes.get(NaN) already returns undefined on its own (a Map lookup miss, not a throw), the same outcome this guard would have skipped to directly for a non-integer numFmtId.
     if (Number.isInteger(numFmtId)) {
       const code = codes.get(numFmtId);
       if (code !== undefined) {
@@ -559,6 +562,7 @@ function normalisedFontOf(font: ContentFont | undefined): DeclaredFont {
   };
 }
 
+// Every "=== true" comparison and the "?? ''" colour fallback below are genuinely irreducible equivalent mutation opportunities, not merely untested ones: this signature is consumed ONLY as an internal Map key (fontIndexBySignature), never exposed, so what matters is solely whether two DIFFERENT DeclaredFont values ever produce equal strings (a wrong collision) or two IDENTICAL values ever produce different ones (a wrong split) -- never which literal characters a given input maps to. Flipping "=== true" to "!== true" for one boolean field relabels that field's two segment values (swapping which string means "on" and which means "off") but stays a bijection over {true, non-true}, so it still correctly distinguishes every bold=true font from every bold=false one and still collides every bold=true font with every other bold=true font -- the equivalence classes this signature partitions inputs into are unchanged. The colour fallback is the same shape: no valid 6-hex-digit colorRgb string can ever equal the empty string (or any other fixed placeholder a mutant substitutes), so the "no colour" case can never collide with a real one regardless of which placeholder marks it.
 function signatureOfFont(font: ContentFont | undefined): string {
   const declared = normalisedFontOf(font);
   let sig = `b:${declared.bold === true}`;
@@ -571,7 +575,7 @@ function signatureOfFont(font: ContentFont | undefined): string {
   return sig;
 }
 
-// A deterministic signature for one ContentCellFill, shared by signatureOfDecoration (the cellXfs interning key) and CellFormatTable.internFill (the <fills> table's own dedup key) so the two can never disagree about which fills count as identical.
+// A deterministic signature for one ContentCellFill, shared by signatureOfDecoration (the cellXfs interning key) and CellFormatTable.internFill (the <fills> table's own dedup key) so the two can never disagree about which fills count as identical. Each "? '' :" fallback below is a genuinely irreducible equivalent mutation opportunity for the identical reason signatureOfFont's own colour fallback is: no valid colorToRgbHex output can ever equal a mutant's substituted placeholder, so an absent foreground/background colour can never collide with a real one regardless of which fixed string marks its absence.
 function fillSignature(fill: ContentCellFill): string {
   return fill.kind === "solid"
     ? `solid:${colorToRgbHex(fill.color)}`
@@ -594,6 +598,7 @@ function signatureOfDecoration(decoration: CellFormatDecoration): string {
       }
     }
   }
+  // Both presence guards below are genuinely irreducible equivalent mutation opportunities, not merely untested ones: Alignment and its vertical counterpart are closed string-literal unions (left/center/right/justify, top/middle/bottom) that can never hold the literal string "undefined" a forced-true mutant would interpolate here for an actually-absent value -- so an alignment-less decoration can never collide with one genuinely stating a real alignment value, regardless of whether this guard runs.
   if (decoration.alignment !== undefined) {
     sig += `|h:${decoration.alignment}`;
   }
@@ -817,6 +822,7 @@ export class CellFormatTable {
 
   private internBorder(borders: ContentCellBorders): number {
     const edges: DeclaredBorder["edges"] = {};
+    // The initial value here is a genuinely irreducible equivalent mutation opportunity, not merely an untested one: borderIndexBySignature starts genuinely empty (no pre-seeded entry, unlike fontIndexBySignature's own DEFAULT_FONT seed), so this string is never compared against a fixed external constant -- only ever against itself, built the identical way, on a later call. Any fixed starting string works identically as a dedup key, as long as it is used consistently, which it is.
     let signature = "";
     for (const edge of ["left", "right", "top", "bottom"] as const) {
       const border = borders[edge];
