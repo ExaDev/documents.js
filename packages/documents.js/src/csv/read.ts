@@ -49,7 +49,8 @@ function dataCell(
   field: string,
   onCellTypeInference: CellTypeInferenceSink | undefined,
 ): ContentSheetCell {
-  const inference = field === "" ? undefined : inferCellValue(field);
+  // No separate empty-field check here: inferCellValue("") already returns undefined on its own (its own text.length === 0 guard), so a guard here would only restate that in a second place.
+  const inference = inferCellValue(field);
   if (inference !== undefined) {
     onCellTypeInference?.({
       sheetIndex: 0,

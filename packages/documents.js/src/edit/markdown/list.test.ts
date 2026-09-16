@@ -36,6 +36,8 @@ describe("MarkdownList.appendItem", () => {
     const first = editor.body.startList({ type: "bullet" });
     const second = editor.body.startList({ type: "bullet" });
     expect(first.numId).not.toBe(second.numId);
+    // No `task` field supplied at all: the minted numId's own +task suffix (markdown-codec's own grammar, see list-id.ts) must be absent, not defaulted on.
+    expect(first.numId).not.toContain("+task");
     const itemA = first.appendItem(0, { text: "A" });
     const itemB = first.appendItem(0, { text: "B" });
     expect(itemA.list?.numId).toBe(first.numId);

@@ -568,6 +568,21 @@ describe("OdsSheet.setColumnWidth / setRowHeight", () => {
     // sheetB's own column was only ever touched by its own cell() call, never by sheetA's setColumnWidth -- it reads back at the ordinary cell()-materialization default (64pt), proving the two sheets' styles are genuinely independent rather than sharing one automatic style neither of them meant to share.
     expect(content.sheets[1]!.columns[0]?.widthPt).toBeCloseTo(64, 5);
   });
+
+  it("a later cell() on a column/row that already has an explicit width/height never resets it back to the cell()-materialization default", () => {
+    const editor = createOds();
+    const sheet = editor.sheets()[0]!;
+    sheet.setColumnWidth(0, 130);
+    sheet.setRowHeight(0, 45);
+    sheet.cell(0, 0).value = { kind: "string", value: "x" }; // ensureColumnDefaultWidth/ensureRowDefaultHeight run here and must no-op
+
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    expect(content.sheets[0]!.columns[0]?.widthPt).toBeCloseTo(130, 5);
+    expect(content.sheets[0]!.rows[0]?.heightPt).toBeCloseTo(45, 5);
+  });
 });
 
 describe("OdsSheet.setColumnHidden / setRowHidden", () => {

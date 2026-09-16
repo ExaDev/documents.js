@@ -12,8 +12,14 @@ import {
   type Package as OoxmlPackage,
 } from "ooxml.js";
 import { el, txt } from "ooxml.js/xml/fragment";
-import { readPdf } from "pdf-codec";
-import { describe, expect, it } from "vitest";
+import {
+  LAYOUT_FORMAT_VERSION,
+  readPdf,
+  type LayoutDocument,
+  writePdf,
+} from "pdf-codec";
+import * as pdfCodecRead from "pdf-codec/read";
+import { describe, expect, it, vi } from "vitest";
 import { docxToPdf, odsToXlsx } from "./convert";
 import { readCsvContent } from "../csv/read";
 import { decodeCsvText, encodeCsvText } from "../csv/text";
@@ -25,6 +31,7 @@ import { readOdgContent } from "../odf/odg/read";
 import { readOdpContent } from "../odf/odp/read";
 import { readOdsContent } from "../odf/ods/read";
 import { readOdtContent } from "../odf/odt/read";
+import * as reconstructModule from "../layout/reconstruct";
 import { readDocxContent } from "../ooxml/docx/read";
 import { readPptxContent } from "../ooxml/pptx/read";
 import { decodeDocumentPackage, encodeDocumentPackage } from "../package-codec";
@@ -142,6 +149,34 @@ describe("readDocumentMetadata", () => {
     expect(metadata.modifiedIso).toBe("2024-02-03T04:05:06Z");
     expect(metadata.producer).toBeUndefined();
   });
+
+  it("pdf: forwards the abort signal to readDocumentLayout, which checks it before parsing", () => {
+    const controller = new AbortController();
+    controller.abort();
+    const bytes = docxToPdf(minimalDocxBytes());
+    let caught: unknown;
+    try {
+      readDocumentMetadata("pdf", bytes, { signal: controller.signal });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(DOMException);
+    expect((caught as DOMException).name).toBe("AbortError");
+  });
+
+  it("markdown: forwards the abort signal to the underlying CONTENT_READERS entry, which checks it before parsing", () => {
+    const controller = new AbortController();
+    controller.abort();
+    const bytes = encodeMarkdownText("hi");
+    let caught: unknown;
+    try {
+      readDocumentMetadata("markdown", bytes, { signal: controller.signal });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(DOMException);
+    expect((caught as DOMException).name).toBe("AbortError");
+  });
 });
 
 // Each case proves readNativeDocumentTree(format, bytes) dispatches to exactly the same underlying reader every ergonomic conversion in this package already uses for that format, decomposed into tree form via assembleTree with no bridging, no cross-variant transform, and (for every format but pdf) no layout pass at all -- unlike ConversionResult.package/onDocument, which report whatever hop actually produced a REQUESTED conversion's output (see this file's own from-pdf.ts module comment, and ExaDev/documents.js#823, for why that can be a different, lossy shape).
@@ -244,6 +279,96 @@ describe("readNativeDocumentTree", () => {
 
     expect(readNativeDocumentTree("pdf", pdfBytes)).toEqual(captured);
     expect(captured.pages).toBeDefined();
+  });
+
+  // A PDF built directly through pdf-codec's own writePdf (bypassing every documents.js writer) with a bare, destination-less outline entry -- a minimalDocxBytes()-derived pdf carries no outline at all, so that fixture alone cannot distinguish readNativeDocumentTree actually calling stampPdfPackageTables from silently skipping it. This one can: stampPdfPackageTables only ever populates pkg.destinations when layout.outline (or layout.destinations) is non-empty, so its own presence here proves the call happened.
+  it("pdf: stamps the outline table onto the reported tree, not just the pages", () => {
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [{ widthPt: 612, heightPt: 792, items: [] }],
+      images: {},
+      outline: [{ title: "Chapter 1", children: [] }],
+    };
+    const pdfBytes = writePdf(doc, { compress: false });
+    const tree = readNativeDocumentTree("pdf", pdfBytes);
+    expect(tree.destinations?.["outline-1"]).toEqual({
+      kind: "outline",
+      title: "Chapter 1",
+    });
+  });
+
+  // reconstructWordprocessing's own signal check independently throws AbortError for an already-aborted signal, so a test only asserting readNativeDocumentTree throws when aborted cannot tell whether readPdf itself genuinely received the signal (and sink) or was called with neither -- both produce the identical outer throw. Spying on the call is what makes the forwarding observable.
+  it("pdf: passes the given signal and sink through to readPdf itself, not just to reconstructWordprocessing", () => {
+    const pdfBytes = docxToPdf(minimalDocxBytes());
+    const controller = new AbortController();
+    const sink = (): void => {};
+    const readPdfSpy = vi.spyOn(pdfCodecRead, "readPdf");
+    readNativeDocumentTree("pdf", pdfBytes, {
+      signal: controller.signal,
+      sink,
+    });
+    expect(readPdfSpy).toHaveBeenCalledWith(pdfBytes, {
+      signal: controller.signal,
+      sink,
+    });
+    readPdfSpy.mockRestore();
+  });
+
+  it("pdf: passes the given signal through to reconstructWordprocessing", () => {
+    const pdfBytes = docxToPdf(minimalDocxBytes());
+    const controller = new AbortController();
+    const reconstructSpy = vi.spyOn(
+      reconstructModule,
+      "reconstructWordprocessing",
+    );
+    readNativeDocumentTree("pdf", pdfBytes, { signal: controller.signal });
+    expect(reconstructSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ signal: controller.signal }),
+    );
+    reconstructSpy.mockRestore();
+  });
+
+  it("pdf: forwards the abort signal to readPdf, which checks it before parsing", () => {
+    const controller = new AbortController();
+    controller.abort();
+    const bytes = docxToPdf(minimalDocxBytes());
+    let caught: unknown;
+    try {
+      readNativeDocumentTree("pdf", bytes, { signal: controller.signal });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(DOMException);
+    expect((caught as DOMException).name).toBe("AbortError");
+  });
+
+  it("markdown: forwards the abort signal to the underlying CONTENT_READERS entry, which checks it before parsing", () => {
+    const controller = new AbortController();
+    controller.abort();
+    const bytes = encodeMarkdownText("hi");
+    let caught: unknown;
+    try {
+      readNativeDocumentTree("markdown", bytes, { signal: controller.signal });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(DOMException);
+    expect((caught as DOMException).name).toBe("AbortError");
+  });
+
+  it("markdown: forwards the images resolver to the underlying CONTENT_READERS entry", () => {
+    const resolver = (): undefined => undefined;
+    let called: readonly [string, unknown] | undefined;
+    const bytes = encodeMarkdownText("![alt](img.png)");
+    readNativeDocumentTree("markdown", bytes, {
+      images: (src, context) => {
+        called = [src, context];
+        resolver();
+      },
+    });
+    expect(called?.[0]).toBe("img.png");
   });
 
   // The regression test for ExaDev/documents.js#823's Ask 1: a real xlsx workbook with cell values, a formula, a merged range, and a comment -- exactly the data the issue reports the OLD --dump-package path losing entirely once a cross-variant bridge (here, xlsx -> markdown, which shares no ContentDocument variant and so composes through a pdf pivot) is in the picture. buildXlsxPackageFromContent/OdsSheet have no write path for a comment (see ooxml.js's own documented cell-comment asymmetry, "read but do not write"), so the comment part is spliced onto the real xlsx package by hand, mirroring ooxml.js's own comments.test.ts synthetic-package convention -- every other fact (cells, the merge, the formula) comes from the real xlsx writer, unedited.

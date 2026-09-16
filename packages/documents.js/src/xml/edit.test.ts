@@ -1,4 +1,5 @@
 import type { XmlElement, XmlNode } from "ooxml.js";
+import { attr } from "ooxml.js";
 import { describe, expect, it } from "vitest";
 import {
   directChildElement,
@@ -61,6 +62,35 @@ describe("removeChild / insertBefore / insertAfter", () => {
     insertAfter(container, b, after);
     expect(container).toEqual([a, before, b, after]);
   });
+
+  it("insertBefore appends at the end when the reference sibling is not in the container, rather than immediately before the last element", () => {
+    const a = el("a");
+    const b = el("b");
+    const container: XmlNode[] = [a, b];
+    const stray = el("stray");
+    const newNode = el("new");
+    insertBefore(container, stray, newNode);
+    expect(container).toEqual([a, b, newNode]);
+  });
+
+  it("insertAfter places the node right after a found reference that is not the container's last element", () => {
+    const a = el("a");
+    const b = el("b");
+    const container: XmlNode[] = [a, b];
+    const newNode = el("new");
+    insertAfter(container, a, newNode);
+    expect(container).toEqual([a, newNode, b]);
+  });
+
+  it("insertAfter appends at the end when the reference sibling is not in the container, rather than at the start", () => {
+    const a = el("a");
+    const b = el("b");
+    const container: XmlNode[] = [a, b];
+    const stray = el("stray");
+    const newNode = el("new");
+    insertAfter(container, stray, newNode);
+    expect(container).toEqual([a, b, newNode]);
+  });
 });
 
 describe("insertInSchemaOrder", () => {
@@ -107,6 +137,17 @@ describe("insertInSchemaOrder", () => {
     expect(
       parent.children.map((c) => (c.type === "element" ? c.tag : c.type)),
     ).toEqual(RPR_ORDER);
+  });
+
+  it("appends after a same-rank sibling rather than inserting before it", () => {
+    const existing = el("w:b", { id: "existing" });
+    const inserted = el("w:b", { id: "inserted" });
+    const parent = el("w:rPr", {}, [existing]);
+    insertInSchemaOrder(parent, inserted, RPR_ORDER);
+    // Same tag on both sides means the tag sequence alone reads identically either way an equal-rank sibling could be placed -- a distinguishing attribute on each element is what actually tells "appended after" apart from "inserted before".
+    expect(
+      parent.children.map((c) => (c.type === "element" ? attr(c, "id") : c)),
+    ).toEqual(["existing", "inserted"]);
   });
 });
 

@@ -652,6 +652,63 @@ describe("buildSvgText", () => {
       },
     ]);
   });
+
+  it("falls back to the literal 'shape' when a diagnostic's own shape has neither a name nor a sourcePath", () => {
+    const diagnostics: SvgDiagnostic[] = [];
+    const document: ContentDocument = {
+      kind: "drawing",
+      metadata: {},
+      pages: [
+        {
+          size: { widthPt: 100, heightPt: 60 },
+          shapes: [
+            {
+              frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+              insetLeftPt: 0,
+              insetTopPt: 0,
+              insetRightPt: 0,
+              insetBottomPt: 0,
+              blocks: [],
+            },
+          ],
+          vectors: [],
+        },
+      ],
+    };
+    buildSvgText(document, {
+      onSvgDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+    });
+    expect(diagnostics[0]?.detail).toMatch(/^shape:/);
+  });
+
+  it('writes a fill-rule="evenodd" attribute on a path vector whose own fillRule is evenodd', () => {
+    const document: ContentDocument = {
+      kind: "drawing",
+      metadata: {},
+      pages: [
+        {
+          size: { widthPt: 100, heightPt: 60 },
+          shapes: [],
+          vectors: [
+            {
+              kind: "path",
+              frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+              fillRule: "evenodd",
+              subpaths: [
+                {
+                  start: { xPt: 0, yPt: 0 },
+                  segments: [],
+                  closed: true,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const text = buildSvgText(document);
+    expect(text).toContain('fill-rule="evenodd"');
+  });
 });
 
 describe("readSvgContent -> buildSvgText round trip", () => {
@@ -687,6 +744,16 @@ describe("decodeSvgText / encodeSvgText", () => {
   it("throws SvgInvalidUtf8Error on malformed UTF-8 rather than producing U+FFFD replacement characters", () => {
     expect(() => decodeSvgText(new Uint8Array([0xff, 0xfe, 0x00]))).toThrow(
       SvgInvalidUtf8Error,
+    );
+    let caught: unknown;
+    try {
+      decodeSvgText(new Uint8Array([0xff, 0xfe, 0x00]));
+    } catch (error) {
+      caught = error;
+    }
+    expect((caught as Error).name).toBe("SvgInvalidUtf8Error");
+    expect((caught as Error).message).toBe(
+      "svg text must be well-formed UTF-8",
     );
   });
 });
