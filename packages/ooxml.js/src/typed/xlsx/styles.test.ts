@@ -1263,39 +1263,40 @@ describe("CellFormatTable: border signature and caching across different outer f
     });
   });
 
-  it("dedupes a border edge with no style stated against one explicitly styled 'solid' -- both are the same visible border", () => {
+  it("dedupes a whole cellXfs entry across an implicit-vs-explicit-'solid' border, at the outer decoration-signature level", () => {
+    // Deliberately the SAME number format on both calls, so the outer cellFormat-level cache (signatureOfDecoration, not internBorder's own separate borderIndexBySignature) is what is actually exercised here: a second intern() with a different numFmtId would call internBorder again regardless of the outer signature, proving nothing about this specific "?? 'solid'" fallback.
     const table = new CellFormatTable();
     const implicit = table.intern(
       { kind: "builtin", id: GENERAL_NUM_FMT_ID },
       { borders: { left: { color: { r: 0, g: 0, b: 0 }, widthPt: 0.75 } } },
     );
     const explicit = table.intern(
-      { kind: "builtin", id: 9 },
+      { kind: "builtin", id: GENERAL_NUM_FMT_ID },
       {
         borders: {
           left: { color: { r: 0, g: 0, b: 0 }, widthPt: 0.75, style: "solid" },
         },
       },
     );
-    expect(table.cellFormatRecords()[implicit]?.borderId).toBe(
-      table.cellFormatRecords()[explicit]?.borderId,
-    );
-    expect(table.borderDeclarations()).toHaveLength(2);
+    expect(explicit).toBe(implicit);
+    expect(table.cellFormatRecords()).toHaveLength(2);
   });
 
-  it("a real edge segment distinguishes a border from an entirely empty one, not just an empty-vs-empty collision", () => {
+  it("two genuinely different real borders mint two distinct entries, not one shared by an edge-segment collapse", () => {
+    // Deliberately two REAL, non-empty borders (not an empty-vs-real pair): an empty `{}` decoration hits the outer cellFormat-level default seed before internBorder is ever called at all (its own signature already coincides with EMPTY_DECORATION's), so it can never exercise internBorder's own per-edge signature segment either way. Two distinct real borders, by contrast, both genuinely reach internBorder, so only a real per-edge signature can tell them apart.
     const table = new CellFormatTable();
-    const empty = table.intern(
+    const thin = table.intern(
       { kind: "builtin", id: GENERAL_NUM_FMT_ID },
-      { borders: {} },
-    );
-    const real = table.intern(
-      { kind: "builtin", id: 9 },
       { borders: { left: { color: { r: 0, g: 0, b: 0 }, widthPt: 0.75 } } },
     );
-    expect(table.cellFormatRecords()[empty]?.borderId).not.toBe(
-      table.cellFormatRecords()[real]?.borderId,
+    const thick = table.intern(
+      { kind: "builtin", id: 9 },
+      { borders: { left: { color: { r: 1, g: 0, b: 0 }, widthPt: 1.5 } } },
     );
+    expect(table.cellFormatRecords()[thin]?.borderId).not.toBe(
+      table.cellFormatRecords()[thick]?.borderId,
+    );
+    expect(table.borderDeclarations()).toHaveLength(3);
   });
 });
 
