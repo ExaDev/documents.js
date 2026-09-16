@@ -2551,7 +2551,11 @@ describe("buildXlsxPackageFromContent: xl/_rels/workbook.xml.rels numbers worksh
         "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
     );
     expect(worksheetRels).toHaveLength(1);
-    expect(attr(worksheetRels[0], "Id")).toBe("rId1");
+    const [worksheetRel] = worksheetRels;
+    if (worksheetRel === undefined) {
+      throw new Error("expected exactly one worksheet relationship");
+    }
+    expect(attr(worksheetRel, "Id")).toBe("rId1");
   });
 });
 
@@ -3219,8 +3223,8 @@ describe("buildPageSetupElement: paperSize vs paperWidth/paperHeight, orientatio
 
 describe("buildBreaksElements: manual row and column breaks are written independently of each other", () => {
   function pkgWithBreaks(manualBreaks: {
-    rows: readonly number[];
-    columns: readonly number[];
+    rows: number[];
+    columns: number[];
   }): Package {
     return buildXlsxPackageFromContent({
       kind: "spreadsheet",
