@@ -1957,3 +1957,417 @@ describe("buildXlsxPackageFromContent: the definitions option (Table objects) an
     expect(Object.keys(pkg.parts)).not.toContain("xl/tables/table1.xml");
   });
 });
+
+// --- exact scaffolding: the XML declaration, [Content_Types].xml, package/workbook relationships -----------------
+
+describe("buildXlsxPackageFromContent: every XML part carries the same declaration prolog", () => {
+  it('declares version="1.0" encoding="UTF-8" standalone="yes" on the [Content_Types].xml part', () => {
+    const part = buildXlsxPackageFromContent(singleSheetDocument([])).parts[
+      "[Content_Types].xml"
+    ];
+    if (part?.kind !== "xml") {
+      throw new Error("expected an xml part");
+    }
+    const declaration = part.nodes[0];
+    if (declaration?.type !== "declaration") {
+      throw new Error("expected a declaration node first");
+    }
+    const attrOf = (name: string): string | undefined =>
+      declaration.attributes.find((a) => a.name === name)?.value;
+    expect(attrOf("version")).toBe("1.0");
+    expect(attrOf("encoding")).toBe("UTF-8");
+    expect(attrOf("standalone")).toBe("yes");
+  });
+});
+
+describe("buildXlsxPackageFromContent: [Content_Types].xml carries every part's exact Override, for a document exercising every content kind", () => {
+  function fullDocument(): ContentDocument {
+    const chart = chartEmbeddedObject();
+    return {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [
+            {
+              row: 0,
+              column: 0,
+              value: { kind: "string", value: "x" },
+              displayText: "x",
+              comment: { text: "note" },
+            },
+          ],
+          columns: [],
+          rows: [],
+          images: [
+            {
+              kind: "image",
+              format: "png",
+              base64: TINY_PNG_BASE64,
+              widthPt: 10,
+              heightPt: 10,
+              anchorRow: 0,
+              anchorColumn: 0,
+              offsetXPt: 0,
+              offsetYPt: 0,
+            },
+          ],
+          embeddedObjects: [chart],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+        },
+        {
+          name: "Sheet2",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+        },
+      ],
+    };
+  }
+
+  it("writes the fixed workbook/styles/sharedStrings overrides, one worksheet override per sheet, and the media/comments/drawing/chart/table overrides for the parts a fuller document actually carries", () => {
+    const pkg = buildXlsxPackageFromContent(fullDocument(), {
+      definitions: tableDefinitions(),
+    });
+    const contentTypes = rootElement(pkg.parts["[Content_Types].xml"]);
+    if (contentTypes === undefined) {
+      throw new Error("expected [Content_Types].xml to have a root element");
+    }
+    const defaults = childrenWithTag(contentTypes, "Default").map((el) => ({
+      extension: attr(el, "Extension"),
+      contentType: attr(el, "ContentType"),
+    }));
+    expect(defaults).toContainEqual({
+      extension: "rels",
+      contentType: "application/vnd.openxmlformats-package.relationships+xml",
+    });
+    expect(defaults).toContainEqual({
+      extension: "xml",
+      contentType: "application/xml",
+    });
+    expect(defaults).toContainEqual({
+      extension: "png",
+      contentType: "image/png",
+    });
+
+    const overrides = childrenWithTag(contentTypes, "Override").map((el) => ({
+      partName: attr(el, "PartName"),
+      contentType: attr(el, "ContentType"),
+    }));
+    expect(overrides).toContainEqual({
+      partName: "/xl/workbook.xml",
+      contentType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+    });
+    expect(overrides).toContainEqual({
+      partName: "/xl/styles.xml",
+      contentType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml",
+    });
+    expect(overrides).toContainEqual({
+      partName: "/xl/sharedStrings.xml",
+      contentType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml",
+    });
+    // One worksheet override per sheet, not one fewer or one more.
+    expect(overrides).toContainEqual({
+      partName: "/xl/worksheets/sheet1.xml",
+      contentType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
+    });
+    expect(overrides).toContainEqual({
+      partName: "/xl/worksheets/sheet2.xml",
+      contentType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
+    });
+    expect(
+      overrides.filter((o) => o.partName?.startsWith("/xl/worksheets/sheet")),
+    ).toHaveLength(2);
+    // Only sheet 1 carries a comment, a drawing, and a table -- indices must not leak onto sheet 2.
+    expect(overrides).toContainEqual({
+      partName: "/xl/threadedComments/threadedComment1.xml",
+      contentType: "application/vnd.ms-excel.threadedcomments+xml",
+    });
+    expect(overrides).not.toContainEqual(
+      expect.objectContaining({
+        partName: "/xl/threadedComments/threadedComment2.xml",
+      }),
+    );
+    expect(overrides).toContainEqual({
+      partName: "/xl/drawings/drawing1.xml",
+      contentType: "application/vnd.openxmlformats-officedocument.drawing+xml",
+    });
+    expect(overrides).not.toContainEqual(
+      expect.objectContaining({ partName: "/xl/drawings/drawing2.xml" }),
+    );
+    expect(overrides).toContainEqual({
+      partName: "/xl/charts/chart1.xml",
+      contentType:
+        "application/vnd.openxmlformats-officedocument.drawingml.chart+xml",
+    });
+    expect(overrides).toContainEqual({
+      partName: "/xl/tables/table1.xml",
+      contentType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml",
+    });
+    expect(overrides).toContainEqual({
+      partName: "/docProps/core.xml",
+      contentType: "application/vnd.openxmlformats-package.core-properties+xml",
+    });
+    expect(overrides).toContainEqual({
+      partName: "/docProps/app.xml",
+      contentType:
+        "application/vnd.openxmlformats-officedocument.extended-properties+xml",
+    });
+  });
+
+  it("declares no jpeg/gif media default when only a png is actually used", () => {
+    const pkg = buildXlsxPackageFromContent(fullDocument());
+    const contentTypes = rootElement(pkg.parts["[Content_Types].xml"]);
+    if (contentTypes === undefined) {
+      throw new Error("expected [Content_Types].xml to have a root element");
+    }
+    const extensions = childrenWithTag(contentTypes, "Default").map((el) =>
+      attr(el, "Extension"),
+    );
+    expect(extensions).not.toContain("jpeg");
+    expect(extensions).not.toContain("gif");
+  });
+});
+
+describe("buildXlsxPackageFromContent: _rels/.rels carries exactly the three fixed package relationships", () => {
+  it("writes rId1/rId2/rId3 pointing at the workbook, core properties, and extended properties, in that order", () => {
+    const pkg = buildXlsxPackageFromContent(singleSheetDocument([]));
+    const rels = rootElement(pkg.parts["_rels/.rels"]);
+    if (rels === undefined) {
+      throw new Error("expected _rels/.rels to have a root element");
+    }
+    const relationships = childrenWithTag(rels, "Relationship").map((el) => ({
+      id: attr(el, "Id"),
+      type: attr(el, "Type"),
+      target: attr(el, "Target"),
+    }));
+    expect(relationships).toEqual([
+      {
+        id: "rId1",
+        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument",
+        target: "xl/workbook.xml",
+      },
+      {
+        id: "rId2",
+        type: "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties",
+        target: "docProps/core.xml",
+      },
+      {
+        id: "rId3",
+        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties",
+        target: "docProps/app.xml",
+      },
+    ]);
+  });
+});
+
+describe("buildXlsxPackageFromContent: xl/_rels/workbook.xml.rels numbers worksheet relationships before styles/sharedStrings, exactly one id past the sheet count", () => {
+  it("writes one worksheet relationship per sheet (rId1..rIdN), then styles at rId(N+1) and sharedStrings at rId(N+2), for a 2-sheet workbook", () => {
+    const pkg = buildXlsxPackageFromContent(DOCUMENT);
+    const rels = rootElement(pkg.parts["xl/_rels/workbook.xml.rels"]);
+    if (rels === undefined) {
+      throw new Error(
+        "expected xl/_rels/workbook.xml.rels to have a root element",
+      );
+    }
+    const relationships = childrenWithTag(rels, "Relationship").map((el) => ({
+      id: attr(el, "Id"),
+      type: attr(el, "Type"),
+      target: attr(el, "Target"),
+    }));
+    expect(relationships).toEqual([
+      {
+        id: "rId1",
+        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
+        target: "worksheets/sheet1.xml",
+      },
+      {
+        id: "rId2",
+        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
+        target: "worksheets/sheet2.xml",
+      },
+      {
+        id: "rId3",
+        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles",
+        target: "styles.xml",
+      },
+      {
+        id: "rId4",
+        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings",
+        target: "sharedStrings.xml",
+      },
+    ]);
+  });
+
+  it("writes exactly one worksheet relationship, at rId1, for a single-sheet workbook -- proving the loop runs sheetCount times, not one more or fewer", () => {
+    const pkg = buildXlsxPackageFromContent(singleSheetDocument([]));
+    const rels = rootElement(pkg.parts["xl/_rels/workbook.xml.rels"]);
+    if (rels === undefined) {
+      throw new Error(
+        "expected xl/_rels/workbook.xml.rels to have a root element",
+      );
+    }
+    const worksheetRels = childrenWithTag(rels, "Relationship").filter(
+      (el) =>
+        attr(el, "Type") ===
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
+    );
+    expect(worksheetRels).toHaveLength(1);
+    expect(attr(worksheetRels[0], "Id")).toBe("rId1");
+  });
+});
+
+describe("buildXlsxPackageFromContent: xl/workbook.xml sheet elements carry the correct sheetId and r:id per index", () => {
+  it("numbers sheetId from 1 and r:id via worksheetRelId, matching the sheet's own position, for a 2-sheet workbook", () => {
+    const pkg = buildXlsxPackageFromContent(DOCUMENT);
+    const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
+    if (workbook === undefined) {
+      throw new Error("expected xl/workbook.xml to have a root element");
+    }
+    expect(attr(workbook, "xmlns:r")).toBe(
+      "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+    );
+    const sheetsEl = requireChild(workbook, "sheets");
+    const sheetElements = elementsOf(sheetsEl, "sheet").map((el) => ({
+      name: attributeOf(el, "name"),
+      sheetId: attributeOf(el, "sheetId"),
+      rId: attributeOf(el, "r:id"),
+    }));
+    expect(sheetElements).toEqual([
+      { name: "Data", sheetId: "1", rId: "rId1" },
+      { name: "Summary", sheetId: "2", rId: "rId2" },
+    ]);
+  });
+});
+
+describe("buildXlsxPackageFromContent: derives _xlnm.Print_Titles from EITHER repeatRows or repeatColumns alone, not only when both are present", () => {
+  function documentWithRepeat(
+    repeat: Partial<
+      Pick<ContentSheet["printSettings"], "repeatRows" | "repeatColumns">
+    >,
+  ): ContentDocument {
+    return {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: { ...DEFAULT_PRINT_SETTINGS, ...repeat },
+        },
+      ],
+    };
+  }
+
+  it("derives Print_Titles from repeatRows alone, with no repeatColumns set", () => {
+    const pkg = buildXlsxPackageFromContent(
+      documentWithRepeat({ repeatRows: { start: 0, end: 1 } }),
+    );
+    const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
+    if (workbook === undefined) {
+      throw new Error("expected xl/workbook.xml to have a root element");
+    }
+    const definedNames = requireChild(workbook, "definedNames");
+    const printTitles = elementsOf(definedNames, "definedName").find(
+      (el) => attributeOf(el, "name") === "_xlnm.Print_Titles",
+    );
+    expect(printTitles).toBeDefined();
+  });
+
+  it("derives Print_Titles from repeatColumns alone, with no repeatRows set", () => {
+    const pkg = buildXlsxPackageFromContent(
+      documentWithRepeat({ repeatColumns: { start: 0, end: 1 } }),
+    );
+    const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
+    if (workbook === undefined) {
+      throw new Error("expected xl/workbook.xml to have a root element");
+    }
+    const definedNames = requireChild(workbook, "definedNames");
+    const printTitles = elementsOf(definedNames, "definedName").find(
+      (el) => attributeOf(el, "name") === "_xlnm.Print_Titles",
+    );
+    expect(printTitles).toBeDefined();
+  });
+
+  it("derives no Print_Titles at all when neither repeatRows nor repeatColumns is set", () => {
+    const pkg = buildXlsxPackageFromContent(documentWithRepeat({}));
+    const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
+    if (workbook === undefined) {
+      throw new Error("expected xl/workbook.xml to have a root element");
+    }
+    expect(childrenWithTag(workbook, "definedNames")).toHaveLength(0);
+  });
+
+  it("does not duplicate Print_Titles when the names array already carries it verbatim for that sheet", () => {
+    const wide = documentWithRepeat({ repeatRows: { start: 0, end: 1 } });
+    if (wide.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    wide.names = [
+      {
+        name: "_xlnm.Print_Titles",
+        refersTo: "Sheet1!$1:$1",
+        scopeSheetIndex: 0,
+      },
+    ];
+    const pkg = buildXlsxPackageFromContent(wide);
+    const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
+    if (workbook === undefined) {
+      throw new Error("expected xl/workbook.xml to have a root element");
+    }
+    const definedNames = requireChild(workbook, "definedNames");
+    const printTitlesEntries = elementsOf(definedNames, "definedName").filter(
+      (el) => attributeOf(el, "name") === "_xlnm.Print_Titles",
+    );
+    expect(printTitlesEntries).toHaveLength(1);
+    expect(textContent(printTitlesEntries[0]!)).toBe("Sheet1!$1:$1");
+  });
+});
+
+describe("buildXlsxPackageFromContent: xl/sharedStrings.xml carries the exact count/uniqueCount and per-entry xml:space", () => {
+  it('writes count and uniqueCount equal to the number of distinct strings, and xml:space="preserve" on every <t>', () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "Alpha" },
+          displayText: "Alpha",
+        },
+        {
+          row: 0,
+          column: 1,
+          value: { kind: "string", value: "Beta" },
+          displayText: "Beta",
+        },
+      ]),
+    );
+    const sharedStrings = rootElement(pkg.parts["xl/sharedStrings.xml"]);
+    if (sharedStrings === undefined) {
+      throw new Error("expected xl/sharedStrings.xml to have a root element");
+    }
+    expect(attr(sharedStrings, "count")).toBe("2");
+    expect(attr(sharedStrings, "uniqueCount")).toBe("2");
+    const tElements = childrenWithTag(sharedStrings, "si").map(
+      (si) => childrenWithTag(si, "t")[0],
+    );
+    for (const t of tElements) {
+      expect(t === undefined ? undefined : attr(t, "xml:space")).toBe(
+        "preserve",
+      );
+    }
+    expect(textContent(childrenWithTag(sharedStrings, "si")[0]!)).toBe("Alpha");
+  });
+});
