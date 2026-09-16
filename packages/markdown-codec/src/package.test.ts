@@ -229,8 +229,19 @@ describe("writeMarkdown: DocumentTree -> markdown text", () => {
       sheets: [],
     });
 
-    expect(() => writeMarkdown(spreadsheet)).toThrow(
-      MarkdownUnsupportedDocumentKindError,
+    let thrown: unknown;
+    try {
+      writeMarkdown(spreadsheet);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(MarkdownUnsupportedDocumentKindError);
+    const typed = thrown as MarkdownUnsupportedDocumentKindError;
+    expect(typed.name).toBe("MarkdownUnsupportedDocumentKindError");
+    expect(typed.kind).toBe("spreadsheet");
+    expect(typed.code).toBe("md/write-side-not-wordprocessing");
+    expect(typed.message).toBe(
+      "writeMarkdown only supports a 'wordprocessing' ContentDocument, got 'spreadsheet'",
     );
   });
 
@@ -242,8 +253,15 @@ describe("writeMarkdown: DocumentTree -> markdown text", () => {
       children: [],
     };
 
-    expect(() => writeMarkdown(formula)).toThrow(
-      MarkdownUnsupportedDocumentKindError,
+    let thrown: unknown;
+    try {
+      writeMarkdown(formula);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(MarkdownUnsupportedDocumentKindError);
+    expect((thrown as MarkdownUnsupportedDocumentKindError).kind).toBe(
+      "formula",
     );
   });
 
@@ -261,10 +279,17 @@ describe("writeMarkdown: DocumentTree -> markdown text", () => {
       readMarkdown(BLOCKQUOTED).documentPackage;
     expect(styles).toBeDefined();
 
-    expect(() => writeMarkdown(packageWithoutStyles)).toThrow(
-      MarkdownPackageFlattenError,
-    );
-    expect(() => writeMarkdown(packageWithoutStyles)).toThrow(/style ref/);
+    let thrown: unknown;
+    try {
+      writeMarkdown(packageWithoutStyles);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(MarkdownPackageFlattenError);
+    const typed = thrown as MarkdownPackageFlattenError;
+    expect(typed.name).toBe("MarkdownPackageFlattenError");
+    expect(typed.code).toBe("md/package-flatten-failed");
+    expect(typed.message).toMatch(/style ref/);
   });
 
   it("reports a PACKAGE_TABLE_DROPPED diagnostic per non-empty package-level table flattenTree cannot carry into markdown", () => {
@@ -304,6 +329,58 @@ describe("writeMarkdown: DocumentTree -> markdown text", () => {
       ),
     ).toHaveLength(0);
     expect(written).toBe(writeMarkdown(base));
+  });
+
+  it("reports nothing for a present but genuinely EMPTY table -- the guard is a real emptiness check, not merely 'is the key present'", () => {
+    const base = readMarkdown(SAMPLE).documentPackage;
+    const withEmptyTables = {
+      ...base,
+      definitions: {},
+      layers: {},
+      attachments: {},
+      destinations: {},
+      pages: [],
+    };
+    const collector = createDiagnosticCollector();
+
+    writeMarkdown(withEmptyTables, { sink: collector.sink });
+
+    expect(collector.has(MarkdownDiagnosticCodes.PACKAGE_TABLE_DROPPED)).toBe(
+      false,
+    );
+  });
+
+  it("names the specific table in each PACKAGE_TABLE_DROPPED diagnostic's own message", () => {
+    const base = readMarkdown(SAMPLE).documentPackage;
+    const withExtraTables = {
+      ...base,
+      definitions: { d1: { kind: "bookmark" } },
+      layers: { l1: { kind: "layer" } },
+      attachments: { a1: { kind: "file" } },
+      destinations: { dest1: { kind: "anchor" } },
+      pages: [{ widthPt: 100, heightPt: 100 }],
+    };
+    const collector = createDiagnosticCollector();
+
+    writeMarkdown(withExtraTables, { sink: collector.sink });
+
+    const messages = collector.diagnostics
+      .filter(
+        (diagnostic) =>
+          diagnostic.code === MarkdownDiagnosticCodes.PACKAGE_TABLE_DROPPED,
+      )
+      .map((diagnostic) => diagnostic.message);
+    for (const name of [
+      "definitions",
+      "layers",
+      "attachments",
+      "destinations",
+      "pages",
+    ]) {
+      expect(messages.some((message) => message.includes(`"${name}"`))).toBe(
+        true,
+      );
+    }
   });
 });
 
@@ -379,6 +456,14 @@ describe("tree-only carries: reference definitions and front-matter residue", ()
     });
   });
 
+  it("splices a titleless link reference definition with no title key at all, not an undefined one", () => {
+    const { documentPackage } = readMarkdown("[foo]: /url\n\n[foo]");
+    expect(documentPackage.definitions).toEqual({
+      FOO: { kind: "link", destination: "/url" },
+    });
+    expect(documentPackage.definitions?.FOO).not.toHaveProperty("title");
+  });
+
   it("leaves definitions and the package source table absent for a document with neither, so the package is exactly assembleTree of the flat document", () => {
     const { documentPackage } = readMarkdown("plain body");
     expect(documentPackage.definitions).toBeUndefined();
@@ -398,6 +483,27 @@ describe("tree-only carries: reference definitions and front-matter residue", ()
     expect(collector.codes()).not.toContain(
       MarkdownDiagnosticCodes.PACKAGE_TABLE_DROPPED,
     );
+  });
+
+  it("renders a titleless link definition with no trailing title clause at all", () => {
+    const written = writeMarkdown(
+      readMarkdown("[foo]: /url\n\n[foo]").documentPackage,
+    );
+    expect(written).toBe("[foo](/url)\n\n[FOO]: /url");
+  });
+
+  it("joins two rendered link definitions with a real newline, one per line", () => {
+    const written = writeMarkdown(
+      readMarkdown("[foo]: /url1\n\n[bar]: /url2\n\n[foo] and [bar]")
+        .documentPackage,
+    );
+    const definitionLines = written.split("\n\n").at(-1)?.split("\n");
+    expect(definitionLines).toEqual(["[FOO]: /url1", "[BAR]: /url2"]);
+  });
+
+  it("renders bare definitions with no leading blank line when the document's own body is empty", () => {
+    const written = writeMarkdown(readMarkdown("[foo]: /url").documentPackage);
+    expect(written).toBe("[FOO]: /url");
   });
 
   it("round-trips text -> package -> text -> package to the identical package and text, definitions included", () => {
@@ -479,6 +585,65 @@ describe("tree-only carries: reference definitions and front-matter residue", ()
     expect(
       readMarkdown(written, { frontMatter: true }).documentPackage.metadata,
     ).toEqual(metadata);
+  });
+
+  it("quotes and escapes a literal backslash inside a value that also needs quoting for its leading '-'", () => {
+    const base = readMarkdown("body").documentPackage;
+    const written = writeMarkdown(
+      { ...base, metadata: { ...base.metadata, title: "-\\" } },
+      { frontMatter: true },
+    );
+    expect(written).toBe('---\ntitle: "-\\\\"\n---\n\nbody');
+  });
+
+  it("quotes and escapes a literal double-quote inside a value that also needs quoting for its leading '-'", () => {
+    const base = readMarkdown("body").documentPackage;
+    const written = writeMarkdown(
+      { ...base, metadata: { ...base.metadata, title: '-"' } },
+      { frontMatter: true },
+    );
+    expect(written).toBe('---\ntitle: "-\\""\n---\n\nbody');
+  });
+
+  it("quotes a value that would otherwise be misread, for reasons NEEDS_QUOTING_PATTERN alone cannot catch: leading/trailing whitespace or an empty string", () => {
+    const base = readMarkdown("body").documentPackage;
+    expect(
+      writeMarkdown(
+        { ...base, metadata: { ...base.metadata, title: " leading space" } },
+        { frontMatter: true },
+      ),
+    ).toBe('---\ntitle: " leading space"\n---\n\nbody');
+    expect(
+      writeMarkdown(
+        { ...base, metadata: { ...base.metadata, title: "trailing space " } },
+        { frontMatter: true },
+      ),
+    ).toBe('---\ntitle: "trailing space "\n---\n\nbody');
+    expect(
+      writeMarkdown(
+        { ...base, metadata: { ...base.metadata, title: "" } },
+        { frontMatter: true },
+      ),
+    ).toBe('---\ntitle: ""\n---\n\nbody');
+  });
+
+  it("omits the keywords line entirely for an empty (but defined) keywords array, rather than emitting an empty flow sequence", () => {
+    const base = readMarkdown("body").documentPackage;
+    const written = writeMarkdown(
+      {
+        ...base,
+        metadata: { ...base.metadata, title: "x", keywords: [] },
+      },
+      { frontMatter: true },
+    );
+    expect(written).toBe("---\ntitle: x\n---\n\nbody");
+    expect(written).not.toContain("keywords");
+  });
+
+  it("emits no front-matter block at all (returns the body untouched) when the metadata carries none of the fields it maps", () => {
+    const base = readMarkdown("body").documentPackage;
+    // frontMatter: true with a metadata object none of STRING_FIELD_ENTRIES/keywords/direction can read anything from -- emitFrontMatter's own lines array stays empty, so it must return undefined (no block at all) rather than an empty "---\n---" shell.
+    expect(writeMarkdown(base, { frontMatter: true })).toBe("body");
   });
 
   it("emits no front matter at all without the option, residue or not", () => {

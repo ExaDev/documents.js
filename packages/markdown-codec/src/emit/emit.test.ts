@@ -50,6 +50,19 @@ describe("headings", () => {
     ).toBe("### foo");
   });
 
+  it("does NOT fire HEADING_LEVEL_CLAMPED for a heading whose own level needs no clamping at all", () => {
+    const collector = createDiagnosticCollector();
+    emitMarkdown(
+      doc([
+        { kind: "paragraph", runs: [{ text: "foo" }], styleId: "Heading3" },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(collector.has(MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED)).toBe(
+      false,
+    );
+  });
+
   it('emits level 1/2 as setext when headingStyle: "setext" is requested, and falls back to ATX beyond level 2', () => {
     expect(
       emitMarkdown(
@@ -103,6 +116,11 @@ describe("headings", () => {
     expect(
       collector.has(MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED),
     ).toBe(true);
+    const diagnostic = collector.diagnostics.find(
+      (d) => d.code === MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED,
+    );
+    expect(diagnostic?.message).toContain("3");
+    expect(diagnostic?.message).toContain("line break");
   });
 
   it("measures the setext underline's length against the CommonMark first line even when its own embedded break is a bare CR, not an LF", () => {
@@ -163,6 +181,13 @@ describe("headings", () => {
             MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
           ),
         ).toBe(true);
+        const diagnostic = collector.diagnostics.find(
+          (d) =>
+            d.code ===
+            MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+        );
+        expect(diagnostic?.message).toContain("no heading text");
+        expect(diagnostic?.message).toContain("attach to");
         expect(
           collector.has(MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED),
         ).toBe(false);
@@ -655,6 +680,62 @@ describe("headings", () => {
 
   describe("an explicit headingStyle: 'setext' request against a break-free heading that is unsafe on its own terms is still refused, with a diagnostic (ExaDev/documents.js#940)", () => {
     // Every OTHER unsafe-for-setext test in this file exercises a heading whose text embeds an actual line break -- the break itself is what makes setext a candidate rendering at all when headingStyle is left at its 'atx' default. This heading has NO embedded break anywhere: headingStyle: 'setext' is the ONLY reason setext is even attempted, and unsafeSetextBreakReason's own first-line-indentation check applies exactly as much to a single-line heading as to a multi-line one. Pre-fix, every heading-related diagnostic sat behind an `embedsLineBreak` guard, so this exact shape silently fell through to a bare, unmarked ATX heading -- an explicit caller preference honoured in appearance (setext was refused, correctly) but with zero signal that it happened.
+    it("does NOT fire HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT for a break-free, 4+-column-indented level-3 heading even with headingStyle: 'setext' requested -- level <= MAX_SETEXT_LEVEL is its own genuine gate, not implied by setextRequested and unsafeForSetext alone", () => {
+      const collector = createDiagnosticCollector();
+      const written = emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [{ text: "    foo" }],
+            styleId: "Heading3",
+          },
+        ]),
+        { headingStyle: "setext", sink: collector.sink },
+      );
+      expect(written).toBe("###     foo");
+      expect(
+        collector.has(
+          MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+        ),
+      ).toBe(false);
+      expect(
+        collector.has(MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED),
+      ).toBe(false);
+      expect(
+        collector.has(
+          MarkdownDiagnosticCodes.HEADING_STYLE_OVERRIDDEN_FOR_LINE_BREAK,
+        ),
+      ).toBe(false);
+    });
+
+    it("does NOT fire HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT for a break-free, 4+-column-indented level-1 heading when setext was never requested at all -- unsafeForSetext alone, with setextRequested false, must not enter the unsafe-diagnostic branch", () => {
+      const collector = createDiagnosticCollector();
+      const written = emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [{ text: "    foo" }],
+            styleId: "Heading1",
+          },
+        ]),
+        { sink: collector.sink },
+      );
+      expect(written).toBe("#     foo");
+      expect(
+        collector.has(
+          MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+        ),
+      ).toBe(false);
+      expect(
+        collector.has(MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED),
+      ).toBe(false);
+      expect(
+        collector.has(
+          MarkdownDiagnosticCodes.HEADING_STYLE_OVERRIDDEN_FOR_LINE_BREAK,
+        ),
+      ).toBe(false);
+    });
+
     it("collapses to ATX with HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT when the heading's own (break-free) text is indented 4 or more columns", () => {
       const collector = createDiagnosticCollector();
       const written = emitMarkdown(
@@ -713,6 +794,30 @@ describe("headings", () => {
         shape: "blockquote-shaped",
         runs: [
           { text: "> q", source: { format: "markdown" as const, xml: "> q" } },
+        ],
+      },
+      {
+        level: "Heading1" as const,
+        shape: "ATX-heading-shaped ('# x')",
+        runs: [
+          { text: "# x", source: { format: "markdown" as const, xml: "# x" } },
+        ],
+      },
+      {
+        level: "Heading2" as const,
+        shape: "math-block-shaped ('$$')",
+        runs: [
+          { text: "$$", source: { format: "markdown" as const, xml: "$$" } },
+        ],
+      },
+      {
+        level: "Heading1" as const,
+        shape: "list-marker-shaped ('- item')",
+        runs: [
+          {
+            text: "- item",
+            source: { format: "markdown" as const, xml: "- item" },
+          },
         ],
       },
     ])(
@@ -788,12 +893,58 @@ describe("headings", () => {
       expect(headingBlock.runs.map((run) => run.text).join("")).toBe("foo");
     });
 
+    it("refuses to promote a break-free heading whose ENTIRE text is an ordered-list marker not starting at 1 -- interruptsSetextParagraph's first-line call must use the genuine block-start sense (any start number counts), not the paragraph-continuation sense (only start-at-1 counts)", () => {
+      const collector = createDiagnosticCollector();
+      const written = emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [
+              {
+                text: "2. foo",
+                source: { format: "markdown", xml: "2. foo" },
+              },
+            ],
+            styleId: "Heading1",
+          },
+        ]),
+        { headingStyle: "setext", sink: collector.sink },
+      );
+      expect(written).toBe("# 2. foo");
+      expect(
+        collector.has(
+          MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+        ),
+      ).toBe(true);
+    });
+
+    it("still safely promotes to setext when a NON-FIRST line is an ordered-list marker not starting at 1 -- interruptsSetextParagraph's non-first-line call must use the paragraph-continuation sense (CommonMark's own exception absorbs it as continuation text), not the block-start sense", () => {
+      const written = emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [
+              { text: "foo" },
+              { text: "\n" },
+              {
+                text: "2. bar",
+                source: { format: "markdown", xml: "2. bar" },
+              },
+            ],
+            styleId: "Heading1",
+          },
+        ]),
+      );
+      expect(written).toBe("foo\\\n2. bar\n====");
+    });
+
     it.each([
       { level: "Heading1" as const, underline: "=" },
       { level: "Heading2" as const, underline: "-" },
     ])(
       "still promotes $level to setext and round-trips the leading break losslessly",
       ({ level, underline }) => {
+        const collector = createDiagnosticCollector();
         const written = emitMarkdown(
           doc([
             {
@@ -802,8 +953,17 @@ describe("headings", () => {
               styleId: level,
             },
           ]),
+          { sink: collector.sink },
         );
         expect(written).toBe(`\\\nfoo\n${underline}`);
+        const diagnostic = collector.diagnostics.find(
+          (d) =>
+            d.code ===
+            MarkdownDiagnosticCodes.HEADING_STYLE_OVERRIDDEN_FOR_LINE_BREAK,
+        );
+        // Unlike the genuinely-absorbed leading-break case above, this break survives losslessly -- the diagnostic must say so, not claim it was absorbed.
+        expect(diagnostic?.message).toContain("so the break survives");
+        expect(diagnostic?.message).not.toContain("absorbed");
 
         const reparsed = lowerMarkdown(written);
         if (reparsed.kind !== "wordprocessing") {
@@ -1254,6 +1414,25 @@ describe("math (ExaDev/markdown-codec#53)", () => {
     ).toBe("$$\n$$");
   });
 
+  it("does not render the $$ math shortcut when objectKind disagrees with the document's own kind, even though the document itself is a formula carrying real presentation LaTeX -- both fields must agree, not just the document's own kind", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "embeddedObject",
+            objectKind: "wordprocessing",
+            document: {
+              kind: "formula",
+              metadata: {},
+              formula: { mathml: [], presentation: { latex: "x^2" } },
+            },
+            frame: { xPt: 0, yPt: 0, widthPt: 1, heightPt: 1 },
+          },
+        ]),
+      ),
+    ).toBe("");
+  });
+
   it("still silently drops an embedded object of any other kind, and a formula with no presentation LaTeX, which have no markdown spelling", () => {
     expect(
       emitMarkdown(
@@ -1411,6 +1590,32 @@ describe("blockquotes", () => {
     expect(collector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(
       true,
     );
+    const diagnostic = collector.diagnostics.find(
+      (d) => d.code === MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+    );
+    expect(diagnostic?.message).toContain("division");
+    expect(diagnostic?.message).toContain("no markdown syntax");
+  });
+
+  it("renders a division transparently (no '> ' wrapping) when only SOME of its wrapped paragraphs carry the dual-carry quote indent, not all of them -- isMaterialisedDivision requires EVERY child to qualify, not just one", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division", name: "mixed" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "quoted" }],
+          styleId: "Quote",
+          indentLeftPt: 36,
+        },
+        { kind: "paragraph", runs: [{ text: "plain" }] },
+        { kind: "constructEnd" },
+      ]),
+    );
+    // Transparent, not materialised -- so each wrapped paragraph still recovers (or doesn't) its own quote depth independently, exactly as if the division weren't there at all: "quoted" keeps its own '> ' from indentLeftPt, "plain" has none.
+    expect(markdown).toBe("> quoted\n\nplain");
   });
 
   it("round-trips blockquote shapes byte for byte through lower -> emit -> lower, including nesting and adjacency", () => {
@@ -1532,6 +1737,278 @@ describe("lists", () => {
     expect(markdown).toBe("- [x] done");
   });
 
+  it("recognises the pre-field UNCHECKED glyph spelling on its OWN, with no checked item preceding it in the same call, and with real text following the glyph in the SAME run (so startsWith and endsWith genuinely disagree)", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "☐ todo" }],
+          list: { numId: "md1:bullet+task", level: 0 },
+        },
+      ]),
+    );
+    expect(markdown).toBe("- [ ] todo");
+  });
+
+  it("never strips a run's own leading text when the checkbox comes from membership.checked instead of a legacy glyph, even when that text happens to look exactly like the legacy glyph spelling", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "☒ literal text not a glyph to strip" }],
+          list: {
+            numId: "md1:bullet+task",
+            level: 0,
+            checked: true,
+            itemId: "i1",
+          },
+        },
+      ]),
+    );
+    // stripGlyph must be false here -- the checkbox already came from membership.checked, so this run's own text is ordinary content, never a legacy glyph prefix to strip back off.
+    expect(markdown).toBe("- [x] ☒ literal text not a glyph to strip");
+  });
+
+  it("strips a legacy checkbox glyph from a run that ALSO carries its own following text, not just when the glyph fills a whole separate run of its own", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "☒ done" }],
+          list: { numId: "md1:bullet+task", level: 0 },
+        },
+      ]),
+    );
+    expect(markdown).toBe("- [x] done");
+  });
+
+  it("renders an ordinary bullet with no checkbox at all for a task-flagged numId whose leading text matches neither legacy glyph", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "ordinary" }],
+          list: { numId: "md1:bullet+task", level: 0 },
+        },
+      ]),
+    );
+    expect(markdown).toBe("- ordinary");
+  });
+
+  it("never misreads a ballot-box glyph as a checkbox for an ORDINARY (non-task-flagged) numId, even though its leading text happens to match the legacy glyph spelling exactly", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "☒ not a checkbox" }],
+          list: { numId: "md1:bullet", level: 0 },
+        },
+      ]),
+    );
+    expect(markdown).toBe("- ☒ not a checkbox");
+  });
+
+  it("does not pad a genuinely blank line inside a NESTED sub-list's own rendering with trailing indent whitespace once that rendering is indented under its parent item", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "b" }],
+          list: { numId: "md1:bullet+loose", level: 1 },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "c" }],
+          list: { numId: "md1:bullet+loose", level: 1 },
+        },
+      ]),
+    );
+    expect(markdown).toBe("- a\n  - b\n\n  - c");
+    // Split on "\n" and re-check the blank line specifically: exactly "", never "  " (indent with nothing on it).
+    expect(markdown.split("\n")).toContain("");
+  });
+
+  it("recognises a construct as carrying an item's own itemId when ONLY ONE of its several children actually carries it, not requiring every child to -- constructCarriesListItemId is an ANY match, not an ALL match", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division", name: "d1" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "carries i1" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        { kind: "paragraph", runs: [{ text: "other" }] },
+        { kind: "constructEnd" },
+      ]),
+    );
+    // The construct is recognised as belonging to item i1 (one of its two children carries that itemId, and ANY match is enough) and stays absorbed into i1's own run, rather than fracturing out as an unrelated top-level construct.
+    expect(markdown).toBe("- a\n\n  carries i1\n\n  other");
+  });
+
+  it("pops a SIBLING item's own membership off openMemberships before pushing the next one at the SAME level, not just a genuinely deeper one -- a stale sibling entry left on the stack could wrongly absorb a later construct that only carries THAT earlier sibling's own itemId", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "i1" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "i2" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i2" },
+        },
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division", name: "d1" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "carries i1" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        { kind: "constructEnd" },
+      ]),
+    );
+    // i1's own membership must already be off the stack once i2 (its sibling at the SAME level) is pushed -- so this construct, which carries only i1's itemId, cannot still be absorbed into the (no-longer-open) i1 item; it fractures out and re-enters as its OWN fresh list region instead (its wrapped paragraph still carries itemId i1, but as a new region, not a continuation of the item above).
+    expect(markdown).toBe("- i1\n- i2\n\n- carries i1");
+  });
+
+  it("finds the REAL last styleId of a NESTED sub-list's own last block, not just undefined, so the outer item's own resuming block reflects what that sub-list actually ends on", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "b" }],
+          styleId: "CodeBlock",
+          list: { numId: "md1:bullet", level: 1, itemId: "i2" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "z" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+      ]),
+    );
+    // No forced blank line before "z": the nested sub-list's own last (and only) item is a CodeBlock, which terminates cleanly -- reading segment.blocks[segment.blocks.length - 1] must actually find that item, not silently report undefined (which would wrongly force a blank line here).
+    expect(markdown).toBe("- a\n  - ```\n    b\n    ```\n  z");
+  });
+
+  it("needs no forced blank line before a construct whose own FIRST child is an EMPTY, non-division nested construct, in the SAME list item -- emitItemCanInterrupt's construct-recursion base case (an empty children array) defaults to interrupting, exactly like the non-paragraph fallback it mirrors", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        {
+          kind: "constructStart",
+          descriptor: {
+            kind: "link",
+            target: { kind: "external", uri: "https://example.com" },
+          },
+        },
+        {
+          kind: "constructStart",
+          descriptor: { kind: "anchor", anchorType: "bookmark", name: "empty" },
+        },
+        { kind: "constructEnd" },
+        {
+          kind: "paragraph",
+          runs: [{ text: "caption" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        { kind: "constructEnd" },
+      ]),
+    );
+    expect(markdown).toBe("- a\n  caption");
+  });
+
+  it("needs no forced blank line between an open (styleId-less) paragraph and a following link-construct whose FIRST child is a non-paragraph IMAGE block, in the SAME list item -- a non-paragraph block always interrupts an open paragraph unconditionally, per emitItemCanInterrupt's non-construct fallback", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        {
+          kind: "constructStart",
+          descriptor: {
+            kind: "link",
+            target: { kind: "external", uri: "https://example.com/a.png" },
+          },
+        },
+        {
+          kind: "image",
+          format: "png",
+          base64: "AAAA",
+          widthPt: 1,
+          heightPt: 1,
+          altText: "img",
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "caption" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        { kind: "constructEnd" },
+      ]),
+    );
+    expect(markdown).toBe(
+      "- a\n  ![img](data:image/png;base64,AAAA)\n\n  caption",
+    );
+  });
+
+  it("finds the REAL last styleId inside a construct that resumes a list item, not just undefined, so a following block's own blank-line decision reflects what that construct actually ends on", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division", name: "d1" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "mid" }],
+          styleId: "CodeBlock",
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        { kind: "constructEnd" },
+        {
+          kind: "paragraph",
+          runs: [{ text: "z" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+      ]),
+    );
+    // No forced blank line before "z": the construct's own last (and only) wrapped block is a CodeBlock, which terminates cleanly -- lastStyleIdOf must actually find that CodeBlock styleId through the construct's own children, not silently report undefined (which would wrongly force a blank line here).
+    expect(markdown).toBe("- a\n  ```\n  mid\n  ```\n  z");
+  });
+
   it("renders every block of one itemId as a single item -- a blank line and the continuation indent between blocks, one marker only", () => {
     const markdown = emitMarkdown(
       doc([
@@ -1548,6 +2025,26 @@ describe("lists", () => {
       ]),
     );
     expect(markdown).toBe("- a\n\n  second block");
+  });
+
+  it("does not pad a genuinely blank line inside a LATER (continuation) block's own body with trailing indent whitespace once that block is indented under the item's marker", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "md-i1" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "x\n\ny" }],
+          styleId: "CodeBlock",
+          list: { numId: "md1:bullet", level: 0, itemId: "md-i1" },
+        },
+      ]),
+    );
+    expect(markdown).toBe("- a\n  ```\n  x\n\n  y\n  ```");
+    expect(markdown.split("\n")).toContain("");
   });
 
   it("renders same-level paragraphs with DIFFERENT itemIds as separate items even when they share a numId", () => {
@@ -2041,6 +2538,46 @@ describe("lists", () => {
     expect(headingBlock.runs.map((run) => run.text).join("")).toBe("h");
   });
 
+  it("inserts a blank line between a paragraph and a following Heading2 rendered as setext too, not just Heading1 -- willRenderAsSetext's own level > MAX_SETEXT_LEVEL check must correctly admit level 2 AT the boundary, not treat it the same as a level that exceeds it", () => {
+    const written = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        {
+          kind: "paragraph",
+          styleId: "Heading2",
+          runs: [{ text: "h" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+      ]),
+      { headingStyle: "setext" },
+    );
+    expect(written).toBe("- a\n\n  h\n  -");
+  });
+
+  it("keeps a paragraph and a following Heading3 TIGHT even with headingStyle: 'setext' requested -- level 3 always renders as ATX regardless of the configured style (there is no setext spelling beyond level 2), so willRenderAsSetext must still refuse it rather than treating any level as eligible whenever setext is merely requested", () => {
+    const written = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        {
+          kind: "paragraph",
+          styleId: "Heading3",
+          runs: [{ text: "h" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+      ]),
+      { headingStyle: "setext" },
+    );
+    expect(written).toBe("- a\n  ### h");
+  });
+
   it("inserts a blank line between a paragraph and a following heading that is forced to setext by its OWN embedded line break, even with the default ATX headingStyle -- the interrupt guard must key off what the heading will actually render as, not the configured style, or the preceding paragraph is silently absorbed into it on reparse (ExaDev/documents.js#940)", () => {
     const softBreakRuns = [
       { text: "h1" },
@@ -2389,6 +2926,74 @@ describe("lists", () => {
     expect(mathBlock?.kind).toBe("embeddedObject");
   });
 
+  it("needs no forced blank line between a CodeBlock and a following plain paragraph in the SAME tight list item -- a fenced code block's own closing fence terminates cleanly, with nothing left open for the next line to lazily continue", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        styleId: "CodeBlock",
+        runs: [{ text: "x" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "y" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    expect(emitMarkdown(source)).toBe("- ```\n  x\n  ```\n  y");
+  });
+
+  it("needs no forced blank line between a MathBlock and a following plain paragraph in the SAME tight list item -- a $$ block's own closing delimiter terminates cleanly", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        styleId: "MathBlock",
+        runs: [{ text: "x" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "y" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    expect(emitMarkdown(source)).toBe("- $$\n  x\n  $$\n  y");
+  });
+
+  it("needs no forced blank line between a HorizontalRule and a following plain paragraph in the SAME tight list item -- a thematic break is a single complete line with nothing left open", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        styleId: "HorizontalRule",
+        runs: [],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "y" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    expect(emitMarkdown(source, { thematicBreakChar: "*" })).toBe("- ***\n  y");
+  });
+
+  it("DOES force a blank line between two plain paragraphs sharing an unrecognised, non-quotable, non-clean-terminating styleId in the same tight list item -- src/lower's own reader can only ever have produced this pair from a genuine source blank line, so the write side must reinsert it even though the list itself is tight", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        styleId: "SomeUnrecognisedStyle",
+        runs: [{ text: "a" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "b" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    expect(emitMarkdown(source)).toBe("- a\n\n  b");
+  });
+
   it("separates loose-list siblings with a blank line and tight-list siblings with none", () => {
     const tight = emitMarkdown(
       doc([
@@ -2514,6 +3119,15 @@ describe("adjacent same-type lists get different marker glyphs (ExaDev/markdown-
 });
 
 describe("tables", () => {
+  it("emits an empty string for a table with no rows at all, rather than a header/delimiter line of nothing", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [],
+      rows: [],
+    };
+    expect(emitMarkdown(doc([table]))).toBe("");
+  });
+
   it("emits alignment markers read from the header row's own cell alignment", () => {
     const table: ContentTable = {
       kind: "table",
@@ -2681,6 +3295,17 @@ describe("images", () => {
       "![alt](data:image/png;base64,AA==)",
     );
     expect(emitMarkdown(doc([image]), { images: false })).toBe("![alt]()");
+  });
+
+  it("emits an empty alt attribute for an image block with no altText at all", () => {
+    const image: ContentImageBlock = {
+      kind: "image",
+      format: "png",
+      base64: "AA==",
+      widthPt: 1,
+      heightPt: 1,
+    };
+    expect(emitMarkdown(doc([image]))).toBe("![](data:image/png;base64,AA==)");
   });
 });
 
@@ -2907,6 +3532,37 @@ describe("link and image titles (the `link` construct annotation)", () => {
     );
   });
 
+  it("does NOT render the image-shortcut spelling for a link construct wrapping MORE than one child, even when the first of them is an image -- the mint condition is exactly one child, not merely 'starts with an image'", () => {
+    const collector = createDiagnosticCollector();
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "constructStart",
+          descriptor: {
+            kind: "link",
+            target: { kind: "external", uri: "https://example.com/a.png" },
+          },
+        },
+        {
+          kind: "image",
+          format: "png",
+          base64: "AAAA",
+          widthPt: 1,
+          heightPt: 1,
+          altText: "alt",
+        },
+        { kind: "paragraph", runs: [{ text: "caption" }] },
+        { kind: "constructEnd" },
+      ]),
+      { sink: collector.sink },
+    );
+    // The construct falls through to the generic, transparent rendering -- its own image child renders as ITSELF (a plain data: URI image, not the link-shortcut's own remote-destination spelling), and the caption follows as an ordinary paragraph.
+    expect(markdown).toBe("![alt](data:image/png;base64,AAAA)\n\ncaption");
+    expect(collector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(
+      true,
+    );
+  });
+
   it("falls back to the plain no-bytes image rendering when the construct destination is itself a data: URI and images: false asks for no bytes", () => {
     const blocks: ContentBlock[] = [
       {
@@ -2931,7 +3587,8 @@ describe("link and image titles (the `link` construct annotation)", () => {
   });
 
   it("throws for a paragraph whose run-level construct extent does not name real runs", () => {
-    expect(() => {
+    let beyondRuns: unknown;
+    try {
       emitMarkdown(
         doc([
           {
@@ -2951,8 +3608,22 @@ describe("link and image titles (the `link` construct annotation)", () => {
           },
         ]),
       );
-    }).toThrow(MarkdownInvalidRunConstructExtentError);
-    expect(() => {
+    } catch (error) {
+      beyondRuns = error;
+    }
+    expect(beyondRuns).toBeInstanceOf(MarkdownInvalidRunConstructExtentError);
+    const beyondRunsTyped =
+      beyondRuns as MarkdownInvalidRunConstructExtentError;
+    expect(beyondRunsTyped.name).toBe("MarkdownInvalidRunConstructExtentError");
+    expect(beyondRunsTyped.faultKind).toBe("beyondRuns");
+    expect(beyondRunsTyped.entryIndex).toBe(0);
+    expect(beyondRunsTyped.code).toBe("md/run-construct-extent-invalid");
+    expect(beyondRunsTyped.message).toBe(
+      "a paragraph's run-level construct extent reaches outside the paragraph's own runs (constructs entry 0); a run extent must name real runs in 0..runs.length",
+    );
+
+    let invertedRange: unknown;
+    try {
       emitMarkdown(
         doc([
           {
@@ -2972,7 +3643,61 @@ describe("link and image titles (the `link` construct annotation)", () => {
           },
         ]),
       );
-    }).toThrow(/ends before it starts/);
+    } catch (error) {
+      invertedRange = error;
+    }
+    expect(invertedRange).toBeInstanceOf(
+      MarkdownInvalidRunConstructExtentError,
+    );
+    const invertedRangeTyped =
+      invertedRange as MarkdownInvalidRunConstructExtentError;
+    expect(invertedRangeTyped.faultKind).toBe("invertedRange");
+    expect(invertedRangeTyped.entryIndex).toBe(0);
+    expect(invertedRangeTyped.message).toBe(
+      "a paragraph's run-level construct extent ends before it starts (constructs entry 0); a run extent must name real runs in 0..runs.length",
+    );
+  });
+
+  it("also throws for an invalid run-level construct extent buried inside a TABLE CELL's own paragraph, not just a top-level one -- validateRunConstructExtents must actually recurse into every row's every cell", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [
+                {
+                  kind: "paragraph",
+                  runs: [{ text: "text", hyperlink: "/u" }],
+                  constructs: [
+                    {
+                      descriptor: {
+                        kind: "link",
+                        target: { kind: "external", uri: "/u" },
+                        title: "t",
+                      },
+                      startRun: 0,
+                      endRun: 5,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    let inCell: unknown;
+    try {
+      emitMarkdown(doc([table]));
+    } catch (error) {
+      inCell = error;
+    }
+    expect(inCell).toBeInstanceOf(MarkdownInvalidRunConstructExtentError);
+    expect((inCell as MarkdownInvalidRunConstructExtentError).faultKind).toBe(
+      "beyondRuns",
+    );
   });
 });
 
@@ -3060,6 +3785,11 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     expect(collector.has(MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED)).toBe(
       true,
     );
+    const diagnostic = collector.diagnostics.find(
+      (d) => d.code === MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED,
+    );
+    expect(diagnostic?.message).toContain("9");
+    expect(diagnostic?.message).toContain("6");
   });
 
   it("ADJACENT_LINKS_MERGED fires when two consecutive runs share a hyperlink", () => {
@@ -3108,6 +3838,26 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     ).toBe(true);
   });
 
+  it("PARAGRAPH_INDENT_DROPPED also fires for a DEFINED but unrecognised styleId carrying indentLeftPt, not only an absent styleId -- isQuotableStyle's own QUOTABLE_STYLE_IDS/heading check must actually run, not just its undefined short-circuit", () => {
+    const collector = createDiagnosticCollector();
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          styleId: "SomeUnrecognisedStyle",
+          indentLeftPt: 36,
+        },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(markdown).toBe("x");
+    expect(markdown).not.toContain(">");
+    expect(
+      collector.has(MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED),
+    ).toBe(true);
+  });
+
   it("LIST_NUMID_FALLBACK fires for a numId this package never minted, falling back to a plain bullet", () => {
     const collector = createDiagnosticCollector();
     const markdown = emitMarkdown(
@@ -3124,6 +3874,36 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     expect(collector.has(MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK)).toBe(
       true,
     );
+    const diagnostic = collector.diagnostics.find(
+      (d) => d.code === MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK,
+    );
+    expect(diagnostic?.message).toContain("list1");
+    expect(diagnostic?.message).toContain("not minted");
+  });
+
+  it("LIST_NUMID_FALLBACK fires only once for two items sharing the SAME never-minted numId, not once per item", () => {
+    const collector = createDiagnosticCollector();
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "list1", level: 0 },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "b" }],
+          list: { numId: "list1", level: 0 },
+        },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(markdown).toBe("- a\n- b");
+    expect(
+      collector.diagnostics.filter(
+        (d) => d.code === MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK,
+      ),
+    ).toHaveLength(1);
   });
 
   it("LIST_NUMID_FALLBACK fires once for depth-only memberships with no numId, falling back to one tight plain-bullet list", () => {
@@ -3136,12 +3916,12 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
       { sink: collector.sink },
     );
     expect(markdown).toBe("- x\n  - y");
-    expect(
-      collector.diagnostics.filter(
-        (diagnostic) =>
-          diagnostic.code === MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK,
-      ),
-    ).toHaveLength(1);
+    const fallbacks = collector.diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.code === MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK,
+    );
+    expect(fallbacks).toHaveLength(1);
+    expect(fallbacks[0]?.message).toContain("no numId");
   });
 
   it("TABLE_CELL_FORMATTING_DROPPED fires for a non-paragraph/non-image/non-lone-nested-table cell block even inside the HTML-table fallback, once colSpan already triggers it", () => {
@@ -3168,6 +3948,14 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     expect(markdown).toContain('colspan="2"');
     expect(collector.has(MarkdownDiagnosticCodes.TABLE_HTML_FALLBACK)).toBe(
       true,
+    );
+    expect(
+      collector.diagnostics.find(
+        (diagnostic) =>
+          diagnostic.code === MarkdownDiagnosticCodes.TABLE_HTML_FALLBACK,
+      )?.message,
+    ).toBe(
+      "a cell in this table needs colSpan/rowSpan/background, or holds a block a GFM table cell cannot represent at all (most commonly a nested table); GFM's own table extension holds inline content only (github.github.com/gfm, \"Tables (extension)\"), so no single cell can carry an HTML sub-block inside an otherwise pipe-syntax table -- the whole table is rendered as a raw HTML <table> block instead (CommonMark spec 0.31.2, HTML blocks condition 6, https://spec.commonmark.org/0.31.2/#html-blocks), which src/html/html-table.ts's own reader recognises back into an equal ContentTable",
     );
     expect(
       collector.has(MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED),
@@ -3198,6 +3986,33 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     expect(
       collector.has(MarkdownDiagnosticCodes.TABLE_CELL_MULTI_PARAGRAPH_JOINED),
     ).toBe(true);
+    expect(
+      collector.diagnostics.find(
+        (diagnostic) =>
+          diagnostic.code ===
+          MarkdownDiagnosticCodes.TABLE_CELL_MULTI_PARAGRAPH_JOINED,
+      )?.message,
+    ).toBe(
+      "a table cell with 2 blocks has no multi-paragraph equivalent in a GFM table cell; their own rendered text is joined with a literal <br> line break",
+    );
+  });
+
+  it("does not fire TABLE_CELL_MULTI_PARAGRAPH_JOINED for a cell with exactly one block", () => {
+    const collector = createDiagnosticCollector();
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }] },
+        {
+          cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "one" }] }] }],
+        },
+      ],
+    };
+    emitMarkdown(doc([table]), { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.TABLE_CELL_MULTI_PARAGRAPH_JOINED),
+    ).toBe(false);
   });
 
   it("TABLE_CELL_IMAGE_DEGRADED fires for an image-kind cell block, which emits inline rather than being dropped", () => {
@@ -3233,8 +4048,37 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
       collector.has(MarkdownDiagnosticCodes.TABLE_CELL_IMAGE_DEGRADED),
     ).toBe(true);
     expect(
+      collector.diagnostics.find(
+        (diagnostic) =>
+          diagnostic.code === MarkdownDiagnosticCodes.TABLE_CELL_IMAGE_DEGRADED,
+      )?.message,
+    ).toBe(
+      "a table cell's own image block has no GFM table equivalent; it emits inline instead, degrading on read-back to a run carrying the alt text with the image's data as that run's hyperlink",
+    );
+    expect(
       collector.has(MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED),
     ).toBe(false);
+  });
+
+  it("joins a cell's own paragraphs skipping any that render to empty text, without an extra <br>", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }] },
+        {
+          cells: [
+            {
+              blocks: [
+                { kind: "paragraph", runs: [] },
+                { kind: "paragraph", runs: [{ text: "one" }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    expect(emitMarkdown(doc([table]))).toContain("| one |");
   });
 
   it("round-trips a table cell image as a run carrying the alt text with the image's own data as that run's hyperlink, the same shape a nested image inside emphasis/a link already degrades to", () => {
@@ -3312,5 +4156,323 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
         ? cell.blocks[0].runs.map((run) => run.text).join("")
         : undefined;
     expect(text).toBe("one<br>two");
+  });
+});
+
+describe("quoteDepthOf, longestRunLength, and leadingIndentColumns boundaries", () => {
+  it("treats indentLeftPt: 0 the same as no indentLeftPt at all -- no quote depth, no '>' prefix", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            styleId: "Quote",
+            indentLeftPt: 0,
+          },
+        ]),
+      ),
+    ).toBe("x");
+  });
+
+  it("resets the fence-character run counter after a non-fence character interrupts it, rather than compounding the interrupted run's own length into a later run of the SAME length as if nothing had broken it", () => {
+    // The genuine longest run of '`' here is 4 (the second one); a counter that failed to reset after 'xxx' would instead carry the first run's own length of 3 into the second, overcounting to 7 and picking an unnecessarily long fence.
+    const literal = "```xxx````";
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [{ text: literal }],
+            styleId: "CodeBlock",
+          },
+        ]),
+      ),
+    ).toBe(`\`\`\`\`\`\n${literal}\n\`\`\`\`\``);
+  });
+
+  it("expands a leading tab to the correct tab-stop-aligned column count, not merely to SOME value past the 4-column indented-code-block threshold, when the tab is not the first character of the line", () => {
+    // Two leading spaces (column 2) then a tab: the correct tab-stop rule rounds up to the NEXT multiple of 4, landing on column 4 (2 + 2) -- exactly at, not past, CODE_INDENT_COLUMNS. A `%` -> `*` mutation of the tab-stop arithmetic computes 2 + (4 - 2*4) = 2 + -4 = -2 instead, which is NOT >= 4 and would wrongly let this promote to setext.
+    const collector = createDiagnosticCollector();
+    const written = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [
+            {
+              text: "  \tx",
+              source: { format: "markdown", xml: "  \tx" },
+            },
+          ],
+          styleId: "Heading1",
+        },
+      ]),
+      { headingStyle: "setext", sink: collector.sink },
+    );
+    expect(written).toBe("#   \tx");
+    expect(
+      collector.has(
+        MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+      ),
+    ).toBe(true);
+  });
+
+  it("stops counting leading indentation at the first non-space, non-tab character, rather than resuming the count at a LATER space in the same line as if it were still leading", () => {
+    // Correct: 'a' immediately stops the leading-indent scan at column 0 (well under the 4-column threshold), so this promotes safely to setext. A dropped `break` would instead skip over 'a' and keep scanning, picking up the run of 4 spaces that follows it as if it were still leading indentation, reaching column 4 and wrongly refusing the promotion.
+    const collector = createDiagnosticCollector();
+    const written = emitMarkdown(
+      doc([
+        { kind: "paragraph", runs: [{ text: "a    x" }], styleId: "Heading1" },
+      ]),
+      { headingStyle: "setext", sink: collector.sink },
+    );
+    expect(written).toBe("a    x\n======");
+    expect(
+      collector.has(
+        MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+      ),
+    ).toBe(false);
+  });
+
+  it("does not treat a heading's own SECOND line, indented 4+ columns, as an interrupting construct -- CommonMark absorbs indented content as ordinary paragraph continuation, exactly like its own indented-code paragraph-interruption exception requires", () => {
+    // "    - item" would itself match parseListMarker if the leading 4-column indent were not first exempted -- indented content is absorbed as continuation instead, so this must still promote safely to setext rather than being refused as an interrupting list marker.
+    const written = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [
+            { text: "foo" },
+            { text: "\n" },
+            {
+              text: "    - item",
+              source: { format: "markdown", xml: "    - item" },
+            },
+          ],
+          styleId: "Heading1",
+        },
+      ]),
+    );
+    expect(written).toBe("foo\\\n    - item\n====");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const [headingBlock] = reparsed.sections[0]?.blocks ?? [];
+    if (headingBlock?.kind !== "paragraph") {
+      throw new Error("expected a paragraph block");
+    }
+    expect(headingBlock.styleId).toBe("Heading1");
+  });
+});
+
+describe("renderConstruct's own unrepresentable shapes", () => {
+  it("reports CONSTRUCT_UNREPRESENTED, with the invalid label named, for a footnote anchor whose name cannot be spelled as a [^label]: marker", () => {
+    const collector = createDiagnosticCollector();
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "constructStart",
+          descriptor: {
+            kind: "anchor",
+            anchorType: "footnote",
+            name: "bad label",
+          },
+        },
+        { kind: "paragraph", runs: [{ text: "body" }] },
+        { kind: "constructEnd" },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(markdown).toBe("body");
+    const diagnostic = collector.diagnostics.find(
+      (d) => d.code === MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+    );
+    expect(diagnostic?.message).toContain("bad label");
+    expect(diagnostic?.message).toContain("footnote");
+  });
+
+  it("reports CONSTRUCT_UNREPRESENTED with 'anchor (bookmark)' as the detail for a non-footnote anchor, distinguishing it from a bare 'anchor'", () => {
+    const collector = createDiagnosticCollector();
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "anchor", anchorType: "bookmark", name: "b1" },
+        },
+        { kind: "paragraph", runs: [{ text: "body" }] },
+        { kind: "constructEnd" },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(markdown).toBe("body");
+    const diagnostic = collector.diagnostics.find(
+      (d) => d.code === MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+    );
+    expect(diagnostic?.message).toContain("anchor (bookmark)");
+  });
+
+  it("does not leave an extra blank-line gap for a CONSTRUCT that renders to nothing at all, such as a bodyless footnote anchor (a point anchor with an empty extent) sitting between two paragraphs", () => {
+    const markdown = emitMarkdown(
+      doc([
+        { kind: "paragraph", runs: [{ text: "a" }] },
+        {
+          kind: "constructStart",
+          descriptor: { kind: "anchor", anchorType: "bookmark", name: "empty" },
+        },
+        { kind: "constructEnd" },
+        { kind: "paragraph", runs: [{ text: "b" }] },
+      ]),
+    );
+    expect(markdown).toBe("a\n\nb");
+  });
+
+  it("does not leave an extra blank-line gap for a top-level block that renders to nothing at all, such as a page break sitting between two paragraphs", () => {
+    const markdown = emitMarkdown(
+      doc([
+        { kind: "paragraph", runs: [{ text: "a" }] },
+        { kind: "pageBreak" },
+        { kind: "paragraph", runs: [{ text: "b" }] },
+      ]),
+    );
+    // Exactly one blank line between "a" and "b" -- not two, which pushing the page break's own empty string into the joined parts array would produce.
+    expect(markdown).toBe("a\n\nb");
+  });
+
+  it("does not double-count a division-wrapped paragraph's own indentLeftPt as additional quote depth on top of the division's own '> ' wrapping", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division", name: "d1" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          styleId: "Quote",
+          indentLeftPt: 72,
+        },
+        { kind: "constructEnd" },
+      ]),
+    );
+    // Exactly one level of '> ' from the division itself -- NOT '> > x', which double-counting the paragraph's own indentLeftPt (72pt, two quote levels' worth) on top of the division's own wrapping would produce.
+    expect(markdown).toBe("> x");
+  });
+
+  it("restores divisionDepth to its own PRIOR value once a division closes, rather than leaking an elevated depth into whatever renders after it", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division", name: "d1" },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          styleId: "Quote",
+          indentLeftPt: 36,
+        },
+        { kind: "constructEnd" },
+        {
+          kind: "paragraph",
+          runs: [{ text: "y" }],
+          styleId: "Quote",
+          indentLeftPt: 36,
+        },
+      ]),
+    );
+    // A STANDALONE paragraph after the division closes must recover its own '> ' from indentLeftPt alone -- a decrement that failed to restore divisionDepth to 0 would leave this second paragraph's own quote prefix wrongly suppressed, rendering plain "y" instead of "> y".
+    expect(markdown).toBe("> x\n\n> y");
+  });
+
+  it("still re-embeds a data: URI destination for a link construct wrapping exactly one image when images is left at its own default (true), rather than always falling back to the no-bytes rendering", () => {
+    const dataUri = "data:image/png;base64,AAAA";
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "constructStart",
+          descriptor: {
+            kind: "link",
+            target: { kind: "external", uri: dataUri },
+          },
+        },
+        {
+          kind: "image",
+          format: "png",
+          base64: "AAAA",
+          widthPt: 1,
+          heightPt: 1,
+          altText: "alt",
+        },
+        { kind: "constructEnd" },
+      ]),
+    );
+    expect(markdown).toBe(`![alt](${dataUri})`);
+  });
+});
+
+describe("emitMarkdown's own top-level assembly", () => {
+  it("joins multiple sections with a blank line, not concatenating them directly", () => {
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: PAGE_SIZE_A4,
+          margins: DEFAULT_MARGINS,
+          blocks: [{ kind: "paragraph", runs: [{ text: "first" }] }],
+        },
+        {
+          pageSize: PAGE_SIZE_A4,
+          margins: DEFAULT_MARGINS,
+          blocks: [{ kind: "paragraph", runs: [{ text: "second" }] }],
+        },
+      ],
+    };
+    expect(emitMarkdown(document)).toBe("first\n\nsecond");
+  });
+
+  it("prepends a YAML front matter block, separated from the body by a blank line, when frontMatter: true and the metadata carries a field it can emit", () => {
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: { title: "My Title" },
+      sections: [
+        {
+          pageSize: PAGE_SIZE_A4,
+          margins: DEFAULT_MARGINS,
+          blocks: [{ kind: "paragraph", runs: [{ text: "body" }] }],
+        },
+      ],
+    };
+    expect(emitMarkdown(document, { frontMatter: true })).toBe(
+      "---\ntitle: My Title\n---\n\nbody",
+    );
+  });
+
+  it("emits no front matter block at all when frontMatter is not requested, even though the metadata carries a field emitFrontMatter could have emitted", () => {
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: { title: "My Title" },
+      sections: [
+        {
+          pageSize: PAGE_SIZE_A4,
+          margins: DEFAULT_MARGINS,
+          blocks: [{ kind: "paragraph", runs: [{ text: "body" }] }],
+        },
+      ],
+    };
+    expect(emitMarkdown(document)).toBe("body");
+  });
+
+  it("rewrites every line ending to CRLF when lineEnding: 'crlf' is requested", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          { kind: "paragraph", runs: [{ text: "first" }] },
+          { kind: "paragraph", runs: [{ text: "second" }] },
+        ]),
+        { lineEnding: "crlf" },
+      ),
+    ).toBe("first\r\n\r\nsecond");
   });
 });
