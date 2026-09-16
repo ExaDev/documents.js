@@ -4353,3 +4353,49 @@ describe("buildXlsxPackageFromContent: part roots, scope-keyed name suppression,
     expect(childrenWithTag(worksheet, "tableParts")).toHaveLength(0);
   });
 });
+
+describe("buildXlsxPackageFromContent: bottom alignment and the exact minimal override set", () => {
+  it("writes no vertical attribute at all for a bottom-aligned cell, the documented default", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "bottom" },
+          displayText: "bottom",
+          verticalAlignment: "bottom",
+        },
+      ]),
+    );
+    const styles = styleSheetOf(pkg);
+    const cellXfs = requireChild(styles, "cellXfs");
+    const index = Number(attributeOf(writtenCell(pkg, "A1"), "s"));
+    const xf = elementsOf(cellXfs, "xf")[index]!;
+    const alignment = requireChild(xf, "alignment");
+    expect(attributeOf(alignment, "vertical")).toBeUndefined();
+  });
+
+  it("declares exactly the six overrides a minimal document carries, and nothing else", () => {
+    const pkg = buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [emptySheetFixture("Only")],
+    });
+    const types = rootElement(pkg.parts["[Content_Types].xml"]);
+    if (types === undefined) {
+      throw new Error("expected content types root");
+    }
+    expect(
+      elementsOf(types, "Override").map((override) =>
+        attributeOf(override, "PartName"),
+      ),
+    ).toEqual([
+      "/xl/workbook.xml",
+      "/xl/styles.xml",
+      "/xl/sharedStrings.xml",
+      "/xl/worksheets/sheet1.xml",
+      "/docProps/core.xml",
+      "/docProps/app.xml",
+    ]);
+  });
+});
