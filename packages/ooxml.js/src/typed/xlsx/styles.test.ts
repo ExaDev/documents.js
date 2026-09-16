@@ -1244,6 +1244,36 @@ describe("CellFormatTable: border signature and caching across different outer f
     expect(table.borderDeclarations()).toHaveLength(2);
   });
 
+  it("writes a double-style border as the double token verbatim, ignoring widthPt entirely", () => {
+    const table = new CellFormatTable();
+    table.intern(
+      { kind: "builtin", id: GENERAL_NUM_FMT_ID },
+      {
+        borders: {
+          left: { color: { r: 0, g: 0, b: 0 }, widthPt: 0.75, style: "double" },
+        },
+      },
+    );
+    expect(table.borderDeclarations()[1]).toEqual({
+      edges: { left: { style: "double", rgb: "000000" } },
+    });
+  });
+
+  it("writes a dotted-style border as the dotted token verbatim, ignoring widthPt entirely", () => {
+    const table = new CellFormatTable();
+    table.intern(
+      { kind: "builtin", id: GENERAL_NUM_FMT_ID },
+      {
+        borders: {
+          left: { color: { r: 0, g: 0, b: 0 }, widthPt: 0.75, style: "dotted" },
+        },
+      },
+    );
+    expect(table.borderDeclarations()[1]).toEqual({
+      edges: { left: { style: "dotted", rgb: "000000" } },
+    });
+  });
+
   it("writes a dashed border at thin weight as plain dashed, not mediumDashed -- the medium check is not a no-op", () => {
     const table = new CellFormatTable();
     table.intern(
