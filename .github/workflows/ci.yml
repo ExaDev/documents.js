@@ -565,7 +565,8 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: "4816274"
+          # Public client ID of the ExaDev Sync App (numeric id 4816274), the App whose private key is HIVE_DISPATCH_APP_PRIVATE_KEY.
+          client-id: Iv23li7JN6kJDQqQ3pbA
           private-key: ${{ secrets.HIVE_DISPATCH_APP_PRIVATE_KEY }}
           owner: novus-power
           repositories: |
