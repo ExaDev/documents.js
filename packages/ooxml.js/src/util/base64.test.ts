@@ -1,6 +1,10 @@
 import { Buffer } from "node:buffer";
 import { describe, expect, it } from "vitest";
-import { base64ToBytes, bytesToBase64 } from "./base64";
+import {
+  BASE64_ENCODE_CHUNK_CHARS,
+  base64ToBytes,
+  bytesToBase64,
+} from "./base64";
 
 const REFERENCE_TABLE =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -126,6 +130,21 @@ describe("bytesToBase64 against independent encoders", () => {
     const encoded = bytesToBase64(bytes);
     expect(encoded).toBe(referenceBytesToBase64(bytes));
     expect(encoded).toBe(Buffer.from(bytes).toString("base64"));
+  });
+
+  it("matches the reference encoder and Node's Buffer for lengths on and around each of the first three chunk boundaries", () => {
+    const chunkBytes = (BASE64_ENCODE_CHUNK_CHARS / 4) * 3;
+    for (let chunks = 1; chunks <= 3; chunks += 1) {
+      for (let offset = -2; offset <= 2; offset += 1) {
+        const bytes = seededBytes(
+          chunks * chunkBytes + offset,
+          chunks * 10 + offset + 2,
+        );
+        const encoded = bytesToBase64(bytes);
+        expect(encoded).toBe(referenceBytesToBase64(bytes));
+        expect(encoded).toBe(Buffer.from(bytes).toString("base64"));
+      }
+    }
   });
 
   it("encodes a view onto part of a larger buffer using only the view's own bytes", () => {
