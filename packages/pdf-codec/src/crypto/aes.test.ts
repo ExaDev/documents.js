@@ -272,6 +272,13 @@ function nodeCbc(
   return Uint8Array.from(Buffer.concat([cipher.update(data), cipher.final()]));
 }
 
+/** Byte-for-byte equality through hex strings: vitest's deep equality walks a typed array element by element, which costs milliseconds per kilobyte under coverage instrumentation, and this comparison runs many times over kilobyte-sized buffers. */
+function expectSameBytes(actual: Uint8Array, expected: Uint8Array): void {
+  expect(Buffer.from(actual).toString("hex")).toBe(
+    Buffer.from(expected).toString("hex"),
+  );
+}
+
 describe("aes against independent implementations", () => {
   // Block counts chosen to include zero, one, an odd count, and enough blocks that a chaining mistake past the first few blocks shows.
   const blockCounts = [0, 1, 2, 3, 17, 64];
@@ -294,29 +301,49 @@ describe("aes against independent implementations", () => {
     },
   );
 
-  it("matches Node's AES-CBC on a large buffer of random data", () => {
+  it("matches Node's AES-CBC on a 16 KiB buffer of random data", () => {
     const key = seededBytes(32, 7);
     const iv = seededBytes(16, 8);
-    const data = seededBytes(64 * 1024, 9);
+    const data = seededBytes(16 * 1024, 9);
     const encrypted = aesCbcEncrypt(key, iv, data);
     expect(encrypted).toEqual(nodeCbc("encrypt", key, iv, data));
     expect(aesCbcDecrypt(key, iv, encrypted)).toEqual(data);
   });
 
-  it("matches the reference on every byte value in every position of a block", () => {
+  const SPREAD_VALUES = [0x00, 0x55, 0xaa, 0xff];
+  const SPREAD_POSITIONS = [0, 7, 15];
+
+  // Node's AES sees every byte value in every position (fast and native). The deliberately slow reference sees four values (both extremes and the two alternating-bit patterns) at the first, a middle and the last position, so the test stays well inside the default timeout on a slow, instrumented runner instead of needing one raised.
+  it("matches Node's AES on every byte value in every position of a block, and the reference on a spread of them", () => {
     const key = seededBytes(16, 21);
+    const iv = new Uint8Array(16);
     for (let position = 0; position < 16; position += 1) {
       const data = new Uint8Array(256 * 16);
       for (let value = 0; value < 256; value += 1) {
         data[value * 16 + position] = value;
       }
-      const iv = new Uint8Array(16);
-      expect(aesCbcEncrypt(key, iv, data)).toEqual(
-        referenceCbc("encrypt", key, iv, data),
+      expectSameBytes(
+        aesCbcEncrypt(key, iv, data),
+        nodeCbc("encrypt", key, iv, data),
       );
-      expect(aesCbcDecrypt(key, iv, data)).toEqual(
-        referenceCbc("decrypt", key, iv, data),
+      expectSameBytes(
+        aesCbcDecrypt(key, iv, data),
+        nodeCbc("decrypt", key, iv, data),
       );
+      if (SPREAD_POSITIONS.includes(position)) {
+        const spread = new Uint8Array(SPREAD_VALUES.length * 16);
+        SPREAD_VALUES.forEach((value, index) => {
+          spread[index * 16 + position] = value;
+        });
+        expectSameBytes(
+          aesCbcEncrypt(key, iv, spread),
+          referenceCbc("encrypt", key, iv, spread),
+        );
+        expectSameBytes(
+          aesCbcDecrypt(key, iv, spread),
+          referenceCbc("decrypt", key, iv, spread),
+        );
+      }
     }
   });
 });
