@@ -1,3 +1,14 @@
+## [7.20.17](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.16...documents.js%407.20.17) (2026-09-19)
+
+### Build System
+
+* **documents.js:** move the tsdown external option to deps.neverBundle ([c930036](https://github.com/ExaDev/documents.js/commit/c9300362a5cf1384b62c97ec84fb1c9eb575f11e))
+
+
+### Dependencies
+
+- Updated pdf-codec to 4.8.6
+
 ## [7.20.16](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.15...documents.js%407.20.16) (2026-09-19)
 
 
