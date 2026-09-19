@@ -1,3 +1,11 @@
+## [2.11.27](https://github.com/ExaDev/documents.js/compare/web%402.11.26...web%402.11.27) (2026-09-19)
+
+
+### Dependencies
+
+- Updated ooxml.js to 8.14.8
+- Updated documents.js to 7.20.16
+
 ## [2.11.26](https://github.com/ExaDev/documents.js/compare/web%402.11.25...web%402.11.26) (2026-09-19)
 
 
