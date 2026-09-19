@@ -1,3 +1,13 @@
+## [2.12.2](https://github.com/ExaDev/documents.js/compare/doc-codec%402.12.1...doc-codec%402.12.2) (2026-09-19)
+
+### Performance Improvements
+
+* **doc-codec:** encode base64 in chunks of character codes ([2dd3123](https://github.com/ExaDev/documents.js/commit/2dd3123fb800c70340b8a6272c6e3f0e7268db35))
+
+### Tests
+
+* **doc-codec:** check bytesToBase64 against a naive reference and Buffer ([aba3bf1](https://github.com/ExaDev/documents.js/commit/aba3bf14196353b9a05b70cce7abfcf1a62fc173))
+
 ## [2.12.1](https://github.com/ExaDev/documents.js/compare/doc-codec%402.12.0...doc-codec%402.12.1) (2026-09-14)
 
 ### Documentation
