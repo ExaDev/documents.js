@@ -102,8 +102,6 @@ describe("sha512", () => {
 });
 
 // The reference below is the SHA-384/512 construction the implementation under test is held to: FIPS 180-4 6.4 written with BigInt, one operation per line, as slow and as direct as it can be. Its round constants and initial states are derived here from their definitions (the first 64 bits of the fractional parts of the cube roots and square roots of the first primes) with exact integer roots, not copied from the implementation, so agreement is between two separately built constructions and with Node's own hashes.
-const MASK64 = 0xffffffffffffffffn;
-
 function integerRoot(value: bigint, degree: bigint): bigint {
   let low = 0n;
   let high =
@@ -126,18 +124,18 @@ const FIRST_PRIMES = (() => {
 })();
 
 // The fractional part's first 64 bits: floor(root * 2^64) modulo 2^64, taken by rooting the prime scaled by 2^(64 * degree).
-const REFERENCE_K = FIRST_PRIMES.map(
-  (prime) => integerRoot(BigInt(prime) << 192n, 3n) & MASK64,
+const REFERENCE_K = FIRST_PRIMES.map((prime) =>
+  BigInt.asUintN(64, integerRoot(BigInt(prime) << 192n, 3n)),
 );
-const REFERENCE_H512 = FIRST_PRIMES.slice(0, 8).map(
-  (prime) => integerRoot(BigInt(prime) << 128n, 2n) & MASK64,
+const REFERENCE_H512 = FIRST_PRIMES.slice(0, 8).map((prime) =>
+  BigInt.asUintN(64, integerRoot(BigInt(prime) << 128n, 2n)),
 );
-const REFERENCE_H384 = FIRST_PRIMES.slice(8, 16).map(
-  (prime) => integerRoot(BigInt(prime) << 128n, 2n) & MASK64,
+const REFERENCE_H384 = FIRST_PRIMES.slice(8, 16).map((prime) =>
+  BigInt.asUintN(64, integerRoot(BigInt(prime) << 128n, 2n)),
 );
 
 function referenceRotr(value: bigint, bits: bigint): bigint {
-  return ((value >> bits) | (value << (64n - bits))) & MASK64;
+  return BigInt.asUintN(64, (value >> bits) | (value << (64n - bits)));
 }
 
 function referenceSha512Family(
@@ -168,7 +166,7 @@ function referenceSha512Family(
       const y = w[t - 2]!;
       const s0 = referenceRotr(x, 1n) ^ referenceRotr(x, 8n) ^ (x >> 7n);
       const s1 = referenceRotr(y, 19n) ^ referenceRotr(y, 61n) ^ (y >> 6n);
-      w.push((w[t - 16]! + s0 + w[t - 7]! + s1) & MASK64);
+      w.push(BigInt.asUintN(64, w[t - 16]! + s0 + w[t - 7]! + s1));
     }
     let a = state[0]!;
     let b = state[1]!;
@@ -181,23 +179,23 @@ function referenceSha512Family(
     for (let t = 0; t < 80; t += 1) {
       const bigS1 =
         referenceRotr(e, 14n) ^ referenceRotr(e, 18n) ^ referenceRotr(e, 41n);
-      const ch = (e & f) ^ (~e & MASK64 & g);
-      const t1 = (h + bigS1 + ch + REFERENCE_K[t]! + w[t]!) & MASK64;
+      const ch = (e & f) ^ (BigInt.asUintN(64, ~e) & g);
+      const t1 = BigInt.asUintN(64, h + bigS1 + ch + REFERENCE_K[t]! + w[t]!);
       const bigS0 =
         referenceRotr(a, 28n) ^ referenceRotr(a, 34n) ^ referenceRotr(a, 39n);
       const maj = (a & b) ^ (a & c) ^ (b & c);
-      const t2 = (bigS0 + maj) & MASK64;
+      const t2 = BigInt.asUintN(64, bigS0 + maj);
       h = g;
       g = f;
       f = e;
-      e = (d + t1) & MASK64;
+      e = BigInt.asUintN(64, d + t1);
       d = c;
       c = b;
       b = a;
-      a = (t1 + t2) & MASK64;
+      a = BigInt.asUintN(64, t1 + t2);
     }
-    state = state.map(
-      (word, i) => (word + [a, b, c, d, e, f, g, h][i]!) & MASK64,
+    state = state.map((word, i) =>
+      BigInt.asUintN(64, word + [a, b, c, d, e, f, g, h][i]!),
     );
   }
   const digest = new Uint8Array(64);
