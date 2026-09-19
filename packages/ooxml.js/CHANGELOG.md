@@ -1,3 +1,13 @@
+## [8.14.8](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.14.7...ooxml.js%408.14.8) (2026-09-19)
+
+### Performance Improvements
+
+* **ooxml.js:** encode base64 in chunks of character codes ([be61ddd](https://github.com/ExaDev/documents.js/commit/be61ddd8e4b9c52e0fa8ba7016f5a5bf84caf432))
+
+### Tests
+
+* **ooxml.js:** check bytesToBase64 against a naive reference and Buffer ([98c7d18](https://github.com/ExaDev/documents.js/commit/98c7d18b1dabf3c2e5a335d9382f4d4b84ab6383))
+
 ## [8.14.7](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.14.6...ooxml.js%408.14.7) (2026-09-14)
 
 ### Miscellaneous Chores
