@@ -1,3 +1,10 @@
+## [7.20.18](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.17...documents.js%407.20.18) (2026-09-19)
+
+
+### Dependencies
+
+- Updated pdf-codec to 4.8.7
+
 ## [7.20.17](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.16...documents.js%407.20.17) (2026-09-19)
 
 ### Build System

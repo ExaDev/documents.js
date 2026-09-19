@@ -1,3 +1,17 @@
+## [4.8.7](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.8.6...pdf-codec%404.8.7) (2026-09-19)
+
+### Performance Improvements
+
+* **pdf-codec:** compute SHA-384 and SHA-512 on pairs of 32-bit words, not BigInt ([d3eadb7](https://github.com/ExaDev/documents.js/commit/d3eadb73a7f90d2de2c8647081af2f4d15904152))
+
+### Code Refactoring
+
+* **pdf-codec:** mask BigInt values with BigInt.asUintN instead of a mask constant ([137f5f0](https://github.com/ExaDev/documents.js/commit/137f5f01abe777818a12db57b8a85d090260f45c))
+
+### Tests
+
+* **pdf-codec:** check SHA-384 and SHA-512 against a BigInt reference and Node's hashes ([e1aa944](https://github.com/ExaDev/documents.js/commit/e1aa94460b1585c459fa8365b40619a0d8cfbfd1))
+
 ## [4.8.6](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.8.5...pdf-codec%404.8.6) (2026-09-19)
 
 ### Performance Improvements
