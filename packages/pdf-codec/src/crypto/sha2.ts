@@ -123,9 +123,8 @@ const K256 = Uint32Array.from(K512.slice(0, SHA256_ROUNDS), (k) =>
 const H256 = Uint32Array.from(H512, (h) => Number(h >> 32n));
 
 // The 64-bit constants split into their high and low 32-bit halves, the form the word-pair arithmetic below consumes.
-const LOW_HALF = 0xffffffffn;
 const K512_HIGH = Uint32Array.from(K512, (k) => Number(k >> 32n));
-const K512_LOW = Uint32Array.from(K512, (k) => Number(k & LOW_HALF));
+const K512_LOW = Uint32Array.from(K512, (k) => Number(BigInt.asUintN(32, k)));
 const TWO_POW_32 = 0x100000000;
 
 // FIPS 180-4 5.1: append 0x80, pad with zeroes, and end with the message's *bit* length as a big-endian integer occupying the final `lengthBytes` of the last block. The length is written by repeated division rather than shifts so a message beyond 512 MB (which overflows a 32-bit bit count) still records its length exactly.
@@ -235,7 +234,7 @@ function sha512Core(
     Number(word >> 32n),
   );
   const stateLow = Uint32Array.from(initialState, (word) =>
-    Number(word & LOW_HALF),
+    Number(BigInt.asUintN(32, word)),
   );
   const wHigh = new Uint32Array(SHA512_ROUNDS);
   const wLow = new Uint32Array(SHA512_ROUNDS);
