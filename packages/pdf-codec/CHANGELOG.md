@@ -1,3 +1,14 @@
+## [4.8.6](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.8.5...pdf-codec%404.8.6) (2026-09-19)
+
+### Performance Improvements
+
+* **pdf-codec:** run AES rounds from lookup tables instead of per-byte field arithmetic ([facc6ca](https://github.com/ExaDev/documents.js/commit/facc6caf40115effb7436ff03401d5b9a3065200))
+
+### Tests
+
+* **pdf-codec:** check AES-CBC against Node's crypto and an independent reference ([cb4aab0](https://github.com/ExaDev/documents.js/commit/cb4aab0ad4fa7106915f261ce7794d10a7eea153))
+* **pdf-codec:** keep the AES differential tests inside the default timeout ([90b355e](https://github.com/ExaDev/documents.js/commit/90b355e2afb25c435fa903744d3b868c3603d313))
+
 ## [4.8.5](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.8.4...pdf-codec%404.8.5) (2026-09-14)
 
 ### Miscellaneous Chores
