@@ -20,6 +20,8 @@ export const WpdDiagnosticCodes = {
   TableAttributesTruncated: "wpd/table-attributes-truncated",
   // A cell's fill is a two-colour pattern at a partial shading percentage: both colours are resolved into a real 'pattern' ContentCellFill (ExaDev/documents.js#1024), but the WordPerfect SDK reference this reader is built against (see stream/table.ts's own top-of-file citation) does not document the shading byte's exact compositing formula, so the pattern's own density is a best-effort derivation (the background colour's own shade byte read as its opacity, snapped to the nearest percentN step) rather than a value confirmed against a specification.
   CellFillBlended: "wpd/cell-fill-blended",
+  // A table cell the spanning subfunction marks as covered by a neighbouring cell's merge held content of its own. A merged region's content belongs to the cell that anchors it, so the covered cell's own content is not carried.
+  CoveredCellContentDropped: "wpd/covered-cell-content-dropped",
   // The form names a landscape orientation. PageSize carries no orientation of its own, so the form's stated width and length are used exactly as written rather than rotated.
   LandscapeOrientationUnmapped: "wpd/landscape-orientation-unmapped",
   // The document changes its page size or a margin partway through. ContentSection carries one page geometry, so the document's first statement of that dimension is the one used.
