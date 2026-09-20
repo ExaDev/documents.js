@@ -93,6 +93,24 @@ export {
   createStandardFontMeasurer,
 } from "./measure";
 
+// Text grouping: the read-side counterpart to the wrapping above. readPdf reports one positioned run per text-showing operator and nothing about lines or words, because a PDF states nothing about them, so every consumer wanting readable text has had to rebuild them from geometry itself. groupPdfTextRuns is that pass, owned here rather than repeated downstream, along with the two rules whose hand-rolled versions kept getting them wrong (ExaDev/documents.js#1317): a same-baseline tolerance taken from the smaller of the two runs, so a heading cannot absorb the line beneath it, and an absent advance width treated as an unknown gap rather than a zero one, so no space appears inside a word. This is grouping, not semantics: no paragraph, heading, or table inference happens here, and none should, for the same reason readPdf itself leaves reconstruction to documents.js.
+export type {
+  PdfTextBox,
+  PdfTextGroupingOptions,
+  PdfTextLine,
+  PdfTextRunGeometry,
+  PdfTextWord,
+  PdfWordSeparator,
+} from "./text-group";
+export {
+  DEFAULT_BASELINE_TOLERANCE_EM,
+  DEFAULT_COLUMN_GAP_EM,
+  DEFAULT_WORD_GAP_EM,
+  groupPdfTextRuns,
+  runGapPt,
+  runsShareBaseline,
+} from "./text-group";
+
 // Geometry: shape/slide placement math. Point stays public (it is the neutral geometry type); rotatePointAboutCenter is no longer exported -- documents.js owns its own copy now, and pdf-codec had no internal production caller for it (only a test). wrapRunsToWidth likewise dropped below: documents.js owns its own text-wrapping primitive now.
 export type { Point } from "document-schema.js";
 
