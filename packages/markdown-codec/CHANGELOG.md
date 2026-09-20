@@ -1,3 +1,39 @@
+## [6.7.6](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.7.5...markdown-codec%406.7.6) (2026-09-20)
+
+### Bug Fixes
+
+* **markdown-codec:** stop an unterminated inline tag repeating its cell's preceding text ([0a8fdcf](https://github.com/ExaDev/documents.js/commit/0a8fdcf1d65b7886774e8bf5e11bfadf554e233b))
+
+### Code Refactoring
+
+* **markdown-codec:** ask whether a block suppresses starts rather than whether it accepts lines ([d1e5bdc](https://github.com/ExaDev/documents.js/commit/d1e5bdc2ee4c41506ac6c5634bdd7b4b1b83d861))
+* **markdown-codec:** claim the inline scanner's plain-text run before its construct dispatch ([8be0870](https://github.com/ExaDev/documents.js/commit/8be0870dbc7c1c4b99b25dcc1f9bebfb7f51ae4b))
+* **markdown-codec:** derive the block parser's open-paragraph tests from the tip itself ([129918c](https://github.com/ExaDev/documents.js/commit/129918c7f416c3d9d496c4e5d09706834aa2c721))
+* **markdown-codec:** drop isDelimiterChar, which no longer has a caller ([c974000](https://github.com/ExaDev/documents.js/commit/c9740004b36c898cd2c883b529551c96b3ec09ce))
+* **markdown-codec:** drop lowering guards the parser's own output already settles ([9ef1dd1](https://github.com/ExaDev/documents.js/commit/9ef1dd15538180bbd57f01686b58accd9e57fca2))
+* **markdown-codec:** drop the markdown writers' length bounds and seeds that decide nothing ([9f74c59](https://github.com/ExaDev/documents.js/commit/9f74c591764d7f06754b2153250e805d38831c86))
+* **markdown-codec:** end gfm-autolink's scans on the empty string charAt returns past the text ([2b0f774](https://github.com/ExaDev/documents.js/commit/2b0f774e5ffa09c9e5e530472ff8dc34b96b9f97))
+* **markdown-codec:** match the html-table reader's open and close tags in one scan ([8e37e67](https://github.com/ExaDev/documents.js/commit/8e37e671f5299b289f19278ae56789b1b1c99674))
+* **markdown-codec:** read JPEG markers only at indices the input reaches ([cb8750b](https://github.com/ExaDev/documents.js/commit/cb8750b44726232adad7b8439579522de48b3a41))
+
+### Styles
+
+* **markdown-codec:** write this branch's own prose with a real em dash ([8b15857](https://github.com/ExaDev/documents.js/commit/8b158577577ffcb9afebf138281eb0b3829222f7))
+
+### Tests
+
+* **markdown-codec:** cover gfm-autolink's start boundaries, trimming and email rules ([c8b735a](https://github.com/ExaDev/documents.js/commit/c8b735a384a1674ee00a0d516a9fea3c3238f4e6))
+* **markdown-codec:** cover the block parser's container continuation and promotion boundaries ([dacca0c](https://github.com/ExaDev/documents.js/commit/dacca0ca3a75487bd2379da4e73749cb8a995315))
+* **markdown-codec:** cover the html-table reader's refusals and the writer's cell attributes ([04b7436](https://github.com/ExaDev/documents.js/commit/04b7436cff47693000804c2040ca7995840c39f6))
+* **markdown-codec:** cover the inline phase's code spans, escapes and link grammar ([04a322e](https://github.com/ExaDev/documents.js/commit/04a322e029bf5553473c1b838e583ec337e242ed))
+* **markdown-codec:** cover the JPEG marker walk's refusals and boundaries ([3f81782](https://github.com/ExaDev/documents.js/commit/3f8178211dc9202296a6e5e4a47ac75a6266890f))
+* **markdown-codec:** cover the lowering stage's degrade diagnostics and fallbacks ([0a78877](https://github.com/ExaDev/documents.js/commit/0a78877e810f28b0c9caeaf9cfd77330f82c6288))
+* **markdown-codec:** cover the markdown writers' escaping, delimiters and list regions ([e35ccc6](https://github.com/ExaDev/documents.js/commit/e35ccc6ae0d7396aa3dcbadfd8fc21800bd9a393))
+
+### Miscellaneous Chores
+
+* **markdown-codec:** raise the mutation break threshold to 100 ([68530a7](https://github.com/ExaDev/documents.js/commit/68530a7e32291a309a5afde57d6d57352aa71e43))
+
 ## [6.7.5](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.7.4...markdown-codec%406.7.5) (2026-09-20)
 
 ### Bug Fixes

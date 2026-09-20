@@ -1,3 +1,9 @@
+## [4.8.17](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.8.16...pdf-codec%404.8.17) (2026-09-20)
+
+### Documentation
+
+* **pdf-codec:** stop describing a base64 copy src/util/ no longer holds ([7ed643f](https://github.com/ExaDev/documents.js/commit/7ed643fb2bac56ac02ce86b380c3ffd12cfc63ce))
+
 ## [4.8.16](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.8.15...pdf-codec%404.8.16) (2026-09-20)
 
 ### Documentation

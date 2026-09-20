@@ -1,3 +1,11 @@
+## [2.11.41](https://github.com/ExaDev/documents.js/compare/web%402.11.40...web%402.11.41) (2026-09-20)
+
+
+### Dependencies
+
+- Updated markdown-codec to 6.7.6
+- Updated documents.js to 7.20.30
+
 ## [2.11.40](https://github.com/ExaDev/documents.js/compare/web%402.11.39...web%402.11.40) (2026-09-20)
 
 
