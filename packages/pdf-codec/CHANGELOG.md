@@ -1,3 +1,10 @@
+## [4.8.8](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.8.7...pdf-codec%404.8.8) (2026-09-20)
+
+
+### Dependencies
+
+- Updated byte-codec to 1.5.6
+
 ## [4.8.7](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.8.6...pdf-codec%404.8.7) (2026-09-19)
 
 ### Performance Improvements
