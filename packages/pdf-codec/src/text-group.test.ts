@@ -405,6 +405,15 @@ describe("groupPdfTextRuns: gap thresholds", () => {
       "in\tto",
     );
   });
+
+  it("carries an explicit baseline tolerance through to the clustering", () => {
+    // 6pt apart at 10pt: one line under the default two thirds of an em, two under a quarter of one.
+    const runs = [run("upper", 50, 200, 10, 30), run("lower", 50, 194, 10, 30)];
+    expect(groupPdfTextRuns(runs)).toHaveLength(1);
+    expect(groupPdfTextRuns(runs, { baselineToleranceEm: 0.25 })).toHaveLength(
+      2,
+    );
+  });
 });
 
 describe("groupPdfTextRuns: reading order", () => {
@@ -436,10 +445,10 @@ describe("groupPdfTextRuns: reading order", () => {
   });
 
   it("lets the leftmost run of a baseline anchor its line", () => {
-    // The anchor's own size is half of every later candidate's tolerance, so which run anchors decides what the line can still admit. Here the 30pt run on the left admits the 30pt line 12pt below it; the 9pt run to its right would not.
+    // The anchor's own size sets every later candidate's tolerance, so which run anchors decides what the line can still admit. Here the 30pt run on the left admits the 30pt line 12pt below it; the 9pt run to its right would not. Passed rightmost-first, so only the sort along the baseline puts the left one in front.
     const lines = groupPdfTextRuns([
-      run("Title", 50, 700, 30, 20),
       run("note", 200, 700, 9, 20),
+      run("Title", 50, 700, 30, 20),
       run("more", 50, 688, 30, 20),
     ]);
     expect(lines).toHaveLength(1);
