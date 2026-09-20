@@ -1004,3 +1004,52 @@ export function parentTreeMissingEntryPdf(): Uint8Array<ArrayBuffer> {
   b.classicXrefAndTrailer(8, "/Root 1 0 R");
   return b.bytes();
 }
+
+// A page showing two CIDs from a composite (Type0) font, with the caller choosing the /Encoding CMap and whatever vertical-metric entries the descendant CIDFont carries. One fixture covers the whole writing-mode surface: Identity-H as the horizontal control, Identity-V, a predefined vertical CMap named only by its own "-V" suffix, and an embedded CMap stream whose own /WMode is the only thing that says which way the text runs. Both CIDs are 1000/1000 em wide horizontally, so every expected position below is exact rather than font-dependent, and the /ToUnicode CMap maps them to two kana so the recovered text is real rather than a pair of replacement characters.
+export function compositeFontWritingModePdf(options: {
+  readonly encoding: string; // the Type0 font's own /Encoding value, a name or an indirect reference
+  readonly encodingStream?: string; // an embedded CMap stream's dict, written as object 9 when present
+  readonly verticalMetrics?: string; // the descendant CIDFont's own /DW2 and /W2 entries, if any
+}): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header();
+  b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+  b.object(
+    3,
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 800] /Resources << /Font << /F1 4 0 R >> >> /Contents 6 0 R >>",
+  );
+  b.object(
+    4,
+    `<< /Type /Font /Subtype /Type0 /BaseFont /KozMinPr6N-Regular /Encoding ${options.encoding} /DescendantFonts [5 0 R] /ToUnicode 7 0 R >>`,
+  );
+  b.object(
+    5,
+    `<< /Type /Font /Subtype /CIDFontType2 /BaseFont /KozMinPr6N-Regular /CIDSystemInfo << /Registry (Adobe) /Ordering (Japan1) /Supplement 6 >> /DW 1000 /W [65 [1000] 66 [1000]] ${options.verticalMetrics ?? ""} /FontDescriptor 8 0 R >>`,
+  );
+  b.stream(6, EMPTY_DICT, enc("BT /F1 20 Tf 100 700 Td <00410042> Tj ET"));
+  b.stream(
+    7,
+    EMPTY_DICT,
+    enc(
+      [
+        "begincmap",
+        "2 beginbfchar",
+        "<0041> <3042>",
+        "<0042> <3044>",
+        "endbfchar",
+        "endcmap",
+      ].join("\n"),
+    ),
+  );
+  b.object(
+    8,
+    "<< /Type /FontDescriptor /FontName /KozMinPr6N-Regular /Flags 4 >>",
+  );
+  if (options.encodingStream !== undefined) {
+    b.stream(9, options.encodingStream, enc("begincmap\nendcmap"));
+    b.classicXrefAndTrailer(9, "/Root 1 0 R");
+    return b.bytes();
+  }
+  b.classicXrefAndTrailer(8, "/Root 1 0 R");
+  return b.bytes();
+}

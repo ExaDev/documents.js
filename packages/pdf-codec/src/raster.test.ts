@@ -1731,6 +1731,7 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
     readonly fontDescriptorBody?: string;
     readonly fontFileKey?: string;
     readonly fontFileBytes?: Uint8Array<ArrayBuffer>;
+    readonly content?: string;
   }): Uint8Array<ArrayBuffer> {
     const fontBytes = overrides.fontFileBytes ?? carlitoRegularBytes();
     const fontFileKey = overrides.fontFileKey ?? "FontFile2";
@@ -1755,7 +1756,11 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
         `<< /Type /FontDescriptor /FontName /Carlito /Flags 32 /${fontFileKey} 9 0 R >>`,
     );
     b.stream(9, `<< /Length1 ${fontBytes.length} >>`, fontBytes);
-    b.stream(5, "<< >>", enc("BT /F1 24 Tf 20 50 Td <0000> Tj ET"));
+    b.stream(
+      5,
+      "<< >>",
+      enc(overrides.content ?? "BT /F1 24 Tf 20 50 Td <0000> Tj ET"),
+    );
     return b.classicXrefAndTrailer(9, "/Root 1 0 R");
   }
 
@@ -1783,15 +1788,71 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
     expect(rasteriser.ops).toEqual([]);
   });
 
-  it("refuses a Type0 font whose /Encoding is not Identity-H", () => {
+  it("refuses a Type0 font whose /Encoding is neither Identity CMap", () => {
     const { diagnostics, rasteriser } = refusalDiagnostics(
       type0Skeleton({ encoding: "/90ms-RKSJ-H" }),
     );
     expect(
       diagnostics.find((d) => d.code === "raster/text-outlines-unavailable")
         ?.message,
-    ).toContain("not Identity-H");
+    ).toContain("neither Identity-H nor Identity-V");
     expect(rasteriser.ops).toEqual([]);
+  });
+
+  // The defect ExaDev/documents.js#1358 records: a vertically set run's glyphs were advanced along x like any other, so a whole column landed stacked on top of itself at one point. Each glyph's ink is reduced to the centre of its own path op's bounding box, which is enough to say which way the run ran without depending on the vendored face's own outlines.
+  function glyphCentres(
+    bytes: Uint8Array<ArrayBuffer>,
+  ): { x: number; y: number }[] {
+    const rasteriser = new RecordingRasteriser();
+    drive(bytes, 0, { sink: () => undefined }, rasteriser);
+    return rasteriser.ops.flatMap((op) => {
+      if (op.kind !== "path") {
+        return [];
+      }
+      const points = op.subpaths.flatMap((subpath) => [
+        { x: subpath.startXPx, y: subpath.startYPx },
+        ...subpath.segments.map((segment) => ({
+          x: segment.xPx,
+          y: segment.yPx,
+        })),
+      ]);
+      const xs = points.map((point) => point.x);
+      const ys = points.map((point) => point.y);
+      return [
+        {
+          x: (Math.min(...xs) + Math.max(...xs)) / 2,
+          y: (Math.min(...ys) + Math.max(...ys)) / 2,
+        },
+      ];
+    });
+  }
+
+  const TWO_GLYPH_CONTENT = "BT /F1 24 Tf 20 50 Td <00000000> Tj ET";
+
+  it("draws a horizontal run's glyphs side by side", () => {
+    const centres = glyphCentres(type0Skeleton({ content: TWO_GLYPH_CONTENT }));
+    expect(centres).toHaveLength(2);
+    expect(centres[1]?.x).not.toBeCloseTo(centres[0]?.x ?? 0, 3);
+    expect(centres[1]?.y).toBeCloseTo(centres[0]?.y ?? 0, 6);
+  });
+
+  it("draws a vertical run's glyphs down the page rather than on top of each other", () => {
+    const centres = glyphCentres(
+      type0Skeleton({ encoding: "/Identity-V", content: TWO_GLYPH_CONTENT }),
+    );
+    expect(centres).toHaveLength(2);
+    expect(centres[1]?.x).toBeCloseTo(centres[0]?.x ?? 0, 6);
+    expect(centres[1]?.y).not.toBeCloseTo(centres[0]?.y ?? 0, 3);
+  });
+
+  it("accepts Identity-V, whose CID mapping is the same identity one set vertically", () => {
+    const { diagnostics, rasteriser } = refusalDiagnostics(
+      type0Skeleton({ encoding: "/Identity-V" }),
+    );
+    expect(
+      diagnostics.find((d) => d.code === "raster/text-outlines-unavailable"),
+    ).toBe(undefined);
+    expect(rasteriser.ops.length).toBeGreaterThan(0);
   });
 
   it("refuses a Type0 font with no readable /DescendantFonts entry", () => {

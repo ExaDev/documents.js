@@ -29,11 +29,14 @@ function fixedWidthFontMetrics(
   widthPer1000 = 500,
   byteLengthConsumed = 1,
 ): FontMetricsPort {
-  return { glyphAdvance: () => ({ widthPer1000, byteLengthConsumed }) };
+  return {
+    glyphAdvance: () => ({ widthPer1000, byteLengthConsumed }),
+    isVertical: () => false,
+  };
 }
 
 function unresolvableFontMetrics(): FontMetricsPort {
-  return { glyphAdvance: () => undefined };
+  return { glyphAdvance: () => undefined, isVertical: () => false };
 }
 
 function makeResolver(objects: Map<number, PdfObject>): PdfObjectResolver {

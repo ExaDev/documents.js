@@ -23,8 +23,10 @@ export const LayoutTextSchema = z.object({
   font: LayoutFontSchema,
   sizePt: z.number().positive(),
   color: ColorSchema,
-  widthPt: z.number().nonnegative().optional(), // measured (write path) or reported (read path)
+  widthPt: z.number().nonnegative().optional(), // measured (write path) or reported (read path); the advance along whichever axis writingMode chooses, so a vertically set run's own extent runs down the page
   rotationDeg: z.number().optional(),
+  // Set only on a run whose font CMap selects vertical writing mode (ISO 32000-1 9.7.5.1's WMode 1): the glyphs stay upright but advance DOWN the page, so xPt/yPt is the top of a column rather than the left of a line and widthPt measures downward. Absent means horizontal, which is every run every other reader and writer in this family produces. Distinct from rotationDeg, which reports the text rendering matrix turning the glyphs themselves on their side and is normally 0 on exactly this kind of run.
+  writingMode: z.literal("vertical").optional(),
   underline: z.boolean().optional(),
   layer: z.string().optional(), // the optional-content group this item belongs to (a /OC BDC span or XObject dict), naming an entry in LayoutDocument.layers
   actualText: z.string().optional(), // a /ActualText marked-content span over this run: the producer's own replacement reading for extraction
