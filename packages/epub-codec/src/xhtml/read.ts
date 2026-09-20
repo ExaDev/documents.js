@@ -15,7 +15,7 @@ import {
   POINTS_PER_PIXEL,
   readImageDimensions,
 } from "../image/dimensions";
-import { bytesToBase64 } from "../util/base64";
+import { bytesToBase64 } from "byte-codec";
 import { buildXml } from "../xml/build";
 import { isTextLikeNode, type XmlElement, type XmlNode } from "../xml/node";
 import { attrValue, findChildElement, rootElement } from "../xml/query";

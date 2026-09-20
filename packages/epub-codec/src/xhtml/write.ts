@@ -17,7 +17,7 @@ import {
 } from "document-schema.js";
 import { decomposeSection } from "document-schema.js/decompose";
 import { EpubDiagnosticCodes, type EpubDiagnosticSink } from "../diagnostics";
-import { base64ToBytes } from "../util/base64";
+import { base64ToBytes } from "byte-codec";
 import type { Attribute, XmlElement, XmlNode } from "../xml/node";
 import { encodeEntities } from "../xml/entities";
 import { parseListNumId } from "./list-id";

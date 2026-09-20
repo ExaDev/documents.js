@@ -10,7 +10,7 @@ import {
   EpubUnsupportedDocumentKindError,
 } from "./diagnostics";
 import { readEpub } from "./read";
-import { bytesToBase64 } from "./util/base64";
+import { bytesToBase64 } from "byte-codec";
 import { unzipPackage } from "./zip";
 import { writeEpub, writeEpubContent } from "./write";
 

@@ -1,5 +1,5 @@
 import type { EpubPackage } from "../model/package";
-import { bytesToBase64 } from "../util/base64";
+import { bytesToBase64 } from "byte-codec";
 import { parseXml } from "../xml/parse";
 import { unzipPackage } from "../zip";
 
