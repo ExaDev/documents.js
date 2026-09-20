@@ -387,6 +387,7 @@ describe("OdsSheet.printSettings: repeatColumns/repeatRows", () => {
       sheet.cell(0, column).value = { kind: "number", value: column };
     }
     sheet.printSettings = { ...BASE, repeatColumns: { start: 0, end: 1 } };
+    expect(sheet.printSettings.repeatColumns).toEqual({ start: 0, end: 1 });
     sheet.printSettings = { ...BASE, repeatColumns: { start: 2, end: 3 } };
 
     expect(sheet.printSettings.repeatColumns).toEqual({ start: 2, end: 3 });
