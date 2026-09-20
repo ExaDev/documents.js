@@ -1,6 +1,6 @@
 import type { EpubPackage, Part } from "../model/package";
 import { OCF_MIMETYPE_PATH } from "../format";
-import { base64ToBytes } from "../util/base64";
+import { base64ToBytes } from "byte-codec";
 import { buildXml } from "../xml/build";
 import { zipPackage, type ZipEntry } from "../zip";
 
