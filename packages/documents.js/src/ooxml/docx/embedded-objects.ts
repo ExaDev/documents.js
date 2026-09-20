@@ -22,6 +22,7 @@ import { collectOfficeMathElements, readOfficeMath } from "../../omml/read";
 import { decodeLegacyEmbeddedObject } from "../legacy-embedded";
 import type { DetectedParagraphVector } from "./vector";
 import { collectParagraphVectors } from "./vector";
+import { docxMainPartPath } from "./parts";
 import type { OmmlDiagnosticSink } from "./formula";
 import {
   collectBodyParagraphs,
@@ -30,12 +31,11 @@ import {
   PARAGRAPH_NON_CONTENT_TAGS,
 } from "./formula";
 
-// A second, independent pass over the SAME word/document.xml the upstream reader already read, splicing every OOXML math equation, every recovered vector-only shape, AND every classic-OLE-compound-file embedding it found into the ContentSections that reader produced -- the docx-side counterpart to src/odf/odt/read.ts's own combined embedded-formula/vector pass, and the direct replacement of what used to be a formula-only spliceDocxFormulas (src/ooxml/docx/formula.ts). Merging these into ONE splice pass rather than running several sequential ones is load-bearing, not tidiness: a second pass run against the ALREADY-spliced block array would count paragraph ordinals against the wrong (post-splice) indices, since this pass's own paragraph-to-block ordinal correspondence assumes nothing has moved yet.
+// A second, independent pass over the SAME body part the upstream reader already read, splicing every OOXML math equation, every recovered vector-only shape, AND every classic-OLE-compound-file embedding it found into the ContentSections that reader produced -- the docx-side counterpart to src/odf/odt/read.ts's own combined embedded-formula/vector pass, and the direct replacement of what used to be a formula-only spliceDocxFormulas (src/ooxml/docx/formula.ts). Merging these into ONE splice pass rather than running several sequential ones is load-bearing, not tidiness: a second pass run against the ALREADY-spliced block array would count paragraph ordinals against the wrong (post-splice) indices, since this pass's own paragraph-to-block ordinal correspondence assumes nothing has moved yet.
 //
 // A formula's own detection (collectOfficeMathElements/readOfficeMath) is unchanged from the old spliceDocxFormulas; collectParagraphVectors (./vector.ts) is the vector-side detector, mirroring src/odf/odt/read.ts's own collectContainerVectors call exactly one paragraph at a time; collectParagraphOleObjects (below) is the legacy-embedding detector (ExaDev/documents.js#921) -- a w:object/o:OLEObject whose payload is a classic OLE compound file holding native Word 97/Excel 97/PowerPoint 97 streams (no "Package" stream a ZIP could sit in) leaves no trace in ooxml.js's own readDocxContent at all, exactly the gap a vector-only w:drawing leaves, so recovering it needs the identical second-pass treatment. This pass now also descends into every table's cells (and any table nested in a cell, recursively): collectBodyParagraphs/collectBodyTables were extended to collect w:tbl alongside w:p, and a table block is rebuilt with each of its cells' own blocks spliced independently -- so an equation, vector, or legacy embedding inside a table cell is recovered into THAT cell's blocks, not dropped the way it was when this pass walked only top-level paragraphs.
 
 // The one document-level relationship part every w:object in the body resolves r:id against -- headers/footers carry their own separate relationship parts and are out of scope here, the same pre-existing limit the formula/vector detectors above already have (see this module's own README gotcha list).
-const DOCUMENT_PART_PATH = "word/document.xml";
 
 function isVectorOnlyRun(
   run: XmlElement,
@@ -423,7 +423,7 @@ export function spliceDocxEmbeddedObjects(
   collectBodyParagraphs(bodyChildren, paragraphElements);
   const tableElements: XmlElement[] = [];
   collectBodyTables(bodyChildren, tableElements);
-  const rels = resolveRelationships(pkg, DOCUMENT_PART_PATH);
+  const rels = resolveRelationships(pkg, docxMainPartPath(pkg));
 
   let paragraphOrdinal = 0;
   let tableOrdinal = 0;

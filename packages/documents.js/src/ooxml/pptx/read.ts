@@ -4,6 +4,7 @@ import type { Package } from "ooxml.js";
 import {
   attr,
   childrenWithTag,
+  findMainPartPath,
   readPptxContent as readPptxFlat,
   resolveRelationships,
   rootElement,
@@ -17,11 +18,14 @@ export interface ReadPptxContentOptions {
   readonly onMathDiagnostic?: OmmlDiagnosticSink;
 }
 
-const PRESENTATION_PART = "ppt/presentation.xml";
+// The conventional name for the presentation part. OPC names it through the package root's officeDocument relationship, so this is only the fallback for a package that declares no usable one -- resolved the same way ooxml.js's own readPptxContent resolves it, since this second pass walks the very slides that reader produced.
+const CONVENTIONAL_PRESENTATION_PART = "ppt/presentation.xml";
 
-// Every slide's own part path, in p:sldIdLst document order -- the same order the upstream reader itself resolves slides in (see ooxml.js's own readSlidePathsInOrder), needed here only to locate each slide's raw p:sld root for the second, vector-detecting pass below. Exported (not merely internal) so its own two malformed-package guards -- no ppt/presentation.xml part, or one with no p:sldIdLst -- are directly testable: readPptxContent's own upstream flat reader has no slides to map over at all in either of those same shapes, so nothing calling THIS function through readPptxContent can ever observe which of its two possible return values ("[]" vs "the mutant's own placeholder array") actually came back.
+// Every slide's own part path, in p:sldIdLst document order -- the same order the upstream reader itself resolves slides in (see ooxml.js's own readSlidePathsInOrder), needed here only to locate each slide's raw p:sld root for the second, vector-detecting pass below. Exported (not merely internal) so its own two malformed-package guards -- no presentation part, or one with no p:sldIdLst -- are directly testable: readPptxContent's own upstream flat reader has no slides to map over at all in either of those same shapes, so nothing calling THIS function through readPptxContent can ever observe which of its two possible return values ("[]" vs "the mutant's own placeholder array") actually came back.
 export function slidePathsInOrder(pkg: Package): readonly string[] {
-  const presentationRoot = rootElement(pkg.parts[PRESENTATION_PART]);
+  const presentationPath =
+    findMainPartPath(pkg) ?? CONVENTIONAL_PRESENTATION_PART;
+  const presentationRoot = rootElement(pkg.parts[presentationPath]);
   if (presentationRoot === undefined) {
     return [];
   }
@@ -29,7 +33,7 @@ export function slidePathsInOrder(pkg: Package): readonly string[] {
   if (sldIdLst === undefined) {
     return [];
   }
-  const rels = resolveRelationships(pkg, PRESENTATION_PART);
+  const rels = resolveRelationships(pkg, presentationPath);
   const paths: string[] = [];
   for (const sldId of childrenWithTag(sldIdLst, "p:sldId")) {
     const rId = attr(sldId, "r:id");

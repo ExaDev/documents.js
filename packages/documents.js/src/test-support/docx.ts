@@ -138,6 +138,31 @@ export function docxWithTableCellEquationPackage(): Package {
   );
 }
 
+// The same content as docxWithTableCellEquationPackage, with the body and its companion parts renamed and reached only through the package's own relationships: a producer is free to call the body anything, and OPC names it through the root officeDocument relationship (ExaDev/documents.js#1314). The styles Target is package-rooted on purpose, so a reader resolving it against the body part's own directory would look for word/word/styles2.xml and find nothing.
+const RENAMED_ROOT_RELS_XML = enc(
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document2.xml"/></Relationships>',
+);
+
+const RENAMED_DOCUMENT_RELS_XML = enc(
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="/word/styles2.xml"/></Relationships>',
+);
+
+const RENAMED_CONTENT_TYPES_XML = enc(
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>',
+);
+
+export function renamedMainPartDocxPackage(): Package {
+  return decodePackage(
+    zipPackage({
+      "[Content_Types].xml": RENAMED_CONTENT_TYPES_XML,
+      "_rels/.rels": RENAMED_ROOT_RELS_XML,
+      "word/document2.xml": TABLE_CELL_EQUATION_DOCUMENT_XML,
+      "word/_rels/document2.xml.rels": RENAMED_DOCUMENT_RELS_XML,
+      "word/styles2.xml": STYLES_XML,
+    }),
+  );
+}
+
 // A one-paragraph body carrying nothing but a w:object -- the real-world spelling a classic OLE compound-file embedding takes (o:OLEObject/@r:id names the embeddings part relationship, w:dxaOrig/w:dyaOrig its own twips size), mirroring ooxml.js's own oleObjectFixturePackage (typed/docx/read.test.ts) but with no VML preview picture -- documents.js's own splice pass (ExaDev/documents.js#921) recovers a legacy-native payload from the r:id/relationship/part chain alone, so the preview a real producer would also ship adds nothing this fixture needs to exercise.
 const LEGACY_OLE_CONTENT_TYPES_XML = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="bin" ContentType="application/vnd.openxmlformats-officedocument.oleObject"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>',
