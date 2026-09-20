@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  base64ToBytes,
-  bytesToBase64,
-  detectImageFormat,
-  readImageDimensions,
-} from "./image";
+import { detectImageFormat, readImageDimensions } from "./image";
 
 function bytes(...values: number[]): Uint8Array {
   return new Uint8Array(values);
@@ -382,42 +377,5 @@ describe("detectImageFormat", () => {
 
   it("returns undefined for an empty input", () => {
     expect(detectImageFormat(bytes())).toBeUndefined();
-  });
-});
-
-describe("bytesToBase64 / base64ToBytes", () => {
-  it.each([
-    [[], ""],
-    [[0x4d], "TQ=="],
-    [[0x4d, 0x61], "TWE="],
-    [[0x4d, 0x61, 0x6e], "TWFu"],
-    [[0x4d, 0x61, 0x6e, 0x21], "TWFuIQ=="],
-  ])("encodes %j to %s", (input, expected) => {
-    expect(bytesToBase64(bytes(...input))).toBe(expected);
-  });
-
-  it.each([
-    ["", []],
-    ["TQ==", [0x4d]],
-    ["TWE=", [0x4d, 0x61]],
-    ["TWFu", [0x4d, 0x61, 0x6e]],
-    ["TWFuIQ==", [0x4d, 0x61, 0x6e, 0x21]],
-  ])("decodes %s to %j", (input, expected) => {
-    expect(Array.from(base64ToBytes(input))).toEqual(expected);
-  });
-
-  it("round-trips arbitrary byte sequences through encode then decode", () => {
-    const original = bytes(0x00, 0xff, 0x10, 0x80, 0x7f, 0x01, 0x02, 0x03);
-    expect(Array.from(base64ToBytes(bytesToBase64(original)))).toEqual(
-      Array.from(original),
-    );
-  });
-
-  it("ignores characters outside the base64 alphabet when decoding", () => {
-    expect(Array.from(base64ToBytes("TW\nFu\r\n"))).toEqual([0x4d, 0x61, 0x6e]);
-  });
-
-  it("throws for an invalid base64 character in a would-be data position", () => {
-    expect(() => base64ToBytes("T!==")).toThrow("invalid base64 input");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bytesToBase64 } from "../image/image";
+import { bytesToBase64 } from "byte-codec";
 import { resolveMarkdownImage } from "./image";
 
 // A minimal, otherwise-valid PNG signature + IHDR chunk with an asymmetric width/height (300x100) so a widthPt/heightPt swap or a wrong operator on either axis produces a value distinct from the other, rather than two coincidentally-equal numbers.
