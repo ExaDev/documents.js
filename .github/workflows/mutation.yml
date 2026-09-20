@@ -97,13 +97,27 @@ jobs:
         with:
           path: ${{ matrix.directory }}/reports/stryker-incremental.json
           key: mutation-incremental-${{ matrix.cacheKey }}-${{ github.run_id }}-${{ github.run_attempt }}
+      # The json report is renamed after its slice before upload, so that every slice's report lands in one flat directory with a distinct name when the result job downloads them. The layout of a downloaded artifact otherwise depends on how many artifacts matched, which a gate reading fixed paths cannot tolerate.
+      - name: Name the json report after its slice
+        if: always()
+        env:
+          DIRECTORY: ${{ matrix.directory }}
+          CACHE_KEY: ${{ matrix.cacheKey }}
+        run: |
+          if [ -f "$DIRECTORY/reports/mutation/mutation.json" ]; then
+            cp "$DIRECTORY/reports/mutation/mutation.json" "$DIRECTORY/reports/mutation/$CACHE_KEY.json"
+          fi
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: mutation-report-${{ matrix.cacheKey }}
-          path: |
-            ${{ matrix.directory }}/reports/mutation/mutation.json
-            ${{ matrix.directory }}/reports/mutation/mutation.html
+          name: mutation-json-${{ matrix.cacheKey }}
+          path: ${{ matrix.directory }}/reports/mutation/${{ matrix.cacheKey }}.json
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mutation-html-${{ matrix.cacheKey }}
+          path: ${{ matrix.directory }}/reports/mutation/mutation.html
           if-no-files-found: ignore
 
   # The single check context that reports the outcome. The mutation-test job above is a matrix whose width the plan job computes per run from the affected package set, so no slice's own context could be a stable name to require. This job always runs, and succeeds when nothing needed mutating. It is not one of the required checks on main and this workflow does not make it one.
@@ -134,8 +148,10 @@ jobs:
       - uses: actions/download-artifact@v8
         if: needs.plan.outputs.has-packages == 'true'
         with:
-          pattern: mutation-report-*
+          pattern: mutation-json-*
           path: mutation-reports
+          # All slices' reports into the one directory, whatever their number: without this the layout differs between one matching artifact and several.
+          merge-multiple: true
       - name: Gate each package's merged score
         if: needs.plan.outputs.has-packages == 'true'
         env:
