@@ -3,6 +3,7 @@ import {
   isListGroupNode,
   isSectionConstructGroupNode,
   isTreeBlockLeaf,
+  walkTableGrid,
   type ContentBlock,
   type ContentImageBlock,
   type ContentParagraph,
@@ -553,11 +554,17 @@ function writeTable(
   table: ContentTable,
   context: XhtmlWriteContext,
 ): XmlElement {
-  const rows = table.rows.map((row) =>
+  // HTML states anchors only: a covered position of a merged region has no <td> of its own, its extent being carried by the anchor's colspan/rowspan, so emitting one would widen the row past the grid.
+  const gridPositions = walkTableGrid(table);
+  const rows = gridPositions.map((rowPositions) =>
     element(
       "tr",
       {},
-      row.cells.map((cell) => {
+      rowPositions.flatMap((position) => {
+        if (position.anchorRowIndex !== undefined) {
+          return [];
+        }
+        const cell = position.cell;
         const attrs: Record<string, string> = {};
         if (cell.colSpan !== undefined) attrs.colspan = String(cell.colSpan);
         if (cell.rowSpan !== undefined) attrs.rowspan = String(cell.rowSpan);
@@ -576,7 +583,7 @@ function writeTable(
         const cellChildren = cell.blocks
           .filter(isTreeBlockLeaf)
           .flatMap((block) => writeLeafBlock(block, context));
-        return element("td", attrs, cellChildren);
+        return [element("td", attrs, cellChildren)];
       }),
     ),
   );
