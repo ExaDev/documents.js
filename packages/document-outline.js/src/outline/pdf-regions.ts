@@ -1,5 +1,6 @@
 import type { ContentInterpretation } from "document-schema.js";
 import type { LayoutItem, LayoutPage } from "pdf-codec";
+import { runGapPt, runsShareBaseline } from "pdf-codec";
 import type { RegionClassification } from "./regions";
 
 // PDF region segmentation (ExaDev/documents.js#931): pdf-codec's LayoutPage is deliberately just positioned items -- text/image/rect/line/ellipse/path/link, in PDF user space (origin bottom-left, y up, points) -- with no notion of columns, tables, figures, or captions (see pdf-codec's own README, "Architecture": semantic reconstruction from geometry is expensive, lossy, and deliberately kept out of the codec). segmentPdfRegions is the PDF-specific sibling of outline/regions.ts's segmentSheetRegions: a PURELY ADDITIONAL, OPT-IN inference over a page's own items, reusing RegionClassification (regions.ts's own doc comment already names this as the vocabulary a future PDF pass would reuse rather than re-mint) rather than mutating or gating anything -- a consumer who never calls this still has every LayoutItem exactly as readPdf reported it.
@@ -180,7 +181,10 @@ export interface CutResult {
   readonly maxGap: number;
 }
 
-// A fraction of one band's text lines that must recur, within LINE_TOLERANCE_PT, in every other qualifying band before a candidate vertical cut is rejected as fragmenting a table's own rows rather than genuinely separating independent columns -- a bare majority, not unanimity, since a table's own header or a ragged final row can legitimately miss a match in one column without the rest of the grid ceasing to be one.
+// How close two bands' text lines must sit, in points, before one band's row counts as recurring in the other. A fixed figure rather than a font-relative one, unlike the same-line rule groupIntoLines applies below, because what is matched here is a table row's position across independent columns whose text sizes need not agree at all, not two runs' membership of one line.
+const ROW_MATCH_TOLERANCE_PT = 2;
+
+// A fraction of one band's text lines that must recur, within ROW_MATCH_TOLERANCE_PT, in every other qualifying band before a candidate vertical cut is rejected as fragmenting a table's own rows rather than genuinely separating independent columns -- a bare majority, not unanimity, since a table's own header or a ragged final row can legitimately miss a match in one column without the rest of the grid ceasing to be one.
 const ROW_ALIGNMENT_FRACTION = 0.6;
 
 // A vertical cut whose bands each carry the SAME set of row y-positions is a table's columns, not independent multi-column body text: two genuinely separate flowing-text columns each keep their own paragraph's line rhythm, which is essentially never synchronised row-for-row with an unrelated column beside it, whereas a table's "columns" are by definition the same rows read at different x-positions. Rejecting the cut in that case leaves the whole grid as one leaf, which is what lets classifyLeaf's own per-line cell-counting recognise it as a table at all -- a vertical cut taken eagerly would instead fragment it into as many single-column leaves as the table has columns, each looking like ordinary prose.
@@ -195,7 +199,7 @@ export function isRowAlignedGrid(bands: readonly BoundedItem[][]): boolean {
   const [first, ...rest] = withLines;
   const matches = first!.filter((y) =>
     rest.every((lines) =>
-      lines.some((other) => Math.abs(other - y) <= LINE_TOLERANCE_PT),
+      lines.some((other) => Math.abs(other - y) <= ROW_MATCH_TOLERANCE_PT),
     ),
   );
   return matches.length / first!.length >= ROW_ALIGNMENT_FRACTION;
@@ -225,7 +229,7 @@ export function findCut(
     }
     bandMax = Math.max(bandMax, maxOf(entry));
   }
-  // No separate `bands.length < 2` guard: for 0 or 1 bands, the loop below (bounded by the real `bands.length`) never runs, `cutSomewhere` stays false, and the `if (!cutSomewhere) return undefined` guard further down already returns undefined by that route. Not restricted to `axis === "x"`: bands built along the y-axis are, by construction, separated from each other by a gap of at least `threshold` (>= MIN_GAP_FLOOR_PT, 3pt), which already exceeds isRowAlignedGrid's own LINE_TOLERANCE_PT (2pt) match window, so it can never find a recurring row across genuinely different y-bands -- checking it unconditionally costs nothing extra for a real y-axis call and keeps this guard's own logic in one place rather than duplicated per axis.
+  // No separate `bands.length < 2` guard: for 0 or 1 bands, the loop below (bounded by the real `bands.length`) never runs, `cutSomewhere` stays false, and the `if (!cutSomewhere) return undefined` guard further down already returns undefined by that route. Not restricted to `axis === "x"`: bands built along the y-axis are, by construction, separated from each other by a gap of at least `threshold` (>= MIN_GAP_FLOOR_PT, 3pt), which already exceeds isRowAlignedGrid's own ROW_MATCH_TOLERANCE_PT (2pt) match window, so it can never find a recurring row across genuinely different y-bands -- checking it unconditionally costs nothing extra for a real y-axis call and keeps this guard's own logic in one place rather than duplicated per axis.
   if (isRowAlignedGrid(bands)) return undefined;
 
   const bandStats = bands.map((band) => ({
@@ -283,9 +287,7 @@ export function boundingBox(items: readonly BoundedItem[]): PdfRegionBounds {
   return { xPt: minX, yPt: minY, widthPt: maxX - minX, heightPt: maxY - minY };
 }
 
-// A text baseline cluster: items in one leaf whose vertical anchor (LayoutText.yPt) falls within LINE_TOLERANCE_PT of each other, sorted left to right. Two items on the same visual line rarely share an identical yPt (rounding, mixed font sizes on one baseline), so clustering needs a tolerance rather than an exact match.
-const LINE_TOLERANCE_PT = 2;
-
+// A text baseline cluster: items in one leaf that share a baseline by pdf-codec's own runsShareBaseline rule, sorted left to right. Two items on the same visual line rarely share an identical yPt (rounding, mixed font sizes on one baseline), so clustering needs a tolerance rather than an exact match, and that tolerance has to scale with the SMALLER of the two runs (ExaDev/documents.js#1317): the fixed 2pt window this used to apply let any two consecutive lines of text set below about 3pt fall into one, and made no allowance for a superscript on a line of ordinary body text. The comparison is against the line's own anchor, the item that opened it, so a line cannot walk down the page one near-miss at a time.
 export interface TextLine {
   readonly items: LayoutItem[];
   readonly yPt: number;
@@ -300,10 +302,12 @@ export function groupIntoLines(textItems: readonly LayoutItem[]): TextLine[] {
   const lines: TextLine[] = [];
   for (const item of sorted) {
     if (item.kind !== "text") continue;
+    const anchor = lines[lines.length - 1]?.items[0];
     const last = lines[lines.length - 1];
     if (
       last !== undefined &&
-      Math.abs(last.yPt - item.yPt) <= LINE_TOLERANCE_PT
+      anchor?.kind === "text" &&
+      runsShareBaseline(anchor, item)
     ) {
       last.items.push(item);
     } else {
@@ -322,6 +326,14 @@ export function groupIntoLines(textItems: readonly LayoutItem[]): TextLine[] {
 // Within one line, a gap between consecutive text runs wider than this many em (multiples of the runs' own font size) is treated as a cell/column boundary rather than ordinary word spacing -- typical inter-word spacing sits well under one em, so a gap exceeding it is evidence of a deliberately separated column, the same kind of gutter recursiveXYCut looks for at the whole-page scale, just within a single baseline.
 const CELL_GAP_EM = 1.2;
 
+// The em this line's cell threshold is measured in, taken from the SMALLER of the two runs either side of the gap for the same reason the page-level gap threshold above takes the smaller of its two bands: the finer-grained side of a boundary is the one whose scale says whether the boundary is real.
+function cellThresholdPt(
+  previousSizePt: number,
+  currentSizePt: number,
+): number {
+  return CELL_GAP_EM * Math.min(previousSizePt, currentSizePt);
+}
+
 // Counts the distinct horizontally-gapped clusters ("cells") on one line -- 1 for an ordinary run of prose, >1 when the line itself contains internal gaps wide enough to be separate table cells or aligned columns.
 export function cellsInLine(line: TextLine): number {
   let cells = 1;
@@ -329,9 +341,14 @@ export function cellsInLine(line: TextLine): number {
   for (const [index, current] of line.items.entries()) {
     const previous = line.items[index - 1];
     if (previous?.kind !== "text" || current.kind !== "text") continue;
-    const previousEnd = previous.xPt + (previous.widthPt ?? 0);
-    const gap = current.xPt - previousEnd;
-    if (gap > CELL_GAP_EM * current.sizePt) cells++;
+    // A run that stated no advance width leaves the gap after it underivable, and an underivable gap is no evidence of a cell boundary (ExaDev/documents.js#1317): reading the absent width as zero made the run's whole advance look like a gap, so a line of separately-shown words counted as many cells as it had words and read as a table row.
+    const gap = runGapPt(previous, current);
+    if (
+      gap !== undefined &&
+      gap > cellThresholdPt(previous.sizePt, current.sizePt)
+    ) {
+      cells++;
+    }
   }
   return cells;
 }
