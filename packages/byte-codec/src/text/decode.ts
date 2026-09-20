@@ -9,7 +9,7 @@
 /**
  * The character encodings {@link decodeText} can produce text from.
  *
- * Deliberately bounded: each is either self-identifying through a byte order mark, structurally checkable through its own validity rules, or guessable behind a stated plausibility test. Legacy CJK and Cyrillic code pages are outside the set on purpose, since nothing tells them apart from one another without the statistical model this module does not carry; bytes that look like one are refused rather than guessed at.
+ * Deliberately bounded: each is either self-identifying through a byte order mark, structurally checkable through its own validity rules, or guessable behind a stated plausibility test. Legacy CJK and Cyrillic code pages are outside the set on purpose, since nothing tells them apart from one another without the statistical model this module does not carry; bytes that look like one are refused rather than guessed at. That boundary also limits what {@link DecodeTextOptions.encoding} can name, which is a narrower restriction than detection itself needs (ExaDev/documents.js#1361).
  */
 export type TextEncodingLabel =
   "utf-8" | "utf-16le" | "utf-16be" | "utf-32le" | "utf-32be" | "windows-1252";
