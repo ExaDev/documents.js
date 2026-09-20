@@ -8,7 +8,7 @@ import {
   recordedBreak,
   renderSummary,
   reportFiles,
-  sliceArtifactName,
+  sliceReportFile,
   thresholdBehind,
   type PackageOutcome,
   type PackageVerdict,
@@ -238,10 +238,10 @@ describe("renderSummary", () => {
   });
 });
 
-describe("sliceArtifactName", () => {
-  it("names the artifact from the slice's cache key", () => {
+describe("sliceReportFile", () => {
+  it("names the report after the slice's cache key", () => {
     expect(
-      sliceArtifactName({
+      sliceReportFile({
         package: "p",
         directory: "packages/p",
         slice: 1,
@@ -250,6 +250,6 @@ describe("sliceArtifactName", () => {
         timeoutMinutes: 30,
         cacheKey: "p-1of1",
       }),
-    ).toBe("mutation-report-p-1of1");
+    ).toBe("p-1of1.json");
   });
 });

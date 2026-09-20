@@ -13,9 +13,9 @@ const PERCENT = 100;
 /** Below this many whole points of margin the derivation rule never goes: the timeout share rounds up to at least one point. */
 const MINIMUM_TIMEOUT_MARGIN_POINTS = 1;
 
-/** The artifact directory one slice's reports are uploaded under, which the workflow names from the matrix entry's cache key. */
-export function sliceArtifactName(entry: SliceMatrixEntry): string {
-  return `mutation-report-${entry.cacheKey}`;
+/** The file one slice's json report is uploaded as and read back from, named after the slice's cache key. Every slice's report sits in one flat directory after download, so the name is what tells them apart; a per-artifact directory cannot be relied on, because the download action drops it when only one artifact matches. */
+export function sliceReportFile(entry: SliceMatrixEntry): string {
+  return `${entry.cacheKey}.json`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -172,7 +172,7 @@ async function evaluate(
   for (const [name, entries] of groupByPackage(matrix)) {
     const reportPaths = entries.map((entry) => ({
       entry,
-      file: join(reportsDirectory, sliceArtifactName(entry), "mutation.json"),
+      file: join(reportsDirectory, sliceReportFile(entry)),
     }));
     const missing = reportPaths
       .filter(({ file }) => !existsSync(file))
