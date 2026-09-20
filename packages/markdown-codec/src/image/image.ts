@@ -27,11 +27,14 @@ const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 // signature(8) + IHDR chunk length(4) + 'IHDR'(4) + width(4) + height(4) -- the minimum a PNG needs before its own dimensions are readable.
 const PNG_HEADER_BYTES = 24;
 
+// A short input needs no length check of its own: a signature byte the input does not reach reads as undefined, which equals no byte value.
 function isPng(bytes: Uint8Array): boolean {
-  if (bytes.length < PNG_SIGNATURE.length) {
-    return false;
-  }
   return PNG_SIGNATURE.every((byte, index) => bytes[index] === byte);
+}
+
+// As in isPng, a byte the input does not reach reads as undefined and equals nothing, so the length needs no check of its own.
+function isJpeg(bytes: Uint8Array): boolean {
+  return bytes[0] === 0xff && bytes[1] === 0xd8;
 }
 
 // IHDR is always the very first chunk after the signature (PNG spec section 5.6, "IHDR must appear first") -- no chunk-walking is needed at all.
@@ -73,13 +76,19 @@ function hasNoLengthField(marker: number): boolean {
 }
 
 // Walks JPEG marker segments from the SOI (0xFFD8) until a Start-Of-Frame marker's own segment: length(2, BE) + precision(1) + height(2, BE) + width(2, BE) -- height before width, unlike PNG. Every other marker segment is skipped by its own declared length (which includes the 2 length bytes themselves).
+//
+// A truncated file needs no length checks along the way, only the one end-of-input check the walk already makes each pass. A length field the input is too short to hold reads its missing bytes as zero (see readUint16BE). That either leaves the offset on the length field itself, whose own leading byte must then have been zero, so the next pass walks past it a byte at a time; or it pushes the offset straight past the end, which is also what a declared length that overshoots does. Either way the walk arrives at an offset the input does not reach, which is where a truncated segment is meant to end up.
 function readJpegDimensions(bytes: Uint8Array): ImageDimensions | undefined {
-  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+  if (!isJpeg(bytes)) {
     return undefined;
   }
   let offset = 2;
-  while (offset < bytes.length) {
-    if (bytes[offset] !== 0xff) {
+  for (;;) {
+    const byte = bytes[offset];
+    if (byte === undefined) {
+      return undefined;
+    }
+    if (byte !== 0xff) {
       offset += 1;
       continue;
     }
@@ -96,9 +105,6 @@ function readJpegDimensions(bytes: Uint8Array): ImageDimensions | undefined {
     if (hasNoLengthField(marker)) {
       continue;
     }
-    if (offset + 2 > bytes.length) {
-      return undefined;
-    }
     const length = readUint16BE(bytes, offset);
     if (isStartOfFrameMarker(marker)) {
       if (offset + 7 > bytes.length) {
@@ -114,11 +120,6 @@ function readJpegDimensions(bytes: Uint8Array): ImageDimensions | undefined {
     }
     offset += length;
   }
-  return undefined;
-}
-
-function isJpeg(bytes: Uint8Array): boolean {
-  return bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xd8;
 }
 
 // The same signature check readImageDimensions already makes internally to choose which reader to run, exposed so a caller (src/lower/image.ts) can pick ContentImageBlock's own `format` field from the identical bytes without a second, potentially-divergent sniff of its own. Returns undefined for anything that is neither a PNG nor a JPEG -- ContentImageBlockSchema's own `format` field has no third member to fall back to.
