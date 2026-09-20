@@ -16,7 +16,7 @@ import { writeMarkdown } from "../write";
 import {
   MarkdownDiagnosticCodes,
   MarkdownInputTooLargeError,
-  MarkdownInvalidUtf8Error,
+  MarkdownUndecodableTextError,
   MarkdownNestingLimitExceededError,
   MarkdownParseError,
   MarkdownWriteError,
@@ -468,7 +468,7 @@ function captureThrown(fn: () => void): unknown {
 // The throw tier's own error classes, exercised directly rather than only observed via .toThrow(SomeClass) at a real call site elsewhere: an instanceof check alone cannot distinguish a correct message/code/field from a mutated one, so each case here asserts every field the constructor sets, not just the class.
 describe("throw-tier error classes carry their own precise code, message, and fields", () => {
   it("MarkdownParseError: constructed directly (not through a subclass), name/code/message all carry the constructor's own arguments", () => {
-    // Every concrete subclass overwrites `this.name` in its own constructor right after calling super(), so a MarkdownInvalidUtf8Error/MarkdownInputTooLargeError/MarkdownNestingLimitExceededError instance can never observe MarkdownParseError's own `this.name = "MarkdownParseError"` assignment — it is immediately clobbered. Only a direct instantiation of the base class exercises that line.
+    // Every concrete subclass overwrites `this.name` in its own constructor right after calling super(), so a MarkdownUndecodableTextError/MarkdownInputTooLargeError/MarkdownNestingLimitExceededError instance can never observe MarkdownParseError's own `this.name = "MarkdownParseError"` assignment — it is immediately clobbered. Only a direct instantiation of the base class exercises that line.
     const error = new MarkdownParseError("md/some-code", "some message");
     expect(error).toBeInstanceOf(MarkdownParseError);
     expect(error.name).toBe("MarkdownParseError");
@@ -485,18 +485,20 @@ describe("throw-tier error classes carry their own precise code, message, and fi
     expect(error.message).toBe("some message");
   });
 
-  it("MarkdownInvalidUtf8Error: default message, code, and MarkdownParseError lineage", () => {
-    const error = new MarkdownInvalidUtf8Error();
+  it("MarkdownUndecodableTextError: default message, code, and MarkdownParseError lineage", () => {
+    const error = new MarkdownUndecodableTextError();
     expect(error).toBeInstanceOf(MarkdownParseError);
-    expect(error.name).toBe("MarkdownInvalidUtf8Error");
-    expect(error.code).toBe("md/invalid-utf8");
-    expect(error.message).toBe("input is not valid UTF-8");
+    expect(error.name).toBe("MarkdownUndecodableTextError");
+    expect(error.code).toBe("md/undecodable-text");
+    expect(error.message).toBe(
+      "input does not decode as text under any supported encoding",
+    );
   });
 
-  it("MarkdownInvalidUtf8Error: a caller-supplied message overrides the default without touching the code", () => {
-    const error = new MarkdownInvalidUtf8Error("custom detail");
+  it("MarkdownUndecodableTextError: a caller-supplied message overrides the default without touching the code", () => {
+    const error = new MarkdownUndecodableTextError("custom detail");
     expect(error.message).toBe("custom detail");
-    expect(error.code).toBe("md/invalid-utf8");
+    expect(error.code).toBe("md/undecodable-text");
   });
 
   it("MarkdownInputTooLargeError: lowerMarkdown enforces maxInputBytes against the input's own UTF-8 byte length, not its character count", () => {

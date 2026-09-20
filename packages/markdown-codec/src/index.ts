@@ -22,7 +22,7 @@ export {
   MarkdownDiagnosticCodes,
   MarkdownInputTooLargeError,
   MarkdownInvalidRunConstructExtentError,
-  MarkdownInvalidUtf8Error,
+  MarkdownUndecodableTextError,
   MarkdownNestingLimitExceededError,
   MarkdownParseError,
   MarkdownTableGridFaultError,
