@@ -150,8 +150,9 @@ function lowerParagraph(
   const inlineCtx = inlineContext(context);
   let segment: MarkdownParagraphNode["children"] = [];
 
-  const flushSegment = (force: boolean): void => {
-    if (segment.length === 0 && !force) {
+  // Flushes whatever inline children have accumulated since the last resolved image as one paragraph, and does nothing at all when none have. That no-op arm can never swallow the paragraph whole: src/block/block.ts discards a paragraph whose content is blank before the AST is built (its own isBlankContent check), so a paragraph node always arrives carrying at least one inline child, and every child either joins this segment or pushes a block of its own — an empty segment therefore always sits behind an image block that has already been pushed, never behind nothing at all.
+  const flushSegment = (): void => {
+    if (segment.length === 0) {
       return;
     }
     const inline = lowerInlineNodes(segment, inlineCtx);
@@ -186,7 +187,7 @@ function lowerParagraph(
       segment.push(child);
       continue;
     }
-    flushSegment(false);
+    flushSegment();
     if (context.list !== undefined) {
       context.sink({
         code: MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED,
@@ -221,7 +222,7 @@ function lowerParagraph(
       { kind: "constructEnd" },
     );
   }
-  flushSegment(blocks.length === 0);
+  flushSegment();
   return blocks;
 }
 
@@ -312,9 +313,8 @@ function lowerHtmlBlock(
     message:
       "block-level raw HTML was preserved as literal text (styleId \"HTMLPreformatted\"); it will not be rendered as HTML by any consumer of the resulting ContentDocument, and its verbatim original rides the paragraph's own markdown residue for this package's writer to re-emit as-is",
   });
-  const literal = node.literal.replace(/\n+$/, "");
-  const runs: ContentRun[] = literal.length === 0 ? [] : [{ text: literal }];
-  // The residue carries the UNTRIMMED literal: the runs strip trailing newlines because those are block separators, not content, but the restorable tier re-emits the block exactly as it stood.
+  // One run of the literal exactly as the block parser handed it over, with nothing trimmed and nothing to guard against: the blank lines that ENDED the block are block separators rather than content and were already stripped there (src/block/block.ts's own TRAILING_HTML_BLANK_LINES_PATTERN, applied when the block was finalised), and what remains can never be empty, since an HTML block's own opening line is the one line that strip can never reach and it always carries at least the '<' that started the block. The runs and the residue below therefore hold the same text, and the restorable tier re-emits the block exactly as it stood.
+  const runs: ContentRun[] = [{ text: node.literal }];
   const paragraph: ContentParagraph = {
     kind: "paragraph",
     runs,
@@ -395,7 +395,7 @@ function lowerListItem(
   };
   const itemContext: BlockLowerContext = { ...context, list: membership };
   const blocks: ContentBlock[] = [];
-  let ownLevelBlockCount = 0;
+  // The item's own FIRST own-level block, and the whole record of whether it has any: a lowered block list is never sparse, so its first element is present whenever it has any length at all, and this stays undefined precisely when every child was a nested list (or there were no children) and nothing own-level was contributed.
   let firstOwnBlock: ContentBlock | undefined;
   for (const child of item.children) {
     if (child.type === "list") {
@@ -405,11 +405,10 @@ function lowerListItem(
       continue;
     }
     const childBlocks = lowerBlock(child, itemContext, contentWidthPt);
-    ownLevelBlockCount += childBlocks.length;
     firstOwnBlock ??= childBlocks[0];
     blocks.push(...childBlocks);
   }
-  if (ownLevelBlockCount === 0 || firstOwnBlock?.kind === "constructStart") {
+  if (firstOwnBlock === undefined || firstOwnBlock.kind === "constructStart") {
     // A truly empty item (no children at all), one whose sole content is a nested list, or one whose own first block is a construct (ExaDev/documents.js#1012 -- most commonly a blockquote's division pair) all share the same gap: none of them has an ORDINARY paragraph of its own to carry ContentListMembership(numId, level) on directly. Without a placeholder here, the item's own existence -- and, for the construct case, which item its dual-carried interior paragraph even belongs to -- has nowhere to attach except the construct's own interior, which src/emit/emit.ts's renderItems cannot read back before it has already decided how to open the region: a construct sitting at an item's own head is, at that point, indistinguishable from a genuinely fresh, unrelated construct that merely happens to wrap a list of its own (CommonMark spec 0.31.2 example 235, `> - foo\n- bar`, is exactly that unrelated shape, and must keep rendering as a bare quote with no borrowed item to attach it to). The placeholder carries the full membership, checked state included, so a task item wrapping only a nested list (or only a construct) keeps its checkbox; the construct's own interior still carries the SAME membership too (lowerBlockquote's own dual carry, unchanged), which is what lets emit.ts's existing constructCarriesListItemId absorb it as an ordinary continuation once the placeholder has established the item.
     blocks.unshift(
       decorateParagraph({ kind: "paragraph", runs: [] }, itemContext),
@@ -441,7 +440,10 @@ function lowerList(
   } else {
     numId = ancestorNumId;
     const mintedType = mintedListType(numId);
-    if (mintedType !== undefined && mintedType !== node.markerType) {
+    // numId here is always one a parent lowerList call minted through mintListNumId moments ago, so mintedListType always reads a type back out of it; asking whether it reads back as the OTHER of the two marker types says exactly that, since the marker domain is bullet and ordered and nothing else, rather than pairing the real disagreement check with a second arm for a numId this package never minted and can never see here.
+    const conflictingMintedType =
+      node.markerType === "bullet" ? "ordered" : "bullet";
+    if (mintedType === conflictingMintedType) {
       context.sink({
         code: MarkdownDiagnosticCodes.LIST_MARKER_TYPE_CONFLICT,
         severity: "warning",
