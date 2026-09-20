@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ContentImageBlock } from "document-schema.js";
-import { bytesToBase64 } from "./base64";
+import { bytesToBase64 } from "byte-codec";
 import { DocFormatError, DocUnsupportedError } from "./errors";
 import { buildInlinePicture } from "./pictures-write";
 import { readInlinePicture } from "./pictures";

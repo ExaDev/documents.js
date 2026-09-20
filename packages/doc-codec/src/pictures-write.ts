@@ -1,5 +1,5 @@
 import type { ContentImageBlock } from "document-schema.js";
-import { base64ToBytes } from "./base64";
+import { base64ToBytes } from "byte-codec";
 import { DocFormatError, DocUnsupportedError } from "./errors";
 
 // The inverse of pictures.ts's readInlinePicture: a ContentImageBlock to the PICFAndOfficeArtData bytes a real MS-DOC producer places in the Data stream, plus the sprmCPicLocation grpprl a run's own Chpx states to point at them -- an empty OfficeArtSpContainer.shape (pictures.ts's own reader skips it whole by recLen and never looks inside it, so this writer states no shape properties of its own either) followed by a single-rgbUid OfficeArtBlip record wrapping the image's own raw file bytes verbatim. Only the two raster formats pictures.ts itself decodes from a real OfficeArtBlip -- PNG (OfficeArtBlipPNG, 0xF01E) and JPEG (OfficeArtBlipJPEG, 0xF01D) -- can be written this way; ContentImageBlock's own 'svg'/'gif' members have no OfficeArtBlip type this format defines at all, so writing one would mean fabricating a bitmap tag this reader could not itself decode back, the identical "genuinely unimplemented, not approximated" boundary pictures.ts's own top comment already draws for every blip kind beyond PNG/JPEG.
