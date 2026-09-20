@@ -1272,6 +1272,147 @@ describe("headings", () => {
     expect(paragraphBlock.runs.map((run) => run.text).join("")).toBe("a");
     expect(headingBlock.styleId).toBe("Heading1");
   });
+
+  it("does not treat a heading's own SECOND line, indented 4+ columns, as an interrupting ATX heading, since an indented line is absorbed as ordinary paragraph continuation, so the promotion still stands", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [
+              { text: "foo" },
+              { text: "\n" },
+              {
+                text: "    # bar",
+                source: { format: "markdown", xml: "    # bar" },
+              },
+            ],
+            styleId: "Heading1",
+          },
+        ]),
+      ),
+    ).toBe("foo\\\n    # bar\n====");
+  });
+
+  it("refuses setext when a heading's own second line opens an HTML BLOCK of a kind that genuinely interrupts a paragraph, collapsing to ATX instead", () => {
+    const collector = createDiagnosticCollector();
+    const written = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [
+            { text: "foo" },
+            { text: "\n" },
+            { text: "<div>", source: { format: "markdown", xml: "<div>" } },
+          ],
+          styleId: "Heading1",
+        },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(written).toBe("# foo <div>");
+    expect(
+      collector.has(
+        MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+      ),
+    ).toBe(true);
+  });
+
+  it("still promotes a heading whose own SECOND line is a lone generic tag, since CommonMark's HTML-block condition 7 is barred from interrupting a paragraph, so the line is absorbed as more of the heading's text", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [
+              { text: "foo" },
+              { text: "\n" },
+              { text: "<a>", source: { format: "markdown", xml: "<a>" } },
+            ],
+            styleId: "Heading1",
+          },
+        ]),
+      ),
+    ).toBe("foo\\\n<a>\n====");
+  });
+
+  it("refuses setext when that same lone generic tag is the heading's own FIRST line instead, where genuine block-start position lets condition 7 open an HTML block after all", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [
+              { text: "<a>", source: { format: "markdown", xml: "<a>" } },
+              { text: " ", source: { format: "markdown", xml: "\n" } },
+              { text: "foo" },
+            ],
+            styleId: "Heading1",
+          },
+        ]),
+      ),
+    ).toBe("# <a> foo");
+  });
+
+  it("refuses setext for a heading whose own second line is a GFM table delimiter row matching the line before it, but not when that same row is indented 4+ columns", () => {
+    const heading = (delimiterRow: string): string =>
+      emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [
+              { text: "h", source: { format: "markdown", xml: "a | b" } },
+              { text: " ", source: { format: "markdown", xml: "\n" } },
+              {
+                text: "d",
+                source: { format: "markdown", xml: delimiterRow },
+              },
+            ],
+            styleId: "Heading1",
+          },
+        ]),
+      );
+    expect(heading("---|---")).toBe("# a | b ---|---");
+    expect(heading("    ---|---")).toBe("a | b\n    ---|---\n=====");
+  });
+
+  it("does NOT report HEADING_STYLE_OVERRIDDEN_FOR_LINE_BREAK when setext was the caller's own explicit request, since the break overrode nothing", () => {
+    const collector = createDiagnosticCollector();
+    const written = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [
+            { text: "foo" },
+            { text: " ", source: { format: "markdown", xml: "\n" } },
+            { text: "bar" },
+          ],
+          styleId: "Heading2",
+        },
+      ]),
+      { headingStyle: "setext", sink: collector.sink },
+    );
+    expect(written).toBe("foo\nbar\n---");
+    expect(
+      collector.has(
+        MarkdownDiagnosticCodes.HEADING_STYLE_OVERRIDDEN_FOR_LINE_BREAK,
+      ),
+    ).toBe(false);
+  });
+
+  it("does NOT report HEADING_LINE_BREAK_COLLAPSED for a heading whose own rendered text carries no line break at all", () => {
+    const collector = createDiagnosticCollector();
+    const written = emitMarkdown(
+      doc([
+        { kind: "paragraph", runs: [{ text: "foo" }], styleId: "Heading3" },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(written).toBe("### foo");
+    expect(
+      collector.has(MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED),
+    ).toBe(false);
+  });
 });
 
 describe("code blocks, thematic breaks, preformatted HTML", () => {
@@ -1362,6 +1503,50 @@ describe("code blocks, thematic breaks, preformatted HTML", () => {
         ]),
       ),
     ).toBe("<div>*not emphasis*</div>");
+  });
+
+  it("joins a CodeBlock paragraph's several runs into one literal with nothing between them", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [{ text: "foo" }, { text: "bar" }],
+            styleId: "CodeBlock",
+          },
+        ]),
+      ),
+    ).toBe("```\nfoobar\n```");
+  });
+
+  it("drops an EMPTY codeLanguage from the info line rather than emitting a stray separator ahead of the residue remainder", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [{ text: "foo" }],
+            styleId: "CodeBlock",
+            codeLanguage: "",
+            source: { format: "markdown", xml: "{.numberLines}" },
+          },
+        ]),
+      ),
+    ).toBe("``` {.numberLines}\nfoo\n```");
+  });
+
+  it("joins an HTMLPreformatted paragraph's several runs into one literal with nothing between them", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [{ text: "<div>" }, { text: "</div>" }],
+            styleId: "HTMLPreformatted",
+          },
+        ]),
+      ),
+    ).toBe("<div></div>");
   });
 });
 
@@ -1476,6 +1661,20 @@ describe("math (ExaDev/markdown-codec#53)", () => {
         ]),
       ),
     ).toBe("\\(f(x) = x^2\\)");
+  });
+
+  it("joins a MathBlock paragraph's several runs into one literal with nothing between them", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x^" }, { text: "2" }],
+            styleId: "MathBlock",
+          },
+        ]),
+      ),
+    ).toBe("$$\nx^2\n$$");
   });
 });
 
@@ -3027,6 +3226,82 @@ describe("lists", () => {
     );
     expect(loose).toBe("- a\n\n- b");
   });
+
+  it("keeps two same-level items of DEPTH-ONLY memberships tight, since an absent numId carries no loose flag of its own to read one from", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          { kind: "paragraph", runs: [{ text: "a" }], list: { level: 0 } },
+          { kind: "paragraph", runs: [{ text: "b" }], list: { level: 0 } },
+        ]),
+      ),
+    ).toBe("- a\n- b");
+  });
+
+  it("separates two adjacent lists of DIFFERENT numIds with a blank line even when the first of them is loose, since looseness only decides spacing within one list", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [{ text: "a" }],
+            list: { numId: "md1:bullet+loose", level: 0 },
+          },
+          {
+            kind: "paragraph",
+            runs: [{ text: "b" }],
+            list: { numId: "md2:bullet+loose", level: 0 },
+          },
+        ]),
+      ),
+    ).toBe("- a\n\n+ b");
+  });
+
+  it("does NOT report LIST_NUMID_FALLBACK for a numId this package minted itself", () => {
+    const collector = createDiagnosticCollector();
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0 },
+        },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(markdown).toBe("- a");
+    expect(collector.has(MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK)).toBe(
+      false,
+    );
+  });
+
+  it("drops a legacy checkbox glyph run ENTIRELY when the glyph is all that run holds, rather than leaving an empty run behind for the item's own styling to wrap around nothing", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [{ text: "☒ ", bold: true }, { text: "done" }],
+            list: { numId: "md1:bullet+task", level: 0 },
+          },
+        ]),
+      ),
+    ).toBe("- [x] done");
+  });
+
+  it("renders a task-flagged item whose first block has no runs at all as a plain marker, with no checkbox sniffed from a leading run that does not exist", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [],
+            list: { numId: "md1:bullet+task", level: 0 },
+          },
+        ]),
+      ),
+    ).toBe("- ");
+  });
 });
 
 describe("adjacent same-type lists get different marker glyphs (ExaDev/markdown-codec#957)", () => {
@@ -3583,7 +3858,70 @@ describe("link and image titles (the `link` construct annotation)", () => {
       },
       { kind: "constructEnd" },
     ];
-    expect(emitMarkdown(doc(blocks), { images: false })).toBe("![alt]()");
+    const collector = createDiagnosticCollector();
+    expect(
+      emitMarkdown(doc(blocks), { images: false, sink: collector.sink }),
+    ).toBe("![alt]()");
+    // The pair still renders through its own image shortcut here, just without the bytes, and it never falls through to the transparent path that reports an unrepresented construct.
+    expect(collector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(
+      false,
+    );
+  });
+
+  it("emits an empty alt slot for a link construct wrapping an image block that carries no altText of its own", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "constructStart",
+            descriptor: {
+              kind: "link",
+              target: {
+                kind: "external",
+                uri: "https://example.com/a.png",
+              },
+              title: "img title",
+            },
+          },
+          {
+            kind: "image",
+            format: "png",
+            base64: "AAAA",
+            widthPt: 1,
+            heightPt: 1,
+          },
+          { kind: "constructEnd" },
+        ]),
+      ),
+    ).toBe('![](https://example.com/a.png "img title")');
+  });
+
+  it("omits the title slot entirely for a link construct wrapping an image whose descriptor carries no title", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "constructStart",
+            descriptor: {
+              kind: "link",
+              target: {
+                kind: "external",
+                uri: "https://example.com/a.png",
+              },
+            },
+          },
+          {
+            kind: "image",
+            format: "png",
+            base64: "AAAA",
+            widthPt: 1,
+            heightPt: 1,
+            altText: "alt",
+          },
+          { kind: "constructEnd" },
+        ]),
+      ),
+    ).toBe("![alt](https://example.com/a.png)");
   });
 
   it("throws for a paragraph whose run-level construct extent does not name real runs", () => {
@@ -3836,6 +4174,26 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     expect(
       collector.has(MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED),
     ).toBe(true);
+    expect(
+      collector.diagnostics.find(
+        (diagnostic) =>
+          diagnostic.code === MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED,
+      )?.message,
+    ).toBe(
+      "paragraph carries indentLeftPt (20pt) with no styleId this package recognises as quotable; the indent has no other markdown representation and is dropped",
+    );
+  });
+
+  it("does NOT report PARAGRAPH_INDENT_DROPPED for a paragraph carrying no indent at all, whose quote depth is already zero before any styleId question arises", () => {
+    const collector = createDiagnosticCollector();
+    const markdown = emitMarkdown(
+      doc([{ kind: "paragraph", runs: [{ text: "x" }] }]),
+      { sink: collector.sink },
+    );
+    expect(markdown).toBe("x");
+    expect(
+      collector.has(MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED),
+    ).toBe(false);
   });
 
   it("PARAGRAPH_INDENT_DROPPED also fires for a DEFINED but unrecognised styleId carrying indentLeftPt, not only an absent styleId -- isQuotableStyle's own QUOTABLE_STYLE_IDS/heading check must actually run, not just its undefined short-circuit", () => {
