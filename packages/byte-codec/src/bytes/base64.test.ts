@@ -185,6 +185,12 @@ describe("base64ToBytes", () => {
     expect(base64ToBytes("/w \n== ")).toEqual(new Uint8Array([0xff]));
   });
 
+  it("strips a carriage-return and line-feed pair splitting a group, decoding the same bytes as the unsplit text", () => {
+    expect(base64ToBytes("TW\r\nFu")).toEqual(
+      new Uint8Array([0x4d, 0x61, 0x6e]),
+    );
+  });
+
   it("round-trips bytesToBase64's own output for every remainder length (0, 1, 2 bytes past a full group)", () => {
     for (const bytes of [
       new Uint8Array([1, 2, 3, 4]),
@@ -208,6 +214,11 @@ describe("base64ToBytes", () => {
 
   it("throws with the exact 'invalid base64 input' message when only the second character of a 4-character group is unmappable", () => {
     expect(() => base64ToBytes("A=AA")).toThrow("invalid base64 input");
+  });
+
+  it("throws when stripping a character outside the alphabet leaves a group whose second character is the padding sign", () => {
+    // "T!==" strips to "T==", so the character that lands in the group's second position is the padding sign rather than the one the text originally held there.
+    expect(() => base64ToBytes("T!==")).toThrow("invalid base64 input");
   });
 });
 
