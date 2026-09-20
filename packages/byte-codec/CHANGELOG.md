@@ -1,3 +1,13 @@
+## [1.5.8](https://github.com/ExaDev/documents.js/compare/byte-codec%401.5.7...byte-codec%401.5.8) (2026-09-20)
+
+### Performance Improvements
+
+* **byte-codec:** decode PNG rows without a new array per row or per pixel ([37453f8](https://github.com/ExaDev/documents.js/commit/37453f83ce9c66a766d9c8d2d78fe7f5d1592da3))
+
+### Tests
+
+* **byte-codec:** check decodePng against a reference for every colour type and bit depth ([9148352](https://github.com/ExaDev/documents.js/commit/9148352a2ba178409a198018ff6eaac406bda7e6))
+
 ## [1.5.7](https://github.com/ExaDev/documents.js/compare/byte-codec%401.5.6...byte-codec%401.5.7) (2026-09-20)
 
 ### Performance Improvements
