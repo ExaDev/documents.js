@@ -1,3 +1,4 @@
+import type { ContentTableCell, ContentTableRow } from "document-schema.js";
 import { describe, expect, it, vi } from "vitest";
 import type { EpubDiagnostic } from "../diagnostics";
 import { readXhtmlBody, scanXhtmlAnchors } from "./read";
@@ -6,6 +7,34 @@ const CONTENT_WIDTH_PT = 451.28; // A4 minus 1in margins each side, matching src
 
 function body(inner: string, attrs = ""): string {
   return `<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"${attrs}><body>${inner}</body></html>`;
+}
+
+// One compact descriptor per cell, so a test can state a whole grid at a glance: the cell's own text, then `|cN` / `|rN` for a colSpan / rowSpan; a covered entry holds no blocks and so reads as the empty string.
+function describeCell(cell: ContentTableCell): string {
+  const text = cell.blocks
+    .flatMap((block) =>
+      block.kind === "paragraph" ? block.runs.map((run) => run.text) : [],
+    )
+    .join("");
+  const colSpan = cell.colSpan === undefined ? "" : `|c${String(cell.colSpan)}`;
+  const rowSpan = cell.rowSpan === undefined ? "" : `|r${String(cell.rowSpan)}`;
+  return `${text}${colSpan}${rowSpan}`;
+}
+
+function readTableGrid(html: string): {
+  grid: string[][];
+  columnWidthsPt: number[];
+  rows: ContentTableRow[];
+} {
+  const table = read(body(html)).find((b) => b.kind === "table");
+  if (table === undefined) {
+    throw new Error("expected a table block");
+  }
+  return {
+    grid: table.rows.map((row) => row.cells.map(describeCell)),
+    columnWidthsPt: table.columnWidthsPt,
+    rows: table.rows,
+  };
 }
 
 function read(
@@ -1130,6 +1159,7 @@ describe("tables", () => {
                 blocks: [{ kind: "paragraph", runs: [{ text: "wide" }] }],
                 colSpan: 2,
               },
+              { blocks: [] },
             ],
           },
         ],
@@ -1138,17 +1168,82 @@ describe("tables", () => {
     ]);
   });
 
-  it("treats a zero or negative colspan as absent, rather than a real span", () => {
+  it("supplies a block-less covered entry for every grid column a colspan reaches, so the row is one cell per grid column", () => {
+    const { grid, rows } = readTableGrid(
+      '<table><tr><td colspan="2">wide</td><td>x</td></tr><tr><td>a</td><td>b</td><td>c</td></tr></table>',
+    );
+    expect(grid).toEqual([
+      ["wide|c2", "", "x"],
+      ["a", "b", "c"],
+    ]);
+    expect(rows[0]?.cells[1]).toEqual({ blocks: [] });
+  });
+
+  it("derives the column count from the dense width, so a lone colspan cell still declares every column it spans", () => {
+    const { grid, columnWidthsPt } = readTableGrid(
+      '<table><tr><td colspan="3">wide</td></tr></table>',
+    );
+    expect(grid).toEqual([["wide|c3", "", ""]]);
+    expect(columnWidthsPt).toEqual([
+      CONTENT_WIDTH_PT / 3,
+      CONTENT_WIDTH_PT / 3,
+      CONTENT_WIDTH_PT / 3,
+    ]);
+  });
+
+  it("places a covered entry at the column a rowspan consumes in the row below, and places that row's own cells after it", () => {
+    const { grid, columnWidthsPt, rows } = readTableGrid(
+      '<table><tr><td rowspan="2">tall</td><td>a</td></tr><tr><td>b</td></tr></table>',
+    );
+    expect(grid).toEqual([
+      ["tall|r2", "a"],
+      ["", "b"],
+    ]);
+    expect(rows[1]?.cells[0]).toEqual({ blocks: [] });
+    expect(columnWidthsPt).toEqual([
+      CONTENT_WIDTH_PT / 2,
+      CONTENT_WIDTH_PT / 2,
+    ]);
+  });
+
+  it("covers every position of a 2x2 merge except its anchor", () => {
+    const { grid } = readTableGrid(
+      '<table><tr><td colspan="2" rowspan="2">m</td><td>x</td></tr><tr><td>y</td></tr></table>',
+    );
+    expect(grid).toEqual([
+      ["m|c2|r2", "", "x"],
+      ["", "", "y"],
+    ]);
+  });
+
+  it("widens every row to a later row's width, and a header rowspan consumes a column below it rather than narrowing the grid", () => {
+    const { grid, columnWidthsPt } = readTableGrid(
+      '<table><tr><th rowspan="2">h</th></tr><tr><td>a</td><td>b</td></tr></table>',
+    );
+    expect(grid).toEqual([
+      ["h|r2", "", ""],
+      ["", "a", "b"],
+    ]);
+    expect(columnWidthsPt).toHaveLength(3);
+  });
+
+  it("treats a zero or negative colspan or rowspan as absent, rather than a real span", () => {
+    // One cell per row, so that a wrongly retained zero span could not be masked by a neighbouring cell being placed over the same grid column.
     const table = read(
       body(
-        '<table><tr><td colspan="0">a</td><td colspan="-1">b</td></tr></table>',
+        '<table><tr><td colspan="0">a</td></tr><tr><td colspan="-1">b</td></tr><tr><td rowspan="0">c</td></tr><tr><td rowspan="-1">d</td></tr></table>',
       ),
     ).find((b) => b.kind === "table");
     if (table === undefined) {
       throw new Error("expected a table block");
     }
-    for (const cell of table.rows[0]?.cells ?? []) {
-      expect(Object.hasOwn(cell, "colSpan")).toBe(false);
+    expect(table.rows).toHaveLength(4);
+    for (const row of table.rows) {
+      expect(row.cells).toHaveLength(1);
+      for (const cell of row.cells) {
+        expect(Object.hasOwn(cell, "colSpan")).toBe(false);
+        expect(Object.hasOwn(cell, "rowSpan")).toBe(false);
+      }
     }
   });
 
