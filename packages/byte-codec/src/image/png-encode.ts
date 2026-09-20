@@ -170,17 +170,15 @@ function writeTruecolorPng(
   const pixelCount = width * height;
 
   const interleaved = new Uint8Array(pixelCount * outChannels);
-  // Iterated via an exact-length Array.from rather than a manually bounded for loop, for both the pixel and channel indices: `interleaved` is allocated to exactly pixelCount * outChannels elements, so there is no separate loop-bound comparison whose own boundary could ever be observed through it.
-  for (const i of Array.from({ length: pixelCount }, (_, index) => index)) {
-    const srcBase = i * channels;
-    const dstBase = i * outChannels;
-    for (const c of Array.from({ length: channels }, (_, index) => index)) {
-      interleaved[dstBase + c] = data[srcBase + c]!;
-    }
-    if (alpha !== undefined) {
-      interleaved[dstBase + channels] = alpha[i]!;
-    }
-  }
+  // Filled through the typed array's own forEach rather than a manually bounded for loop, and rather than an index array as long as the image: `interleaved` is allocated to exactly pixelCount * outChannels elements, so each position is visited once, there is no separate loop-bound comparison whose own boundary could ever be observed through it, and encoding a large image does not first build a pixelCount-entry array. Each position holds one channel of one pixel; the extra channel past `channels`, present only with an alpha plane, is that pixel's alpha.
+  interleaved.forEach((_byte, index) => {
+    const pixel = Math.floor(index / outChannels);
+    const channel = index % outChannels;
+    interleaved[index] =
+      alpha !== undefined && channel === channels
+        ? alpha[pixel]!
+        : data[pixel * channels + channel]!;
+  });
 
   writeIhdr(writer, width, height, colorTypeFor(image));
   const filtered = filterScanlines(

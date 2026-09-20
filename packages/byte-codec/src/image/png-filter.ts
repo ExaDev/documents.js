@@ -67,17 +67,20 @@ export function unfilterScanlines(
     const rowStart = y * stride + 1;
     const outRowStart = y * bytesPerRow;
     const prevOutRowStart = y > 0 ? outRowStart - bytesPerRow : undefined;
-    // Iterated via an exact-length Array.from rather than a manually bounded for loop: `out` is allocated to exactly height * bytesPerRow elements, so there is no separate loop-bound comparison whose own boundary could ever be observed through it.
-    for (const x of Array.from({ length: bytesPerRow }, (_, i) => i)) {
-      const raw = data[rowStart + x]!;
-      const a = x >= bpp ? out[outRowStart + x - bpp]! : 0;
-      const b = prevOutRowStart === undefined ? 0 : out[prevOutRowStart + x]!;
-      const c =
-        x >= bpp && prevOutRowStart !== undefined
-          ? out[prevOutRowStart + x - bpp]!
-          : 0;
-      out[outRowStart + x] = (raw + predictorValue(filterByte, a, b, c)) & 0xff;
-    }
+    // Walks this row's own window of `out` through the typed array's forEach rather than a manually bounded for loop, and rather than an index array built per row: the window is exactly bytesPerRow elements, so there is no separate loop-bound comparison whose own boundary could ever be observed through it, and no allocation proportional to the row on every row.
+    out
+      .subarray(outRowStart, outRowStart + bytesPerRow)
+      .forEach((_value, x) => {
+        const raw = data[rowStart + x]!;
+        const a = x >= bpp ? out[outRowStart + x - bpp]! : 0;
+        const b = prevOutRowStart === undefined ? 0 : out[prevOutRowStart + x]!;
+        const c =
+          x >= bpp && prevOutRowStart !== undefined
+            ? out[prevOutRowStart + x - bpp]!
+            : 0;
+        out[outRowStart + x] =
+          (raw + predictorValue(filterByte, a, b, c)) & 0xff;
+      });
   }
   return out;
 }
@@ -101,15 +104,15 @@ function filterRowInto(
   out: Uint8Array<ArrayBuffer>,
   outOffset: number,
 ): void {
-  // Iterated via an exact-length Array.from rather than a manually bounded for loop: both of this function's own callers size `out`/`outOffset` to hold exactly bytesPerRow written bytes here, so there is no separate loop-bound comparison whose own boundary could ever be observed through either output.
-  for (const x of Array.from({ length: bytesPerRow }, (_, i) => i)) {
+  // Walks the bytesPerRow-long window of `out` this call fills through the typed array's forEach, not a manually bounded for loop and not an index array built on every call (this runs five times per row under the adaptive strategy): both of this function's own callers size `out`/`outOffset` to hold exactly bytesPerRow written bytes here, so there is no separate loop-bound comparison whose own boundary could ever be observed through either output.
+  out.subarray(outOffset, outOffset + bytesPerRow).forEach((_byte, x) => {
     const rawByte = raw[rowStart + x]!;
     const a = x >= bpp ? raw[rowStart + x - bpp]! : 0;
     const b = prevRowStart === undefined ? 0 : raw[prevRowStart + x]!;
     const c =
       x >= bpp && prevRowStart !== undefined ? raw[prevRowStart + x - bpp]! : 0;
     out[outOffset + x] = (rawByte - predictorValue(filterType, a, b, c)) & 0xff;
-  }
+  });
 }
 
 const ALL_FILTER_TYPES: readonly PngFilterType[] = [0, 1, 2, 3, 4];
