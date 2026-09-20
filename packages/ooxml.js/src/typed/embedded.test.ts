@@ -245,4 +245,59 @@ describe("detectFlavour", () => {
   it("detects no flavour when none of the three entry parts is present", () => {
     expect(detectFlavour(packageFromEntries({}))).toBeUndefined();
   });
+
+  const rootRelsFor = (target: string): Uint8Array<ArrayBuffer> =>
+    new TextEncoder().encode(
+      `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="${target}"/></Relationships>`,
+    );
+
+  it("detects a wordprocessing flavour from a main part the package names word/document2.xml", () => {
+    const nested = packageFromEntries({
+      "_rels/.rels": rootRelsFor("word/document2.xml"),
+      "word/document2.xml": new TextEncoder().encode(
+        "<w:document><w:body/></w:document>",
+      ),
+    });
+    expect(detectFlavour(nested)).toBe("wordprocessing");
+  });
+
+  it("detects a spreadsheet flavour from a main part the package names xl/workbook2.xml", () => {
+    const nested = packageFromEntries({
+      "_rels/.rels": rootRelsFor("xl/workbook2.xml"),
+      "xl/workbook2.xml": new TextEncoder().encode("<workbook/>"),
+    });
+    expect(detectFlavour(nested)).toBe("spreadsheet");
+  });
+
+  it("detects a presentation flavour from a main part the package names ppt/presentation2.xml", () => {
+    const nested = packageFromEntries({
+      "_rels/.rels": rootRelsFor("ppt/presentation2.xml"),
+      "ppt/presentation2.xml": new TextEncoder().encode("<p:presentation/>"),
+    });
+    expect(detectFlavour(nested)).toBe("presentation");
+  });
+
+  it("identifies a named main part by its root element, not by the directory it sits in", () => {
+    const nested = packageFromEntries({
+      "_rels/.rels": rootRelsFor("word/workbook.xml"),
+      "word/workbook.xml": new TextEncoder().encode("<x:workbook/>"),
+    });
+    expect(detectFlavour(nested)).toBe("spreadsheet");
+  });
+
+  it("detects no flavour for a named main part whose root element opens none of the three languages", () => {
+    const nested = packageFromEntries({
+      "_rels/.rels": rootRelsFor("word/document2.xml"),
+      "word/document2.xml": new TextEncoder().encode("<w:settings/>"),
+    });
+    expect(detectFlavour(nested)).toBeUndefined();
+  });
+
+  it("still applies the w:body precondition to a named main part", () => {
+    const nested = packageFromEntries({
+      "_rels/.rels": rootRelsFor("word/document2.xml"),
+      "word/document2.xml": new TextEncoder().encode("<w:document/>"),
+    });
+    expect(detectFlavour(nested)).toBeUndefined();
+  });
 });
