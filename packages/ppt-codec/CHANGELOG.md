@@ -1,3 +1,9 @@
+## [1.7.12](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.7.11...ppt-codec%401.7.12) (2026-09-20)
+
+### Code Refactoring
+
+* **ppt-codec:** encode and decode base64 through byte-codec ([a53828b](https://github.com/ExaDev/documents.js/commit/a53828bed889a819136a160808053cbda64bce80))
+
 ## [1.7.11](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.7.10...ppt-codec%401.7.11) (2026-09-20)
 
 

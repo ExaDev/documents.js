@@ -1,3 +1,9 @@
+## [4.8.15](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.8.14...pdf-codec%404.8.15) (2026-09-20)
+
+### Code Refactoring
+
+* **pdf-codec:** encode and decode base64 through byte-codec ([03c9353](https://github.com/ExaDev/documents.js/commit/03c935326d354775c33f6d1365792dd0e842e602))
+
 ## [4.8.14](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.8.13...pdf-codec%404.8.14) (2026-09-20)
 
 
