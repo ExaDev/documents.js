@@ -266,6 +266,26 @@ describe("groupPdfTextRuns: word splitting", () => {
     expect(lines[0]?.text).toBe("kept");
   });
 
+  it("reads whitespace inside a run's text as neither leading nor trailing it", () => {
+    // Whitespace between the run's own words says nothing about its boundary with the runs either side, so two runs meeting with no gap still meet inside one word.
+    const [line] = groupPdfTextRuns([
+      run("x", 50, 200, 10, 5),
+      run("one two", 55, 200, 10, 30),
+      run("y", 85, 200, 10, 5),
+    ]);
+    expect(line?.text).toBe("xone twoy");
+  });
+
+  it("keeps a column boundary a column even when the run before it ended in a space", () => {
+    // A space either side of a boundary can only upgrade a gap that reads as nothing; it never demotes the stronger claim a column-wide gap makes.
+    const [line] = groupPdfTextRuns([
+      run("Region ", 50, 200, 10, 34),
+      run("Revenue", 200, 200, 10, 36),
+    ]);
+    expect(line?.words[1]?.separatorBefore).toBe("column");
+    expect(line?.text).toBe("Region\tRevenue");
+  });
+
   it("joins runs split mid-word by a style change into one word", () => {
     const [line] = groupPdfTextRuns([
       run("hel", 50, 200, 10, 15),
@@ -285,6 +305,48 @@ describe("groupPdfTextRuns: word splitting", () => {
       widthPt: 25,
       heightPt: 10,
     });
+  });
+
+  it("takes a spanning word's height from the largest of its runs", () => {
+    const [line] = groupPdfTextRuns([
+      run("hel", 50, 200, 10, 15),
+      run("lo", 65, 200, 14, 10),
+    ]);
+    expect(line?.words[0]?.bounds?.heightPt).toBe(14);
+  });
+
+  it("leaves a single-run word with no stated width unmeasurable", () => {
+    const [line] = groupPdfTextRuns([run("solo", 50, 200, 10)]);
+    expect(line?.words[0]?.bounds).toBe(undefined);
+  });
+
+  it("does not recover a word's measurability from a later run that has a width", () => {
+    // The first run left the word's extent unknown; a second run stating its own width says nothing about where the first one ended.
+    const [line] = groupPdfTextRuns([
+      run("hel", 50, 200, 10),
+      run("lo", 65, 200, 10, 10),
+    ]);
+    expect(line?.words[0]?.text).toBe("hello");
+    expect(line?.words[0]?.bounds).toBe(undefined);
+  });
+
+  it("loses a word's measurability to a later run that states no width", () => {
+    const [line] = groupPdfTextRuns([
+      run("hel", 50, 200, 10, 15),
+      run("lo", 65, 200, 10),
+    ]);
+    expect(line?.words[0]?.text).toBe("hello");
+    expect(line?.words[0]?.bounds).toBe(undefined);
+  });
+
+  it("loses a word's measurability to a run that gave it only part of its own text", () => {
+    // The second run advances across "cd ef" in total, so nothing in it says where "cd" alone ends, and the word it completes has no derivable extent.
+    const [line] = groupPdfTextRuns([
+      run("ab", 50, 200, 10, 10),
+      run("cd ef", 60, 200, 10, 25),
+    ]);
+    expect(line?.words[0]?.text).toBe("abcd");
+    expect(line?.words[0]?.bounds).toBe(undefined);
   });
 });
 
@@ -371,6 +433,16 @@ describe("groupPdfTextRuns: reading order", () => {
       run("middle", 84, 296, 12, 30),
     ]);
     expect(lines.map((line) => line.text)).toEqual(["upper middle", "lower"]);
+  });
+
+  it("lets the leftmost run of a baseline anchor its line", () => {
+    // The anchor's own size is half of every later candidate's tolerance, so which run anchors decides what the line can still admit. Here the 30pt run on the left admits the 30pt line 12pt below it; the 9pt run to its right would not.
+    const lines = groupPdfTextRuns([
+      run("Title", 50, 700, 30, 20),
+      run("note", 200, 700, 9, 20),
+      run("more", 50, 688, 30, 20),
+    ]);
+    expect(lines).toHaveLength(1);
   });
 
   it("measures a line's box from its leftmost start to its rightmost end", () => {
