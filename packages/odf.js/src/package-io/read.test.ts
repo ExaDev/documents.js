@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bytesToBase64 } from "../util/base64";
+import { bytesToBase64 } from "byte-codec";
 import { zipPackage } from "../zip";
 import { hasUtf8Bom, parsePackage } from "./read";
 

@@ -1,7 +1,7 @@
 import type { Attribute, XmlElement, XmlNode } from "../model/node";
 import type { Package, Part } from "../model/package";
 import { rootElement, findChildElement, attrValue } from "../xml/query";
-import { bytesToBase64 } from "../util/base64";
+import { bytesToBase64 } from "byte-codec";
 import { readMimetype } from "../mimetype";
 import { ODF_NAMESPACES } from "../ns";
 import { resolveOdfListKind } from "../typed/shared/list";
