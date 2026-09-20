@@ -336,6 +336,18 @@ Conventional Commits, enforced workspace-wide by commitlint through a root `comm
 - [odf.js](../odf.js/README.md) — sibling OpenDocument Format package, also on `document-schema.js`.
 - [documents.js](https://github.com/ExaDev/documents.js) — adds PDF conversion and a read-and-write docx/pptx editor on top of this package.
 
+## Removed: base64 from `ooxml.js/util/base64`
+
+`bytesToBase64` and `base64ToBytes` were this package's own copy of helpers every codec in the family carried separately. They live in [`byte-codec`](../byte-codec/README.md) now, as one implementation ([ExaDev/documents.js#1282](https://github.com/ExaDev/documents.js/issues/1282)), so the module behind the `ooxml.js/util/base64` deep import is gone.
+
+Import from `byte-codec` directly:
+
+```ts
+import { base64ToBytes, bytesToBase64 } from "byte-codec";
+```
+
+Both names are also still on this package's own barrel, exactly as before, so `import { bytesToBase64 } from "ooxml.js"` is unaffected.
+
 ## License
 
 MIT
