@@ -1,3 +1,9 @@
+## [3.9.7](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.9.6...document-outline.js%403.9.7) (2026-09-20)
+
+### Tests
+
+* **document-outline.js:** pin attachCaptions' nearest-candidate tie-breaks ([edb3035](https://github.com/ExaDev/documents.js/commit/edb3035927f9b88df17d41ddca8f2e1fac1d5c7b))
+
 ## [3.9.6](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.9.5...document-outline.js%403.9.6) (2026-09-20)
 
 
