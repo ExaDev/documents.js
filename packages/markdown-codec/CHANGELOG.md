@@ -1,3 +1,26 @@
+## [7.0.0](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.7.6...markdown-codec%407.0.0) (2026-09-20)
+
+### ⚠ BREAKING CHANGES
+
+* **markdown-codec:** markdown-codec/image/image no longer exports
+  bytesToBase64 or base64ToBytes; both come from byte-codec now.
+  The module itself remains, and still reads PNG/JPEG dimensions.
+  Neither name was ever on this package's barrel. The removal
+  already shipped, unmarked, in 6.7.5.
+
+### Documentation
+
+* **markdown-codec:** state that base64 moved out of the image module ([71efdad](https://github.com/ExaDev/documents.js/commit/71efdadb6109e1f24da1643061c2688a42a97045))
+
+### Styles
+
+* write the base64 module's own prose without a double hyphen ([c58e8b5](https://github.com/ExaDev/documents.js/commit/c58e8b5035dfbe940aeff377773948b7e5c5c8c1))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.6.2
+
 ## [6.7.6](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.7.5...markdown-codec%406.7.6) (2026-09-20)
 
 ### Bug Fixes

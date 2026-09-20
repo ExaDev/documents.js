@@ -1,3 +1,22 @@
+## [2.0.0](https://github.com/ExaDev/documents.js/compare/epub-codec%401.5.8...epub-codec%402.0.0) (2026-09-20)
+
+### ⚠ BREAKING CHANGES
+
+* **epub-codec:** The epub-codec/util/base64 deep import is removed,
+  along with its entry in the smoke suite's deep-module list.
+  bytesToBase64 and base64ToBytes come from byte-codec now, and are
+  still on this package's own barrel as well. The removal already
+  shipped, unmarked, in 1.5.8.
+
+### Documentation
+
+* **epub-codec:** state that base64 moved out of src/util ([a3c820d](https://github.com/ExaDev/documents.js/commit/a3c820d0c409e5f019a9c4a9b711336ec484ea9d))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.6.2
+
 ## [1.5.8](https://github.com/ExaDev/documents.js/compare/epub-codec%401.5.7...epub-codec%401.5.8) (2026-09-20)
 
 ### Code Refactoring
