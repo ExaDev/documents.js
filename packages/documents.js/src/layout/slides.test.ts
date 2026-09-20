@@ -8,6 +8,7 @@ import type {
   ContentShape,
   ContentSlide,
   ContentTable,
+  ContentTableCell,
 } from "document-schema.js";
 
 import type {
@@ -402,6 +403,105 @@ describe("convertPresentationToLayout: tables", () => {
     expect(rects[0]?.heightPt).toBe(20);
   });
 
+  it("lays a horizontally merged cell out once, at its anchor's column and spanning its full width, with nothing drawn or framed for the position it covers", () => {
+    const blue = { r: 0, g: 0, b: 1 };
+    const anchor: ContentTableCell = {
+      blocks: [paragraph([run("AB", { sizePt: 10 })])],
+      colSpan: 2,
+      background: { kind: "solid", color: RED },
+    };
+    const covered: ContentTableCell = {
+      blocks: [],
+      background: { kind: "solid", color: blue },
+    };
+    const after: ContentTableCell = {
+      blocks: [paragraph([run("C", { sizePt: 10 })])],
+    };
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [40, 30, 30],
+      rows: [{ heightPt: 20, cells: [anchor, covered, after] }],
+    };
+    const layout = convert([
+      slide(
+        [
+          shape({
+            frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+            blocks: [table],
+          }),
+        ],
+        { widthPt: 960, heightPt: 100 },
+      ),
+    ]);
+    const rects = layout.pages[0]!.items.filter(
+      (i): i is LayoutRect => i.kind === "rect",
+    );
+    expect(rects).toHaveLength(1);
+    expect(rects[0]).toMatchObject({ fill: RED, xPt: 0, widthPt: 70 });
+    expect(anchor.frames).toHaveLength(1);
+    expect(anchor.frames?.[0]).toMatchObject({ xPt: 0, widthPt: 70 });
+    expect(covered.frames).toBeUndefined();
+    expect(after.frames?.[0]).toMatchObject({ xPt: 70, widthPt: 30 });
+    expect(
+      textItems(layout.pages[0]!.items).map((i) => [i.text, i.xPt]),
+    ).toEqual([
+      ["AB", 0],
+      ["C", 70],
+    ]);
+  });
+
+  it("lays a vertically merged cell out once, in its first row, with nothing drawn or framed for the covered position in the rows below", () => {
+    const blue = { r: 0, g: 0, b: 1 };
+    const anchor: ContentTableCell = {
+      blocks: [paragraph([run("A", { sizePt: 10 })])],
+      rowSpan: 2,
+      background: { kind: "solid", color: RED },
+    };
+    const covered: ContentTableCell = {
+      blocks: [],
+      background: { kind: "solid", color: blue },
+    };
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [50, 50],
+      rows: [
+        {
+          heightPt: 20,
+          cells: [anchor, { blocks: [paragraph([run("B", { sizePt: 10 })])] }],
+        },
+        {
+          heightPt: 20,
+          cells: [covered, { blocks: [paragraph([run("D", { sizePt: 10 })])] }],
+        },
+      ],
+    };
+    const layout = convert([
+      slide(
+        [
+          shape({
+            frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+            blocks: [table],
+          }),
+        ],
+        { widthPt: 960, heightPt: 100 },
+      ),
+    ]);
+    const rects = layout.pages[0]!.items.filter(
+      (i): i is LayoutRect => i.kind === "rect",
+    );
+    expect(rects).toHaveLength(1);
+    expect(rects[0]).toMatchObject({ fill: RED, xPt: 0, widthPt: 50 });
+    expect(anchor.frames).toHaveLength(1);
+    expect(covered.frames).toBeUndefined();
+    expect(
+      textItems(layout.pages[0]!.items).map((i) => [i.text, i.xPt]),
+    ).toEqual([
+      ["A", 0],
+      ["B", 50],
+      ["D", 50],
+    ]);
+  });
+
   it("emits no background rect at all for a pattern fill that resolves to no colour, rather than a fill-less no-op one", () => {
     // A 'pattern' fill stating neither foregroundColor nor backgroundColor (the reserved gray125 scaffolding pattern, or a theme/indexed colour this reader could not resolve) is exactly the case resolveCellFillColor's own doc comment names as returning undefined -- genuinely no fill, not a reason to still push a rect item that would render invisibly.
     const table: ContentTable = {
@@ -502,5 +602,78 @@ describe("convertPresentationToLayout: rotation", () => {
     const layout = convert([slide([s])]);
     const rects = layout.pages[0]!.items.filter((i) => i.kind === "rect");
     expect(rects).toHaveLength(0);
+    // The cell's own frame is skipped for the same reason: an unrotated frame on a rotated shape would misplace it.
+    expect(table.rows[0]!.cells[0]!.frames).toBeUndefined();
+  });
+
+  it("scales the column widths proportionally to the shape's width, and treats a grid of zero total width as unscaled", () => {
+    const scaled: ContentTableCell = {
+      blocks: [paragraph([run("B", { sizePt: 10 })])],
+    };
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [50, 50],
+      rows: [{ heightPt: 20, cells: [{ blocks: [] }, scaled] }],
+    };
+    convert([
+      slide(
+        [
+          shape({
+            frame: { xPt: 0, yPt: 0, widthPt: 200, heightPt: 50 },
+            blocks: [table],
+          }),
+        ],
+        { widthPt: 960, heightPt: 100 },
+      ),
+    ]);
+    // Grid width 100 scaled to the shape's 200: the second column starts at 100 and is 100 wide.
+    expect(scaled.frames?.[0]).toMatchObject({ xPt: 100, widthPt: 100 });
+    const flat: ContentTableCell = { blocks: [] };
+    convert([
+      slide(
+        [
+          shape({
+            frame: { xPt: 0, yPt: 0, widthPt: 200, heightPt: 50 },
+            blocks: [
+              {
+                kind: "table",
+                columnWidthsPt: [0],
+                rows: [{ heightPt: 20, cells: [flat] }],
+              },
+            ],
+          }),
+        ],
+        { widthPt: 960, heightPt: 100 },
+      ),
+    ]);
+    expect(flat.frames?.[0]?.widthPt).toBe(0);
+  });
+
+  it("stacks rows by their own heights", () => {
+    const first: ContentTableCell = { blocks: [] };
+    const second: ContentTableCell = { blocks: [] };
+    convert([
+      slide(
+        [
+          shape({
+            frame: { xPt: 0, yPt: 0, widthPt: 50, heightPt: 50 },
+            blocks: [
+              {
+                kind: "table",
+                columnWidthsPt: [50],
+                rows: [
+                  { heightPt: 20, cells: [first] },
+                  { heightPt: 30, cells: [second] },
+                ],
+              },
+            ],
+          }),
+        ],
+        { widthPt: 960, heightPt: 100 },
+      ),
+    ]);
+    // Frames are PDF-space (y up) on a 100pt-tall slide: the first row's bottom edge is 20pt below the top, the second's a further 30pt.
+    expect(first.frames?.[0]).toMatchObject({ yPt: 80, heightPt: 20 });
+    expect(second.frames?.[0]).toMatchObject({ yPt: 50, heightPt: 30 });
   });
 });

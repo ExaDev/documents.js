@@ -1828,7 +1828,7 @@ describe("reconstructWordprocessing: irregular gridlines recover colSpan/rowSpan
         .join("");
     expect(textOf(table.rows[0]!.cells[0]!)).toBe("Ref");
     expect(textOf(table.rows[0]!.cells[1]!)).toBe("Name");
-    // The second row's own first entry is the rowSpan cell's continuation placeholder -- present so a positional writer (docx/pptx) advances columns correctly, but empty, matching how ooxml.js's own docx/pptx readers already expect a vMerge/vMerge continuation cell to arrive.
+    // The second row's own first entry is the position the rowSpan cell covers: a real, empty cell, so the row still holds one entry per grid column.
     expect(table.rows[1]!.cells).toHaveLength(2);
     expect(table.rows[1]!.cells[0]!.blocks).toEqual([]);
     expect(textOf(table.rows[1]!.cells[1]!)).toBe("Value");
@@ -1865,12 +1865,70 @@ describe("reconstructWordprocessing: irregular gridlines recover colSpan/rowSpan
         )
         .join("");
     expect(table.rows).toHaveLength(2);
-    expect(table.rows[0]!.cells).toHaveLength(1);
+    // The header spans three grid columns, so its row still holds one entry per column: the anchor at column 0 and an empty covered cell at each of the two columns it reaches.
+    expect(table.rows[0]!.cells).toHaveLength(3);
     expect(table.rows[0]!.cells[0]!.colSpan).toBe(3);
     expect(table.rows[0]!.cells[0]!.rowSpan).toBeUndefined();
-    expect(textOf(table.rows[0]!.cells[0]!)).toBe("Title");
+    expect(table.rows[0]!.cells.map(textOf)).toEqual(["Title", "", ""]);
+    expect(table.rows[0]!.cells[1]).toEqual({ blocks: [] });
+    expect(table.rows[0]!.cells[2]).toEqual({ blocks: [] });
     expect(table.rows[1]!.cells).toHaveLength(3);
     expect(table.rows[1]!.cells.map(textOf)).toEqual(["A", "B", "C"]);
+  });
+
+  it("recovers a region spanning two columns and two rows as one anchor plus an empty covered cell at every other position it reaches, in every row", () => {
+    const items: LayoutItem[] = [
+      // Outer rectangle: x 0/100/200/300, y 250/200/150/100.
+      line(0, 250, 300, 250),
+      line(0, 100, 300, 100),
+      line(0, 100, 0, 250),
+      line(300, 100, 300, 250),
+      // The right column's divider (x=200) and the bottom row's divider (y=150) are drawn in full; the divider at x=100 is drawn only in the bottom row, and the divider at y=200 only in the rightmost column, so the top-left 2x2 block of atomic cells has no stroke between any of them and is one region.
+      line(200, 100, 200, 250),
+      line(0, 150, 300, 150),
+      line(100, 100, 100, 150),
+      line(200, 200, 300, 200),
+      text({ text: "Big", xPt: 10, yPt: 230, widthPt: 20 }),
+      text({ text: "R", xPt: 210, yPt: 230, widthPt: 10 }),
+      text({ text: "S", xPt: 210, yPt: 180, widthPt: 10 }),
+      text({ text: "X", xPt: 10, yPt: 120, widthPt: 10 }),
+      text({ text: "Y", xPt: 110, yPt: 120, widthPt: 10 }),
+      text({ text: "Z", xPt: 210, yPt: 120, widthPt: 10 }),
+    ];
+    const blocks = blocksOf(
+      reconstructWordprocessing(docFrom([page(300, 300, items)])),
+    );
+    const table = blocks.find((b) => b.kind === "table");
+    if (table?.kind !== "table") {
+      throw new Error("expected a recovered table block");
+    }
+    const textOf = (cell: ContentTableCell): string =>
+      cell.blocks
+        .flatMap((b) =>
+          b.kind === "paragraph" ? b.runs.map((r) => r.text) : [],
+        )
+        .join("");
+    expect(table.columnWidthsPt).toEqual([100, 100, 100]);
+    expect(table.rows.map((row) => row.cells.length)).toEqual([3, 3, 3]);
+    const anchor = table.rows[0]!.cells[0]!;
+    expect(anchor.colSpan).toBe(2);
+    expect(anchor.rowSpan).toBe(2);
+    expect(textOf(anchor)).toBe("Big");
+    // The anchor's frame spans the whole merged region: two 100pt columns and two 50pt rows, its bottom edge at the lower boundary of the region's last row.
+    expect(anchor.frames).toEqual([
+      { pageIndex: 0, xPt: 0, yPt: 150, widthPt: 200, heightPt: 100 },
+    ]);
+    expect(table.rows[0]!.cells[2]!.frames).toEqual([
+      { pageIndex: 0, xPt: 200, yPt: 200, widthPt: 100, heightPt: 50 },
+    ]);
+    expect(table.rows[0]!.cells[1]).toEqual({ blocks: [] });
+    expect(table.rows[1]!.cells[0]).toEqual({ blocks: [] });
+    expect(table.rows[1]!.cells[1]).toEqual({ blocks: [] });
+    expect(table.rows.map((row) => row.cells.map(textOf))).toEqual([
+      ["Big", "", "R"],
+      ["", "", "S"],
+      ["X", "Y", "Z"],
+    ]);
   });
 
   it("rejects a lattice whose missing dividers don't reduce to a rectangular merge (an L-shaped union no colSpan/rowSpan pair can express)", () => {

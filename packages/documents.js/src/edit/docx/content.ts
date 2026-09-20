@@ -4,8 +4,15 @@ import type {
   ContentEmbeddedObjectBlock,
   ContentParagraph,
   ContentTable,
+  ContentTableCell,
+  TableGridPosition,
 } from "document-schema.js";
-import { resolveCellFillColor } from "document-schema.js";
+import {
+  resolveCellFillColor,
+  tableCellColumnSpan,
+  tableCellRowSpan,
+  walkTableGrid,
+} from "document-schema.js";
 import type { Package } from "ooxml.js";
 import { resolveMetadataTimestamps } from "../../model/metadata";
 import {
@@ -334,7 +341,44 @@ function populateCellBlocks(
   }
 }
 
-// docx (unlike ODF -- see appendTable in src/edit/odt/content.ts) never writes a placeholder element for a column consumed by a horizontal merge, so ContentTable.rows[].cells has exactly one array entry per REAL w:tc the row will contain -- appendRow(row.cells.length) below builds precisely that many, rather than the fixed `columns` grid every row would otherwise get. A vertical merge (rowSpan), by contrast, still needs one real w:tc per covered row (Word has nowhere else to hang that row's own content), so those covered rows' own entries in `row.cells` (present as ordinary, usually-empty cells -- see ooxml.js's own readTable) are written as w:vMerge="continue" cells here rather than populated as fresh content. verticalMerges tracks, per grid column index (accounting for colSpan), how many further rows remain covered and what gridSpan the continuation cells in those rows should themselves carry, so a merge that is both column- and row-spanning covers the full rectangle, not just its own starting column.
+interface DocxRowCell {
+  readonly cell: ContentTableCell;
+  readonly colSpan: number;
+  readonly verticalMerge?: "restart" | "continue";
+}
+
+// The w:tc elements one dense row writes, in order. A ContentTable row holds one entry per grid column, but docx has an element only where a cell has its own place: an anchor writes a w:tc carrying its w:gridSpan (and a w:vMerge restart when it spans rows); a position covered along its own row writes nothing, since ECMA-376 has no element for a column a w:gridSpan already reaches (unlike ODF, whose covered-table-cell -- see appendTable in src/edit/odt/content.ts -- is written explicitly); and a position covered from an earlier row writes one bare w:vMerge continuation at the covering anchor's first column only, as wide as the anchor's own gridSpan so the continuation is exactly as wide as the cell it continues.
+function docxRowCells(
+  positions: readonly TableGridPosition[],
+  positionsByRow: readonly (readonly TableGridPosition[])[],
+): DocxRowCell[] {
+  return positions.flatMap((position): DocxRowCell[] => {
+    if (position.anchorRowIndex === undefined) {
+      return [
+        {
+          cell: position.cell,
+          colSpan: tableCellColumnSpan(position.cell),
+          verticalMerge:
+            tableCellRowSpan(position.cell) > 1 ? "restart" : undefined,
+        },
+      ];
+    }
+    // A covered position in its anchor's own column can only have been reached from an earlier row: a region reaches later columns of its own first row, never its anchor column again.
+    if (position.columnIndex === position.anchorColumnIndex) {
+      const anchor =
+        positionsByRow[position.anchorRowIndex]![position.anchorColumnIndex]!;
+      return [
+        {
+          cell: position.cell,
+          colSpan: tableCellColumnSpan(anchor.cell),
+          verticalMerge: "continue",
+        },
+      ];
+    }
+    return [];
+  });
+}
+
 function appendTable(body: DocxBody, block: ContentTable): void {
   const columns = block.columnWidthsPt.length;
   if (block.rows.length === 0 || columns === 0) {
@@ -345,55 +389,27 @@ function appendTable(body: DocxBody, block: ContentTable): void {
     columns,
     columnWidthsTwips: block.columnWidthsPt.map(ptToTwips),
   });
-  const verticalMerges = new Map<
-    number,
-    { rowsRemaining: number; gridSpan: number }
-  >();
-  block.rows.forEach((row) => {
-    const tableRow = table.appendRow(row.cells.length);
-    if (row.heightPt !== undefined) {
-      tableRow.heightPt = row.heightPt;
-    }
+  const positionsByRow = walkTableGrid(block);
+  block.rows.forEach((row, rowIndex) => {
+    const rowCells = docxRowCells(positionsByRow[rowIndex]!, positionsByRow);
+    const tableRow = table.appendRow(rowCells.length);
+    tableRow.heightPt = row.heightPt;
     const domCells = tableRow.cells();
-    let colIndex = 0;
-    row.cells.forEach((cell, cellIndex) => {
+    rowCells.forEach(({ cell, colSpan, verticalMerge }, cellIndex) => {
       const tableCell = domCells[cellIndex];
       if (tableCell === undefined) {
         return;
       }
-      const active = verticalMerges.get(colIndex);
-      if (active !== undefined && active.rowsRemaining > 0) {
-        if (active.gridSpan > 1) {
-          tableCell.colSpan = active.gridSpan;
-        }
-        tableCell.verticalMerge = "continue";
-        verticalMerges.set(colIndex, {
-          rowsRemaining: active.rowsRemaining - 1,
-          gridSpan: active.gridSpan,
-        });
-        colIndex += active.gridSpan;
-        return;
+      if (colSpan > 1) {
+        tableCell.colSpan = colSpan;
       }
-      const span = cell.colSpan ?? 1;
-      if (span > 1) {
-        tableCell.colSpan = span;
-      }
-      if (cell.rowSpan !== undefined && cell.rowSpan > 1) {
-        tableCell.verticalMerge = "restart";
-        verticalMerges.set(colIndex, {
-          rowsRemaining: cell.rowSpan - 1,
-          gridSpan: span,
-        });
-      }
+      tableCell.verticalMerge = verticalMerge;
       // DocxTableCell.background models one flat colour (this editor's own w:shd writer states only w:val="clear"/w:fill), so a 'pattern' fill (ExaDev/documents.js#951) writes through resolveCellFillColor's own single representative colour.
       if (cell.background !== undefined) {
         tableCell.background = resolveCellFillColor(cell.background);
       }
-      if (cell.borders !== undefined) {
-        tableCell.borders = cell.borders;
-      }
+      tableCell.borders = cell.borders;
       populateCellBlocks(tableCell, cell.blocks);
-      colIndex += span;
     });
   });
 }
