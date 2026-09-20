@@ -280,6 +280,16 @@ This package also published under an alternate name from the pre-monorepo pipeli
 
 **Republished automatically** — the alias's trusted publisher is registered against this repository and workflow (2026-09-10), so every release from the [backfill run](https://github.com/ExaDev/documents.js/actions/runs/34449796133) onward publishes under this name too; the registration evidence is on [ExaDev/documents.js#728](https://github.com/ExaDev/documents.js/issues/728).
 
+## Removed: base64 from `markdown-codec/image/image`
+
+`markdown-codec/image/image` still exists and still reads PNG/JPEG dimensions, but it no longer exports `bytesToBase64` or `base64ToBytes`. Those were this package's own copy of helpers every codec carried separately, and they live in [`byte-codec`](../byte-codec/README.md) now, as one implementation ([ExaDev/documents.js#1282](https://github.com/ExaDev/documents.js/issues/1282)).
+
+Import from `byte-codec` directly:
+
+```ts
+import { base64ToBytes, bytesToBase64 } from "byte-codec";
+```
+
 ## License
 
 MIT
