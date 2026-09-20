@@ -1,3 +1,16 @@
+## [1.1.26](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.25...document-operations%401.1.26) (2026-09-20)
+
+### Tests
+
+* **document-operations:** raise the unit test timeout for the threshold-boundary tests ([17a9c82](https://github.com/ExaDev/documents.js/commit/17a9c82c2e02bed4419c0fee47624b1ac649b01e))
+
+
+### Dependencies
+
+- Updated document-outline.js to 3.9.9
+- Updated documents.js to 7.20.25
+- Updated document-compute.js to 1.5.28
+
 ## [1.1.25](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.24...document-operations%401.1.25) (2026-09-20)
 
 

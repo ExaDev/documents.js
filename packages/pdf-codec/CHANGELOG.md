@@ -1,3 +1,78 @@
+## [4.8.12](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.8.11...pdf-codec%404.8.12) (2026-09-20)
+
+### Bug Fixes
+
+* **pdf-codec:** compute cffIndex's own offSize instead of hardcoding it to 1 ([6c9cd30](https://github.com/ExaDev/documents.js/commit/6c9cd309ac5216982ad81c492cb9c18649343037))
+* **pdf-codec:** drop requiredRepeatCount's redundant empty-extenders guard ([04137e4](https://github.com/ExaDev/documents.js/commit/04137e4ad8a60deb8f48682cc00e60d21acc8020))
+* **pdf-codec:** drop xmp's unreachable absent-capturing-group fallback ([2a28075](https://github.com/ExaDev/documents.js/commit/2a2807548342cbfb22c70eac0cf8f740d4a2ad77))
+* **pdf-codec:** scope annotation subtype sets to readPageAnnotations and cover every branch ([fedcf29](https://github.com/ExaDev/documents.js/commit/fedcf29e6052d7a1b170f326ff9ebd8f1c9c8082))
+* **pdf-codec:** scope font-style's subset-tag pattern and suffix list to their one caller ([d507b26](https://github.com/ExaDev/documents.js/commit/d507b2698bc4d2893cf7a23bce5e95eee5b7d639))
+* **pdf-codec:** stop buildGsubTable racing a markFilteringSet write against its own subtable write ([84e7b66](https://github.com/ExaDev/documents.js/commit/84e7b66a25982e5772f94c64651ab00c2a50e694))
+
+### Code Refactoring
+
+* **pdf-codec:** build jp2-boxes' colour-space lookup inside the function that reads it ([bba666a](https://github.com/ExaDev/documents.js/commit/bba666abf405252e2347c8616ff0d6c1539c54fb))
+* **pdf-codec:** build the 9-7 lifting constants inside inverse97Filter ([55a4a6a](https://github.com/ExaDev/documents.js/commit/55a4a6a57c7a84ed4719f4b3394dbf2029845449))
+* **pdf-codec:** build the progression-order table inside readCodingDefaults ([90445eb](https://github.com/ExaDev/documents.js/commit/90445eb0675703c44e100edadf2595f9ffa38ee6))
+* **pdf-codec:** drop inverseDwt53Level/97Level's own non-positive-dimension guard ([fee5ad4](https://github.com/ExaDev/documents.js/commit/fee5ad41c394b95fdb9f440cd5b4f26ef6eab0e5))
+* **pdf-codec:** drop jp2-boxes guards that duplicate a later bounds check ([0c6ccc2](https://github.com/ExaDev/documents.js/commit/0c6ccc2e39f2a482797c52693e1b10df97f39dac))
+* **pdf-codec:** drop mirrorIndex's redundant absolute-position round-trip ([dec2d9c](https://github.com/ExaDev/documents.js/commit/dec2d9c2ed02d2179f18ef5007dfdbfdd830718b))
+* **pdf-codec:** drop trimTrailingEoc's own redundant length guard ([d8f0d03](https://github.com/ExaDev/documents.js/commit/d8f0d03c7bd96fec6e9b35d9157059752a5eab83))
+* **pdf-codec:** drop widthForWidthsArray's dead zero-width branch ([02b794b](https://github.com/ExaDev/documents.js/commit/02b794b10bddf7f4d84fc6d365dfb9e84e8ec2ee))
+* **pdf-codec:** expose interleave, mirrorIndex and synthesiseLine for testing ([1beb026](https://github.com/ExaDev/documents.js/commit/1beb026f2c2c09948f5b6dd80b4f087336af5169))
+* **pdf-codec:** expose MarkerCursor and drop a redundant code-block-size check ([e473019](https://github.com/ExaDev/documents.js/commit/e47301954988a8f583edc4de930272ba2097a26e))
+* **pdf-codec:** extract inverseDwt53Level/97Level's row loop into a testable primitive ([362b989](https://github.com/ExaDev/documents.js/commit/362b98915a29d9adf037aca9a34a7f5fe29e9331))
+
+### Documentation
+
+* **pdf-codec:** describe the unit timeout's real cost multiplier, not the old cipher cost ([dc931fe](https://github.com/ExaDev/documents.js/commit/dc931fe8f9ec91b4f7ae4dd71ef71d07daa998cb))
+
+### Tests
+
+* **pdf-codec:** add direct byte-level coverage for the MATH table parser ([1b1854e](https://github.com/ExaDev/documents.js/commit/1b1854efec145f1ea813b7973b4030d60a710be4))
+* **pdf-codec:** add direct coverage for decodePdfString and parsePdfDate ([b53bb47](https://github.com/ExaDev/documents.js/commit/b53bb47c9bb2e133a7e38b2ffdf714f83d682113))
+* **pdf-codec:** assert Jpeg2000ParseError/UnsupportedError carry their own name ([c427def](https://github.com/ExaDev/documents.js/commit/c427def7f0cde591c31c1f26b0dc8a5e54dadcdf))
+* **pdf-codec:** assert randomBytes actually fills its buffer from the CSPRNG ([428c5bc](https://github.com/ExaDev/documents.js/commit/428c5bcd2a42017872b9efa70c174f5b258388e7))
+* **pdf-codec:** cover a checkbox's own /V export-value derivation ([aa67372](https://github.com/ExaDev/documents.js/commit/aa673721b36f39a1aed7c58567f5a9560503e1d8))
+* **pdf-codec:** cover CFF charset/encoding formats 1/2 and Type 1's PFB form ([b32c3cc](https://github.com/ExaDev/documents.js/commit/b32c3cccb789c6d679cf21bb6076e828e26ee239))
+* **pdf-codec:** cover cffIndex's offSize boundaries and the two sfnt/CFF-table guards ([b3eadea](https://github.com/ExaDev/documents.js/commit/b3eadea2d6d79e19e41bea43c494e46fd2b19a5a))
+* **pdf-codec:** cover decodeJpeg2000CodeBlock's unsupported code-block style rejection ([e1863f5](https://github.com/ExaDev/documents.js/commit/e1863f59bcee86d73bca078f518d59bfa30b1a2a))
+* **pdf-codec:** cover endchar's own bare-width and width-plus-seac arities ([ad0dd02](https://github.com/ExaDev/documents.js/commit/ad0dd02ab6befc8b5798edd218342ffcdb6fce1d))
+* **pdf-codec:** cover every internal-link destination view type ([51ba7b6](https://github.com/ExaDev/documents.js/commit/51ba7b69b8e44e10f827cde146d045740015c8dc))
+* **pdf-codec:** cover every SEMANTIC_SUBTYPES entry in readPageAnnotations ([f35cdfc](https://github.com/ExaDev/documents.js/commit/f35cdfc97f1b4e4303b96b5d874e1917655fe01e))
+* **pdf-codec:** cover every ToUnicode CMap error and boundary path ([f7d64d9](https://github.com/ExaDev/documents.js/commit/f7d64d951c45d7fb5a9557b94dca4d8f1d07a34d))
+* **pdf-codec:** cover format 12 cmap subtables and the subtable-preference ranking ([449dc56](https://github.com/ExaDev/documents.js/commit/449dc5671884967355df80002b660d0c803268e5))
+* **pdf-codec:** cover Info dict metadata, font flags, JPEG colour space, and embedded formulas ([a4b91f0](https://github.com/ExaDev/documents.js/commit/a4b91f0e580cd989fcc87ced8593a744462dce3e))
+* **pdf-codec:** cover jpeg2000-codestream.ts's header-segment and cursor edge cases ([1e0406b](https://github.com/ExaDev/documents.js/commit/1e0406b2fd80c31671ac53b5eb06a9d80bea1d6c))
+* **pdf-codec:** cover jpeg2000-codestream.ts's remaining header-segment boundaries ([d5ccf33](https://github.com/ExaDev/documents.js/commit/d5ccf3390cbbbf89ada788709b46152f3e75818b))
+* **pdf-codec:** cover jpeg2000-dwt.ts's filter loop bounds and remaining edges ([1c22d88](https://github.com/ExaDev/documents.js/commit/1c22d8876a0056a2bbef81ed122cb4e4d0d46b07))
+* **pdf-codec:** cover jpeg2000-dwt.ts's zero-size, boundary and index-arithmetic cases ([e972163](https://github.com/ExaDev/documents.js/commit/e9721630e4de2d73599c8fb52dbb70c66c443b1d))
+* **pdf-codec:** cover loadMathFont's broken-parse guards ([d00b467](https://github.com/ExaDev/documents.js/commit/d00b467898974c758c9ee9b00beca272ab52be7f))
+* **pdf-codec:** cover outline dict keys, attachment Desc, and AcroForm /FT and /Ff ([a182218](https://github.com/ExaDev/documents.js/commit/a182218907d22b15fbfdb89eee8b674cee3091d1))
+* **pdf-codec:** cover parseFormat4's header and segment-count guards ([0185d5b](https://github.com/ExaDev/documents.js/commit/0185d5b72b97491f4622c0be4852988bfbcd2a15))
+* **pdf-codec:** cover readOptionalContent's unresolved-OCG and layer-naming gaps ([ee58651](https://github.com/ExaDev/documents.js/commit/ee58651346d962de46bb4ba36d0b4548aa852f34))
+* **pdf-codec:** cover remaining jpeg2000-codestream.ts header-segment cases ([3c9322e](https://github.com/ExaDev/documents.js/commit/3c9322ed1c3c3b755b4da0d114df4ab15af8cb69))
+* **pdf-codec:** cover rmoveto/hmoveto/vmoveto width-shift and cubic-axis extrema ([f905dc7](https://github.com/ExaDev/documents.js/commit/f905dc79758fc487fbb1a16bc9f221e2afa6b5d8))
+* **pdf-codec:** cover SCALED_COMPONENT_OFFSET applied to a component's own placement offset ([0befe4b](https://github.com/ExaDev/documents.js/commit/0befe4b4fce8d903d3cd6808b757665880aa2db0))
+* **pdf-codec:** cover structure element dict keys and the /Lang attribute ([93e7126](https://github.com/ExaDev/documents.js/commit/93e7126be40b1d90107d97191f51f98f6295028b))
+* **pdf-codec:** cover times() directly and pin inverse97Filter's F-12/F-13 boundaries ([b9520b4](https://github.com/ExaDev/documents.js/commit/b9520b4b7177b1c4e6f413b03c3c88e44c17b212))
+* **pdf-codec:** draw after each interpreter-limit boundary to make success observable ([475affa](https://github.com/ExaDev/documents.js/commit/475affa4ca082c990eeaca61e0e99ad03f490083))
+* **pdf-codec:** drive cff-bounds's interpreter through its untested operators ([84929f6](https://github.com/ExaDev/documents.js/commit/84929f6959ea946023853a37b4f94a26c5bad07f))
+* **pdf-codec:** exercise widthOfCode's missing-AFM-width guard directly ([664110d](https://github.com/ExaDev/documents.js/commit/664110d0d0126419b89fb0b33d0c247b9b3c491a))
+* **pdf-codec:** gate the package on its measured mutation score ([1ae1cd4](https://github.com/ExaDev/documents.js/commit/1ae1cd4aeeb50e618f82320d770403a517789999))
+* **pdf-codec:** key the vendored-face cache by its own base64 constant ([e0954c7](https://github.com/ExaDev/documents.js/commit/e0954c71db1f5b7d26affb6dc0f9acdc1dfe9b03))
+* **pdf-codec:** kill jp2-boxes.ts mutants left over from the JPEG 2000 decoder ([5477af1](https://github.com/ExaDev/documents.js/commit/5477af1439e781b365dc5159393e6f4d584219e1))
+* **pdf-codec:** pin decodeUtf16BEString's odd-length trailing-byte boundary ([4ea6d07](https://github.com/ExaDev/documents.js/commit/4ea6d079fa9b94b140ffe2c444ae8dec7d01e425))
+* **pdf-codec:** pin dict-key names, sort order, and empty-collection boundaries ([38e9e3a](https://github.com/ExaDev/documents.js/commit/38e9e3a961a98dbefecc01d0d8bb7fa6e0cff254))
+* **pdf-codec:** pin flushWord's no-op guard for a whitespace-only run ([dd467dd](https://github.com/ExaDev/documents.js/commit/dd467ddb0913cd4160122958b1c34690d4c5625d))
+* **pdf-codec:** pin passthrough image headers and destination-lookup-by-name ([5be8f05](https://github.com/ExaDev/documents.js/commit/5be8f058a0b96e2f843e0014ab8747229beadfd6))
+* **pdf-codec:** pin readChunks' exact end-of-file chunk-header boundary ([14f9864](https://github.com/ExaDev/documents.js/commit/14f9864e0cc797bb0cd93a56e02c869b68e264b7))
+* **pdf-codec:** pin subrBias's switch from the small to the medium bias ([2bfe027](https://github.com/ExaDev/documents.js/commit/2bfe027c5f4cb5cc68974bb555e144861d168276))
+* **pdf-codec:** pin SUBSET_TAG_PATTERN's anchor and exact letter count ([a5ae2c7](https://github.com/ExaDev/documents.js/commit/a5ae2c7033071c3bedc173b7a88af37b773161c5))
+* **pdf-codec:** pin widthOfCode's short-circuit for a monospace face ([7d86c8e](https://github.com/ExaDev/documents.js/commit/7d86c8eafcbcdbbefdb6de9d9da73a07e3544f1a))
+* **pdf-codec:** update mirrorIndex/synthesiseLine tests for the offset-from-i0 signature ([5487580](https://github.com/ExaDev/documents.js/commit/54875805207a98279c45a6c4d7cd350fd6b92ff0))
+* **pdf-codec:** verify assemblePdf's own byte structure directly ([e667048](https://github.com/ExaDev/documents.js/commit/e66704884caea536ba9f6847e8f3fb8d041be0a6))
+
 ## [4.8.11](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.8.10...pdf-codec%404.8.11) (2026-09-20)
 
 ### Bug Fixes
