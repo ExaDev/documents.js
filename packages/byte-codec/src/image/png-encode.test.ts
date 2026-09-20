@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import * as zlib from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { crc32 } from "../bytes/crc32";
 import { decodePng } from "./png-decode";
+import type { RawImage } from "./png-decode";
 import {
   PNG_MAX_DIMENSION,
   PNG_MAX_PIXELS,
@@ -560,4 +562,202 @@ describe("encodePng indexed-colour (colour type 3)", () => {
     expect(colorTypeOf(png)).toBe(3); // indexed colour wins the tie
     expect(Array.from(decodePng(png).data)).toEqual(Array.from(image.data));
   });
+});
+
+// Known-answer regression for the whole encode and decode path over seeded images: each row is the SHA-256 of encodePng's exact output bytes, and of what decodePng reads back, recorded from the implementation before its scanline loops were rewritten to avoid per-row index arrays. Every stage is deterministic (the filter choice, the palette decision and the deflate encoder), so any change to those bytes is a change of behaviour, not of representation.
+function seededBytes(length: number, seed: number): Uint8Array<ArrayBuffer> {
+  const out = new Uint8Array(length);
+  let state = seed >>> 0;
+  for (let index = 0; index < length; index += 1) {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let mixed = Math.imul(state ^ (state >>> 15), state | 1);
+    mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
+    out[index] = (mixed ^ (mixed >>> 14)) & 0xff;
+  }
+  return out;
+}
+
+function sha256Hex(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+const GOLDEN_WIDTH = 37;
+const GOLDEN_HEIGHT = 23;
+
+function goldenImages(): Record<string, RawImage> {
+  const pixels = GOLDEN_WIDTH * GOLDEN_HEIGHT;
+  const noise3: RawImage = {
+    width: GOLDEN_WIDTH,
+    height: GOLDEN_HEIGHT,
+    channels: 3,
+    data: seededBytes(pixels * 3, 1),
+  };
+  const noise1: RawImage = {
+    width: GOLDEN_WIDTH,
+    height: GOLDEN_HEIGHT,
+    channels: 1,
+    data: seededBytes(pixels, 4),
+  };
+  const fewColours = seededBytes(pixels, 7).map((value) => (value % 4) * 60);
+  return {
+    noise3,
+    noise3a: {
+      ...noise3,
+      data: seededBytes(pixels * 3, 2),
+      alpha: seededBytes(pixels, 3),
+    },
+    noise1,
+    noise1a: {
+      ...noise1,
+      data: seededBytes(pixels, 5),
+      alpha: seededBytes(pixels, 6),
+    },
+    paletted: {
+      width: GOLDEN_WIDTH,
+      height: GOLDEN_HEIGHT,
+      channels: 3,
+      data: Uint8Array.from(
+        { length: pixels * 3 },
+        (_unused, index) => fewColours[Math.floor(index / 3)]!,
+      ),
+    },
+    flat: {
+      width: 64,
+      height: 32,
+      channels: 3,
+      data: new Uint8Array(64 * 32 * 3).fill(255),
+    },
+    smooth: {
+      width: 48,
+      height: 20,
+      channels: 3,
+      data: Uint8Array.from(
+        { length: 48 * 20 * 3 },
+        (_unused, index) => (Math.floor(index / 3) % 48) * 5 + (index % 3),
+      ),
+    },
+  };
+}
+
+const GOLDEN_ROWS: readonly {
+  readonly name: string;
+  readonly filter: "adaptive" | "none";
+  readonly png: string;
+  readonly decoded: string;
+  readonly alpha: string | undefined;
+}[] = [
+  {
+    name: "noise3",
+    filter: "adaptive",
+    png: "03286760e30ae4d164c61ca0333760d16fd15ef3c5ca8c532d7bf59b819f15b9",
+    decoded: "c6ed34fd6c6ea37236c67896e86ff4ab58cf99312038155ada88f0ce614e0916",
+    alpha: undefined,
+  },
+  {
+    name: "noise3",
+    filter: "none",
+    png: "44eee96670351458d5adc3e947bdb3e873412637bd02b466f07b56992e891a99",
+    decoded: "c6ed34fd6c6ea37236c67896e86ff4ab58cf99312038155ada88f0ce614e0916",
+    alpha: undefined,
+  },
+  {
+    name: "noise3a",
+    filter: "adaptive",
+    png: "c8a322ebe213a7562b2f3d196e0d50a08cd1896f3aaaaf6fa906d309294550ae",
+    decoded: "5c2e1463fdda17962b41a4982dd9c3803adb3ffad8162bd629bb147e63beb1dd",
+    alpha: "48d377b6529612227715238cbf7dde9bc86907b35b3b376f24283ea6940ee55d",
+  },
+  {
+    name: "noise3a",
+    filter: "none",
+    png: "82fd824ca12ae030b5d9e2e7c4189f212d9ace31ad53d30b4553969ad4e9c357",
+    decoded: "5c2e1463fdda17962b41a4982dd9c3803adb3ffad8162bd629bb147e63beb1dd",
+    alpha: "48d377b6529612227715238cbf7dde9bc86907b35b3b376f24283ea6940ee55d",
+  },
+  {
+    name: "noise1",
+    filter: "adaptive",
+    png: "1637b16f093b72f1d4920be20dc421ce1bbd480764b9a04675743184f37c0bf6",
+    decoded: "f8db1e5c0e33afc06bab22fc26f4bf86cf3efcc96737a86dfb90491072c940d5",
+    alpha: undefined,
+  },
+  {
+    name: "noise1",
+    filter: "none",
+    png: "dc5ea944b4f628368969253ac6e73a2ca1b16cdfed6f1673e0509e9c873f2795",
+    decoded: "f8db1e5c0e33afc06bab22fc26f4bf86cf3efcc96737a86dfb90491072c940d5",
+    alpha: undefined,
+  },
+  {
+    name: "noise1a",
+    filter: "adaptive",
+    png: "dcc9f24d7e5c87567b4aeb3555e1476e9391bd9f2176dd0af52f878c4cd305ac",
+    decoded: "a998a64def4294ad3e7ee4a4a41d0ab5655eadd0aea24b3c3488944f25d00888",
+    alpha: "1ddf764399deea8ac4889772430b6edae60077fe86bfddac3b75f872a157dc17",
+  },
+  {
+    name: "noise1a",
+    filter: "none",
+    png: "4b60beec863862dc68b868700d4177d49e008486e9143264b29a9f507fc8f12e",
+    decoded: "a998a64def4294ad3e7ee4a4a41d0ab5655eadd0aea24b3c3488944f25d00888",
+    alpha: "1ddf764399deea8ac4889772430b6edae60077fe86bfddac3b75f872a157dc17",
+  },
+  {
+    name: "paletted",
+    filter: "adaptive",
+    png: "acaf84ed51749ecd6104d5794a2a2978251b64c5d8e7973c1d547a4202560143",
+    decoded: "7fe791f94f7dcb63e01f5054460ee3421c0f8c75263b2c6bc19323167bee19bb",
+    alpha: undefined,
+  },
+  {
+    name: "paletted",
+    filter: "none",
+    png: "98c583f42e160b16e61bdb2d8754a471af511897f8c2f465466bb92d926154ae",
+    decoded: "7fe791f94f7dcb63e01f5054460ee3421c0f8c75263b2c6bc19323167bee19bb",
+    alpha: undefined,
+  },
+  {
+    name: "flat",
+    filter: "adaptive",
+    png: "57c221352c7782acb99364a8f2b722c6e8ae0a0c83367e12b031e15454cbfee8",
+    decoded: "884929e08ec0c709c085488ca1b0c61bb9749b0f38bd253c97c073657116f5be",
+    alpha: undefined,
+  },
+  {
+    name: "flat",
+    filter: "none",
+    png: "57c221352c7782acb99364a8f2b722c6e8ae0a0c83367e12b031e15454cbfee8",
+    decoded: "884929e08ec0c709c085488ca1b0c61bb9749b0f38bd253c97c073657116f5be",
+    alpha: undefined,
+  },
+  {
+    name: "smooth",
+    filter: "adaptive",
+    png: "1db43cc9731744f49b21c3afa53e685a91dcb224063c463bc29366071a88396f",
+    decoded: "6ebd58d0fb6cd909811b15a2a4454569fa41ae57710e955d1086378286a347f3",
+    alpha: undefined,
+  },
+  {
+    name: "smooth",
+    filter: "none",
+    png: "12e7ca387300c407e81902804bac56d4a8c02d550e346a79ae7e1de6b188ff68",
+    decoded: "6ebd58d0fb6cd909811b15a2a4454569fa41ae57710e955d1086378286a347f3",
+    alpha: undefined,
+  },
+];
+
+describe("encodePng and decodePng known answers over seeded images", () => {
+  it.each(GOLDEN_ROWS)(
+    "reproduces the recorded bytes for $name under the $filter filter",
+    ({ name, filter, png, decoded, alpha }) => {
+      const image = goldenImages()[name]!;
+      const encoded = encodePng(image, { filter });
+      expect(sha256Hex(encoded)).toBe(png);
+      const back = decodePng(encoded);
+      expect(sha256Hex(back.data)).toBe(decoded);
+      expect(back.alpha === undefined ? undefined : sha256Hex(back.alpha)).toBe(
+        alpha,
+      );
+    },
+  );
 });

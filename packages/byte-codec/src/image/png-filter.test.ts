@@ -297,3 +297,210 @@ describe("filterScanlines: strategy 'adaptive'", () => {
     expect(Array.from(back)).toEqual(Array.from(data));
   });
 });
+
+// The reference below is the PNG specification's own filter definitions (section 9.2) written as directly as possible, one function per filter type, sharing nothing with the implementation: Paeth's predictor is the spec's pseudocode with its explicit "pa <= pb and pa <= pc" comparison chain, and the adaptive choice is the spec's suggested heuristic (the smallest sum of absolute values of the filtered bytes taken as signed) with the first minimal type winning a tie.
+function referencePaeth(a: number, b: number, c: number): number {
+  const p = a + b - c;
+  const pa = Math.abs(p - a);
+  const pb = Math.abs(p - b);
+  const pc = Math.abs(p - c);
+  if (pa <= pb && pa <= pc) return a;
+  if (pb <= pc) return b;
+  return c;
+}
+
+function referencePredict(
+  type: number,
+  a: number,
+  b: number,
+  c: number,
+): number {
+  switch (type) {
+    case 0:
+      return 0;
+    case 1:
+      return a;
+    case 2:
+      return b;
+    case 3:
+      return (a + b) >> 1;
+    default:
+      return referencePaeth(a, b, c);
+  }
+}
+
+function referenceFilterRow(
+  pixels: Uint8Array,
+  height: number,
+  bytesPerRow: number,
+  bpp: number,
+  y: number,
+  type: number,
+): number[] {
+  const row: number[] = [];
+  for (let x = 0; x < bytesPerRow; x += 1) {
+    const at = (row_: number, col: number): number =>
+      row_ < 0 || col < 0 ? 0 : pixels[row_ * bytesPerRow + col]!;
+    const a = at(y, x - bpp);
+    const b = at(y - 1, x);
+    const c = at(y - 1, x - bpp);
+    row.push(
+      (pixels[y * bytesPerRow + x]! - referencePredict(type, a, b, c)) & 0xff,
+    );
+  }
+  return row;
+}
+
+function referenceFilter(
+  pixels: Uint8Array,
+  height: number,
+  bytesPerRow: number,
+  bpp: number,
+  strategy: "none" | "adaptive",
+): number[] {
+  const out: number[] = [];
+  for (let y = 0; y < height; y += 1) {
+    const types = strategy === "none" ? [0] : [0, 1, 2, 3, 4];
+    let bestType = 0;
+    let bestRow: number[] = [];
+    let bestSum = Number.POSITIVE_INFINITY;
+    for (const type of types) {
+      const row = referenceFilterRow(pixels, height, bytesPerRow, bpp, y, type);
+      const sum = row.reduce(
+        (total, byte) => total + Math.abs(byte < 128 ? byte : byte - 256),
+        0,
+      );
+      if (sum < bestSum) {
+        bestSum = sum;
+        bestType = type;
+        bestRow = row;
+      }
+    }
+    out.push(bestType, ...bestRow);
+  }
+  return out;
+}
+
+function referenceUnfilter(
+  data: Uint8Array,
+  height: number,
+  bytesPerRow: number,
+  bpp: number,
+): number[] {
+  const out: number[] = [];
+  for (let y = 0; y < height; y += 1) {
+    const type = data[y * (bytesPerRow + 1)]!;
+    for (let x = 0; x < bytesPerRow; x += 1) {
+      const at = (row: number, col: number): number =>
+        row < 0 || col < 0 ? 0 : out[row * bytesPerRow + col]!;
+      const value =
+        data[y * (bytesPerRow + 1) + 1 + x]! +
+        referencePredict(
+          type,
+          at(y, x - bpp),
+          at(y - 1, x),
+          at(y - 1, x - bpp),
+        );
+      out.push(value & 0xff);
+    }
+  }
+  return out;
+}
+
+/** Deterministic pseudo-random bytes from Mulberry32, so a failing input reproduces exactly and no test depends on Math.random. */
+function seededBytes(length: number, seed: number): Uint8Array<ArrayBuffer> {
+  const out = new Uint8Array(length);
+  let state = seed >>> 0;
+  for (let index = 0; index < length; index += 1) {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let mixed = Math.imul(state ^ (state >>> 15), state | 1);
+    mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
+    out[index] = (mixed ^ (mixed >>> 14)) & 0xff;
+  }
+  return out;
+}
+
+// Pixel widths and bytes-per-pixel that cover a single byte per row, rows shorter than one pixel's neighbour reach, and the 1, 2, 3, 4, 6 and 8 byte pixels PNG's colour types and bit depths produce.
+const FILTER_SHAPES: readonly (readonly [number, number, number])[] = [
+  [1, 1, 1],
+  [5, 1, 1],
+  [2, 2, 2],
+  [3, 3, 3],
+  [7, 3, 3],
+  [4, 4, 4],
+  [5, 6, 6],
+  [6, 8, 8],
+  [11, 2, 3],
+];
+
+describe("filterScanlines and unfilterScanlines against the PNG specification's definitions", () => {
+  it.each(FILTER_SHAPES)(
+    "match the reference for %i rows of %i bytes with a %i-byte pixel, under both strategies",
+    (height, bytesPerRow, bpp) => {
+      const rawBytes = seededBytes(
+        height * bytesPerRow,
+        height * 100 + bytesPerRow,
+      );
+      for (const strategy of ["none", "adaptive"] as const) {
+        const filteredBytes = filterScanlines(
+          rawBytes,
+          height,
+          bytesPerRow,
+          bpp,
+          strategy,
+        );
+        expect(Array.from(filteredBytes)).toEqual(
+          referenceFilter(rawBytes, height, bytesPerRow, bpp, strategy),
+        );
+        expect(
+          Array.from(
+            unfilterScanlines(filteredBytes, height, bytesPerRow, bpp),
+          ),
+        ).toEqual(Array.from(rawBytes));
+      }
+    },
+  );
+
+  it("unfilters rows that use every filter type, one per row, the same way the reference does", () => {
+    const height = 10;
+    const bytesPerRow = 9;
+    const bpp = 3;
+    const data = seededBytes(height * (bytesPerRow + 1), 99);
+    for (let y = 0; y < height; y += 1) {
+      data[y * (bytesPerRow + 1)] = y % 5;
+    }
+    expect(
+      Array.from(unfilterScanlines(data, height, bytesPerRow, bpp)),
+    ).toEqual(referenceUnfilter(data, height, bytesPerRow, bpp));
+  });
+
+  it("matches the reference on a larger image where every filter type wins some row", () => {
+    const height = 40;
+    const bytesPerRow = 48;
+    const bpp = 3;
+    const noisy = seededBytes(height * bytesPerRow, 5);
+    const smooth = Uint8Array.from(
+      { length: height * bytesPerRow },
+      (_unused, index) =>
+        Math.floor(index / bytesPerRow) * 3 + (index % bytesPerRow),
+    );
+    const rawBytes = new Uint8Array(height * bytesPerRow);
+    for (let y = 0; y < height; y += 1) {
+      const source = y % 2 === 0 ? smooth : noisy;
+      rawBytes.set(
+        source.subarray(y * bytesPerRow, (y + 1) * bytesPerRow),
+        y * bytesPerRow,
+      );
+    }
+    const filteredBytes = filterScanlines(
+      rawBytes,
+      height,
+      bytesPerRow,
+      bpp,
+      "adaptive",
+    );
+    expect(Array.from(filteredBytes)).toEqual(
+      referenceFilter(rawBytes, height, bytesPerRow, bpp, "adaptive"),
+    );
+  });
+});
