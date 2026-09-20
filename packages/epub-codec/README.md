@@ -200,6 +200,18 @@ Conventional Commits, enforced workspace-wide by commitlint through a root `comm
 - [EPUB 3.3](https://www.w3.org/TR/epub-33/) — the current W3C Recommendation this package's own EPUB 3 reading and writing targets.
 - [OCF 1.0 / OPF 2.0.1 / OPS 2.0.1](https://idpf.org/epub/dir) — the legacy IDPF specifications this package's EPUB 2 reading targets (container.xml, the OPF package document, and the NCX navigation format are all unchanged in substance between the two generations).
 
+## Removed: base64 from `epub-codec/util/base64`
+
+`bytesToBase64` and `base64ToBytes` were this package's own copy of helpers every codec in the family carried separately. They live in [`byte-codec`](../byte-codec/README.md) now, as one implementation ([ExaDev/documents.js#1282](https://github.com/ExaDev/documents.js/issues/1282)), so the module behind the `epub-codec/util/base64` deep import is gone.
+
+Import from `byte-codec` directly:
+
+```ts
+import { base64ToBytes, bytesToBase64 } from "byte-codec";
+```
+
+Both names are also still on this package's own barrel, exactly as before, so `import { bytesToBase64 } from "epub-codec"` is unaffected.
+
 ## License
 
 MIT
