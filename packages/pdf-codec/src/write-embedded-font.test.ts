@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { encodePng } from "byte-codec";
+import { bytesToBase64, encodePng } from "byte-codec";
 import { describe, expect, it } from "vitest";
 import type { LayoutFont } from "document-schema.js";
 import type { LayoutDocument, LayoutImageAsset } from "./layout";
@@ -12,7 +12,6 @@ import { readPdf } from "./read";
 import { parseSfnt } from "./sfnt";
 import { carlitoRegularBytes } from "./test-support/fonts";
 import { wrapRunsToWidth } from "./text-layout";
-import { bytesToBase64 } from "./util/base64";
 import { writePdf } from "./write";
 
 // The end-to-end proof that a FontRegistry actually reaches the written PDF: a document whose text is authored in Calibri, converted with a registry whose vendored-substitute step resolves that family to the real Carlito face this package embeds, must come out carrying a genuine /Type0 + /CIDFontType2 + /FontFile2 font program rather than a standard-14 Helvetica dictionary -- and must be measured against Carlito's own advances rather than Helvetica's plus the Calibri width fudge.

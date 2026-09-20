@@ -24,7 +24,7 @@ import { readPdf } from "./read";
 import { parseSfnt } from "./sfnt";
 import { ByteWriter } from "./bytes/writer";
 import { STIX_TWO_MATH_FONT_BASE64 } from "./assets/stix-two-math-font";
-import { base64ToBytes } from "./util/base64";
+import { base64ToBytes } from "byte-codec";
 import { carlitoRegularBytes } from "./test-support/fonts";
 import {
   cropBoxPdf,

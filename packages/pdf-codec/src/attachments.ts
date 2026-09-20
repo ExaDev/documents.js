@@ -6,7 +6,7 @@ import { walkNameTree } from "./names";
 import type { PdfDict, PdfObject } from "./objects";
 import { asArray, asName, dictGet } from "./objects";
 import { decodePdfString } from "./pdf-text";
-import { bytesToBase64 } from "./util/base64";
+import { bytesToBase64 } from "byte-codec";
 
 // Embedded-file reading (#721): one collector for the three places a PDF states an attachment -- the /Names /EmbeddedFiles name tree (the primary, addressable-by-name store), /FileAttachment annotations' /FS filespecs (a file pinned to a page rectangle), and catalog /AF associated files (ISO 32000-2's machine-readable association list). Collection order is that same order, and a filespec whose name was already collected collapses into the first entry: the name is the attachment's identity, and the same file reached through two routes is one attachment, not two.
 
