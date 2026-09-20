@@ -1,4 +1,4 @@
-// Standard-alphabet base64 (RFC 4648 section 4) over bytes, in both directions. The one implementation the documents.js family shares: every codec that has to put an image payload into a `data:` URI, an OOXML/ODF inline picture, or a ContentImageBlock.base64 field reaches for this rather than carrying its own alphabet indexing. Pure typed-array and string arithmetic -- no Buffer, no atob/btoa -- so it runs unchanged in a Worker, a browser, and Node.
+// Standard-alphabet base64 (RFC 4648 section 4) over bytes, in both directions. The one implementation the documents.js family shares: every codec that has to put an image payload into a `data:` URI, an OOXML/ODF inline picture, or a ContentImageBlock.base64 field reaches for this rather than carrying its own alphabet indexing. Pure typed-array and string arithmetic, with no Buffer and no atob/btoa, so it runs unchanged in a Worker, a browser, and Node.
 
 const TABLE =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -67,7 +67,7 @@ export function bytesToBase64(bytes: Uint8Array): string {
 /**
  * Decodes standard-alphabet base64 (RFC 4648 section 4) back to the bytes it was made from.
  *
- * Characters outside the alphabet and the padding character are removed before decoding, so text wrapped across lines -- which several of the formats built on this deliberately emit -- decodes the same as an unwrapped run of the same characters.
+ * Characters outside the alphabet and the padding character are removed before decoding, so text wrapped across lines, which several of the formats built on this deliberately emit, decodes the same as an unwrapped run of the same characters.
  * @param base64 - The base64 text to decode.
  * @throws Error `invalid base64 input` when a four-character group's first two characters are not both in the alphabet, which is the point at which no byte at all can be recovered from that group.
  * @returns The decoded bytes, and an empty array for input that holds no alphabet characters.

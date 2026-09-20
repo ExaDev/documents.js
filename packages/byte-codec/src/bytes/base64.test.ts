@@ -9,7 +9,7 @@ import {
 const REFERENCE_TABLE =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-/** The straightforward encoder bytesToBase64 is held to: one output character appended at a time, four per three input bytes, with `=` where the final group is short. It is deliberately the slow, obviously-correct formulation -- and the one every package in this family carried before they shared one implementation -- so the optimised encoder is checked against it rather than against its own reasoning. */
+/** The straightforward encoder bytesToBase64 is held to: one output character appended at a time, four per three input bytes, with `=` where the final group is short. It is deliberately the slow, obviously-correct formulation, and the one every package in this family carried before they shared one implementation, so the optimised encoder is checked against it rather than against its own reasoning. */
 function referenceBytesToBase64(bytes: Uint8Array): string {
   let out = "";
   for (let index = 0; index < bytes.length; index += 3) {
