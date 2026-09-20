@@ -15,6 +15,7 @@ import { encodeXmlText } from "../../xml/entities";
 import type { ImageMediaContext } from "./paragraph";
 import { buildParagraph, DocxParagraph } from "./paragraph";
 import type { ParagraphInit } from "./paragraph";
+import { docxMainPartPath, docxMediaDir } from "./parts";
 import { createEmptyDocxPackage } from "./scaffold";
 import { buildTable, DocxTable } from "./table";
 import type {
@@ -22,9 +23,6 @@ import type {
   ProvenanceDescriptor,
 } from "document-schema.js";
 import type { TableInit } from "./table";
-
-const DOCUMENT_PART_PATH = "word/document.xml";
-const MEDIA_DIR = "word/media";
 
 export interface DocxBody {
   insertParagraphAt(index: number, init?: ParagraphInit): DocxParagraph;
@@ -41,21 +39,24 @@ export interface DocxBody {
   closeRegion(): void;
 }
 
-function findDocumentRoot(pkg: Package): XmlElement {
-  const root = rootElement(pkg.parts[DOCUMENT_PART_PATH]);
+function findDocumentRoot(pkg: Package, documentPartPath: string): XmlElement {
+  const root = rootElement(pkg.parts[documentPartPath]);
   if (root === undefined) {
-    throw new Error(`package has no root element at ${DOCUMENT_PART_PATH}`);
+    throw new Error(`package has no root element at ${documentPartPath}`);
   }
   return root;
 }
 
-function findBody(documentRoot: XmlElement): XmlElement {
+function findBody(
+  documentRoot: XmlElement,
+  documentPartPath: string,
+): XmlElement {
   for (const child of documentRoot.children) {
     if (child.type === "element" && child.tag === "w:body") {
       return child;
     }
   }
-  throw new Error(`${DOCUMENT_PART_PATH} has no w:body element`);
+  throw new Error(`${documentPartPath} has no w:body element`);
 }
 
 // w:sectPr, when it appears as a direct child of w:body (the document's final/only section), must be the LAST child -- every new top-level element is inserted immediately before it.
@@ -317,15 +318,24 @@ function spellDeletedText(element: XmlElement): void {
 export class DocxEditor {
   readonly body: DocxBody;
   private readonly pkg: Package;
+  // Resolved once, at open time, and reused for every later read and relationship: the package's own officeDocument relationship decides which part holds the body, so re-resolving per call would only repeat the same answer (see ./parts.ts).
+  private readonly documentPartPath: string;
+  private readonly mediaDir: string;
 
   constructor(pkg: Package) {
     this.pkg = pkg;
-    const documentRoot = findDocumentRoot(pkg);
-    const body = findBody(documentRoot);
+    this.documentPartPath = docxMainPartPath(pkg);
+    this.mediaDir = docxMediaDir(this.documentPartPath);
+    const documentRoot = findDocumentRoot(pkg, this.documentPartPath);
+    const body = findBody(documentRoot, this.documentPartPath);
     const imageContext: ImageMediaContext = {
       pkg,
       documentRoot,
-      media: { pkg, partPath: DOCUMENT_PART_PATH, mediaDir: MEDIA_DIR },
+      media: {
+        pkg,
+        partPath: this.documentPartPath,
+        mediaDir: this.mediaDir,
+      },
     };
     this.body = new DocxBodyImpl(body, imageContext, this.pkg);
   }
@@ -340,15 +350,15 @@ export class DocxEditor {
   }
 
   paragraphs(): DocxParagraph[] {
-    const documentRoot = findDocumentRoot(this.pkg);
-    const body = findBody(documentRoot);
+    const documentRoot = findDocumentRoot(this.pkg, this.documentPartPath);
+    const body = findBody(documentRoot, this.documentPartPath);
     const imageContext: ImageMediaContext = {
       pkg: this.pkg,
       documentRoot,
       media: {
         pkg: this.pkg,
-        partPath: DOCUMENT_PART_PATH,
-        mediaDir: MEDIA_DIR,
+        partPath: this.documentPartPath,
+        mediaDir: this.mediaDir,
       },
     };
     const out: DocxParagraph[] = [];
@@ -361,7 +371,10 @@ export class DocxEditor {
   }
 
   tables(): DocxTable[] {
-    const body = findBody(findDocumentRoot(this.pkg));
+    const body = findBody(
+      findDocumentRoot(this.pkg, this.documentPartPath),
+      this.documentPartPath,
+    );
     const out: DocxTable[] = [];
     for (const child of body.children) {
       if (child.type === "element" && child.tag === "w:tbl") {

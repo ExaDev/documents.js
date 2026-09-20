@@ -1,6 +1,6 @@
 import type { Package } from "ooxml.js";
 import { bytesToBase64 } from "ooxml.js";
-import { buildRelativeTarget } from "./paths";
+import { buildRelativeTarget, escapeRegExp } from "./paths";
 import { addRelationship } from "./rels";
 import {
   defaultContentTypeForExtension,
@@ -13,10 +13,6 @@ const IMAGE_RELATIONSHIP_TYPE =
 export interface AddedMedia {
   readonly partPath: string;
   readonly relationshipId: string;
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export function nextMediaIndex(
