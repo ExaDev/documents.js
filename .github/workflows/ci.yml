@@ -836,8 +836,25 @@ jobs:
           node-version-file: .tool-versions
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # This step fails intermittently on windows-latest, on no particular package, in a way its own log cannot explain (ExaDev/documents.js#1313): turbo stops part-way through the graph right after a task that succeeded, with no run summary and no task error, and pnpm reports the exit code. Nothing is lost to turbo's output grouping, because every task that started also finished and printed its output in full, so the flags here exist to capture what the log has no way to show after the fact. --summarize writes turbo's own machine-readable record of what it planned against what it actually executed, which is the one artifact that distinguishes "turbo stopped" from "a task failed silently", and the failure-only steps below record the runner state (disk, temp directory, and on Windows the processes holding memory) at the moment it happened. None of this changes what gets built.
       - name: Build the released package's SEA bundle
-        run: pnpm --dir "packages/${{ matrix.name }}" build
+        run: pnpm --dir "packages/${{ matrix.name }}" build -- --output-logs=full --verbosity=2 --summarize
+      - name: Record the runner's disk and temp state if the build failed
+        if: failure()
+        shell: bash
+        run: |
+          df -h .
+          ls -la "${RUNNER_TEMP}"
+      - name: Record the Windows runner's largest processes if the build failed
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: Get-Process | Sort-Object -Descending WorkingSet | Select-Object -First 15 Name, Id, WorkingSet | Format-Table -AutoSize
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: turbo-run-summary-${{ matrix.name }}-${{ matrix.os }}
+          path: .turbo/runs/
+          if-no-files-found: ignore
       # The workspace's own pinned Node (.tool-versions) predates the native ESM SEA mainFormat support document-cli's Ink-driven ESM bundle needs (see tsdown.sea.shared.ts and build-sea-binary.ts's own mainFormatFor), and a Homebrew-style distribution of even a new-enough Node can ship with the SEA feature itself compiled out. This second install, immediately before the injection step, targets one specific version confirmed locally to have SEA enabled, rather than "latest", so a future Node release can't silently break this step.
       - name: Install a Node build with SEA and native ESM mainFormat support
         uses: actions/setup-node@v7
