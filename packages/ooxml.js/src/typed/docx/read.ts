@@ -56,6 +56,7 @@ import {
   rootElement,
   textContent,
 } from "../util";
+import { findMainPartPath, findRelatedPartPath, hasPart } from "../opc";
 import type { DocxStyleContext } from "./styles";
 import { resolveParagraphProperties, resolveRunProperties } from "./styles";
 import {
@@ -140,8 +141,18 @@ export const DocxDocumentSchema = z.object({
 });
 export type DocxDocument = z.infer<typeof DocxDocumentSchema>;
 
-const DOCUMENT_PART_PATH = "word/document.xml";
-const STYLES_PART_PATH = "word/styles.xml";
+// The conventional names every mainstream producer gives these parts. OPC itself names each of them through a relationship (the package root's officeDocument relationship for the body, the body part's own relationships for the rest), so each is used only as the fallback for a package that declares no usable relationship of that type -- see typed/opc.ts.
+const CONVENTIONAL_DOCUMENT_PART_PATH = "word/document.xml";
+const CONVENTIONAL_STYLES_PART_PATH = "word/styles.xml";
+const CONVENTIONAL_COMMENTS_PART_PATH = "word/comments.xml";
+const CONVENTIONAL_FOOTNOTES_PART_PATH = "word/footnotes.xml";
+const CONVENTIONAL_ENDNOTES_PART_PATH = "word/endnotes.xml";
+const STYLES_REL_SUFFIX = "/styles";
+const COMMENTS_REL_SUFFIX = "/comments";
+const FOOTNOTES_REL_SUFFIX = "/footnotes";
+const ENDNOTES_REL_SUFFIX = "/endnotes";
+const HEADER_REL_SUFFIX = "/header";
+const FOOTER_REL_SUFFIX = "/footer";
 const THEME_REL_SUFFIX = "/theme";
 
 // Everything the block walk needs that does not change as it descends: the style/theme cascade context, the containing part's own relationships, and the package the media parts live in.
@@ -1660,20 +1671,47 @@ function readSectionHeaderFooters(
   return references;
 }
 
-// Each header/footer part as block flow: the part's own body walked by the same collectFlowNodes machinery the document body uses, against the part's OWN relationships (an image inside a header resolves through the header part's rels, not the document's) while sharing the document's style/theme cascade. Every part matching the word/header*/word/footer* path shape is walked, referenced or not -- sectionHeaderFooters carries the reference side, so an orphaned part still surfaces here rather than nowhere. Parts are listed in sorted package-key order, one entry per part.
-function readHeaderFooterParts(
+// The part holding the document body, named by the package root's own officeDocument relationship. The conventional word/document.xml is the fallback for a package that declares no usable such relationship, which is the shape every package this reader's own test fixtures build takes.
+function resolveDocxMainPartPath(pkg: Package): string {
+  return findMainPartPath(pkg) ?? CONVENTIONAL_DOCUMENT_PART_PATH;
+}
+
+// Every header/footer part in the package, in sorted package-key order: the ones the main part declares a header/footer relationship to, unioned with every part matching the conventional word/header*/word/footer* path shape. The union is deliberate -- a package whose body sits somewhere other than word/ keeps its header parts wherever its own relationships say, while an orphaned part nothing references still surfaces here rather than nowhere, as it always has.
+function headerFooterPartPaths(
   pkg: Package,
-  ctx: DocxReadContext,
-): HeaderFooterPart[] {
-  const parts: HeaderFooterPart[] = [];
-  const paths = Object.keys(pkg.parts)
-    .filter(
+  documentPartPath: string,
+): string[] {
+  const paths = new Set(
+    Object.keys(pkg.parts).filter(
       (path) =>
         (path.startsWith("word/header") || path.startsWith("word/footer")) &&
         path.endsWith(".xml"),
-    )
-    .sort();
-  for (const path of paths) {
+    ),
+  );
+  for (const relationship of resolveRelationships(
+    pkg,
+    documentPartPath,
+  ).values()) {
+    if (
+      (relationship.type.endsWith(HEADER_REL_SUFFIX) ||
+        relationship.type.endsWith(FOOTER_REL_SUFFIX)) &&
+      relationship.targetMode !== "External" &&
+      hasPart(pkg, relationship.target)
+    ) {
+      paths.add(relationship.target);
+    }
+  }
+  return [...paths].sort();
+}
+
+// Each header/footer part as block flow: the part's own body walked by the same collectFlowNodes machinery the document body uses, against the part's OWN relationships (an image inside a header resolves through the header part's rels, not the document's) while sharing the document's style/theme cascade. Parts are listed in sorted package-key order, one entry per part; headerFooterPartPaths above decides which parts those are.
+function readHeaderFooterParts(
+  pkg: Package,
+  documentPartPath: string,
+  ctx: DocxReadContext,
+): HeaderFooterPart[] {
+  const parts: HeaderFooterPart[] = [];
+  for (const path of headerFooterPartPaths(pkg, documentPartPath)) {
     const root = rootElement(pkg.parts[path]);
     if (root === undefined) {
       continue;
@@ -1813,8 +1851,13 @@ function readFootnote(footnote: XmlElement): Footnote {
   return result;
 }
 
-function readComments(pkg: Package): Comment[] {
-  const root = rootElement(pkg.parts["word/comments.xml"]);
+function readComments(pkg: Package, documentPartPath: string): Comment[] {
+  const root = rootElement(
+    pkg.parts[
+      findRelatedPartPath(pkg, documentPartPath, COMMENTS_REL_SUFFIX) ??
+        CONVENTIONAL_COMMENTS_PART_PATH
+    ],
+  );
   if (root === undefined) {
     return [];
   }
@@ -1846,23 +1889,27 @@ function readNotesPart(
 //
 // Information not modelled here is still dropped: live PAGE/NUMPAGES field re-evaluation; w:themeShade/w:themeTint refinement of a resolved theme colour; a floating image's own anchored position; any image whose bytes don't sniff as PNG/JPEG; a w:object's VML preview picture (v:imagedata -- no VML reader exists here, and real producers ship WMF/EMF previews anyway); a w:object sitting inside a footnote (footnotes ride DocxDocument.footnotes as text, so there is no block flow to lift an object into -- a header/footer's own objects DO recover now, since those parts are walked as block flow); the evenAndOddHeaders setting in word/settings.xml that gates whether a section's even-page slot renders (the references themselves are recorded as spelled); Word's header/footer slot-inheritance rule (a section reusing the previous section's part when it spells no reference of its own -- a consumer concern, since this records exactly what the file spells); the classic non-ZIP OLE compound-file payload (.bin -- opaque external-application data, left skipped exactly as unhandled markup) and a ZIP payload that does not decode as one of the three OOXML flavours (both degrade to no embedded block, never a failed read); and the run-level construct occurrences still without an encoding here -- an inline SDT or partial tracked change, and a bookmark whose two halves sit in different paragraphs (a same-paragraph bookmark pair, crossing included, lands on ContentParagraph.constructs; see typed/docx/constructs.ts for the scope rules, and typed/docx/write.ts for the write side of what does survive).
 export function readDocxContent(pkg: Package): DocxDocument {
-  const documentRoot = rootElement(pkg.parts[DOCUMENT_PART_PATH]);
+  const documentPartPath = resolveDocxMainPartPath(pkg);
+  const documentRoot = rootElement(pkg.parts[documentPartPath]);
   if (documentRoot === undefined) {
-    throw new Error(
-      `readDocxContent: package has no ${DOCUMENT_PART_PATH} part`,
-    );
+    throw new Error(`readDocxContent: package has no ${documentPartPath} part`);
   }
   const body = childrenWithTag(documentRoot, "w:body")[0];
   if (body === undefined) {
     throw new Error(
-      `readDocxContent: ${DOCUMENT_PART_PATH} has no w:body element`,
+      `readDocxContent: ${documentPartPath} has no w:body element`,
     );
   }
 
-  const docRels = resolveRelationships(pkg, DOCUMENT_PART_PATH);
+  const docRels = resolveRelationships(pkg, documentPartPath);
   const ctx: DocxReadContext = {
     styles: {
-      stylesRoot: rootElement(pkg.parts[STYLES_PART_PATH]),
+      stylesRoot: rootElement(
+        pkg.parts[
+          findRelatedPartPath(pkg, documentPartPath, STYLES_REL_SUFFIX) ??
+            CONVENTIONAL_STYLES_PART_PATH
+        ],
+      ),
       theme: readDocumentTheme(pkg, docRels),
     },
     rels: docRels,
@@ -1873,10 +1920,20 @@ export function readDocxContent(pkg: Package): DocxDocument {
   return {
     metadata: readCoreProperties(pkg),
     sections,
-    comments: readComments(pkg),
-    footnotes: readNotesPart(pkg, "word/footnotes.xml", "w:footnote"),
-    endnotes: readNotesPart(pkg, "word/endnotes.xml", "w:endnote"),
-    headerFooterParts: readHeaderFooterParts(pkg, ctx),
+    comments: readComments(pkg, documentPartPath),
+    footnotes: readNotesPart(
+      pkg,
+      findRelatedPartPath(pkg, documentPartPath, FOOTNOTES_REL_SUFFIX) ??
+        CONVENTIONAL_FOOTNOTES_PART_PATH,
+      "w:footnote",
+    ),
+    endnotes: readNotesPart(
+      pkg,
+      findRelatedPartPath(pkg, documentPartPath, ENDNOTES_REL_SUFFIX) ??
+        CONVENTIONAL_ENDNOTES_PART_PATH,
+      "w:endnote",
+    ),
+    headerFooterParts: readHeaderFooterParts(pkg, documentPartPath, ctx),
     sectionHeaderFooters: headerFooters,
     numbering: readNumberingDefinitions(pkg),
   };
