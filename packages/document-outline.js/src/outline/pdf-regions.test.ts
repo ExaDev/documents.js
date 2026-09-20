@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LayoutItem, LayoutPage, LayoutText } from "pdf-codec";
+import { DEFAULT_BASELINE_TOLERANCE_EM } from "pdf-codec";
 import type { LayoutFont } from "document-schema.js";
 import {
   attachCaptions,
@@ -587,7 +588,7 @@ describe("regularity", () => {
 });
 
 describe("groupIntoLines", () => {
-  it("clusters items within LINE_TOLERANCE_PT into one line, sorted left to right", () => {
+  it("clusters items sharing a baseline into one line, sorted left to right", () => {
     const a = line(50, 700, "a");
     const b = line(10, 701, "b"); // within tolerance of a (diff 1)
     const lines = groupIntoLines([a, b]);
@@ -598,12 +599,21 @@ describe("groupIntoLines", () => {
     ]);
   });
 
-  it("clusters at exactly the tolerance boundary, but not one point beyond it", () => {
+  it("clusters at exactly the tolerance boundary, but not beyond it", () => {
+    // The tolerance is pdf-codec's own: a fraction of an em of the smaller of the two runs, which at the 10pt default size these helpers use is 20/3 points.
+    const tolerancePt = DEFAULT_BASELINE_TOLERANCE_EM * 10;
     const a = line(0, 700, "a");
-    const atBoundary = line(0, 698, "b"); // diff exactly 2 (LINE_TOLERANCE_PT)
+    const atBoundary = line(0, 700 - tolerancePt, "b");
     expect(groupIntoLines([a, atBoundary])).toHaveLength(1);
-    const beyondBoundary = line(0, 697, "c"); // diff 3, past tolerance
+    const beyondBoundary = line(0, 700 - tolerancePt - 0.01, "c");
     expect(groupIntoLines([a, beyondBoundary])).toHaveLength(2);
+  });
+
+  it("takes the tolerance from the smaller of the two runs, so a heading cannot absorb the line under it", () => {
+    // 12pt between a 30pt heading's baseline and the 9pt line beneath it: inside the heading's own tolerance, outside the body line's. The smaller run decides (ExaDev/documents.js#1317).
+    const heading = line(0, 700, "Results", 30);
+    const body = line(0, 688, "Measured over four quarters", 9);
+    expect(groupIntoLines([heading, body])).toHaveLength(2);
   });
 
   it("sorts lines top to bottom (descending y), matching PDF's upward-increasing y-axis", () => {
@@ -644,6 +654,28 @@ describe("cellsInLine", () => {
       items: [previous, textItem(22.1, 5, 10)],
     };
     expect(cellsInLine(beyondThreshold)).toBe(2);
+  });
+
+  it("counts no cell boundary after a run that stated no advance width", () => {
+    // Where the previous run ends is unknown, so the gap after it is too, and an unknown gap is no evidence of a cell boundary. Reading the absent width as zero made the whole distance between the two origins look like a gap, so a line of separately-shown words counted one cell per word and read as a table row (ExaDev/documents.js#1317).
+    const withoutWidth: LayoutText = {
+      kind: "text",
+      text: "x",
+      xPt: 0,
+      yPt: 0,
+      font: FONT,
+      sizePt: 10,
+      color: BLACK,
+    };
+    expect(
+      cellsInLine({ yPt: 0, items: [withoutWidth, textItem(30, 5, 10)] }),
+    ).toBe(1);
+  });
+
+  it("takes the cell threshold from the smaller of the two runs", () => {
+    // A 13pt gap after a 30pt run, before a 9pt one: beyond a cell boundary at the small run's scale (1.2 x 9 = 10.8), nowhere near one at the large run's.
+    const items = [textItem(0, 20, 30), textItem(33, 5, 9)];
+    expect(cellsInLine({ yPt: 0, items })).toBe(2);
   });
 
   it("counts every qualifying internal gap, not just the first", () => {
