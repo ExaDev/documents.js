@@ -124,6 +124,8 @@ pnpm test:mutation    # Stryker mutation testing, sliced by package and cached i
 pnpm test:e2e         # the web UI driven through a real browser (Playwright); a required check (named in the repository ruleset alongside Lint/Test and siblings)
 ```
 
+To mutate a subset of one package by hand, run `stryker run stryker.config.ts --mutate <files>` from that package's directory, with the config file named on the command line. Stryker does not discover a TypeScript config by itself: without it the run falls back to Stryker's defaults (a command test runner and no plugins) and produces a complete-looking report in which every mutant survived.
+
 Every one of these runs through turbo, so a package whose inputs have not changed replays a cached result rather than re-running.
 
 To scope a run, drive turbo directly rather than adding a filter to the scripts above. The scripts name two task sets (the underscore tasks every package defines, and the web UI's plainly-named ones — see the pipeline note below), and turbo unions an explicitly named `package#task` with whatever `--filter` selects, so `pnpm test --filter=pdf-codec` would run the web UI's tests too:
