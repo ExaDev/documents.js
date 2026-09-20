@@ -95,13 +95,19 @@ export interface Relationship {
   targetMode?: string;
 }
 
+// The package root's own relationships part, the one .rels path in an OPC package that is fixed rather than derived from a part path.
+export const ROOT_RELS_PART_PATH = "_rels/.rels";
+
 // The .rels part for a given part path: word/document.xml -> word/_rels/document.xml.rels. Exported purely for direct unit coverage -- resolveRelationships is its only real caller.
 export function relsPathFor(partPath: string): string {
   const lastSlash = partPath.lastIndexOf("/");
-  const dir = lastSlash === -1 ? "" : partPath.slice(0, lastSlash);
-  // No ternary needed here (unlike dir above): slice(-1 + 1) is slice(0), which returns the whole string unchanged -- exactly what a slash-free path needs -- so this one expression already covers both cases the dir computation above needs a real branch for.
+  // slice(-1 + 1) is slice(0), which returns the whole string unchanged -- exactly what a part sitting directly at the package root needs.
   const fileName = partPath.slice(lastSlash + 1);
-  return `${dir}/_rels/${fileName}.rels`;
+  if (lastSlash === -1) {
+    // A root-level part ("document2.xml", which OPC permits and the officeDocument relationship can legitimately name) keeps its relationships at "_rels/document2.xml.rels" with no leading slash: Package.parts is keyed by ZIP entry name, and no OPC package spells an entry with one. Prefixing an empty directory would produce "/_rels/document2.xml.rels", a key nothing in the package ever matches.
+    return `_rels/${fileName}.rels`;
+  }
+  return `${partPath.slice(0, lastSlash)}/_rels/${fileName}.rels`;
 }
 
 // Resolve a relationship Target (relative to the subject part's directory, or package-rooted with a leading slash) to a package-relative part path. Exported purely for direct unit coverage -- resolveRelationships is its only real caller.
@@ -132,8 +138,24 @@ export function resolveRelationships(
   pkg: Package,
   partPath: string,
 ): Map<string, Relationship> {
+  return relationshipsFrom(pkg, relsPathFor(partPath), partPath);
+}
+
+// The package root's own relationships, read from the fixed "_rels/.rels". The root is not itself a part, so its .rels path is stated rather than derived, and its targets resolve against the package root -- which is exactly what an empty base path makes resolveRelTarget do, so a root Relationship spelling "/word/document.xml", "word/document.xml" or even "./word/document.xml" all land on the same part key.
+export function resolveRootRelationships(
+  pkg: Package,
+): Map<string, Relationship> {
+  return relationshipsFrom(pkg, ROOT_RELS_PART_PATH, "");
+}
+
+// Shared body of the two resolvers above: `relsPartPath` says which .rels part to read, `basePartPath` says what its Targets resolve against. The two differ only for the package root, whose rels part is not derivable from its (non-existent) own path.
+function relationshipsFrom(
+  pkg: Package,
+  relsPartPath: string,
+  basePartPath: string,
+): Map<string, Relationship> {
   const map = new Map<string, Relationship>();
-  const rels = rootElement(pkg.parts[relsPathFor(partPath)]);
+  const rels = rootElement(pkg.parts[relsPartPath]);
   if (rels === undefined) {
     return map;
   }
@@ -149,7 +171,9 @@ export function resolveRelationships(
     map.set(id, {
       type: decodeEntities(type),
       target:
-        targetMode === "External" ? target : resolveRelTarget(partPath, target),
+        targetMode === "External"
+          ? target
+          : resolveRelTarget(basePartPath, target),
       targetMode,
     });
   }
