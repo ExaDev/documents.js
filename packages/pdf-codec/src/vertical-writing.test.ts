@@ -157,6 +157,42 @@ describe("/DW2 and /W2", () => {
     expect(item?.yPt).toBeCloseTo(ORIGIN_Y_PT - SIZE_PT * 0.9, 6);
   });
 
+  it("gives each triplet of a /W2 array its own consecutive CID", () => {
+    // Two triplets from CID 65: the first a half-em displacement, the second a quarter. A reader that assigned both to one CID, or counted the CIDs by anything other than the triplet's own position, would not produce 10pt plus 5pt.
+    const item = textItems(
+      compositeFontWritingModePdf({
+        encoding: "/Identity-V",
+        verticalMetrics: "/W2 [65 [-500 200 900 -250 200 900]]",
+      }),
+    )[0];
+    expect(item?.widthPt).toBeCloseTo(SIZE_PT * 0.5 + SIZE_PT * 0.25, 6);
+  });
+
+  it("falls back to the defaults for a /W2 entry missing a number", () => {
+    // A triplet whose position vector's x is not a number describes nothing usable, so the CID takes /DW2's own default full-em displacement rather than half of an entry.
+    const item = textItems(
+      compositeFontWritingModePdf({
+        encoding: "/Identity-V",
+        verticalMetrics: "/W2 [65 [-500 /NotANumber 900]]",
+      }),
+    )[0];
+    expect(item?.widthPt).toBeCloseTo(SIZE_PT * GLYPH_COUNT, 6);
+  });
+
+  it("adds character spacing to the vertical advance, not subtracting it", () => {
+    // ISO 32000-1 9.4.4: ty is (w1 - Tj/1000) x Tfs + Tc + Tw, so Tc adds to a displacement that is itself negative and the column tightens rather than opening out. Two glyphs at -20pt each plus 2pt of Tc each cover 36pt.
+    const item = textItems(
+      compositeFontWritingModePdf({
+        encoding: "/Identity-V",
+        content: "BT /F1 20 Tf 2 Tc 100 700 Td <00410042> Tj ET",
+      }),
+    )[0];
+    expect(item?.widthPt).toBeCloseTo(
+      SIZE_PT * GLYPH_COUNT - 2 * GLYPH_COUNT,
+      6,
+    );
+  });
+
   it("applies a /W2 range to every CID it covers", () => {
     const item = textItems(
       compositeFontWritingModePdf({

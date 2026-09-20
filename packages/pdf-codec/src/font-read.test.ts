@@ -848,6 +848,85 @@ describe("createFontResolver: composite (Type0) fonts", () => {
       false,
     );
   });
+
+  // The identity of CID and glyph id is what makes reading the program legitimate at all, and two things break it: an /Encoding that is not one of the two Identity CMaps, and a /CIDToGIDMap that is neither absent nor /Identity. Each is checked below against the same program the test above reads successfully, so a failure to decode is the guard working rather than a broken fixture.
+  function decodeThroughProgram(overrides: {
+    readonly encoding: PdfObject;
+    readonly cidToGidMap?: PdfObject;
+  }): string | undefined {
+    const program = buildSfnt(
+      new Map([
+        [
+          "cmap",
+          buildCmapTable([
+            {
+              platformId: 3,
+              encodingId: 1,
+              format: 4,
+              mappings: new Map([[0x2126, 3]]),
+            },
+          ]),
+        ],
+      ]),
+    );
+    const objects = new Map<number, PdfObject>([
+      [7, pdfStream(pdfDict({}), program)],
+      [8, pdfStream(pdfDict({}), new Uint8Array([0, 0, 0, 3]))],
+    ]);
+    const descendant = pdfDict({
+      Subtype: pdfName("CIDFontType2"),
+      FontDescriptor: pdfDict({ FontFile2: pdfRef(7, 0) }),
+      ...(overrides.cidToGidMap === undefined
+        ? {}
+        : { CIDToGIDMap: overrides.cidToGidMap }),
+    });
+    const fontDict = pdfDict({
+      Subtype: pdfName("Type0"),
+      BaseFont: pdfName("CIDFont+F3"),
+      Encoding: overrides.encoding,
+      DescendantFonts: pdfArray([descendant]),
+    });
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(objects),
+      sink: () => undefined,
+    });
+    return resolve(
+      "F1",
+      pdfDict({ Font: pdfDict({ F1: fontDict }) }),
+    )?.decodeToUnicode(new Uint8Array([0x00, 0x03]));
+  }
+
+  it("identifies a CID through the program under Identity-V too, the same identity mapping set vertically", () => {
+    expect(decodeThroughProgram({ encoding: pdfName("Identity-V") })).toBe(
+      "\u2126",
+    );
+  });
+
+  it("does not consult the program under a CMap that is not an Identity one", () => {
+    // A predefined CMap remaps codes to CIDs through its own tables, so a CID is no longer the program's glyph id and reading the program would answer about the wrong glyph.
+    expect(decodeThroughProgram({ encoding: pdfName("90ms-RKSJ-V") })).toBe(
+      "\ufffd",
+    );
+  });
+
+  it("does not consult the program under a /CIDToGIDMap stream", () => {
+    // An explicit map breaks the identity just as surely as a non-Identity CMap does.
+    expect(
+      decodeThroughProgram({
+        encoding: pdfName("Identity-H"),
+        cidToGidMap: pdfRef(8, 0),
+      }),
+    ).toBe("\ufffd");
+  });
+
+  it("still consults the program when /CIDToGIDMap says /Identity explicitly", () => {
+    expect(
+      decodeThroughProgram({
+        encoding: pdfName("Identity-H"),
+        cidToGidMap: pdfName("Identity"),
+      }),
+    ).toBe("\u2126");
+  });
 });
 
 describe("createFontResolver: the FontMetricsPort adapter", () => {
