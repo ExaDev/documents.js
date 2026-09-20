@@ -1,3 +1,21 @@
+## [4.0.0](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.5.8...wpd-codec%404.0.0) (2026-09-20)
+
+### ⚠ BREAKING CHANGES
+
+* **wpd-codec:** The wpd-codec/bytes/base64 deep import is removed.
+  bytesToBase64 comes from byte-codec now. This package never carried
+  a decoder and never had either name on its barrel. The removal
+  already shipped, unmarked, in 3.5.8.
+
+### Documentation
+
+* **wpd-codec:** state that the base64 encoder moved out of src/bytes ([d970faa](https://github.com/ExaDev/documents.js/commit/d970faad113e84379bf823de497f28b5279bda14))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.6.2
+
 ## [3.5.8](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.5.7...wpd-codec%403.5.8) (2026-09-20)
 
 ### Code Refactoring

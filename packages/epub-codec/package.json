@@ -1,6 +1,6 @@
 {
   "name": "epub-codec",
-  "version": "1.5.8",
+  "version": "2.0.0",
   "description": "EPUB 2/3 reading and deterministic EPUB 3 writing against the shared document-schema.js content pivot.",
   "type": "module",
   "repository": {
@@ -78,7 +78,7 @@
   "license": "MIT",
   "packageManager": "pnpm@12.4.1+sha512.2e81e399d73fe8390dab25e06aa788ab7a5908248d2f5a370f82b481147a6a7a367bf8048f9a6fdb6460f21a66f0542dedb8b94ca2c8723596741920b1656d4c",
   "dependencies": {
-    "byte-codec": "1.6.1",
+    "byte-codec": "1.6.2",
     "document-schema.js": "7.11.4",
     "entities": "8.0.0",
     "fast-xml-parser": "5.10.1",

@@ -1,3 +1,21 @@
+## [2.0.0](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.7.13...ppt-codec%402.0.0) (2026-09-20)
+
+### ⚠ BREAKING CHANGES
+
+* **ppt-codec:** The ppt-codec/base64 deep import is removed.
+  bytesToBase64 and base64ToBytes come from byte-codec now, and are
+  still on this package's own barrel as well. The removal already
+  shipped, unmarked, in 1.7.12.
+
+### Documentation
+
+* **ppt-codec:** state that base64 moved out of src/base64.ts ([5be6861](https://github.com/ExaDev/documents.js/commit/5be68610b4c976fedbbf2f799ef33b450d51e4bd))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.6.2
+
 ## [1.7.13](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.7.12...ppt-codec%401.7.13) (2026-09-20)
 
 

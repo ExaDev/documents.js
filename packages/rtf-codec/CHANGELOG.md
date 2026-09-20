@@ -1,3 +1,22 @@
+## [5.0.0](https://github.com/ExaDev/documents.js/compare/rtf-codec%404.4.7...rtf-codec%405.0.0) (2026-09-20)
+
+### ⚠ BREAKING CHANGES
+
+* **rtf-codec:** rtf-codec/base64 no longer exports bytesToBase64,
+  which comes from byte-codec now. The module itself remains, and
+  still exports this package's own base64ToBytes, which returns
+  undefined rather than throwing, and its hex conversion. The
+  removal already shipped, unmarked, in 4.4.7.
+
+### Documentation
+
+* **rtf-codec:** state that the base64 encoder moved to byte-codec ([d440556](https://github.com/ExaDev/documents.js/commit/d440556f4e450dc4ae789e7ebc92045e348933da))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.6.2
+
 ## [4.4.7](https://github.com/ExaDev/documents.js/compare/rtf-codec%404.4.6...rtf-codec%404.4.7) (2026-09-20)
 
 ### Code Refactoring

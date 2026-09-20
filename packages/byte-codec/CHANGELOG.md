@@ -1,3 +1,9 @@
+## [1.6.2](https://github.com/ExaDev/documents.js/compare/byte-codec%401.6.1...byte-codec%401.6.2) (2026-09-20)
+
+### Styles
+
+* write the base64 module's own prose without a double hyphen ([c58e8b5](https://github.com/ExaDev/documents.js/commit/c58e8b5035dfbe940aeff377773948b7e5c5c8c1))
+
 ## [1.6.1](https://github.com/ExaDev/documents.js/compare/byte-codec%401.6.0...byte-codec%401.6.1) (2026-09-20)
 
 ### Bug Fixes

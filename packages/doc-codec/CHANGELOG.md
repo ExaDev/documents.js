@@ -1,3 +1,21 @@
+## [3.0.0](https://github.com/ExaDev/documents.js/compare/doc-codec%402.12.4...doc-codec%403.0.0) (2026-09-20)
+
+### ⚠ BREAKING CHANGES
+
+* **doc-codec:** The doc-codec/base64 deep import is removed.
+  bytesToBase64 and base64ToBytes come from byte-codec now, and are
+  still on this package's own barrel as well. The removal already
+  shipped, unmarked, in 2.12.4.
+
+### Documentation
+
+* **doc-codec:** state that base64 moved out of src/base64.ts ([8bf0b1e](https://github.com/ExaDev/documents.js/commit/8bf0b1e54c40956fc08a1cef3d9f84e127334596))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.6.2
+
 ## [2.12.4](https://github.com/ExaDev/documents.js/compare/doc-codec%402.12.3...doc-codec%402.12.4) (2026-09-20)
 
 ### Code Refactoring

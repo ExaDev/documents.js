@@ -1,3 +1,21 @@
+## [9.0.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.14.11...ooxml.js%409.0.0) (2026-09-20)
+
+### ⚠ BREAKING CHANGES
+
+* **ooxml.js:** The ooxml.js/util/base64 deep import is removed.
+  bytesToBase64 and base64ToBytes come from byte-codec now, and are
+  still on this package's own barrel as well. The removal already
+  shipped, unmarked, in 8.14.11.
+
+### Documentation
+
+* **ooxml.js:** state that base64 moved out of src/util ([ea6fbb9](https://github.com/ExaDev/documents.js/commit/ea6fbb9c183928d93cd787963b8035c47f285e72))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.6.2
+
 ## [8.14.11](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.14.10...ooxml.js%408.14.11) (2026-09-20)
 
 ### Code Refactoring

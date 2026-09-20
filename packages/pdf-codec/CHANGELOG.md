@@ -1,3 +1,21 @@
+## [5.0.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.8.17...pdf-codec%405.0.0) (2026-09-20)
+
+### ⚠ BREAKING CHANGES
+
+* **pdf-codec:** The pdf-codec/util/base64 deep import is removed.
+  bytesToBase64 and base64ToBytes come from byte-codec now, and are
+  still on this package's own barrel as well. The removal already
+  shipped, unmarked, in 4.8.15.
+
+### Documentation
+
+* **pdf-codec:** state that base64 moved out of src/util ([22f352b](https://github.com/ExaDev/documents.js/commit/22f352b0e56ca07b5d3c63692fa3b8b894c2258d))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.6.2
+
 ## [4.8.17](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.8.16...pdf-codec%404.8.17) (2026-09-20)
 
 ### Documentation

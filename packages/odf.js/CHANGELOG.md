@@ -1,3 +1,21 @@
+## [8.0.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.25.7...odf.js%408.0.0) (2026-09-20)
+
+### ⚠ BREAKING CHANGES
+
+* **odf.js:** The odf.js/util/base64 deep import is removed.
+  bytesToBase64 and base64ToBytes come from byte-codec now, and are
+  still on this package's own barrel as well. The removal already
+  shipped, unmarked, in 7.25.7.
+
+### Documentation
+
+* **odf.js:** state that base64 moved out of src/util ([30a1fe4](https://github.com/ExaDev/documents.js/commit/30a1fe40b2aaa0098844630d1afb776719e549e1))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.6.2
+
 ## [7.25.7](https://github.com/ExaDev/documents.js/compare/odf.js%407.25.6...odf.js%407.25.7) (2026-09-20)
 
 ### Code Refactoring
