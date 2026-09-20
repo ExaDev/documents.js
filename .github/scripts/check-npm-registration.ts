@@ -1,6 +1,8 @@
 // npm's own trusted-publishing setup requires an OIDC trusted publisher to be configured on a package's npmjs.com settings page before OIDC publishing from CI can succeed — and that settings page only exists once the package has been published at least once (docs.npmjs.com/trusted-publishers; github.blog's OIDC-GA changelog describes the same one-time bootstrap). A package that has never been published therefore has no trusted publisher to configure, so its very first release-job publish attempt fails outright with a 404 OIDC token exchange error, then ENONPMTOKEN on the token fallback, since this workspace deliberately configures no NPM_TOKEN (see README.md's Releases section). This check catches that gap before it reaches the release job at all (confirmed for pdf-raster-cpu, ExaDev/documents.js, 2026-09-11).
 //
-// Scoped to the packages a pull request actually touches, the same way most other tasks here scope to `--affected`: this is required on every pull request, and an unscoped whole-workspace check would mean one still-unregistered package blocks every unrelated pull request until someone bootstraps it, not just the pull requests that touch it. `GITHUB_BASE_REF` is set automatically by GitHub Actions on a pull_request event and absent on a push (main) or workflow_dispatch run, which is what this reads to decide between the two: a push to main runs the full, unscoped check, matching how the whole workspace is what actually gates the release job that runs immediately after.
+// Scoped to the packages a change actually touches, the same way most other tasks here scope to `--affected`: this is a required check, and an unscoped whole-workspace check would mean one still-unregistered package blocks every unrelated change until someone bootstraps it, not just the changes that touch it. `GITHUB_BASE_REF` is set automatically by GitHub Actions on a pull_request event and absent on a push (main) or workflow_dispatch run, which is what this reads to decide between the two: a push to main runs the full, unscoped check, matching how the whole workspace is what actually gates the release job that runs immediately after.
+//
+// GitHub sets `GITHUB_BASE_REF` for pull_request and pull_request_target events only, so a merge-queue run has none and would otherwise silently fall back to the unscoped whole-workspace check, on every entry in the queue, with the blocking behaviour above restored in the one place it is most expensive. ci.yml passes the merge group's own parent commit as `MERGE_GROUP_BASE_SHA` instead. That is a commit rather than a branch name, and the merge group branch is built directly on top of it, so it is already in the checkout and needs no fetch of its own.
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -41,6 +43,34 @@ export function touchedPackageDirectories(
     }
   }
   return directories;
+}
+
+/** The revision a run's changed-file diff is taken against, and the ref that has to be fetched first to make it resolvable. */
+export interface DiffBase {
+  /** Revision to diff HEAD against. */
+  readonly revision: string;
+  /** Branch to fetch from origin before diffing. Absent when the revision is already present in the checkout. */
+  readonly fetchBranch?: string;
+}
+
+/**
+ * Resolves the revision this run's changed-file diff should be taken against from the environment GitHub Actions provides.
+ * @param env - The process environment, or an equivalent mapping.
+ * @returns The diff base, or `undefined` when nothing scopes this run and the whole workspace is therefore in scope (a push to main, or a workflow_dispatch run).
+ */
+export function resolveDiffBase(
+  env: Readonly<Record<string, string | undefined>>,
+): DiffBase | undefined {
+  // Checked before GITHUB_BASE_REF so that, if both are ever set at once, the explicit commit wins over a branch name whose tip may have moved on since the merge group was formed.
+  const mergeGroupBaseSha = env.MERGE_GROUP_BASE_SHA;
+  if (mergeGroupBaseSha !== undefined && mergeGroupBaseSha !== "") {
+    return { revision: mergeGroupBaseSha };
+  }
+  const baseRef = env.GITHUB_BASE_REF;
+  if (baseRef !== undefined && baseRef !== "") {
+    return { revision: `origin/${baseRef}`, fetchBranch: baseRef };
+  }
+  return undefined;
 }
 
 function git(args: readonly string[]): string {
@@ -94,18 +124,24 @@ function main(): void {
   try {
     const packages = readWorkspacePackages();
 
-    const baseRef = process.env.GITHUB_BASE_REF;
+    const diffBase = resolveDiffBase(process.env);
     let inScope = packages;
-    if (baseRef !== undefined && baseRef !== "") {
-      git(["fetch", "origin", baseRef]);
-      const changed = git(["diff", "--name-only", `origin/${baseRef}...HEAD`])
+    if (diffBase !== undefined) {
+      if (diffBase.fetchBranch !== undefined) {
+        git(["fetch", "origin", diffBase.fetchBranch]);
+      }
+      const changed = git([
+        "diff",
+        "--name-only",
+        `${diffBase.revision}...HEAD`,
+      ])
         .split("\n")
         .filter((line) => line !== "");
       const touched = touchedPackageDirectories(changed);
       inScope = packages.filter((pkg) => touched.has(pkg.directory));
       if (inScope.length === 0) {
         console.log(
-          "No workspace package's files changed in this pull request; nothing to check.",
+          "No workspace package's files changed against the base of this run; nothing to check.",
         );
         return;
       }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isRecord,
   readWorkspacePackage,
+  resolveDiffBase,
   touchedPackageDirectories,
 } from "./check-npm-registration";
 
@@ -73,6 +74,40 @@ describe("touchedPackageDirectories", () => {
       "packages/pdf-codec/src/read.ts",
     ]);
     expect([...touched].sort()).toEqual(["byte-codec", "pdf-codec"]);
+  });
+});
+
+describe("resolveDiffBase", () => {
+  it("diffs against the origin copy of the pull request base branch, fetching it first", () => {
+    expect(resolveDiffBase({ GITHUB_BASE_REF: "main" })).toEqual({
+      revision: "origin/main",
+      fetchBranch: "main",
+    });
+  });
+
+  it("diffs against the merge group parent commit, with nothing to fetch", () => {
+    expect(
+      resolveDiffBase({ MERGE_GROUP_BASE_SHA: "0123456789abcdef" }),
+    ).toEqual({ revision: "0123456789abcdef" });
+  });
+
+  it("prefers the merge group commit over a base branch name when both are set", () => {
+    expect(
+      resolveDiffBase({
+        GITHUB_BASE_REF: "main",
+        MERGE_GROUP_BASE_SHA: "0123456789abcdef",
+      }),
+    ).toEqual({ revision: "0123456789abcdef" });
+  });
+
+  it("scopes nothing when neither variable is set, so the whole workspace is checked", () => {
+    expect(resolveDiffBase({})).toBeUndefined();
+  });
+
+  it("treats an empty value as unset, since a skipped expression interpolates to one", () => {
+    expect(
+      resolveDiffBase({ GITHUB_BASE_REF: "", MERGE_GROUP_BASE_SHA: "" }),
+    ).toBeUndefined();
   });
 });
 

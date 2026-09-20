@@ -204,6 +204,9 @@ jobs:
     name: npm registration
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # GitHub sets GITHUB_BASE_REF for pull_request and pull_request_target events only, so the script's own scoping has nothing to read on a merge-queue entry and would check the whole workspace on every one of them. The merge group's parent commit gives it the same base a pull request's own base.sha does; it is already in the checkout, so the script skips the fetch a branch name needs. Empty on every other event, which is exactly how the script recognises that nothing scopes this run.
+    env:
+      MERGE_GROUP_BASE_SHA: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_sha || '' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -211,7 +214,7 @@ jobs:
       - uses: ./.github/actions/setup-workspace
         with:
           task: npm-registration
-          # Not a turbo task -- the script does its own scoping directly from GITHUB_BASE_REF (set automatically on a pull_request event, absent on push/workflow_dispatch), checking only the packages a pull request's own diff touches and the whole workspace on a push to main. See the script's own top-of-file comment for why (a required check with no such scoping would let one still-unregistered package block every unrelated pull request) and for the OIDC chicken-and-egg mechanics this guards against.
+          # Not a turbo task. The script does its own scoping, from GITHUB_BASE_REF on a pull request and from the MERGE_GROUP_BASE_SHA above on a merge-queue entry, checking only the packages that change's own diff touches and the whole workspace on a push to main. See the script's own top-of-file comment for why (a required check with no such scoping would let one still-unregistered package block every unrelated change) and for the OIDC chicken-and-egg mechanics this guards against.
           command: node --experimental-strip-types .github/scripts/check-npm-registration.ts
 
   audit:
