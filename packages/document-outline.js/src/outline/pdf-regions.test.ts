@@ -1411,6 +1411,49 @@ describe("attachCaptions", () => {
     expect(result.classification).toBe("caption");
     expect(result.confidence).toBeCloseTo(1 - 5 / 24, 10);
   });
+
+  it("gives a figure the nearer of two caption candidates even when the nearer one is checked second", () => {
+    // Candidates are visited in array order, so this is the arrangement where keeping the first-seen candidate and replacing it with a strictly nearer later one give different answers. The far run is 20pt above figureRegion (top 500) and the near run 5pt below it (bottom 400).
+    const far = textRegion(
+      { xPt: 100, yPt: 520, widthPt: 100, heightPt: 10 },
+      "The farther run.",
+    );
+    const near = textRegion(
+      { xPt: 100, yPt: 385, widthPt: 100, heightPt: 10 },
+      "The nearer run.",
+    );
+    const [figure] = attachCaptions([figureRegion, far, near]);
+    expect(figure?.caption).toBe("The nearer run.");
+  });
+
+  it("keeps the first of two caption candidates that are exactly as near as each other", () => {
+    // 15pt above and 15pt below figureRegion: an exact tie, which the strictly-closer comparison resolves in favour of the candidate seen first, so a later run never displaces an equally near one.
+    const first = textRegion(
+      { xPt: 100, yPt: 515, widthPt: 100, heightPt: 10 },
+      "The first run.",
+    );
+    const second = textRegion(
+      { xPt: 100, yPt: 375, widthPt: 100, heightPt: 10 },
+      "The second run.",
+    );
+    const [figure] = attachCaptions([figureRegion, first, second]);
+    expect(figure?.caption).toBe("The first run.");
+  });
+
+  it("claims a run for the first of two figures that are exactly as near as each other", () => {
+    // One run sits 15pt above figureRegion (top 500) and 15pt below a second figure (bottom 540): an exact tie between the two figures, resolved in favour of the figure seen first, so only that one carries the run's text.
+    const upperFigure: PdfRegion = {
+      ...figureRegion,
+      bounds: { xPt: 100, yPt: 540, widthPt: 100, heightPt: 100 },
+    };
+    const between = textRegion(
+      { xPt: 100, yPt: 515, widthPt: 100, heightPt: 10 },
+      "Between two figures.",
+    );
+    const [lower, upper] = attachCaptions([figureRegion, upperFigure, between]);
+    expect(lower?.caption).toBe("Between two figures.");
+    expect(upper?.caption).toBeUndefined();
+  });
 });
 
 describe("horizontallyOverlaps", () => {
