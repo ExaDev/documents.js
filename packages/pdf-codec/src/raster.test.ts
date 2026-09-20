@@ -1868,6 +1868,30 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
     expect((halved[1]?.x ?? 0) - (equal[1]?.x ?? 0)).toBeCloseTo(6, 3);
   });
 
+  it("raises a vertical glyph by its own position vector's y", () => {
+    // The same comparison along the other axis, where only /W2 can vary the vector: the second CID's y drops from /DW2's 880/1000 em to 500/1000, so that glyph alone moves by 380/1000 em, which at 24pt is 9.12 points.
+    const twoCids = "BT /F1 24 Tf 20 50 Td <00000001> Tj ET";
+    const shared = glyphCentres(
+      type0Skeleton({
+        encoding: "/Identity-V",
+        descendantExtra: "/DW 1000 /DW2 [880 -1000]",
+        content: twoCids,
+      }),
+    );
+    const lowered = glyphCentres(
+      type0Skeleton({
+        encoding: "/Identity-V",
+        descendantExtra: "/DW 1000 /DW2 [880 -1000] /W2 [1 [-1000 500 500]]",
+        content: twoCids,
+      }),
+    );
+    expect((lowered[0]?.y ?? 0) - (shared[0]?.y ?? 0)).toBeCloseTo(0, 6);
+    expect(Math.abs((lowered[1]?.y ?? 0) - (shared[1]?.y ?? 0))).toBeCloseTo(
+      9.12,
+      2,
+    );
+  });
+
   it("accepts Identity-V, whose CID mapping is the same identity one set vertically", () => {
     const { diagnostics, rasteriser } = refusalDiagnostics(
       type0Skeleton({ encoding: "/Identity-V" }),

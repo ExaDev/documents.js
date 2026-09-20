@@ -360,7 +360,7 @@ function readCidVerticalMetrics(
     }
     const next = w2[i + 1];
     if (next?.kind === "array") {
-      wholeTriplets(next.items).forEach((triplet, index) => {
+      tripletsOf(next.items).forEach((triplet, index) => {
         const entry = verticalEntryFrom(
           asNumber(triplet[0]),
           asNumber(triplet[1]),
@@ -389,8 +389,8 @@ function readCidVerticalMetrics(
   return map;
 }
 
-// The array's items gathered into complete triplets, each triplet's index being the CID it describes relative to the entry's first. Grouping by filling rather than by indexing off a computed bound means nothing ever reads past the array's end: a trailing partial entry, which a producer really can leave behind, is one short group and is dropped by the length test rather than being discovered by an out-of-range read.
-function wholeTriplets(items: readonly PdfObject[]): PdfObject[][] {
+// The array's items gathered into triplets, each triplet's index being the CID it describes relative to the entry's first. Grouping by filling rather than by indexing off a computed bound means nothing ever reads past the array's end. A trailing partial entry, which a producer really can leave behind, is left in place as a short group rather than filtered out: verticalEntryFrom already refuses any group whose three numbers are not all there, and a short group can only ever be the last one, so no later CID's index depends on dropping it.
+function tripletsOf(items: readonly PdfObject[]): PdfObject[][] {
   const groups: PdfObject[][] = [];
   for (const item of items) {
     const last = groups[groups.length - 1];
@@ -400,7 +400,7 @@ function wholeTriplets(items: readonly PdfObject[]): PdfObject[][] {
       groups.push([item]);
     }
   }
-  return groups.filter((group) => group.length === W2_TRIPLET_LENGTH);
+  return groups;
 }
 
 function verticalEntryFrom(
