@@ -4,7 +4,10 @@ import type {
   ContentBlock,
   ContentSection,
 } from "document-schema.js";
-import { findConstructMarkerImbalance } from "document-schema.js";
+import {
+  findConstructMarkerImbalance,
+  rgbHexToColor,
+} from "document-schema.js";
 import type { Package } from "../../model/package";
 import type { XmlElement, XmlNode } from "../../model/node";
 import { el, txt } from "../../xml/fragment";
@@ -3615,7 +3618,8 @@ describe("buildDocxPackageFromContent: media and embedded-object emission", () =
       kind: "embeddedObject",
       objectKind: "wordprocessing",
       document,
-      frame: { widthPt, heightPt: 60 },
+      // The frame's origin is part of the schema's Box, but this writer reads only the extent: w:dxaOrig/w:dyaOrig carry the width and height, and nothing emits xPt/yPt.
+      frame: { xPt: 0, yPt: 0, widthPt, heightPt: 60 },
     };
   }
 
@@ -3727,7 +3731,7 @@ describe("buildDocxPackageFromContent: media and embedded-object emission", () =
                 kind: "embeddedObject",
                 objectKind: "drawing",
                 document: { kind: "drawing", metadata: {}, pages: [] },
-                frame: { widthPt: 100, heightPt: 60 },
+                frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 60 },
               },
             ],
           },
@@ -3739,17 +3743,20 @@ describe("buildDocxPackageFromContent: media and embedded-object emission", () =
   });
 
   it("refuses an embedded presentation with no injected serialiser, and serialises it through the port when one is injected", () => {
-    const presentation = {
+    const presentation: Extract<
+      ContentBlock,
+      { kind: "embeddedObject" }
+    >["document"] = {
       kind: "presentation",
       metadata: {},
       slides: [],
-    } as const;
-    const block = {
+    };
+    const block: Extract<ContentBlock, { kind: "embeddedObject" }> = {
       kind: "embeddedObject",
       objectKind: "presentation",
       document: presentation,
-      frame: { widthPt: 100, heightPt: 60 },
-    } as const;
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 60 },
+    };
     expect(() =>
       buildDocxPackageFromContent({
         sections: [{ ...emptyBodySection(), blocks: [block] }],
@@ -4399,7 +4406,7 @@ describe("buildDocxPackageFromContent: table grid and vertical-merge arithmetic"
     const border = (style?: "solid" | "dashed" | "dotted" | "double") => ({
       style,
       widthPt: 1,
-      color: { red: 17, green: 34, blue: 51 },
+      color: rgbHexToColor("112233"),
     });
     const written = buildDocxPackageFromContent({
       sections: [
@@ -4939,11 +4946,14 @@ describe("buildDocxPackageFromContent: flow assembly and section breaks", () => 
   });
 
   it("materialises a pending break before an embedded object, then places the object inside that break paragraph", () => {
-    const nested = {
+    const nested: Extract<
+      ContentBlock,
+      { kind: "embeddedObject" }
+    >["document"] = {
       kind: "wordprocessing",
       metadata: {},
       sections: [],
-    } as const;
+    };
     const written = buildDocxPackageFromContent({
       sections: [
         {
@@ -4954,7 +4964,7 @@ describe("buildDocxPackageFromContent: flow assembly and section breaks", () => 
               kind: "embeddedObject",
               objectKind: "wordprocessing",
               document: nested,
-              frame: { widthPt: 100, heightPt: 60 },
+              frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 60 },
             },
           ],
         },
@@ -4967,25 +4977,27 @@ describe("buildDocxPackageFromContent: flow assembly and section breaks", () => 
   });
 
   it("appends an embedded object with no trailing empty run to its preceding paragraph, and one with no paragraph at all to a fresh paragraph", () => {
-    const nested = (text: string) =>
-      ({
-        kind: "wordprocessing",
-        metadata: {},
-        sections: [
-          {
-            pageSize: { widthPt: 612, heightPt: 792 },
-            margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
-            blocks: [{ kind: "paragraph", runs: [{ text }] }],
-          },
-        ],
-      }) as const;
-    const object = (text: string) =>
-      ({
-        kind: "embeddedObject",
-        objectKind: "wordprocessing",
-        document: nested(text),
-        frame: { widthPt: 100, heightPt: 60 },
-      }) as const;
+    const nested = (
+      text: string,
+    ): Extract<ContentBlock, { kind: "embeddedObject" }>["document"] => ({
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [{ kind: "paragraph", runs: [{ text }] }],
+        },
+      ],
+    });
+    const object = (
+      text: string,
+    ): Extract<ContentBlock, { kind: "embeddedObject" }> => ({
+      kind: "embeddedObject",
+      objectKind: "wordprocessing",
+      document: nested(text),
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 60 },
+    });
     const attached = buildDocxPackageFromContent({
       sections: [
         {
@@ -5568,7 +5580,10 @@ describe("buildDocxPackageFromContent: cross-part payload sharing, minting order
     return body;
   }
 
-  const nestedWordprocessing = () => ({
+  const nestedWordprocessing = (): Extract<
+    ContentBlock,
+    { kind: "embeddedObject" }
+  >["document"] => ({
     kind: "wordprocessing",
     metadata: {},
     sections: [
@@ -5580,11 +5595,14 @@ describe("buildDocxPackageFromContent: cross-part payload sharing, minting order
     ],
   });
 
-  const embeddedBlock = () => ({
-    kind: "embeddedObject" as const,
-    objectKind: "wordprocessing" as const,
+  const embeddedBlock = (): Extract<
+    ContentBlock,
+    { kind: "embeddedObject" }
+  > => ({
+    kind: "embeddedObject",
+    objectKind: "wordprocessing",
     document: nestedWordprocessing(),
-    frame: { widthPt: 100, heightPt: 60 },
+    frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 60 },
   });
 
   it("content-addresses one embedded payload across a header part and the body: one file, one override, two part-local relationships", () => {
