@@ -323,15 +323,17 @@ function detectBomlessUtf16(bytes: Uint8Array): TextEncodingLabel | undefined {
   }
   let evenIndexNuls = 0;
   let oddIndexNuls = 0;
-  for (let index = 0; index < bytes.length; index += 1) {
-    if (bytes[index] !== NUL_BYTE) {
-      continue;
+  // Walked byte by byte with the parity carried alongside, rather than by index against a bound, so that which side of the unit boundary a byte sits on is read off the walk itself.
+  let atEvenIndex = true;
+  for (const byte of bytes) {
+    if (byte === NUL_BYTE) {
+      if (atEvenIndex) {
+        evenIndexNuls += 1;
+      } else {
+        oddIndexNuls += 1;
+      }
     }
-    if (index % 2 === 0) {
-      evenIndexNuls += 1;
-    } else {
-      oddIndexNuls += 1;
-    }
+    atEvenIndex = !atEvenIndex;
   }
   const units = bytes.length / 2;
   if (oddIndexNuls > evenIndexNuls && oddIndexNuls * 2 > units) {
@@ -413,10 +415,8 @@ export function decodeText(
       text: utf8,
       encoding: "utf-8",
       source: "utf8",
-      // Bytes entirely below 0x80 decode to the same text under every encoding in the supported set, so calling them UTF-8 cannot be wrong; above it, UTF-8's multi-byte rules are strong evidence rather than proof.
-      confidence: bytes.every((byte) => byte < FIRST_HIGH_BYTE)
-        ? "certain"
-        : "high",
+      // ASCII decodes to the same text under every encoding in the supported set, so calling it UTF-8 cannot be wrong; above ASCII, UTF-8's multi-byte rules are strong evidence rather than proof. A UTF-8 decode yields exactly one code unit per byte only for ASCII, since every multi-byte sequence collapses two, three or four bytes into one or two code units, so the lengths matching is itself the proof that there were none.
+      confidence: utf8.length === bytes.length ? "certain" : "high",
       warnings: [],
     };
   }

@@ -296,6 +296,11 @@ describe("decodeText UTF-16 without a byte order mark", () => {
     expect(refusal(halfAscii).reason).toBe("binary");
   });
 
+  it("refuses mirrored bytes whose NUL interleave covers only half the code units", () => {
+    const halfAscii = bytesOf([0x00, 0x61, 0x00, 0x62, 0x30, 0x42, 0x30, 0x44]);
+    expect(refusal(halfAscii).reason).toBe("binary");
+  });
+
   it("refuses bytes carrying NULs on both sides of the unit boundary", () => {
     expect(refusal(new Uint8Array(16)).reason).toBe("binary");
   });
@@ -351,6 +356,13 @@ describe("decodeText binary refusal", () => {
     const result = decodeText(bytesOf([0x1b], filler));
     expect(result.encoding).toBe("utf-8");
     expect(result.text.startsWith("\u001b")).toBe(true);
+  });
+
+  it("refuses a single NUL among otherwise ordinary text, below the control-byte density", () => {
+    const filler = Array.from({ length: 63 }, () => 0x41);
+    const withOneNul = bytesOf(filler.slice(0, 31), [0x00], filler.slice(31));
+    expect(withOneNul.length).toBe(64);
+    expect(refusal(withOneNul).reason).toBe("binary");
   });
 
   it("refuses pseudo-random bytes", () => {
@@ -450,6 +462,11 @@ describe("decodeText surrogates", () => {
     expect(decodeText(bytesOf(UTF16BE_BOM, utf16(text, false))).text).toBe(
       text,
     );
+  });
+
+  it("decodes a code unit just above the surrogate range as an ordinary character", () => {
+    const text = "a\ue000b\uffff";
+    expect(decodeText(bytesOf(UTF16LE_BOM, utf16(text, true))).text).toBe(text);
   });
 
   it("refuses a high surrogate whose partner never arrives", () => {
@@ -569,6 +586,11 @@ describe("isProbablyText", () => {
 
   it("rejects a NUL byte anywhere", () => {
     expect(isProbablyText(bytesOf(utf8("hello"), [0x00]))).toBe(false);
+  });
+
+  it("rejects a single NUL even where the control-byte density alone would pass", () => {
+    const filler = Array.from({ length: 63 }, () => 0x41);
+    expect(isProbablyText(bytesOf([0x00], filler))).toBe(false);
   });
 
   it("rejects a density of other C0 control bytes", () => {
