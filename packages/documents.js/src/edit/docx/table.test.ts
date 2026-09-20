@@ -474,8 +474,10 @@ describe("DocxTableRow.mergeCellsHorizontally", () => {
     if (roundTrippedTable?.kind !== "table") {
       throw new Error("expected a table block");
     }
-    expect(roundTrippedTable.rows[0]?.cells).toHaveLength(3);
+    // The four-column row reads back dense: the anchor at column 1 and an empty covered cell at column 2, the column its w:gridSpan reaches.
+    expect(roundTrippedTable.rows[0]?.cells).toHaveLength(4);
     expect(roundTrippedTable.rows[0]?.cells[1]?.colSpan).toBe(2);
+    expect(roundTrippedTable.rows[0]?.cells[2]).toEqual({ blocks: [] });
   });
 });
 

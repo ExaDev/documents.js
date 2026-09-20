@@ -33,7 +33,7 @@ import {
   registerImage,
   stampFragmentFrame,
   stampFrame,
-  sumColumnWidthsPt,
+  tableAnchorBoxes,
   textBoxForFragment,
 } from "./shared";
 import type {
@@ -401,20 +401,14 @@ function layoutTableFlow(
   const gridWidthPt = table.columnWidthsPt.reduce((sum, w) => sum + w, 0);
   const scale = gridWidthPt > 0 ? contentWidthPt / gridWidthPt : 1;
 
-  for (const row of table.rows) {
-    const rowHeightPt =
-      row.heightPt ??
-      estimateRowHeightPt(row, measurer, table.columnWidthsPt, scale);
+  for (const { row, anchors } of tableAnchorBoxes(table, scale)) {
+    const rowHeightPt = row.heightPt ?? estimateRowHeightPt(anchors, measurer);
     ensureRoom(state, section, pages, rowHeightPt, contentBottomYDown);
     // The row's own settled page -- read after ensureRoom, and shared by every cell in it (row-atomic placement means the whole row, decorations and content, is one page's content).
     const pageIndex = pages.length;
 
-    let cellXDown = contentLeftXDown;
-    let colIndex = 0;
-    for (const cell of row.cells) {
-      const span = cell.colSpan ?? 1;
-      const cellWidthPt =
-        sumColumnWidthsPt(table.columnWidthsPt, colIndex, span) * scale;
+    for (const { cell, xOffsetPt, widthPt: cellWidthPt } of anchors) {
+      const cellXDown = contentLeftXDown + xOffsetPt;
 
       // A cell's decoration paints under its own content, in the order a real word processor draws it: background fill first, then the border lines sitting on that same frame's edges, then (below) the cell's paragraphs on top of both. ContentTableCell carries a real sourcePath of its own now, so a cell's rect/lines are attributed to the exact cell that declared them, falling back to the containing table only for a cell that has none. The cell's own frame stamps the CELL node once, PDF-space -- background, borders, and any content runs inside all belong to this one placement of this one cell.
       const cellFrameYDown = {
@@ -468,9 +462,6 @@ function layoutTableFlow(
           );
         }
       }
-
-      cellXDown += cellWidthPt;
-      colIndex += span;
     }
     state.cursorYDown += rowHeightPt;
   }

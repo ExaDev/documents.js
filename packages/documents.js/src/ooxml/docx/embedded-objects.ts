@@ -5,6 +5,8 @@ import type {
   ContentTable,
   PageSize,
 } from "document-schema.js";
+import type { TableGridPosition } from "document-schema.js";
+import { walkTableGrid } from "document-schema.js";
 import type { Package, Relationship, XmlElement, XmlNode } from "ooxml.js";
 import {
   attr,
@@ -296,7 +298,7 @@ function paragraphEmbeddings(
 
 // A block list (a section's, or a cell's) walked against its own container's children: every paragraph block is matched to its w:p (advancing paragraphOrdinal), every table block to its w:tbl (advancing tableOrdinal), and a table's own cells are each recursed through the same function so an equation nested in a cell is spliced into that cell's blocks. Returns the spliced block list, or the input array unchanged when nothing was recovered at this level or any cell beneath it.
 function spliceContainerBlocks(
-  blocks: readonly ContentBlock[],
+  blocks: ContentBlock[],
   containerChildren: readonly XmlNode[],
   pageSize: PageSize,
   sourcePathPrefix: string,
@@ -329,9 +331,7 @@ function spliceContainerBlocks(
         pkg,
         onMathDiagnostic,
       );
-      if (paragraphPlacements.length > 0) {
-        placements.push(...paragraphPlacements);
-      }
+      placements.push(...paragraphPlacements);
       if (consume) {
         consumedIndices.add(blockIndex);
       }
@@ -361,7 +361,7 @@ function spliceContainerBlocks(
     consumedIndices.size > 0 ||
     rebuiltBlocks.some((block, index) => block !== blocks[index]);
   if (!rebuiltAnyBlock && placements.length === 0) {
-    return [...blocks];
+    return blocks;
   }
   return spliceBlocks(
     rebuiltBlocks,
@@ -371,7 +371,15 @@ function spliceContainerBlocks(
   );
 }
 
-// Rebuilds a table block with each of its cells' own blocks spliced independently. The cell correspondence is positional: the Nth ContentTableRow maps to the Nth w:tr child of `tblElement`, and within it the Nth ContentTableCell to the Nth w:tc -- exactly the row-major order ooxml.js's own readTable produces them in (one cell per real w:tc, since a horizontal merge collapses to one w:tc carrying w:gridSpan). Returns the original table unchanged when no cell carried a recoverable embedded object.
+// Whether a grid position is backed by a w:tc of its own in docx: an anchor is, and so is a position covered from an earlier row at the covering anchor's own first column (that row's w:vMerge continuation cell). A position covered along its own row is not, since ECMA-376 has no element for a column a w:gridSpan already reaches. A covered position in its anchor's own column can only have been reached from an earlier row, since a region reaches later columns of its first row and never its anchor column again. This is the same rule ooxml.js's own docx writer applies when it decides which entries of a dense row become a w:tc.
+function isBackedByTableCellElement(position: TableGridPosition): boolean {
+  return (
+    position.anchorRowIndex === undefined ||
+    position.columnIndex === position.anchorColumnIndex
+  );
+}
+
+// Rebuilds a table block with each of its cells' own blocks spliced independently. A ContentTable row is dense (one ContentTableCell per grid column) while a w:tr holds only the w:tc elements that have a grid position of their own, so the Nth w:tc is matched to the Nth position of its row that isBackedByTableCellElement, never to the Nth ContentTableCell: the w:tc elements appear in the row-major, left-to-right order that walkTableGrid visits their positions in. A cell with no w:tc of its own (one a horizontal merge covers) is left as it is. Returns the original table unchanged when no cell carried a recoverable embedded object.
 function rebuildTable(
   table: ContentTable,
   tblElement: XmlElement,
@@ -382,12 +390,22 @@ function rebuildTable(
   onMathDiagnostic?: OmmlDiagnosticSink,
 ): ContentTable {
   const rowElements = childrenWithTag(tblElement, "w:tr");
+  const positionsByRow = walkTableGrid(table);
   const rows = table.rows.map((row, rowIndex) => {
     const rowElement = rowElements[rowIndex];
     const cellElements =
       rowElement === undefined ? [] : childrenWithTag(rowElement, "w:tc");
-    const cells = row.cells.map((cell, cellIndex) => {
-      const cellElement = cellElements[cellIndex];
+    const cellElementByColumn = new Map<number, XmlElement>();
+    positionsByRow[rowIndex]!.filter(isBackedByTableCellElement).forEach(
+      (position, ordinal) => {
+        const cellElement = cellElements[ordinal];
+        if (cellElement !== undefined) {
+          cellElementByColumn.set(position.columnIndex, cellElement);
+        }
+      },
+    );
+    const cells = row.cells.map((cell, columnIndex) => {
+      const cellElement = cellElementByColumn.get(columnIndex);
       if (cellElement === undefined) {
         return cell;
       }
@@ -395,7 +413,7 @@ function rebuildTable(
         cell.blocks,
         cellElement.children,
         pageSize,
-        `${blockPath}.rows[${rowIndex}].cells[${cellIndex}].blocks`,
+        `${blockPath}.rows[${rowIndex}].cells[${columnIndex}].blocks`,
         rels,
         pkg,
         onMathDiagnostic,
@@ -449,9 +467,7 @@ export function spliceDocxEmbeddedObjects(
               pkg,
               onMathDiagnostic,
             );
-          if (paragraphPlacements.length > 0) {
-            placements.push(...paragraphPlacements);
-          }
+          placements.push(...paragraphPlacements);
           if (consume) {
             consumedIndices.add(blockIndex);
           }
@@ -467,7 +483,7 @@ export function spliceDocxEmbeddedObjects(
             block,
             tableElement,
             section.pageSize,
-            `sections[${sectionIndex}].blocks`,
+            `sections[${sectionIndex}].blocks[${blockIndex}]`,
             rels,
             pkg,
             onMathDiagnostic,

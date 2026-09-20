@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { ContentDocument } from "document-schema.js";
+import type { ContentDocument, ContentTable } from "document-schema.js";
 import type { XmlElement } from "ooxml.js";
 import {
   attr,
@@ -248,6 +248,7 @@ describe("buildDocxPackage", () => {
                     blocks: [{ kind: "paragraph", runs: [{ text: "A1" }] }],
                     colSpan: 2,
                   },
+                  { blocks: [] },
                 ],
               },
             ],
@@ -265,13 +266,275 @@ describe("buildDocxPackage", () => {
     if (tableBlock?.kind !== "table") {
       throw new Error("expected a table block");
     }
-    // docx collapses a horizontal merge into ONE real w:tc (no filler element for the consumed column), so the row's own cells array has exactly one entry, not two.
-    expect(tableBlock.rows[0]?.cells).toHaveLength(1);
+    // The row reads back dense: the anchor at column 0 and an empty covered cell at the column its w:gridSpan reaches.
+    expect(tableBlock.rows[0]?.cells).toHaveLength(2);
     expect(tableBlock.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(tableBlock.rows[0]?.cells[0]?.blocks[0]).toMatchObject({
       kind: "paragraph",
       runs: [{ text: "A1" }],
     });
+    expect(tableBlock.rows[0]?.cells[1]).toEqual({ blocks: [] });
+  });
+
+  it("writes one w:tc per anchor for a dense row with a horizontal merge, none for the position the merge covers", () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "table",
+            columnWidthsPt: [100, 100, 100],
+            rows: [
+              {
+                cells: [
+                  { blocks: [{ kind: "paragraph", runs: [{ text: "A" }] }] },
+                  {
+                    blocks: [{ kind: "paragraph", runs: [{ text: "B" }] }],
+                    colSpan: 2,
+                  },
+                  { blocks: [] },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    const documentRoot = rootElement(
+      buildDocxPackage(content).parts["word/document.xml"],
+    );
+    if (documentRoot === undefined) {
+      throw new Error("expected a word/document.xml root element");
+    }
+    const [row] = descendants(documentRoot, "w:tr");
+    const cells = childrenWithTag(row!, "w:tc");
+    expect(cells.map((cell) => textContent(cell))).toEqual(["A", "B"]);
+    const gridSpans = cells.map((cell) => {
+      const gridSpan = descendants(cell, "w:gridSpan")[0];
+      return gridSpan === undefined ? undefined : attr(gridSpan, "w:val");
+    });
+    expect(gridSpans).toEqual([undefined, "2"]);
+  });
+
+  it("writes a bare w:vMerge continuation at the covering anchor's first column only, as wide as the anchor, for a region spanning rows and columns", () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "table",
+            columnWidthsPt: [100, 100, 100],
+            rows: [
+              {
+                cells: [
+                  {
+                    blocks: [{ kind: "paragraph", runs: [{ text: "Big" }] }],
+                    colSpan: 2,
+                    rowSpan: 2,
+                  },
+                  { blocks: [] },
+                  { blocks: [{ kind: "paragraph", runs: [{ text: "R1" }] }] },
+                ],
+              },
+              {
+                cells: [
+                  { blocks: [] },
+                  { blocks: [] },
+                  { blocks: [{ kind: "paragraph", runs: [{ text: "R2" }] }] },
+                ],
+              },
+              {
+                cells: [
+                  { blocks: [{ kind: "paragraph", runs: [{ text: "X" }] }] },
+                  { blocks: [{ kind: "paragraph", runs: [{ text: "Y" }] }] },
+                  { blocks: [{ kind: "paragraph", runs: [{ text: "Z" }] }] },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    const pkg = buildDocxPackage(content);
+    const documentRoot = rootElement(pkg.parts["word/document.xml"]);
+    if (documentRoot === undefined) {
+      throw new Error("expected a word/document.xml root element");
+    }
+    const rows = descendants(documentRoot, "w:tr").map((row) =>
+      childrenWithTag(row, "w:tc").map((cell) => ({
+        text: textContent(cell),
+        gridSpan: attr(descendants(cell, "w:gridSpan")[0] ?? cell, "w:val"),
+        vMerge: descendants(cell, "w:vMerge").map(
+          (vMerge) => attr(vMerge, "w:val") ?? "continue",
+        ),
+      })),
+    );
+    expect(rows).toEqual([
+      [
+        { text: "Big", gridSpan: "2", vMerge: ["restart"] },
+        { text: "R1", gridSpan: undefined, vMerge: [] },
+      ],
+      [
+        { text: "", gridSpan: "2", vMerge: ["continue"] },
+        { text: "R2", gridSpan: undefined, vMerge: [] },
+      ],
+      [
+        { text: "X", gridSpan: undefined, vMerge: [] },
+        { text: "Y", gridSpan: undefined, vMerge: [] },
+        { text: "Z", gridSpan: undefined, vMerge: [] },
+      ],
+    ]);
+    const roundTripped = readDocxContent(pkg);
+    if (roundTripped.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const tableBlock = roundTripped.sections[0]!.blocks[0];
+    if (tableBlock?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    expect(tableBlock.rows.map((row) => row.cells.length)).toEqual([3, 3, 3]);
+    expect(tableBlock.rows[0]?.cells[0]).toMatchObject({
+      colSpan: 2,
+      rowSpan: 2,
+    });
+  });
+
+  it("writes no table at all for a table with no rows or no columns", () => {
+    const tableDoc = (table: ContentTable): ContentDocument =>
+      wordDoc([
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+          blocks: [table],
+        },
+      ]);
+    const tablesOf = (content: ContentDocument): number => {
+      const root = rootElement(
+        buildDocxPackage(content).parts["word/document.xml"],
+      );
+      return root === undefined ? -1 : descendants(root, "w:tbl").length;
+    };
+    expect(
+      tablesOf(tableDoc({ kind: "table", columnWidthsPt: [100], rows: [] })),
+    ).toBe(0);
+    expect(
+      tablesOf(
+        tableDoc({
+          kind: "table",
+          columnWidthsPt: [],
+          rows: [{ cells: [{ blocks: [] }] }],
+        }),
+      ),
+    ).toBe(0);
+  });
+
+  it("writes a row's own height, and none for a row that states no height", () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "table",
+            columnWidthsPt: [100],
+            rows: [
+              { heightPt: 30, cells: [{ blocks: [] }] },
+              { cells: [{ blocks: [] }] },
+            ],
+          },
+        ],
+      },
+    ]);
+    const documentRoot = rootElement(
+      buildDocxPackage(content).parts["word/document.xml"],
+    );
+    if (documentRoot === undefined) {
+      throw new Error("expected a word/document.xml root element");
+    }
+    const rows = descendants(documentRoot, "w:tr").map((row) =>
+      descendants(row, "w:trHeight").map((height) => attr(height, "w:val")),
+    );
+    expect(rows).toEqual([["600"], []]);
+  });
+
+  it("writes a cell's own borders, and none for a cell that states none", () => {
+    const red = { r: 1, g: 0, b: 0 };
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "table",
+            columnWidthsPt: [100, 100],
+            rows: [
+              {
+                cells: [
+                  { blocks: [], borders: { top: { color: red, widthPt: 1 } } },
+                  { blocks: [] },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    const documentRoot = rootElement(
+      buildDocxPackage(content).parts["word/document.xml"],
+    );
+    if (documentRoot === undefined) {
+      throw new Error("expected a word/document.xml root element");
+    }
+    const [row] = descendants(documentRoot, "w:tr");
+    expect(
+      childrenWithTag(row!, "w:tc").map(
+        (cell) => descendants(cell, "w:tcBorders").length,
+      ),
+    ).toEqual([1, 0]);
+  });
+
+  it("writes a covered position's own shading on the continuation w:tc it becomes", () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "table",
+            columnWidthsPt: [100],
+            rows: [
+              {
+                cells: [
+                  {
+                    blocks: [{ kind: "paragraph", runs: [{ text: "A" }] }],
+                    rowSpan: 2,
+                  },
+                ],
+              },
+              {
+                cells: [
+                  {
+                    blocks: [],
+                    background: { kind: "solid", color: { r: 1, g: 0, b: 0 } },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    const roundTripped = readDocxContent(buildDocxPackage(content));
+    if (roundTripped.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const tableBlock = roundTripped.sections[0]!.blocks[0];
+    if (tableBlock?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    expect(tableBlock.rows[1]?.cells[0]?.background).toBeDefined();
   });
 
   it("writes a recovered drawing block as real DrawingML vector shapes that survive a build-then-read round trip", () => {
