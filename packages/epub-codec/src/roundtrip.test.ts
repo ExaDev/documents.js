@@ -6,7 +6,7 @@ import {
   assertMimetypeEntryLayout,
   localFileHeaderNames,
 } from "./test-support/zip";
-import { bytesToBase64 } from "./util/base64";
+import { bytesToBase64 } from "byte-codec";
 import { writeEpubContent } from "./write";
 
 // A real end-to-end round trip: a hand-built ContentDocument covering most of the element list ExaDev/documents.js#801 asks for, written to a genuine EPUB 3 zip via writeEpubContent, then read back via readEpubContent -- proving the two sides agree on every convention this package invents (list numId grammar, footnote descriptor shape, HorizontalRule styleId, monospace-as-code-block detection) without a real EPUB library on either side to fall back on.

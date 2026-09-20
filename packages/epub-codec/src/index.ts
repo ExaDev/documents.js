@@ -10,7 +10,8 @@ export * from "./opf/types";
 export * from "./opf/metadata";
 export * from "./opf/parse";
 export * from "./opf/write";
-export * from "./util/base64";
+// bytesToBase64/base64ToBytes were this package's own copy of the family-wide base64 helpers before byte-codec held one for everybody; they stay on this barrel because they have always been part of its published surface. The `epub-codec/util/base64` deep import goes with the module: a re-export module kept only to preserve that path is what the barrel-policy lint rule exists to reject.
+export { base64ToBytes, bytesToBase64 } from "byte-codec";
 export * from "./image/dimensions";
 export * from "./xhtml/context";
 export * from "./xhtml/footnote";

@@ -91,7 +91,6 @@ describe('dist/ deep imports resolve for every advertised module, in both builds
     { path: '../dist/xml/build.js', exports: ['buildXml'] },
     { path: '../dist/xml/query.js', exports: ['rootElement', 'attrValue'] },
     { path: '../dist/xml/entities.js', exports: ['decodeEntities', 'encodeEntities'] },
-    { path: '../dist/util/base64.js', exports: ['bytesToBase64', 'base64ToBytes'] },
     { path: '../dist/image/dimensions.js', exports: ['detectImageFormat', 'readImageDimensions'] },
   ];
 
