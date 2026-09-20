@@ -4286,9 +4286,14 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     const collector = createDiagnosticCollector();
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columnWidthsPt: [100, 100],
       rows: [
-        { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }] },
+        {
+          cells: [
+            { blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] },
+            { blocks: [{ kind: "paragraph", runs: [{ text: "i" }] }] },
+          ],
+        },
         {
           cells: [
             {
@@ -4298,6 +4303,7 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
               ],
               colSpan: 2,
             },
+            { blocks: [] },
           ],
         },
       ],

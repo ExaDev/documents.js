@@ -46,6 +46,13 @@ function roundTrip(table: ContentTable): {
   return { markdown, table: block };
 }
 
+// The number of cell tags (<th> or <td>) in each <tr>, in document order.
+function cellTagCountsPerRow(markup: string): number[] {
+  return [...markup.matchAll(/<tr>(.*?)<\/tr>/g)].map(
+    (row) => (row[1] ?? "").split(/<t[dh]\b/).length - 1,
+  );
+}
+
 describe("HTML-table fallback round trip", () => {
   it("colSpan survives write -> read as an equal ContentTable", () => {
     const table: ContentTable = {
@@ -64,6 +71,7 @@ describe("HTML-table fallback round trip", () => {
               blocks: [{ kind: "paragraph", runs: [{ text: "merged" }] }],
               colSpan: 2,
             },
+            { blocks: [] },
           ],
         },
       ],
@@ -94,7 +102,10 @@ describe("HTML-table fallback round trip", () => {
           ],
         },
         {
-          cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "2" }] }] }],
+          cells: [
+            { blocks: [] },
+            { blocks: [{ kind: "paragraph", runs: [{ text: "2" }] }] },
+          ],
         },
       ],
     };
@@ -224,6 +235,7 @@ describe("HTML-table fallback round trip", () => {
               ],
               colSpan: 2,
             },
+            { blocks: [] },
           ],
         },
       ],
@@ -234,6 +246,29 @@ describe("HTML-table fallback round trip", () => {
     expect(markdown).toContain("<del>struck</del>");
     expect(markdown).toContain('<a href="https://example.com">link</a>');
     expect(read).toEqual(table);
+  });
+
+  it("a merged HTML table read then written keeps the same number of cell tags per row as the source", () => {
+    const source = [
+      "<table>",
+      '<tr><td colspan="2" rowspan="2">m</td><td>x</td></tr>',
+      "<tr><td>y</td></tr>",
+      "<tr><td>a</td><td>b</td><td>c</td></tr>",
+      "</table>",
+    ].join("\n");
+    const { document } = readMarkdownContent(source);
+    if (document.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing document, got '${document.kind}'`,
+      );
+    }
+    const block = document.sections[0]?.blocks[0];
+    if (block?.kind !== "table") {
+      throw new Error(`expected a table block, got '${block?.kind}'`);
+    }
+    expect(block.rows.map((row) => row.cells.length)).toEqual([3, 3, 3]);
+    const markdown = writeMarkdownContent(document);
+    expect(cellTagCountsPerRow(markdown)).toEqual(cellTagCountsPerRow(source));
   });
 
   it("a table with none of these needs still writes as plain GFM pipe syntax, unaffected by this fallback", () => {
