@@ -1,7 +1,12 @@
 // Gates a mutation run on each package's merged score. The slice jobs (plan-mutation-slices.ts) each mutate part of a package and leave the break threshold to this step, because only the union of a package's slices has a score that means anything against the package's recorded threshold. Reads every slice's json report from the directory the workflow downloaded them into, merges each package's files, computes the score with Stryker's own metrics library, and fails when a package's score is under its recorded break threshold or when a planned slice produced no report.
 //
 // The same table reports the threshold the documented derivation rule (stryker.shared.ts, on `thresholds.break`) would give from this run, so a package whose recorded threshold has fallen behind its measured score shows up on every full run rather than waiting for someone to look.
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { calculateMetrics, type Metrics } from "mutation-testing-metrics";
@@ -107,6 +112,18 @@ export function packageFails(outcome: PackageOutcome): boolean {
   const verdict = outcome.verdict;
   if (verdict.kind === "missing-reports") return true;
   return verdict.recorded !== undefined && verdict.score < verdict.recorded;
+}
+
+/** Why a package fails the gate, in a sentence, or undefined when it passes. */
+export function failureReason(outcome: PackageOutcome): string | undefined {
+  const verdict = outcome.verdict;
+  if (verdict.kind === "missing-reports") {
+    return `no report for slice ${verdict.slices.join(", ")}`;
+  }
+  if (verdict.recorded !== undefined && verdict.score < verdict.recorded) {
+    return `score ${formatScore(verdict.score)} is under the recorded threshold of ${String(verdict.recorded)}`;
+  }
+  return undefined;
 }
 
 /** Whether the recorded threshold has fallen behind what the rule would derive from this run. */
@@ -224,10 +241,10 @@ function isMatrix(value: unknown): value is { include: SliceMatrixEntry[] } {
 }
 
 async function main(): Promise<void> {
-  const [reportsDirectory, matrixJson] = process.argv.slice(2);
+  const [reportsDirectory, matrixJson, resultFile] = process.argv.slice(2);
   if (reportsDirectory === undefined || matrixJson === undefined) {
     throw new Error(
-      "usage: gate-mutation-scores.ts <reports-dir> <matrix-json>",
+      "usage: gate-mutation-scores.ts <reports-dir> <matrix-json> [result-file]",
     );
   }
   const matrix: unknown = JSON.parse(matrixJson);
@@ -240,6 +257,17 @@ async function main(): Promise<void> {
   const summaryFile = process.env.GITHUB_STEP_SUMMARY;
   if (summaryFile) appendFileSync(summaryFile, `${summary}\n`);
   const failed = outcomes.filter(packageFails);
+  if (resultFile !== undefined) {
+    writeFileSync(
+      resultFile,
+      JSON.stringify({
+        failing: failed.map((outcome) => ({
+          package: outcome.package,
+          reason: failureReason(outcome),
+        })),
+      }),
+    );
+  }
   if (failed.length > 0) {
     console.error(
       `::error::Mutation gate failed for: ${failed.map((outcome) => outcome.package).join(", ")}`,
