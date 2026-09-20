@@ -1,3 +1,9 @@
+## [1.6.0](https://github.com/ExaDev/documents.js/compare/byte-codec%401.5.8...byte-codec%401.6.0) (2026-09-20)
+
+### Features
+
+* **byte-codec:** add shared base64 encode and decode over bytes ([6061c9f](https://github.com/ExaDev/documents.js/commit/6061c9f48558e82a72a6df8cecf3169e4efef9dc))
+
 ## [1.5.8](https://github.com/ExaDev/documents.js/compare/byte-codec%401.5.7...byte-codec%401.5.8) (2026-09-20)
 
 ### Performance Improvements
