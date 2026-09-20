@@ -47,7 +47,7 @@ import { extractDefinitions } from "./definitions";
 import { CODE_INDENT_COLUMNS, LineCursor } from "./line";
 import { finalizeListTightness, listsMatch, parseListMarker } from "./list";
 import type { BlockHeadingLevel, BlockNodeKind } from "./node";
-import { BlockNode, acceptsLines, canContain } from "./node";
+import { BlockNode, canContain, suppressesBlockStarts } from "./node";
 import {
   fitRowToColumns,
   parseTableDelimiterRow,
@@ -390,11 +390,8 @@ class BlockParser {
   // Step 2: try block starts against the deepest matched container until one produces a leaf block, none matches, or the line is plainly ordinary text.
   private openNewBlocks(matchedContainer: BlockNode): BlockNode {
     let container = matchedContainer;
-    // A paragraph and a GFM table both accept lines AND still let block starts be tried, so a `>` or a heading on the next line breaks out of either. A code block or an HTML block accepts lines and suppresses starts entirely, which is what makes their own content literal.
-    let matchedLeaf =
-      container.kind !== "paragraph" &&
-      container.kind !== "table" &&
-      acceptsLines(container.kind);
+    // A paragraph and a GFM table both accept lines AND still let block starts be tried, so a `>` or a heading on the next line breaks out of either. Neither is named here: suppressesBlockStarts answers false for both already, a table by its own definition and a paragraph because addTextToContainer has already dealt with one.
+    let matchedLeaf = suppressesBlockStarts(container.kind);
     while (!matchedLeaf) {
       this.line.findNextNonspace();
       const result = this.tryBlockStart(container);
@@ -700,7 +697,8 @@ class BlockParser {
     }
     this.recordBlankLineForTightness(container);
 
-    if (acceptsLines(container.kind)) {
+    // The table is named alongside the predicate rather than inside it: a table takes this line as its own content here, but unlike the three literal-content kinds it still lets a block start be tried against the NEXT line, which is the distinction suppressesBlockStarts draws.
+    if (suppressesBlockStarts(container.kind) || container.kind === "table") {
       this.addLine();
       if (
         container.kind === "htmlBlock" &&

@@ -143,13 +143,7 @@ export function canContain(
   }
 }
 
-// Whether a block accepts raw source lines as its own content. A paragraph and a GFM table accept lines AND still let new block starts be tried against each line (a `>` after a table opens a blockquote and breaks the table); a code block, an HTML block, and a math block accept lines and suppress block starts entirely, which is what makes their content literal.
-export function acceptsLines(kind: BlockNodeKind): boolean {
-  return (
-    kind === "paragraph" ||
-    kind === "codeBlock" ||
-    kind === "htmlBlock" ||
-    kind === "table" ||
-    kind === "mathBlock"
-  );
+// Whether a block takes every line as its own literal content, which is the same thing as saying no new block start is tried against a line while it is open: a code block, an HTML block, and a math block each run to their own terminator regardless of what the lines in between look like. A GFM table also takes lines as its own content but is deliberately absent here, because a block start IS still tried against each of its lines (a `>` after a table opens a blockquote and breaks the table), so the one caller that wants that wider question names the table alongside this predicate. A paragraph is absent for a different reason: addTextToContainer answers an open paragraph's own next line, lazy continuation included, before it asks anything here.
+export function suppressesBlockStarts(kind: BlockNodeKind): boolean {
+  return kind === "codeBlock" || kind === "htmlBlock" || kind === "mathBlock";
 }
