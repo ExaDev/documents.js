@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PdfDiagnostic } from "./diagnostics";
 import { readPdf } from "./read";
 import { embeddedFilesPdf } from "./test-support/pdf";
-import { bytesToBase64 } from "./util/base64";
+import { bytesToBase64 } from "byte-codec";
 
 // Embedded files (#721 phase 2): /Names /EmbeddedFiles name-tree entries, /FileAttachment annotations' /FS filespecs, and catalog /AF associated files (ISO 32000-2), all decoded to base64 through the ordinary stream filters and deduplicated by filespec name.
 

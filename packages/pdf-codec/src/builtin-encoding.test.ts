@@ -16,7 +16,7 @@ import {
   buildPostV3Table,
   buildSfnt,
 } from "./test-support/sfnt";
-import { base64ToBytes } from "./util/base64";
+import { base64ToBytes } from "byte-codec";
 
 const OHM_SIGN = 0x2126; // the Adobe Glyph List's own mapping for the glyph name "Omega"
 

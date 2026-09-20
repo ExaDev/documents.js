@@ -1,4 +1,4 @@
-import { bytesToBase64 } from "./util/base64";
+import { bytesToBase64 } from "byte-codec";
 import { crc32 } from "./bytes/crc32";
 import { concatBytes } from "./bytes/writer";
 import { readPageAnnotations } from "./annotations";

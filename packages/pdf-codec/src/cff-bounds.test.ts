@@ -12,7 +12,7 @@ import {
   csInt16,
   stixMathCffBytes,
 } from "./test-support/cff";
-import { base64ToBytes } from "./util/base64";
+import { base64ToBytes } from "byte-codec";
 
 // The single-byte small-integer encoding (TN 5177 section 3.2) covers -107..107; anything outside that range needs the 3-byte int16 form. Shared by every hand-built charstring test below so each one states the operand it wants, not which of the two encodings reaches it.
 function enc(value: number): number[] {

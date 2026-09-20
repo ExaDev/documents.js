@@ -29,7 +29,7 @@ import { resolveVendoredSubstituteFamily } from "./font-substitutes";
 import { normalizeFamilyName, resolveStandardFont } from "./fonts";
 import type { SfntFont } from "./sfnt";
 import { parseSfnt } from "./sfnt";
-import { base64ToBytes } from "./util/base64";
+import { base64ToBytes } from "byte-codec";
 
 // What FontRegistry.resolve settled on for one LayoutFont: either a real embeddable face (steps 1-4 above), or the standard-14 fallback (step 5) -- the same ResolvedFont shape resolveStandardFont already returns, carried through unchanged so a caller who only wants the standard-14 case can narrow on `kind` and read it exactly as before.
 export type ResolvedFace =

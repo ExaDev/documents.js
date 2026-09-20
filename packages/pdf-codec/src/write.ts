@@ -1,4 +1,4 @@
-import { base64ToBytes } from "./util/base64";
+import { base64ToBytes } from "byte-codec";
 import { deflate } from "./bytes/flate";
 import { ByteWriter, concatBytes } from "./bytes/writer";
 import { ByteReader } from "./bytes/reader";

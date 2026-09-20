@@ -1,5 +1,4 @@
-import { encodePng } from "byte-codec";
-import { bytesToBase64 } from "./util/base64";
+import { bytesToBase64, encodePng } from "byte-codec";
 import { describe, expect, it } from "vitest";
 import type {
   LayoutDocument,
