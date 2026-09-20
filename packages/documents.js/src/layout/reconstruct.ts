@@ -44,6 +44,7 @@ import type {
   LayoutSubpath,
   LayoutText,
 } from "pdf-codec";
+import { runGapPt, runsShareBaseline } from "pdf-codec/text-group";
 import { buildDrawingBlock } from "../model/embedded-drawing";
 import type { Box, Margins } from "document-schema.js";
 import { flipY } from "../model/geometry";
@@ -72,8 +73,15 @@ interface TextLine {
   readonly baselineY: number;
 }
 
-// Baseline-proximity tolerance of 0.5x font size -- wide enough to catch superscripts into their own line, tight enough to never merge two genuinely separate lines (plan Step 10).
+// Baseline-proximity tolerance of 0.5x font size -- wide enough to catch superscripts into their own line, tight enough to never merge two genuinely separate lines (plan Step 10). The fraction stays at this package's own tuned value rather than pdf-codec's looser default, but the em it is a fraction of now comes from the SMALLER of the two runs being compared rather than from whichever of them happened to supply it (ExaDev/documents.js#1317): taken from the larger, a 30pt heading's own 15pt window swallowed the 9pt line 12pt beneath it, and the merged line's runs then sorted by x into a sequence whose gaps were negative, which pushRunsForLine reads as one word, concatenating the two lines into run-together text.
 const LINE_BASELINE_TOLERANCE_FACTOR = 0.5;
+
+// Whether `item` belongs on the line `anchor` opened. The comparison is always against a line's own anchor, never its most recently admitted run, so a line cannot walk down the page one near-miss at a time.
+function sharesBaseline(anchor: LayoutText, item: LayoutText): boolean {
+  return runsShareBaseline(anchor, item, {
+    baselineToleranceEm: LINE_BASELINE_TOLERANCE_FACTOR,
+  });
+}
 
 // --- Duplicate-paint collapsing (ExaDev/documents.js#1062) ---
 //
@@ -154,14 +162,11 @@ interface RedrawPass {
 function groupByBaselineInDocumentOrder(
   items: readonly LayoutText[],
 ): LayoutText[][] {
-  const groups: { baselineY: number; items: LayoutText[] }[] = [];
+  const groups: { anchor: LayoutText; items: LayoutText[] }[] = [];
   for (const item of items) {
-    const tolerance = LINE_BASELINE_TOLERANCE_FACTOR * item.sizePt;
-    const group = groups.find(
-      (g) => Math.abs(g.baselineY - item.yPt) <= tolerance,
-    );
+    const group = groups.find((g) => sharesBaseline(g.anchor, item));
     if (group === undefined) {
-      groups.push({ baselineY: item.yPt, items: [item] });
+      groups.push({ anchor: item, items: [item] });
     } else {
       group.items.push(item);
     }
@@ -288,14 +293,15 @@ function clusterIntoLines(items: readonly LayoutText[]): TextLine[] {
   const sorted = [...dropDuplicatePaints(dropFuzzyRedrawnPasses(items))].sort(
     (a, b) => b.yPt - a.yPt || a.xPt - b.xPt,
   );
-  const working: { items: LayoutText[]; baselineY: number }[] = [];
+  const working: {
+    items: LayoutText[];
+    baselineY: number;
+    anchor: LayoutText;
+  }[] = [];
   for (const item of sorted) {
-    const tolerance = LINE_BASELINE_TOLERANCE_FACTOR * item.sizePt;
-    const line = working.find(
-      (l) => Math.abs(l.baselineY - item.yPt) <= tolerance,
-    );
+    const line = working.find((l) => sharesBaseline(l.anchor, item));
     if (line === undefined) {
-      working.push({ items: [item], baselineY: item.yPt });
+      working.push({ items: [item], baselineY: item.yPt, anchor: item });
     } else {
       line.items.push(item);
     }
@@ -338,6 +344,16 @@ function textItemToContentRun(item: LayoutText): ContentRun {
 
 // A small absolute floor (not font-size-relative) below which two adjacent items are treated as directly continuing the same word (e.g. a bold/italic sub-run split mid-word) rather than separate words needing a space -- guards against float-rounding noise producing a spurious tiny positive gap.
 const MIN_WORD_GAP_PT = 0.5;
+
+// Whether the gap between two consecutive items on one line clears `thresholdPt`. False whenever the gap is not derivable at all, which is what an absent advance width on the earlier item means (ExaDev/documents.js#1317): reading that absence as zero put the previous item's end at its own start, so its whole advance read as a gap and spaces appeared inside words, "Com plete ly". An unknown gap is no evidence of a space, a tab, or a cell boundary.
+function gapExceeds(
+  previous: LayoutText,
+  next: LayoutText,
+  thresholdPt: number,
+): boolean {
+  const gap = runGapPt(previous, next);
+  return gap !== undefined && gap > thresholdPt;
+}
 
 // The PDF-space box one recovered text item occupied -- the exact frame stamped onto the ContentRun node rebuilt from it (and, aggregated over a line's items, onto the paragraph that line became). Uses the same real AFM ascent/descent metrics textItemVerticalExtent derives, so a run's own frame matches the geometry its source glyph run was rendered with.
 function textBoxOfItem(item: LayoutText, pageIndex: number): LayoutFrame {
@@ -383,10 +399,9 @@ function pushRunsForLine(
   line.items.forEach((item, itemIndex) => {
     if (itemIndex > 0) {
       const prevItem = line.items[itemIndex - 1]!;
-      const gap = item.xPt - (prevItem.xPt + (prevItem.widthPt ?? 0));
-      if (gap > LARGE_GAP_EM_MULTIPLIER * item.sizePt) {
+      if (gapExceeds(prevItem, item, LARGE_GAP_EM_MULTIPLIER * item.sizePt)) {
         runs.push({ text: "\t" });
-      } else if (gap > MIN_WORD_GAP_PT) {
+      } else if (gapExceeds(prevItem, item, MIN_WORD_GAP_PT)) {
         runs[runs.length - 1]!.text += " ";
       }
     }
@@ -1340,8 +1355,7 @@ function splitLineByLargeGaps(line: TextLine): TextLine[] {
   line.items.forEach((item, i) => {
     if (i > 0) {
       const prev = line.items[i - 1]!;
-      const gap = item.xPt - (prev.xPt + (prev.widthPt ?? 0));
-      if (gap > LARGE_GAP_EM_MULTIPLIER * item.sizePt) {
+      if (gapExceeds(prev, item, LARGE_GAP_EM_MULTIPLIER * item.sizePt)) {
         segments.push({ items: current, baselineY: line.baselineY });
         current = [];
       }
@@ -2187,8 +2201,7 @@ function joinCellText(items: readonly LayoutText[]): string {
   sorted.forEach((item, i) => {
     if (i > 0) {
       const prev = sorted[i - 1]!;
-      const gap = item.xPt - (prev.xPt + (prev.widthPt ?? 0));
-      if (gap > MIN_WORD_GAP_PT) {
+      if (gapExceeds(prev, item, MIN_WORD_GAP_PT)) {
         text += " ";
       }
     }

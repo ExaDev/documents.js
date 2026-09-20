@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LayoutItem, LayoutPage, LayoutText } from "pdf-codec";
-import { DEFAULT_BASELINE_TOLERANCE_EM } from "pdf-codec";
+import { DEFAULT_BASELINE_TOLERANCE_EM } from "pdf-codec/text-group";
 import type { LayoutFont } from "document-schema.js";
 import {
   attachCaptions,

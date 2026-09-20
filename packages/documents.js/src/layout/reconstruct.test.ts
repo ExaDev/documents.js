@@ -123,6 +123,40 @@ function paragraphs(
   );
 }
 
+describe("reconstructWordprocessing: baseline clustering and word gaps", () => {
+  it("does not let a large run claim the smaller line above it", () => {
+    // A 9pt kicker 12pt above a 30pt title. Taking the tolerance from the larger of the two gives 15pt and merges them; taking it from the smaller gives 4.5pt and cannot (ExaDev/documents.js#1317). Merged, the two sort by x into one sequence whose gap is negative, which reads as one word, so the failure is not two lines in one paragraph but "QuarterlyResults" run together.
+    const pg = page(612, 792, [
+      text({ text: "Quarterly", xPt: 50, yPt: 700, widthPt: 40, sizePt: 9 }),
+      text({ text: "Results", xPt: 50, yPt: 688, widthPt: 110, sizePt: 30 }),
+    ]);
+    const texts = paragraphs(reconstructWordprocessing(docFrom([pg]))).map(
+      (para) => para.runs.map((r) => r.text).join(""),
+    );
+    expect(texts).toEqual(["Quarterly", "Results"]);
+  });
+
+  it("puts no space between runs whose advance widths were never stated", () => {
+    // Three fragments of one word, each starting where the last visually ended. Reading the absent width as zero makes every advance look like a gap, so spaces land inside the word: "Com plete ly" (ExaDev/documents.js#1317).
+    const withoutWidth = (content: string, xPt: number): LayoutText => ({
+      kind: "text",
+      text: content,
+      xPt,
+      yPt: 700,
+      font: { family: "Helvetica", weight: "normal", style: "normal" },
+      sizePt: 10,
+      color: BLACK,
+    });
+    const pg = page(612, 792, [
+      withoutWidth("Com", 50),
+      withoutWidth("plete", 68),
+      withoutWidth("ly", 95),
+    ]);
+    const paras = paragraphs(reconstructWordprocessing(docFrom([pg])));
+    expect(paras[0]?.runs.map((r) => r.text).join("")).toBe("Completely");
+  });
+});
+
 describe("reconstructWordprocessing: paragraph clustering", () => {
   it("joins lines within the modal line spacing into one paragraph, separated by a single space", () => {
     const pg = page(612, 792, [
