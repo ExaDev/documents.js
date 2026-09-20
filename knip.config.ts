@@ -26,8 +26,13 @@ const config: KnipConfig = {
   workspaces: {
     // The workspace root builds nothing. Its files are the tooling configs, which are entry points by definition -- each is loaded by the tool it configures, never imported.
     ".": {
-      // eslint.shared.ts and stryker.shared.ts are each imported by every package's own config rather than loaded by a tool directly, so nothing else marks them reachable. The .github/scripts entries are the opposite case: CI invokes each as a `node` entry point and nothing imports them, so without naming them knip reports both the scripts and everything they import as unused -- which is how `semver` first looked dead here.
-      entry: ["eslint.shared.ts", "stryker.shared.ts", ".github/scripts/*.ts"],
+      // eslint.shared.ts and stryker.shared.ts are each imported by every package's own config rather than loaded by a tool directly, so nothing else marks them reachable. stryker.runner-preload.ts is handed to Node as a `--import` path string by stryker.shared.ts, which no import statement expresses. The .github/scripts entries are the opposite case: CI invokes each as a `node` entry point and nothing imports them, so without naming them knip reports both the scripts and everything they import as unused -- which is how `semver` first looked dead here.
+      entry: [
+        "eslint.shared.ts",
+        "stryker.shared.ts",
+        "stryker.runner-preload.ts",
+        ".github/scripts/*.ts",
+      ],
       // `*.ts` alone is not recursive, so it never reached .github/scripts and the scripts' own imports were invisible.
       project: ["*.ts", ".github/scripts/**/*.ts"],
     },
