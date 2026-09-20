@@ -363,6 +363,292 @@ describe("readImageDimensions", () => {
     const jpeg = bytes(0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00);
     expect(readImageDimensions(jpeg)).toBeUndefined();
   });
+
+  it("reads a frame header whose payload ends exactly at the last byte of input", () => {
+    // Height and width occupy the final four bytes, so the segment is complete with nothing to spare.
+    const jpeg = bytes(
+      0xff,
+      0xd8,
+      0xff,
+      0xc0,
+      0x00,
+      0x0b,
+      0x08,
+      0x00,
+      0x14,
+      0x00,
+      0x15,
+    );
+    expect(readImageDimensions(jpeg)).toEqual({ widthPx: 21, heightPx: 20 });
+  });
+
+  it("returns undefined for bytes carrying a frame header but no SOI marker at all", () => {
+    const notJpeg = bytes(
+      0x00,
+      0x00,
+      0xff,
+      0xc0,
+      0x00,
+      0x0b,
+      0x08,
+      0x00,
+      0x07,
+      0x00,
+      0x08,
+      0x01,
+      0x01,
+      0x11,
+      0x00,
+    );
+    expect(readImageDimensions(notJpeg)).toBeUndefined();
+  });
+
+  it("returns undefined when the 0xFF lead byte is present but the byte completing SOI is not 0xD8", () => {
+    const notJpeg = bytes(
+      0xff,
+      0x00,
+      0xff,
+      0xc0,
+      0x00,
+      0x0b,
+      0x08,
+      0x00,
+      0x09,
+      0x00,
+      0x0a,
+      0x01,
+      0x01,
+      0x11,
+      0x00,
+    );
+    expect(readImageDimensions(notJpeg)).toBeUndefined();
+  });
+
+  it("returns undefined when the 0xD8 byte is present but the 0xFF lead of SOI is not", () => {
+    const notJpeg = bytes(
+      0x00,
+      0xd8,
+      0xff,
+      0xc0,
+      0x00,
+      0x0b,
+      0x08,
+      0x00,
+      0x0b,
+      0x00,
+      0x0c,
+      0x01,
+      0x01,
+      0x11,
+      0x00,
+    );
+    expect(readImageDimensions(notJpeg)).toBeUndefined();
+  });
+
+  it("skips a marker below the Start-Of-Frame range by its own declared length", () => {
+    // 0xBF is reserved and carries a length field, so its payload is skipped whole rather than read as a frame header.
+    const jpeg = bytes(
+      0xff,
+      0xd8,
+      0xff,
+      0xbf,
+      0x00,
+      0x0b,
+      0x08,
+      0x00,
+      0x01,
+      0x00,
+      0x02,
+      0x01,
+      0x01,
+      0x11,
+      0x00,
+      0xff,
+      0xc0,
+      0x00,
+      0x0b,
+      0x08,
+      0x00,
+      0x03,
+      0x00,
+      0x04,
+      0x01,
+      0x01,
+      0x11,
+      0x00,
+      0xff,
+      0xd9,
+    );
+    expect(readImageDimensions(jpeg)).toEqual({ widthPx: 4, heightPx: 3 });
+  });
+
+  it("reads a SOF15 (0xCF) frame header, the last marker of the Start-Of-Frame range", () => {
+    const jpeg = bytes(
+      0xff,
+      0xd8,
+      0xff,
+      0xcf,
+      0x00,
+      0x0b,
+      0x08,
+      0x00,
+      0x05,
+      0x00,
+      0x06,
+      0x01,
+      0x01,
+      0x11,
+      0x00,
+      0xff,
+      0xd9,
+    );
+    expect(readImageDimensions(jpeg)).toEqual({ widthPx: 6, heightPx: 5 });
+  });
+
+  it("skips a second SOI marker, which carries no length field of its own", () => {
+    const jpeg = bytes(
+      0xff,
+      0xd8,
+      0xff,
+      0xd8,
+      0xff,
+      0xc0,
+      0x00,
+      0x0b,
+      0x08,
+      0x00,
+      0x07,
+      0x00,
+      0x08,
+      0x01,
+      0x01,
+      0x11,
+      0x00,
+      0xff,
+      0xd9,
+    );
+    expect(readImageDimensions(jpeg)).toEqual({ widthPx: 8, heightPx: 7 });
+  });
+
+  it("skips an EOI marker appearing before the frame header, which carries no length field of its own", () => {
+    const jpeg = bytes(
+      0xff,
+      0xd8,
+      0xff,
+      0xd9,
+      0xff,
+      0xc0,
+      0x00,
+      0x0b,
+      0x08,
+      0x00,
+      0x09,
+      0x00,
+      0x0a,
+      0x01,
+      0x01,
+      0x11,
+      0x00,
+      0xff,
+      0xd9,
+    );
+    expect(readImageDimensions(jpeg)).toEqual({ widthPx: 10, heightPx: 9 });
+  });
+
+  it("skips a DQT segment by its declared length rather than scanning through its payload", () => {
+    // The quantisation table's payload deliberately spells out a frame header, which must not be mistaken for the real one that follows the segment.
+    const jpeg = bytes(
+      0xff,
+      0xd8,
+      0xff,
+      0xdb,
+      0x00,
+      0x0b,
+      0xff,
+      0xc0,
+      0x00,
+      0x0b,
+      0x08,
+      0x00,
+      0x01,
+      0x00,
+      0x02,
+      0xff,
+      0xc0,
+      0x00,
+      0x0b,
+      0x08,
+      0x00,
+      0x03,
+      0x00,
+      0x04,
+      0x01,
+      0x01,
+      0x11,
+      0x00,
+      0xff,
+      0xd9,
+    );
+    expect(readImageDimensions(jpeg)).toEqual({ widthPx: 4, heightPx: 3 });
+  });
+
+  it("resumes scanning from the next 0xFF when a segment's declared length lands between markers", () => {
+    // The APP0 segment declares one payload byte but two more follow it, so the walk lands on a byte that begins no marker.
+    const jpeg = bytes(
+      0xff,
+      0xd8,
+      0xff,
+      0xe0,
+      0x00,
+      0x03,
+      0x41,
+      0x42,
+      0x43,
+      0xff,
+      0xc0,
+      0x00,
+      0x0b,
+      0x08,
+      0x00,
+      0x0b,
+      0x00,
+      0x0c,
+      0x01,
+      0x01,
+      0x11,
+      0x00,
+      0xff,
+      0xd9,
+    );
+    expect(readImageDimensions(jpeg)).toEqual({ widthPx: 12, heightPx: 11 });
+  });
+
+  it("returns undefined for a frame-header-shaped run inside the scan data after Start Of Scan", () => {
+    const jpeg = bytes(
+      0xff,
+      0xd8,
+      0xff,
+      0xda,
+      0x00,
+      0x02,
+      0xff,
+      0xc0,
+      0x00,
+      0x0b,
+      0x08,
+      0x00,
+      0x16,
+      0x00,
+      0x17,
+      0x01,
+      0x01,
+      0x11,
+      0x00,
+      0xff,
+      0xd9,
+    );
+    expect(readImageDimensions(jpeg)).toBeUndefined();
+  });
 });
 
 describe("detectImageFormat", () => {
@@ -382,6 +668,24 @@ describe("detectImageFormat", () => {
 
   it("returns undefined for an empty input", () => {
     expect(detectImageFormat(bytes())).toBeUndefined();
+  });
+
+  it("returns undefined for bytes sharing only the leading byte of the PNG signature", () => {
+    expect(
+      detectImageFormat(bytes(0x89, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)),
+    ).toBeUndefined();
+  });
+
+  it("detects a two-byte input that is exactly the SOI marker", () => {
+    expect(detectImageFormat(bytes(0xff, 0xd8))).toBe("jpeg");
+  });
+
+  it("returns undefined for the 0xD8 of SOI without its 0xFF lead byte", () => {
+    expect(detectImageFormat(bytes(0x00, 0xd8))).toBeUndefined();
+  });
+
+  it("returns undefined for the 0xFF lead byte of SOI without the 0xD8 that completes it", () => {
+    expect(detectImageFormat(bytes(0xff, 0x00))).toBeUndefined();
   });
 });
 
@@ -420,4 +724,33 @@ describe("bytesToBase64 / base64ToBytes", () => {
   it("throws for an invalid base64 character in a would-be data position", () => {
     expect(() => base64ToBytes("T!==")).toThrow("invalid base64 input");
   });
+
+  it("throws for padding in the first character position of a group, where no padding can belong", () => {
+    expect(() => base64ToBytes("=A==")).toThrow("invalid base64 input");
+  });
+
+  it("throws for a group left with a single data character, which carries too few bits for even one byte", () => {
+    expect(() => base64ToBytes("A===")).toThrow("invalid base64 input");
+  });
+
+  it.each([0, 1, 2, 3, 4, 5, 6, 7, 8])(
+    "round-trips a %i-byte prefix of a sample sequence back to exactly those bytes",
+    (byteCount) => {
+      const sample = bytes(
+        0x00,
+        0xff,
+        0x10,
+        0x80,
+        0x7f,
+        0x01,
+        0x02,
+        0x03,
+        0xab,
+      );
+      const original = sample.subarray(0, byteCount);
+      expect(Array.from(base64ToBytes(bytesToBase64(original)))).toEqual(
+        Array.from(original),
+      );
+    },
+  );
 });
