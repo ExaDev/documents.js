@@ -30,7 +30,7 @@ export function splitTableRow(line: string): string[] {
   // text.charAt(index) !== "", not index < text.length: the two are equivalent for every real index (charAt already returns "" one past the end, which none of this loop's own branches below can ever match either), but only this spelling's own mutation is actually reachable by a test rather than always landing on the identical fallthrough either way.
   while (text.charAt(index) !== "") {
     const char = text.charAt(index);
-    // No separate "is there a character after the backslash" guard: when the backslash is the very last character, text.charAt(index + 1) is already "" out of range, which the ternary below already treats as "not a pipe" and appends as char + "" -- the identical single backslash the no-escape fallthrough two branches down would append anyway, so the guard would only ever gate two provably equal outcomes.
+    // No separate "is there a character after the backslash" guard: when the backslash is the very last character, text.charAt(index + 1) is already "" out of range, which the ternary below already treats as "not a pipe" and appends as char + "" — the identical single backslash the no-escape fallthrough two branches down would append anyway, so the guard would only ever gate two provably equal outcomes.
     if (char === "\\") {
       // An escaped pipe is resolved HERE rather than left for the inline phase's own backslash handling, because a cell's content may put it somewhere that handling never reaches: GFM's own example escapes a pipe inside a code span (`` | b `\|` az | ``), and a code span's literal is never backslash-processed. Every other escape is passed through untouched for the inline phase to resolve as usual.
       const escaped = text.charAt(index + 1);
@@ -56,7 +56,7 @@ function endsWithUnescapedPipe(text: string): boolean {
     return false;
   }
   let backslashes = 0;
-  // No separate `backslashes + 1 < text.length` bound: charAt(text.length - 2 - backslashes) reads before the start of `text` once backslashes grows past text.length - 2, and charAt already returns "" for a negative index, which is never "\\" either -- so the loop already stops there on its own, on exactly the same iteration a length-based bound would have forced.
+  // No separate `backslashes + 1 < text.length` bound: charAt(text.length - 2 - backslashes) reads before the start of `text` once backslashes grows past text.length - 2, and charAt already returns "" for a negative index, which is never "\\" either — so the loop already stops there on its own, on exactly the same iteration a length-based bound would have forced.
   while (text.charAt(text.length - 2 - backslashes) === "\\") {
     backslashes += 1;
   }

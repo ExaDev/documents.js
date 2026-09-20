@@ -11,7 +11,7 @@ describe("MarkdownScanCursor", () => {
     expect(cursor.position).toEqual({ offset: 2, line: 1, column: 2 });
     expect(cursor.atEnd()).toBe(true);
     expect(cursor.next()).toBeUndefined();
-    // Calling next() again once already at the exact end must not advance any further state -- offset/column stay put rather than ticking past source.length.
+    // Calling next() again once already at the exact end must not advance any further state — offset/column stay put rather than ticking past source.length.
     expect(cursor.position).toEqual({ offset: 2, line: 1, column: 2 });
   });
 
@@ -123,7 +123,7 @@ describe("MarkdownScanCursor", () => {
     expect(cursor.next()).toBe("f");
   });
 
-  it("next() past the end of input is idempotent -- it never advances rawOffset or column further", () => {
+  it("next() past the end of input is idempotent — it never advances rawOffset or column further", () => {
     const cursor = new MarkdownScanCursor("a");
     cursor.next();
     expect(cursor.next()).toBeUndefined();

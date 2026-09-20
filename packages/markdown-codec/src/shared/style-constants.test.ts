@@ -17,7 +17,7 @@ describe("headingStyleId / parseHeadingStyleId", () => {
     expect(parseHeadingStyleId("Quote")).toBeUndefined();
   });
 
-  it("rejects level 0 -- a heading style level is always a positive integer", () => {
+  it("rejects level 0 — a heading style level is always a positive integer", () => {
     expect(parseHeadingStyleId("Heading0")).toBeUndefined();
   });
 

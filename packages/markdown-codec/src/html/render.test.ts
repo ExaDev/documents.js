@@ -1,4 +1,4 @@
-// Direct unit tests for this module's own conformance-oracle rendering, isolated from the parser -- src/conformance.test.ts and src/gfm-conformance.test.ts only exercise renderDocumentToHtml through whatever the real CommonMark/GFM corpora happen to contain, which never reaches several of this renderer's own branches: math (a Pandoc/GFM extension outside both corpora), footnote definitions/references (a GitHub extension outside both), an apostrophe or a single-hex-digit byte in an href, and a table column with no alignment. Building MarkdownBlockNode/MarkdownDocumentNode trees by hand here reaches those directly.
+// Direct unit tests for this module's own conformance-oracle rendering, isolated from the parser — src/conformance.test.ts and src/gfm-conformance.test.ts only exercise renderDocumentToHtml through whatever the real CommonMark/GFM corpora happen to contain, which never reaches several of this renderer's own branches: math (a Pandoc/GFM extension outside both corpora), footnote definitions/references (a GitHub extension outside both), an apostrophe or a single-hex-digit byte in an href, and a table column with no alignment. Building MarkdownBlockNode/MarkdownDocumentNode trees by hand here reaches those directly.
 
 import { describe, expect, it } from "vitest";
 import type { MarkdownBlockNode, MarkdownDocumentNode } from "../ast/ast";
@@ -15,12 +15,12 @@ describe("escapeHref", () => {
   });
 
   it("pads a single hex digit's percent escape to two digits", () => {
-    // U+0007 (BEL) is ASCII, not alphanumeric, not in the safe-punctuation set -- its own byte value is 7, whose hex digit "7" needs a leading zero. Built via fromCharCode rather than a literal escape so the source never carries a raw, invisible control byte.
+    // U+0007 (BEL) is ASCII, not alphanumeric, not in the safe-punctuation set — its own byte value is 7, whose hex digit "7" needs a leading zero. Built via fromCharCode rather than a literal escape so the source never carries a raw, invisible control byte.
     expect(escapeHref(String.fromCharCode(7))).toBe("%07");
   });
 
   it("leaves a two-hex-digit byte unpadded", () => {
-    // '<' is byte 0x3C -- already two hex digits, nothing to pad.
+    // '<' is byte 0x3C — already two hex digits, nothing to pad.
     expect(escapeHref("<")).toBe("%3C");
   });
 });
@@ -124,7 +124,7 @@ describe("renderDocumentToHtml: table column alignment, only rendered when genui
     expect(html).toContain('<td align="right">b</td>');
   });
 
-  it("also omits the align attribute for a column with no alignment entry at all -- undefined, distinct from the explicit 'none'", () => {
+  it("also omits the align attribute for a column with no alignment entry at all — undefined, distinct from the explicit 'none'", () => {
     const html = render([
       {
         type: "table",
@@ -183,7 +183,7 @@ describe("renderDocumentToHtml: cr() only inserts a newline when the buffer genu
         ],
       },
     ]);
-    // A bare tight-paragraph "a" carries no trailing newline of its own -- the nested list's own leading cr() is what supplies the line break before its "<ul>".
+    // A bare tight-paragraph "a" carries no trailing newline of its own — the nested list's own leading cr() is what supplies the line break before its "<ul>".
     expect(html).toBe("<ul>\n<li>a\n<ul>\n<li>b</li>\n</ul>\n</li>\n</ul>\n");
   });
 
