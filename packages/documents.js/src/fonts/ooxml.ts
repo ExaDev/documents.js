@@ -10,15 +10,14 @@ import {
   base64ToBytes,
   childrenWithTag,
   decodeEntities,
+  findMainPartPath,
+  findRelatedPartPath,
   resolveRelationships,
   rootElement,
 } from "ooxml.js";
 import { deobfuscateEmbeddedFont } from "./obfuscation";
 
-const OFFICE_DOCUMENT_RELATIONSHIP =
-  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
-const FONT_TABLE_RELATIONSHIP =
-  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable";
+const FONT_TABLE_REL_SUFFIX = "/fontTable";
 const ROOT_RELS_PART = "_rels/.rels";
 
 // The four docx w:font children that reference an embedded face, paired with the bold/italic combination each one means. Order is the declaration order ECMA-376 gives them in the CT_Font sequence, so a package with all four yields faces in a stable, document-faithful order.
@@ -52,43 +51,15 @@ export class OoxmlEmbeddedFontError extends Error {
   }
 }
 
-// The part `fromPartPath` reaches through a relationship of the given type, or undefined when it declares none. Resolution goes through ooxml.js's own resolveRelationships rather than assuming a conventional path, so a producer that names its font table something other than word/fontTable.xml still resolves -- resolveRelationships already turns a Relationship's own directory-relative Target into a package-relative part path.
-function relatedPartPath(
-  pkg: Package,
-  fromPartPath: string,
-  relationshipType: string,
-): string | undefined {
-  for (const relationship of resolveRelationships(pkg, fromPartPath).values()) {
-    if (
-      relationship.type === relationshipType &&
-      relationship.targetMode === undefined
-    ) {
-      return relationship.target;
-    }
-  }
-  return undefined;
-}
-
-// The package's main document part (word/document.xml, ppt/presentation.xml), resolved from _rels/.rels the same way every OOXML consumer is required to. Read directly rather than through resolveRelationships: that function derives a part's .rels path from the part's own path, and the package root has no part path to derive one from -- passing an empty string yields "/_rels/.rels", with a leading slash no real package uses. A root Relationship's Target is always package-root-relative, so the only normalisation needed here is stripping an optional leading slash.
+// The package's main document part (word/document.xml, ppt/presentation.xml), resolved through ooxml.js's own OPC resolver so the part's real name, not its conventional one, is what the font tables are read against. Unlike the readers, this throws rather than falling back to a conventional path: a caller asking for a package's embedded fonts has already decided the package is a docx or pptx, so a package naming no main part at all is malformed, and silently probing a path it does not declare would report "no embedded fonts" for a structural fault.
 function officeDocumentPartPath(pkg: Package): string {
-  const rels = rootElement(pkg.parts[ROOT_RELS_PART]);
-  if (rels !== undefined) {
-    for (const relationship of childrenWithTag(rels, "Relationship")) {
-      if (
-        attr(relationship, "Type") !== OFFICE_DOCUMENT_RELATIONSHIP ||
-        attr(relationship, "TargetMode") !== undefined
-      ) {
-        continue;
-      }
-      const target = attr(relationship, "Target");
-      if (target !== undefined) {
-        return target.startsWith("/") ? target.slice(1) : target;
-      }
-    }
+  const mainPartPath = findMainPartPath(pkg);
+  if (mainPartPath === undefined) {
+    throw new OoxmlEmbeddedFontError(
+      `the package declares no officeDocument relationship in ${ROOT_RELS_PART}`,
+    );
   }
-  throw new OoxmlEmbeddedFontError(
-    `the package declares no officeDocument relationship in ${ROOT_RELS_PART}`,
-  );
+  return mainPartPath;
 }
 
 // The raw bytes of a font part, given the id of a relationship declared by `fromPartPath`. Throws rather than skipping: a w:embedRegular naming an r:id that resolves to nothing, or to an XML part, is a structurally broken package, and quietly dropping the face would silently downgrade the render to a substitute for a reason no caller could see.
@@ -160,10 +131,10 @@ function collectFaces(
 
 function extractDocxFonts(pkg: Package): ProvidedFont[] {
   const documentPartPath = officeDocumentPartPath(pkg);
-  const fontTablePath = relatedPartPath(
+  const fontTablePath = findRelatedPartPath(
     pkg,
     documentPartPath,
-    FONT_TABLE_RELATIONSHIP,
+    FONT_TABLE_REL_SUFFIX,
   );
   if (fontTablePath === undefined) {
     return [];

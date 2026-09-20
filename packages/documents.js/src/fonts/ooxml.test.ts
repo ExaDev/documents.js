@@ -117,6 +117,40 @@ describe("extractOoxmlEmbeddedFonts (docx)", () => {
       },
     ]);
   });
+  // The main part's own name is no more authoritative than the font table's: a package is free to call its body word/document2.xml, and the root officeDocument relationship is what says so (ExaDev/documents.js#1314).
+  it("resolves the font table from a main part the package names word/document2.xml", () => {
+    const pkg = decodePackage(
+      zipPackage({
+        "[Content_Types].xml": enc(
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>',
+        ),
+        "_rels/.rels": enc(
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document2.xml"/></Relationships>',
+        ),
+        "word/document2.xml": enc(
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body/></w:document>',
+        ),
+        "word/_rels/document2.xml.rels": enc(
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable" Target="fontTable2.xml"/></Relationships>',
+        ),
+        "word/fontTable2.xml": enc(
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:fonts xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:font w:name="Caladea"><w:embedItalic r:id="rId4"/></w:font></w:fonts>',
+        ),
+        "word/_rels/fontTable2.xml.rels": enc(
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/font" Target="media/face.ttf"/></Relationships>',
+        ),
+        "word/media/face.ttf": caladeaItalicBytes(),
+      }),
+    );
+    expect(extractOoxmlEmbeddedFonts(pkg, "docx")).toEqual([
+      {
+        family: "Caladea",
+        bold: false,
+        italic: true,
+        bytes: caladeaItalicBytes(),
+      },
+    ]);
+  });
 });
 
 describe("extractOoxmlEmbeddedFonts (pptx)", () => {

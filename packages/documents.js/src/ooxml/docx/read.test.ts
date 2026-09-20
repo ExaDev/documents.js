@@ -4,6 +4,7 @@ import {
   docxWithLegacyOleObjectPackage,
   docxWithTableCellEquationPackage,
   minimalDocxPackage,
+  renamedMainPartDocxPackage,
 } from "../../test-support/docx";
 import { readDocxContent } from "./read";
 
@@ -44,6 +45,30 @@ describe("readDocxContent", () => {
 
   it("propagates the upstream reader's own error for a package with no word/document.xml", () => {
     expect(() => readDocxContent({ parts: {} })).toThrow(/word\/document\.xml/);
+  });
+
+  it("reads a body the package names word/document2.xml, splicing an equation through that part's own relationships", () => {
+    const doc = readDocxContent(renamedMainPartDocxPackage());
+    if (doc.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing document");
+    }
+    const table = doc.sections[0]?.blocks.find(
+      (block) => block.kind === "table",
+    );
+    if (table?.kind !== "table") {
+      throw new Error("expected a table");
+    }
+    const cells = table.rows[0]?.cells ?? [];
+    expect(cells[0]?.blocks.some((block) => block.kind === "paragraph")).toBe(
+      true,
+    );
+    // The splice pass walks the resolved body part's own markup; reading the conventional path instead would find no part, leave the equation unspliced, and lose it silently.
+    expect(
+      cells[1]?.blocks.some(
+        (block) =>
+          block.kind === "embeddedObject" && block.objectKind === "formula",
+      ),
+    ).toBe(true);
   });
 
   it("recovers an equation embedded in a table cell, splicing the formula into that cell's own blocks", () => {
