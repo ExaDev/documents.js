@@ -299,6 +299,9 @@ describe("DocxTableCell.borders", () => {
     cell.borders = {
       top: { color: { r: 1, g: 0, b: 0 }, widthPt: 2, style: "dashed" },
     };
+    expect(cell.borders).toEqual({
+      top: { color: { r: 1, g: 0, b: 0 }, widthPt: 2, style: "dashed" },
+    });
     cell.borders = {
       left: { color: { r: 0, g: 1, b: 0 }, widthPt: 1, style: "solid" },
     };
