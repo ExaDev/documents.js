@@ -1,8 +1,9 @@
-import type { Metrics } from "mutation-testing-metrics";
+import { calculateMetrics, type Metrics } from "mutation-testing-metrics";
 import type { FileResult } from "mutation-testing-report-schema";
 import { describe, expect, it } from "vitest";
 import {
   derivedBreakThreshold,
+  filesOwnedBySlice,
   mergeSliceFiles,
   packageFails,
   recordedBreak,
@@ -98,6 +99,32 @@ describe("derivedBreakThreshold", () => {
         metrics({ mutationScore: 0, timeout: 0, totalValid: 0 }),
       ),
     ).toBe(0);
+  });
+});
+
+describe("filesOwnedBySlice", () => {
+  const report = { "src/a.ts": file(), "src/b.ts": file(), "src/c.ts": file() };
+
+  it("keeps only the files named in the slice's own mutate list", () => {
+    expect(Object.keys(filesOwnedBySlice(report, "src/a.ts,src/c.ts"))).toEqual(
+      ["src/a.ts", "src/c.ts"],
+    );
+  });
+
+  it("drops results a slice restored for files another slice owns", () => {
+    expect(filesOwnedBySlice(report, "src/b.ts")).toEqual({
+      "src/b.ts": report["src/b.ts"],
+    });
+  });
+
+  it("keeps every file when the slice covers the whole package", () => {
+    expect(filesOwnedBySlice(report, "")).toBe(report);
+  });
+
+  it("does not require every owned file to appear in the report", () => {
+    expect(Object.keys(filesOwnedBySlice(report, "src/a.ts,src/z.ts"))).toEqual(
+      ["src/a.ts"],
+    );
   });
 });
 
@@ -251,5 +278,67 @@ describe("sliceReportFile", () => {
         cacheKey: "p-1of1",
       }),
     ).toBe("p-1of1.json");
+  });
+});
+
+describe("the score of a real Stryker report", () => {
+  // The mutant statuses of one whole-package Stryker report, counted from the report itself. The expected totals are the ones Stryker printed in the same run's clear-text table (its killed, timeout, survived, no-coverage and error columns and its score), so this pins the metrics library the gate scores with to Stryker's own arithmetic instead of to a formula written here. The `Ignored` mutants are in the report but not in any of those columns.
+  const STATUS_COUNTS: Readonly<Record<string, number>> = {
+    Killed: 254,
+    Timeout: 18,
+    CompileError: 115,
+    Ignored: 91,
+  };
+
+  function reportWith(statusCounts: Readonly<Record<string, number>>): unknown {
+    let id = 0;
+    const mutants = Object.entries(statusCounts).flatMap(([status, count]) =>
+      Array.from({ length: count }, () => ({
+        id: String((id += 1)),
+        mutatorName: "Fixture",
+        replacement: "",
+        status,
+        location: {
+          start: { line: 1, column: 1 },
+          end: { line: 1, column: 2 },
+        },
+      })),
+    );
+    return {
+      files: { "src/a.ts": { language: "typescript", source: "", mutants } },
+    };
+  }
+
+  it("reproduces the totals Stryker printed for it", () => {
+    const totals = calculateMetrics(
+      reportFiles(reportWith(STATUS_COUNTS), "counts"),
+    ).metrics;
+    expect(totals.mutationScore).toBe(100);
+    expect(totals.killed).toBe(254);
+    expect(totals.timeout).toBe(18);
+    expect(totals.survived).toBe(0);
+    expect(totals.noCoverage).toBe(0);
+    expect(totals.compileErrors + totals.runtimeErrors).toBe(115);
+    expect(totals.totalValid).toBe(272);
+  });
+
+  it("scores survivors and uncovered mutants against the detected ones", () => {
+    const totals = calculateMetrics(
+      reportFiles(
+        reportWith({ Killed: 60, Timeout: 20, Survived: 15, NoCoverage: 5 }),
+        "counts",
+      ),
+    ).metrics;
+    expect(totals.mutationScore).toBe(80);
+  });
+
+  it("does not let errors or ignored mutants change the score", () => {
+    const totals = calculateMetrics(
+      reportFiles(
+        reportWith({ Killed: 3, Survived: 1, CompileError: 50, Ignored: 50 }),
+        "counts",
+      ),
+    ).metrics;
+    expect(totals.mutationScore).toBe(75);
   });
 });
