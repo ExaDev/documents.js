@@ -1,3 +1,4 @@
+import { bytesToBase64 } from "byte-codec";
 import { BlockCursor } from "../biff/cursor";
 import { recoverFromFormatError } from "../biff/records";
 import {
@@ -126,17 +127,4 @@ function blipFormatOf(recType: number): "png" | "jpeg" | undefined {
     return "jpeg";
   }
   return undefined;
-}
-
-function bytesToBase64(bytes: Uint8Array<ArrayBuffer>): string {
-  // Chunked to stay under String.fromCharCode's own argument-count limit, the same reason biff/strings.ts's readCharacters is; chunk count comes from Math.ceil rather than a manually bounds-checked loop, for the identical reason that module gives.
-  const chunkSize = 0x8000;
-  const binary = Array.from(
-    { length: Math.ceil(bytes.length / chunkSize) },
-    (_, index) =>
-      String.fromCharCode(
-        ...bytes.subarray(index * chunkSize, (index + 1) * chunkSize),
-      ),
-  ).join("");
-  return btoa(binary);
 }

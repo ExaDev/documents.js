@@ -274,7 +274,7 @@ export function writeEmbeddedObjRecord(
 
 // --- The workbook-wide plan ---
 
-/** Base64's own character set, decoded by hand rather than through atob's DOM-string round trip -- mirroring drawing/blips.ts's own hand-written encoder, which exists for the identical reason: byte-exact, allocation-predictable, and identical in Node and a Workers isolate. */
+/** Base64's own character set, decoded by hand rather than through atob's DOM-string round trip, and kept here rather than taken from byte-codec (whose bytesToBase64 is what the read side encodes with) because this one reports an unmappable character as a BiffWriteError naming the character itself, which is what a caller writing a sheet image needs to hear; byte-codec's own decoder throws a flat "invalid base64 input". Byte-exact, allocation-predictable, and identical in Node and a Workers isolate. */
 export function bytesFromBase64(base64: string): Uint8Array<ArrayBuffer> {
   const values = new Int8Array(256).fill(-1);
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
