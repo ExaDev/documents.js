@@ -1010,6 +1010,7 @@ export function compositeFontWritingModePdf(options: {
   readonly encoding: string; // the Type0 font's own /Encoding value, a name or an indirect reference
   readonly encodingStream?: string; // an embedded CMap stream's dict, written as object 9 when present
   readonly verticalMetrics?: string; // the descendant CIDFont's own /DW2 and /W2 entries, if any
+  readonly content?: string; // the page's own content stream, for a caller that needs text state the default does not set
 }): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header();
   b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
@@ -1026,7 +1027,11 @@ export function compositeFontWritingModePdf(options: {
     5,
     `<< /Type /Font /Subtype /CIDFontType2 /BaseFont /KozMinPr6N-Regular /CIDSystemInfo << /Registry (Adobe) /Ordering (Japan1) /Supplement 6 >> /DW 1000 /W [65 [1000] 66 [1000]] ${options.verticalMetrics ?? ""} /FontDescriptor 8 0 R >>`,
   );
-  b.stream(6, EMPTY_DICT, enc("BT /F1 20 Tf 100 700 Td <00410042> Tj ET"));
+  b.stream(
+    6,
+    EMPTY_DICT,
+    enc(options.content ?? "BT /F1 20 Tf 100 700 Td <00410042> Tj ET"),
+  );
   b.stream(
     7,
     EMPTY_DICT,
