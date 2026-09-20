@@ -15,13 +15,16 @@ What it is _not_ is another XML format. RTF is tokenised plain text with a brace
 ```mermaid
 graph TD
     archive("archive-codec")
+    bytes("byte-codec")
     schema("document-schema.js")
     rtfcodec("rtf-codec")
 
     archive --> rtfcodec
+    bytes --> rtfcodec
     schema --> rtfcodec
 
     click archive "https://github.com/ExaDev/documents.js/tree/main/packages/archive-codec" "archive-codec"
+    click bytes "https://github.com/ExaDev/documents.js/tree/main/packages/byte-codec" "byte-codec"
     click schema "https://github.com/ExaDev/documents.js/tree/main/packages/document-schema.js" "document-schema.js"
     click rtfcodec "https://github.com/ExaDev/documents.js/tree/main/packages/rtf-codec" "rtf-codec"
 
@@ -230,13 +233,13 @@ The throw tier is `RtfNotAnRtfDocumentError` (no `{\rtf` header), `RtfInputTooLa
 
 `iconv-lite` is banned for a second reason on top of that: it is Node-only (it is built on `Buffer`), so depending on it would break this package's Worker isomorphism. The code-page tables in `src/codepage.ts` exist instead.
 
-It deliberately does **not** depend on `byte-codec`, even though that package has the base64 and byte-writing primitives `src/base64.ts` reimplements. RTF's picture payload is hex-encoded ASCII inside a text format, not a binary container, so what is actually needed here is about sixty lines of hex and base64 conversion — considerably less than the coupling a dependency on a sibling's release cadence would cost. `epub-codec` made the same call for the same reason.
+It depends on `byte-codec` for one thing only: `bytesToBase64`, the family's single base64 encoder ([ExaDev/documents.js#1282](https://github.com/ExaDev/documents.js/issues/1282)), which the read path turns a picture's recovered bytes into a `ContentImageBlock` payload with. What stays hand-written in `src/base64.ts` is the hex conversion RTF's own `#SDATA` payload actually needs, which no other package has a use for, and a base64 _decoder_ that answers a different question from byte-codec's: it returns `undefined` for a character outside the alphabet, so a single malformed image degrades with a diagnostic instead of throwing and failing the whole write.
 
 ## Worker isomorphism
 
 Like every foundation and format-codec package in this family, `rtf-codec` is Worker-isomorphic: its published `src/` imports no `node:*` module and uses no `Buffer`, so one artifact behaves identically in a Node host, a browser, and a Cloudflare Worker. The ban is enforced by `isomorphic: true` in this package's `eslint.config.ts`, and `pnpm test:workers` proves it at runtime by running the public surface inside workerd.
 
-Two places would have been tempting to write with a Node-only shortcut, and the workers suite exercises both: `src/base64.ts`'s hand-written encoders (`Buffer.from(bytes).toString("base64")` is the one-liner they exist instead of) and `src/codepage.ts`'s own tables.
+Two places would have been tempting to write with a Node-only shortcut, and the workers suite exercises both: `src/base64.ts`'s hand-written hex and base64 decoding (`Buffer.from(text, "base64")` is the one-liner they exist instead of) and `src/codepage.ts`'s own tables.
 
 ## Fidelity constructs and the residue channel
 

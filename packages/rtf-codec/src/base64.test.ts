@@ -1,33 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { base64ToBytes, bytesToBase64, bytesToHex, hexToBytes } from "./base64";
-
-describe("bytesToBase64", () => {
-  it("pads with two '=' for a length not divisible by 3 with one trailing byte", () => {
-    // "Ma==" is the canonical base64 of the single byte 0x4d ("M").
-    expect(bytesToBase64(Uint8Array.from([0x4d]))).toBe("TQ==");
-  });
-
-  it("pads with one '=' for a length not divisible by 3 with two trailing bytes", () => {
-    // "TWE=" is the canonical base64 of the two bytes "Ma".
-    expect(bytesToBase64(Uint8Array.from([0x4d, 0x61]))).toBe("TWE=");
-  });
-
-  it("pads with nothing for a length exactly divisible by 3", () => {
-    // "Man" encodes to "TWFu" with no padding at all.
-    expect(bytesToBase64(Uint8Array.from([0x4d, 0x61, 0x6e]))).toBe("TWFu");
-  });
-
-  it("does not read past the input on the last group of three", () => {
-    // Six bytes is two whole groups of three; a loop reading one byte too far would append a spurious fourth group of padding-only characters.
-    expect(
-      bytesToBase64(Uint8Array.from([0x4d, 0x61, 0x6e, 0x4d, 0x61, 0x6e])),
-    ).toBe("TWFuTWFu");
-  });
-
-  it("encodes an empty input as an empty string", () => {
-    expect(bytesToBase64(new Uint8Array(0))).toBe("");
-  });
-});
+import { bytesToBase64 } from "byte-codec";
+import { base64ToBytes, bytesToHex, hexToBytes } from "./base64";
 
 describe("base64ToBytes", () => {
   it("decodes a real multi-character base64 string back to its exact bytes", () => {

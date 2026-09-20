@@ -10,6 +10,7 @@
 //
 // UNICODE. \uN carries the character and is followed by an ANSI approximation that a Unicode-aware reader must skip: "the reader should ignore the next N' characters, where N' corresponds to the last \ucN' value encountered", where "any RTF control word or symbol is considered a single character" and a brace ends the skippable run early. skipUnicodeFallback below implements exactly that, including the partial consumption of a text run, which is why the main loop carries a byte offset alongside its token index.
 
+import { bytesToBase64 } from "byte-codec";
 import {
   assembleTree,
   type Alignment,
@@ -52,7 +53,7 @@ import {
   provenanceDescriptors,
   type RevisionState,
 } from "./constructs";
-import { bytesToBase64, hexToBytes } from "./base64";
+import { hexToBytes } from "./base64";
 import { readEmbeddedObjectData } from "./embedded-object";
 import { appendBytes, asciiStringFromBytes, rtfBytesFromLatin1 } from "./bytes";
 import { decodeCodepageBytes } from "./codepage";

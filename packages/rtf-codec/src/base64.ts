@@ -1,30 +1,10 @@
-// Base64 and hexadecimal conversion for picture payloads, hand-written for the same reason every other byte-level routine in this family is: this package is Worker-isomorphic, so Node's Buffer is banned outright (the root eslint.shared.ts enforces it), and the two globals that would otherwise do the job -- btoa/atob -- are not universally present and operate on latin-1 strings rather than bytes anyway, which makes them the wrong shape for a picture's payload even where they exist.
+// Hexadecimal conversion for picture payloads, and the one base64 decode this package's own write path needs, hand-written for the same reason every other byte-level routine in this family is: this package is Worker-isomorphic, so Node's Buffer is banned outright (the root eslint.shared.ts enforces it), and the two globals that would otherwise do the job -- btoa/atob -- are not universally present and operate on latin-1 strings rather than bytes anyway, which makes them the wrong shape for a picture's payload even where they exist.
 //
-// ContentImageBlock states its payload as base64, and RTF states a picture's payload as either #SDATA (an even-length run of ASCII hex digits, the default) or #BDATA (raw bytes after \binN). So the read path is hex-or-bytes to base64, and the write path is base64 back to hex, which is what a \pict destination emits.
+// ContentImageBlock states its payload as base64, and RTF states a picture's payload as either #SDATA (an even-length run of ASCII hex digits, the default) or #BDATA (raw bytes after \binN). So the read path is hex-or-bytes to base64, and the write path is base64 back to hex, which is what a \pict destination emits. The read path's encode is byte-codec's bytesToBase64, the family's one implementation; the decode below stays here because it answers a different question from byte-codec's, returning undefined for an unmappable character so one malformed image degrades with a diagnostic instead of failing the whole write.
 
 const BASE64_ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 const HEX_DIGITS = "0123456789abcdef";
-
-// Indexed reads below go through charAt rather than [] on purpose: under noUncheckedIndexedAccess a bracket read is typed string | undefined, and every index here is already masked into the alphabet's own range by the bit operations that produce it (>> 2 and & 0b111111 for base64, >> 4 and & 0x0f for hex), so charAt's total signature states what the arithmetic already guarantees instead of a ?? "" fallback pretending an unreachable case is real.
-export function bytesToBase64(input: Uint8Array): string {
-  let out = "";
-  for (let index = 0; index < input.length; index += 3) {
-    const first = input[index] ?? 0;
-    const second = input[index + 1];
-    const third = input[index + 2];
-    out += BASE64_ALPHABET.charAt(first >> 2);
-    out += BASE64_ALPHABET.charAt(((first & 0b11) << 4) | ((second ?? 0) >> 4));
-    out +=
-      second === undefined
-        ? "="
-        : BASE64_ALPHABET.charAt(
-            ((second & 0b1111) << 2) | ((third ?? 0) >> 6),
-          );
-    out += third === undefined ? "=" : BASE64_ALPHABET.charAt(third & 0b111111);
-  }
-  return out;
-}
 
 function base64Value(character: string): number | undefined {
   const index = BASE64_ALPHABET.indexOf(character);
