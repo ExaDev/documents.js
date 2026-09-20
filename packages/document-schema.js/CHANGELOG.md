@@ -1,3 +1,9 @@
+## [7.11.4](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.11.3...document-schema.js%407.11.4) (2026-09-20)
+
+### Code Refactoring
+
+* **document-schema.js:** rebuild every group kind through one generic walk ([fd67c61](https://github.com/ExaDev/documents.js/commit/fd67c61af885fab1cd09b4b121132b6467824660))
+
 ## [7.11.3](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.11.2...document-schema.js%407.11.3) (2026-09-14)
 
 ### Miscellaneous Chores
