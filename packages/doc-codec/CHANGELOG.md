@@ -1,3 +1,16 @@
+## [3.0.1](https://github.com/ExaDev/documents.js/compare/doc-codec%403.0.0...doc-codec%403.0.1) (2026-09-20)
+
+### Documentation
+
+* make a hand-typed scoped mutation run find its package's Stryker config ([ed3297b](https://github.com/ExaDev/documents.js/commit/ed3297b6aa71b2d94913519e6960537ca5ac0f61))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.6.3
+- Updated document-schema.js to 7.11.5
+- Updated archive-codec to 1.11.7
+
 ## [3.0.0](https://github.com/ExaDev/documents.js/compare/doc-codec%402.12.4...doc-codec%403.0.0) (2026-09-20)
 
 ### ⚠ BREAKING CHANGES

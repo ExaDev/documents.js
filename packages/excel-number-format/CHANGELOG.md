@@ -1,3 +1,9 @@
+## [1.2.5](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.2.4...excel-number-format%401.2.5) (2026-09-20)
+
+### Documentation
+
+* make a hand-typed scoped mutation run find its package's Stryker config ([ed3297b](https://github.com/ExaDev/documents.js/commit/ed3297b6aa71b2d94913519e6960537ca5ac0f61))
+
 ## [1.2.4](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.2.3...excel-number-format%401.2.4) (2026-09-14)
 
 ### Miscellaneous Chores

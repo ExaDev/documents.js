@@ -1,3 +1,16 @@
+## [1.5.37](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.5.36...document-compute.js%401.5.37) (2026-09-20)
+
+### Documentation
+
+* make a hand-typed scoped mutation run find its package's Stryker config ([ed3297b](https://github.com/ExaDev/documents.js/commit/ed3297b6aa71b2d94913519e6960537ca5ac0f61))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.5
+- Updated markdown-codec to 7.0.1
+- Updated documents.js to 7.20.34
+
 ## [1.5.36](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.5.35...document-compute.js%401.5.36) (2026-09-20)
 
 
