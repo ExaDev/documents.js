@@ -3,6 +3,7 @@ import type { FileResult } from "mutation-testing-report-schema";
 import { describe, expect, it } from "vitest";
 import {
   derivedBreakThreshold,
+  failureReason,
   filesOwnedBySlice,
   mergeSliceFiles,
   packageFails,
@@ -340,5 +341,31 @@ describe("the score of a real Stryker report", () => {
       ),
     ).metrics;
     expect(totals.mutationScore).toBe(75);
+  });
+});
+
+describe("failureReason", () => {
+  it("names the slices with no report", () => {
+    expect(
+      failureReason({
+        package: "p",
+        verdict: { kind: "missing-reports", slices: [2, 3] },
+      }),
+    ).toBe("no report for slice 2, 3");
+  });
+
+  it("gives the score against the recorded threshold for a package under it", () => {
+    expect(failureReason({ package: "p", verdict: scored(88.9, 89, 88) })).toBe(
+      "score 88.90 is under the recorded threshold of 89",
+    );
+  });
+
+  it("is undefined for a package that passes or records no threshold", () => {
+    expect(
+      failureReason({ package: "p", verdict: scored(89, 89, 88) }),
+    ).toBeUndefined();
+    expect(
+      failureReason({ package: "p", verdict: scored(10, undefined, 9) }),
+    ).toBeUndefined();
   });
 });
