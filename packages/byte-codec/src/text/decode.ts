@@ -63,10 +63,11 @@ export class UndecodableTextError extends Error {
   }
 }
 
-const NUL_BYTE = 0x00;
+/** NUL, as a byte and as a code unit alike: it belongs to no text under either reading. */
+const NUL_CODE = 0x00;
 
-/** The first byte that is not a C0 control character. */
-const FIRST_NON_CONTROL_BYTE = 0x20;
+/** The first character code that is not a C0 control. */
+const FIRST_NON_CONTROL_CODE = 0x20;
 
 /** The first byte outside ASCII, which is also where every encoding in the supported set stops agreeing with every other. */
 const FIRST_HIGH_BYTE = 0x80;
@@ -75,13 +76,13 @@ const FIRST_HIGH_BYTE = 0x80;
 const C1_CONTROL_START = 0x80;
 const C1_CONTROL_END = 0x9f;
 
-/** C0 control bytes that appear in real text: tab, line feed, form feed, carriage return. Every other byte below {@link FIRST_NON_CONTROL_BYTE} belongs to binary content. */
-const TEXTUAL_CONTROL_BYTES: ReadonlySet<number> = new Set([
+/** C0 controls that appear in real text: tab, line feed, form feed, carriage return. Every other code below {@link FIRST_NON_CONTROL_CODE} belongs to binary content. */
+const TEXTUAL_CONTROL_CODES: ReadonlySet<number> = new Set([
   0x09, 0x0a, 0x0c, 0x0d,
 ]);
 
-/** One C0 control byte outside {@link TEXTUAL_CONTROL_BYTES} is permitted per this many bytes before the content is taken for binary. Plain text carries none at all, so the allowance exists only to tolerate a stray one, an end-of-file Ctrl-Z left by a DOS-era editor being the case that actually occurs; compressed and image data puts roughly an eighth of its bytes in the C0 range, more than an order of magnitude above this. Counted as integer arithmetic against the byte length rather than a floating-point ratio so the boundary is exact. */
-const BYTES_PER_PERMITTED_CONTROL_BYTE = 64;
+/** One C0 control outside {@link TEXTUAL_CONTROL_CODES} is permitted per this many characters before the content is taken for binary. Plain text carries none at all, so the allowance exists only to tolerate a stray one, an end-of-file Ctrl-Z left by a DOS-era editor being the case that actually occurs; compressed and image data puts roughly an eighth of its bytes in the C0 range, more than an order of magnitude above this. Counted as integer arithmetic against the length rather than a floating-point ratio so the boundary is exact. */
+const CODES_PER_PERMITTED_CONTROL = 64;
 
 /** The longest run of consecutive bytes at or above {@link FIRST_HIGH_BYTE} the windows-1252 guess accepts. Latin-script text sets an accented letter inside otherwise-ASCII words, so even the most accent-dense Western orthography never strings many together; text in a non-Latin single-byte code page, and bytes that are not text at all, put whole words above that boundary and run far longer. A caller holding bytes that genuinely do (a line of nothing but bullets, say) names the encoding explicitly rather than relying on the guess. */
 const MAX_HIGH_BYTE_RUN = 4;
@@ -205,6 +206,17 @@ function decodeUtf16(bytes: Uint8Array, littleEndian: boolean): string {
   return fromCodeUnits(units);
 }
 
+function tryDecodeUtf16(
+  bytes: Uint8Array,
+  littleEndian: boolean,
+): string | undefined {
+  try {
+    return decodeUtf16(bytes, littleEndian);
+  } catch {
+    return undefined;
+  }
+}
+
 function decodeUtf32(bytes: Uint8Array, littleEndian: boolean): string {
   if (bytes.byteLength % 4 !== 0) {
     throw new UndecodableTextError(
@@ -271,26 +283,41 @@ const DECODERS: Readonly<
   "windows-1252": decodeWindows1252,
 };
 
+/** The text-versus-binary rule itself, over character codes: a NUL settles it outright, and every other C0 control outside {@link TEXTUAL_CONTROL_CODES} is allowed only up to one per {@link CODES_PER_PERMITTED_CONTROL}. Reading codes through an accessor rather than taking an array lets the identical rule run over a Uint8Array's bytes and over a decoded string's code units without copying either into one. */
+function codesAreTextual(
+  codeAt: (index: number) => number,
+  length: number,
+): boolean {
+  let controlCodes = 0;
+  for (let index = 0; index < length; index += 1) {
+    const code = codeAt(index);
+    if (code === NUL_CODE) {
+      return false;
+    }
+    if (code < FIRST_NON_CONTROL_CODE && !TEXTUAL_CONTROL_CODES.has(code)) {
+      controlCodes += 1;
+    }
+  }
+  return controlCodes * CODES_PER_PERMITTED_CONTROL <= length;
+}
+
 /**
  * Whether bytes can hold text at all, judged without reference to which encoding they might be in.
  *
  * A NUL byte belongs to no text document format, and outside NUL the only C0 control bytes text carries are tab, line feed, form feed and carriage return, so a density of any others says binary. {@link decodeText} asks this before it guesses at windows-1252, which maps nearly every byte to some character and would otherwise read a PNG as a page of mojibake rather than refusing it.
  *
- * UTF-16 is the one text encoding this returns `false` for, since it interleaves NUL bytes by design; {@link decodeText} settles UTF-16 from a byte order mark or that same interleave before it reaches this check.
+ * UTF-16 is the one text encoding this returns `false` for, since it interleaves NUL bytes by design. {@link decodeText} settles UTF-16 from a byte order mark or that same interleave before it reaches this check, and applies the identical rule to the characters a mark-less UTF-16 guess produced, so that guess cannot smuggle binary past this one.
  * @param bytes - The bytes to judge.
  * @returns Whether the bytes carry no NUL and few enough other C0 control bytes to be text.
  */
 export function isProbablyText(bytes: Uint8Array): boolean {
-  let controlBytes = 0;
-  for (const byte of bytes) {
-    if (byte === NUL_BYTE) {
-      return false;
-    }
-    if (byte < FIRST_NON_CONTROL_BYTE && !TEXTUAL_CONTROL_BYTES.has(byte)) {
-      controlBytes += 1;
-    }
-  }
-  return controlBytes * BYTES_PER_PERMITTED_CONTROL_BYTE <= bytes.length;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return codesAreTextual((index) => view.getUint8(index), bytes.byteLength);
+}
+
+/** {@link isProbablyText}'s own question asked of characters rather than of bytes, for a decode that has already happened. A multi-byte encoding puts NULs and other low bytes into its bytes as part of how it spells ordinary characters, so the bytes cannot answer it; the characters that came out can. */
+function isTextualString(text: string): boolean {
+  return codesAreTextual((index) => text.charCodeAt(index), text.length);
 }
 
 /** Whether the bytes could be windows-1252 text, as opposed to some other single-byte code page or no text at all. windows-1252 has a character for all but five of its byte values, so trying it and seeing whether it fails proves nothing; these two structural tests are what stands in for that. */
@@ -315,18 +342,17 @@ function looksLikeWindows1252Text(bytes: Uint8Array): boolean {
 /**
  * UTF-16 without a byte order mark, recognised from the NUL a code unit below U+0100 puts on one fixed side of every unit pair.
  *
- * The recognised case is UTF-16 holding mostly Latin-script text, which is the only case a NUL interleave makes visible at all: UTF-16 holding CJK text has no NUL high bytes to see and is indistinguishable from other byte sequences without the statistical model this module does not carry. A majority on exactly one side is the signal, so bytes with NULs on both sides, padding rather than text, match neither.
+ * The recognised case is UTF-16 holding mostly Latin-script text, which is the only case a NUL interleave makes visible at all: UTF-16 holding CJK text has no NUL high bytes to see and is indistinguishable from other byte sequences without the statistical model this module does not carry.
+ *
+ * A majority of the units carrying a NUL on one fixed side is the whole of the test, and it is deliberately not also a comparison between the two sides. Bytes that put NULs on both sides, padding rather than text, do satisfy it, and are answered by the decode rather than here: a unit whose two bytes are both NUL decodes to U+0000, which is not text, so the caller's own check on the decoded characters refuses them. Requiring one side to beat the other would be unobservable, since a tie can only arise when some unit carries NULs on both sides, which is exactly the case that cannot survive that check. An odd byte count is left to the decoder for the same reason: it has no whole final code unit, so decoding it fails and the bytes are refused there.
  */
 function detectBomlessUtf16(bytes: Uint8Array): TextEncodingLabel | undefined {
-  if (bytes.length % 2 !== 0) {
-    return undefined;
-  }
   let evenIndexNuls = 0;
   let oddIndexNuls = 0;
   // Walked byte by byte with the parity carried alongside, rather than by index against a bound, so that which side of the unit boundary a byte sits on is read off the walk itself.
   let atEvenIndex = true;
   for (const byte of bytes) {
-    if (byte === NUL_BYTE) {
+    if (byte === NUL_CODE) {
       if (atEvenIndex) {
         evenIndexNuls += 1;
       } else {
@@ -336,13 +362,20 @@ function detectBomlessUtf16(bytes: Uint8Array): TextEncodingLabel | undefined {
     atEvenIndex = !atEvenIndex;
   }
   const units = bytes.length / 2;
-  if (oddIndexNuls > evenIndexNuls && oddIndexNuls * 2 > units) {
+  if (oddIndexNuls * 2 > units) {
     return "utf-16le";
   }
-  if (evenIndexNuls > oddIndexNuls && evenIndexNuls * 2 > units) {
+  if (evenIndexNuls * 2 > units) {
     return "utf-16be";
   }
   return undefined;
+}
+
+const BINARY_MESSAGE =
+  "bytes are not text: they carry a NUL byte, or too many other C0 control bytes for any text encoding";
+
+function refuseAsBinary(): never {
+  throw new UndecodableTextError("binary", BINARY_MESSAGE);
 }
 
 function guessWarning(encoding: TextEncodingLabel, evidence: string): string {
@@ -354,7 +387,7 @@ function guessWarning(encoding: TextEncodingLabel, evidence: string): string {
  *
  * The encoding is settled in a fixed order: the `encoding` option if the caller gave one, then a byte order mark, then the NUL interleave UTF-16 leaves when it holds Latin-script text and carries no mark, then UTF-8 if the bytes satisfy its own validity rules, then windows-1252 if the bytes read as Western text. Anything a byte order mark or the caller names is decoded under that encoding alone and fails if the bytes contradict it. Everything reached by detection reports how it was reached, so a caller can show the encoding, and a guess additionally carries a warning and a `low` confidence rather than being presented as fact.
  *
- * Bytes that are not text (a NUL byte, or a density of other C0 control bytes) are refused before any guess is made, so detection never widens what counts as text. A byte order mark is removed from the result rather than left as a leading U+FEFF.
+ * Bytes that are not text (a NUL byte, or a density of other C0 control bytes) are refused before any guess is made, so detection never widens what counts as text. The readings whose bytes carry NULs legitimately, mark-less UTF-16 and anything behind a UTF-16 or UTF-32 byte order mark, are judged by the same rule applied to the characters they produced instead. Only an explicit `encoding` from the caller skips the judgement entirely, since that is the caller overriding detection outright. A byte order mark is removed from the result rather than left as a leading U+FEFF.
  * @param bytes - The bytes to decode.
  * @param options - An explicit `encoding` to decode under, skipping detection.
  * @throws UndecodableTextError When the bytes are not text, contradict a declared or marked encoding, or match none of the supported encodings.
@@ -377,8 +410,13 @@ export function decodeText(
 
   const bom = findBom(bytes);
   if (bom !== undefined) {
+    const text = DECODERS[bom.encoding](bytes.subarray(bom.bytes.length));
+    // A mark identifies its encoding unambiguously, but it does not promise that what follows is text: binary beginning with the same two or four bytes would otherwise decode here into a page of control characters, where the previous UTF-8-only boundary refused it. The byte-level check cannot be asked, since UTF-16 and UTF-32 spell ordinary characters with NUL bytes by design, so the same question goes to the characters instead.
+    if (!isTextualString(text)) {
+      refuseAsBinary();
+    }
     return {
-      text: DECODERS[bom.encoding](bytes.subarray(bom.bytes.length)),
+      text,
       encoding: bom.encoding,
       source: "bom",
       confidence: "certain",
@@ -388,25 +426,26 @@ export function decodeText(
 
   const interleaved = detectBomlessUtf16(bytes);
   if (interleaved !== undefined) {
-    return {
-      text: DECODERS[interleaved](bytes),
-      encoding: interleaved,
-      source: "detected",
-      confidence: "low",
-      warnings: [
-        guessWarning(
-          interleaved,
-          "the bytes carry no byte order mark, but interleave NUL bytes in the pattern UTF-16 gives Latin-script text",
-        ),
-      ],
-    };
+    // The guess is judged on the characters it produced, not on the bytes it came from. A compound-file document's own directory and allocation structures interleave NUL bytes in exactly the pattern Latin-script UTF-16 does, and isProbablyText cannot be asked about those bytes, since UTF-16 spells ordinary characters with NULs by design. What separates the two is what comes out: real text, or a run of C0 controls. Anything that fails here falls through to the byte-level check below, which necessarily refuses it, because the NULs that produced this guess in the first place are exactly what that check rejects.
+    const guessed = tryDecodeUtf16(bytes, interleaved === "utf-16le");
+    if (guessed !== undefined && isTextualString(guessed)) {
+      return {
+        text: guessed,
+        encoding: interleaved,
+        source: "detected",
+        confidence: "low",
+        warnings: [
+          guessWarning(
+            interleaved,
+            "the bytes carry no byte order mark, but interleave NUL bytes in the pattern UTF-16 gives Latin-script text",
+          ),
+        ],
+      };
+    }
   }
 
   if (!isProbablyText(bytes)) {
-    throw new UndecodableTextError(
-      "binary",
-      "bytes are not text: they carry a NUL byte, or too many other C0 control bytes for any text encoding",
-    );
+    refuseAsBinary();
   }
 
   const utf8 = tryDecodeUtf8(bytes);
