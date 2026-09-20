@@ -1,3 +1,18 @@
+## [7.20.35](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.34...documents.js%407.20.35) (2026-09-20)
+
+### Bug Fixes
+
+* **documents.js:** take PDF baseline tolerance and word gaps from pdf-codec ([32ec324](https://github.com/ExaDev/documents.js/commit/32ec3246f7c1c9cc6d335507b77382f14e9bbbcd))
+
+### Tests
+
+* **documents.js:** pin the word-gap floor as strictly exclusive ([ba137d8](https://github.com/ExaDev/documents.js/commit/ba137d8e08ffed16d9363f21b8ddfb40414284ae))
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.1.0
+
 ## [7.20.34](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.33...documents.js%407.20.34) (2026-09-20)
 
 ### Documentation
