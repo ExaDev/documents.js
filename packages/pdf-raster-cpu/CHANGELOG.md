@@ -1,3 +1,14 @@
+## [1.0.13](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.12...pdf-raster-cpu%401.0.13) (2026-09-20)
+
+### Tests
+
+* **pdf-raster-cpu:** raise the unit suite's test timeout past vitest's 5000ms default ([c6d6e83](https://github.com/ExaDev/documents.js/commit/c6d6e83d9ede6cd09ee9a1763f5db5bf97c49f89))
+
+
+### Dependencies
+
+- Updated pdf-codec to 4.8.12
+
 ## [1.0.12](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.11...pdf-raster-cpu%401.0.12) (2026-09-20)
 
 
