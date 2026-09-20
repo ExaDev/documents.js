@@ -12,6 +12,11 @@ type StrykerConfig = PartialStrykerOptions & {
   vitest?: VitestRunnerPluginOptions;
 };
 
+/**
+ * Set to "true" by the mutation workflow's slice jobs. A slice mutates only some of a package's files, so its own score says nothing about the package's break threshold; the workflow merges every slice's json report and gates that instead (gate-mutation-scores.ts). A local `pnpm test:mutation` leaves it unset and still gates the whole package.
+ */
+const DEFER_BREAK_ENV = "MUTATION_DEFER_BREAK";
+
 const RUNNER_PRELOAD = fileURLToPath(
   new URL("./stryker.runner-preload.ts", import.meta.url),
 );
@@ -48,6 +53,8 @@ export function packageStrykerConfig(
     concurrency = 4,
   } = options;
 
+  const breakDeferred = process.env[DEFER_BREAK_ENV] === "true";
+
   return {
     packageManager: "pnpm",
     mutate,
@@ -68,17 +75,20 @@ export function packageStrykerConfig(
     incremental: true,
     // Static mutants (module-load-time code) can only be killed by a test that fails on IMPORT, so each one re-runs its ENTIRE related suite -- measured directly against document-schema.js: Stryker's own MutantTestPlanner reported 2989 of 5217 mutants (57%) as static, estimated at 92% of the run's total time. Dropping them is what makes a cold run (no incremental cache to restore -- documents.js and pdf-codec, this workspace's two largest packages, will hit this on their very first CI run) finish inside mutation.yml's own job timeout at all. This can only RAISE a package's score (static mutants are disproportionately survived/no-coverage, never killed), so it never needs revisiting once a package's baseline is eventually measured.
     ignoreStatic: true,
-    // high/low colour-code the HTML/clear-text report. `break` is deliberately per-package (a workspace-wide break would be too strict for the least-tested package or too lax for the most mature one) and derived, never picked: take the package's first CI-measured mutation score from mutation.yml's per-shard HTML reports, floor it to whole points, and subtract a noise margin of that package's own Timeout-classified share of its valid mutants, rounded up to whole points with a floor of one. Timeout is the one mutant classification that legitimately flaps between runs -- runner load alone decides whether the same mutant times out (counted detected) or survives -- so that margin keeps even every timeout in a package re-classifying from tripping the break, while a drop beyond it is a real regression. A package whose mutation run has never completed passes no breakThreshold and stays ungated until one does; picking its number without the measurement would be exactly the arbitrary magic number this rule exists to avoid.
+    // high/low colour-code the HTML/clear-text report. `break` is deliberately per-package (a workspace-wide break would be too strict for the least-tested package or too lax for the most mature one) and derived, never picked: take the package's first CI-measured mutation score from the mutation workflow's merged score for the package (its summary table, or the per-slice HTML reports), floor it to whole points, and subtract a noise margin of that package's own Timeout-classified share of its valid mutants, rounded up to whole points with a floor of one. Timeout is the one mutant classification that legitimately flaps between runs -- runner load alone decides whether the same mutant times out (counted detected) or survives -- so that margin keeps even every timeout in a package re-classifying from tripping the break, while a drop beyond it is a real regression. A package whose mutation run has never completed passes no breakThreshold and stays ungated until one does; picking its number without the measurement would be exactly the arbitrary magic number this rule exists to avoid.
     thresholds: {
       high: 80,
       low: 60,
-      ...(breakThreshold === undefined ? {} : { break: breakThreshold }),
+      ...(breakThreshold === undefined || breakDeferred
+        ? {}
+        : { break: breakThreshold }),
     },
     // dist/coverage/.turbo are build/tooling output Stryker would otherwise copy into every mutant's own sandbox for nothing -- none of it is ever read by a test.
     ignorePatterns: ["dist", "coverage", ".turbo"],
     // stryker.runner-preload.ts, resolved to an absolute path because each runner child process runs from its own sandbox directory. It drops vitest's github-actions reporter from these processes; the file itself explains why.
     testRunnerNodeArgs: ["--import", RUNNER_PRELOAD],
-    reporters: ["progress", "clear-text", "html"],
+    // json is what the mutation workflow merges across a package's slices, so the package-level score is computed from every file rather than from one slice.
+    reporters: ["progress", "clear-text", "html", "json"],
     tempDirName: ".stryker-tmp",
     cleanTempDir: true,
     concurrency,
