@@ -175,4 +175,24 @@ describe("readXlsxWorkbook", () => {
     );
     expect(markers).toEqual(["first", "second", "third"]);
   });
+  it("names sheets from a workbook the package puts at xl/workbook2.xml", () => {
+    const pkg = decodePackage(
+      zipPackage({
+        "[Content_Types].xml": CONTENT_TYPES,
+        "_rels/.rels": enc(
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook2.xml"/></Relationships>',
+        ),
+        "xl/workbook2.xml": enc(
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Report" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="Total">Report!$B$1</definedName></definedNames></workbook>',
+        ),
+        "xl/_rels/workbook2.xml.rels": enc(
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
+        ),
+        "xl/worksheets/sheet1.xml": SHEET1,
+      }),
+    );
+    const workbook = readXlsxWorkbook(pkg);
+    expect(workbook.sheets[0]?.name).toBe("Report");
+    expect(workbook.definedNames.map((name) => name.name)).toEqual(["Total"]);
+  });
 });
