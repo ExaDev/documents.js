@@ -678,6 +678,16 @@ describe("groupPdfTextRuns: vertical writing mode", () => {
     return { text, xPt, yPt, sizePt: 20, widthPt, writingMode: "vertical" };
   }
 
+  // A line of glyphs turned on their side, which advances down the page exactly as an upright column does. Only the writing mode tells the two apart, so every check that the two never mix has to use this rather than an ordinary horizontal run, whose different advance axis would separate it anyway.
+  const SIDEWAYS: PdfTextRunGeometry = {
+    text: "A",
+    xPt: 200,
+    yPt: 700,
+    sizePt: 20,
+    widthPt: 20,
+    rotationDeg: 270,
+  };
+
   it("groups a column's runs into one line", () => {
     const [line] = groupPdfTextRuns([
       vertical("あ", 200, 700, 20),
@@ -691,6 +701,12 @@ describe("groupPdfTextRuns: vertical writing mode", () => {
     const [line] = groupPdfTextRuns([vertical("あ", 200, 700, 20)]);
     expect(line?.rotationDeg).toBe(270);
     expect(line?.writingMode).toBe("vertical");
+  });
+
+  it("leaves an ordinary horizontal line claiming no writing mode of its own", () => {
+    const [line] = groupPdfTextRuns([run("A", 50, 200, 10, 20)]);
+    expect(line?.rotationDeg).toBe(0);
+    expect(line?.writingMode).toBe(undefined);
   });
 
   it("orders columns right to left, the way vertical text is read", () => {
@@ -720,19 +736,22 @@ describe("groupPdfTextRuns: vertical writing mode", () => {
   });
 
   it("never groups a vertical run with a run turned to face the same way", () => {
-    // Both advance down the page, but one is a column of upright glyphs and the other a line of glyphs turned on their side. Nothing in the geometry lets one continue into the other.
-    const lines = groupPdfTextRuns([
-      vertical("あ", 200, 700, 20),
-      {
-        text: "A",
-        xPt: 200,
-        yPt: 700,
-        sizePt: 20,
-        widthPt: 20,
-        rotationDeg: 270,
-      },
+    // Both advance down the page, but one is a column of upright glyphs and the other a line of glyphs turned on their side. Nothing in the geometry lets one continue into the other, and the merely-turned line comes first, before the one genuinely set vertically.
+    const lines = groupPdfTextRuns([vertical("あ", 200, 700, 20), SIDEWAYS]);
+    expect(lines.map((line) => line.writingMode)).toEqual([
+      undefined,
+      "vertical",
     ]);
-    expect(lines).toHaveLength(2);
+  });
+
+  it("does not share a baseline with a run that merely advances the same way", () => {
+    expect(runsShareBaseline(vertical("あ", 200, 700, 20), SIDEWAYS)).toBe(
+      false,
+    );
+  });
+
+  it("reports no gap to a run that merely advances the same way", () => {
+    expect(runGapPt(vertical("あ", 200, 700, 20), SIDEWAYS)).toBe(undefined);
   });
 
   it("reads a gap down the column as a separation", () => {
