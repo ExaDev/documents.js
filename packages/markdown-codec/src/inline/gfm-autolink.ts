@@ -52,9 +52,9 @@ const OPAQUE_KINDS: ReadonlySet<string> = new Set([
   "autolink",
 ]);
 
+// GFM's own whitespace set for this extension. Every caller passes a character the text actually holds, so the empty string `charAt` returns past either end of a string is deliberately NOT whitespace here: scanRawCandidate treats it as its own end-of-text case, and isValidStartBoundary must not accept it as a preceding character.
 function isWhitespace(char: string): boolean {
   return (
-    char === "" ||
     char === " " ||
     char === "\t" ||
     char === "\n" ||
@@ -85,24 +85,24 @@ function isValidDomain(domain: string): boolean {
 }
 
 // GFM's own trailing-trimming rules, applied in the order the specification states them: strip the named trailing punctuation; then strip an unmatched closing paren (a link ending in `)` keeps it only when the parens inside balance, so `(see http://example.com/a(b))` links `http://example.com/a(b)`); then strip a trailing `;` that is really the tail of a character reference such as `&amp;`. Each strip can expose another, so the three run to a fixed point.
+//
+// None of the three needs a guard against `end` reaching zero: `charAt` before the start of a string returns the empty string, which is in neither punctuation set, and ENTITY_TAIL_PATTERN is anchored on a trailing `;` so it already declines every candidate that does not end in one.
 function trimTrailingPunctuation(candidate: string): string {
   let end = candidate.length;
   for (;;) {
     const before = end;
-    while (end > 0 && TRAILING_PUNCTUATION.has(candidate.charAt(end - 1))) {
+    while (TRAILING_PUNCTUATION.has(candidate.charAt(end - 1))) {
       end -= 1;
     }
-    if (end > 0 && candidate.charAt(end - 1) === ")") {
+    if (candidate.charAt(end - 1) === ")") {
       const slice = candidate.slice(0, end);
       if (slice.split(")").length > slice.split("(").length) {
         end -= 1;
       }
     }
-    if (end > 0 && candidate.charAt(end - 1) === ";") {
-      const entityTail = ENTITY_TAIL_PATTERN.exec(candidate.slice(0, end));
-      if (entityTail !== null) {
-        end -= entityTail[0].length;
-      }
+    const entityTail = ENTITY_TAIL_PATTERN.exec(candidate.slice(0, end));
+    if (entityTail !== null) {
+      end -= entityTail[0].length;
     }
     if (end === before) {
       return candidate.slice(0, end);
@@ -118,17 +118,16 @@ interface AutolinkMatch {
   readonly start: number;
 }
 
-// The run of characters an extended autolink can consist of at all, before trailing-punctuation trimming: everything up to whitespace or `<`.
+// The run of characters an extended autolink can consist of at all, before trailing-punctuation trimming: everything up to whitespace or `<`. The end of the text is the third terminator, recognised by the empty string `charAt` returns there, which saves a separate length bound.
 function scanRawCandidate(text: string, start: number): string {
   let end = start;
-  while (
-    end < text.length &&
-    !isWhitespace(text.charAt(end)) &&
-    text.charAt(end) !== "<"
-  ) {
+  for (;;) {
+    const char = text.charAt(end);
+    if (char === "" || isWhitespace(char) || char === "<") {
+      return text.slice(start, end);
+    }
     end += 1;
   }
-  return text.slice(start, end);
 }
 
 function matchPrefixed(
@@ -139,12 +138,14 @@ function matchPrefixed(
   requireValidDomain: boolean,
 ): AutolinkMatch | undefined {
   const trimmed = trimTrailingPunctuation(scanRawCandidate(text, index));
-  if (trimmed.length <= prefixLength) {
+  // Trimming can eat back into the prefix itself, since a bare `mailto:` loses its `:` as trailing punctuation, so what matters is that something survives after the prefix rather than that the candidate was ever long enough.
+  const afterPrefix = trimmed.slice(prefixLength);
+  if (afterPrefix === "") {
     return undefined;
   }
   if (requireValidDomain) {
-    const afterPrefix = trimmed.slice(prefixLength);
-    const domain = afterPrefix.split(/[/?#]/)[0] ?? "";
+    // `split` always yields at least one element, so the first is never absent.
+    const domain = afterPrefix.split(/[/?#]/)[0]!;
     if (!isValidDomain(domain)) {
       return undefined;
     }
@@ -156,9 +157,10 @@ function matchPrefixed(
   };
 }
 
+// The end of the text needs no bound of its own: `charAt` returns the empty string there, which matches no character class.
 function scanEmailDomain(text: string, start: number): string {
   let end = start;
-  while (end < text.length && EMAIL_DOMAIN_PATTERN.test(text.charAt(end))) {
+  while (EMAIL_DOMAIN_PATTERN.test(text.charAt(end))) {
     end += 1;
   }
   return text.slice(start, end);
@@ -170,7 +172,8 @@ function matchEmailAt(
   atIndex: number,
 ): AutolinkMatch | undefined {
   let start = atIndex;
-  while (start > 0 && EMAIL_LOCAL_PART_PATTERN.test(text.charAt(start - 1))) {
+  // As in scanEmailDomain, the empty string `charAt` returns before the start of the text matches no character class, so the scan stops there without a bound of its own.
+  while (EMAIL_LOCAL_PART_PATTERN.test(text.charAt(start - 1))) {
     start -= 1;
   }
   if (start === atIndex || !isValidStartBoundary(text, start)) {
@@ -182,8 +185,10 @@ function matchEmailAt(
     return undefined;
   }
   // An email's own domain is scanned against its own character set rather than through the shared trailing-punctuation trimming, because the two disagree on `_`: that trimming strips a trailing underscore (GFM lists `_` as trailing punctuation for a url autolink), whereas GFM says of an email address that "the last character must not be one of `-` or `_`" -- which invalidates the whole address rather than shortening it. Only a trailing `.` is dropped, per "only `.` may occur at the end of the email address, in which case it will not be considered part of the address".
+  //
+  // Of that pair only the trailing `-` needs a check here: a domain ending in `_` has that underscore in its own last segment, which isValidDomain already rejects for every domain, email or not.
   const domain = scanEmailDomain(text, atIndex + 1).replace(/\.+$/, "");
-  if (domain.endsWith("-") || domain.endsWith("_") || !isValidDomain(domain)) {
+  if (domain.endsWith("-") || !isValidDomain(domain)) {
     return undefined;
   }
   const address = `${local}@${domain}`;
@@ -228,12 +233,13 @@ function expandTextNode(node: InlineNode): void {
   const text = node.literal;
   let cursor = 0;
   let anchor: InlineNode = node;
-  let matches = 0;
   let index = 0;
 
-  while (index < text.length) {
+  // The end of the text is recognised by the empty string `charAt` returns there, the same way the scans above recognise it, since no autolink can begin with it.
+  while (text.charAt(index) !== "") {
     const found = findAutolinkAt(text, index);
-    if (found === undefined || found.start < cursor) {
+    // A match never begins before the cursor, so none is needed in this check. A prefixed match begins at `index`, which the loop only ever moves forward. An email's local part is scanned backwards, but it cannot reach back into an earlier match's text: an earlier match ends either at whitespace or `<` (neither of which is a local-part character, so the scan stops there) or at the trailing punctuation trimmed off it, whose run is itself followed by one of those; and an earlier email's own `@` is not a local-part character either, so the scan stops on that instead.
+    if (found === undefined) {
       index += 1;
       continue;
     }
@@ -248,11 +254,11 @@ function expandTextNode(node: InlineNode): void {
     anchor.insertAfter(link);
     anchor = link;
     cursor = found.start + found.text.length;
-    matches += 1;
     index = cursor;
   }
 
-  if (matches === 0) {
+  // The anchor still being the node itself means nothing was inserted after it, so this text node holds no autolink and is left exactly as it is rather than being replaced by an equal one.
+  if (anchor === node) {
     return;
   }
   if (cursor < text.length) {
