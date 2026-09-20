@@ -156,6 +156,33 @@ describe("code spans and code blocks", () => {
     });
   });
 
+  it("treats an info string that is nothing but an attribute block, with no word break anywhere in it, as pure residue as well", () => {
+    const block = paragraph(blocks("```{.a}\nfoo\n```")[0]);
+    expect(block).not.toHaveProperty("codeLanguage");
+    expect(block.source).toEqual({ format: "markdown", xml: "{.a}" });
+  });
+
+  it("trims the trailing whitespace an entity reference decoded into an attribute-block info string, leaving the attribute block alone as the residue", () => {
+    const block = paragraph(blocks("```{.a b}&#32;\nfoo\n```")[0]);
+    expect(block).not.toHaveProperty("codeLanguage");
+    expect(block.source).toEqual({ format: "markdown", xml: "{.a b}" });
+  });
+
+  it("carries no residue at all when everything following the language word is whitespace an entity reference decoded into the info string", () => {
+    const block = paragraph(blocks("```js&#32;\nfoo\n```")[0]);
+    expect(block.codeLanguage).toBe("js");
+    expect(block).not.toHaveProperty("source");
+  });
+
+  it("omits both keys outright for a bare fence and an indented code block, rather than carrying either one set to undefined", () => {
+    const fenced = paragraph(blocks("```\nfoo\n```")[0]);
+    expect(fenced).not.toHaveProperty("codeLanguage");
+    expect(fenced).not.toHaveProperty("source");
+    const indented = paragraph(blocks("    foo")[0]);
+    expect(indented).not.toHaveProperty("codeLanguage");
+    expect(indented).not.toHaveProperty("source");
+  });
+
   it("carries neither field for a bare fence or an indented code block, which have no info string at all", () => {
     const fenced = paragraph(blocks("```\nfoo\n```")[0]);
     expect(fenced.codeLanguage).toBeUndefined();
@@ -194,6 +221,36 @@ describe("math (ExaDev/markdown-codec#53)", () => {
     expect(
       ContentDocumentSchema.safeParse(lowerMarkdown("$$\nx^2\n$$")).success,
     ).toBe(true);
+  });
+
+  it("keeps every line of a multi-line math block, stripping only the newline the closing fence's own line left behind", () => {
+    const [block] = blocks("$$\na\nb\n$$");
+    if (block?.kind !== "embeddedObject")
+      throw new Error(`expected an embeddedObject block, got ${block?.kind}`);
+    if (block.document.kind !== "formula") throw new Error("unreachable");
+    expect(block.document.formula.presentation).toEqual({ latex: "a\nb" });
+  });
+
+  it("reports LIST_ITEM_BLOCK_UNLISTED for a display-math block directly inside a list item, naming that gap in the message", () => {
+    const collector = createDiagnosticCollector();
+    const result = blocks("- $$\n  a\n  $$", { sink: collector.sink });
+    expect(result.map((block) => block.kind)).toEqual(["embeddedObject"]);
+    const diagnostic = collector.diagnostics.find(
+      (entry) =>
+        entry.code === MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED,
+    );
+    expect(diagnostic?.severity).toBe("info");
+    expect(diagnostic?.message).toContain(
+      "a display-math block directly inside a list item",
+    );
+  });
+
+  it("reports nothing of the sort for a display-math block outside any list", () => {
+    const collector = createDiagnosticCollector();
+    blocks("$$\na\n$$", { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED),
+    ).toBe(false);
   });
 
   it("carries an empty math block as a formula with an empty presentation LaTeX", () => {
@@ -268,6 +325,19 @@ describe("blockquotes", () => {
     ]);
   });
 
+  it("keeps one empty, indented placeholder paragraph inside the pair when every child was consumed away, as a lone link reference definition is", () => {
+    const result = blocks("> [a]: /u");
+    expect(result.map((block) => block.kind)).toEqual([
+      "constructStart",
+      "paragraph",
+      "constructEnd",
+    ]);
+    const placeholder = paragraph(result[1]);
+    expect(placeholder.runs).toEqual([]);
+    expect(placeholder.styleId).toBe("Quote");
+    expect(placeholder.indentLeftPt).toBe(36);
+  });
+
   it("wraps a quote inside a list item, the pair sitting among the item's own membership-carrying blocks", () => {
     const result = blocks("- item\n\n  > quoted");
     expect(result.map((block) => block.kind)).toEqual([
@@ -311,6 +381,18 @@ describe("lists", () => {
     expect(paragraph(plain).list?.checked).toBeUndefined();
     expect(paragraph(checked).runs[0]?.text).toBe("done");
     expect(paragraph(unchecked).runs[0]?.text).toBe("todo");
+  });
+
+  it("omits the checked key from a plain item's membership outright, rather than carrying it set to undefined", () => {
+    const [plain] = blocks("- plain");
+    expect(paragraph(plain).list).not.toHaveProperty("checked");
+  });
+
+  it("mints the whole list as a task list as soon as any one of its items carries a checkbox, not only when they all do", () => {
+    const [partiallyChecked] = blocks("- [x] done\n- plain");
+    expect(paragraph(partiallyChecked).list?.numId).toBe("md1:bullet+task");
+    const [noCheckboxes] = blocks("- a\n- b");
+    expect(paragraph(noCheckboxes).list?.numId).toBe("md1:bullet");
   });
 
   it("mints a distinct itemId per item, shared by every block of one multi-block item and separating it from a sibling with the same numId and level", () => {
@@ -397,6 +479,52 @@ describe("images", () => {
     if (image?.kind !== "image") throw new Error("expected an image block");
     expect(image.format).toBe("png");
     expect(image.widthPt).toBeCloseTo(0.75);
+  });
+
+  it("carries the alt text as the image block's own altText, and omits the key outright for an empty alt", () => {
+    const withAlt = blocks(`![alt](${onePixelPng})`)[0];
+    if (withAlt?.kind !== "image") throw new Error("expected an image block");
+    expect(withAlt.altText).toBe("alt");
+    const withoutAlt = blocks(`![](${onePixelPng})`)[0];
+    if (withoutAlt?.kind !== "image")
+      throw new Error("expected an image block");
+    expect(withoutAlt).not.toHaveProperty("altText");
+  });
+
+  it("reports LIST_ITEM_BLOCK_UNLISTED for a resolved image directly inside a list item, the image block itself carrying no membership", () => {
+    const collector = createDiagnosticCollector();
+    const result = blocks(`- ![alt](${onePixelPng})`, { sink: collector.sink });
+    expect(result.map((block) => block.kind)).toEqual(["image"]);
+    expect(result[0]).not.toHaveProperty("list");
+    const diagnostic = collector.diagnostics.find(
+      (entry) =>
+        entry.code === MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED,
+    );
+    expect(diagnostic?.severity).toBe("info");
+    expect(diagnostic?.message).toContain(
+      "a resolved image block directly inside a list item",
+    );
+  });
+
+  it("reports nothing of the sort for a resolved image outside any list", () => {
+    const collector = createDiagnosticCollector();
+    blocks(`![alt](${onePixelPng})`, { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED),
+    ).toBe(false);
+  });
+
+  it("names the image's own destination, and what became of it, in the IMAGE_UNRESOLVED message", () => {
+    const collector = createDiagnosticCollector();
+    blocks("![alt](http://example.com/missing.png)", { sink: collector.sink });
+    const diagnostic = collector.diagnostics.find(
+      (entry) => entry.code === MarkdownDiagnosticCodes.IMAGE_UNRESOLVED,
+    );
+    expect(diagnostic?.severity).toBe("info");
+    expect(diagnostic?.message).toContain("http://example.com/missing.png");
+    expect(diagnostic?.message).toContain(
+      "could not be resolved to real bytes",
+    );
   });
 });
 
@@ -544,6 +672,68 @@ describe("raw HTML", () => {
       format: "markdown",
       xml: "<div>\nfoo\n</div>",
     });
+  });
+
+  it("keeps the whole block as one run of its own verbatim text, internal line endings included, matching the residue exactly", () => {
+    const block = paragraph(blocks("<div>\nfoo\n</div>\n\nafter")[0]);
+    expect(block.runs).toEqual([{ text: "<div>\nfoo\n</div>" }]);
+    expect(block.source).toEqual({
+      format: "markdown",
+      xml: "<div>\nfoo\n</div>",
+    });
+  });
+
+  it("names the preserved-as-text gap, and where the verbatim original went, in the RAW_HTML_PRESERVED_AS_TEXT message", () => {
+    const collector = createDiagnosticCollector();
+    blocks("<div>\nfoo\n</div>", { sink: collector.sink });
+    const diagnostic = collector.diagnostics.find(
+      (entry) =>
+        entry.code === MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT,
+    );
+    expect(diagnostic?.severity).toBe("info");
+    expect(diagnostic?.message).toContain(
+      "block-level raw HTML was preserved as literal text",
+    );
+    expect(diagnostic?.message).toContain("markdown residue");
+  });
+
+  it("names the option that discarded the block in the RAW_HTML_DROPPED message", () => {
+    const collector = createDiagnosticCollector();
+    blocks("<div>\nfoo\n</div>", { sink: collector.sink, rawHtml: "drop" });
+    const diagnostic = collector.diagnostics.find(
+      (entry) => entry.code === MarkdownDiagnosticCodes.RAW_HTML_DROPPED,
+    );
+    expect(diagnostic?.severity).toBe("info");
+    expect(diagnostic?.message).toContain(
+      'block-level raw HTML was dropped per the rawHtml: "drop" option',
+    );
+  });
+
+  it("reports LIST_ITEM_BLOCK_UNLISTED for a recognised HTML table directly inside a list item, naming that gap in the message", () => {
+    const collector = createDiagnosticCollector();
+    const result = blocks("- <table>\n  <tr><td>x</td></tr>\n  </table>", {
+      sink: collector.sink,
+    });
+    expect(result.map((block) => block.kind)).toEqual(["table"]);
+    const diagnostic = collector.diagnostics.find(
+      (entry) =>
+        entry.code === MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED,
+    );
+    expect(diagnostic?.severity).toBe("info");
+    expect(diagnostic?.message).toContain(
+      "an HTML-table block directly inside a list item",
+    );
+  });
+
+  it("reports nothing of the sort for a recognised HTML table outside any list", () => {
+    const collector = createDiagnosticCollector();
+    const result = blocks("<table>\n<tr><td>x</td></tr>\n</table>", {
+      sink: collector.sink,
+    });
+    expect(result.map((block) => block.kind)).toEqual(["table"]);
+    expect(
+      collector.has(MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED),
+    ).toBe(false);
   });
 
   it("quarantines inline raw HTML verbatim as markdown residue on each tag's own run -- the parser emits one rawHtml node per tag, so the residue is per tag", () => {
@@ -742,6 +932,63 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     expect(
       collector.has(MarkdownDiagnosticCodes.LIST_MARKER_TYPE_CONFLICT),
     ).toBe(true);
+  });
+
+  it("LIST_MARKER_TYPE_CONFLICT fires the other way round too, for a nested bullet list under an ordered mint, naming both marker types", () => {
+    const collector = createDiagnosticCollector();
+    blocks("1. top\n   - nested", { sink: collector.sink });
+    const diagnostic = collector.diagnostics.find(
+      (entry) =>
+        entry.code === MarkdownDiagnosticCodes.LIST_MARKER_TYPE_CONFLICT,
+    );
+    expect(diagnostic?.severity).toBe("warning");
+    expect(diagnostic?.message).toContain(
+      "a nested bullet list sits under a list minted as ordered",
+    );
+  });
+
+  it("LIST_MARKER_TYPE_CONFLICT stays silent when a nested list's own marker type agrees with the mint, of either type", () => {
+    const bullet = createDiagnosticCollector();
+    blocks("- top\n  - nested", { sink: bullet.sink });
+    expect(bullet.has(MarkdownDiagnosticCodes.LIST_MARKER_TYPE_CONFLICT)).toBe(
+      false,
+    );
+    const ordered = createDiagnosticCollector();
+    blocks("1. top\n   1. nested", { sink: ordered.sink });
+    expect(ordered.has(MarkdownDiagnosticCodes.LIST_MARKER_TYPE_CONFLICT)).toBe(
+      false,
+    );
+  });
+
+  it("LIST_ITEM_BLOCK_UNLISTED names the table gap in its message, and stays silent for a table outside any list", () => {
+    const inItem = createDiagnosticCollector();
+    blocks("- | a | b |\n  | - | - |\n  | 1 | 2 |", { sink: inItem.sink });
+    const diagnostic = inItem.diagnostics.find(
+      (entry) =>
+        entry.code === MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED,
+    );
+    expect(diagnostic?.severity).toBe("info");
+    expect(diagnostic?.message).toContain(
+      "a table directly inside a list item",
+    );
+    const topLevel = createDiagnosticCollector();
+    blocks("| a | b |\n| - | - |\n| 1 | 2 |", { sink: topLevel.sink });
+    expect(topLevel.has(MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED)).toBe(
+      false,
+    );
+  });
+
+  it("INVENTED_PAGE_GEOMETRY explains the synthesised geometry, and where it came from, in its message", () => {
+    const collector = createDiagnosticCollector();
+    lowerMarkdown("foo", { sink: collector.sink });
+    const diagnostic = collector.diagnostics.find(
+      (entry) => entry.code === MarkdownDiagnosticCodes.INVENTED_PAGE_GEOMETRY,
+    );
+    expect(diagnostic?.severity).toBe("info");
+    expect(diagnostic?.message).toContain(
+      "markdown carries no page geometry of its own",
+    );
+    expect(diagnostic?.message).toContain("ReadMarkdownOptions.pageSize");
   });
 
   it("IMAGE_UNRESOLVED fires for an image with no resolver and degrades to a text run of alt text + hyperlink", () => {
