@@ -127,7 +127,9 @@
         "package.json"
       ],
       // reports/stryker-incremental.json is Stryker's own cross-run cache (this workspace's CI restores/saves it separately via actions/cache, keyed independently of turbo's own cache), and the HTML/clear-text reports sit alongside it -- both worth keeping as a declared, replayable output rather than left for turbo to treat as untracked.
-      "outputs": ["reports/**"]
+      "outputs": ["reports/**"],
+      // Read by stryker.shared.ts to leave the break threshold to the workflow's own merged gate. Passed through rather than declared under `env` so setting it does not change the task's cache key: the task's reports are the same whichever job produced them.
+      "passThroughEnv": ["MUTATION_DEFER_BREAK"]
     },
 
     "web#_build": {
