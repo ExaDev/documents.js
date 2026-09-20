@@ -335,6 +335,18 @@ Release, CI, and commit-message conventions are all workspace-wide, not package-
 
 Conventional Commits, enforced workspace-wide by commitlint through a root `commit-msg` hook. Work inside `packages/ppt-codec/`; see [CONTRIBUTING.md](../../CONTRIBUTING.md) for the shared git hooks and history conventions.
 
+## Removed: base64 from `ppt-codec/base64`
+
+`bytesToBase64` and `base64ToBytes` were this package's own copy of helpers every codec in the family carried separately. They live in [`byte-codec`](../byte-codec/README.md) now, as one implementation ([ExaDev/documents.js#1282](https://github.com/ExaDev/documents.js/issues/1282)), so the module behind the `ppt-codec/base64` deep import is gone.
+
+Import from `byte-codec` directly:
+
+```ts
+import { base64ToBytes, bytesToBase64 } from "byte-codec";
+```
+
+Both names are also still on this package's own barrel, exactly as before, so `import { bytesToBase64 } from "ppt-codec"` is unaffected.
+
 ## License
 
 MIT
