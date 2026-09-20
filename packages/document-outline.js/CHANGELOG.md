@@ -1,3 +1,15 @@
+## [3.9.16](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.9.15...document-outline.js%403.9.16) (2026-09-20)
+
+### Documentation
+
+* make a hand-typed scoped mutation run find its package's Stryker config ([ed3297b](https://github.com/ExaDev/documents.js/commit/ed3297b6aa71b2d94913519e6960537ca5ac0f61))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.5
+- Updated pdf-codec to 5.0.1
+
 ## [3.9.15](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.9.14...document-outline.js%403.9.15) (2026-09-20)
 
 

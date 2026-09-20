@@ -1,3 +1,9 @@
+## [7.11.5](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.11.4...document-schema.js%407.11.5) (2026-09-20)
+
+### Documentation
+
+* make a hand-typed scoped mutation run find its package's Stryker config ([ed3297b](https://github.com/ExaDev/documents.js/commit/ed3297b6aa71b2d94913519e6960537ca5ac0f61))
+
 ## [7.11.4](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.11.3...document-schema.js%407.11.4) (2026-09-20)
 
 ### Code Refactoring

@@ -1,3 +1,17 @@
+## [5.11.36](https://github.com/ExaDev/documents.js/compare/document-cli%405.11.35...document-cli%405.11.36) (2026-09-20)
+
+### Documentation
+
+* make a hand-typed scoped mutation run find its package's Stryker config ([ed3297b](https://github.com/ExaDev/documents.js/commit/ed3297b6aa71b2d94913519e6960537ca5ac0f61))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.5
+- Updated odf.js to 8.0.1
+- Updated document-outline.js to 3.9.16
+- Updated documents.js to 7.20.34
+
 ## [5.11.35](https://github.com/ExaDev/documents.js/compare/document-cli%405.11.34...document-cli%405.11.35) (2026-09-20)
 
 

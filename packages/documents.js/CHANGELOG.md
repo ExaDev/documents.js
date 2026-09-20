@@ -1,3 +1,26 @@
+## [7.20.34](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.33...documents.js%407.20.34) (2026-09-20)
+
+### Documentation
+
+* make a hand-typed scoped mutation run find its package's Stryker config ([ed3297b](https://github.com/ExaDev/documents.js/commit/ed3297b6aa71b2d94913519e6960537ca5ac0f61))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.6.3
+- Updated document-schema.js to 7.11.5
+- Updated archive-codec to 1.11.7
+- Updated epub-codec to 2.0.1
+- Updated markdown-codec to 7.0.1
+- Updated odf.js to 8.0.1
+- Updated pdf-codec to 5.0.1
+- Updated doc-codec to 3.0.1
+- Updated ooxml.js to 9.1.2
+- Updated ppt-codec to 2.0.1
+- Updated rtf-codec to 5.0.1
+- Updated wpd-codec to 4.0.1
+- Updated xls-codec to 4.15.12
+
 ## [7.20.33](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.32...documents.js%407.20.33) (2026-09-20)
 
 ### Bug Fixes

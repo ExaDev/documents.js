@@ -1,3 +1,9 @@
+## [1.6.3](https://github.com/ExaDev/documents.js/compare/byte-codec%401.6.2...byte-codec%401.6.3) (2026-09-20)
+
+### Documentation
+
+* make a hand-typed scoped mutation run find its package's Stryker config ([ed3297b](https://github.com/ExaDev/documents.js/commit/ed3297b6aa71b2d94913519e6960537ca5ac0f61))
+
 ## [1.6.2](https://github.com/ExaDev/documents.js/compare/byte-codec%401.6.1...byte-codec%401.6.2) (2026-09-20)
 
 ### Styles
