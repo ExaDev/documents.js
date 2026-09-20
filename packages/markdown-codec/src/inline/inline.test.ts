@@ -179,6 +179,17 @@ describe("emphasis, strong emphasis, and the flanking rules", () => {
   it("leaves an unmatched delimiter run as literal text", () => {
     expect(parse("*foo")).toEqual([{ type: "text", value: "*foo" }]);
   });
+
+  it("merges the text a wrapper encloses into one run, not only the text at the top level", () => {
+    // The escaped `*` is appended as its own text node, between the two the plain-text runs either side of it produced, and all three are moved into the emphasis wrapper as they stand — so anything that merges only the top level leaves this emphasis holding three children.
+    expect(parse("*a\\*b*")).toEqual([
+      {
+        type: "emphasis",
+        marker: "*",
+        children: [{ type: "text", value: "a*b" }],
+      },
+    ]);
+  });
 });
 
 describe("links and images", () => {
@@ -272,6 +283,81 @@ describe("links and images", () => {
     ]);
   });
 
+  it("omits the title key itself, not merely its value, when a link or image has none", () => {
+    // toStrictEqual rather than toEqual: only the strict form distinguishes an absent key from one explicitly present and undefined, which is the whole difference between the two shapes toLinkAstNode and toImageAstNode each choose between.
+    expect(parse("[a](/url)")).toStrictEqual([
+      {
+        type: "link",
+        destination: "/url",
+        children: [{ type: "text", value: "a" }],
+      },
+    ]);
+    expect(parse("![a](/url)")).toStrictEqual([
+      { type: "image", destination: "/url", alt: "a" },
+    ]);
+  });
+
+  it("refuses a shortcut reference whose own link text contained a bracket", () => {
+    // `[foo [bar]]` cannot be a reference under any definition: a link label admits no unescaped bracket, so the outer brackets are literal text even though the text between them normalises to a label this table does define.
+    const references: LinkReferenceMap = new Map([
+      ["FOO [BAR]", { destination: "/url" }],
+    ]);
+    expect(parse("[foo [bar]]", references)).toEqual([
+      { type: "text", value: "[foo [bar]]" },
+    ]);
+  });
+
+  it("looks a shortcut image reference up under its description alone, with the bang outside the label", () => {
+    const references: LinkReferenceMap = new Map([
+      ["FOO", { destination: "/url", title: "t" }],
+    ]);
+    expect(parse("![foo]", references)).toEqual([
+      { type: "image", destination: "/url", title: "t", alt: "foo" },
+    ]);
+  });
+
+  it("keeps an enclosing image opener active when a link inside its description closes", () => {
+    // "No links inside links" deactivates every earlier LINK opener when a link closes; an image opener is exempt, so this image still resolves around a link that already resolved inside it.
+    expect(parse("![outer [inner](/i)](/o)")).toEqual([
+      { type: "image", destination: "/o", alt: "outer inner" },
+    ]);
+  });
+
+  it("reads no inline destination at all when the closing bracket is followed by something other than `(`", () => {
+    expect(parse("[a]/url)")).toEqual([{ type: "text", value: "[a]/url)" }]);
+  });
+
+  it("refuses a title that no whitespace separates from the destination", () => {
+    // The `<...>` destination form ends at its own `>`, so what follows it is a title only if a separator says so; with none, the whole parenthesised run fails to parse as a link and its own `<b>` is read back as the raw HTML tag it is.
+    expect(parse('[a](<b>"t")')).toEqual([
+      { type: "text", value: "[a](" },
+      { type: "rawHtml", literal: "<b>" },
+      { type: "text", value: '"t")' },
+    ]);
+  });
+
+  it("flattens an autolink in an image description to its destination", () => {
+    expect(parse("![see <https://a.example/b>](/u)")).toEqual([
+      { type: "image", destination: "/u", alt: "see https://a.example/b" },
+    ]);
+  });
+
+  it("flattens either kind of line break in an image description to a single space", () => {
+    expect(parse("![a  \nb](/u)")).toEqual([
+      { type: "image", destination: "/u", alt: "a b" },
+    ]);
+    expect(parse("![a\nb](/u)")).toEqual([
+      { type: "image", destination: "/u", alt: "a b" },
+    ]);
+  });
+
+  it("spells a footnote reference in an image description as its own source form", () => {
+    const footnotes: FootnoteLabelSet = new Set(["1"]);
+    expect(
+      parseInlines("![a [^1]](/u)", NO_REFERENCES, footnotes, COMMONMARK_ONLY),
+    ).toEqual([{ type: "image", destination: "/u", alt: "a [^1]" }]);
+  });
+
   it("resolves backslash escapes and character references inside a destination and title", () => {
     expect(parse('[a](/f\\(o\\)o "b&amp;r")')).toEqual([
       {
@@ -332,6 +418,29 @@ describe("line breaks", () => {
   it("produces a soft break from a bare line ending, dropping one trailing space", () => {
     expect(parse("a \nb")).toEqual([
       { type: "text", value: "a" },
+      { type: "softBreak" },
+      { type: "text", value: "b" },
+    ]);
+  });
+
+  it("drops only the spaces the line ending itself carries, leaving an earlier run inside the same text", () => {
+    expect(parse("a b  \nc")).toEqual([
+      { type: "text", value: "a b" },
+      { type: "hardBreak" },
+      { type: "text", value: "c" },
+    ]);
+  });
+
+  it("produces a bare soft break from a line ending with nothing before it", () => {
+    expect(parse("\nb")).toEqual([
+      { type: "softBreak" },
+      { type: "text", value: "b" },
+    ]);
+  });
+
+  it("leaves a code span's own trailing spaces alone, since only a text run can carry a break's marker", () => {
+    expect(parse("`a  `\nb")).toEqual([
+      { type: "codeSpan", literal: "a  " },
       { type: "softBreak" },
       { type: "text", value: "b" },
     ]);
