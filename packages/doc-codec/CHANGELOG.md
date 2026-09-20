@@ -1,3 +1,15 @@
+## [2.12.4](https://github.com/ExaDev/documents.js/compare/doc-codec%402.12.3...doc-codec%402.12.4) (2026-09-20)
+
+### Code Refactoring
+
+* **doc-codec:** encode and decode base64 through byte-codec ([af616d0](https://github.com/ExaDev/documents.js/commit/af616d0fd3b3c1f5921000bb99e61c17e013e1eb))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.6.1
+- Updated archive-codec to 1.11.6
+
 ## [2.12.3](https://github.com/ExaDev/documents.js/compare/doc-codec%402.12.2...doc-codec%402.12.3) (2026-09-20)
 
 

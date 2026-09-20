@@ -1,3 +1,9 @@
+## [1.6.1](https://github.com/ExaDev/documents.js/compare/byte-codec%401.6.0...byte-codec%401.6.1) (2026-09-20)
+
+### Bug Fixes
+
+* **markdown-codec:** stop importing base64 from a module that no longer exports it ([8aed93d](https://github.com/ExaDev/documents.js/commit/8aed93d64b6354249a3aedf4a7b9a97a1bbaf58c))
+
 ## [1.6.0](https://github.com/ExaDev/documents.js/compare/byte-codec%401.5.8...byte-codec%401.6.0) (2026-09-20)
 
 ### Features

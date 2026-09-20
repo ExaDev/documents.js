@@ -1,3 +1,25 @@
+## [7.20.29](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.28...documents.js%407.20.29) (2026-09-20)
+
+### Code Refactoring
+
+* **documents.js:** encode a Firebird binary blob through byte-codec ([1c7e740](https://github.com/ExaDev/documents.js/commit/1c7e740b1fcc7096dc2f66a90a247cb7ed67e016))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.6.1
+- Updated archive-codec to 1.11.6
+- Updated epub-codec to 1.5.8
+- Updated markdown-codec to 6.7.5
+- Updated odf.js to 7.25.7
+- Updated pdf-codec to 4.8.16
+- Updated doc-codec to 2.12.4
+- Updated ooxml.js to 8.14.11
+- Updated ppt-codec to 1.7.13
+- Updated rtf-codec to 4.4.7
+- Updated wpd-codec to 3.5.8
+- Updated xls-codec to 4.15.9
+
 ## [7.20.28](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.27...documents.js%407.20.28) (2026-09-20)
 
 ### Code Refactoring

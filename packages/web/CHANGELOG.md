@@ -1,3 +1,12 @@
+## [2.11.40](https://github.com/ExaDev/documents.js/compare/web%402.11.39...web%402.11.40) (2026-09-20)
+
+
+### Dependencies
+
+- Updated markdown-codec to 6.7.5
+- Updated ooxml.js to 8.14.11
+- Updated documents.js to 7.20.29
+
 ## [2.11.39](https://github.com/ExaDev/documents.js/compare/web%402.11.38...web%402.11.39) (2026-09-20)
 
 

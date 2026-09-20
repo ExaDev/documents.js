@@ -1,3 +1,15 @@
+## [3.5.8](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.5.7...wpd-codec%403.5.8) (2026-09-20)
+
+### Code Refactoring
+
+* **wpd-codec:** encode base64 through byte-codec ([901adbb](https://github.com/ExaDev/documents.js/commit/901adbb081034326d6fcdcf8f494a29a30da960e))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.6.1
+- Updated archive-codec to 1.11.6
+
 ## [3.5.7](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.5.6...wpd-codec%403.5.7) (2026-09-20)
 
 
