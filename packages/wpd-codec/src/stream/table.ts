@@ -219,7 +219,7 @@ export function readCellInformation(
 
 // -- Cell Spanning Information (0xD085), "(size = 4)": <number of cells spanned horizontally> <number of cells spanned vertically> --
 //
-// "bit 7 is set if spanned from left" / "bit 7 is set if spanned from above" -- so the byte carries two facts at once: the low seven bits are the span count, and the high bit marks a cell that is COVERED by an earlier cell's span rather than the one doing the spanning. The shared schema states a table as one entry per originating cell with colSpan/rowSpan on it and no entry at all for a covered position, so a covered cell is dropped rather than emitted with a span of its own.
+// "bit 7 is set if spanned from left" / "bit 7 is set if spanned from above" -- so the byte carries two facts at once: the low seven bits are the span count, and the high bit marks a cell that is COVERED by an earlier cell's span rather than the one doing the spanning. The shared schema states a table with one entry per grid position, an anchor carrying colSpan/rowSpan and a block-less entry at every position its region covers, so a covered cell is emitted as its own block-less entry with no span of its own, and read.ts's closeCell carries the properties the stream states for it.
 
 const SPAN_COVERED_FLAG = 0x80;
 const SPAN_COUNT_MASK = 0x7f;

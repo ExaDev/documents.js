@@ -15,7 +15,7 @@ import type {
   LayoutMetadata,
   RunConstructExtent,
 } from "document-schema.js";
-import { assembleTree } from "document-schema.js";
+import { assembleTree, denseTableRows } from "document-schema.js";
 import { uint16At } from "./bytes/view";
 import { WpdFormatError } from "./errors";
 import { readFurnitureClaim } from "./stream/furniture";
@@ -516,7 +516,7 @@ function readCellAttributes(
   };
 }
 
-// Closes the cell currently being built and appends it to the row under construction. A cell the spanning subfunction marks as covered by a neighbour's merge is dropped instead: the shared schema states a merged region as one entry carrying colSpan/rowSpan with no entry at all at the positions it covers, so emitting one would double-count the region.
+// Closes the cell currently being built and appends it to the row under construction. A cell the spanning subfunction marks as covered by a neighbour's merge still holds its own grid position (the shared schema's grid rule gives every position an entry), so it is appended as a block-less entry carrying the one property the stream states for it that a covered entry can hold, its own fill. Its justification has no paragraph to land on and its spans and formula belong to the region's anchor, so none of those are carried; any content it holds is not carried either and is reported, since the region's content belongs to its anchor.
 function closeCell(
   state: ReaderState,
   table: TableState,
@@ -526,7 +526,21 @@ function closeCell(
   flushParagraphIfContent(state, sink);
   const blocks = table.cellBlocks;
   table.cellBlocks = [];
+  // ContentTableCell.background is document-schema.js's discriminated ContentCellFill (ExaDev/documents.js#951); readCellFill (stream/table.ts) already resolves the real 'solid'/'pattern' shape, including a genuine two-colour blend (ExaDev/documents.js#1024), so this just passes it through.
+  const background =
+    attributes.background === undefined
+      ? {}
+      : { background: attributes.background };
   if (attributes.covered) {
+    if (blocks.length > 0) {
+      reportOnce(
+        state,
+        sink,
+        WpdDiagnosticCodes.CoveredCellContentDropped,
+        "A table cell covered by a neighbouring cell's merge held content of its own, which was not carried: a merged region's content belongs to the cell that anchors it.",
+      );
+    }
+    table.cells.push({ blocks: [], ...background });
     return;
   }
   // A cell states its own justification ("bit 1: 1 = use cell justification"), and the shared schema carries alignment on the paragraph rather than the cell -- so the cell's statement lands on the paragraphs it holds, overriding the document-level justification they were built with. A cell whose flag leaves justification inherited states nothing, and its paragraphs keep what they had.
@@ -543,10 +557,7 @@ function closeCell(
       ? { colSpan: attributes.columnSpan }
       : {}),
     ...(attributes.rowSpan > NO_SPAN ? { rowSpan: attributes.rowSpan } : {}),
-    // ContentTableCell.background is document-schema.js's discriminated ContentCellFill (ExaDev/documents.js#951); readCellFill (stream/table.ts) already resolves the real 'solid'/'pattern' shape, including a genuine two-colour blend (ExaDev/documents.js#1024), so this just passes it through.
-    ...(attributes.background === undefined
-      ? {}
-      : { background: attributes.background }),
+    ...background,
     ...(attributes.formula === undefined
       ? {}
       : { formula: attributes.formula }),
@@ -579,7 +590,14 @@ function closeTable(state: ReaderState): void {
   }
   targetBlocks(state).push({
     kind: "table",
-    rows: table.rows,
+    // Every cell the stream states holds its own grid position, in order, so a row's cell index is its grid column; a row the stream leaves short of the defined grid is filled out with block-less entries, since the shared schema's grid rule requires every row to be as long as columnWidthsPt.
+    rows: denseTableRows(
+      table.rows.map((row) => ({
+        ...row,
+        cells: row.cells.map((cell, columnIndex) => ({ columnIndex, cell })),
+      })),
+      table.columnWidthsPt.length,
+    ),
     columnWidthsPt: table.columnWidthsPt,
   });
 }

@@ -391,8 +391,8 @@ describe("tables", () => {
     ]);
   });
 
-  // "<number of cells spanned horizontally> bit 7 is set if spanned from left" -- the spanning cell carries the count, and the position it covers carries the high bit and no entry of its own in the shared schema.
-  it("reads a horizontal merge as one cell with a colSpan", () => {
+  // "<number of cells spanned horizontally> bit 7 is set if spanned from left" -- the spanning cell carries the count, and the position it covers carries the high bit; that position still holds its own grid entry in the shared schema, block-less and with no span of its own.
+  it("reads a horizontal merge as one anchor with a colSpan followed by a block-less entry at the position it covers", () => {
     const document = readDocumentArea([
       ...tableDefinition([1200, 1200]),
       ...text("merged"),
@@ -407,11 +407,12 @@ describe("tables", () => {
       ...eolFunction({ subgroup: EOL_TABLE_OFF }),
     ]);
     const row = tablesOf(document)[0]?.rows[0];
-    expect(row?.cells).toHaveLength(1);
+    expect(row?.cells).toHaveLength(2);
     expect(row?.cells[0]?.colSpan).toBe(2);
+    expect(row?.cells[1]).toEqual({ blocks: [] });
   });
 
-  it("reads a vertical merge as a rowSpan and drops the covered position", () => {
+  it("reads a vertical merge as a rowSpan on the anchor and a block-less entry at the same column of the row below", () => {
     const document = readDocumentArea([
       ...tableDefinition([1200]),
       ...text("tall"),
@@ -426,8 +427,168 @@ describe("tables", () => {
       ...eolFunction({ subgroup: EOL_TABLE_OFF }),
     ]);
     const rows = tablesOf(document)[0]?.rows;
-    expect(rows).toHaveLength(1);
+    expect(rows).toHaveLength(2);
     expect(rows?.[0]?.cells[0]?.rowSpan).toBe(2);
+    expect(rows?.[1]?.cells).toEqual([{ blocks: [] }]);
+  });
+
+  it("reads a 2x2 merge as one anchor carrying both spans and a block-less entry at each of the three positions it covers", () => {
+    const document = readDocumentArea([
+      ...tableDefinition([1200, 1200]),
+      ...text("big"),
+      ...eolFunction({
+        subgroup: EOL_TABLE_CELL,
+        embedded: embeddedSubfunction(CELL_SPANNING, [2, 2]),
+      }),
+      ...eolFunction({
+        subgroup: EOL_TABLE_ROW,
+        embedded: embeddedSubfunction(CELL_SPANNING, [0x81, 2]),
+      }),
+      ...eolFunction({
+        subgroup: EOL_TABLE_CELL,
+        embedded: embeddedSubfunction(CELL_SPANNING, [2, 0x81]),
+      }),
+      ...eolFunction({
+        subgroup: EOL_TABLE_ROW,
+        embedded: embeddedSubfunction(CELL_SPANNING, [0x81, 0x81]),
+      }),
+      ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+    ]);
+    const table = tablesOf(document)[0];
+    expect(table?.rows.map((row) => row.cells.length)).toEqual([2, 2]);
+    const anchor = table?.rows[0]?.cells[0];
+    expect(anchor?.colSpan).toBe(2);
+    expect(anchor?.rowSpan).toBe(2);
+    expect(anchor === undefined ? undefined : cellText(anchor)).toBe("big");
+    expect(table?.rows[0]?.cells[1]).toEqual({ blocks: [] });
+    expect(table?.rows[1]?.cells).toEqual([{ blocks: [] }, { blocks: [] }]);
+  });
+
+  // A covered position's own fill is a fact the stream states for that position, and a covered entry may carry it; its spans, formula and justification belong to the region or have no paragraph to land on.
+  it("carries a covered position's own fill onto its block-less entry", () => {
+    const document = readDocumentArea([
+      ...tableDefinition([1200, 1200]),
+      ...text("merged"),
+      ...eolFunction({
+        subgroup: EOL_TABLE_CELL,
+        embedded: embeddedSubfunction(CELL_SPANNING, [2, 1]),
+      }),
+      ...eolFunction({
+        subgroup: EOL_TABLE_ROW,
+        embedded: [
+          ...embeddedSubfunction(CELL_SPANNING, [0x81, 1]),
+          ...embeddedSubfunction(
+            CELL_FILL_COLORS,
+            [0, 0, 0, 255, 0, 255, 0, 255],
+          ),
+        ],
+      }),
+      ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+    ]);
+    expect(tablesOf(document)[0]?.rows[0]?.cells[1]).toEqual({
+      blocks: [],
+      background: { kind: "solid", color: { r: 0, g: 1, b: 0 } },
+    });
+  });
+
+  it("states no background on a covered position whose stream states no fill", () => {
+    const document = readDocumentArea([
+      ...tableDefinition([1200, 1200]),
+      ...text("merged"),
+      ...eolFunction({
+        subgroup: EOL_TABLE_CELL,
+        embedded: embeddedSubfunction(CELL_SPANNING, [2, 1]),
+      }),
+      ...eolFunction({
+        subgroup: EOL_TABLE_ROW,
+        embedded: embeddedSubfunction(CELL_SPANNING, [0x81, 1]),
+      }),
+      ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+    ]);
+    const covered = tablesOf(document)[0]?.rows[0]?.cells[1];
+    expect(
+      covered === undefined ? true : Object.hasOwn(covered, "background"),
+    ).toBe(false);
+  });
+
+  it("reports content held by a covered cell instead of carrying it, and reports it once however many such cells there are", () => {
+    const { document, diagnostics } = readWithDiagnostics([
+      ...tableDefinition([1200, 1200, 1200]),
+      ...text("merged"),
+      ...eolFunction({
+        subgroup: EOL_TABLE_CELL,
+        embedded: embeddedSubfunction(CELL_SPANNING, [3, 1]),
+      }),
+      ...text("hidden one"),
+      ...eolFunction({
+        subgroup: EOL_TABLE_CELL,
+        embedded: embeddedSubfunction(CELL_SPANNING, [0x81, 1]),
+      }),
+      ...text("hidden two"),
+      ...eolFunction({
+        subgroup: EOL_TABLE_ROW,
+        embedded: embeddedSubfunction(CELL_SPANNING, [0x81, 1]),
+      }),
+      ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+    ]);
+    expect(tablesOf(document)[0]?.rows[0]?.cells.slice(1)).toEqual([
+      { blocks: [] },
+      { blocks: [] },
+    ]);
+    expect(
+      diagnostics.filter(
+        (diagnostic) =>
+          diagnostic.code === WpdDiagnosticCodes.CoveredCellContentDropped,
+      ),
+    ).toEqual([
+      {
+        code: WpdDiagnosticCodes.CoveredCellContentDropped,
+        message:
+          "A table cell covered by a neighbouring cell's merge held content of its own, which was not carried: a merged region's content belongs to the cell that anchors it.",
+      },
+    ]);
+  });
+
+  it("does not report a covered cell that holds no content", () => {
+    const { diagnostics } = readWithDiagnostics([
+      ...tableDefinition([1200, 1200]),
+      ...text("merged"),
+      ...eolFunction({
+        subgroup: EOL_TABLE_CELL,
+        embedded: embeddedSubfunction(CELL_SPANNING, [2, 1]),
+      }),
+      ...eolFunction({
+        subgroup: EOL_TABLE_ROW,
+        embedded: embeddedSubfunction(CELL_SPANNING, [0x81, 1]),
+      }),
+      ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+    ]);
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === WpdDiagnosticCodes.CoveredCellContentDropped,
+      ),
+    ).toBe(false);
+  });
+
+  // The shared schema's grid rule gives every row exactly one entry per grid column; a row the stream leaves short of the defined grid is filled out rather than handed on short.
+  it("fills a row the stream leaves short of the defined grid with block-less entries", () => {
+    const document = readDocumentArea([
+      ...tableDefinition([1200, 1200, 1200]),
+      ...text("A"),
+      ...eolFunction({ subgroup: EOL_TABLE_CELL }),
+      ...text("B"),
+      ...eolFunction({ subgroup: EOL_TABLE_CELL }),
+      ...text("C"),
+      ...eolFunction({ subgroup: EOL_TABLE_ROW }),
+      ...text("D"),
+      ...eolFunction({ subgroup: EOL_TABLE_ROW }),
+      ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+    ]);
+    const table = tablesOf(document)[0];
+    expect(table?.rows.map((row) => row.cells.length)).toEqual([3, 3]);
+    expect(table?.rows[1]?.cells.map(cellText)).toEqual(["D", "", ""]);
+    expect(table?.rows[1]?.cells[1]).toEqual({ blocks: [] });
   });
 
   it("reads a cell's background colour", () => {
