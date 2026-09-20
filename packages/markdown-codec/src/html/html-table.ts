@@ -4,6 +4,7 @@
 
 import type {
   Alignment,
+  AnchorTableRow,
   Color,
   ContentBlock,
   ContentCellFill,
@@ -13,7 +14,7 @@ import type {
   ContentTableCell,
   ContentTableRow,
 } from "document-schema.js";
-import { rgbHexToColor } from "document-schema.js";
+import { placeAnchorTableRows, rgbHexToColor } from "document-schema.js";
 import { resolveMarkdownImage } from "../lower/image";
 import { MONOSPACE_FONT_FAMILY } from "../shared/style-constants";
 
@@ -324,6 +325,10 @@ function buildCell(
   };
 }
 
+// HTML declares no table grid width of its own, so the width placeAnchorTableRows produces follows from the placed cells alone.
+const NO_DECLARED_COLUMN_COUNT = 0;
+
+// HTML states anchors only (a <td colspan rowspan> has no element for the positions it covers), so the grid rule wants the covered positions supplied here: placeAnchorTableRows places each anchor at the first column no earlier cell reaches, exactly as HTML's own table formation does, and fills every covered position with an empty cell.
 function parseTableRows(
   inner: string,
   contentWidthPt: number,
@@ -332,29 +337,25 @@ function parseTableRows(
   if (rowElements === undefined || rowElements.length === 0) {
     return undefined;
   }
-  const rows: ContentTableRow[] = [];
+  const anchorRows: AnchorTableRow[] = [];
   for (const row of rowElements) {
     const cellElements = extractTopLevelElements(row.inner, ["td", "th"]);
     if (cellElements === undefined || cellElements.length === 0) {
       return undefined;
     }
-    rows.push({
+    anchorRows.push({
       cells: cellElements.map((cell) => buildCell(cell, contentWidthPt)),
     });
   }
-  return rows;
+  return placeAnchorTableRows(anchorRows, NO_DECLARED_COLUMN_COUNT);
 }
 
-// Column count and evenly-distributed columnWidthsPt read from the header row's own cells (rows[0], summing each cell's own colSpan -- default 1 -- across it), the identical convention src/lower/table.ts's own lowerTable already uses for a plain GFM table; absolute widths were never something either grammar carries, so this is a minted approximation on read exactly as it already is there.
+// Column count and evenly-distributed columnWidthsPt read from the dense grid width: every row of a dense table has one cell per grid column, so the first row's own length is the column count whichever rows carry spans, including a later row wider than the header or a header rowspan consuming a column below it. Absolute widths were never something either grammar carries, so this is the same even distribution src/lower/table.ts's own lowerTable uses for a plain GFM table.
 function buildContentTable(
   rows: ContentTableRow[],
   contentWidthPt: number,
 ): ContentTable {
-  const header = rows[0]!;
-  const columnCount = Math.max(
-    1,
-    header.cells.reduce((sum, cell) => sum + (cell.colSpan ?? 1), 0),
-  );
+  const columnCount = rows[0]!.cells.length;
   const columnWidthsPt = Array.from(
     { length: columnCount },
     () => contentWidthPt / columnCount,

@@ -32,6 +32,16 @@ function paragraphCell(text: string): ContentTableCell {
   return { blocks: [{ kind: "paragraph", runs: [{ text }] }] };
 }
 
+// A covered position of a merged region: a real cell that holds no blocks, its content belonging to the anchor.
+const COVERED_CELL: ContentTableCell = { blocks: [] };
+
+// The number of cell tags (<th> or <td>) in each <tr>, in document order.
+function cellTagCountsPerRow(markup: string): number[] {
+  return [...markup.matchAll(/<tr>(.*?)<\/tr>/g)].map(
+    (row) => (row[1] ?? "").split(/<t[dh]\b/).length - 1,
+  );
+}
+
 function tableOfRows(rows: readonly ContentTableRow[]): ContentTable {
   return { kind: "table", columnWidthsPt: [COLUMN_WIDTH_PT], rows: [...rows] };
 }
@@ -83,6 +93,28 @@ describe("tableNeedsHtmlFallback", () => {
       ],
     };
     expect(tableNeedsHtmlFallback(tableWithBodyCell(cell))).toBe(true);
+  });
+
+  it("is false for a table with an empty cell but no span or background, since a block-less cell alone needs nothing a plain GFM cell cannot hold", () => {
+    expect(
+      tableNeedsHtmlFallback(
+        tableOfRows([
+          { cells: [paragraphCell("h"), COVERED_CELL] },
+          { cells: [paragraphCell("a"), paragraphCell("b")] },
+        ]),
+      ),
+    ).toBe(false);
+  });
+
+  it("is true for a merged table, whose covered entries are block-less but whose anchor carries the span", () => {
+    expect(
+      tableNeedsHtmlFallback(
+        tableOfRows([
+          { cells: [paragraphCell("h"), paragraphCell("i")] },
+          { cells: [{ ...paragraphCell("wide"), colSpan: 2 }, COVERED_CELL] },
+        ]),
+      ),
+    ).toBe(true);
   });
 
   it("is true for a colSpan, a rowSpan or a background on any cell anywhere", () => {
@@ -239,17 +271,75 @@ describe("emitHtmlTable", () => {
   });
 
   it("writes colspan and rowspan as attributes, in that order, ahead of any style", () => {
-    const cell: ContentTableCell = {
+    const anchor: ContentTableCell = {
       ...paragraphCell("a"),
       colSpan: 2,
-      rowSpan: 3,
+      rowSpan: 2,
       background: { kind: "solid", color: { r: 0, g: 0, b: 1 } },
     };
-    const { html } = emit(tableWithBodyCell(cell));
+    const { html } = emit(
+      tableOfRows([
+        { cells: [paragraphCell("h"), paragraphCell("i")] },
+        { cells: [anchor, COVERED_CELL] },
+        { cells: [COVERED_CELL, COVERED_CELL] },
+      ]),
+    );
     expect(html).toBe(
-      expectedHtml(
-        '<td colspan="2" rowspan="3" style="background-color:#0000ff">a</td>',
-      ),
+      [
+        "<table>",
+        "<tr><th>h</th><th>i</th></tr>",
+        '<tr><td colspan="2" rowspan="2" style="background-color:#0000ff">a</td></tr>',
+        "<tr></tr>",
+        "</table>",
+      ].join("\n"),
+    );
+  });
+
+  it("writes no cell tag for the covered entry of a colspan", () => {
+    const { html } = emit(
+      tableOfRows([
+        { cells: [paragraphCell("h"), paragraphCell("i"), paragraphCell("j")] },
+        {
+          cells: [
+            { ...paragraphCell("wide"), colSpan: 2 },
+            COVERED_CELL,
+            paragraphCell("x"),
+          ],
+        },
+      ]),
+    );
+    expect(cellTagCountsPerRow(html)).toEqual([3, 2]);
+    expect(html).toContain('<td colspan="2">wide</td><td>x</td>');
+  });
+
+  it("writes no cell tag in the row below for the position a rowspan covers", () => {
+    const { html } = emit(
+      tableOfRows([
+        { cells: [paragraphCell("h"), paragraphCell("i")] },
+        {
+          cells: [{ ...paragraphCell("tall"), rowSpan: 2 }, paragraphCell("a")],
+        },
+        { cells: [COVERED_CELL, paragraphCell("b")] },
+      ]),
+    );
+    expect(cellTagCountsPerRow(html)).toEqual([2, 2, 1]);
+    expect(html).toContain("<tr><td>b</td></tr>");
+  });
+
+  it("writes a covered position in the header row as no tag, and the row below as ordinary <td>", () => {
+    const { html } = emit(
+      tableOfRows([
+        { cells: [{ ...paragraphCell("h"), rowSpan: 2 }, paragraphCell("i")] },
+        { cells: [COVERED_CELL, paragraphCell("a")] },
+      ]),
+    );
+    expect(html).toBe(
+      [
+        "<table>",
+        '<tr><th rowspan="2">h</th><th>i</th></tr>',
+        "<tr><td>a</td></tr>",
+        "</table>",
+      ].join("\n"),
     );
   });
 
