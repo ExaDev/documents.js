@@ -16,7 +16,6 @@ import {
   ensureNotesMaster,
   NOTES_MASTER_REL_TYPE,
   PML_NS,
-  PRESENTATION_PART_PATH,
 } from "./scaffold";
 import { buildTextBoxShape, PptxShape } from "./shape";
 import type { PptxTableInit } from "./table";
@@ -138,6 +137,8 @@ export interface SlideContext {
   readonly pkg: Package;
   readonly slidePartPath: string;
   readonly mediaDir: string;
+  // Which part holds the presentation this slide belongs to. Carried on the context rather than assumed: a package names its own presentation part through the root officeDocument relationship, and remove() below has to resolve that exact part's relationships to find the p:sldId entry pointing at this slide.
+  readonly presentationPartPath: string;
 }
 
 // A live view over a p:sld element's shape tree.
@@ -300,8 +301,8 @@ export class PptxSlide {
 
   // Removes this slide from the presentation: the p:sldId entry in sldIdLst -- this.container -- references this slide's own part by r:id, not by the p:sld root element remove() previously (and wrongly) tried to splice out of that same array, so finding it means resolving each p:sldId's relationship and matching its target against this slide's own slidePartPath, exactly as PptxEditor.removeSlideAt does by index.
   remove(): void {
-    const { pkg, slidePartPath } = this.context;
-    const presentationRels = resolveRelationships(pkg, PRESENTATION_PART_PATH);
+    const { pkg, slidePartPath, presentationPartPath } = this.context;
+    const presentationRels = resolveRelationships(pkg, presentationPartPath);
     for (const child of this.container) {
       if (child.type !== "element" || child.tag !== "p:sldId") {
         continue;

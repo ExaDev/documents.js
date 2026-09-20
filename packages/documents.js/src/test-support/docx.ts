@@ -151,6 +151,17 @@ const RENAMED_CONTENT_TYPES_XML = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>',
 );
 
+// The same document minimalDocxBytes produces -- one paragraph and a 2x1 table -- with the body at word/document2.xml instead, for a test that has to open real bytes rather than a decoded Package (openDocx). Identical content on purpose: a test can then assert the editor behaves the same as it does on the conventionally named fixture, rather than only that it doesn't throw.
+export function renamedMainPartDocxBytes(): Uint8Array<ArrayBuffer> {
+  return zipPackage({
+    "[Content_Types].xml": RENAMED_CONTENT_TYPES_XML,
+    "_rels/.rels": RENAMED_ROOT_RELS_XML,
+    "word/document2.xml": DOCUMENT_XML,
+    "word/_rels/document2.xml.rels": RENAMED_DOCUMENT_RELS_XML,
+    "word/styles2.xml": STYLES_XML,
+  });
+}
+
 export function renamedMainPartDocxPackage(): Package {
   return decodePackage(
     zipPackage({

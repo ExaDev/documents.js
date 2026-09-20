@@ -37,3 +37,20 @@ export function buildRelativeTarget(
   const downs = toDirs.slice(common);
   return [...ups, ...downs, toFileName].join("/");
 }
+
+// The directory a part sits in, with no trailing slash: "word/document.xml" -> "word", "document2.xml" -> "". Used to place a new sibling part (a media directory, a slides directory) beside whichever part a package actually named as its main one, rather than at the directory the convention would have put it in.
+export function partDirectory(partPath: string): string {
+  const lastSlash = partPath.lastIndexOf("/");
+  return lastSlash === -1 ? "" : partPath.slice(0, lastSlash);
+}
+
+// A directory beside `partPath`, named `name`: "word/document.xml" + "media" -> "word/media", and "document2.xml" + "media" -> "media" for a main part sitting at the package root.
+export function siblingDirectory(partPath: string, name: string): string {
+  const dir = partDirectory(partPath);
+  return dir === "" ? name : `${dir}/${name}`;
+}
+
+// Escapes every character that carries meaning in a regular expression, so a part-path segment can be embedded in one as a literal. Shared by the two places that scan pkg.parts for an indexed part name under a directory whose own path is a value rather than a literal (opc/media.ts's nextMediaIndex, edit/pptx/editor.ts's nextSlidePartIndex).
+export function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}

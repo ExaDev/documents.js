@@ -29,6 +29,29 @@ const SLIDE1_XML = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:cSld><p:spTree><p:sp><p:spPr><a:xfrm><a:off x="914400" y="914400"/><a:ext cx="3657600" cy="914400"/></a:xfrm></p:spPr><p:txBody><a:p><a:r><a:t>Slide text</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>',
 );
 
+// The same deck with the presentation part at ppt/presentation2.xml, reachable only through the root officeDocument relationship (ExaDev/documents.js#1314). The slide's own Target stays relative to the presentation part's directory, exactly as a real producer writes it, so nothing about the slide part moves -- only the part naming the deck does.
+const RENAMED_CONTENT_TYPES_XML = enc(
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation2.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/></Types>',
+);
+
+const RENAMED_ROOT_RELS_XML = enc(
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation2.xml"/></Relationships>',
+);
+
+function renamedPptxParts(): Record<string, Uint8Array<ArrayBuffer>> {
+  return {
+    "[Content_Types].xml": RENAMED_CONTENT_TYPES_XML,
+    "_rels/.rels": RENAMED_ROOT_RELS_XML,
+    "ppt/presentation2.xml": PRESENTATION_XML,
+    "ppt/_rels/presentation2.xml.rels": PRESENTATION_RELS_XML,
+    "ppt/slides/slide1.xml": SLIDE1_XML,
+  };
+}
+
+export function renamedMainPartPptxBytes(): Uint8Array<ArrayBuffer> {
+  return zipPackage(renamedPptxParts());
+}
+
 function pptxParts(): Record<string, Uint8Array<ArrayBuffer>> {
   return {
     "[Content_Types].xml": CONTENT_TYPES_XML,

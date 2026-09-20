@@ -13,7 +13,7 @@ import { emuToPt, ptToEmu } from "../../model/units";
 import type { ClockPort } from "../../ports/clock";
 import { systemClock } from "../../ports/clock";
 import { ensureContentTypeOverride } from "../../opc/content-types";
-import { buildRelativeTarget } from "../../opc/paths";
+import { buildRelativeTarget, escapeRegExp } from "../../opc/paths";
 import { addRelationship } from "../../opc/rels";
 import { el } from "../../xml/fragment";
 import {
@@ -21,15 +21,14 @@ import {
   createEmptyPptxPackage,
   DML_NS,
   PML_NS,
-  PRESENTATION_PART_PATH,
   R_NS,
   SLIDE_LAYOUT_PART_PATH,
   SLIDE_LAYOUT_REL_TYPE,
 } from "./scaffold";
 import type { SlideContext } from "./slide";
 import { PptxSlide } from "./slide";
+import { pptxMainPartPath, pptxMediaDir, pptxSlidesDir } from "./parts";
 
-const MEDIA_DIR = "ppt/media";
 const SLIDE_CONTENT_TYPE =
   "application/vnd.openxmlformats-officedocument.presentationml.slide+xml";
 const SLIDE_RELATIONSHIP_TYPE =
@@ -56,26 +55,35 @@ function attrValue(element: XmlElement, name: string): string | undefined {
   return undefined;
 }
 
-function findPresentationRoot(pkg: Package): XmlElement {
-  const root = rootElement(pkg.parts[PRESENTATION_PART_PATH]);
+function findPresentationRoot(
+  pkg: Package,
+  presentationPartPath: string,
+): XmlElement {
+  const root = rootElement(pkg.parts[presentationPartPath]);
   if (root === undefined) {
-    throw new Error(`package has no root element at ${PRESENTATION_PART_PATH}`);
+    throw new Error(`package has no root element at ${presentationPartPath}`);
   }
   return root;
 }
 
-function findSldIdLst(presentationRoot: XmlElement): XmlElement {
+function findSldIdLst(
+  presentationRoot: XmlElement,
+  presentationPartPath: string,
+): XmlElement {
   const sldIdLst = directChild(presentationRoot, "p:sldIdLst");
   if (sldIdLst === undefined) {
-    throw new Error(`${PRESENTATION_PART_PATH} has no p:sldIdLst element`);
+    throw new Error(`${presentationPartPath} has no p:sldIdLst element`);
   }
   return sldIdLst;
 }
 
-function findSldSz(presentationRoot: XmlElement): XmlElement {
+function findSldSz(
+  presentationRoot: XmlElement,
+  presentationPartPath: string,
+): XmlElement {
   const sldSz = directChild(presentationRoot, "p:sldSz");
   if (sldSz === undefined) {
-    throw new Error(`${PRESENTATION_PART_PATH} has no p:sldSz element`);
+    throw new Error(`${presentationPartPath} has no p:sldSz element`);
   }
   return sldSz;
 }
@@ -98,8 +106,9 @@ function nextSlideId(sldIdLst: XmlElement): number {
   return max + 1;
 }
 
-function nextSlidePartIndex(pkg: Package): number {
-  const pattern = /^ppt\/slides\/slide(\d+)\.xml$/;
+// The next free slideN.xml index within `slidesDir`, which is wherever this package keeps its slides rather than a fixed ppt/slides -- the directory is derived from the presentation part's own location (./parts.ts).
+function nextSlidePartIndex(pkg: Package, slidesDir: string): number {
+  const pattern = new RegExp(`^${escapeRegExp(slidesDir)}/slide(\\d+)\\.xml$`);
   let max = 0;
   for (const path of Object.keys(pkg.parts)) {
     const match = pattern.exec(path);
@@ -129,9 +138,16 @@ function buildEmptySlideRoot(): XmlElement {
 
 export class PptxEditor {
   private readonly pkg: Package;
+  // Resolved once, at open time: the package's own officeDocument relationship decides which part holds the presentation, and every slide directory and media directory this editor writes into sits beside that part (see ./parts.ts).
+  private readonly presentationPartPath: string;
+  private readonly mediaDir: string;
+  private readonly slidesDir: string;
 
   constructor(pkg: Package) {
     this.pkg = pkg;
+    this.presentationPartPath = pptxMainPartPath(pkg);
+    this.mediaDir = pptxMediaDir(this.presentationPartPath);
+    this.slidesDir = pptxSlidesDir(this.presentationPartPath);
   }
 
   // Reads/patches docProps/core.xml directly on the live package -- ExaDev/documents.js#933's own "editor.metadata = {...}" gap, mirroring DocxEditor's own identical getter/setter exactly (src/edit/docx/editor.ts's own comment states the full title/author/subject/keywords-only rationale). setDocumentMetadata's own bytes-level API rebuilds a whole fresh pptx from its ContentDocument for a pptx/pptx pair (src/metadata/write.ts's own REBUILD_FORMATS) -- wrong for a LIVE editor, which would discard every other pending edit the caller made through this same editor instance -- so this patches docProps/core.xml in place instead, via the identical pkg-level primitive DocxEditor uses.
@@ -144,11 +160,14 @@ export class PptxEditor {
   }
 
   slides(): PptxSlide[] {
-    const presentationRoot = findPresentationRoot(this.pkg);
-    const sldIdLst = findSldIdLst(presentationRoot);
+    const presentationRoot = findPresentationRoot(
+      this.pkg,
+      this.presentationPartPath,
+    );
+    const sldIdLst = findSldIdLst(presentationRoot, this.presentationPartPath);
     const presentationRels = resolveRelationships(
       this.pkg,
-      PRESENTATION_PART_PATH,
+      this.presentationPartPath,
     );
     const out: PptxSlide[] = [];
     for (const child of sldIdLst.children) {
@@ -170,7 +189,8 @@ export class PptxEditor {
       const context: SlideContext = {
         pkg: this.pkg,
         slidePartPath: rel.target,
-        mediaDir: MEDIA_DIR,
+        mediaDir: this.mediaDir,
+        presentationPartPath: this.presentationPartPath,
       };
       out.push(new PptxSlide(sldIdLst.children, slideRoot, context));
     }
@@ -178,18 +198,25 @@ export class PptxEditor {
   }
 
   addSlide(): PptxSlide {
-    const presentationRoot = findPresentationRoot(this.pkg);
-    const sldIdLst = findSldIdLst(presentationRoot);
+    const presentationRoot = findPresentationRoot(
+      this.pkg,
+      this.presentationPartPath,
+    );
+    const sldIdLst = findSldIdLst(presentationRoot, this.presentationPartPath);
 
-    const partIndex = nextSlidePartIndex(this.pkg);
-    const slidePartPath = `ppt/slides/slide${partIndex}.xml`;
+    const partIndex = nextSlidePartIndex(this.pkg, this.slidesDir);
+    const slidePartPath = `${this.slidesDir}/slide${partIndex}.xml`;
     const slideRoot = buildEmptySlideRoot();
     this.pkg.parts[slidePartPath] = { kind: "xml", nodes: [slideRoot] };
     ensureContentTypeOverride(this.pkg, slidePartPath, SLIDE_CONTENT_TYPE);
-    const relationshipId = addRelationship(this.pkg, PRESENTATION_PART_PATH, {
-      type: SLIDE_RELATIONSHIP_TYPE,
-      target: `slides/slide${partIndex}.xml`,
-    });
+    const relationshipId = addRelationship(
+      this.pkg,
+      this.presentationPartPath,
+      {
+        type: SLIDE_RELATIONSHIP_TYPE,
+        target: buildRelativeTarget(this.presentationPartPath, slidePartPath),
+      },
+    );
     // Every real p:sld must relate to a slideLayout (CT_Slide's own mandatory chain) -- createEmptyPptxPackage's own single blank layout, referenced here by every slide this editor creates.
     addRelationship(this.pkg, slidePartPath, {
       type: SLIDE_LAYOUT_REL_TYPE,
@@ -204,14 +231,18 @@ export class PptxEditor {
     const context: SlideContext = {
       pkg: this.pkg,
       slidePartPath,
-      mediaDir: MEDIA_DIR,
+      mediaDir: this.mediaDir,
+      presentationPartPath: this.presentationPartPath,
     };
     return new PptxSlide(sldIdLst.children, slideRoot, context);
   }
 
   removeSlideAt(index: number): void {
-    const presentationRoot = findPresentationRoot(this.pkg);
-    const sldIdLst = findSldIdLst(presentationRoot);
+    const presentationRoot = findPresentationRoot(
+      this.pkg,
+      this.presentationPartPath,
+    );
+    const sldIdLst = findSldIdLst(presentationRoot, this.presentationPartPath);
     const sldIdElements = sldIdLst.children.filter(
       (c) => c.type === "element" && c.tag === "p:sldId",
     );
@@ -223,7 +254,7 @@ export class PptxEditor {
     const listIndex = sldIdLst.children.indexOf(target);
     sldIdLst.children.splice(listIndex, 1);
     if (rId !== undefined) {
-      const rel = resolveRelationships(this.pkg, PRESENTATION_PART_PATH).get(
+      const rel = resolveRelationships(this.pkg, this.presentationPartPath).get(
         rId,
       );
       if (rel !== undefined) {
@@ -233,8 +264,11 @@ export class PptxEditor {
   }
 
   moveSlide(from: number, to: number): void {
-    const presentationRoot = findPresentationRoot(this.pkg);
-    const sldIdLst = findSldIdLst(presentationRoot);
+    const presentationRoot = findPresentationRoot(
+      this.pkg,
+      this.presentationPartPath,
+    );
+    const sldIdLst = findSldIdLst(presentationRoot, this.presentationPartPath);
     const sldIdIndices: number[] = [];
     sldIdLst.children.forEach((child, i) => {
       if (child.type === "element" && child.tag === "p:sldId") {
@@ -264,7 +298,10 @@ export class PptxEditor {
 
   // p:sldSz is presentation-wide, not per-slide (unlike ContentSlide.size, which PDF-reconstructed content sets per page) -- a caller building a deck from content whose pages share one size sets this once; createEmptyPptxPackage's own scaffold default is PowerPoint's standard 16:9 widescreen.
   get slideSize(): PageSize {
-    const sldSz = findSldSz(findPresentationRoot(this.pkg));
+    const sldSz = findSldSz(
+      findPresentationRoot(this.pkg, this.presentationPartPath),
+      this.presentationPartPath,
+    );
     const cx = attrValue(sldSz, "cx");
     const cy = attrValue(sldSz, "cy");
     return {
@@ -274,7 +311,10 @@ export class PptxEditor {
   }
 
   set slideSize(size: PageSize) {
-    const sldSz = findSldSz(findPresentationRoot(this.pkg));
+    const sldSz = findSldSz(
+      findPresentationRoot(this.pkg, this.presentationPartPath),
+      this.presentationPartPath,
+    );
     sldSz.attributes = [
       { name: "cx", value: String(ptToEmu(size.widthPt)) },
       { name: "cy", value: String(ptToEmu(size.heightPt)) },
