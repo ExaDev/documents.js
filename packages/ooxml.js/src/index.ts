@@ -22,7 +22,12 @@ export {
 } from "./typed/util";
 export type { Relationship } from "./typed/util";
 
-export { findMainPartPath, findRelatedPartPath, hasPart } from "./typed/opc";
+export {
+  findMainPartPath,
+  findRelatedPartPath,
+  findRootRelatedPartPath,
+  hasPart,
+} from "./typed/opc";
 
 export {
   XmlNodeSchema,
