@@ -27,13 +27,21 @@ export function findRelatedPartPath(
   );
 }
 
-// The package's main document part, named by the root `officeDocument` relationship, or undefined when the package declares none that leads to a part it holds.
-export function findMainPartPath(pkg: Package): string | undefined {
+// The part the package ROOT reaches through a relationship whose type ends with `relationshipTypeSuffix`, or undefined when it declares no usable one. The root-relationship counterpart of findRelatedPartPath above, for the parts a package declares alongside its main one rather than through it: the core and extended properties, and the main part itself.
+export function findRootRelatedPartPath(
+  pkg: Package,
+  relationshipTypeSuffix: string,
+): string | undefined {
   return firstResolvableTarget(
     pkg,
     resolveRootRelationships(pkg),
-    OFFICE_DOCUMENT_REL_SUFFIX,
+    relationshipTypeSuffix,
   );
+}
+
+// The package's main document part, named by the root `officeDocument` relationship, or undefined when the package declares none that leads to a part it holds.
+export function findMainPartPath(pkg: Package): string | undefined {
+  return findRootRelatedPartPath(pkg, OFFICE_DOCUMENT_REL_SUFFIX);
 }
 
 function firstResolvableTarget(
