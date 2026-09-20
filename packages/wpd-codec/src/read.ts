@@ -1,3 +1,4 @@
+import { bytesToBase64 } from "byte-codec";
 import type {
   Alignment,
   Color,
@@ -15,7 +16,6 @@ import type {
   RunConstructExtent,
 } from "document-schema.js";
 import { assembleTree } from "document-schema.js";
-import { bytesToBase64 } from "./bytes/base64";
 import { uint16At } from "./bytes/view";
 import { WpdFormatError } from "./errors";
 import { readFurnitureClaim } from "./stream/furniture";

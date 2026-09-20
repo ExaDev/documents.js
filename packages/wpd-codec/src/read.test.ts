@@ -3,7 +3,7 @@ import type {
   ContentDocument,
   ContentParagraph,
 } from "document-schema.js";
-import { bytesToBase64 } from "./bytes/base64";
+import { bytesToBase64 } from "byte-codec";
 import { describe, expect, it } from "vitest";
 import { WpdDiagnosticCodes, type WpdDiagnostic } from "./diagnostics";
 import {
