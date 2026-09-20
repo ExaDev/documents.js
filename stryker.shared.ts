@@ -17,6 +17,15 @@ type StrykerConfig = PartialStrykerOptions & {
  */
 const DEFER_BREAK_ENV = "MUTATION_DEFER_BREAK";
 
+/**
+ * Why every package carries a `stryker.conf.mjs` beside its `stryker.config.ts`, holding nothing but `export { default } from "./stryker.config.ts"`.
+ *
+ * Stryker loads a `.ts` config perfectly well when it is given one, but its config DISCOVERY only looks for `stryker.conf` / `stryker.config` with a `.js`, `.mjs`, `.cjs` or `.json` extension. A `.ts` config therefore has to be named on the command line, which is what each package's own `_test:mutation` script does (`stryker run stryker.config.ts`).
+ *
+ * Omitting it does not fail. Stryker reports `No config file specified. Running with command line arguments` on its first line and then runs with its own defaults: the COMMAND test runner rather than the vitest one, no vitest plugin, no typescript checker, and no per-test coverage. The run completes, writes a full HTML/JSON report, and classifies every mutant as Survived, so a scoped run typed by hand -- `stryker run --mutate <glob>`, which is exactly how a package's mutation score is chased file by file -- yields a plausible, complete, entirely meaningless 0-killed report rather than an error. Confirmed against a file whose package scores in the high nineties (ExaDev/documents.js#1338 review).
+ *
+ * The `.mjs` re-export is what discovery finds, so the hand-typed form picks up this configuration too and the silent-fallback case cannot arise from a package directory. Nothing chooses between the two files: the script names the `.ts` explicitly and wins, discovery finds the `.mjs` and it re-exports the same object, so both routes load one configuration.
+ */
 const RUNNER_PRELOAD = fileURLToPath(
   new URL("./stryker.runner-preload.ts", import.meta.url),
 );
