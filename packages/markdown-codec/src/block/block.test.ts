@@ -4,13 +4,30 @@
 
 import { describe, expect, it } from "vitest";
 import type { MarkdownBlockNode } from "../ast/ast";
-import { MarkdownDiagnosticCodes } from "../diagnostics/diagnostics";
+import {
+  MarkdownDiagnosticCodes,
+  MarkdownNestingLimitExceededError,
+} from "../diagnostics/diagnostics";
 import { createDiagnosticCollector } from "../test-support/diagnostics";
 import { parseMarkdown } from "./block";
 
 function parse(source: string): MarkdownBlockNode[] {
   return parseMarkdown(source).document.children;
 }
+
+describe("line endings", () => {
+  it("reads a carriage return ending the last line as that line's own ending, not as a blank line after it", () => {
+    expect(parse("```\na\r")).toEqual([
+      {
+        type: "codeBlock",
+        fenced: true,
+        fenceChar: "`",
+        infoString: "",
+        literal: "a\n",
+      },
+    ]);
+  });
+});
 
 describe("headings", () => {
   it("records an ATX heading's own style and level", () => {
@@ -41,6 +58,11 @@ describe("headings", () => {
         children: [{ type: "text", value: "foo" }],
       },
     ]);
+  });
+
+  it("takes a setext level from the underline's own leading character, not from where the line ends", () => {
+    // The match covers the trailing spaces the spec allows after the underline, so what the underline ENDS with is not the same question as which character it is made of.
+    expect(parse("foo\n===  ")).toMatchObject([{ level: 1, style: "setext" }]);
   });
 
   it("promotes only the paragraph it directly follows, never a lazily continued one", () => {
@@ -75,6 +97,19 @@ describe("code blocks", () => {
       { type: "codeBlock", fenced: false, literal: "foo\n" },
     ]);
   });
+
+  it("closes on a closing fence that carries trailing spaces, which the spec allows after it", () => {
+    expect(parse("```\nx\n```   \nafter")).toEqual([
+      {
+        type: "codeBlock",
+        fenced: true,
+        fenceChar: "`",
+        infoString: "",
+        literal: "x\n",
+      },
+      { type: "paragraph", children: [{ type: "text", value: "after" }] },
+    ]);
+  });
 });
 
 describe("math blocks (ExaDev/markdown-codec#53)", () => {
@@ -99,6 +134,99 @@ describe("math blocks (ExaDev/markdown-codec#53)", () => {
     expect(parse("$$\nx^2 $$ y\n$$")).toEqual([
       { type: "mathBlock", literal: "x^2 $$ y\n" },
     ]);
+  });
+
+  it("keeps trailing whitespace on the opening $$ line out of the content", () => {
+    expect(parse("$$  \nx^2\n$$")).toEqual([
+      { type: "mathBlock", literal: "x^2\n" },
+    ]);
+  });
+
+  it("ends at its closing $$ rather than carrying on over what follows", () => {
+    expect(parse("$$\nx^2\n$$\nafter")).toEqual([
+      { type: "mathBlock", literal: "x^2\n" },
+      { type: "paragraph", children: [{ type: "text", value: "after" }] },
+    ]);
+  });
+
+  it("reads an indented $$ line as indented code, since a block may not open there", () => {
+    expect(parse("    $$")).toEqual([
+      { type: "codeBlock", fenced: false, literal: "$$\n" },
+    ]);
+  });
+
+  it("opens at the level of the deepest block the line matched, closing whatever it did not", () => {
+    expect(parse("> a\n$$\nx\n$$")).toEqual([
+      {
+        type: "blockquote",
+        children: [
+          { type: "paragraph", children: [{ type: "text", value: "a" }] },
+        ],
+      },
+      { type: "mathBlock", literal: "x\n" },
+    ]);
+  });
+});
+
+describe("footnote definitions (ExaDev/markdown-codec#66)", () => {
+  it("ends a definition with no content at a blank line rather than taking what follows as its body", () => {
+    expect(parse("[^1]:\n\n    b")).toEqual([
+      { type: "footnoteDefinition", label: "1", children: [] },
+      { type: "codeBlock", fenced: false, literal: "b\n" },
+    ]);
+  });
+
+  it("continues a definition that already has content across a blank line", () => {
+    expect(parse("[^1]: a\n\n    b")).toEqual([
+      {
+        type: "footnoteDefinition",
+        label: "1",
+        children: [
+          { type: "paragraph", children: [{ type: "text", value: "a" }] },
+          { type: "paragraph", children: [{ type: "text", value: "b" }] },
+        ],
+      },
+    ]);
+  });
+
+  it("consumes a whitespace-only line whole, so a code block in the body sees a genuinely blank line", () => {
+    expect(parse("[^1]: a\n\n        code\n      \n        more")).toEqual([
+      {
+        type: "footnoteDefinition",
+        label: "1",
+        children: [
+          { type: "paragraph", children: [{ type: "text", value: "a" }] },
+          { type: "codeBlock", fenced: false, literal: "code\n\nmore\n" },
+        ],
+      },
+    ]);
+  });
+
+  it("takes the body from just after the marker when the marker itself is indented", () => {
+    expect(parse("  [^1]: body")).toEqual([
+      {
+        type: "footnoteDefinition",
+        label: "1",
+        children: [
+          { type: "paragraph", children: [{ type: "text", value: "body" }] },
+        ],
+      },
+    ]);
+  });
+});
+
+describe("the nesting limit", () => {
+  it("counts how deep the open chain goes, not how many blocks the document has in total", () => {
+    expect(() =>
+      parseMarkdown("a\n\nb\n\nc\n\nd", { maxNesting: 3 }),
+    ).not.toThrow();
+  });
+
+  it("refuses the block that would sit at the limit and allows the one just below it", () => {
+    expect(() => parseMarkdown("> a", { maxNesting: 2 })).not.toThrow();
+    expect(() => parseMarkdown("> > a", { maxNesting: 2 })).toThrow(
+      MarkdownNestingLimitExceededError,
+    );
   });
 });
 
@@ -214,6 +342,24 @@ describe("lists", () => {
   it("reads three bullet markers with nothing after them as a thematic break, not as three empty items", () => {
     expect(parse("- - -")).toEqual([{ type: "thematicBreak" }]);
     expect(parse("* * *")).toEqual([{ type: "thematicBreak" }]);
+  });
+
+  it("marks a list loose when the blank line between its items is one an indented code block continues", () => {
+    // The code block, not the item, is the deepest block the blank line matched, so nothing below the item records it: the separation is only visible on the chain of blocks the line sat inside.
+    expect(parse("-     b\n\n- a")[0]).toMatchObject({ tight: false });
+  });
+
+  it("keeps a list tight when the only blank line is a block quote's own marker-only line", () => {
+    expect(parse("- > a\n  >\n- b")[0]).toMatchObject({ tight: true });
+  });
+
+  it("keeps a list tight when the only blank line is content inside a fenced code block", () => {
+    expect(parse("- ```\n\n  ```\n- b")[0]).toMatchObject({ tight: true });
+  });
+
+  it("keeps a list tight when an item is nothing but its own marker", () => {
+    // spec 0.31.2: "A list item can begin with at most one blank line". That first blank line is the item itself, not a separator between items.
+    expect(parse("- foo\n-\n- bar")[0]).toMatchObject({ tight: true });
   });
 });
 
@@ -338,6 +484,77 @@ describe("HTML blocks", () => {
       },
     ]);
   });
+
+  it("opens a type-7 block when there is no open paragraph for it to interrupt", () => {
+    expect(parse('<a href="x">')).toEqual([
+      { type: "htmlBlock", literal: '<a href="x">' },
+    ]);
+  });
+
+  it("does not let a type-7 block interrupt a paragraph it could instead continue lazily", () => {
+    expect(parse('> foo\n<a href="x">')).toEqual([
+      {
+        type: "blockquote",
+        children: [
+          {
+            type: "paragraph",
+            children: [
+              { type: "text", value: "foo" },
+              { type: "softBreak" },
+              { type: "rawHtml", literal: '<a href="x">' },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("opens a type-7 block after a line that left a container unmatched but no paragraph open", () => {
+    expect(parse('> # h\n<a href="x">')).toEqual([
+      {
+        type: "blockquote",
+        children: [
+          {
+            type: "heading",
+            level: 1,
+            style: "atx",
+            children: [{ type: "text", value: "h" }],
+          },
+        ],
+      },
+      { type: "htmlBlock", literal: '<a href="x">' },
+    ]);
+  });
+
+  it("tests an end condition only against an open HTML block, never against a fenced code block", () => {
+    // A code block's content is literal, so a line that would end an HTML block of type 1 is just one more line of it.
+    expect(parse("```\n</pre>\nstill code\n```")).toEqual([
+      {
+        type: "codeBlock",
+        fenced: true,
+        fenceChar: "`",
+        infoString: "",
+        literal: "</pre>\nstill code\n",
+      },
+    ]);
+  });
+
+  it("tests an end condition only against an open HTML block, never against a paragraph", () => {
+    expect(parse("foo\nbar </pre> baz\nqux")).toEqual([
+      {
+        type: "paragraph",
+        children: [
+          { type: "text", value: "foo" },
+          { type: "softBreak" },
+          { type: "text", value: "bar " },
+          { type: "rawHtml", literal: "</pre>" },
+          { type: "text", value: " baz" },
+          { type: "softBreak" },
+          { type: "text", value: "qux" },
+        ],
+      },
+    ]);
+  });
 });
 
 describe("GFM extension toggles", () => {
@@ -345,6 +562,40 @@ describe("GFM extension toggles", () => {
     expect(
       parseMarkdown("| a |\n| - |", { gfmTables: false }).document.children,
     ).toMatchObject([{ type: "paragraph" }]);
+  });
+});
+
+describe("GFM tables", () => {
+  it("leaves the paragraph's earlier lines behind as a paragraph, still separated as they were written", () => {
+    const blocks = parse("a\nb\n| h |\n| - |");
+    expect(blocks[0]).toEqual({
+      type: "paragraph",
+      children: [
+        { type: "text", value: "a" },
+        { type: "softBreak" },
+        { type: "text", value: "b" },
+      ],
+    });
+    expect(blocks[1]).toMatchObject({ type: "table" });
+  });
+
+  it("is not itself promoted by a following underline, which only an open paragraph answers to", () => {
+    // A table accepts lines and still lets block starts be tried, so the promotion hook is offered it as a container and has to decline, or the accumulated rows would be read as a setext heading's own text.
+    const blocks = parse("| a |\n| - |\n| 1 |\n---");
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]).toMatchObject({ type: "table" });
+    expect(blocks[1]).toEqual({ type: "thematicBreak" });
+  });
+
+  it("builds one row per body line, with the delimiter row's own consumed line contributing none", () => {
+    const [table] = parse("| a |\n| - |\n| 1 |");
+    expect(table).toMatchObject({
+      type: "table",
+      children: [
+        { type: "tableRow", header: true },
+        { type: "tableRow", header: false },
+      ],
+    });
   });
 });
 
@@ -387,6 +638,10 @@ describe("GFM task list items", () => {
     expect(list).toMatchObject({ children: [{ type: "listItem" }] });
     if (list?.type !== "list") throw new Error("expected a list node");
     expect(list.children[0]?.checked).toBeUndefined();
+    const [item] = list.children;
+    if (item === undefined) throw new Error("expected a list item");
+    // Absent, not present and undefined: a structural equality check reads the two the same way, so the key itself has to be asked for.
+    expect(Object.hasOwn(item, "checked")).toBe(false);
   });
 
   it("reads a leading [ ]/[x] as ordinary text when task lists are disabled", () => {
@@ -460,5 +715,79 @@ describe("recover-tier diagnostics", () => {
     expect(collector.has(MarkdownDiagnosticCodes.UNCLOSED_MATH_BLOCK)).toBe(
       true,
     );
+  });
+
+  it("reports nothing for an indented code block left open at end-of-input, which has no closing condition to miss", () => {
+    const collector = createDiagnosticCollector();
+    parseMarkdown("    code", { sink: collector.sink });
+    expect(collector.codes()).toEqual([]);
+  });
+
+  it("names the opening line of the fenced code block that was never closed", () => {
+    const collector = createDiagnosticCollector();
+    parseMarkdown("text\n\n```js\ncode", { sink: collector.sink });
+    const [diagnostic] = collector.diagnostics;
+    expect(diagnostic?.code).toBe(MarkdownDiagnosticCodes.UNCLOSED_FENCE);
+    expect(diagnostic?.line).toBe(3);
+    expect(diagnostic?.message).toContain("line 3");
+    expect(diagnostic?.message).toContain("never closed");
+  });
+
+  it("names the type and the opening line of the HTML block that never met its end condition", () => {
+    const collector = createDiagnosticCollector();
+    parseMarkdown("text\n\n<!-- comment\nmore text", { sink: collector.sink });
+    const [diagnostic] = collector.diagnostics;
+    expect(diagnostic?.code).toBe(
+      MarkdownDiagnosticCodes.UNTERMINATED_HTML_BLOCK,
+    );
+    expect(diagnostic?.line).toBe(3);
+    expect(diagnostic?.message).toContain("type 2");
+    expect(diagnostic?.message).toContain("line 3");
+  });
+
+  it("names the opening line of the math block that was never closed", () => {
+    const collector = createDiagnosticCollector();
+    parseMarkdown("text\n\n$$\nx^2", { sink: collector.sink });
+    const [diagnostic] = collector.diagnostics;
+    expect(diagnostic?.code).toBe(MarkdownDiagnosticCodes.UNCLOSED_MATH_BLOCK);
+    expect(diagnostic?.line).toBe(3);
+    expect(diagnostic?.message).toContain("line 3");
+    expect(diagnostic?.message).toContain("$$");
+  });
+
+  it("reports both cell counts when a table row does not match its header", () => {
+    const collector = createDiagnosticCollector();
+    parseMarkdown("| a | b |\n| - | - |\n| 1 | 2 | 3 |", {
+      sink: collector.sink,
+    });
+    const [diagnostic] = collector.diagnostics;
+    expect(diagnostic?.message).toContain("3 cell(s)");
+    expect(diagnostic?.message).toContain("declares 2");
+  });
+
+  it("reports nothing for a table whose every row matches its header", () => {
+    const collector = createDiagnosticCollector();
+    parseMarkdown("| a | b |\n| - | - |\n| 1 | 2 |", { sink: collector.sink });
+    expect(collector.codes()).toEqual([]);
+  });
+
+  it("reports the second footnote definition sharing a label, naming the label and its own line", () => {
+    const collector = createDiagnosticCollector();
+    parseMarkdown("[^a]: one\n\n[^a]: two", { sink: collector.sink });
+    const duplicates = collector.diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.code ===
+        MarkdownDiagnosticCodes.DUPLICATE_FOOTNOTE_DEFINITION,
+    );
+    expect(duplicates).toHaveLength(1);
+    expect(duplicates[0]?.line).toBe(3);
+    expect(duplicates[0]?.message).toContain('"a"');
+    expect(duplicates[0]?.message).toContain("already defined");
+  });
+
+  it("reports nothing for a single footnote definition", () => {
+    const collector = createDiagnosticCollector();
+    parseMarkdown("[^a]: one", { sink: collector.sink });
+    expect(collector.codes()).toEqual([]);
   });
 });
