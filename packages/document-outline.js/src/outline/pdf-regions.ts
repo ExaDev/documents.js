@@ -1,6 +1,6 @@
 import type { ContentInterpretation } from "document-schema.js";
 import type { LayoutItem, LayoutPage } from "pdf-codec";
-import { runGapPt, runsShareBaseline } from "pdf-codec";
+import { runGapPt, runsShareBaseline } from "pdf-codec/text-group";
 import type { RegionClassification } from "./regions";
 
 // PDF region segmentation (ExaDev/documents.js#931): pdf-codec's LayoutPage is deliberately just positioned items -- text/image/rect/line/ellipse/path/link, in PDF user space (origin bottom-left, y up, points) -- with no notion of columns, tables, figures, or captions (see pdf-codec's own README, "Architecture": semantic reconstruction from geometry is expensive, lossy, and deliberately kept out of the codec). segmentPdfRegions is the PDF-specific sibling of outline/regions.ts's segmentSheetRegions: a PURELY ADDITIONAL, OPT-IN inference over a page's own items, reusing RegionClassification (regions.ts's own doc comment already names this as the vocabulary a future PDF pass would reuse rather than re-mint) rather than mutating or gating anything -- a consumer who never calls this still has every LayoutItem exactly as readPdf reported it.
