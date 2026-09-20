@@ -1,3 +1,15 @@
+## [5.11.30](https://github.com/ExaDev/documents.js/compare/document-cli%405.11.29...document-cli%405.11.30) (2026-09-20)
+
+### Documentation
+
+* **document-cli:** state the mutation gate's derivation without point-in-time figures ([54021c3](https://github.com/ExaDev/documents.js/commit/54021c34caa7fa33c40ed57f600f964b4e57f7bc))
+
+
+### Dependencies
+
+- Updated document-outline.js to 3.9.12
+- Updated documents.js to 7.20.28
+
 ## [5.11.29](https://github.com/ExaDev/documents.js/compare/document-cli%405.11.28...document-cli%405.11.29) (2026-09-20)
 
 

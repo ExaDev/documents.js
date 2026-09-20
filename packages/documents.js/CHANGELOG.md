@@ -1,3 +1,15 @@
+## [7.20.28](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.27...documents.js%407.20.28) (2026-09-20)
+
+### Code Refactoring
+
+* **pdf-codec:** encode and decode base64 through byte-codec ([03c9353](https://github.com/ExaDev/documents.js/commit/03c935326d354775c33f6d1365792dd0e842e602))
+
+
+### Dependencies
+
+- Updated pdf-codec to 4.8.15
+- Updated ppt-codec to 1.7.12
+
 ## [7.20.27](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.26...documents.js%407.20.27) (2026-09-20)
 
 
