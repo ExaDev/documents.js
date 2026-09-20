@@ -48,7 +48,7 @@ import {
   rootElement,
   textContent,
 } from "../util";
-import { base64ToBytes } from "../../util/base64";
+import { base64ToBytes } from "byte-codec";
 import { assignReadingOrder } from "./reading-order";
 import type { DefaultRunProperties, SlideInheritanceContext } from "./inherit";
 import {

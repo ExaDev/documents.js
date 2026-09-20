@@ -6,7 +6,8 @@ export { buildXml } from "./xml/build";
 export { el, txt } from "./xml/fragment";
 export { encodeXmlText } from "./xml/entities";
 export { unzipPackage, zipPackage } from "./zip";
-export { bytesToBase64, base64ToBytes } from "./util/base64";
+// bytesToBase64/base64ToBytes were this package's own copy of the family-wide base64 helpers before byte-codec held one for everybody; they stay on this barrel because they have always been part of its published surface.
+export { base64ToBytes, bytesToBase64 } from "byte-codec";
 
 export {
   walk,

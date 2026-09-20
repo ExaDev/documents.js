@@ -45,7 +45,7 @@ import type { DrawingTheme } from "../shared/drawingml";
 import { EMPTY_THEME, readTheme } from "../shared/drawingml";
 import { assignSourcePaths } from "../shared/source-path";
 import { sniffImageFormat } from "../../image/sniff";
-import { base64ToBytes } from "../../util/base64";
+import { base64ToBytes } from "byte-codec";
 import type { Relationship } from "../util";
 import {
   attr,

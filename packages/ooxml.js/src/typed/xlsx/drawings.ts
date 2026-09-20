@@ -18,7 +18,7 @@ import {
 } from "../util";
 import type { ImageFormat } from "../../image/sniff";
 import { sniffImageFormat } from "../../image/sniff";
-import { base64ToBytes } from "../../util/base64";
+import { base64ToBytes } from "byte-codec";
 import { readPrintSettings } from "./print-settings";
 import {
   columnWidthCharsToPt,

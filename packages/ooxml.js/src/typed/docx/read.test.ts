@@ -11,7 +11,7 @@ import type {
 } from "document-schema.js";
 import { rgbHexToColor } from "document-schema.js";
 import { el, txt } from "../../xml/fragment";
-import { bytesToBase64 } from "../../util/base64";
+import { bytesToBase64 } from "byte-codec";
 import { zipPackage } from "../../zip";
 import { oleObjectBin } from "../../test-support/cfb";
 import {

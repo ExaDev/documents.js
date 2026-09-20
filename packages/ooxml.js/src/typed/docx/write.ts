@@ -29,7 +29,7 @@ import { el, txt } from "../../xml/fragment";
 import { encodeXmlText } from "../../xml/entities";
 import { parseXml } from "../../xml/parse";
 import { encodePackage } from "../../codec";
-import { bytesToBase64 } from "../../util/base64";
+import { bytesToBase64 } from "byte-codec";
 import type { DocumentMetadata } from "../shared/metadata";
 import {
   ptToEighthPoints,

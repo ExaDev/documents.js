@@ -10,7 +10,7 @@ import type { XmlElement } from "../model/node";
 import type { BinaryPart, Package } from "../model/package";
 import { packageFromEntries } from "../package-io/read";
 import type { ContentEmbeddedObjectKind } from "document-schema.js";
-import { base64ToBytes } from "../util/base64";
+import { base64ToBytes } from "byte-codec";
 import { readDocxContent } from "./docx/read";
 import { readPptxContent } from "./pptx/read";
 import { readXlsxContent } from "./xlsx/content";
