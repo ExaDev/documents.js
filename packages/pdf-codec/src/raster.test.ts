@@ -1842,7 +1842,14 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
     );
     expect(centres).toHaveLength(2);
     expect(centres[1]?.x).toBeCloseTo(centres[0]?.x ?? 0, 6);
-    expect(centres[1]?.y).not.toBeCloseTo(centres[0]?.y ?? 0, 3);
+    // Exactly one em apart, not merely apart: the same two glyphs drawn horizontally are the same distance along the other axis, so any mis-scaling of the accumulated advance shows up as a different figure rather than as the glyphs merely still being separate.
+    const horizontal = glyphCentres(
+      type0Skeleton({ content: TWO_GLYPH_CONTENT }),
+    );
+    expect(Math.abs((centres[1]?.y ?? 0) - (centres[0]?.y ?? 0))).toBeCloseTo(
+      Math.abs((horizontal[1]?.x ?? 0) - (horizontal[0]?.x ?? 0)),
+      3,
+    );
   });
 
   it("centres each vertical glyph over the column by its own position vector", () => {
