@@ -11,7 +11,7 @@ import type {
   ContentTable,
   ContentTableCell,
 } from "document-schema.js";
-import { colorToRgbHex } from "document-schema.js";
+import { colorToRgbHex, walkTableGrid } from "document-schema.js";
 import type { MarkdownDiagnosticSink } from "../diagnostics/diagnostics";
 import { MarkdownDiagnosticCodes } from "../diagnostics/diagnostics";
 import { MONOSPACE_FONT_FAMILY } from "../shared/style-constants";
@@ -181,18 +181,14 @@ export function emitHtmlTable(
   table: ContentTable,
   context: TableEmitContext,
 ): string {
-  const [header, ...body] = table.rows;
-  const lines: string[] = ["<table>"];
-  if (header !== undefined) {
-    lines.push(
-      `<tr>${header.cells.map((cell) => emitCellTag(cell, true, context)).join("")}</tr>`,
+  // HTML states anchors only: a covered position of a merged region has no cell tag of its own, its extent being carried by the anchor's colspan/rowspan, so emitting one would widen the row past the grid. The first row is the header row, whichever of its positions are anchors.
+  const rowTags = walkTableGrid(table).map((positions, rowIndex) => {
+    const cellTags = positions.flatMap((position) =>
+      position.anchorRowIndex === undefined
+        ? [emitCellTag(position.cell, rowIndex === 0, context)]
+        : [],
     );
-  }
-  for (const row of body) {
-    lines.push(
-      `<tr>${row.cells.map((cell) => emitCellTag(cell, false, context)).join("")}</tr>`,
-    );
-  }
-  lines.push("</table>");
-  return lines.join("\n");
+    return `<tr>${cellTags.join("")}</tr>`;
+  });
+  return ["<table>", ...rowTags, "</table>"].join("\n");
 }

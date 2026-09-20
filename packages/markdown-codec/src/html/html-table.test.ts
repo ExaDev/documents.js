@@ -1,6 +1,6 @@
 // Construct-by-construct tests for the bounded HTML-table recogniser itself (ExaDev/documents.js#1089) -- src/table-html-fallback.test.ts covers the full write -> read round trip through the public surface; this file exercises parseHtmlTable directly, including the shapes it deliberately refuses to guess about.
 
-import type { ContentTable } from "document-schema.js";
+import type { ContentTable, ContentTableCell } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { parseHtmlTable } from "./html-table";
 
@@ -14,6 +14,18 @@ const ONE_PIXEL_PNG_BASE64 =
 const ONE_PIXEL_PT = 72 / 96;
 
 const ONE_PIXEL_DATA_URI = `data:image/png;base64,${ONE_PIXEL_PNG_BASE64}`;
+
+// One compact descriptor per cell, so a test can state a whole grid at a glance: the cell's own text, then `|cN` / `|rN` for a colSpan / rowSpan; a covered entry holds no blocks and so reads as the empty string.
+function describeCell(cell: ContentTableCell): string {
+  const text = cell.blocks
+    .flatMap((block) =>
+      block.kind === "paragraph" ? block.runs.map((run) => run.text) : [],
+    )
+    .join("");
+  const colSpan = cell.colSpan === undefined ? "" : `|c${String(cell.colSpan)}`;
+  const rowSpan = cell.rowSpan === undefined ? "" : `|r${String(cell.rowSpan)}`;
+  return `${text}${colSpan}${rowSpan}`;
+}
 
 function parse(literal: string): ContentTable | undefined {
   return parseHtmlTable(literal, CONTENT_WIDTH_PT);
@@ -38,8 +50,67 @@ describe("parseHtmlTable", () => {
     );
     expect(table?.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(table?.rows[0]?.cells[0]?.rowSpan).toBe(3);
-    expect(table?.rows[0]?.cells[1]?.colSpan).toBeUndefined();
-    expect(table?.rows[0]?.cells[1]?.rowSpan).toBeUndefined();
+    expect(table?.rows[0]?.cells[2]?.colSpan).toBeUndefined();
+    expect(table?.rows[0]?.cells[2]?.rowSpan).toBeUndefined();
+  });
+
+  it("supplies a block-less covered entry for every grid column a colspan reaches, and sizes the columns from the dense width", () => {
+    const table = parse(
+      '<table>\n<tr><td colspan="2">wide</td><td>x</td></tr>\n<tr><td>a</td><td>b</td><td>c</td></tr>\n</table>',
+    );
+    expect(table?.rows.map((row) => row.cells.map(describeCell))).toEqual([
+      ["wide|c2", "", "x"],
+      ["a", "b", "c"],
+    ]);
+    expect(table?.rows[0]?.cells[1]).toEqual({ blocks: [] });
+    expect(table?.columnWidthsPt).toEqual([
+      CONTENT_WIDTH_PT / 3,
+      CONTENT_WIDTH_PT / 3,
+      CONTENT_WIDTH_PT / 3,
+    ]);
+  });
+
+  it("places a covered entry at the column a rowspan consumes in the row below, and places that row's own cells after it", () => {
+    const table = parse(
+      '<table>\n<tr><td rowspan="2">tall</td><td>a</td></tr>\n<tr><td>b</td></tr>\n</table>',
+    );
+    expect(table?.rows.map((row) => row.cells.map(describeCell))).toEqual([
+      ["tall|r2", "a"],
+      ["", "b"],
+    ]);
+    expect(table?.rows[1]?.cells[0]).toEqual({ blocks: [] });
+  });
+
+  it("covers every position of a 2x2 merge except its anchor", () => {
+    const table = parse(
+      '<table>\n<tr><td colspan="2" rowspan="2">m</td><td>x</td></tr>\n<tr><td>y</td></tr>\n</table>',
+    );
+    expect(table?.rows.map((row) => row.cells.map(describeCell))).toEqual([
+      ["m|c2|r2", "", "x"],
+      ["", "", "y"],
+    ]);
+  });
+
+  it("takes the column count from the dense width when a later row is wider than the header, and a header rowspan consumes a column below it", () => {
+    const table = parse(
+      '<table>\n<tr><th rowspan="2">h</th></tr>\n<tr><td>a</td><td>b</td></tr>\n</table>',
+    );
+    expect(table?.rows.map((row) => row.cells.map(describeCell))).toEqual([
+      ["h|r2", "", ""],
+      ["", "a", "b"],
+    ]);
+    expect(table?.columnWidthsPt).toHaveLength(3);
+  });
+
+  it("sizes the columns from a header whose own colspan already exceeds every later row", () => {
+    const table = parse(
+      '<table>\n<tr><th colspan="3">h</th></tr>\n<tr><td>a</td></tr>\n</table>',
+    );
+    expect(table?.rows.map((row) => row.cells.map(describeCell))).toEqual([
+      ["h|c3", "", ""],
+      ["a", "", ""],
+    ]);
+    expect(table?.columnWidthsPt).toHaveLength(3);
   });
 
   it("ignores a non-positive or non-numeric colspan/rowspan rather than guessing", () => {
