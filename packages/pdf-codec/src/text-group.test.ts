@@ -667,6 +667,130 @@ describe("groupPdfTextRuns: rotated text", () => {
   });
 });
 
+describe("groupPdfTextRuns: vertical writing mode", () => {
+  // A column of upright glyphs running down the page: the glyphs are not turned on their side, so every run's own rotationDeg is 0, and only writingMode says the run advances downward. Each run below starts exactly where the one above it ended.
+  function vertical(
+    text: string,
+    xPt: number,
+    yPt: number,
+    widthPt: number,
+  ): PdfTextRunGeometry {
+    return { text, xPt, yPt, sizePt: 20, widthPt, writingMode: "vertical" };
+  }
+
+  it("groups a column's runs into one line", () => {
+    const [line] = groupPdfTextRuns([
+      vertical("あ", 200, 700, 20),
+      vertical("い", 200, 680, 20),
+      vertical("う", 200, 660, 20),
+    ]);
+    expect(line?.text).toBe("あいう");
+  });
+
+  it("reports the line as advancing down the page", () => {
+    const [line] = groupPdfTextRuns([vertical("あ", 200, 700, 20)]);
+    expect(line?.rotationDeg).toBe(270);
+    expect(line?.writingMode).toBe("vertical");
+  });
+
+  it("orders columns right to left, the way vertical text is read", () => {
+    const lines = groupPdfTextRuns([
+      vertical("left", 160, 700, 20),
+      vertical("right", 200, 700, 20),
+    ]);
+    expect(lines.map((line) => line.text)).toEqual(["right", "left"]);
+  });
+
+  it("keeps two columns apart", () => {
+    const lines = groupPdfTextRuns([
+      vertical("あ", 200, 700, 20),
+      vertical("い", 200, 680, 20),
+      vertical("か", 170, 700, 20),
+      vertical("き", 170, 680, 20),
+    ]);
+    expect(lines.map((line) => line.text)).toEqual(["あい", "かき"]);
+  });
+
+  it("never groups a vertical run with a horizontal one", () => {
+    const lines = groupPdfTextRuns([
+      vertical("あ", 200, 700, 20),
+      { text: "A", xPt: 200, yPt: 700, sizePt: 20, widthPt: 20 },
+    ]);
+    expect(lines).toHaveLength(2);
+  });
+
+  it("never groups a vertical run with a run turned to face the same way", () => {
+    // Both advance down the page, but one is a column of upright glyphs and the other a line of glyphs turned on their side. Nothing in the geometry lets one continue into the other.
+    const lines = groupPdfTextRuns([
+      vertical("あ", 200, 700, 20),
+      {
+        text: "A",
+        xPt: 200,
+        yPt: 700,
+        sizePt: 20,
+        widthPt: 20,
+        rotationDeg: 270,
+      },
+    ]);
+    expect(lines).toHaveLength(2);
+  });
+
+  it("reads a gap down the column as a separation", () => {
+    const [line] = groupPdfTextRuns([
+      vertical("あ", 200, 700, 20),
+      vertical("い", 200, 650, 20),
+    ]);
+    expect(line?.words[1]?.separatorBefore).toBe("column");
+  });
+
+  it("measures the gap between two runs down the column, not across the page", () => {
+    expect(
+      runGapPt(vertical("あ", 200, 700, 20), vertical("い", 200, 670, 20)),
+    ).toBeCloseTo(10, 6);
+  });
+
+  it("puts two runs at one column position on one baseline", () => {
+    expect(
+      runsShareBaseline(
+        vertical("あ", 200, 700, 20),
+        vertical("い", 200, 400, 20),
+      ),
+    ).toBe(true);
+  });
+
+  it("does not share a baseline between a vertical run and a horizontal one", () => {
+    expect(
+      runsShareBaseline(vertical("あ", 200, 700, 20), {
+        text: "A",
+        xPt: 200,
+        yPt: 700,
+        sizePt: 20,
+        widthPt: 20,
+      }),
+    ).toBe(false);
+  });
+
+  it("reports no gap between a vertical run and a horizontal one", () => {
+    expect(
+      runGapPt(vertical("あ", 200, 700, 20), {
+        text: "A",
+        xPt: 200,
+        yPt: 680,
+        sizePt: 20,
+        widthPt: 20,
+      }),
+    ).toBe(undefined);
+  });
+
+  it("measures a column's box down the page from its own top", () => {
+    const [line] = groupPdfTextRuns([
+      vertical("あ", 200, 700, 20),
+      vertical("い", 200, 680, 20),
+    ]);
+    expect(line?.bounds?.widthPt).toBeCloseTo(40, 6);
+  });
+});
+
 describe("groupPdfTextRuns: hyphenation, ligatures and zero-width characters", () => {
   it("leaves a word hyphenated across a line end split, hyphen intact", () => {
     const lines = groupPdfTextRuns([

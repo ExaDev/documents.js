@@ -13,7 +13,8 @@ export interface PdfTextRunGeometry {
   readonly yPt: number; // page-space baseline of that glyph
   readonly sizePt: number;
   readonly widthPt?: number; // advance along the baseline; absent means the producer did not state one, never zero
-  readonly rotationDeg?: number; // baseline direction, anticlockwise from the page's x-axis; absent means zero
+  readonly rotationDeg?: number; // how far the glyphs themselves are turned, anticlockwise from the page's x-axis; absent means zero
+  readonly writingMode?: "vertical"; // the run advances perpendicular to the direction its glyphs face, down a column rather than across a line; absent means horizontal
 }
 
 // A text box whose origin is page space and whose extents are measured in the line's own baseline frame: widthPt along the baseline, heightPt perpendicular to it, from the baseline upward. For an unrotated line (rotationDeg 0, the overwhelmingly common case) that is an ordinary axis-aligned page-space box. For a rotated one, a consumer that wants a page-space polygon rotates the box's own corners about (xPt, yPt) by the line's rotationDeg.
@@ -40,7 +41,9 @@ export interface PdfTextLine<TRun extends PdfTextRunGeometry> {
   readonly text: string;
   readonly words: readonly PdfTextWord<TRun>[];
   readonly baselineYPt: number; // the baseline of the run that opened the line, in the line's own frame (page-space y for an unrotated line)
-  readonly rotationDeg: number; // normalised into [0, 360)
+  // The direction this line ADVANCES in, normalised into [0, 360), which is the frame its own baselineYPt and bounds are measured in. For a vertically set line that is a quarter turn clockwise of the way its glyphs face, so an ordinary upright column reports 270 while every run on it reports a rotationDeg of 0.
+  readonly rotationDeg: number;
+  readonly writingMode?: "vertical"; // the line is a column of upright glyphs running down the page rather than a line running across it; absent means horizontal
   readonly bounds?: PdfTextBox; // present only when every run on the line stated an advance width
 }
 
@@ -71,8 +74,14 @@ interface Projected<TRun extends PdfTextRunGeometry> {
   readonly sizePt: number;
 }
 
-function normaliseRotationDeg(rotationDeg: number | undefined): number {
-  const raw = rotationDeg ?? 0;
+// A vertically set run advances a quarter turn clockwise of the way its glyphs face: upright glyphs, unrotated at 0 degrees, run down the page at 270.
+const VERTICAL_ADVANCE_OFFSET_DEG = -90;
+
+// The direction a run actually advances in, which is what grouping it into lines and words is about, as opposed to the direction its glyphs face. The two differ by a quarter turn for a vertically set run and not at all for every other run.
+function advanceAngleDeg(run: PdfTextRunGeometry): number {
+  const raw =
+    (run.rotationDeg ?? 0) +
+    (run.writingMode === "vertical" ? VERTICAL_ADVANCE_OFFSET_DEG : 0);
   const rounded = Math.round(raw / ROTATION_NOISE_DEG) * ROTATION_NOISE_DEG;
   return ((rounded % DEGREES_PER_TURN) + DEGREES_PER_TURN) % DEGREES_PER_TURN;
 }
@@ -126,8 +135,8 @@ export function runsShareBaseline(
   b: PdfTextRunGeometry,
   options: PdfTextGroupingOptions = {},
 ): boolean {
-  const rotationDeg = normaliseRotationDeg(a.rotationDeg);
-  if (rotationDeg !== normaliseRotationDeg(b.rotationDeg)) {
+  const rotationDeg = advanceAngleDeg(a);
+  if (rotationDeg !== advanceAngleDeg(b) || a.writingMode !== b.writingMode) {
     return false;
   }
   const toleranceEm =
@@ -150,8 +159,11 @@ export function runGapPt(
   previous: PdfTextRunGeometry,
   next: PdfTextRunGeometry,
 ): number | undefined {
-  const rotationDeg = normaliseRotationDeg(previous.rotationDeg);
-  if (rotationDeg !== normaliseRotationDeg(next.rotationDeg)) {
+  const rotationDeg = advanceAngleDeg(previous);
+  if (
+    rotationDeg !== advanceAngleDeg(next) ||
+    previous.writingMode !== next.writingMode
+  ) {
     return undefined;
   }
   const previousWidthPt = previous.widthPt;
@@ -346,6 +358,7 @@ function buildWords<TRun extends PdfTextRunGeometry>(
 function buildLine<TRun extends PdfTextRunGeometry>(
   line: WorkingLine<TRun>,
   rotationDeg: number,
+  vertical: boolean,
   wordGapEm: number,
   columnGapEm: number,
 ): PdfTextLine<TRun> {
@@ -371,6 +384,7 @@ function buildLine<TRun extends PdfTextRunGeometry>(
     words,
     baselineYPt: line.anchor.acrossPt,
     rotationDeg,
+    ...(vertical ? { writingMode: "vertical" as const } : {}),
     ...(measurable
       ? {
           bounds: boundsOf(
@@ -394,7 +408,7 @@ function buildLine<TRun extends PdfTextRunGeometry>(
  *
  * Grouping is by baseline alone, with no page segmentation: on a multi-column page whose columns are set at different vertical offsets, a line of one column can fall within tolerance of a line of the next and the two are reported as one line, because from geometry alone at this level that is what they are. The gutter between them still reads as a column boundary, so the separator says where to cut. A caller that needs the columns apart segments the page first, which is what document-outline.js's `segmentPdfRegions` is for, and groups each region's own runs.
  *
- * Known limitations, all of them inherent to what a PDF states rather than to this implementation. Text is reported in visual order, left to right along the baseline: a right-to-left script arrives from the content stream already laid out visually and carries no direction of its own, so a consumer needing logical order applies the Unicode Bidi Algorithm to the result. Vertical writing modes are not recognised, because this package's content interpreter does not read a CMap's WMode and so reports vertically set text with horizontal advances (ExaDev/documents.js#1358), which puts the positions beyond anything grouping could repair. A word hyphenated across a line end is left split, with its hyphen intact, because rejoining it needs to know the two lines belong to one paragraph, which is a semantic judgement this package deliberately leaves to its consumers. Runs with empty text are dropped, and so are the empty words a whitespace-only run would otherwise produce, but no other normalisation of the decoded text is attempted: a ligature and a zero-width character each reach the output exactly as the font's ToUnicode mapping spelled them.
+ * Known limitations, all of them inherent to what a PDF states rather than to this implementation. Text is reported in visual order, left to right along the baseline: a right-to-left script arrives from the content stream already laid out visually and carries no direction of its own, so a consumer needing logical order applies the Unicode Bidi Algorithm to the result. A vertically set run is grouped into columns rather than lines, from the writingMode its own reader reported, and its column is reported with a rotationDeg of 270 and its own writingMode; columns order right to left, the direction vertical setting is read in. What is NOT recognised is a predefined non-Identity CMap's own byte decoding, so a vertically set font using one (90ms-RKSJ-V and its siblings) still has its codes read as two-byte CIDs, which is this package's own long-standing composite-font limit rather than anything about writing mode. A word hyphenated across a line end is left split, with its hyphen intact, because rejoining it needs to know the two lines belong to one paragraph, which is a semantic judgement this package deliberately leaves to its consumers. Runs with empty text are dropped, and so are the empty words a whitespace-only run would otherwise produce, but no other normalisation of the decoded text is attempted: a ligature and a zero-width character each reach the output exactly as the font's ToUnicode mapping spelled them.
  * @param runs - positioned text runs, in any order
  * @param options - tolerance overrides; each defaults to the exported constant of the same name
  * @returns the grouped lines, in reading order
@@ -408,30 +422,47 @@ export function groupPdfTextRuns<TRun extends PdfTextRunGeometry>(
   const wordGapEm = options.wordGapEm ?? DEFAULT_WORD_GAP_EM;
   const columnGapEm = options.columnGapEm ?? DEFAULT_COLUMN_GAP_EM;
 
-  const byRotation = new Map<number, TRun[]>();
+  // Runs are grouped by the axis they advance along AND by whether they are set vertically, not by the axis alone: a column of upright glyphs running down the page and a line of glyphs turned on their side to run down the same page advance along one axis but are not the same text, and nothing about the geometry lets one continue into the other.
+  const buckets = new Map<
+    string,
+    { readonly rotationDeg: number; readonly vertical: boolean; runs: TRun[] }
+  >();
   for (const run of runs) {
     if (run.text.length === 0) {
       continue;
     }
-    const rotationDeg = normaliseRotationDeg(run.rotationDeg);
-    const bucket = byRotation.get(rotationDeg);
+    const rotationDeg = advanceAngleDeg(run);
+    const vertical = run.writingMode === "vertical";
+    const key = `${String(rotationDeg)}|${String(vertical)}`;
+    const bucket = buckets.get(key);
     if (bucket === undefined) {
-      byRotation.set(rotationDeg, [run]);
+      buckets.set(key, { rotationDeg, vertical, runs: [run] });
     } else {
-      bucket.push(run);
+      bucket.runs.push(run);
     }
   }
 
   const result: PdfTextLine<TRun>[] = [];
-  for (const rotationDeg of [...byRotation.keys()].sort((a, b) => a - b)) {
-    const bucket = byRotation.get(rotationDeg) ?? [];
-    const entries = bucket
-      .map((run) => project(run, rotationDeg))
-      // Down the page first (acrossPt decreases downward in every frame, since the perpendicular axis points away from the descender side), then along the baseline, so clustering meets a line's runs before any run of the line below it.
+  const ordered = [...buckets.values()].sort(
+    (a, b) =>
+      a.rotationDeg - b.rotationDeg || Number(a.vertical) - Number(b.vertical),
+  );
+  for (const bucket of ordered) {
+    const entries = bucket.runs
+      .map((run) => project(run, bucket.rotationDeg))
+      // Down the page first (acrossPt decreases downward in every frame, since the perpendicular axis points away from the descender side), then along the baseline, so clustering meets a line's runs before any run of the line below it. For a vertical column this orders the columns right to left, which is the reading order vertical setting is used for.
       .sort((a, b) => b.acrossPt - a.acrossPt || a.alongPt - b.alongPt);
     for (const line of clusterIntoLines(entries, toleranceEm)) {
       line.entries.sort((a, b) => a.alongPt - b.alongPt);
-      result.push(buildLine(line, rotationDeg, wordGapEm, columnGapEm));
+      result.push(
+        buildLine(
+          line,
+          bucket.rotationDeg,
+          bucket.vertical,
+          wordGapEm,
+          columnGapEm,
+        ),
+      );
     }
   }
   return result;

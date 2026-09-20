@@ -896,11 +896,14 @@ function buildTextOutlineFace(
   const subtype = asName(dictGet(fontDict, "Subtype"));
 
   if (subtype === "Type0") {
-    // The dominant embedded-font shape mainstream producers emit (and this package's own writer's): /Type0 + /Identity-H + /CIDFontType2 + /FontFile2, where CID == the 2-byte code and /CIDToGIDMap (usually /Identity) maps CID -> GID.
+    // The dominant embedded-font shape mainstream producers emit (and this package's own writer's): /Type0 + /Identity-H + /CIDFontType2 + /FontFile2, where CID == the 2-byte code and /CIDToGIDMap (usually /Identity) maps CID -> GID. Identity-V is the same identity mapping set vertically, so it decodes identically here and differs only in the axis drawTextRun advances the glyphs along.
     const encoding = resolver.resolve(dictGet(fontDict, "Encoding"));
-    if (encoding?.kind !== "name" || encoding.name !== "Identity-H") {
+    if (
+      encoding?.kind !== "name" ||
+      (encoding.name !== "Identity-H" && encoding.name !== "Identity-V")
+    ) {
       unavailable(
-        "a Type0 font whose /Encoding is not Identity-H (a predefined or embedded CMap this raster walk does not decode)",
+        "a Type0 font whose /Encoding is neither Identity-H nor Identity-V (a predefined or embedded CMap this raster walk does not decode)",
       );
       return;
     }
@@ -1045,6 +1048,9 @@ function drawTextRun(
   const placements: {
     readonly glyphId: number | undefined;
     readonly advance: number;
+    // This glyph's own position vector in glyph space, for a vertically set run. item.startMatrix already carries the FIRST glyph's, so what each later glyph needs is only the difference between the two: zero whenever the font gives every glyph one vector, and a real sideways shift on a column mixing full-width and half-width glyphs, whose default vectors are half their differing widths.
+    readonly positionX: number;
+    readonly positionY: number;
   }[] = [];
   let offset = 0;
   let cumulative = 0;
@@ -1056,14 +1062,17 @@ function drawTextRun(
       item.codes,
       offset,
     )!;
-    const widthPer1000 = advance.widthPer1000;
     const byteLength = advance.byteLengthConsumed;
     placements.push({
       glyphId: face.glyphIdOf(item.codes, offset),
       advance: cumulative,
+      positionX: (advance.vertical?.positionXPer1000 ?? 0) / 1000,
+      positionY: (advance.vertical?.positionYPer1000 ?? 0) / 1000,
     });
-    // The same user-space displacement the interpreter accumulates ((w/1000) x fontSize -- interpret.ts's own tx formula without the Tc/Tw/Tz terms this walk cannot see, which the end-matrix correction below absorbs). Pre-composing a translation onto startMatrix is associatively identical to pre-composing onto the text matrix it was built from, so glyph k's matrix here is glyph k's Trm there.
-    cumulative += (widthPer1000 / 1000) * item.sizePt;
+    // The same user-space displacement the interpreter accumulates (interpret.ts's own two displacement formulas without the Tc/Tw/Tz terms this walk cannot see, which the end-matrix correction below absorbs). Pre-composing a translation onto startMatrix is associatively identical to pre-composing onto the text matrix it was built from, so glyph k's matrix here is glyph k's Trm there. A vertically set run advances by the glyph's own w1y instead of its width, and downward, so the accumulated figure is negative and is measured along y below rather than x.
+    cumulative +=
+      ((advance.vertical?.displacementPer1000 ?? advance.widthPer1000) / 1000) *
+      item.sizePt;
     offset += byteLength;
   }
 
@@ -1076,9 +1085,13 @@ function drawTextRun(
     item.endMatrix,
     interpretToDeviceMatrix,
   );
+  const vertical = item.vertical === true;
   const startPoint = applyMatrix(startDeviceMatrix, { x: 0, y: 0 });
   const endPoint = applyMatrix(endDeviceMatrix, { x: 0, y: 0 });
-  const rawEndPoint = applyMatrix(startDeviceMatrix, { x: cumulative, y: 0 });
+  const rawEndPoint = applyMatrix(
+    startDeviceMatrix,
+    vertical ? { x: 0, y: cumulative } : { x: cumulative, y: 0 },
+  );
   const rawExtent = Math.hypot(
     rawEndPoint.x - startPoint.x,
     rawEndPoint.y - startPoint.y,
@@ -1087,9 +1100,10 @@ function drawTextRun(
     endPoint.x - startPoint.x,
     endPoint.y - startPoint.y,
   );
-  const correction =
-    rawExtent > 1e-9 && cumulative > 0 ? actualExtent / rawExtent : 1;
+  // No separate zero-advance guard beside the extent one: rawEndPoint is startMatrix applied to the accumulated advance, so an advance of zero puts it exactly on startPoint and rawExtent is zero already. Testing the advance's own sign as well would only wrongly disable the correction for a vertically set run, whose accumulated advance is negative by construction.
+  const correction = rawExtent > 1e-9 ? actualExtent / rawExtent : 1;
 
+  const firstPlacement = placements[0];
   const glyphScale = scaleMatrix(1 / face.unitsPerEm, 1 / face.unitsPerEm);
   for (const placement of placements) {
     if (placement.glyphId === undefined) {
@@ -1100,9 +1114,19 @@ function drawTextRun(
       continue; // an undecodable glyph: nothing to draw
     }
     // No separate outline.contours.length === 0 guard here: an empty glyph (a space) decodes to zero contours, and glyphOutlineSubpaths already turns zero contours into zero subpaths on its own (the same emptiness drawGlyphOutline's own subpaths.length === 0 check below catches), so a dedicated check for it here would only ever duplicate a skip that already happens one call downstream.
+    //
+    // Two translations rather than one because their units genuinely differ: the accumulated advance is in the interpreter's own nominal figure that `correction` rescales, while a position vector is already a fraction of an em, which the font matrix inside startMatrix scales on its own. Translations commute, so composing them separately costs nothing and keeps each one's units its own.
     const trm = multiplyMatrices(
-      translationMatrix(placement.advance * correction, 0),
-      item.startMatrix,
+      translationMatrix(
+        (firstPlacement?.positionX ?? 0) - placement.positionX,
+        (firstPlacement?.positionY ?? 0) - placement.positionY,
+      ),
+      multiplyMatrices(
+        vertical
+          ? translationMatrix(0, placement.advance * correction)
+          : translationMatrix(placement.advance * correction, 0),
+        item.startMatrix,
+      ),
     );
     const glyphMatrix = multiplyMatrices(
       glyphScale,

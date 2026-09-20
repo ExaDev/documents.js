@@ -34,6 +34,7 @@ export interface ExtractedTextRun {
   readonly actualText?: string; // a /ActualText marked-content property in scope: the producer's replacement reading for extraction
   readonly alt?: string; // a /Alt marked-content property in scope: the producer's alternate description
   readonly mcid?: number; // the /MCID of the innermost marked-content span in scope -- tagged PDF's handle for the (page, MCID) structure association read.ts resolves through /ParentTree
+  readonly vertical?: boolean; // the font's CMap selects writing mode 1, so this run advances DOWN the page: startMatrix and endMatrix differ in y rather than x, and both already carry the first glyph's position vector
 }
 
 // The paint a recovered shape carries, shared by every extracted item that can be filled and/or stroked. At least one of the two is always set: `n` (the clip-only, paints-nothing operator) never emits an item at all, and every other path-painting operator fills, strokes, or does both.
@@ -132,9 +133,17 @@ export type ExtractedItem =
   | ExtractedImage
   | ExtractedInlineImage;
 
+// A glyph's own vertical-writing metrics (ISO 32000-1 9.7.4.3), present only when the shown font's CMap selects writing mode 1. displacementPer1000 is w1y, normally negative because a vertical line runs down the page; positionXPer1000/positionYPer1000 are the position vector v, which says how far the glyph paints from the text position.
+export interface VerticalGlyphAdvance {
+  readonly displacementPer1000: number;
+  readonly positionXPer1000: number;
+  readonly positionYPer1000: number;
+}
+
 export interface GlyphAdvance {
   readonly widthPer1000: number; // 1000ths of text space, matching PDF's own /Widths convention
   readonly byteLengthConsumed: number; // 1 for a simple font's single-byte codes, 2 for an Identity-H composite font
+  readonly vertical?: VerticalGlyphAdvance; // absent for a horizontally set font, which is every simple font and every composite font whose CMap is horizontal
 }
 
 // interpret.ts knows nothing about font dictionaries, /ToUnicode CMaps, or embedded-font tables -- it only needs "how wide is the next glyph and how many bytes did it consume" to advance the text matrix correctly. font-read.ts implements this against a real PdfDocument; tests here use a fake.
@@ -145,6 +154,8 @@ export interface FontMetricsPort {
     codes: Uint8Array<ArrayBuffer>,
     byteOffset: number,
   ): GlyphAdvance | undefined;
+  // Whether this font is set vertically, asked independently of any one glyph because a TJ array's own positioning numbers move the text position along whichever axis the writing mode chooses and an array may begin with one before a single glyph has been shown.
+  isVertical(fontResourceName: string, resources: PdfDict): boolean;
 }
 
 // The minimal reference-resolution surface interpret.ts needs (looking up /XObject and /Font resources, and recursing into a resolved Form XObject) -- a structural subset of PdfDocument, not a dependency on document.ts itself.
@@ -862,14 +873,51 @@ function runContentStream(
       const widthPer1000 = glyph?.widthPer1000 ?? FALLBACK_GLYPH_WIDTH_PER_1000;
       const byteLength = glyph?.byteLengthConsumed ?? 1;
       const isSingleByteSpace = byteLength === 1 && codes[offset] === 0x20;
-      const tx =
-        ((widthPer1000 / 1000) * gs.fontSizePt +
-          gs.charSpace +
-          (isSingleByteSpace ? gs.wordSpace : 0)) *
-        gs.horizScale;
-      text.tm = multiplyMatrices(translationMatrix(tx, 0), text.tm);
+      const spacing = gs.charSpace + (isSingleByteSpace ? gs.wordSpace : 0);
+      // ISO 32000-1 9.4.4's own two displacement formulas. Horizontal advances by the glyph's width along x, scaled by Tz; vertical advances by the glyph's own w1y along y, which Tz does not touch since it scales horizontally only.
+      const vertical = glyph?.vertical;
+      text.tm =
+        vertical === undefined
+          ? multiplyMatrices(
+              translationMatrix(
+                ((widthPer1000 / 1000) * gs.fontSizePt + spacing) *
+                  gs.horizScale,
+                0,
+              ),
+              text.tm,
+            )
+          : multiplyMatrices(
+              translationMatrix(
+                0,
+                (vertical.displacementPer1000 / 1000) * gs.fontSizePt + spacing,
+              ),
+              text.tm,
+            );
       offset += byteLength;
     }
+  };
+
+  // The first glyph of `codes` as a translation in GLYPH space, the space a matrix pre-composed onto a text rendering matrix acts in: the font matrix inside that Trm is what turns these fractions of an em into points, supplying the font size and the horizontal scaling exactly as it does for a glyph's own outline coordinates.
+  const positionVectorOf = (
+    codes: Uint8Array<ArrayBuffer>,
+  ): { x: number; y: number } | undefined => {
+    const fontResourceName = gs.fontResourceName;
+    if (fontResourceName === undefined) {
+      return undefined;
+    }
+    const vertical = context.fontMetrics.glyphAdvance(
+      fontResourceName,
+      resources,
+      codes,
+      0,
+    )?.vertical;
+    if (vertical === undefined) {
+      return undefined;
+    }
+    return {
+      x: vertical.positionXPer1000 / 1000,
+      y: vertical.positionYPer1000 / 1000,
+    };
   };
 
   const showTextArray = (elements: readonly PdfObject[]): void => {
@@ -877,17 +925,31 @@ function runContentStream(
     if (fontResourceName === undefined) {
       return;
     }
+    const vertical = context.fontMetrics.isVertical(
+      fontResourceName,
+      resources,
+    );
     const startMatrix = computeTrm(gs, text);
     const chunks: Uint8Array<ArrayBuffer>[] = [];
     let totalLength = 0;
+    let firstGlyphPosition: { x: number; y: number } | undefined;
     for (const el of elements) {
       if (el.kind === "string") {
+        firstGlyphPosition ??= vertical
+          ? positionVectorOf(el.bytes)
+          : undefined;
         chunks.push(el.bytes);
         totalLength += el.bytes.length;
         advanceThroughString(el.bytes);
       } else if (el.kind === "number") {
-        const adjustment = -(el.value / 1000) * gs.fontSizePt * gs.horizScale;
-        text.tm = multiplyMatrices(translationMatrix(adjustment, 0), text.tm);
+        // ISO 32000-1 9.4.3: the adjustment is subtracted from whichever coordinate the writing mode advances along, and Tz scales the horizontal one only.
+        const adjustment = -(el.value / 1000) * gs.fontSizePt;
+        text.tm = multiplyMatrices(
+          vertical
+            ? translationMatrix(0, adjustment)
+            : translationMatrix(adjustment * gs.horizScale, 0),
+          text.tm,
+        );
       }
     }
     if (totalLength === 0) {
@@ -900,15 +962,25 @@ function runContentStream(
       at += chunk.length;
     }
     const endMatrix = computeTrm(gs, text);
+    // A vertically set run paints its glyphs offset from the text position by the position vector, so the run is reported where its ink actually is rather than where its column's spine runs. Both matrices take the FIRST glyph's vector, which keeps their difference (and so the run's reported advance) exactly the total displacement: the vector's y is one figure for the whole font in every real file, and its x only shifts the run sideways, across the axis the advance is measured along.
+    const shift =
+      firstGlyphPosition === undefined
+        ? undefined
+        : translationMatrix(-firstGlyphPosition.x, -firstGlyphPosition.y);
     pushItem({
       kind: "text",
       codes: combined,
       fontResourceName,
       resources,
-      startMatrix,
-      endMatrix,
+      startMatrix:
+        shift === undefined
+          ? startMatrix
+          : multiplyMatrices(shift, startMatrix),
+      endMatrix:
+        shift === undefined ? endMatrix : multiplyMatrices(shift, endMatrix),
       sizePt: gs.fontSizePt,
       color: gs.fillColor,
+      ...(vertical ? { vertical: true } : {}),
     });
   };
 
