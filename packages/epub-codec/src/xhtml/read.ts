@@ -1,10 +1,11 @@
+import { placeAnchorTableRows } from "document-schema.js";
 import type {
+  AnchorTableRow,
   ContentBlock,
   ContentListMembership,
   ContentParagraph,
   ContentRun,
   ContentTableCell,
-  ContentTableRow,
   RunConstructExtent,
   SourceResidue,
   TextDirection,
@@ -840,12 +841,14 @@ function flushDefinitionListStrayContent(
 }
 
 // The <table> content model per HTML5 is, in order: an optional <caption>, zero or more <colgroup>, an optional <thead>, either zero or more <tbody> or one or more bare <tr>, an optional <tfoot>, optionally intermixed with script-supporting elements -- so an inert element (isInertElement) sitting directly inside the <table> carries nothing document-schema.js's own vocabulary can represent and is silently skipped exactly like a <div>'s own class/id elsewhere in this file. A <colgroup> is legal here too, but is not skipped wholesale the same way: its own conforming content (<col>, and the same script-supporting elements) carries nothing to represent either, but anything else inside one -- a stray <p>, stray text, a stray <img> -- is not valid HTML5 and shares the identical malformed shape and identical most-likely producer intent as content sitting directly inside the <table> itself, so collectColgroupStrayContent below folds it into this very same strayNodes collection rather than the wholesale skip silently discarding it. Anything else that is not tr/thead/tbody/tfoot/caption/colgroup/inert -- a stray <p>, a stray <div>, stray text -- is not valid HTML5, but was previously dropped with zero diagnostics; it is now collected into strayNodes below and recovered through the same readContainerChildren dispatch as everything else this file recovers, reported via the TABLE_CONTENT_UNRECOGNIZED diagnostic further down (there is no separate flushTableStrayContent helper -- the collection and the recovery both live inline in this function) -- the real output order is the recovered stray content FIRST, then any caption paragraph(s), then the table itself (see this function's own closing `return`), mirroring the "recovered as ordinary content, positioned relative to the block it describes" convention this file already applies to a list's own before-the-first-item stray content -- a table's own rows fold into one indivisible ContentTable block, so there is no position WITHIN the table's own structure to reinsert interleaved stray content into without misrepresenting it as more than one table. A <thead>/<tbody>/<tfoot>'s own content model is narrower still: zero or more <tr> and script-supporting elements only, per the HTML Standard -- so any OTHER content sitting directly inside one of those row groups (a stray text node, a stray <p>, a stray <img>, an entire nested list) shares the identical malformed shape and is folded into this very same strayNodes collection by collectRowGroupRows below, exactly one level of nesting deeper than the table-direct case, rather than being silently dropped the way it once was.
+// HTML declares no table grid width of its own (a <colgroup> is not read), so the width placeAnchorTableRows produces follows from the placed cells alone.
+const NO_DECLARED_COLUMN_COUNT = 0;
+
 function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
   const captionElements = element.children.filter(
     (c): c is XmlElement => c.type === "element" && c.tag === "caption",
   );
-  const rows: ContentTableRow[] = [];
-  let columnCount = 0;
+  const anchorRows: AnchorTableRow[] = [];
   const strayNodes: XmlNode[] = [];
   for (const section of element.children) {
     if (section.type === "element" && section.tag === "caption") {
@@ -919,8 +922,7 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
         strayCellNodes.push(cellNode);
       }
       flushStrayCell();
-      columnCount = Math.max(columnCount, cells.length);
-      rows.push({ cells });
+      anchorRows.push({ cells });
     }
   }
   // No `strayNodes.length === 0` short-circuit is needed ahead of this call: readContainerChildren([], ...) is itself already a genuine no-op, so the length check immediately below already treats a genuinely empty strayNodes the same either way.
@@ -934,6 +936,9 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
       href: state.context.sourceHref,
     });
   }
+  // HTML states anchors only (a <td colspan rowspan> has no element for the positions it covers), so the grid rule wants the covered positions supplied here, and the grid width is whatever the placement produced: every row has the same dense length, so the first row's own length is the column count whichever rows carry spans.
+  const rows = placeAnchorTableRows(anchorRows, NO_DECLARED_COLUMN_COUNT);
+  const columnCount = rows[0]?.cells.length ?? 0;
   const width =
     columnCount > 0 ? state.contentWidthPt / columnCount : state.contentWidthPt;
   const table: ContentBlock = {

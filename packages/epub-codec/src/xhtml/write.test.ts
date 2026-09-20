@@ -45,6 +45,13 @@ function writeWithSink(
   return { xml, diagnostics };
 }
 
+// The number of cell tags in each <tr>, in document order.
+function cellTagCountsPerRow(markup: string): number[] {
+  return [...markup.matchAll(/<tr[^>]*>(.*?)<\/tr>/gs)].map(
+    (row) => (row[1] ?? "").split("<td").length - 1,
+  );
+}
+
 function roundTrip(blocks: ContentBlock[]): ContentBlock[] {
   const xml = write(blocks);
   return readXhtmlBody(xml, {
@@ -250,6 +257,7 @@ describe("writeXhtmlBody", () => {
                 blocks: [{ kind: "paragraph", runs: [{ text: "wide" }] }],
                 colSpan: 2,
               },
+              { blocks: [] },
             ],
           },
         ],
@@ -267,10 +275,11 @@ describe("writeXhtmlBody", () => {
                 blocks: [{ kind: "paragraph", runs: [{ text: "wide" }] }],
                 colSpan: 2,
               },
+              { blocks: [] },
             ],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columnWidthsPt: [CONTENT_WIDTH_PT / 2, CONTENT_WIDTH_PT / 2],
       },
     ]);
   });
@@ -294,6 +303,96 @@ describe("writeXhtmlBody", () => {
     ];
     const xml = write(blocks);
     expect(xml).toContain('rowspan="3"');
+  });
+
+  it("writes no cell tag for a covered entry of a colspan", () => {
+    const xml = write([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [{ kind: "paragraph", runs: [{ text: "wide" }] }],
+                colSpan: 2,
+              },
+              { blocks: [] },
+              { blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] },
+            ],
+          },
+        ],
+        columnWidthsPt: [100, 100, 100],
+      },
+    ]);
+    expect(cellTagCountsPerRow(xml)).toEqual([2]);
+    expect(xml).toContain('colspan="2"');
+  });
+
+  it("writes no cell tag in the row below for the position a rowspan covers", () => {
+    const xml = write([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [{ kind: "paragraph", runs: [{ text: "tall" }] }],
+                rowSpan: 2,
+              },
+              { blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] },
+            ],
+          },
+          {
+            cells: [
+              { blocks: [] },
+              { blocks: [{ kind: "paragraph", runs: [{ text: "b" }] }] },
+            ],
+          },
+        ],
+        columnWidthsPt: [100, 100],
+      },
+    ]);
+    expect(cellTagCountsPerRow(xml)).toEqual([2, 1]);
+    expect(xml).toContain('rowspan="2"');
+  });
+
+  it("writes one cell tag for a 2x2 merge, carrying both spans", () => {
+    const xml = write([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [{ kind: "paragraph", runs: [{ text: "m" }] }],
+                colSpan: 2,
+                rowSpan: 2,
+              },
+              { blocks: [] },
+            ],
+          },
+          { cells: [{ blocks: [] }, { blocks: [] }] },
+        ],
+        columnWidthsPt: [100, 100],
+      },
+    ]);
+    expect(cellTagCountsPerRow(xml)).toEqual([1, 0]);
+    expect(xml).toContain('colspan="2"');
+    expect(xml).toContain('rowspan="2"');
+  });
+
+  it("round-trips a merged HTML table with the same number of cell tags per row as the source", () => {
+    const source =
+      '<table><tr><td colspan="2" rowspan="2">m</td><td>x</td></tr><tr><td>y</td></tr><tr><td>a</td><td>b</td><td>c</td></tr></table>';
+    const blocks = readXhtmlBody(xhtmlDocument(source), {
+      resolveImage: () => undefined,
+      sink: () => undefined,
+      sourceHref: "chapter1.xhtml",
+      contentWidthPt: CONTENT_WIDTH_PT,
+    }).blocks;
+    const xml = write(blocks);
+    expect(cellTagCountsPerRow(xml)).toEqual(cellTagCountsPerRow(source));
+    expect(roundTrip(blocks)).toEqual(blocks);
   });
 
   it("never reports ELEMENT_UNMAPPED for an ordinary table cell carrying only real leaf blocks", () => {
