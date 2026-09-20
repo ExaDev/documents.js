@@ -251,14 +251,16 @@ Character properties this writer converts, the exact inverse of [What is convert
 
 This package hand-parses and hand-writes [MS-DOC] against its published field tables. It depends on no third-party `.doc` reader or writer, and its ESLint configuration bans several by name (`word-extractor`, `mammoth`, `textract`, the `cfb` package) so the decision is enforced rather than merely intended — the same bet `markdown-codec` makes against every markdown library and `pdf-codec` against `pdf-lib`.
 
-It depends on exactly two siblings: [`archive-codec`](../archive-codec/README.md) for the [MS-CFB] container — `readCompoundFile` on the read side, `writeCompoundFile` on the write side — and [`document-schema.js`](../document-schema.js/README.md) for the content pivot it reads into and writes from. It does not depend on `ooxml.js`, and `ooxml.js` does not depend on it: `.doc` and `.docx` are unrelated formats that happen to share an application, and the only thing they genuinely have in common is the `ContentDocument` both target.
+It depends on exactly three siblings, all of them foundation packages: [`archive-codec`](../archive-codec/README.md) for the [MS-CFB] container — `readCompoundFile` on the read side, `writeCompoundFile` on the write side — [`byte-codec`](../byte-codec/README.md) for the base64 an inline picture's payload rides into the content schema as, and [`document-schema.js`](../document-schema.js/README.md) for the content pivot it reads into and writes from. It does not depend on `ooxml.js`, and `ooxml.js` does not depend on it: `.doc` and `.docx` are unrelated formats that happen to share an application, and the only thing they genuinely have in common is the `ContentDocument` both target.
 
 ```mermaid
 graph TD
     archive("archive-codec")
+    bytes("byte-codec")
     schema("document-schema.js")
     doc("doc-codec")
     archive --> doc
+    bytes --> doc
     schema --> doc
     style doc fill:#f9a825,stroke:#333,stroke-width:3px
 ```
@@ -268,7 +270,6 @@ The modules layer in the order [MS-DOC]'s own algorithms chain:
 | Module                                           | What it does                                                                                                                                                                                                                                                                                                 |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `src/bytes.ts`                                   | Bounds-checked little-endian reads; every offset in the format is attacker-controlled data, so an over-read fails loudly.                                                                                                                                                                                    |
-| `src/base64.ts`                                  | Isomorphic base64 <-> `Uint8Array` conversion, shared by `pictures.ts` (encode) and `pictures-write.ts` (decode) for an inline picture's own raw file bytes.                                                                                                                                                 |
 | `src/plc.ts`                                     | The `PLC` container shape, whose element count is derived from its total size by [MS-DOC] 2.2.2's own formula, and the "largest key at most" lookup every algorithm phrases in those words.                                                                                                                  |
 | `src/fib/`                                       | The FIB's field offsets, derived by summing the declared field sizes, and the parse that reads the counts and offsets from them.                                                                                                                                                                             |
 | `src/text/piece-table.ts`                        | The `Clx` and its `PlcPcd`, and the character-position-to-byte-offset mapping.                                                                                                                                                                                                                               |
