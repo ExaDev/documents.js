@@ -1,6 +1,7 @@
 import type { Package } from "../../model/package";
 import { attr, childrenWithTag, rootElement } from "../util";
 import { readXmlBool } from "./util";
+import { workbookPartPath } from "./parts";
 
 // xlsx stores every date and time as a bare serial NUMBER in the cell's own <v> -- a day count plus a fraction-of-a-day -- with nothing in the cell itself saying it is temporal at all; that lives entirely in the number format its style points at (see typed/xlsx/number-format.ts). This module converts between one and the canonical ISO spellings document-schema.js's own ContentCellValue doc comment fixes for its three temporal variants ('date' is YYYY-MM-DD, 'time' is a 24-hour zero-padded HH:MM:SS wall-clock time of day, 'dateTime' is YYYY-MM-DDTHH:MM:SS), in both directions: serial -> ISO for typed/xlsx/content.ts's reader, ISO -> serial for typed/xlsx/build.ts's writer.
 
@@ -9,11 +10,9 @@ const MS_PER_HOUR = 3_600_000;
 const MS_PER_MINUTE = 60_000;
 const MS_PER_SECOND = 1000;
 
-const WORKBOOK_PATH = "xl/workbook.xml";
-
 // Which of the two epochs a workbook's serials are counted from: the 1900 system (the default, and what every mainstream producer writes -- this package's own kitchen-sink fixture carries an explicit date1904="false") or the 1904 system, historically the Macintosh Excel default and still legal to write. Getting this wrong shifts every date in the file by 1462 days, so it is read from the file rather than assumed.
 export function readDate1904(pkg: Package): boolean {
-  const workbook = rootElement(pkg.parts[WORKBOOK_PATH]);
+  const workbook = rootElement(pkg.parts[workbookPartPath(pkg)]);
   if (workbook === undefined) {
     return false;
   }

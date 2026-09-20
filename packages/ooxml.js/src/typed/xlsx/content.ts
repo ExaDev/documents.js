@@ -38,6 +38,7 @@ import type { SheetCellComment } from "./comments";
 import { readSheetCellComments } from "./comments";
 import { columnWidthCharsToPt, DEFAULT_ROW_HEIGHT_PT } from "./units";
 import { readXmlBool } from "./util";
+import { workbookPartPath } from "./parts";
 import { readDxfElements } from "./styles";
 import { readConditionalFormats } from "./conditional-format";
 import { readDataValidations } from "./data-validation";
@@ -48,7 +49,7 @@ import { readDataValidations } from "./data-validation";
 //
 // SCOPE, stated up front rather than only at each individual site below: (1) xlsx's own cell-type vocabulary (t="n"/absent, "s", "str", "inlineStr", "b", "e") has no percentage/currency/date variant the way ODF's office:value-type does -- those are all just numeric cells with a number-format style applied, so recovering them means resolving the cell's own style index through xl/styles.xml to a numFmt code and classifying that code. This reader does exactly that (typed/xlsx/styles.ts resolves, typed/xlsx/number-format.ts classifies, typed/xlsx/serial.ts converts a date/time serial to ISO), so a numeric cell reads as ContentCellValue's 'percentage'/'currency'/'date'/'time'/'dateTime' kind whenever its format genuinely says so, and 'number' otherwise. What that classifier is NOT is a FORMATTER: nothing here renders a value through a format code, which is why (2) below still holds. Only genuinely numeric cells are ever reclassified -- an s/str/inlineStr/b/e/d cell already carries its own type in the file and is never second-guessed by a style. (2) displayText has no native xlsx equivalent to read verbatim the way ODF's text:p content or a cached string gives readOds for free -- see deriveDisplayText below for exactly how this reader constructs one instead. (3) ContentSheetCellSchema's own `runs` field (genuinely mixed inline formatting within one cell) is never populated -- xlsx rich-text runs (<is>/<si>'s own nested <r><rPr>...) use a distinct font-property vocabulary from docx/pptx's own run styling, and resolving it would duplicate a meaningful slice of that machinery for a rarely-used feature not in this reader's own required field list; only the concatenated plain text (via deriveDisplayText) is read. The uniform per-cell font, by contrast, IS read (ContentSheetCell.font): a cell's xf resolves through <fonts> into the one font every cell of that format states, diffed against the workbook's own entry-0 default so only genuine differences survive (see contentFontOf in typed/xlsx/styles.ts). (4) The cell DECORATION fields (background/borders/alignment/verticalAlignment) ARE read now, resolved from the same cellXfs index the number format comes from: typed/xlsx/styles.ts's readCellStyles resolves each entry's fill bg colour, per-edge borders, and inline <alignment> straight off the <cellXfs><xf> the cell's own s attribute indexes, and readCell below copies whichever of them are present onto the ContentSheetCell -- mirroring how odf.js's readOds populates the same fields from a table:table-cell's style chain. Two genuine scope limits on that resolution live in styles.ts: a fill/border colour carried only as theme/indexed/tint/auto (not rgb) is left unread, and the dash-family border tokens (dashDot/dashDotDot/...) collapse to ContentStrokeStyle 'dashed' since the schema has no dash-dot member. (5) The cell COMMENT field IS read, from both mechanisms xlsx has ever used for comments -- legacy VML-anchored notes (xl/comments{N}.xml) and the Office-365 threaded-comments extension -- resolved through the worksheet part's own relationships into typed/xlsx/comments.ts, whose own header states the full shape decisions. Comments are read-only: buildXlsxPackageFromContent never writes a comment part, so a ContentDocument round-tripped through that pair keeps its cells and drops their annotations.
 
-const WORKBOOK_PATH = "xl/workbook.xml";
+// Resolved per call through typed/xlsx/parts.ts rather than named here: the workbook part is whatever the package root's officeDocument relationship points at.
 
 interface SheetEntry {
   name: string;
@@ -57,7 +58,8 @@ interface SheetEntry {
 
 // Sheet order and part paths come from xl/workbook.xml's own <sheets> list, resolved through xl/_rels/workbook.xml.rels -- the same "never trust filename order" precedent readPptxContent already established for p:sldIdLst (worksheets, like slides, carry no ordering guarantee in their own part names). Exported for typed/xlsx/definitions.ts, which needs the same order to resolve a table part's owning sheet name.
 export function resolveSheetEntries(pkg: Package): SheetEntry[] {
-  const workbook = rootElement(pkg.parts[WORKBOOK_PATH]);
+  const workbookPath = workbookPartPath(pkg);
+  const workbook = rootElement(pkg.parts[workbookPath]);
   if (workbook === undefined) {
     return [];
   }
@@ -65,7 +67,7 @@ export function resolveSheetEntries(pkg: Package): SheetEntry[] {
   if (sheetsEl === undefined) {
     return [];
   }
-  const rels = resolveRelationships(pkg, WORKBOOK_PATH);
+  const rels = resolveRelationships(pkg, workbookPath);
   const entries: SheetEntry[] = [];
   for (const sheet of childrenWithTag(sheetsEl, "sheet")) {
     const name = attr(sheet, "name");

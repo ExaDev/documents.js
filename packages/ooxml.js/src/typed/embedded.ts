@@ -15,10 +15,11 @@ import { readDocxContent } from "./docx/read";
 import { readPptxContent } from "./pptx/read";
 import { readXlsxContent } from "./xlsx/content";
 import { childrenWithTag, rootElement } from "./util";
+import { findMainPartPath } from "./opc";
 
-// The shared embedded-object decode: an OOXML package's OLE embeddings (pptx's p:oleObj/@r:id target part, docx's o:OLEObject/@r:id target part) hold either a whole nested OOXML package zipped into the part's bytes (every modern producer's spelling), or a classic OLE compound-file blob (.bin) whose root storage carries the real file as an OLE-packaged 'Package' stream. This module recovers both: payload shape distinguished by archive-codec's isZipArchive (a byte check, never a parse-and-catch) with the compound-file alternative left to readCompoundFile's own equivalent magic check inside the try below, a .bin unwrapped through archive-codec's CFB reader and OLE-package parser to the ZIP a modern embed packages, the ZIP bytes walked through archive-codec's guarded recursive walk (the bounded inflate -- see readEmbeddedOoxmlPayload's own comment) with the walk's root entries assembled into a nested Package, the flavour detected from the nested package's own entry part, and the matching typed reader run to produce the nested ContentDocument that ContentEmbeddedObject.document carries.
+// The shared embedded-object decode: an OOXML package's OLE embeddings (pptx's p:oleObj/@r:id target part, docx's o:OLEObject/@r:id target part) hold either a whole nested OOXML package zipped into the part's bytes (every modern producer's spelling), or a classic OLE compound-file blob (.bin) whose root storage carries the real file as an OLE-packaged 'Package' stream. This module recovers both: payload shape distinguished by archive-codec's isZipArchive (a byte check, never a parse-and-catch) with the compound-file alternative left to readCompoundFile's own equivalent magic check inside the try below, a .bin unwrapped through archive-codec's CFB reader and OLE-package parser to the ZIP a modern embed packages, the ZIP bytes walked through archive-codec's guarded recursive walk (the bounded inflate -- see readEmbeddedOoxmlPayload's own comment) with the walk's root entries assembled into a nested Package, the flavour detected from the nested package's own main part, and the matching typed reader run to produce the nested ContentDocument that ContentEmbeddedObject.document carries.
 //
-// Flavour detection is by entry-part path, not [Content_Types].xml overrides, for two reasons: the three entry paths are exactly what the readers themselves dispatch on (readDocxContent throws without word/document.xml, readSlidePathsInOrder reads ppt/presentation.xml, resolveSheetEntries reads xl/workbook.xml), so detection by the same paths -- plus the one further precondition a reader of the three has, readDocxContent's w:body (hasDocxBody below) -- guarantees the chosen reader's precondition already holds; and the macro-enabled variants (docm/pptm/xlsm) share these exact paths -- the macro payload is an extra vbaProject.bin part, not a different entry -- so they map onto the same three content kinds with no separate case.
+// Flavour detection resolves the nested package's own main part and reads its root element, not [Content_Types].xml overrides, for two reasons: resolving the main part is exactly what the three readers themselves do, so detection through the same resolver -- plus the one further precondition a reader of the three has, readDocxContent's w:body (hasDocxBody below) -- guarantees the chosen reader's precondition already holds; and the macro-enabled variants (docm/pptm/xlsm) open on the same three root elements -- the macro payload is an extra vbaProject.bin part, not a different entry -- so they map onto the same three content kinds with no separate case.
 //
 // This module imports all three format readers while pptx/read.ts and docx/read.ts both import this module back -- module cycles that are safe under one discipline: every cross-use is call-time only, both sides export hoisted function declarations, and nothing at module-evaluation time may read a cycle partner's bindings (a top-level const whose initialiser touched a partner would TDZ, because ESM initialises a cycle's modules in an order the import graph does not pin). odf.js's equivalent (typed/draw/embedded.ts) first broke its analogous cycle by moving dispatch into each calling format reader -- a split that only stood while odf's embedding edges all pointed one way -- and later inverted itself into this same central-dispatch shape once odt's own frame reading made odf's embedding symmetric too (a Writer document embeds a Calc sheet exactly as a Calc sheet embeds a Writer document), because symmetric embedding leaves no acyclic per-reader arrangement: per-reader dispatch would trade each reader's single edge to the dispatch module for direct docx-to-pptx reader edges that re-create the cycle. Injecting the dispatch through a read context instead would change the public readDocxContent/readPptxContent signatures, which construct their own contexts and stand alone.
 
@@ -40,28 +41,58 @@ export function hasDocxBody(root: XmlElement): boolean {
 
 const ENTRY_PARTS: readonly {
   readonly partPath: string;
+  readonly rootLocalName: string;
   readonly objectKind: EmbeddedOoxmlKind;
   readonly readerPrecondition?: (root: XmlElement) => boolean;
 }[] = [
   {
     partPath: "word/document.xml",
+    rootLocalName: "document",
     objectKind: "wordprocessing",
     readerPrecondition: hasDocxBody,
   },
-  { partPath: "ppt/presentation.xml", objectKind: "presentation" },
-  { partPath: "xl/workbook.xml", objectKind: "spreadsheet" },
+  {
+    partPath: "ppt/presentation.xml",
+    rootLocalName: "presentation",
+    objectKind: "presentation",
+  },
+  {
+    partPath: "xl/workbook.xml",
+    rootLocalName: "workbook",
+    objectKind: "spreadsheet",
+  },
 ];
 
-// A real OOXML package has exactly one main document part, so at most one entry part is ever present; a fixed probe order keeps detection deterministic even for a hand-built package that somehow carries two. A row only matches when its reader's own precondition holds too, so flavour detection genuinely guarantees the chosen reader's precondition already holds and the dispatch below cannot throw for precondition reasons.
+// The local part of an element's tag, with any namespace prefix dropped: "w:document" -> "document", "workbook" -> "workbook". Which prefix a producer binds a namespace to is its own choice, so the local name is the only part of a root element's tag that identifies the markup language it opens.
+function localNameOf(tag: string): string {
+  return tag.slice(tag.indexOf(":") + 1);
+}
+
+// A real OOXML package has exactly one main document part, so at most one row ever matches; a fixed probe order keeps detection deterministic even for a hand-built package that somehow carries two. A row only matches when its reader's own precondition holds too, so flavour detection genuinely guarantees the chosen reader's precondition already holds and the dispatch below cannot throw for precondition reasons.
+//
+// The main part is resolved the same way each of the three readers now resolves it -- from the package root's own officeDocument relationship -- and the flavour then comes from that one part's root element rather than from the name it happens to carry, so a nested package whose body sits at "word/document2.xml" is detected as readily as a conventionally named one (ExaDev/documents.js#1314). Only a nested package declaring no usable officeDocument relationship falls back to probing the three conventional entry paths.
 export function detectFlavour(nested: Package): EmbeddedOoxmlKind | undefined {
-  return ENTRY_PARTS.find((candidate) => {
-    const root = rootElement(nested.parts[candidate.partPath]);
-    return (
-      root !== undefined &&
-      (candidate.readerPrecondition === undefined ||
-        candidate.readerPrecondition(root))
-    );
-  })?.objectKind;
+  const mainPartPath = findMainPartPath(nested);
+  for (const candidate of ENTRY_PARTS) {
+    const root = rootElement(nested.parts[mainPartPath ?? candidate.partPath]);
+    if (root === undefined) {
+      continue;
+    }
+    if (
+      mainPartPath !== undefined &&
+      localNameOf(root.tag) !== candidate.rootLocalName
+    ) {
+      continue;
+    }
+    if (
+      candidate.readerPrecondition !== undefined &&
+      !candidate.readerPrecondition(root)
+    ) {
+      continue;
+    }
+    return candidate.objectKind;
+  }
+  return undefined;
 }
 
 // The root-level entries of a walk -- exactly the entry set unzipping the payload's own archive would produce, with everything the walk found nested INSIDE those entries (ZIP-in-ZIP parts) excluded: the nested package's readers see the payload as one flat archive, the same view parsePackage ever gave them. Root-entry duplicates collapse last-wins, matching unzipSync's own Record semantics.

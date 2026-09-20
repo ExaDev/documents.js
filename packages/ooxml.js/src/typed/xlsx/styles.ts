@@ -22,10 +22,11 @@ import type { XmlElement } from "../../model/node";
 import type { CellNumberFormat } from "./number-format";
 import { attr, childrenWithTag, decodeEntities, rootElement } from "../util";
 import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
+import { stylesPartPath } from "./parts";
 
 // Resolves xl/styles.xml for typed/xlsx/content.ts (read) and typed/xlsx/build.ts (write). The read side produces one entry per <cellXfs><xf> -- the array index IS the value of a cell's own s attribute -- carrying everything ContentSheetCellSchema models that lives in a cell format: the number-format CODE STRING (resolved through <numFmts>, classified by typed/xlsx/number-format.ts upstream), the cell DECORATION (background fill, per-edge borders, horizontal/vertical alignment), and the cell FONT (resolved through the xf's own fontId into <fonts>, diffed against that table's entry 0 -- see contentFontOf below). The write side is the same relationship in reverse: CellFormatTable interns the (number format, font, decoration) tuples a written workbook needs, ready to serialize as <numFmts>/<fonts>/<fills>/<borders>/<cellXfs>.
 
-const STYLES_PATH = "xl/styles.xml";
+// The styles part is resolved per call through typed/xlsx/parts.ts: the workbook names it through its own styles relationship, and xl/styles.xml is only the convention.
 
 // numFmtId 0, 'General' -- CT_Xf/@numFmtId's own schema default, so an <xf> with no numFmtId attribute at all is General, not "unformatted". Shared by both directions: what the reader falls back to for an undeclared id, and what the writer's own default cell format carries.
 export const GENERAL_NUM_FMT_ID = 0;
@@ -409,7 +410,7 @@ function readAlignment(xf: XmlElement): {
 
 // One entry per <cellXfs><xf>, in document order, so the array index IS the value of a cell's own s attribute. numberFormatCode is read directly off the cellXf's numFmtId (not chased through xfId into <cellStyleXfs>: real producers write the resolved numFmtId onto the cellXf itself -- see the note on readCellFormatCodes below -- and the same holds for fontId/fillId/borderId/alignment, which this reader also reads off the cellXf directly). fontId resolves through the <fonts> table and contentFontOf's diff against that table's entry 0; fillId/borderId resolve through the <fills>/<borders> tables; alignment is the inline <alignment> child. A cell whose xf carries applyAlignment="0" still reads its inline alignment here, matching the numFmtId policy and real producer output.
 export function readCellStyles(pkg: Package): readonly CellStyleEntry[] {
-  const styleSheet = rootElement(pkg.parts[STYLES_PATH]);
+  const styleSheet = rootElement(pkg.parts[stylesPartPath(pkg)]);
   if (styleSheet === undefined) {
     return [];
   }
@@ -461,7 +462,7 @@ export function readCellStyles(pkg: Package): readonly CellStyleEntry[] {
 
 // One raw <dxf> element per <dxfs><dxf>, in document order -- the array index IS a cfRule's own dxfId attribute. Unlike <cellXfs> (interned across every CELL a workbook has, decoration and number format both), a <dxfs> entry exists only to serve conditionalFormatting rules and carries a genuinely different shape (font/fill/alignment/border/numFmt/protection as full override elements, not indices into shared tables), so this is a thin positional list handed to typed/xlsx/conditional-format.ts to resolve into ContentSheetConditionalFormatStyle, not another decoration cascade of this module's own.
 export function readDxfElements(pkg: Package): readonly XmlElement[] {
-  const styleSheet = rootElement(pkg.parts[STYLES_PATH]);
+  const styleSheet = rootElement(pkg.parts[stylesPartPath(pkg)]);
   if (styleSheet === undefined) {
     return [];
   }
