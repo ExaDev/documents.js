@@ -195,6 +195,18 @@ export function readIssueTypes(response: unknown): ReadonlyMap<string, string> {
   return types;
 }
 
+/** What a failed `gh` call said: its own stderr when it has one, since the error message alone only names the command. */
+function describeFailure(error: unknown): string {
+  if (
+    isRecord(error) &&
+    typeof error.stderr === "string" &&
+    error.stderr !== ""
+  ) {
+    return error.stderr.trim();
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
 function ghClient(repository: string): GhClient {
   const gh = (args: readonly string[]): string =>
     execFileSync("gh", [...args, "--repo", repository], { encoding: "utf8" });
@@ -273,7 +285,7 @@ function ghClient(repository: string): GhClient {
         );
         return undefined;
       } catch (error) {
-        return error instanceof Error ? error.message : String(error);
+        return describeFailure(error);
       }
     },
     updateIssue(issue, body) {
