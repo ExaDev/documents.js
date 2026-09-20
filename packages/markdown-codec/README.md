@@ -25,6 +25,7 @@ graph TD
     schema --> mdcodec
     schema --> documents
     bytecodec --> pdfcodec
+    bytecodec --> mdcodec
     ooxml --> documents
     odf --> documents
     pdfcodec --> documents
@@ -143,7 +144,7 @@ Modelled on `pdf-codec`'s own layering, aimed at CommonMark+GFM instead of PDF:
 - **`src/block/`** — CommonMark block-structure algorithm (open-block stack, continuation matching): paragraphs, headings, code blocks, block quotes, lists (incl. GFM task-list-item), thematic breaks, link references, footnote definitions, GFM tables.
 - **`src/inline/`** — emphasis, code spans, links, autolinks, raw HTML, GFM strikethrough, footnote references, line breaks. `link.ts` and `footnote.ts` hold the label grammars the block phase shares.
 - **`src/html/`** — raw HTML recognition (bounded rules, not a general parser) plus `render.ts` (conformance oracle; internal only). `html-table.ts` is the one exception to "never parsed as markup": a block-level HTML that is, in full, one well-formed `<table>` recognises straight to a real `ContentTable` instead of opaque text — see [HTML-table fallback](#html-table-fallback).
-- **`src/image/`** — PNG/JPEG dimension reader and base64 codec, shared by `src/lower/` and `src/emit/`.
+- **`src/image/`** — PNG/JPEG dimension reader, shared by `src/lower/` and `src/emit/`. The base64 those paths encode and decode a `data:` URI's payload with comes from `byte-codec`.
 - **`src/shared/`** — string-shape conventions `src/lower`/`src/emit` agree on (`style-constants.ts`, `list-id.ts`'s opaque `numId`). Re-exported so `documents.js`'s `MarkdownEditor` reuses the identical grammar.
 - **`src/lower/`** — AST → `ContentDocument` lowering (thin adapter, not a second parser); top-of-file table maps each construct to its diagnostic gap.
 - **`src/emit/`** — `ContentDocument` → markdown text emission, the structural inverse of `src/lower`. `html-table.ts` is `src/html/html-table.ts`'s own write-side counterpart.
