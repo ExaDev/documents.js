@@ -1,3 +1,15 @@
+## [9.1.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%409.0.0...ooxml.js%409.1.0) (2026-09-20)
+
+### Features
+
+* **ooxml.js:** resolve a package's main part from its officeDocument relationship ([b23be37](https://github.com/ExaDev/documents.js/commit/b23be37b370375ee78b40122fa6cfc285dcd22ee))
+
+### Bug Fixes
+
+* **ooxml.js:** name the lossy xlsx reader's sheets from the resolved workbook part ([ad01140](https://github.com/ExaDev/documents.js/commit/ad0114052534331b7a6d36a0e23bdf52e55543ff)), references [#1314](https://github.com/ExaDev/documents.js/issues/1314)
+* **ooxml.js:** read the docx body from the part the package names, not word/document.xml ([a26c217](https://github.com/ExaDev/documents.js/commit/a26c217d9b9137a9feaf5a8a5c60307b861a1e1d)), references [#1314](https://github.com/ExaDev/documents.js/issues/1314)
+* **ooxml.js:** read the xlsx and pptx main part from the part the package names ([2a281a4](https://github.com/ExaDev/documents.js/commit/2a281a4649fbe630b1d2f038c4b1f690e0e74212)), references [#1314](https://github.com/ExaDev/documents.js/issues/1314)
+
 ## [9.0.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.14.11...ooxml.js%409.0.0) (2026-09-20)
 
 ### ⚠ BREAKING CHANGES

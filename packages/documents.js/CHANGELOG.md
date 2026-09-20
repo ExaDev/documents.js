@@ -1,3 +1,14 @@
+## [7.20.32](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.31...documents.js%407.20.32) (2026-09-20)
+
+### Bug Fixes
+
+* **documents.js:** resolve the OOXML main part through the package relationships ([5b6f5a9](https://github.com/ExaDev/documents.js/commit/5b6f5a9218db05115d3ece931146c47ff1edeac4)), references [#1314](https://github.com/ExaDev/documents.js/issues/1314)
+
+
+### Dependencies
+
+- Updated ooxml.js to 9.1.0
+
 ## [7.20.31](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.30...documents.js%407.20.31) (2026-09-20)
 
 
