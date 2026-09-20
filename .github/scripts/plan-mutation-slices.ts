@@ -5,6 +5,16 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+  LOCKFILE_PATH,
+  changedFilesSince,
+  changedImporters,
+  fileAtRef,
+  mutationInputs,
+  packagesAffectedByChanges,
+  readScopedPackage,
+  type ScopedPackage,
+} from "./mutation-scope.ts";
 
 /** The most a GitHub-hosted runner job may run for, from GitHub's workflow syntax reference for `jobs.<job_id>.timeout-minutes`. */
 export const GITHUB_JOB_LIMIT_MINUTES = 360;
@@ -17,6 +27,15 @@ export const COLD_FIXED_SECONDS = 240;
 
 /** Cold-run cost per mutable source line, in seconds. The smallest value for which the envelope through COLD_FIXED_SECONDS clears every measured cold sample. */
 export const COLD_SECONDS_PER_LINE = 0.55;
+
+/** How many standard GitHub-hosted Linux jobs one account may run at once, from GitHub's "Actions limits" reference (job concurrency limits, by plan). The account this repository belongs to is on the plan this figure is for, and every workflow of every repository in it draws on the same pool, including the required checks a merge waits on. */
+export const ACCOUNT_RUNNER_LIMIT = 20;
+
+/** The most of that pool mutation jobs may hold at once, all runs together. Kept well under half so the required checks always find runners: a mutation job is long and a check is short, so a pool that mutation could fill turns every queued check into a wait as long as a mutation job. */
+export const MUTATION_SHARE_OF_RUNNER_LIMIT = 0.4;
+
+/** How many pull-request mutation runs the pull-request half of the budget is divided between. Each pull request has a group of its own, so nothing enforces this: it is the number of pull requests expected to be running mutation at once, and the per-run ceiling follows from it. */
+export const EXPECTED_CONCURRENT_PULL_REQUEST_RUNS = 2;
 
 /** Runner set-up outside Stryker (checkout, install, cache restore), added to a job's timeout on top of its scaled estimate. */
 export const JOB_SETUP_MINUTES = 10;
@@ -172,28 +191,163 @@ export function packageMatrixEntries(
   }));
 }
 
+export type MutationEvent = "pull_request" | "schedule" | "workflow_dispatch";
+
+/** The `strategy.max-parallel` for one run. The mutation budget is split in half between pull-request runs and full-workspace runs; a scheduled run holds the whole full-run half (it runs when few other jobs do), a dispatched run, which someone starts during the working day, holds half of that, and a pull-request run holds its share of the pull-request half. Across all of them the total stays inside the mutation budget as long as the expected number of concurrent pull-request runs is not exceeded. */
+export function maxParallelFor(event: MutationEvent): number {
+  const budget = Math.floor(
+    ACCOUNT_RUNNER_LIMIT * MUTATION_SHARE_OF_RUNNER_LIMIT,
+  );
+  const half = Math.floor(budget / 2);
+  const byEvent: Record<MutationEvent, number> = {
+    schedule: half,
+    workflow_dispatch: Math.floor(half / 2),
+    pull_request: Math.floor(half / EXPECTED_CONCURRENT_PULL_REQUEST_RUNS),
+  };
+  return Math.max(1, byEvent[event]);
+}
+
+export interface PackagePlan {
+  readonly package: string;
+  readonly entries: readonly SliceMatrixEntry[];
+}
+
+/** Splits the planned packages into those a pull request runs automatically and those it leaves to a dispatched or scheduled run. A package planned as several slices costs hours cold, so it is not started by every pull request that touches it; the scheduled run gates it, and a dispatch names it on demand. Any other event runs every planned package. */
+export function partitionForEvent(
+  plans: readonly PackagePlan[],
+  event: MutationEvent,
+): {
+  readonly run: readonly PackagePlan[];
+  readonly deferred: readonly string[];
+} {
+  if (event !== "pull_request") return { run: plans, deferred: [] };
+  return {
+    run: plans.filter((plan) => plan.entries.length === 1),
+    deferred: plans
+      .filter((plan) => plan.entries.length > 1)
+      .map((plan) => plan.package),
+  };
+}
+
+/** The packages a dispatch named, or every package when it named none. Throws on a name that is not a workspace package, so a typo cannot quietly plan nothing. */
+export function selectRequested<T extends { readonly name: string }>(
+  packages: readonly T[],
+  requested: readonly string[],
+): readonly T[] {
+  if (requested.length === 0) return packages;
+  const known = new Set(packages.map((pkg) => pkg.name));
+  const unknown = requested.filter((name) => !known.has(name));
+  if (unknown.length > 0) {
+    throw new Error(
+      `not a workspace package with a mutation task: ${unknown.join(", ")}`,
+    );
+  }
+  return packages.filter((pkg) => requested.includes(pkg.name));
+}
+
 function setOutput(name: string, value: string): void {
   const outputFile = process.env.GITHUB_OUTPUT;
   if (!outputFile) return;
   appendFileSync(outputFile, `${name}=${value}\n`);
 }
 
+function isMutationEvent(value: string | undefined): value is MutationEvent {
+  return (
+    value === "pull_request" ||
+    value === "schedule" ||
+    value === "workflow_dispatch"
+  );
+}
+
+/** The workspace's packages with their direct workspace dependencies, for judging which a change can reach. */
+function workspaceScopedPackages(): readonly ScopedPackage[] {
+  const named = readdirSync("packages", { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => join("packages", entry.name))
+    .map((directory) => {
+      const manifest: unknown = JSON.parse(
+        readFileSync(join(directory, "package.json"), "utf8"),
+      );
+      const name =
+        typeof manifest === "object" && manifest !== null && "name" in manifest
+          ? manifest.name
+          : undefined;
+      if (typeof name !== "string") {
+        throw new Error(`${directory}/package.json has no name`);
+      }
+      return { name, directory };
+    });
+  const names = new Set(named.map((pkg) => pkg.name));
+  return named.map((pkg) => readScopedPackage(pkg.name, pkg.directory, names));
+}
+
+/** The packages a pull request's changes can move a mutation result for, out of those turbo reports as affected. */
+function pullRequestPackages(
+  affected: readonly AffectedPackage[],
+): readonly AffectedPackage[] {
+  const base = process.env.TURBO_SCM_BASE;
+  if (!base) throw new Error("a pull request plan needs TURBO_SCM_BASE");
+  const changedFiles = changedFilesSince(base);
+  const importers = changedFiles.includes(LOCKFILE_PATH)
+    ? changedImporters(
+        fileAtRef(base, LOCKFILE_PATH),
+        readFileSync(LOCKFILE_PATH, "utf8"),
+      )
+    : new Set<string>();
+  const inScope = new Set(
+    packagesAffectedByChanges({
+      packages: workspaceScopedPackages(),
+      changedFiles,
+      inputs: mutationInputs(readFileSync("turbo.json", "utf8")),
+      changedImporters: importers,
+    }).map((pkg) => pkg.name),
+  );
+  return affected.filter((pkg) => inScope.has(pkg.name));
+}
+
 function main(): void {
-  const turboArgs = process.argv.slice(2);
+  const event = process.env.MUTATION_EVENT;
+  if (!isMutationEvent(event)) {
+    throw new Error(`unsupported MUTATION_EVENT: ${String(event)}`);
+  }
+  const requested = (process.env.MUTATION_PACKAGES ?? "")
+    .split(/\s+/)
+    .filter((name) => name !== "");
   const dryRunOutput = execFileSync(
     "pnpm",
-    ["exec", "turbo", "run", "_test:mutation", "--dry-run=json", ...turboArgs],
+    [
+      "exec",
+      "turbo",
+      "run",
+      "_test:mutation",
+      "--dry-run=json",
+      ...process.argv.slice(2),
+    ],
     { encoding: "utf8" },
   );
   const affected = affectedMutationPackages(dryRunOutput);
-  const include = affected.flatMap((pkg) =>
-    packageMatrixEntries(pkg, packageSourceFiles(pkg.directory)),
-  );
+  const candidates =
+    event === "pull_request"
+      ? pullRequestPackages(affected)
+      : selectRequested(affected, requested);
+  const plans = candidates.map((pkg) => ({
+    package: pkg.name,
+    entries: packageMatrixEntries(pkg, packageSourceFiles(pkg.directory)),
+  }));
+  const { run, deferred } = partitionForEvent(plans, event);
+  const include = run.flatMap((plan) => plan.entries);
   console.log(
-    `${String(affected.length)} affected package(s) planned into ${String(include.length)} slice(s)`,
+    `${String(run.length)} package(s) planned into ${String(include.length)} slice(s), at most ${String(maxParallelFor(event))} at once`,
   );
+  if (deferred.length > 0) {
+    const notice = `Not started by this pull request because each is several slices and costs hours from a cold cache: ${deferred.join(", ")}. The scheduled run covers them, or start them for this branch with: gh workflow run mutation.yml --ref <branch> -f packages="${deferred.join(" ")}"`;
+    console.log(notice);
+    const summaryFile = process.env.GITHUB_STEP_SUMMARY;
+    if (summaryFile) appendFileSync(summaryFile, `${notice}\n`);
+  }
   setOutput("matrix", JSON.stringify({ include }));
-  setOutput("has-packages", affected.length > 0 ? "true" : "false");
+  setOutput("has-packages", include.length > 0 ? "true" : "false");
+  setOutput("max-parallel", String(maxParallelFor(event)));
 }
 
 if (
