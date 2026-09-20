@@ -136,6 +136,16 @@ describe("reconstructWordprocessing: baseline clustering and word gaps", () => {
     expect(texts).toEqual(["Quarterly", "Results"]);
   });
 
+  it("puts no space between runs separated by exactly the word-gap floor", () => {
+    // The floor is the point at which a gap stops being float noise from a sub-run split mid-word, so a gap sitting exactly on it is still noise: only a strictly wider one is a space.
+    const pg = page(612, 792, [
+      text({ text: "hel", xPt: 50, yPt: 700, widthPt: 30 }),
+      text({ text: "lo", xPt: 80.5, yPt: 700, widthPt: 20 }),
+    ]);
+    const paras = paragraphs(reconstructWordprocessing(docFrom([pg])));
+    expect(paras[0]?.runs.map((r) => r.text).join("")).toBe("hello");
+  });
+
   it("puts no space between runs whose advance widths were never stated", () => {
     // Three fragments of one word, each starting where the last visually ended. Reading the absent width as zero makes every advance look like a gap, so spaces land inside the word: "Com plete ly" (ExaDev/documents.js#1317).
     const withoutWidth = (content: string, xPt: number): LayoutText => ({
