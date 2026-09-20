@@ -1,11 +1,14 @@
-import type {
-  ContentBlock,
-  ContentBorder,
-  ContentCellBorders,
-  ContentCellFill,
-  ContentTable,
-  ContentTableCell,
-  ContentTableRow,
+import {
+  denseTableRows,
+  type ContentBlock,
+  type ContentBorder,
+  type ContentCellBorders,
+  type ContentCellFill,
+  type ContentTable,
+  type ContentTableCell,
+  type ContentTableRow,
+  type PositionedTableCell,
+  type PositionedTableRow,
 } from "document-schema.js";
 import { assertDefined, DocFormatError } from "../errors";
 import type { ParagraphEntry } from "../text/paragraphs";
@@ -485,6 +488,8 @@ function columnWidthsFromBoundaries(boundaries: readonly number[]): number[] {
 interface LogicalCell {
   readonly startGridIndex: number;
   readonly colSpan: number;
+  /** Whether the physical cell's own boundaries snap to a single canonical grid entry, so it covers no segment of the shared grid; `colSpan` still reads 1 for such a cell (see logicalCellsForRow), which is what later-row coverage checks rely on, but it owns no grid column of its own in the dense rows buildRows produces. */
+  readonly zeroWidth: boolean;
   readonly vertMerge: number;
   readonly borders: ContentCellBorders | undefined;
   readonly background: ContentCellFill | undefined;
@@ -531,6 +536,7 @@ function logicalCellsForRow(
     );
     logical.push({
       startGridIndex,
+      zeroWidth: endGridIndex <= startGridIndex,
       // A physical cell whose own boundaries snap to one canonical entry covers no segment of the shared grid at all. That is a legal cell, not corruption: [MS-DOC] 2.9.321 requires rgdxaCenter only to be "in non-decreasing order", so two adjacent entries may be equal (a genuine zero-width cell) or -- now that the union snaps -- within the tolerance of each other. ContentTableCell has no way to say "zero columns wide", so such a cell is carried with its content as an ordinary un-spanned cell, and the cell following it keeps its own start index rather than being displaced by a span this one never occupied.
       colSpan:
         endGridIndex > startGridIndex ? endGridIndex - startGridIndex : 1,
@@ -562,7 +568,51 @@ function vertMergeChainLastRow(
   return lastRow;
 }
 
-// Folds each row's LogicalCell list into the shared schema's own anchor-carries-the-span convention: a vertical-continuation cell is kept as its own `{blocks: []}` entry, mirroring ooxml.js's own docx table reader, which the shared schema's colSpan/rowSpan fields were designed to hold either format's cousin of. rowSpan is matched by each cell's own startGridIndex on the canonical grid, never a raw physical-array position, because two rows may genuinely have different physical cell counts (a horizontal merge in one row and not the other) and still need their vertical merges to line up correctly.
+// A physical cell that owns no grid column (LogicalCell.zeroWidth) cannot be given an entry of its own in a dense row, where every entry is one grid column, so its content moves into the cell beside it rather than being dropped: appended to the nearest preceding cell that owns a column, or, when it leads the row, prepended to the first following one. A row in which no cell owns a column has nowhere to move the content to and is returned as it stands.
+function absorbZeroWidthCells(row: readonly LogicalCell[]): LogicalCell[] {
+  const kept: LogicalCell[] = [];
+  let carried: ContentBlock[] = [];
+  for (const cell of row) {
+    if (!cell.zeroWidth) {
+      kept.push({ ...cell, blocks: [...carried, ...cell.blocks] });
+      carried = [];
+      continue;
+    }
+    const previous = kept.pop();
+    if (previous === undefined) {
+      carried = [...carried, ...cell.blocks];
+    } else {
+      kept.push({ ...previous, blocks: [...previous.blocks, ...cell.blocks] });
+    }
+  }
+  return kept.length > 0 ? kept : [...row];
+}
+
+// The one entry a logical cell states, positioned at its own start column: a vertical continuation is a covered entry holding no blocks and no span of its own (the anchor above carries both), and every other cell is the anchor of its region, whose rowSpan is however far its vertical-merge chain reaches. rowSpan is matched by each cell's own startGridIndex on the canonical grid, never a raw physical-array position, because two rows may genuinely have different physical cell counts (a horizontal merge in one row and not the other) and still need their vertical merges to line up correctly. A continuation's own decoration is deliberately dropped rather than carried: the merged region renders the anchor's, and the writer states none for a continuation either.
+function anchorEntryFor(
+  cell: LogicalCell,
+  rowIndex: number,
+  logicalRows: readonly (readonly LogicalCell[])[],
+): ContentTableCell {
+  if (cell.vertMerge === VERT_MERGE_CONTINUATION) {
+    return { blocks: [] };
+  }
+  const lastRowInChain = vertMergeChainLastRow(
+    logicalRows,
+    rowIndex,
+    cell.startGridIndex,
+  );
+  const rowSpan = lastRowInChain - rowIndex + 1;
+  return {
+    blocks: cell.blocks,
+    colSpan: cell.colSpan > 1 ? cell.colSpan : undefined,
+    rowSpan: rowSpan > 1 ? rowSpan : undefined,
+    background: cell.background,
+    borders: cell.borders,
+  };
+}
+
+// Folds each row's LogicalCell list into the shared schema's dense-row convention (ContentTableCell's grid rule): one entry per grid column, an anchor carrying colSpan/rowSpan at its top-left position and a block-less entry at every other position its region covers, horizontally and vertically alike. A horizontal merge is one wider physical cell in [MS-DOC], and a ragged row can be narrower than the table's shared grid: every position no physical cell states is a block-less entry that denseTableRows fills in, so every row has exactly one entry per column of columnWidthsPt.
 function buildRows(
   rawRows: readonly RawCell[][],
   rowDefinitions: readonly TableRowDefinition[],
@@ -583,30 +633,17 @@ function buildRows(
     );
   });
 
-  return logicalRows.map((row, rowIndex): ContentTableRow => {
-    const cells: ContentTableCell[] = [];
-    for (const cell of row) {
-      const colSpan = cell.colSpan > 1 ? cell.colSpan : undefined;
-      if (cell.vertMerge === VERT_MERGE_CONTINUATION) {
-        // A vertical continuation combined with a horizontal merge in the same row still carries its own colSpan, so a later write (whose own active-merge tracking otherwise trusts the anchor's span, never a continuation's own) still has it if this row is ever read back on its own. Its own decoration is deliberately dropped rather than carried: the merged region renders the anchor's, and a continuation cell is `{blocks: []}` by the shared schema's own convention -- giving it a background or borders would make it indistinguishable from a real, decorated, genuinely blank cell on the way back out.
-        cells.push({ blocks: [], colSpan });
-        continue;
-      }
-      const lastRowInChain = vertMergeChainLastRow(
-        logicalRows,
-        rowIndex,
-        cell.startGridIndex,
+  const positionedRows = logicalRows.map(
+    (row, rowIndex): PositionedTableRow => {
+      const cells = absorbZeroWidthCells(row).map(
+        (cell): PositionedTableCell => ({
+          columnIndex: cell.startGridIndex,
+          cell: anchorEntryFor(cell, rowIndex, logicalRows),
+        }),
       );
-      const rowSpan = lastRowInChain - rowIndex + 1;
-      cells.push({
-        blocks: cell.blocks,
-        colSpan,
-        rowSpan: rowSpan > 1 ? rowSpan : undefined,
-        background: cell.background,
-        borders: cell.borders,
-      });
-    }
-    const heightPt = rowHeights[rowIndex];
-    return heightPt !== undefined ? { cells, heightPt } : { cells };
-  });
+      const heightPt = rowHeights[rowIndex];
+      return heightPt !== undefined ? { cells, heightPt } : { cells };
+    },
+  );
+  return denseTableRows(positionedRows, canonicalBoundariesTwips.length - 1);
 }

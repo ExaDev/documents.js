@@ -92,6 +92,11 @@ function cellText(cell: ContentTableCell | undefined): string {
     .join(",");
 }
 
+/** `count` block-less entries: the positions a merged region covers besides its anchor, in a dense row (ContentTableCell's grid rule). */
+function coveredCells(count: number): ContentTableCell[] {
+  return Array.from({ length: count }, () => ({ blocks: [] }));
+}
+
 function paragraphAt(result: ContentDocument, index: number): ContentParagraph {
   const block = blocksOf(result)[index];
   if (block === undefined) throw new Error(`no block at index ${index}`);
@@ -1356,6 +1361,7 @@ describe("writeDocContent tables", () => {
           {
             cells: [
               { blocks: [paragraph([{ text: "wide" }])], colSpan: 2 },
+              ...coveredCells(1),
               { blocks: [paragraph([{ text: "narrow" }])] },
             ],
           },
@@ -1375,11 +1381,12 @@ describe("writeDocContent tables", () => {
       throw new Error("expected a table block");
     }
     expect(block.columnWidthsPt).toEqual([50, 50, 50]);
-    expect(block.rows[0]?.cells).toHaveLength(2);
+    expect(block.rows[0]?.cells).toHaveLength(3);
     expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(cellText(block.rows[0]?.cells[0])).toBe("wide");
-    expect(block.rows[0]?.cells[1]?.colSpan).toBeUndefined();
-    expect(cellText(block.rows[0]?.cells[1])).toBe("narrow");
+    expect(block.rows[0]?.cells[1]).toEqual({ blocks: [] });
+    expect(block.rows[0]?.cells[2]?.colSpan).toBeUndefined();
+    expect(cellText(block.rows[0]?.cells[2])).toBe("narrow");
     expect(block.rows[1]?.cells.map((cell) => cellText(cell))).toEqual([
       "A2",
       "B2",
@@ -1397,6 +1404,7 @@ describe("writeDocContent tables", () => {
           {
             cells: [
               { blocks: [paragraph([{ text: "wide" }])], colSpan: 2 },
+              ...coveredCells(1),
               { blocks: [paragraph([{ text: "narrow" }])] },
             ],
           },
@@ -1409,11 +1417,12 @@ describe("writeDocContent tables", () => {
       throw new Error("expected a table block");
     }
     expect(block.columnWidthsPt).toEqual([50, 50, 50]);
-    expect(block.rows[0]?.cells).toHaveLength(2);
+    expect(block.rows[0]?.cells).toHaveLength(3);
     expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(cellText(block.rows[0]?.cells[0])).toBe("wide");
-    expect(block.rows[0]?.cells[1]?.colSpan).toBeUndefined();
-    expect(cellText(block.rows[0]?.cells[1])).toBe("narrow");
+    expect(block.rows[0]?.cells[1]).toEqual({ blocks: [] });
+    expect(block.rows[0]?.cells[2]?.colSpan).toBeUndefined();
+    expect(cellText(block.rows[0]?.cells[2])).toBe("narrow");
   });
 
   it("recovers colSpan and columnWidthsPt when every row of a multi-row table merges across the identical boundary (ExaDev/documents.js#992)", () => {
@@ -1426,12 +1435,14 @@ describe("writeDocContent tables", () => {
           {
             cells: [
               { blocks: [paragraph([{ text: "R1-wide" }])], colSpan: 2 },
+              ...coveredCells(1),
               { blocks: [paragraph([{ text: "R1-narrow" }])] },
             ],
           },
           {
             cells: [
               { blocks: [paragraph([{ text: "R2-wide" }])], colSpan: 2 },
+              ...coveredCells(1),
               { blocks: [paragraph([{ text: "R2-narrow" }])] },
             ],
           },
@@ -1446,10 +1457,10 @@ describe("writeDocContent tables", () => {
     expect(block.columnWidthsPt).toEqual([50, 50, 50]);
     expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(cellText(block.rows[0]?.cells[0])).toBe("R1-wide");
-    expect(cellText(block.rows[0]?.cells[1])).toBe("R1-narrow");
+    expect(cellText(block.rows[0]?.cells[2])).toBe("R1-narrow");
     expect(block.rows[1]?.cells[0]?.colSpan).toBe(2);
     expect(cellText(block.rows[1]?.cells[0])).toBe("R2-wide");
-    expect(cellText(block.rows[1]?.cells[1])).toBe("R2-narrow");
+    expect(cellText(block.rows[1]?.cells[2])).toBe("R2-narrow");
   });
 
   it("recovers two adjacent lost boundaries inside a single colSpan-3 cell", () => {
@@ -1462,6 +1473,7 @@ describe("writeDocContent tables", () => {
           {
             cells: [
               { blocks: [paragraph([{ text: "wide" }])], colSpan: 3 },
+              ...coveredCells(2),
               { blocks: [paragraph([{ text: "narrow" }])] },
             ],
           },
@@ -1473,8 +1485,8 @@ describe("writeDocContent tables", () => {
     expect(block.columnWidthsPt).toEqual([50, 50, 50, 50]);
     expect(block.rows[0]?.cells[0]?.colSpan).toBe(3);
     expect(cellText(block.rows[0]?.cells[0])).toBe("wide");
-    expect(block.rows[0]?.cells[1]?.colSpan).toBeUndefined();
-    expect(cellText(block.rows[0]?.cells[1])).toBe("narrow");
+    expect(block.rows[0]?.cells[3]?.colSpan).toBeUndefined();
+    expect(cellText(block.rows[0]?.cells[3])).toBe("narrow");
   });
 
   it("recovers non-contiguous lost boundaries when a third row states the boundary in between two that stay lost", () => {
@@ -1487,19 +1499,23 @@ describe("writeDocContent tables", () => {
           {
             cells: [
               { blocks: [paragraph([{ text: "A-wide" }])], colSpan: 4 },
+              ...coveredCells(3),
               { blocks: [paragraph([{ text: "A-narrow" }])] },
             ],
           },
           {
             cells: [
               { blocks: [paragraph([{ text: "B-wide" }])], colSpan: 4 },
+              ...coveredCells(3),
               { blocks: [paragraph([{ text: "B-narrow" }])] },
             ],
           },
           {
             cells: [
               { blocks: [paragraph([{ text: "C-left" }])], colSpan: 2 },
+              ...coveredCells(1),
               { blocks: [paragraph([{ text: "C-right" }])], colSpan: 2 },
+              ...coveredCells(1),
               { blocks: [paragraph([{ text: "C-narrow" }])] },
             ],
           },
@@ -1515,8 +1531,8 @@ describe("writeDocContent tables", () => {
     expect(cellText(block.rows[1]?.cells[0])).toBe("B-wide");
     expect(block.rows[2]?.cells[0]?.colSpan).toBe(2);
     expect(cellText(block.rows[2]?.cells[0])).toBe("C-left");
-    expect(block.rows[2]?.cells[1]?.colSpan).toBe(2);
-    expect(cellText(block.rows[2]?.cells[1])).toBe("C-right");
+    expect(block.rows[2]?.cells[2]?.colSpan).toBe(2);
+    expect(cellText(block.rows[2]?.cells[2])).toBe("C-right");
   });
 
   it("keeps a cell's own background and borders on the content sub-cell after a lost-boundary split", () => {
@@ -1539,6 +1555,7 @@ describe("writeDocContent tables", () => {
                   right: { color: { r: 1, g: 0, b: 0 }, widthPt: 1 },
                 },
               },
+              ...coveredCells(1),
               { blocks: [paragraph([{ text: "narrow" }])] },
             ],
           },
@@ -1573,12 +1590,13 @@ describe("writeDocContent tables", () => {
                 colSpan: 3,
                 rowSpan: 2,
               },
+              ...coveredCells(2),
               { blocks: [paragraph([{ text: "top-right" }])] },
             ],
           },
           {
             cells: [
-              { blocks: [] },
+              ...coveredCells(3),
               { blocks: [paragraph([{ text: "bottom-right" }])] },
             ],
           },
@@ -1591,10 +1609,10 @@ describe("writeDocContent tables", () => {
     expect(block.rows[0]?.cells[0]?.colSpan).toBe(3);
     expect(block.rows[0]?.cells[0]?.rowSpan).toBe(2);
     expect(cellText(block.rows[0]?.cells[0])).toBe("anchor");
-    expect(cellText(block.rows[0]?.cells[1])).toBe("top-right");
-    expect(block.rows[1]?.cells[0]?.blocks).toEqual([]);
-    expect(block.rows[1]?.cells[0]?.colSpan).toBe(3);
-    expect(cellText(block.rows[1]?.cells[1])).toBe("bottom-right");
+    expect(cellText(block.rows[0]?.cells[3])).toBe("top-right");
+    expect(block.rows.map((row) => row.cells.length)).toEqual([4, 4]);
+    expect(block.rows[1]?.cells.slice(0, 3)).toEqual(coveredCells(3));
+    expect(cellText(block.rows[1]?.cells[3])).toBe("bottom-right");
   });
 
   it("writes an ordinary, fully unmerged 20-column table without the lost-boundary fallback touching it", () => {
@@ -1638,6 +1656,7 @@ describe("writeDocContent tables", () => {
           blocks: [paragraph([{ text: `row ${rowIndex}` }])],
           colSpan: columnCount,
         },
+        ...coveredCells(columnCount - 1),
       ],
     }));
     const input = document([{ kind: "table", columnWidthsPt, rows }]);
@@ -1645,7 +1664,7 @@ describe("writeDocContent tables", () => {
     const block = tableAt(result, 0);
     expect(block.columnWidthsPt).toHaveLength(columnCount);
     for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
-      expect(block.rows[rowIndex]?.cells).toHaveLength(1);
+      expect(block.rows[rowIndex]?.cells).toHaveLength(columnCount);
       expect(block.rows[rowIndex]?.cells[0]?.colSpan).toBe(columnCount);
       expect(cellText(block.rows[rowIndex]?.cells[0])).toBe(`row ${rowIndex}`);
     }
@@ -1662,6 +1681,7 @@ describe("writeDocContent tables", () => {
           blocks: [paragraph([{ text: `row ${rowIndex}` }])],
           colSpan: columnCount,
         },
+        ...coveredCells(columnCount - 1),
       ],
     }));
     const input = document([{ kind: "table", columnWidthsPt, rows }]);
@@ -1689,6 +1709,7 @@ describe("writeDocContent tables", () => {
           blocks: [paragraph([{ text: `row ${rowIndex}` }])],
           colSpan: columnCount,
         },
+        ...coveredCells(columnCount - 1),
       ],
     }));
     const input = document([{ kind: "table", columnWidthsPt, rows }]);
@@ -1732,6 +1753,7 @@ describe("writeDocContent tables", () => {
                   blocks: [paragraph([{ text: "wide" }])],
                   colSpan: columnCount,
                 },
+                ...coveredCells(columnCount - 1),
               ],
             },
           ],
@@ -1780,6 +1802,7 @@ describe("writeDocContent tables", () => {
                 blocks: [paragraph([{ text: "wide" }])],
                 colSpan: columnCount,
               },
+              ...coveredCells(columnCount - 1),
             ],
           },
         ],
@@ -1814,6 +1837,7 @@ describe("writeDocContent tables", () => {
           {
             cells: [
               { blocks: [paragraph([{ text: "wide" }])], colSpan: columnCount },
+              ...coveredCells(columnCount - 1),
             ],
           },
         ],
@@ -1832,6 +1856,7 @@ describe("writeDocContent tables", () => {
         {
           cells: [
             { blocks: [paragraph([{ text: "wide" }])], colSpan: columnCount },
+            ...coveredCells(columnCount - 1),
           ],
         },
       ],
@@ -1931,8 +1956,8 @@ describe("writeDocContent tables", () => {
     ]);
   });
 
-  it("treats a non-blank cell under an active vertical merge as ending it, never as a continuation", () => {
-    // The anchor's rowSpan of 2 would ordinarily cover row 1 too, but row 1's own cell at that column carries real content of its own -- placeCell's own continuation test requires the cell to be genuinely blank, not merely sitting where a merge is still active, so row 1 must read back as its own independent cell rather than the merge's silently-discarded continuation.
+  it("throws for a cell under a vertical merge that carries content of its own, rather than silently discarding it as a continuation's contents", () => {
+    // The anchor's rowSpan of 2 covers row 1's cell at the same column, and a merged region's content belongs to its anchor: a covered entry holding blocks of its own is a table that contradicts the grid rule, and writing it as a continuation would lose those blocks without a trace.
     const input = document([
       {
         kind: "table",
@@ -1953,11 +1978,112 @@ describe("writeDocContent tables", () => {
         ],
       },
     ]);
-    const result = roundTrip(input);
-    const block = tableAt(result, 0);
-    expect(cellText(block.rows[0]?.cells[0])).toBe("anchor");
-    // The core claim: row 1's own real content must survive, never silently discarded as a vertical-merge continuation's contents would be.
-    expect(cellText(block.rows[1]?.cells[0])).toBe("own content");
+    expect(() => writeDocContent(input)).toThrow(
+      "a table cell at row 1, column 0 lies inside the merged region anchored at row 0, column 0 but carries content of its own; a merged region's content belongs to its anchor",
+    );
+  });
+
+  it("throws for a cell under a horizontal merge that carries content of its own", () => {
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [50, 50, 50],
+        rows: [
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "wide" }])], colSpan: 2 },
+              { blocks: [paragraph([{ text: "hidden" }])] },
+              { blocks: [paragraph([{ text: "right" }])] },
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(() => writeDocContent(input)).toThrow(
+      "a table cell at row 0, column 1 lies inside the merged region anchored at row 0, column 0 but carries content of its own; a merged region's content belongs to its anchor",
+    );
+  });
+
+  it("writes a vertical continuation at the grid column of its anchor even when a colSpan anchor precedes the rowSpan anchor in the row", () => {
+    // Row 0 is [wide (cols 0-1), tall (col 2, two rows)]: in the dense form the wide anchor's covered entry sits at array position 1 and the rowSpan anchor at array position 2, so an implementation keyed on array position and one keyed on grid column agree here only by accident of the covered entry; row 1's continuation must land at grid column 2, after the two ordinary cells at columns 0 and 1.
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [50, 50, 50],
+        rows: [
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "wide" }])], colSpan: 2 },
+              ...coveredCells(1),
+              { blocks: [paragraph([{ text: "tall" }])], rowSpan: 2 },
+            ],
+          },
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "A1" }])] },
+              { blocks: [paragraph([{ text: "B1" }])] },
+              ...coveredCells(1),
+            ],
+          },
+        ],
+      },
+    ]);
+    const block = tableAt(roundTrip(input), 0);
+    expect(block.columnWidthsPt).toEqual([50, 50, 50]);
+    expect(block.rows.map((row) => row.cells.length)).toEqual([3, 3]);
+    expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
+    expect(block.rows[0]?.cells[2]?.rowSpan).toBe(2);
+    expect(cellText(block.rows[0]?.cells[2])).toBe("tall");
+    expect(block.rows[1]?.cells.map((cell) => cellText(cell))).toEqual([
+      "A1",
+      "B1",
+      "",
+    ]);
+    expect(block.rows[1]?.cells[2]).toEqual({ blocks: [] });
+  });
+
+  it("writes a vertical continuation one physical cell wide however many adjacent columns its anchor spans, apart from a neighbouring region's continuation", () => {
+    // Two rowSpan anchors side by side, the first two columns wide and the second one column wide: row 1 has three covered-from-above entries, which belong to two different anchors and so become two physical continuation cells (widths 2 and 1), not one of width 3 and not three of width 1. The decoded row mark states exactly two cells, both continuations.
+    const input: readonly ContentBlock[] = [
+      {
+        kind: "table",
+        columnWidthsPt: [20, 20, 20],
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [paragraph([{ text: "left" }])],
+                colSpan: 2,
+                rowSpan: 2,
+              },
+              ...coveredCells(1),
+              { blocks: [paragraph([{ text: "right" }])], rowSpan: 2 },
+            ],
+          },
+          { cells: [...coveredCells(3)] },
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "a" }])] },
+              { blocks: [paragraph([{ text: "b" }])] },
+              { blocks: [paragraph([{ text: "c" }])] },
+            ],
+          },
+        ],
+      },
+    ];
+    const paragraphs = flattenSectionBlocks(input, new DataStreamBuilder());
+    // Row 0: two physical cells (indices 0-1) then its row mark (index 2); row 1: two continuation cells (indices 3-4) then its row mark (index 5).
+    const continuationRowMark = paragraphs[5];
+    if (continuationRowMark === undefined) {
+      throw new Error("expected row 1's own row-mark paragraph at index 5");
+    }
+    const definition = applyTableSprms(
+      readGrpprl(new Uint8Array(continuationRowMark.extraGrpprl)),
+      {},
+    ).definition;
+    expect(definition?.cells).toHaveLength(2);
+    expect(definition?.columnBoundariesTwips).toEqual([0, 800, 1200]);
+    expect(definition?.cells.map((cell) => cell.vertMerge)).toEqual([1, 1]);
   });
 
   it("does not track a merge at all for an explicit rowSpan of 1, treating the next row's identical-column cell as wholly independent", () => {
@@ -2039,9 +2165,10 @@ describe("writeDocContent tables", () => {
                 colSpan: 3,
                 rowSpan: 2,
               },
+              ...coveredCells(2),
             ],
           },
-          { cells: [{ blocks: [] }] },
+          { cells: [...coveredCells(3)] },
         ],
       },
     ];
@@ -2135,6 +2262,7 @@ describe("writeDocContent tables", () => {
           {
             cells: [
               { blocks: [paragraph([{ text: "wide" }])], colSpan: 3 },
+              ...coveredCells(2),
               { blocks: [paragraph([{ text: "narrow" }])] },
             ],
           },
@@ -2157,7 +2285,10 @@ describe("writeDocContent tables", () => {
         columnWidthsPt: [50, 50],
         rows: [
           {
-            cells: [{ blocks: [paragraph([{ text: "wide" }])], colSpan: 3 }],
+            cells: [
+              { blocks: [paragraph([{ text: "wide" }])], colSpan: 3 },
+              ...coveredCells(1),
+            ],
           },
         ],
       },
@@ -2222,6 +2353,7 @@ describe("writeDocContent tables", () => {
                 blocks: [paragraph([{ text: "merged" }])],
                 colSpan: 2,
               },
+              ...coveredCells(1),
             ],
           },
         ],
@@ -2281,10 +2413,13 @@ describe("writeDocContent tables", () => {
         columnWidthsPt: Array.from({ length: pairCount * 2 }, () => 20),
         rows: [
           {
-            cells: Array.from({ length: pairCount }, (_unused, index) => ({
-              blocks: [paragraph([{ text: `c${index}` }])],
-              colSpan: 2,
-            })),
+            cells: Array.from({ length: pairCount }, (_unused, index) => [
+              {
+                blocks: [paragraph([{ text: `c${index}` }])],
+                colSpan: 2,
+              },
+              ...coveredCells(1),
+            ]).flat(),
           },
         ],
       },
@@ -2349,11 +2484,15 @@ describe("writeDocContent tables", () => {
                 colSpan: 2,
                 rowSpan: 2,
               },
+              ...coveredCells(1),
               { blocks: [paragraph([{ text: "C1" }])] },
             ],
           },
           {
-            cells: [{ blocks: [] }, { blocks: [paragraph([{ text: "C2" }])] }],
+            cells: [
+              ...coveredCells(2),
+              { blocks: [paragraph([{ text: "C2" }])] },
+            ],
           },
           // Neither row above ever states the boundary between the anchor's own 2 merged columns, since both merge across it identically -- a third, wholly unmerged row is what reveals the table genuinely has 3 columns here, so the lost-boundary fallback never triggers for this particular table (see this describe block's own "recovers colSpan and columnWidthsPt" tests for what the fallback does when no row reveals it at all).
           {
@@ -2375,12 +2514,11 @@ describe("writeDocContent tables", () => {
     expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(block.rows[0]?.cells[0]?.rowSpan).toBe(2);
     expect(cellText(block.rows[0]?.cells[0])).toBe("anchor");
-    expect(cellText(block.rows[0]?.cells[1])).toBe("C1");
-    // The row below carries one schema cell for the whole 2-wide vertical continuation, not two -- its own colSpan records the physical width it still covers.
-    expect(block.rows[1]?.cells).toHaveLength(2);
-    expect(block.rows[1]?.cells[0]?.blocks).toEqual([]);
-    expect(block.rows[1]?.cells[0]?.colSpan).toBe(2);
-    expect(cellText(block.rows[1]?.cells[1])).toBe("C2");
+    expect(cellText(block.rows[0]?.cells[2])).toBe("C1");
+    // Every row holds one entry per grid column: the row below states the 2-wide vertical continuation as two block-less entries, neither carrying a span of its own.
+    expect(block.rows[1]?.cells).toHaveLength(3);
+    expect(block.rows[1]?.cells.slice(0, 2)).toEqual(coveredCells(2));
+    expect(cellText(block.rows[1]?.cells[2])).toBe("C2");
     expect(block.rows[2]?.cells.map((cell) => cellText(cell))).toEqual([
       "A3",
       "B3",
