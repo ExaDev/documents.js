@@ -2,7 +2,7 @@ name: Mutation testing
 
 # Repo-wide, sliced, incrementally cached mutation testing via Stryker. Every package is gated on its own merged score against the break threshold recorded in its stryker.config.ts (derived by the rule documented on `thresholds.break` in stryker.shared.ts), and the mutation-result job at the bottom is the one stable check context that reports the outcome.
 #
-# Three kinds of run share this file, and what each gates differs. A pull request run covers the packages the change can move a mutation result for (mutation-scope.ts decides, from the `_test:mutation` inputs in turbo.json, the packages' dependency graph and the lockfile) and, of those, only the ones that plan into a single slice; a change that cannot alter any result, such as documentation, starts no mutation job. A scheduled run covers every package, and is the run that gates the large ones and gives main a completed result. A dispatched run covers every package, or the ones named in its `packages` input, on whatever ref it is started against, which is how a large package is measured for a branch before it merges. Nothing runs on a push to main, so a threshold is checked before a merge only for the packages a pull request runs, and for every other package on the next scheduled run.
+# Three kinds of run share this file, and what each gates differs. A pull request run covers the packages the change can move a mutation result for (mutation-scope.ts decides, from the `_test:mutation` inputs in turbo.json, the packages' dependency graph and the lockfile) and, of those, only the ones that plan into a single slice; a change that cannot alter any result, such as documentation, starts no mutation job. A scheduled run covers every package, and is the run that gates the large ones and gives main a completed result. A dispatched run covers every package, or the ones named in its `packages` input, on whatever ref it is started against, which is how a large package is measured for a branch before it merges. Nothing runs on a push to main, so a threshold is checked before a merge only for the packages a pull request runs, and for every other package on the next scheduled run. A scheduled or dispatched run on main that fails opens, or updates, the one issue titled "Mutation testing is failing on main", and closes it when a later run passes.
 #
 # Every run draws on one pool of runners that the whole account shares, the required checks included, so the parallelism of each kind of run is derived in plan-mutation-slices.ts from the account's documented concurrent-job limit rather than chosen here.
 
@@ -15,6 +15,10 @@ on:
     inputs:
       packages:
         description: Space-separated workspace package names to mutate. Empty means every package.
+        required: false
+        default: ""
+      tracking_issue_title:
+        description: Only for exercising the tracking issue from a branch. A title to manage instead of the real one, which only a run on main manages.
         required: false
         default: ""
 
@@ -166,13 +170,14 @@ jobs:
           # The matrix crosses into the script as data through the environment, not as text in the command line.
           MATRIX: ${{ needs.plan.outputs.matrix }}
         run: node --experimental-strip-types .github/scripts/gate-mutation-scores.ts mutation-reports "$MATRIX" "$RUNNER_TEMP/mutation-gate-result.json"
-      # A red scheduled or dispatched run on main must not go unnoticed, so one tracking issue is opened when it fails, updated in place while it keeps failing, and closed when a later run passes (report-mutation-outcome.ts). Pull requests and runs against other refs report through their own check and leave the issue alone.
+      # A red scheduled or dispatched run on main must not go unnoticed, so one tracking issue, titled "Mutation testing is failing on main", is opened when it fails, updated in place while it keeps failing, and closed when a later run passes (report-mutation-outcome.ts). It is found by that title rather than by number, since a new one is opened after one is closed. Only a run on main manages it: a run on any other ref manages nothing, or the test title it was given, and can never target the real one.
       - name: Keep the tracking issue in step with this run
-        if: always() && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         env:
           GH_TOKEN: ${{ github.token }}
           PLAN_RESULT: ${{ needs.plan.result }}
           SLICE_RESULT: ${{ needs.mutation-test.result }}
+          MUTATION_ISSUE_TITLE: ${{ inputs.tracking_issue_title }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: node --experimental-strip-types .github/scripts/report-mutation-outcome.ts "$RUNNER_TEMP/mutation-gate-result.json" "$RUN_URL"
       - name: Fail when the plan failed
