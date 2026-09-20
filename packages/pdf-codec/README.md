@@ -383,6 +383,18 @@ This package also published under the following alternate npm names from the pre
 
 **Republished automatically** — the alias's trusted publisher is registered against this repository and workflow (2026-09-10), so every release from the [backfill run](https://github.com/ExaDev/documents.js/actions/runs/34449796133) onward publishes under this name too; the registration evidence is on [ExaDev/documents.js#729](https://github.com/ExaDev/documents.js/issues/729).
 
+## Removed: base64 from `pdf-codec/util/base64`
+
+`bytesToBase64` and `base64ToBytes` were this package's own copy of helpers every codec in the family carried separately. They live in [`byte-codec`](../byte-codec/README.md) now, as one implementation ([ExaDev/documents.js#1282](https://github.com/ExaDev/documents.js/issues/1282)), so the module behind the `pdf-codec/util/base64` deep import is gone.
+
+Import from `byte-codec` directly:
+
+```ts
+import { base64ToBytes, bytesToBase64 } from "byte-codec";
+```
+
+Both names are also still on this package's own barrel, exactly as before, so `import { bytesToBase64 } from "pdf-codec"` is unaffected.
+
 ## License
 
 MIT
