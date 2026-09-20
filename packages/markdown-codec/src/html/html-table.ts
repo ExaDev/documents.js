@@ -24,37 +24,36 @@ interface HtmlElement {
   readonly inner: string;
 }
 
-// Where the element that opened at `openEnd` (just past its own opening tag's '>') closes, by depth-counting further opens/closes of any tag named in `tagNames` (case-insensitive) -- so a tag nested inside a DIFFERENT same-class element (a <table> nested inside a <td> that is itself inside a <tr>, or a <td> belonging to THAT nested table) is skipped over correctly by depth alone, without this parser ever needing to know which element a given tag "belongs to". Returns the matching close tag's own [start, end) span, or undefined for an unterminated element -- a shape this bounded recogniser refuses to guess about rather than silently truncating.
+// Where the element that opened at `openEnd` (just past its own opening tag's '>') closes, by depth-counting further opens/closes of any tag named in `tagNames` (case-insensitive) — so a tag nested inside a DIFFERENT same-class element (a <table> nested inside a <td> that is itself inside a <tr>, or a <td> belonging to THAT nested table) is skipped over correctly by depth alone, without this parser ever needing to know which element a given tag "belongs to". One alternation matches an opening and a closing tag together, so their relative order falls out of the single scan itself: the two can never begin at the same offset (the character after '<' is either '/' or the tag's own first letter, never both), so searching for each separately would only ever be re-deriving an ordering the scan already has. Returns the matching close tag's own [start, end) span, or undefined for an unterminated element — a shape this bounded recogniser refuses to guess about rather than silently truncating.
 function findBalancedClose(
   text: string,
   openEnd: number,
   tagNames: readonly string[],
 ): { readonly start: number; readonly end: number } | undefined {
   const names = tagNames.join("|");
-  const openPattern = new RegExp(`<(?:${names})(?=[\\s/>])`, "gi");
-  const closePattern = new RegExp(`</(?:${names})\\s*>`, "gi");
+  const tagPattern = new RegExp(
+    `</(?:${names})\\s*>|<(?:${names})(?=[\\s/>])`,
+    "gi",
+  );
   let depth = 1;
   let pos = openEnd;
-  while (depth > 0) {
-    openPattern.lastIndex = pos;
-    closePattern.lastIndex = pos;
-    const openMatch = openPattern.exec(text);
-    const closeMatch = closePattern.exec(text);
-    if (closeMatch === null) {
+  // Every way out of this scan is an explicit return: the depth only ever reaches zero through the decrement below, which returns on the spot, so there is no state in which the scan falls out of the loop with an element still open.
+  for (;;) {
+    tagPattern.lastIndex = pos;
+    const match = tagPattern.exec(text);
+    if (match === null) {
       return undefined;
     }
-    if (openMatch !== null && openMatch.index < closeMatch.index) {
+    pos = match.index + match[0].length;
+    if (!match[0].startsWith("</")) {
       depth += 1;
-      pos = openMatch.index + openMatch[0].length;
       continue;
     }
     depth -= 1;
-    pos = closeMatch.index + closeMatch[0].length;
     if (depth === 0) {
-      return { start: closeMatch.index, end: pos };
+      return { start: match.index, end: pos };
     }
   }
-  return undefined;
 }
 
 // Every top-level (not nested inside another same-class element) <tagName ...>...</tagName> in `text`, tolerating only whitespace between and around them -- any other stray content refuses the whole parse rather than guessing which parts to keep. `tagNames` lets td/th share one pass: a table cell is one or the other, and ContentTableRow never itself distinguishes them -- row position alone marks the header row (src/lower/table.ts's own top comment, mirrored on the write side by src/emit/html-table.ts).
@@ -74,7 +73,8 @@ function extractTopLevelElements(
     if (text.slice(pos, match.index).trim().length > 0) {
       return undefined;
     }
-    const attrs = match[1] ?? "";
+    // The attribute capture group is `([^>]*)`, an unconditional part of the pattern that can match empty but can never fail, so a successful match always carries it as a string.
+    const attrs = match[1]!;
     const openEnd = match.index + match[0].length;
     const close = findBalancedClose(text, openEnd, tagNames);
     if (close === undefined) {
@@ -218,7 +218,8 @@ function parseInlineHtml(text: string, style: RunStyle): ContentRun[] {
       return runs;
     }
     const tagName = match[1]!.toLowerCase();
-    const attrs = match[2] ?? "";
+    // Both capture groups are unconditional parts of INLINE_TAG_PATTERN, so a successful match always carries them as strings.
+    const attrs = match[2]!;
     const openEnd = pos + match.index + match[0].length;
     const close = findBalancedClose(text, openEnd, [tagName]);
     if (close === undefined) {
@@ -269,16 +270,13 @@ function parseCellBlocks(
   inner: string,
   contentWidthPt: number,
 ): ContentBlock[] {
-  const trimmed = inner.trim();
-  if (trimmed.length === 0) {
-    return [];
-  }
-  const nestedTable = parseWholeTable(trimmed, contentWidthPt);
+  const nestedTable = parseWholeTable(inner, contentWidthPt);
   if (nestedTable !== undefined) {
     return [nestedTable];
   }
   const blocks: ContentBlock[] = [];
-  for (const segment of trimmed.split(/<br\s*\/?>/i)) {
+  // No whole-cell trim ahead of this split: parseWholeTable above already tolerates surrounding whitespace on its own, and each segment below is trimmed individually, so a cell holding nothing but whitespace yields one empty segment that the skip below drops. That reaches the same empty block list a pre-trimmed empty string would have.
+  for (const segment of inner.split(/<br\s*\/?>/i)) {
     const piece = segment.trim();
     if (piece.length === 0) {
       continue;
@@ -379,14 +377,10 @@ function parseWholeTable(
     : buildContentTable(rows, contentWidthPt);
 }
 
-// The public entry point: an html_block's own literal source text (src/ast/ast.ts's MarkdownHtmlBlockNode.literal) -> a ContentTable, or undefined when it is not -- in full -- one well-formed <table> this bounded recogniser understands, in which case src/lower/lower.ts's own lowerHtmlBlock falls through to its existing opaque-preservation path exactly as it always has. `contentWidthPt` is the same section-wide content width src/lower/table.ts's own lowerTable already threads through for a plain GFM table (this package invents no page geometry of its own beyond that one shared default -- MarkdownDiagnosticCodes.INVENTED_PAGE_GEOMETRY).
+// The public entry point: an html_block's own literal source text (src/ast/ast.ts's MarkdownHtmlBlockNode.literal) -> a ContentTable, or undefined when it is not — in full — one well-formed <table> this bounded recogniser understands, in which case src/lower/lower.ts's own lowerHtmlBlock falls through to its existing opaque-preservation path exactly as it always has. parseWholeTable's own whole-text question (exactly one top-level <table> element, only surrounding whitespace tolerated around it) is already the complete acceptance test, so nothing is gained by a separate "does this even begin with <table" prefix guard ahead of it: any literal such a guard would turn away is one parseWholeTable itself refuses anyway, since whatever precedes the element's own opening tag is by definition stray non-whitespace content. `contentWidthPt` is the same section-wide content width src/lower/table.ts's own lowerTable already threads through for a plain GFM table (this package invents no page geometry of its own beyond that one shared default — MarkdownDiagnosticCodes.INVENTED_PAGE_GEOMETRY).
 export function parseHtmlTable(
   literal: string,
   contentWidthPt: number,
 ): ContentTable | undefined {
-  const trimmed = literal.trim();
-  if (!/^<table\b/i.test(trimmed)) {
-    return undefined;
-  }
-  return parseWholeTable(trimmed, contentWidthPt);
+  return parseWholeTable(literal, contentWidthPt);
 }
