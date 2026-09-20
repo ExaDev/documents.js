@@ -51,7 +51,7 @@ export function codePointBefore(text: string, index: number): string {
   if (index <= 0) {
     return "\n";
   }
-  // No separate "index >= 2" guard: index <= 0 has already returned above, leaving index === 1 as the only remaining case a missing guard could affect, and text.charCodeAt(-2) there is always NaN, which already fails the high-surrogate check below on its own -- an explicit index guard would only ever exclude a case that already excludes itself.
+  // No separate "index >= 2" guard: index <= 0 has already returned above, leaving index === 1 as the only remaining case a missing guard could affect, and text.charCodeAt(-2) there is always NaN, which already fails the high-surrogate check below on its own — an explicit index guard would only ever exclude a case that already excludes itself.
   const low = text.charCodeAt(index - 1);
   if (low >= 0xdc00 && low <= 0xdfff) {
     const high = text.charCodeAt(index - 2);
@@ -67,6 +67,6 @@ export function codePointAt(text: string, index: number): string {
   if (index >= text.length) {
     return "\n";
   }
-  // text.codePointAt only ever returns undefined for an out-of-range index, and the guard above has already ruled that out -- no further fallback needed for an index it can actually be called with here.
+  // text.codePointAt only ever returns undefined for an out-of-range index, and the guard above has already ruled that out — no further fallback needed for an index it can actually be called with here.
   return String.fromCodePoint(text.codePointAt(index)!);
 }

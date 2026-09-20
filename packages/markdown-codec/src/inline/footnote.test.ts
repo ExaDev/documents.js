@@ -26,7 +26,7 @@ describe("matchFootnoteDefinitionMarker", () => {
     });
   });
 
-  it("rejects a valid label marker with no following colon -- this is a reference, not a definition", () => {
+  it("rejects a valid label marker with no following colon — this is a reference, not a definition", () => {
     expect(
       matchFootnoteDefinitionMarker("[^abc] not a definition"),
     ).toBeUndefined();

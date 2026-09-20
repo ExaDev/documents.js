@@ -116,7 +116,7 @@ const SETEXT_LEVEL_1_CHAR = "=";
 const SETEXT_LEVEL_2_CHAR = "-";
 const MIN_SETEXT_UNDERLINE_LENGTH = 1;
 
-// String.prototype.split never returns an empty array for any input, even the empty string ("".split(x) === [""]) -- so a split result's own first line is always genuinely present. Returning a tuple type here, rather than a plain string[], lets every call site destructure or index its own first element directly: TypeScript already knows a tuple's fixed leading position is defined regardless of noUncheckedIndexedAccess, so no call site needs a dead "?? ''"/"= ''" fallback for a branch this invariant guarantees it can never actually take. The non-null assertion below is the one place that invariant is asserted, rather than repeated at every call site.
+// String.prototype.split never returns an empty array for any input, even the empty string ("".split(x) === [""]) — so a split result's own first line is always genuinely present. Returning a tuple type here, rather than a plain string[], lets every call site destructure or index its own first element directly: TypeScript already knows a tuple's fixed leading position is defined regardless of noUncheckedIndexedAccess, so no call site needs a dead "?? ''"/"= ''" fallback for a branch this invariant guarantees it can never actually take. The non-null assertion below is the one place that invariant is asserted, rather than repeated at every call site.
 function splitLines(
   text: string,
   pattern: string | RegExp,
@@ -185,7 +185,7 @@ function isQuotableStyle(styleId: string | undefined): boolean {
   );
 }
 
-// Whether a rendered block of this styleId closes itself unambiguously -- so a non-blank line immediately following it is always scanned by a reparse as a FRESH block rather than being absorbed backward into this one as ordinary continuation text. This is the "safe as PREVIOUS" half of requiresBlankLineBefore's compound check below, and unlike canInterruptOpenParagraph it does not depend on any emit option: a fenced code block and a math block each close at their own explicit closing delimiter, a thematic break and an ATX heading are each a single complete line, and a SETEXT heading's own underline line closes it exactly as definitively -- nothing can lazily continue a heading once its underline has been read, so the setext spelling is only unsafe on the OTHER side, as something that ITSELF follows an open paragraph (see canInterruptOpenParagraph). False for QUOTE_STYLE_ID (renders through the same prefix-free renderParagraphBody as a plain paragraph here, so carries no boundary of its own) and for HTML_PREFORMATTED_STYLE_ID (this package re-emits raw HTML as a bare literal with no record of which CommonMark HTML-block start condition produced it, and several of those seven conditions close only at a blank line -- with no closing condition of its own to fall back to, anything following without one keeps being read as more of the same literal HTML content) -- neither needs its own explicit branch, since neither matches any of the four positive checks below either, so both already fall out to false on their own.
+// Whether a rendered block of this styleId closes itself unambiguously — so a non-blank line immediately following it is always scanned by a reparse as a FRESH block rather than being absorbed backward into this one as ordinary continuation text. This is the "safe as PREVIOUS" half of requiresBlankLineBefore's compound check below, and unlike canInterruptOpenParagraph it does not depend on any emit option: a fenced code block and a math block each close at their own explicit closing delimiter, a thematic break and an ATX heading are each a single complete line, and a SETEXT heading's own underline line closes it exactly as definitively — nothing can lazily continue a heading once its underline has been read, so the setext spelling is only unsafe on the OTHER side, as something that ITSELF follows an open paragraph (see canInterruptOpenParagraph). False for QUOTE_STYLE_ID (renders through the same prefix-free renderParagraphBody as a plain paragraph here, so carries no boundary of its own) and for HTML_PREFORMATTED_STYLE_ID (this package re-emits raw HTML as a bare literal with no record of which CommonMark HTML-block start condition produced it, and several of those seven conditions close only at a blank line — with no closing condition of its own to fall back to, anything following without one keeps being read as more of the same literal HTML content) — neither needs its own explicit branch, since neither matches any of the four positive checks below either, so both already fall out to false on their own.
 function terminatesCleanly(styleId: string | undefined): boolean {
   return (
     styleId === CODE_BLOCK_STYLE_ID ||
@@ -207,7 +207,7 @@ function firstContentLineIndex(text: string): number {
     .findIndex((line) => !BLANK_OR_WHITESPACE_ONLY_LINE.test(line));
 }
 
-// Whether a line's own leading run of spaces and tabs reaches CommonMark's own 4-column indented-code-block threshold (spec 0.31.2, "Tabs": "in contexts where spaces help to define block structure, tabs behave as if they were replaced by spaces with a tab stop of 4 characters", counted from the start of the LINE, not the whole document). Shares MARKDOWN_TAB_STOP_WIDTH with src/scan/scan.ts's own MarkdownScanCursor so a tab's width agrees with the read side's parse of the very text this function is predicting the reparse of. The sole caller below only ever asks a >= CODE_INDENT_COLUMNS boundary question, never the exact column count beyond it, so this returns that boundary directly. Once the leading run of plain spaces ends, only the SINGLE character right after it can still change the answer: a tab there is always itself sufficient to reach the threshold (CODE_INDENT_COLUMNS <= MARKDOWN_TAB_STOP_WIDTH means expanding a tab from any column short of the threshold already lands exactly on it), and anything else stops the leading run outright -- so this needs no loop-exhausted fallback the way a step-by-step scan through every remaining character would: `line[column]` reads as `undefined` past the string's own end, which compares unequal to "\t" exactly as a real non-tab character would.
+// Whether a line's own leading run of spaces and tabs reaches CommonMark's own 4-column indented-code-block threshold (spec 0.31.2, "Tabs": "in contexts where spaces help to define block structure, tabs behave as if they were replaced by spaces with a tab stop of 4 characters", counted from the start of the LINE, not the whole document). Shares MARKDOWN_TAB_STOP_WIDTH with src/scan/scan.ts's own MarkdownScanCursor so a tab's width agrees with the read side's parse of the very text this function is predicting the reparse of. The sole caller below only ever asks a >= CODE_INDENT_COLUMNS boundary question, never the exact column count beyond it, so this returns that boundary directly. Once the leading run of plain spaces ends, only the SINGLE character right after it can still change the answer: a tab there is always itself sufficient to reach the threshold (CODE_INDENT_COLUMNS <= MARKDOWN_TAB_STOP_WIDTH means expanding a tab from any column short of the threshold already lands exactly on it), and anything else stops the leading run outright — so this needs no loop-exhausted fallback the way a step-by-step scan through every remaining character would: `line[column]` reads as `undefined` past the string's own end, which compares unequal to "\t" exactly as a real non-tab character would.
 function leadingIndentReachesCodeThreshold(line: string): boolean {
   let column = 0;
   // No separate `column < line.length` bound: `line[column]` running off the end reads as undefined, which compares unequal to " " exactly as a real non-space character does, so the leading run's own end is the only bound this needs.
@@ -355,7 +355,7 @@ function canInterruptOpenParagraph(
   context: EmitContext,
 ): boolean {
   const styleId = paragraph.styleId;
-  // Undefined needs its own early return purely so parseHeadingStyleId below gets a definite string -- QUOTE_STYLE_ID and HTML_PREFORMATTED_STYLE_ID need no explicit check of their own alongside it, since neither matches any of the positive branches below (parseHeadingStyleId included), so both already fall out to the final `return false` on their own.
+  // Undefined needs its own early return purely so parseHeadingStyleId below gets a definite string — QUOTE_STYLE_ID and HTML_PREFORMATTED_STYLE_ID need no explicit check of their own alongside it, since neither matches any of the positive branches below (parseHeadingStyleId included), so both already fall out to the final `return false` on their own.
   if (styleId === undefined) {
     return false;
   }
@@ -605,7 +605,7 @@ function toEmitItem(item: ListRegionItem): EmitItem {
   return item.kind === "paragraph" ? { block: item.block } : item.item;
 }
 
-// One item's first-block preparation: the checkbox text its marker line carries, and the SAME paragraph with any legacy checkbox glyph run already stripped out of it, when one was found. The membership's own checked field is the current spelling and needs no task-flagged numId behind it; the glyph sniff is gated on the numId's task flag AND on the first block actually being a paragraph (a construct has no runs of its own to sniff a glyph from), so an ordinary item whose text happens to begin with a ballot-box glyph is never misread as a checkbox. Doing the strip here, once, rather than returning a separate "please strip" boolean for listRegionItemBody to act on later, means no second site ever needs to re-derive from the run text whether stripping applies -- the one place that already found the glyph is the one place that removes it.
+// One item's first-block preparation: the checkbox text its marker line carries, and the SAME paragraph with any legacy checkbox glyph run already stripped out of it, when one was found. The membership's own checked field is the current spelling and needs no task-flagged numId behind it; the glyph sniff is gated on the numId's task flag AND on the first block actually being a paragraph (a construct has no runs of its own to sniff a glyph from), so an ordinary item whose text happens to begin with a ballot-box glyph is never misread as a checkbox. Doing the strip here, once, rather than returning a separate "please strip" boolean for listRegionItemBody to act on later, means no second site ever needs to re-derive from the run text whether stripping applies — the one place that already found the glyph is the one place that removes it.
 interface FirstBlockCheckbox {
   readonly checkboxText: string;
   readonly strippedFirstBlock: ContentParagraph | undefined;
@@ -726,7 +726,7 @@ function consumeSameItemRun(
   itemId: string,
 ): number {
   let end = from;
-  // No separate `end < items.length` bound: `items[end]` running off the end already returns undefined, which the very next check below catches and breaks on -- an explicit length comparison here would be redundant with that undefined check on every real input, never independently true or false.
+  // No separate `end < items.length` bound: `items[end]` running off the end already returns undefined, which the very next check below catches and breaks on — an explicit length comparison here would be redundant with that undefined check on every real input, never independently true or false.
   for (;;) {
     const candidate = items[end];
     if (candidate?.list.level !== level || candidate.list.itemId !== itemId) {
@@ -816,7 +816,7 @@ function lastStyleIdOfRegionItem(item: ListRegionItem): string | undefined {
   return lastStyleIdOf(toEmitItem(item));
 }
 
-// One list-region item's own rendered body, with no marker/indent applied yet. A plain paragraph renders through renderParagraphBody exactly as before (using `overrideParagraph` in place of the item's own block when the caller already prepared a checkbox-glyph-stripped version, per firstBlockCheckbox above); a construct renders through renderConstruct -- the SAME function renderItems reaches for a construct that is NOT part of any list region, so a construct's own markdown spelling never diverges depending on whether it happens to sit inside a list item, EXCEPT for context.enclosingItemId, set here for the duration of that one call: it is what lets renderItems' own recursive walk over the construct's children tell inherited pass-through membership (this exact item, see EmitContext's own field comment) apart from a genuinely fresh nested list.
+// One list-region item's own rendered body, with no marker/indent applied yet. A plain paragraph renders through renderParagraphBody exactly as before (using `overrideParagraph` in place of the item's own block when the caller already prepared a checkbox-glyph-stripped version, per firstBlockCheckbox above); a construct renders through renderConstruct — the SAME function renderItems reaches for a construct that is NOT part of any list region, so a construct's own markdown spelling never diverges depending on whether it happens to sit inside a list item, EXCEPT for context.enclosingItemId, set here for the duration of that one call: it is what lets renderItems' own recursive walk over the construct's children tell inherited pass-through membership (this exact item, see EmitContext's own field comment) apart from a genuinely fresh nested list.
 function listRegionItemBody(
   item: ListRegionItem,
   context: EmitContext,
@@ -866,7 +866,7 @@ function renderListRegion(
     const info = listInfoFor(numId, context);
     const loose = info?.loose === true;
     const type = info?.type ?? "bullet";
-    // A depth-only membership (numId undefined) always resolves through listInfoFor's OWN undefined-numId branch, which never returns real ListNumIdInfo -- so `type` above is always its own "bullet" default here, and `type === "ordered"` can never be true in this branch specifically; only the numId-carrying side ever sees a genuinely ordered type.
+    // A depth-only membership (numId undefined) always resolves through listInfoFor's OWN undefined-numId branch, which never returns real ListNumIdInfo — so `type` above is always its own "bullet" default here, and `type === "ordered"` can never be true in this branch specifically; only the numId-carrying side ever sees a genuinely ordered type.
     const glyph =
       numId === undefined
         ? context.bulletMarker
@@ -1053,7 +1053,7 @@ function renderConstruct(item: ConstructItem, context: EmitContext): string {
     });
     return body;
   }
-  // The blockquote spelling is gated on this package's own dual carry, not on the descriptor kind alone -- see isMaterialisedDivision above for exactly what that gate checks and why. A division whose paragraphs carry no such indent is a FOREIGN one -- an ODF text:section, a tagged-PDF /Sect -- and renders transparently below: a named section is not a markdown blockquote, and rendering it as one would invent a construct the source never had. No separate `descriptor.kind === "division"` guard here: isMaterialisedDivision's own first check already tests that, so a non-division descriptor is refused there regardless, making an outer duplicate of the same check redundant.
+  // The blockquote spelling is gated on this package's own dual carry, not on the descriptor kind alone — see isMaterialisedDivision above for exactly what that gate checks and why. A division whose paragraphs carry no such indent is a FOREIGN one — an ODF text:section, a tagged-PDF /Sect — and renders transparently below: a named section is not a markdown blockquote, and rendering it as one would invent a construct the source never had. No separate `descriptor.kind === "division"` guard here: isMaterialisedDivision's own first check already tests that, so a non-division descriptor is refused there regardless, making an outer duplicate of the same check redundant.
   if (isMaterialisedDivision(item)) {
     context.divisionDepth += 1;
     const body = renderItems(item.children, context);
@@ -1231,7 +1231,7 @@ function emitBlocks(
   return renderItems(groupConstructItems(blocks, 0).items, context);
 }
 
-// A paragraph's run-level construct extents must name real runs before anything renders them -- the run-level twin of the marker-balance check above, through document-schema.js's own findRunConstructFault so every codec and consumer agree on one definition of well-formed. Tables are walked into because a cell's block list holds its own paragraphs (and nothing else descends further: a table inside a table cell is not a shape GFM or this model produces). No separate `block.constructs !== undefined` guard here: findRunConstructFault already checks that itself and returns undefined immediately, so a paragraph with no constructs at all is exactly as safe to pass through unconditionally.
+// A paragraph's run-level construct extents must name real runs before anything renders them — the run-level twin of the marker-balance check above, through document-schema.js's own findRunConstructFault so every codec and consumer agree on one definition of well-formed. Tables are walked into because a cell's block list holds its own paragraphs (and nothing else descends further: a table inside a table cell is not a shape GFM or this model produces). No separate `block.constructs !== undefined` guard here: findRunConstructFault already checks that itself and returns undefined immediately, so a paragraph with no constructs at all is exactly as safe to pass through unconditionally.
 function validateRunConstructExtents(blocks: readonly ContentBlock[]): void {
   for (const block of blocks) {
     if (block.kind === "paragraph") {

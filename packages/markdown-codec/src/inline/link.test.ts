@@ -123,7 +123,7 @@ describe("skipInlineWhitespace", () => {
 });
 
 describe("isBlankRemainderOfLine", () => {
-  it("is true at the very end of the text -- vacuously blank, nothing left to disqualify it", () => {
+  it("is true at the very end of the text — vacuously blank, nothing left to disqualify it", () => {
     expect(isBlankRemainderOfLine("", 0)).toBe(true);
   });
 
