@@ -1,6 +1,6 @@
 import { render } from "ink-testing-library";
 import { useEffect, type ReactElement } from "react";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AppStateProvider,
   useAppDispatch,
@@ -13,9 +13,31 @@ import {
   TRANSIENT_STATUS_TTL_MS,
 } from "./status-line.js";
 
-// Real time, not faked: vi.useFakeTimers left the expiry effect's own setTimeout unadvanced in this Ink render harness even with shouldAdvanceTime set, so these tests wait out the real TTL instead. The buffer over the TTL is generous because this machine's own real timers can lag well behind their nominal delay under heavy concurrent CPU load; the per-test timeout below is set even higher again so vitest's own default 5000ms test timeout can never race this wait.
-const TTL_WAIT_MS = TRANSIENT_STATUS_TTL_MS + 15000;
-const TTL_TEST_TIMEOUT_MS = TTL_WAIT_MS + 5000;
+// How far fake time moves per poll below. Fine enough that a frame is observed close to the timeout that produced it, coarse enough that crossing the TTL takes a small number of iterations rather than hundreds.
+const ADVANCE_STEP_MS = 50;
+// Enough fake time for the expiry timeout to fire with room to spare, derived from the TTL itself rather than picked.
+const ADVANCE_BUDGET_MS = TRANSIENT_STATUS_TTL_MS * 2;
+
+// The fake-timer counterpart to test-support's waitForFrame, kept local because it is the only place in this suite that drives a component's own scheduled timeout rather than waiting on effect flushing alone. Polling for the same reason waitForFrame polls (the number of scheduler ticks between a timeout firing and its state update reaching lastFrame is a React and Ink implementation detail), but each step advances FAKE time, so crossing a multi-second TTL costs nothing on the wall clock and cannot lose a race against a loaded machine. advanceTimersByTimeAsync is what makes that work: it flushes microtasks between timers, which is how the dispatch a fired timeout performs gets rendered before the next poll reads the frame.
+async function advanceToFrame(
+  getFrame: () => string | undefined,
+  predicate: (frame: string) => boolean,
+): Promise<void> {
+  for (
+    let elapsed = 0;
+    elapsed <= ADVANCE_BUDGET_MS;
+    elapsed += ADVANCE_STEP_MS
+  ) {
+    const frame = getFrame();
+    if (frame !== undefined && predicate(frame)) {
+      return;
+    }
+    await vi.advanceTimersByTimeAsync(ADVANCE_STEP_MS);
+  }
+  throw new Error(
+    `Fake time advanced ${ADVANCE_BUDGET_MS}ms without a frame matching the predicate. Last frame:\n${getFrame() ?? "(no frame rendered yet)"}`,
+  );
+}
 
 describe("statusColour", () => {
   it("maps each severity to its own distinct colour", () => {
@@ -185,74 +207,72 @@ describe("StatusLine rendering", () => {
   });
 });
 
+// Fake timers for this block alone: these are the only tests whose subject is a scheduled timeout rather than effect flushing, and the rest of the file's waitForFrame polling needs real ones to make progress.
 describe("StatusLine transient status expiry", () => {
-  it(
-    "clears an info status automatically once its TTL elapses",
-    async () => {
-      function TransientHarness(): ReactElement {
-        const state = useAppState();
-        const dispatch = useAppDispatch();
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
 
-        useEffect(() => {
-          if (state.status === undefined) {
-            dispatch({ type: "SET_STATUS", severity: "info", text: "Saved" });
-          }
-        }, [state.status, dispatch]);
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
-        return <StatusLine />;
-      }
+  it("clears an info status automatically once its TTL elapses", async () => {
+    function TransientHarness(): ReactElement {
+      const state = useAppState();
+      const dispatch = useAppDispatch();
 
-      const { lastFrame } = render(
-        <AppStateProvider>
-          <TransientHarness />
-        </AppStateProvider>,
-      );
-      await waitForFrame(lastFrame, (candidate) => candidate.includes("Saved"));
+      useEffect(() => {
+        if (state.status === undefined) {
+          dispatch({ type: "SET_STATUS", severity: "info", text: "Saved" });
+        }
+      }, [state.status, dispatch]);
 
-      await waitForFrame(
-        lastFrame,
-        (candidate) => !candidate.includes("Saved"),
-        TTL_WAIT_MS,
-      );
-    },
-    TTL_TEST_TIMEOUT_MS,
-  );
+      return <StatusLine />;
+    }
 
-  it(
-    "never auto-clears an error status",
-    async () => {
-      function ErrorHarness(): ReactElement {
-        const state = useAppState();
-        const dispatch = useAppDispatch();
+    const { lastFrame } = render(
+      <AppStateProvider>
+        <TransientHarness />
+      </AppStateProvider>,
+    );
+    await advanceToFrame(lastFrame, (candidate) => candidate.includes("Saved"));
 
-        useEffect(() => {
-          if (state.status === undefined) {
-            dispatch({
-              type: "SET_STATUS",
-              severity: "error",
-              text: "Could not save",
-            });
-          }
-        }, [state.status, dispatch]);
+    await advanceToFrame(
+      lastFrame,
+      (candidate) => !candidate.includes("Saved"),
+    );
+  });
 
-        return <StatusLine />;
-      }
+  it("never auto-clears an error status", async () => {
+    function ErrorHarness(): ReactElement {
+      const state = useAppState();
+      const dispatch = useAppDispatch();
 
-      const { lastFrame } = render(
-        <AppStateProvider>
-          <ErrorHarness />
-        </AppStateProvider>,
-      );
-      await waitForFrame(lastFrame, (candidate) =>
-        candidate.includes("Could not save"),
-      );
+      useEffect(() => {
+        if (state.status === undefined) {
+          dispatch({
+            type: "SET_STATUS",
+            severity: "error",
+            text: "Could not save",
+          });
+        }
+      }, [state.status, dispatch]);
 
-      // Real time past the TTL an info/warning status would have expired at -- an error status must still be showing.
-      await new Promise((resolve) => {
-        setTimeout(resolve, TTL_WAIT_MS);
-      });
-      expect(lastFrame()).toContain("Could not save");
-    },
-    TTL_TEST_TIMEOUT_MS,
-  );
+      return <StatusLine />;
+    }
+
+    const { lastFrame } = render(
+      <AppStateProvider>
+        <ErrorHarness />
+      </AppStateProvider>,
+    );
+    await advanceToFrame(lastFrame, (candidate) =>
+      candidate.includes("Could not save"),
+    );
+
+    // Well past the TTL an info or warning status would have expired at, so a still-present message proves the effect never armed its timer rather than merely that the clock has not reached it yet.
+    await vi.advanceTimersByTimeAsync(ADVANCE_BUDGET_MS);
+    expect(lastFrame()).toContain("Could not save");
+  });
 });
