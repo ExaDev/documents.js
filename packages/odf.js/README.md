@@ -499,6 +499,18 @@ Conventional Commits, enforced workspace-wide by commitlint through a root `comm
 - [OpenOffice.org XML File Format 1.0](https://www.openoffice.org/xml/general.html) ([archived](https://web.archive.org/web/20240101000000*/https://www.openoffice.org/xml/general.html)) — the pre-OASIS format's own project page, and the source of the DTD (`xmloff/dtd/office.mod`, `text.mod`, `nmspace.mod`, [retained in Apache OpenOffice's tree](https://github.com/apache/openoffice/tree/trunk/main/xmloff/dtd)) that `src/ooo1/` was written against.
 - [LibreOffice's own OpenOffice.org-to-ODF transformer](https://github.com/LibreOffice/core/tree/master/xmloff/source/transform) — `OOo2Oasis.cxx`'s element and attribute action tables and `StyleOOoTContext.cxx`'s `style:properties` splitter, cross-checked against for every rename `src/ooo1/` implements. Its namespace token table is [`xmloff/source/core/xmltoken.cxx`](https://github.com/LibreOffice/core/blob/master/xmloff/source/core/xmltoken.cxx) (the `XML_N_*_OOO` entries).
 
+## Removed: base64 from `odf.js/util/base64`
+
+`bytesToBase64` and `base64ToBytes` were this package's own copy of helpers every codec in the family carried separately. They live in [`byte-codec`](../byte-codec/README.md) now, as one implementation ([ExaDev/documents.js#1282](https://github.com/ExaDev/documents.js/issues/1282)), so the module behind the `odf.js/util/base64` deep import is gone.
+
+Import from `byte-codec` directly:
+
+```ts
+import { base64ToBytes, bytesToBase64 } from "byte-codec";
+```
+
+Both names are also still on this package's own barrel, exactly as before, so `import { bytesToBase64 } from "odf.js"` is unaffected.
+
 ## License
 
 MIT
