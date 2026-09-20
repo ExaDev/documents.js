@@ -3,6 +3,7 @@ import {
   writeCompoundFile,
   writeSummaryInformationStream,
 } from "archive-codec";
+import { base64ToBytes } from "byte-codec";
 import {
   type ContentDocument,
   type ContentImageBlock,
@@ -12,7 +13,6 @@ import {
   type PageSize,
   flattenTree,
 } from "document-schema.js";
-import { base64ToBytes } from "./base64";
 import { collectFontFamilies } from "./content-write";
 import { writeDocumentAtom } from "./document/document-atom-write";
 import { writeEnvironment } from "./document/fonts-write";
