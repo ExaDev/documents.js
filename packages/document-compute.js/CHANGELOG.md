@@ -1,3 +1,12 @@
+## [1.5.30](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.5.29...document-compute.js%401.5.30) (2026-09-20)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.11.4
+- Updated markdown-codec to 6.7.4
+- Updated documents.js to 7.20.27
+
 ## [1.5.29](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.5.28...document-compute.js%401.5.29) (2026-09-20)
 
 
