@@ -4,7 +4,7 @@ import { CALADEA_REGULAR_FONT_DEFLATED_BASE64 } from "../assets/caladea-regular"
 import { CARLITO_BOLD_FONT_DEFLATED_BASE64 } from "../assets/carlito-bold";
 import { CARLITO_ITALIC_FONT_DEFLATED_BASE64 } from "../assets/carlito-italic";
 import { CARLITO_REGULAR_FONT_DEFLATED_BASE64 } from "../assets/carlito-regular";
-import { base64ToBytes } from "../util/base64";
+import { base64ToBytes } from "byte-codec";
 
 // The real, vendored text fonts as raw sfnt bytes, for tests that parse genuine font tables rather than a synthetic fixture. These are the exact bytes of assets/fonts/{carlito,caladea}/*.ttf: scripts/generate-text-font-assets.mjs DEFLATE-compresses and base64-encodes each vendored file into src/assets/, and inflating one here reverses that transform byte for byte (proved independently by src/assets/text-font-assets.test.ts). Going through the embedded asset rather than reading assets/ from disk keeps the suite filesystem-free, matching the convention test-support/ccitt-fax.ts states for its own fixtures.
 //

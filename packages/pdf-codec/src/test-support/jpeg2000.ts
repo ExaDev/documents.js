@@ -1,4 +1,4 @@
-import { base64ToBytes } from "../util/base64";
+import { base64ToBytes } from "byte-codec";
 
 // Real JPEG 2000 codestreams -- the exact bytes a PDF /JPXDecode filter carries -- produced by OpenJPEG 2.5.4 (opj_compress) from deterministic source images, by scripts/generate-jpeg2000-fixtures.mjs. Embedded as base64 so the suite needs no filesystem access.
 //

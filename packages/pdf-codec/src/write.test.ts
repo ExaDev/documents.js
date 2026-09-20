@@ -1,6 +1,5 @@
-import { decodePng, encodePng } from "byte-codec";
+import { base64ToBytes, bytesToBase64, decodePng, encodePng } from "byte-codec";
 import type { PositionedFormula } from "document-schema.js";
-import { base64ToBytes, bytesToBase64 } from "./util/base64";
 import { describe, expect, it } from "vitest";
 import { openPdfDocument } from "./document";
 import type {

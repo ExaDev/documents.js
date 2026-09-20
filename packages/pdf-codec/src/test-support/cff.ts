@@ -1,6 +1,6 @@
 import { STIX_TWO_MATH_FONT_BASE64 } from "../assets/stix-two-math-font";
 import { parseSfnt, sfntTableBytes } from "../sfnt";
-import { base64ToBytes } from "../util/base64";
+import { base64ToBytes } from "byte-codec";
 
 // Fixtures for the two CFF readers (cff-probe.ts and cff-bounds.ts): the real vendored font's own 'CFF ' table, plus a builder for the small hand-made programs that font does not happen to contain (a CID-keyed Top DICT, and the malformed shapes).
 

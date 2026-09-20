@@ -15,7 +15,7 @@ import type { SfntFont } from "./sfnt";
 import { parseSfnt } from "./sfnt";
 import { subsetSfnt } from "./sfnt-subset";
 import { caladeaRegularBytes, carlitoRegularBytes } from "./test-support/fonts";
-import { base64ToBytes } from "./util/base64";
+import { base64ToBytes } from "byte-codec";
 
 // A real round trip: subset a genuine vendored face down to the glyphs one short string needs, then read the output back through this package's own sfnt/font-tables/glyf/hmtx parsers and check it against the font it was cut from. The container itself is checked by a second, independent reader written here with a bare DataView -- deliberately not this package's own parseSfnt -- so a directory this subsetter writes wrongly cannot be validated by the same assumptions that wrote it.
 //

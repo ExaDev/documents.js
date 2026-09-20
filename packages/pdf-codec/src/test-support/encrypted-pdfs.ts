@@ -4,7 +4,7 @@
 // Real encrypted PDFs, produced by qpdf version 12.3.2 from one plain source document that script builds itself. Every one is an encrypted copy of the same page -- a single line of text reading "Encrypted hello", with an /Info dictionary whose /Title is "Secret Title" and /Author is "Jane Smith" -- so a test can assert on the decrypted content of a stream AND of strings without caring which cipher got it there.
 //
 // Encrypted by an independent implementation on purpose: a fixture this package encrypted itself would let a bug in key derivation or in a cipher cancel out between the write and read halves and pass anyway. Embedded as base64 rather than checked in as .pdf files so the suite needs no filesystem access, matching src/assets/stix-two-math-font.ts's own precedent.
-import { base64ToBytes } from "../util/base64";
+import { base64ToBytes } from "byte-codec";
 
 export const ENCRYPTED_FIXTURE_PAGE_TEXT = "Encrypted hello";
 export const ENCRYPTED_FIXTURE_TITLE = "Secret Title";

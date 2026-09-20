@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodePng } from "byte-codec";
-import { base64ToBytes, bytesToBase64 } from "./util/base64";
+import { base64ToBytes, bytesToBase64, decodePng } from "byte-codec";
 import type { LayoutDocument, LayoutImageAsset } from "./layout";
 import { LAYOUT_FORMAT_VERSION } from "./layout";
 import { readImageXObject } from "./images-read";

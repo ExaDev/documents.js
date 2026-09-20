@@ -1,4 +1,4 @@
-import { base64ToBytes } from "../util/base64";
+import { base64ToBytes } from "byte-codec";
 
 // Real JBIG2 embedded streams -- the exact byte sequence a PDF /JBIG2Decode filter carries -- produced by jbig2enc 0.32 (Adam Langley's encoder, the one behind essentially every JBIG2 image in a real PDF), by libtiff 4.7.2 for the MMR-coded region, and, for the two generic-region templates jbig2enc never emits, by a hand-written T.88 Annex E arithmetic encoder in scripts/generate-jbig2-fixtures.mjs. Embedded as base64 so the suite needs no filesystem access.
 //

@@ -1,4 +1,4 @@
-import { base64ToBytes } from "../util/base64";
+import { base64ToBytes } from "byte-codec";
 
 // Real CCITT Group 3/Group 4 bitstreams, encoded by libtiff (LIBTIFF 4.7.2, driven through Pillow 12.1.0 and tiffcp) rather than by anything in this package -- the same "independent implementation on purpose" rationale test-support/encrypted-pdfs.ts states for its own fixtures: a stream this package encoded itself would let a mistake in the T.4 code tables cancel out between an encoder and a decoder that shared it, and pass anyway. Embedded as base64 so the suite needs no filesystem access.
 //
