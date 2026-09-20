@@ -7,7 +7,7 @@ import { rootElement, attrValue } from "../xml/query";
 import { ODF_NAMESPACES } from "../ns";
 import { ODF_MEDIA_TYPES } from "../media-type";
 import { writeMimetype, readMimetype } from "../mimetype";
-import { base64ToBytes } from "../util/base64";
+import { base64ToBytes } from "byte-codec";
 import { transformOoo1Package, transformToOoo1Package } from "./transform";
 
 const OOO_XMLNS = [

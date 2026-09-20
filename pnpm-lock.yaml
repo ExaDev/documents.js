@@ -1158,6 +1158,9 @@ importers:
 
   packages/odf.js:
     dependencies:
+      byte-codec:
+        specifier: 1.6.0
+        version: link:../byte-codec
       document-schema.js:
         specifier: 7.11.4
         version: link:../document-schema.js

@@ -1,5 +1,5 @@
 import type { Package, Part } from "../model/package";
-import { base64ToBytes } from "../util/base64";
+import { base64ToBytes } from "byte-codec";
 import { buildXml } from "../xml/build";
 import { zipPackage, type ZipEntry } from "../zip";
 
