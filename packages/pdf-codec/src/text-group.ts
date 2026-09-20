@@ -126,31 +126,16 @@ export function runsShareBaseline(
   b: PdfTextRunGeometry,
   options: PdfTextGroupingOptions = {},
 ): boolean {
-  const separation = baselineSeparation(
-    a,
-    b,
-    options.baselineToleranceEm ?? DEFAULT_BASELINE_TOLERANCE_EM,
-  );
-  return separation?.withinTolerance === true;
-}
-
-// How far apart two runs' baselines are, and whether that clears the tolerance the smaller of them sets, or undefined when the two are set at different angles and so share no axis to measure across. One derivation serving both the exported predicate and the clustering below, so the rule the caller can test with is literally the rule the grouping applies.
-function baselineSeparation(
-  a: PdfTextRunGeometry,
-  b: PdfTextRunGeometry,
-  toleranceEm: number,
-): { distancePt: number; withinTolerance: boolean } | undefined {
   const rotationDeg = normaliseRotationDeg(a.rotationDeg);
   if (rotationDeg !== normaliseRotationDeg(b.rotationDeg)) {
-    return undefined;
+    return false;
   }
+  const toleranceEm =
+    options.baselineToleranceEm ?? DEFAULT_BASELINE_TOLERANCE_EM;
   const distancePt = Math.abs(
     project(a, rotationDeg).acrossPt - project(b, rotationDeg).acrossPt,
   );
-  return {
-    distancePt,
-    withinTolerance: distancePt <= toleranceEm * Math.min(a.sizePt, b.sizePt),
-  };
+  return distancePt <= toleranceEm * Math.min(a.sizePt, b.sizePt);
 }
 
 /**
@@ -184,34 +169,27 @@ interface WorkingLine<TRun extends PdfTextRunGeometry> {
   readonly entries: Projected<TRun>[];
 }
 
-// Greedy baseline clustering: each run joins the open line whose baseline is nearest to it among those it shares a baseline with, and opens a new one when there is none. Nearest rather than first-found, so a run falling between two lines joins the one it is actually closer to instead of whichever the iteration order reached first.
+// Greedy baseline clustering: each run joins the nearest open line it shares a baseline with, and opens a new one when there is none. The nearest such line is always the last one opened, with no distance bookkeeping needed to find it: entries arrive ordered down the page, so every open line's anchor sits at or above the run being placed, and the further down the page a line was opened the closer it is. A line's own anchor is what every candidate is measured against, so a line cannot walk down the page one near-miss at a time.
 function clusterIntoLines<TRun extends PdfTextRunGeometry>(
   entries: readonly Projected<TRun>[],
   toleranceEm: number,
 ): WorkingLine<TRun>[] {
   const lines: WorkingLine<TRun>[] = [];
   for (const entry of entries) {
-    let best: WorkingLine<TRun> | undefined;
-    let bestDistancePt = Number.POSITIVE_INFINITY;
+    let nearest: WorkingLine<TRun> | undefined;
     for (const line of lines) {
-      const separation = baselineSeparation(
-        line.anchor.run,
-        entry.run,
-        toleranceEm,
-      );
       if (
-        separation !== undefined &&
-        separation.withinTolerance &&
-        separation.distancePt < bestDistancePt
+        runsShareBaseline(line.anchor.run, entry.run, {
+          baselineToleranceEm: toleranceEm,
+        })
       ) {
-        best = line;
-        bestDistancePt = separation.distancePt;
+        nearest = line;
       }
     }
-    if (best === undefined) {
+    if (nearest === undefined) {
       lines.push({ anchor: entry, entries: [entry] });
     } else {
-      best.entries.push(entry);
+      nearest.entries.push(entry);
     }
   }
   return lines;
@@ -226,7 +204,7 @@ interface RunTokens {
 
 // A run's own text can hold any number of words: a producer is free to show a whole line in one operator, spaces included. Splitting on literal whitespace is the only way to recover those, and a space a run's text states is a space regardless of what the geometry between runs says.
 function tokeniseRun(text: string): RunTokens {
-  const words = text.split(/\s+/).filter((word) => word.length > 0);
+  const words = text.match(/\S+/g) ?? [];
   const leadingSpace = /^\s/.test(text);
   const trailingSpace = /\s$/.test(text);
   return {
@@ -295,8 +273,8 @@ function buildWords<TRun extends PdfTextRunGeometry>(
   columnGapEm: number,
 ): PdfTextWord<TRun>[] {
   const working: MutableWord<TRun>[] = [];
-  let previous: Projected<TRun> | undefined;
-  let pendingSpace = false;
+  // The run before this one, with whether it left a space pending: its own text's trailing whitespace, which a run that states no space of its own between them still has to honour. A whitespace-only run always ends in whitespace, so there is nothing to carry across one that a fresh reading of its own text does not already say.
+  let previous: { entry: Projected<TRun>; trailingSpace: boolean } | undefined;
 
   for (const entry of line.entries) {
     const tokens = tokeniseRun(entry.run.text);
@@ -304,11 +282,12 @@ function buildWords<TRun extends PdfTextRunGeometry>(
       previous === undefined
         ? "none"
         : separatorForGap(
-            runGapPt(previous.run, entry.run),
-            Math.min(previous.sizePt, entry.sizePt),
+            runGapPt(previous.entry.run, entry.run),
+            Math.min(previous.entry.sizePt, entry.sizePt),
             wordGapEm,
             columnGapEm,
           );
+    const pendingSpace = previous?.trailingSpace === true;
     // A line never opens with a separator: whatever a leading whitespace-only run or a left margin puts in front of the first word is not something a reader sees. Past that, a space either side of the boundary is still a space, since whitespace the runs' own text states cannot be overridden by geometry that happens to read as none, and a column boundary is the stronger claim of the two and survives either way.
     let separator: PdfWordSeparator = "none";
     if (working.length > 0) {
@@ -343,10 +322,7 @@ function buildWords<TRun extends PdfTextRunGeometry>(
       });
     });
 
-    // A run that contributed no word of its own leaves any space already pending in place; one that did resets it, so only its own trailing whitespace can carry forward.
-    pendingSpace =
-      tokens.trailingSpace || (tokens.words.length === 0 && pendingSpace);
-    previous = entry;
+    previous = { entry, trailingSpace: tokens.trailingSpace };
   }
 
   return working.map((word) => ({
