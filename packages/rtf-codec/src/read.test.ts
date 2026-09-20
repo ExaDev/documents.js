@@ -2725,6 +2725,17 @@ describe("table cell formatting", () => {
         "\\pard\\intbl A\\cell\\pard\\intbl\\cell\\pard\\intbl C\\cell\\row\\pard x\\par}",
     );
     expect(table.rows[0]?.cells[0]?.colSpan).toBe(2);
+    // One entry per grid column: the covered column keeps its own block-less entry rather than being folded into the anchor.
+    expect(table.rows[0]?.cells).toHaveLength(3);
+    expect(table.rows[0]?.cells[1]).toEqual({
+      blocks: [],
+      background: undefined,
+      borders: undefined,
+      verticalAlign: undefined,
+    });
+    expect(table.rows[0]?.cells[2]?.blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "C", sizePt: 12 }] },
+    ]);
   });
 
   it("leaves a plain cell carrying no borders, background, or span fields at all", () => {
@@ -2909,6 +2920,112 @@ describe("table cell merge span", () => {
       `${HEADER}\\trowd\\trleft0\\cellx1440\\clmrg\\cellx2880\\pard\\intbl A\\cell\\pard\\intbl B\\cell\\row\\pard x\\par}`,
     );
     expect(table.rows[0]?.cells[0]?.colSpan).toBeUndefined();
+    // The unanchored continuation still occupies its own grid column.
+    expect(table.rows[0]?.cells).toHaveLength(2);
+    expect(table.rows[0]?.cells[1]?.blocks).toEqual([]);
+  });
+});
+
+describe("table merges read into the dense grid", () => {
+  const text = (value: string) => ({
+    kind: "paragraph",
+    runs: [{ text: value, sizePt: 12 }],
+  });
+
+  it("reads a horizontal merge as one cell per grid column with the anchor carrying colSpan", () => {
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\clmgf\\cellx1440\\clmrg\\cellx2880\\clmrg\\cellx4320\\cellx5760" +
+        "\\pard\\intbl A\\cell\\pard\\intbl\\cell\\pard\\intbl\\cell\\pard\\intbl B\\cell\\row" +
+        "\\trowd\\trleft0\\cellx1440\\cellx2880\\cellx4320\\cellx5760" +
+        "\\pard\\intbl 1\\cell\\pard\\intbl 2\\cell\\pard\\intbl 3\\cell\\pard\\intbl 4\\cell\\row\\pard z\\par}",
+    );
+    expect(table.columnWidthsPt).toHaveLength(4);
+    expect(table.rows.map((row) => row.cells.length)).toEqual([4, 4]);
+    const [first] = table.rows;
+    expect(first?.cells.map((cell) => cell.colSpan)).toEqual([
+      3,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(first?.cells.map((cell) => cell.blocks)).toEqual([
+      [text("A")],
+      [],
+      [],
+      [text("B")],
+    ]);
+  });
+
+  it("reads a vertical merge as one cell per grid column in every row with the anchor carrying rowSpan", () => {
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\clvmgf\\cellx1440\\cellx2880" +
+        "\\pard\\intbl A\\cell\\pard\\intbl x\\cell\\row" +
+        "\\trowd\\trleft0\\clvmrg\\cellx1440\\cellx2880" +
+        "\\pard\\intbl\\cell\\pard\\intbl y\\cell\\row" +
+        "\\trowd\\trleft0\\clvmrg\\cellx1440\\cellx2880" +
+        "\\pard\\intbl\\cell\\pard\\intbl z\\cell\\row\\pard z\\par}",
+    );
+    expect(table.rows.map((row) => row.cells.length)).toEqual([2, 2, 2]);
+    expect(table.rows.map((row) => row.cells[0]?.rowSpan)).toEqual([
+      3,
+      undefined,
+      undefined,
+    ]);
+    expect(table.rows.map((row) => row.cells[0]?.blocks)).toEqual([
+      [text("A")],
+      [],
+      [],
+    ]);
+  });
+
+  it("reads a 2x2 merge as an anchor carrying both spans and a block-less entry at each other position", () => {
+    // Word's own spelling of a 2x2 region: every position of the second row and the second column carries the flags mirroring the first row and column.
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\clmgf\\clvmgf\\cellx1440\\clmrg\\clvmgf\\cellx2880\\cellx4320" +
+        "\\pard\\intbl A\\cell\\pard\\intbl\\cell\\pard\\intbl B\\cell\\row" +
+        "\\trowd\\trleft0\\clmgf\\clvmrg\\cellx1440\\clmrg\\clvmrg\\cellx2880\\cellx4320" +
+        "\\pard\\intbl\\cell\\pard\\intbl\\cell\\pard\\intbl C\\cell\\row\\pard z\\par}",
+    );
+    expect(table.rows.map((row) => row.cells.length)).toEqual([3, 3]);
+    expect(table.rows[0]?.cells[0]).toMatchObject({ colSpan: 2, rowSpan: 2 });
+    for (const covered of [
+      table.rows[0]?.cells[1],
+      table.rows[1]?.cells[0],
+      table.rows[1]?.cells[1],
+    ]) {
+      expect(covered?.blocks).toEqual([]);
+      expect(covered?.colSpan).toBeUndefined();
+      expect(covered?.rowSpan).toBeUndefined();
+    }
+    expect(table.rows[0]?.cells[2]?.blocks).toEqual([text("B")]);
+    expect(table.rows[1]?.cells[2]?.blocks).toEqual([text("C")]);
+  });
+
+  it("pads a row that ends before the definition's last boundary with empty entries", () => {
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\cellx1440\\cellx2880\\cellx4320\\pard\\intbl A\\cell\\row\\pard z\\par}",
+    );
+    expect(table.rows[0]?.cells).toHaveLength(3);
+    expect(table.rows[0]?.cells[2]?.blocks).toEqual([]);
+  });
+
+  it("carries a covered position's own borders, shading and vertical alignment from its own cell definition", () => {
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\clmgf\\cellx1440\\clmrg\\clvertalb\\clbrdrt\\brdrs\\brdrw30\\clcbpat1\\cellx2880" +
+        "\\pard\\intbl A\\cell\\pard\\intbl\\cell\\row" +
+        "\\trowd\\trleft0\\clvmgf\\cellx1440\\clvmrg\\clvertalc\\cellx2880" +
+        "\\pard\\intbl A\\cell\\pard\\intbl\\cell\\row\\pard z\\par}",
+    );
+    const horizontallyCovered = table.rows[0]?.cells[1];
+    expect(horizontallyCovered?.blocks).toEqual([]);
+    expect(horizontallyCovered?.verticalAlign).toBe("bottom");
+    expect(horizontallyCovered?.borders?.top?.widthPt).toBe(1.5);
+    expect(table.rows[1]?.cells[1]?.verticalAlign).toBe("center");
   });
 });
 
@@ -3224,20 +3341,25 @@ describe("table row and column derivation", () => {
         "\\trowd\\trleft0\\cellx1440\\cellx2880\\cellx4320\\pard\\intbl a\\cell\\pard\\intbl b\\cell\\pard\\intbl c\\cell\\row\\pard x\\par}",
     );
     expect(table.columnWidthsPt.length).toBeGreaterThanOrEqual(3);
+    // Every row is as wide as the grid, the first row being padded with an empty entry to reach the wider second row's width.
+    expect(table.rows.map((row) => row.cells.length)).toEqual([3, 3]);
   });
 
-  it("filters a horizontally-merged continuation cell out of the row entirely, while a vertical continuation keeps its own empty slot", () => {
+  it("keeps both a horizontal and a vertical continuation as a block-less entry at its own grid column", () => {
     const table = firstTable(
       HEADER +
-        "\\trowd\\trleft0\\clmgf\\cellx1440\\clmrg\\cellx2880\\pard\\intbl merged\\cell\\pard\\intbl\\cell\\row" +
+        "\\trowd\\trleft0\\clmgf\\cellx1440\\clmrg\\cellx2880\\pard\\intbl merged\\cell\\pard\\intbl stray\\cell\\row" +
         "\\trowd\\trleft0\\clvmgf\\cellx1440\\cellx2880\\pard\\intbl v\\cell\\pard\\intbl w\\cell\\row" +
         "\\trowd\\trleft0\\clvmrg\\cellx1440\\cellx2880\\pard\\intbl stray\\cell\\pard\\intbl x\\cell\\row\\pard z\\par}",
     );
-    // Row 0's horizontal continuation cell is dropped, leaving one cell.
-    expect(table.rows[0]?.cells).toHaveLength(1);
-    // Row 2's vertical continuation cell keeps its own slot (an empty one), so the row still reports two cells. Its own cell carries a "stray" run in the source (a real producer's own vertically-merged continuation cell does sometimes still write placeholder text, even though the spec's own merge model says only the anchor's content is real) -- a genuinely early-returned `{ blocks: [] }` discards it regardless; a fallen-through cell would keep `cell.blocks` (the stray paragraph) instead.
+    // Row 0's horizontal continuation keeps its own entry, so the row has one cell per grid column. The continuation carried a "stray" run in the source (a real producer's own continuation cell does sometimes still write placeholder text, even though the spec's own merge model says only the anchor's content is real) and it is discarded.
+    expect(table.rows[0]?.cells).toHaveLength(2);
+    expect(table.rows[0]?.cells[1]?.blocks).toEqual([]);
     expect(table.rows[2]?.cells).toHaveLength(2);
     expect(table.rows[2]?.cells[0]?.blocks).toEqual([]);
+    expect(table.rows[2]?.cells[1]?.blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "x", sizePt: 12 }] },
+    ]);
   });
 
   it("derives rowSpan of exactly two, not three, when the row after a merge run is a genuinely ordinary row", () => {
@@ -3273,8 +3395,8 @@ describe("table row and column derivation", () => {
     expect(table.rows[0]?.cells[0]?.rowSpan).toBe(3);
   });
 
-  it("still matches a continuation whose own row places it at cell position one, not only at position zero", () => {
-    // The anchor is the SECOND cell of its own row here (a plain first cell precedes it), so its own resolved column value is 1, not 0 -- and the continuation row below it also places its own \clvmrg continuation as its second cell, so indexOf(column) resolves to matchIndex 1 too. A check that mistook a real matchIndex of 1 for the sentinel "not found" value (rather than genuinely comparing it against -1) would wrongly treat this real match as absent and stop the scan immediately, every existing fixture only ever has its own match at position 0.
+  it("still matches a continuation whose own row places it at grid column one, not only at column zero", () => {
+    // The anchor is the SECOND cell of its own row here (a plain first cell precedes it), and the continuation row below it also places its \\clvmrg as its second cell. A scan that only ever looked at column zero would never find it, as every other fixture here places its match there.
     const table = firstTable(
       HEADER +
         "\\trowd\\trleft0\\cellx1440\\clvmgf\\cellx2880\\pard\\intbl first\\cell\\pard\\intbl anchor\\cell\\row" +
@@ -3290,22 +3412,36 @@ describe("table row and column derivation", () => {
     expect(table.rows[0]?.cells[0]?.rowSpan).toBeUndefined();
   });
 
-  it("matches a \\clvmgf anchor sitting after a real \\clmgf/\\clmrg column span against a continuation row with no span of its own", () => {
-    // The anchor row's own grid-column position (3) is reached after only two of its own cell entries (a colSpan-2 pair, then the anchor itself at local index 2), while the continuation row reaches the identical grid column via four entirely plain cells (local index 3) -- so the two rows' own column values only agree because resolveRows' own per-cell slot count is exactly `span`, not `span + 1`. A test built from two same-shaped rows (as the existing \\clvmgf fixtures above all are) shifts both rows' own columns by the identical amount and can never tell `slot < span` apart from `slot <= span`; this fixture's asymmetric cell counts can.
+  it("matches a \\clvmgf anchor sitting after a real \\clmgf/\\clmrg column span against the continuation at the same grid column", () => {
+    // The anchor sits at grid column 2, after a colSpan-2 pair that occupies columns 0 and 1. The continuation row reaches the same column through two plain cells and then the \\clvmrg, so the two rows only agree because a cell's index in its row is its grid column.
     const table = firstTable(
       HEADER +
         "\\trowd\\trleft0\\clmgf\\cellx1440\\clmrg\\cellx2880\\clvmgf\\cellx4320" +
         "\\pard\\intbl first\\cell\\pard\\intbl\\cell\\pard\\intbl anchor\\cell\\row" +
+        "\\trowd\\trleft0\\cellx1440\\cellx2880\\clvmrg\\cellx4320" +
+        "\\pard\\intbl\\cell\\pard\\intbl\\cell\\pard\\intbl\\cell\\row" +
+        "\\pard z\\par}",
+    );
+    expect(table.rows[0]?.cells[0]?.colSpan).toBe(2);
+    expect(table.rows[0]?.cells[2]?.blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "anchor", sizePt: 12 }] },
+    ]);
+    expect(table.rows[0]?.cells[2]?.rowSpan).toBe(2);
+    expect(table.rows[1]?.cells[2]?.blocks).toEqual([]);
+    expect(table.rows[1]?.cells[2]?.rowSpan).toBeUndefined();
+  });
+
+  it("does not extend a \\clvmgf anchor through a continuation at a different grid column", () => {
+    // The continuation below sits at column 3, one past the anchor's own column 2, so it belongs to no vertical merge of this anchor.
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\cellx1440\\cellx2880\\clvmgf\\cellx4320\\cellx5760" +
+        "\\pard\\intbl\\cell\\pard\\intbl\\cell\\pard\\intbl anchor\\cell\\pard\\intbl\\cell\\row" +
         "\\trowd\\trleft0\\cellx1440\\cellx2880\\cellx4320\\clvmrg\\cellx5760" +
         "\\pard\\intbl\\cell\\pard\\intbl\\cell\\pard\\intbl\\cell\\pard\\intbl\\cell\\row" +
         "\\pard z\\par}",
     );
-    expect(table.rows[0]?.cells[0]?.colSpan).toBe(2);
-    expect(table.rows[0]?.cells[1]?.blocks).toEqual([
-      { kind: "paragraph", runs: [{ text: "anchor", sizePt: 12 }] },
-    ]);
-    expect(table.rows[0]?.cells[1]?.rowSpan).toBe(2);
-    expect(table.rows[1]?.cells[3]?.blocks).toEqual([]);
+    expect(table.rows[0]?.cells[2]?.rowSpan).toBeUndefined();
   });
 
   it("falls back to an even split when the \\cellxN boundaries describe fewer columns than the row actually has", () => {
@@ -4292,31 +4428,37 @@ describe("internal invariants exercised directly (no legitimate RTF input can re
     expect(items).toEqual(["first", "second more"]);
   });
 
-  it("verticalMergeRowSpan throws when a row index in range has no corresponding columnIndices/rows entry", () => {
-    const rows = [
-      { cells: [], definitions: [], direction: undefined },
-      { cells: [], definitions: [], direction: undefined },
-    ];
-    // Mismatched on purpose: columnIndices has one fewer entry than rows, which resolveRows' own construction (one rows.map(...) call over the identical `rows`) can never actually produce.
-    const columnIndices = [[0]];
-    expect(() => verticalMergeRowSpan(rows, columnIndices, 0, 0)).toThrow(
-      "internal invariant violated: verticalMergeRowSpan's own row index scan reached an index with no corresponding columnIndices/rows entry",
-    );
-  });
-
   it("verticalMergeRowSpan counts consecutive vertical-merge continuations forward from rowIndex + 1", () => {
     const continuation = () => ({
       ...newPendingCell(),
       verticalMergeContinuation: true,
     });
     const ordinary = () => ({ ...newPendingCell() });
-    const rows = [
-      { cells: [], definitions: [ordinary()], direction: undefined },
+    const rowsBelow = [
       { cells: [], definitions: [continuation()], direction: undefined },
       { cells: [], definitions: [continuation()], direction: undefined },
       { cells: [], definitions: [ordinary()], direction: undefined },
+      { cells: [], definitions: [continuation()], direction: undefined },
     ];
-    const columnIndices = [[0], [0], [0], [0]];
-    expect(verticalMergeRowSpan(rows, columnIndices, 0, 0)).toBe(3);
+    // The run stops at the first ordinary row, so the continuation after it does not count.
+    expect(verticalMergeRowSpan(rowsBelow, 0)).toBe(3);
+  });
+
+  it("verticalMergeRowSpan reads the definition at the given grid column of each row", () => {
+    const continuation = () => ({
+      ...newPendingCell(),
+      verticalMergeContinuation: true,
+    });
+    const ordinary = () => ({ ...newPendingCell() });
+    const rowsBelow = [
+      {
+        cells: [],
+        definitions: [ordinary(), continuation()],
+        direction: undefined,
+      },
+    ];
+    expect(verticalMergeRowSpan(rowsBelow, 0)).toBe(1);
+    expect(verticalMergeRowSpan(rowsBelow, 1)).toBe(2);
+    expect(verticalMergeRowSpan(rowsBelow, 2)).toBe(1);
   });
 });

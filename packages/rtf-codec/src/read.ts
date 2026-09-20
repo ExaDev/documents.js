@@ -33,8 +33,10 @@ import {
   type LayoutMetadata,
   type Margins,
   type PageSize,
+  type PositionedTableRow,
   type RunConstructExtent,
   type TextDirection,
+  denseTableRows,
 } from "document-schema.js";
 import {
   applyCellDefinitionControlWord,
@@ -684,27 +686,14 @@ function horizontalSpanAt(
   return span;
 }
 
-// The rowSpan a \clvmgf anchor at `column` reaches, scanning forward from `rowIndex + 1` through consecutive \clvmrg continuations at that same column. A standalone function, exported and taking `rows`/`columnIndices` as plain parameters rather than reading ContentBuilder's own private fields, so a mismatched pair (fewer columnIndices entries than rows, which resolveRows' own construction can never actually produce -- columnIndices is built by one rows.map(...) call over the identical `rows`) can be exercised directly by a unit test constructing one, rather than needing a non-null assertion to state that invariant with no test able to reach it.
+// The rowSpan a \clvmgf anchor at grid column `column` reaches: one, plus each consecutive row of `rowsBelow` (the rows after the anchor's own, in order) whose definition at that same column is a \clvmrg continuation. A row's cell definitions are one per grid column, because a merged region's covered positions each keep their own definition and \cell mark, so `column` indexes every row's `definitions` directly. A standalone exported function taking the rows as a plain parameter rather than reading ContentBuilder's own private fields, so it can be exercised directly.
 export function verticalMergeRowSpan(
-  rows: readonly RawTableRow[],
-  columnIndices: readonly (readonly number[])[],
-  rowIndex: number,
+  rowsBelow: readonly RawTableRow[],
   column: number,
 ): number {
   let rowSpan = 1;
-  // Bounded by the last real row index (`rows.length - 1`), not `rows.length` itself, so this scan never has an index one past the array's own end to consider in the first place.
-  for (let next = rowIndex + 1; next <= rows.length - 1; next += 1) {
-    const nextColumns = columnIndices[next];
-    const nextRow = rows[next];
-    if (nextColumns === undefined || nextRow === undefined) {
-      throw new Error(
-        "internal invariant violated: verticalMergeRowSpan's own row index scan reached an index with no corresponding columnIndices/rows entry",
-      );
-    }
-    const matchIndex = nextColumns.indexOf(column);
-    // No `matchIndex === -1 ? undefined : ...` guard: a plain array's own -1 index is never a real property on it, so `definitions[-1]` already evaluates to undefined on its own -- indexOf's own "not found" sentinel needs no special-casing here, since indexing by it produces the identical result the special case would.
-    const match = nextRow.definitions[matchIndex];
-    if (match?.verticalMergeContinuation !== true) {
+  for (const below of rowsBelow) {
+    if (below.definitions[column]?.verticalMergeContinuation !== true) {
       break;
     }
     rowSpan += 1;
@@ -1178,12 +1167,10 @@ class ContentBuilder {
       return;
     }
     const rows = this.resolveRows();
-    // Grid columns, not cells: a horizontally merged anchor stands for several columns, so counting cells would lose one width per merge. The row definition's own \cellxN boundaries are the other lower bound, since a row can end before the definition's last boundary.
+    // Every resolved row is already as wide as the grid (see resolveRows), so any row's length is the grid width; the row definition's own \cellxN boundaries are the other lower bound, since a row can end before the definition's last boundary.
     const columnCount = Math.max(
       this.tableColumnRights.length,
-      ...rows.map((row) =>
-        row.cells.reduce((total, cell) => total + (cell.colSpan ?? 1), 0),
-      ),
+      ...rows.map((row) => row.cells.length),
     );
     this.blocks.push({
       kind: "table",
@@ -1194,65 +1181,62 @@ class ContentBuilder {
     this.tableColumnRights = [];
   }
 
-  // Folds each row's own <celldef> run onto its cells, resolving the two merge families the way every other codec in this family states them: the anchor carries the span and each covered cell stays in the row with no blocks of its own.
+  // Folds each row's own <celldef> run onto its cells, resolving the two merge families into ContentTable's dense grid: RTF writes one \cellxN and one \cell per grid column, so a cell's index in its row is its grid column, the anchor carries the span, and every covered position keeps its own entry with no blocks.
   //
   // Neither span count is stored by RTF -- \clvmgf/\clvmrg and \clmgf/\clmrg are flags, not counts -- so both are derived by scanning forward for the continuation flags, exactly as ooxml.js derives rowSpan from w:vMerge.
   private resolveRows(): ContentTableRow[] {
     const rows = this.tableRows;
-    // A cell's column position accounts for the horizontal spans before it, so a vertical merge below lines up with the column its anchor actually occupies rather than with an ordinal that shifts.
-    const columnIndices = rows.map((row) => {
-      const indices: number[] = [];
-      // One placeholder slot per grid column already accounted for, so `slots.length` -- not a hand-accumulated running total -- is this cell's own column position: every consumer below only ever compares one row's own value against another row's own indices via indexOf equality, never against an absolute position or a literal, so the position only needs to count grid columns consistently, which pushing one slot per column already does on its own.
-      const slots: undefined[] = [];
-      for (const [index] of row.cells.entries()) {
-        indices.push(slots.length);
-        const span = horizontalSpanAt(row.definitions, index);
-        for (let slot = 0; slot < span; slot += 1) {
-          slots.push(undefined);
-        }
-      }
-      return indices;
+    const positioned = rows.map((row, rowIndex): PositionedTableRow => {
+      const rowsBelow = rows.slice(rowIndex + 1);
+      return {
+        // The row's own <rowwrite> member (\ltrrow | \rtlrow), absent meaning the default the spec states for \ltrrow. Every consumer reads .direction by value, never by key presence.
+        direction: row.direction,
+        cells: row.cells.map((cell, column) => ({
+          columnIndex: column,
+          cell: this.resolveCell(row, rowsBelow, column, cell),
+        })),
+      };
     });
-    return rows.map((row, rowIndex) => ({
-      // The row's own <rowwrite> member (\ltrrow | \rtlrow), absent meaning the default the spec states for \ltrrow. Every consumer reads .direction by value, never by key presence.
-      direction: row.direction,
-      // A horizontally merged continuation has no cell of its own in the content model -- the anchor's colSpan already accounts for the columns it swallows, exactly as one w:tc with a gridSpan does. A vertical continuation is the opposite case and keeps its slot, since its row genuinely has a cell there.
-      cells: row.cells
-        .map((cell, cellIndex) => ({ cell, cellIndex }))
-        .filter(
-          ({ cellIndex }) =>
-            row.definitions[cellIndex]?.horizontalMergeContinuation !== true,
-        )
-        .map(({ cell, cellIndex }): ContentTableCell => {
-          const definition = row.definitions[cellIndex];
-          if (definition?.verticalMergeContinuation === true) {
-            return { blocks: [] };
-          }
-          const colSpan = horizontalSpanAt(row.definitions, cellIndex);
-          const column = columnIndices[rowIndex]?.[cellIndex];
-          const rowSpan =
-            definition?.verticalMergeFirst === true && column !== undefined
-              ? verticalMergeRowSpan(rows, columnIndices, rowIndex, column)
-              : 1;
-          const borders = this.resolveBorders(definition);
-          const background =
-            definition === undefined
-              ? undefined
-              : resolveCellFill(
-                  definition,
-                  (index) => this.header.colors[index],
-                );
-          return {
-            blocks: cell.blocks,
-            ...(colSpan > 1 ? { colSpan } : {}),
-            ...(rowSpan > 1 ? { rowSpan } : {}),
-            // Every consumer reads .background/.borders/.verticalAlign by value, never by key presence.
-            background,
-            borders,
-            verticalAlign: definition?.verticalAlign,
-          };
-        }),
-    }));
+    // A row that ends before the definition's last \cellxN boundary is padded with empty cells, so every row is as wide as the grid.
+    return denseTableRows(positioned, this.tableColumnRights.length);
+  }
+
+  private resolveCell(
+    row: RawTableRow,
+    rowsBelow: readonly RawTableRow[],
+    column: number,
+    cell: ContentTableCell,
+  ): ContentTableCell {
+    const definition = row.definitions[column];
+    const borders = this.resolveBorders(definition);
+    const background =
+      definition === undefined
+        ? undefined
+        : resolveCellFill(definition, (index) => this.header.colors[index]);
+    // Every consumer reads .background/.borders/.verticalAlign by value, never by key presence.
+    const own = {
+      background,
+      borders,
+      verticalAlign: definition?.verticalAlign,
+    };
+    // A covered position holds no blocks: the merged region's content belongs to its anchor alone, whatever placeholder text a producer wrote into the continuation's own \cell. It still carries the position's own cell properties.
+    if (
+      definition?.horizontalMergeContinuation === true ||
+      definition?.verticalMergeContinuation === true
+    ) {
+      return { blocks: [], ...own };
+    }
+    const colSpan = horizontalSpanAt(row.definitions, column);
+    const rowSpan =
+      definition?.verticalMergeFirst === true
+        ? verticalMergeRowSpan(rowsBelow, column)
+        : 1;
+    return {
+      blocks: cell.blocks,
+      ...(colSpan > 1 ? { colSpan } : {}),
+      ...(rowSpan > 1 ? { rowSpan } : {}),
+      ...own,
+    };
   }
 
   private resolveBorders(
