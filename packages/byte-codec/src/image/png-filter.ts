@@ -85,34 +85,59 @@ export function unfilterScanlines(
   return out;
 }
 
-function sumOfAbsSigned(bytes: Uint8Array<ArrayBuffer>): number {
-  let sum = 0;
-  for (const byte of bytes) {
-    // The smaller of the byte's two possible signed-interpretation magnitudes, rather than a `<128`-branching choice between them: at the one point the branch's own boundary could matter (byte === 128), both magnitudes are already 128, so Math.min needs no comparison against 128 at all to agree with it everywhere.
-    sum += Math.min(byte, 256 - byte);
-  }
-  return sum;
-}
-
+// Filters one row into `target` (exactly bytesPerRow long) and returns the sum of the filtered bytes' absolute values read as signed, the score the adaptive strategy minimises. `current` and `previous` are the row and the row above it, each with `bpp` zero bytes in front of its samples, so the byte to the left of a sample at row index x is `current[x]`, the byte above is `previous[x + bpp]` and the one above-left is `previous[x]`: the "before the row starts" and "above the first row" cases (PNG spec 9.2) are then just those zeros, with no bounds test on any byte. The filter type is chosen once, outside the per-byte walk, so each byte costs one small callback instead of a dispatch through a general predictor function; the score is accumulated in the same pass rather than by a second one. Each byte's magnitude is the smaller of its two signed readings, `Math.min(byte, 256 - byte)`, rather than a `< 128` branch: at the one point the branch's own boundary could matter (byte === 128) both readings are already 128.
 function filterRowInto(
-  raw: Uint8Array<ArrayBuffer>,
-  rowStart: number,
-  prevRowStart: number | undefined,
-  bytesPerRow: number,
+  current: Uint8Array<ArrayBuffer>,
+  previous: Uint8Array<ArrayBuffer>,
   bpp: number,
   filterType: PngFilterType,
-  out: Uint8Array<ArrayBuffer>,
-  outOffset: number,
-): void {
-  // Walks the bytesPerRow-long window of `out` this call fills through the typed array's forEach, not a manually bounded for loop and not an index array built on every call (this runs five times per row under the adaptive strategy): both of this function's own callers size `out`/`outOffset` to hold exactly bytesPerRow written bytes here, so there is no separate loop-bound comparison whose own boundary could ever be observed through either output.
-  out.subarray(outOffset, outOffset + bytesPerRow).forEach((_byte, x) => {
-    const rawByte = raw[rowStart + x]!;
-    const a = x >= bpp ? raw[rowStart + x - bpp]! : 0;
-    const b = prevRowStart === undefined ? 0 : raw[prevRowStart + x]!;
-    const c =
-      x >= bpp && prevRowStart !== undefined ? raw[prevRowStart + x - bpp]! : 0;
-    out[outOffset + x] = (rawByte - predictorValue(filterType, a, b, c)) & 0xff;
-  });
+  target: Uint8Array<ArrayBuffer>,
+): number {
+  let sum = 0;
+  // Each callback walks `target`'s own exact-length window through the typed array's forEach rather than a manually bounded for loop, so there is no separate loop-bound comparison whose own boundary could ever be observed through it.
+  switch (filterType) {
+    case 1:
+      target.forEach((_byte, x) => {
+        const filtered = (current[x + bpp]! - current[x]!) & 0xff;
+        target[x] = filtered;
+        sum += Math.min(filtered, 256 - filtered);
+      });
+      break;
+    case 2:
+      target.forEach((_byte, x) => {
+        const filtered = (current[x + bpp]! - previous[x + bpp]!) & 0xff;
+        target[x] = filtered;
+        sum += Math.min(filtered, 256 - filtered);
+      });
+      break;
+    case 3:
+      target.forEach((_byte, x) => {
+        const filtered =
+          (current[x + bpp]! -
+            Math.floor((current[x]! + previous[x + bpp]!) / 2)) &
+          0xff;
+        target[x] = filtered;
+        sum += Math.min(filtered, 256 - filtered);
+      });
+      break;
+    case 4:
+      target.forEach((_byte, x) => {
+        const filtered =
+          (current[x + bpp]! -
+            paethPredictor(current[x]!, previous[x + bpp]!, previous[x]!)) &
+          0xff;
+        target[x] = filtered;
+        sum += Math.min(filtered, 256 - filtered);
+      });
+      break;
+    case 0:
+      target.forEach((_byte, x) => {
+        const filtered = current[x + bpp]!;
+        target[x] = filtered;
+        sum += Math.min(filtered, 256 - filtered);
+      });
+  }
+  return sum;
 }
 
 const ALL_FILTER_TYPES: readonly PngFilterType[] = [0, 1, 2, 3, 4];
@@ -127,53 +152,29 @@ export function filterScanlines(
 ): Uint8Array<ArrayBuffer> {
   const stride = bytesPerRow + 1;
   const out = new Uint8Array(height * stride);
-  const candidate = new Uint8Array(bytesPerRow);
+  // Two padded row buffers, swapped after each row so the row above is always the one just filtered; `previous` starts as all zeros, which is what "above the first row" means. Two candidate buffers, swapped when a filter beats the best so far, so no filtered row is ever copied out just to be compared.
+  let current = new Uint8Array(bytesPerRow + bpp);
+  let previous = new Uint8Array(bytesPerRow + bpp);
+  let candidate = new Uint8Array(bytesPerRow);
+  let best = new Uint8Array(bytesPerRow);
+  const filterTypes: readonly PngFilterType[] =
+    strategy === "none" ? [0] : ALL_FILTER_TYPES;
 
-  for (let y = 0; y < height; y++) {
-    const rowStart = y * bytesPerRow;
-    const prevRowStart = y > 0 ? rowStart - bytesPerRow : undefined;
-    const outRowStart = y * stride;
-
-    if (strategy === "none") {
-      out[outRowStart] = 0;
-      filterRowInto(
-        raw,
-        rowStart,
-        prevRowStart,
-        bytesPerRow,
-        bpp,
-        0,
-        out,
-        outRowStart + 1,
-      );
-      continue;
-    }
-
+  Array.from({ length: height }).forEach((_row, y) => {
+    current.set(raw.subarray(y * bytesPerRow, (y + 1) * bytesPerRow), bpp);
     let bestType: PngFilterType = 0;
     let bestSum = Number.POSITIVE_INFINITY;
-    let best: Uint8Array<ArrayBuffer> | undefined;
-    for (const filterType of ALL_FILTER_TYPES) {
-      filterRowInto(
-        raw,
-        rowStart,
-        prevRowStart,
-        bytesPerRow,
-        bpp,
-        filterType,
-        candidate,
-        0,
-      );
-      const sum = sumOfAbsSigned(candidate);
+    for (const filterType of filterTypes) {
+      const sum = filterRowInto(current, previous, bpp, filterType, candidate);
       if (sum < bestSum) {
         bestSum = sum;
         bestType = filterType;
-        best = candidate.slice();
+        [best, candidate] = [candidate, best];
       }
     }
-    out[outRowStart] = bestType;
-    if (best !== undefined) {
-      out.set(best, outRowStart + 1);
-    }
-  }
+    out[y * stride] = bestType;
+    out.set(best, y * stride + 1);
+    [previous, current] = [current, previous];
+  });
   return out;
 }
