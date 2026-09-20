@@ -453,7 +453,7 @@ importers:
         specifier: 15.0.0
         version: 15.0.0
       document-outline.js:
-        specifier: 3.9.6
+        specifier: 3.9.7
         version: link:../document-outline.js
       document-schema.js:
         specifier: 7.11.3
@@ -590,7 +590,7 @@ importers:
         specifier: 2.0.0
         version: 2.0.0
       document-operations:
-        specifier: 1.1.22
+        specifier: 1.1.23
         version: link:../document-operations
       documents.js:
         specifier: 7.20.22
@@ -663,7 +663,7 @@ importers:
         specifier: 1.5.25
         version: link:../document-compute.js
       document-outline.js:
-        specifier: 3.9.6
+        specifier: 3.9.7
         version: link:../document-outline.js
       document-schema.js:
         specifier: 7.11.3
@@ -785,7 +785,7 @@ importers:
   packages/document-rest:
     dependencies:
       document-operations:
-        specifier: 1.1.22
+        specifier: 1.1.23
         version: link:../document-operations
       documents.js:
         specifier: 7.20.22
