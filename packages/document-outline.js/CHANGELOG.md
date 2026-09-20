@@ -1,3 +1,15 @@
+## [3.9.17](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.9.16...document-outline.js%403.9.17) (2026-09-20)
+
+### Bug Fixes
+
+* **document-outline.js:** scale PDF line and cell thresholds by the smaller run ([8fa187f](https://github.com/ExaDev/documents.js/commit/8fa187f4219dcdf1da74e03a4fcd520f5796d11e))
+* **documents.js:** take PDF baseline tolerance and word gaps from pdf-codec ([32ec324](https://github.com/ExaDev/documents.js/commit/32ec3246f7c1c9cc6d335507b77382f14e9bbbcd))
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.1.0
+
 ## [3.9.16](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.9.15...document-outline.js%403.9.16) (2026-09-20)
 
 ### Documentation

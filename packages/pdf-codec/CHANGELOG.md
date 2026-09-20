@@ -1,3 +1,27 @@
+## [5.1.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.0.1...pdf-codec%405.1.0) (2026-09-20)
+
+### Features
+
+* **pdf-codec:** group positioned text runs into lines and words ([d991845](https://github.com/ExaDev/documents.js/commit/d9918458c9aefeaf660c35fc306fb92dd861ec3d))
+
+### Bug Fixes
+
+* **documents.js:** take PDF baseline tolerance and word gaps from pdf-codec ([32ec324](https://github.com/ExaDev/documents.js/commit/32ec3246f7c1c9cc6d335507b77382f14e9bbbcd))
+
+### Code Refactoring
+
+* **pdf-codec:** derive line clustering from runsShareBaseline itself ([41fa96e](https://github.com/ExaDev/documents.js/commit/41fa96e696780e4fce25f9e2580d7dc40f0107ff))
+* **pdf-codec:** drop the unreachable branches in text-run grouping ([0101116](https://github.com/ExaDev/documents.js/commit/0101116c3179dfbb5cee1647f57f027d2588d323))
+
+### Documentation
+
+* **pdf-codec:** document how text runs group into lines and words ([88c56aa](https://github.com/ExaDev/documents.js/commit/88c56aac8488fde1702b5cf571a6d94dd4d31cc0))
+
+### Tests
+
+* **pdf-codec:** group text runs recovered from a real written PDF ([e9b2257](https://github.com/ExaDev/documents.js/commit/e9b22570a12ae795e60fb932c44c7d4cfc78a594))
+* **pdf-codec:** pin the baseline tolerance override and the anchor choice ([c10197c](https://github.com/ExaDev/documents.js/commit/c10197cfdf9cd718681857cb56a873dbb52b7fba))
+
 ## [5.0.1](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.0.0...pdf-codec%405.0.1) (2026-09-20)
 
 ### Documentation
