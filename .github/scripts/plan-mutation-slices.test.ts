@@ -2,10 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   COLD_FIXED_SECONDS,
   COLD_SECONDS_PER_LINE,
+  ACCOUNT_RUNNER_LIMIT,
+  EXPECTED_CONCURRENT_PULL_REQUEST_RUNS,
   GITHUB_JOB_LIMIT_MINUTES,
+  MUTATION_SHARE_OF_RUNNER_LIMIT,
   affectedMutationPackages,
   estimateColdSeconds,
+  maxParallelFor,
   packageMatrixEntries,
+  partitionForEvent,
+  selectRequested,
   planSlices,
   sliceBudgetSeconds,
   timeoutMinutesFor,
@@ -225,5 +231,90 @@ describe("packageMatrixEntries", () => {
         GITHUB_JOB_LIMIT_MINUTES,
       );
     }
+  });
+});
+
+describe("maxParallelFor", () => {
+  const budget = Math.floor(
+    ACCOUNT_RUNNER_LIMIT * MUTATION_SHARE_OF_RUNNER_LIMIT,
+  );
+
+  it("keeps the mutation budget well under half of the account's runner limit", () => {
+    expect(MUTATION_SHARE_OF_RUNNER_LIMIT).toBeLessThan(0.5);
+    expect(budget).toBeLessThan(ACCOUNT_RUNNER_LIMIT / 2);
+  });
+
+  it("holds every run together inside the budget when the expected pull request runs overlap", () => {
+    const total =
+      maxParallelFor("schedule") +
+      EXPECTED_CONCURRENT_PULL_REQUEST_RUNS * maxParallelFor("pull_request");
+    expect(total).toBeLessThanOrEqual(budget);
+  });
+
+  it("holds a dispatched run and the expected pull request runs inside the budget", () => {
+    const total =
+      maxParallelFor("workflow_dispatch") +
+      EXPECTED_CONCURRENT_PULL_REQUEST_RUNS * maxParallelFor("pull_request");
+    expect(total).toBeLessThanOrEqual(budget);
+  });
+
+  it("gives every kind of run at least one job at a time", () => {
+    for (const event of [
+      "schedule",
+      "workflow_dispatch",
+      "pull_request",
+    ] as const) {
+      expect(maxParallelFor(event)).toBeGreaterThanOrEqual(1);
+    }
+  });
+});
+
+describe("partitionForEvent", () => {
+  const small = {
+    package: "small",
+    entries: packageMatrixEntries(BYTE_CODEC, files(300)),
+  };
+  const large = {
+    package: "large",
+    entries: packageMatrixEntries(
+      BIG_PACKAGE,
+      files(...Array.from({ length: 40 }, () => 1200)),
+    ),
+  };
+
+  it("runs a single-slice package on a pull request and defers a multi-slice one", () => {
+    expect(partitionForEvent([small, large], "pull_request")).toEqual({
+      run: [small],
+      deferred: ["large"],
+    });
+  });
+
+  it.each(["schedule", "workflow_dispatch"] as const)(
+    "runs every package on a %s run",
+    (event) => {
+      expect(partitionForEvent([small, large], event)).toEqual({
+        run: [small, large],
+        deferred: [],
+      });
+    },
+  );
+});
+
+describe("selectRequested", () => {
+  const packages = [{ name: "a" }, { name: "b" }, { name: "c" }];
+
+  it("keeps every package when none is named", () => {
+    expect(selectRequested(packages, [])).toEqual(packages);
+  });
+
+  it("keeps only the named packages", () => {
+    expect(selectRequested(packages, ["c", "a"])).toEqual([
+      { name: "a" },
+      { name: "c" },
+    ]);
+  });
+
+  it("throws on a name that is not a package, rather than planning nothing", () => {
+    expect(() => selectRequested(packages, ["a", "nope"])).toThrow(/nope/);
   });
 });
