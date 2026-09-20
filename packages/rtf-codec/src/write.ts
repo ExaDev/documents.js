@@ -19,15 +19,18 @@ import {
   type ContentRun,
   type ContentSection,
   type ContentTable,
-  type ContentTableCell,
   type Color,
   type DocumentTree,
   type ProvenanceChange,
   type ProvenanceDescriptor,
   type RunConstructExtent,
+  type TableGridPosition,
   clampHeadingLevel,
   colorToRgbHex,
   flattenTree,
+  tableCellColumnSpan,
+  tableCellRowSpan,
+  walkTableGrid,
 } from "document-schema.js";
 import { borderControlWords, cellFillControlWords } from "./cell-format";
 import {
@@ -465,22 +468,12 @@ function revisionsCovering(
 // The order <celldef> states its four sides in.
 const CELL_BORDER_ORDER = ["top", "left", "bottom", "right"] as const;
 
-// Which [row][cell] positions a rowSpan above them covers, so each can be written with \clvmrg. A covered cell is still a cell in its row -- that is the shape every reader in this family produces and consumes -- so this marks positions rather than removing them.
-function verticalMergeCoverage(table: ContentTable): boolean[][] {
-  const covered = table.rows.map((row) => row.cells.map(() => false));
-  for (const [rowIndex, row] of table.rows.entries()) {
-    for (const [cellIndex, cell] of row.cells.entries()) {
-      const rowSpan = cell.rowSpan ?? 1;
-      for (let next = 1; next < rowSpan; next += 1) {
-        const target = covered[rowIndex + next];
-        // No cellIndex < target.length check: writeTable only ever reads covered[row]?.[cellIndex] for a cellIndex that row's own row.cells.entries() actually produced, so a phantom flag at an index beyond a shorter row's real cells is never read back either way -- a redundant, equivalent-mutant-prone bound with no consumer that can observe it.
-        if (target !== undefined) {
-          target[cellIndex] = true;
-        }
-      }
-    }
+// The merge control words a grid position states in its <celldef>. RTF writes one cell slot per grid column, so every position of a merged region has a slot: the anchor opens the region along each axis it spans (\clmgf across columns, \clvmgf down rows), a position the region reaches along its own row continues it horizontally (\clmrg), and a position it reaches from an earlier row continues it vertically (\clvmrg).
+function mergeControlWords(position: TableGridPosition): string {
+  if (position.anchorRowIndex === undefined) {
+    return `${tableCellRowSpan(position.cell) > 1 ? "\\clvmgf" : ""}${tableCellColumnSpan(position.cell) > 1 ? "\\clmgf" : ""}`;
   }
-  return covered;
+  return position.anchorRowIndex < position.rowIndex ? "\\clvmrg" : "\\clmrg";
 }
 
 // A properly bookmark-narrowed extent, so its own .descriptor.name is directly accessible with no runtime fallback needed for a case the type checker alone cannot rule out -- .filter() narrows the ARRAY's element type only when the predicate itself is passed directly (not wrapped in an arrow calling a separate helper on one of its properties), which is exactly why this exists instead of reusing isBookmarkAnchor as the filter predicate.
@@ -1036,48 +1029,31 @@ class RtfWriter {
   }
 
   private writeTable(table: ContentTable): void {
-    // Which cells a vertical merge covers, derived once for the whole table: RTF states a continuation with \clvmrg on the covered cell itself, while ContentTableCell states the span on its anchor, so the covered positions have to be computed before any row is written.
-    const covered = verticalMergeCoverage(table);
-    for (const [rowIndex, row] of table.rows.entries()) {
+    // ContentTable's rows are dense (one entry per grid column) and RTF's are too (one \cellxN and one \cell per grid column), so each grid position maps to exactly one RTF cell slot. The walk classifies each as an anchor or as covered by a merged region.
+    for (const [rowIndex, positions] of walkTableGrid(table).entries()) {
       // "\cellxN Defines the right boundary of a cell", cumulative from the row's own left edge, so the boundaries are a running total of the column widths.
-      //
-      // A horizontally merged cell occupies one slot in the content model but several grid columns in RTF, and each column needs its own \cellxN and its own \cell mark -- the anchor carrying \clmgf and each continuation \clmrg. So one cell here can produce several of both.
       let right = 0;
-      let column = 0;
       const definitions: string[] = [];
-      const marks: { cell: ContentTableCell; empty: boolean }[] = [];
-      for (const [cellIndex, cell] of row.cells.entries()) {
-        const colSpan = cell.colSpan ?? 1;
-        for (let offset = 0; offset < colSpan; offset += 1) {
-          right += pointsToTwips(table.columnWidthsPt[column] ?? 0);
-          column += 1;
-          definitions.push(
-            this.cellDefinition(
-              cell,
-              covered[rowIndex]?.[cellIndex] === true,
-              colSpan > 1
-                ? offset === 0
-                  ? "mergeFirst"
-                  : "mergeContinuation"
-                : "single",
-              right,
-            ),
-          );
-          marks.push({ cell, empty: offset > 0 });
-        }
+      for (const position of positions) {
+        right += pointsToTwips(table.columnWidthsPt[position.columnIndex] ?? 0);
+        definitions.push(this.cellDefinition(position, right));
       }
       // The row's own <rowwrite> member inside its <tbldef>, where the spec's production places it -- after \trowd's own leading members and before the <celldef>+ run each \cellxN closes. \ltrrow is the default the spec states ("Cells in this table row will have left-to-right precedence (the default)"), so it is written only for a stated `direction: "ltr"`, never as a restated default.
+      const direction = table.rows[rowIndex]?.direction;
       const rowWrite =
-        row.direction === "rtl"
+        direction === "rtl"
           ? "\\rtlrow"
-          : row.direction === "ltr"
+          : direction === "ltr"
             ? "\\ltrrow"
             : "";
       const rowDefinition = `\\trowd\\trgaph108\\trleft0${rowWrite}${definitions.join("")}`;
       // Word 2002 onward writes the row properties both before and after the row, which the spec explicitly calls out as the shape a reader should not assume otherwise; emitting both makes the output readable by either kind of reader.
       this.line(rowDefinition);
-      for (const mark of marks) {
-        this.writeCellBlocks(mark.empty ? [] : mark.cell.blocks);
+      for (const position of positions) {
+        // A covered position's content belongs to its region's anchor, which writes it exactly once.
+        this.writeCellBlocks(
+          position.anchorRowIndex === undefined ? position.cell.blocks : [],
+        );
         this.raw("\\cell");
       }
       this.line(`${rowDefinition}\\row`);
@@ -1085,25 +1061,13 @@ class RtfWriter {
     this.line("\\pard");
   }
 
-  // One <celldef>: the cell's merge flags, borders and shading, closed by its own \cellxN. Written in the grammar's own order so a reader walking it left to right sees each border's side before the <brdr> describing it.
+  // One <celldef>: the position's merge flags, borders and shading, closed by its own \cellxN. Written in the grammar's own order so a reader walking it left to right sees each border's side before the <brdr> describing it. A covered position states its own borders and shading like any other, since ContentTable lets it carry them.
   private cellDefinition(
-    cell: ContentTableCell,
-    isVerticalContinuation: boolean,
-    horizontal: "single" | "mergeFirst" | "mergeContinuation",
+    position: TableGridPosition,
     rightTwips: number,
   ): string {
-    let out = "";
-    if (isVerticalContinuation) {
-      out += "\\clvmrg";
-    } else if ((cell.rowSpan ?? 1) > 1) {
-      out += "\\clvmgf";
-    }
-    if (horizontal === "mergeFirst") {
-      out += "\\clmgf";
-    } else if (horizontal === "mergeContinuation") {
-      // A continuation column states only that it is merged into the one before it; the borders and shading belong to the anchor, and restating them here would double-draw the merged cell's own edges.
-      return `${out}\\clmrg\\cellx${String(rightTwips)}`;
-    }
+    const { cell } = position;
+    let out = mergeControlWords(position);
     // The <cellalign> member, in the production's own place among the <celldef>'s members (before the <celltop>/<cellleft>/... border sides). Only the two non-default members are written: \clvertalt is the spec's own stated default ("Text is top-aligned in cell (the default)") and ContentTableCell.verticalAlign's absence already means top, so neither a 'top' value nor an absent one restates it -- the identical choice the reader makes for the word on the way in.
     if (cell.verticalAlign === "center") out += "\\clvertalc";
     else if (cell.verticalAlign === "bottom") out += "\\clvertalb";

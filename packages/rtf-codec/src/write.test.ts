@@ -3920,11 +3920,12 @@ describe("round trip through this package's own reader", () => {
                   },
                 },
               },
-              // colSpan 2 means this one cell occupies the second and third grid columns, so the row has two cells across three columns -- the covered column has no cell of its own, exactly as a gridSpan'd w:tc does not.
+              // colSpan 2 means this anchor occupies the second and third grid columns, and the third column keeps its own block-less entry so the row has one cell per grid column.
               {
                 blocks: [{ kind: "paragraph", runs: [{ text: "B" }] }],
                 colSpan: 2,
               },
+              { blocks: [] },
             ],
           },
           {
@@ -3945,7 +3946,7 @@ describe("round trip through this package's own reader", () => {
     expect(out).toContain("\\clbrdrt\\brdrs\\brdrw30");
     expect(out).toContain("\\clbrdrb\\brdrdash\\brdrw15");
     expect(out).toContain("\\clcbpat");
-    // colSpan 2 produces two \cellxN column marks for cell B, but its own content must be written only once (against the first, offset === 0 column) -- never repeated into the merge-continuation column too.
+    // colSpan 2 produces two \cellxN column marks for cell B, but its own content must be written only once, on the anchor -- never repeated into the covered column too.
     expect(out.match(/\{B\}/g)).toHaveLength(1);
 
     const beyond = write(
@@ -3987,6 +3988,130 @@ describe("round trip through this package's own reader", () => {
     expect(
       table?.kind === "table" ? table.rows[0]?.cells[1]?.colSpan : undefined,
     ).toBe(2);
+  });
+
+  it("writes each grid position as one cell slot, with \\clvmrg at the grid column of a rowSpan anchor that follows a colSpan anchor", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "table",
+          columnWidthsPt: [72, 72, 72],
+          rows: [
+            {
+              cells: [
+                { blocks: [], colSpan: 2 },
+                { blocks: [] },
+                { blocks: [], rowSpan: 2 },
+              ],
+            },
+            {
+              cells: [{ blocks: [] }, { blocks: [] }, { blocks: [] }],
+            },
+          ],
+        },
+      ]),
+    );
+    const [firstRow, secondRow] = out
+      .split("\\row")
+      .map((chunk) => chunk.slice(chunk.indexOf("\\trowd")));
+    expect(firstRow).toContain(
+      "\\clmgf\\cellx1440\\clmrg\\cellx2880\\clvmgf\\cellx4320",
+    );
+    // The covered cell of the rowSpan sits at grid column 2, so \clvmrg must precede the third \cellxN and no other.
+    expect(secondRow).toContain("\\cellx1440\\cellx2880\\clvmrg\\cellx4320");
+    expect(out.match(/\\cell(?!x)/g)).toHaveLength(6);
+  });
+
+  it("writes \\clmrg for a position covered along its own row and \\clvmrg for one covered from an earlier row, across a 2x2 merge", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "table",
+          columnWidthsPt: [72, 72],
+          rows: [
+            {
+              cells: [{ blocks: [], colSpan: 2, rowSpan: 2 }, { blocks: [] }],
+            },
+            { cells: [{ blocks: [] }, { blocks: [] }] },
+          ],
+        },
+      ]),
+    );
+    const [firstRow, secondRow] = out
+      .split("\\row")
+      .map((chunk) => chunk.slice(chunk.indexOf("\\trowd")));
+    expect(firstRow).toContain("\\clvmgf\\clmgf\\cellx1440\\clmrg\\cellx2880");
+    expect(secondRow).toContain("\\clvmrg\\cellx1440\\clvmrg\\cellx2880");
+  });
+
+  it("writes a covered position's own borders and shading, and none of its blocks", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "table",
+          columnWidthsPt: [72, 72],
+          rows: [
+            {
+              cells: [
+                {
+                  blocks: [{ kind: "paragraph", runs: [{ text: "A" }] }],
+                  colSpan: 2,
+                },
+                {
+                  blocks: [{ kind: "paragraph", runs: [{ text: "STRAY" }] }],
+                  verticalAlign: "bottom",
+                  borders: {
+                    top: { color: { r: 1, g: 0, b: 0 }, widthPt: 1.5 },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\clmrg\\clvertalb\\clbrdrt\\brdrs\\brdrw30");
+    expect(out).not.toContain("STRAY");
+  });
+
+  it("round-trips a 2x2 merge through the dense grid", () => {
+    const document = wordprocessing([
+      {
+        kind: "table",
+        columnWidthsPt: [72, 72, 72],
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [{ kind: "paragraph", runs: [{ text: "A" }] }],
+                colSpan: 2,
+                rowSpan: 2,
+              },
+              { blocks: [] },
+              { blocks: [{ kind: "paragraph", runs: [{ text: "B" }] }] },
+            ],
+          },
+          {
+            cells: [
+              { blocks: [] },
+              { blocks: [] },
+              { blocks: [{ kind: "paragraph", runs: [{ text: "C" }] }] },
+            ],
+          },
+        ],
+      },
+    ]);
+    const back = roundTrip(document);
+    const table = (
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks : []
+    )?.find((block) => block.kind === "table");
+    const rows = table?.kind === "table" ? table.rows : [];
+    expect(rows.map((row) => row.cells.length)).toEqual([3, 3]);
+    expect(rows[0]?.cells[0]?.colSpan).toBe(2);
+    expect(rows[0]?.cells[0]?.rowSpan).toBe(2);
+    expect(rows[0]?.cells[1]?.blocks).toEqual([]);
+    expect(rows[1]?.cells[0]?.blocks).toEqual([]);
+    expect(rows[1]?.cells[1]?.blocks).toEqual([]);
   });
 
   // ExaDev/documents.js#1024: a 'pattern' cell fill now writes its own genuine two-colour \clcbpatN/\clcfpatN/\clshdngN, not just resolveCellFillColor's single representative colour collapsed into \clcbpatN alone.
