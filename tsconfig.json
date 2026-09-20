@@ -22,6 +22,7 @@
     "prettier.config.ts",
     "stryker.shared.ts",
     "stryker.runner-preload.ts",
+    "stryker.shared.test.ts",
     "tsdown.sea.shared.ts",
     "knip.config.ts",
     "vitest.root.config.ts",
