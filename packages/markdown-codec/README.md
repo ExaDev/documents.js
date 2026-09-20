@@ -105,11 +105,11 @@ The same round trip as a schema-validated [`z.codec()`](https://zod.dev) pair, m
 import { z } from "zod";
 import { markdownCodec, MarkdownBytesSchema } from "markdown-codec";
 
-const documentPackage = z.decode(markdownCodec, bytes); // throws if bytes are not well-formed UTF-8
+const documentPackage = z.decode(markdownCodec, bytes); // throws if the bytes are not text
 const bytes2 = z.encode(markdownCodec, documentPackage);
 ```
 
-`MarkdownBytesSchema` checks for well-formed UTF-8. The no-options form only; `readMarkdown`/`writeMarkdown` remain the entry points for an `AbortSignal` or diagnostic sink. Every construct-mapping gap reports through the sink as a stable code (e.g. `md/nested-emphasis-flattened`) — see `MarkdownDiagnosticCodes` and [Gotchas](#gotchas-and-quirks).
+`MarkdownBytesSchema` checks that the bytes are text at all, which is the only structural question markdown's lack of a magic number leaves. The character encoding is worked out from the bytes by [byte-codec](../byte-codec/README.md#text-decoding) rather than assumed to be UTF-8, so a file saved in the Windows system code page or as UTF-16 reads; binary content, and text in an encoding that cannot be placed, are refused rather than guessed at. The no-options form only; `readMarkdown`/`writeMarkdown` remain the entry points for an `AbortSignal` or diagnostic sink. Every construct-mapping gap reports through the sink as a stable code (e.g. `md/nested-emphasis-flattened`) — see `MarkdownDiagnosticCodes` and [Gotchas](#gotchas-and-quirks).
 
 ## Two encodings: `DocumentTree` and `ContentDocument`
 

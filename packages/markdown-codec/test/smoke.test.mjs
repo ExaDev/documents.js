@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const cjs = require('../dist/index.cjs');
 
 // A representative slice of the public surface, not an exhaustive list -- enough to catch a genuinely broken dual build without duplicating src/index.ts's own export list here. Error classes are real invocable functions at runtime (typeof === 'function'), so they're checked here alongside ordinary functions rather than in OBJECTS below.
-const FUNCTIONS = ['readMarkdown', 'writeMarkdown', 'readMarkdownContent', 'writeMarkdownContent', 'NOOP_MARKDOWN_DIAGNOSTIC_SINK', 'MarkdownParseError', 'MarkdownWriteError', 'MarkdownUnsupportedDocumentKindError', 'MarkdownInvalidUtf8Error', 'MarkdownInputTooLargeError', 'MarkdownNestingLimitExceededError'];
+const FUNCTIONS = ['readMarkdown', 'writeMarkdown', 'readMarkdownContent', 'writeMarkdownContent', 'NOOP_MARKDOWN_DIAGNOSTIC_SINK', 'MarkdownParseError', 'MarkdownWriteError', 'MarkdownUnsupportedDocumentKindError', 'MarkdownUndecodableTextError', 'MarkdownInputTooLargeError', 'MarkdownNestingLimitExceededError'];
 const OBJECTS = ['markdownCodec', 'markdownContentCodec', 'MarkdownBytesSchema', 'MarkdownDiagnosticCodes'];
 
 describe('dist/ exports are present in both builds', () => {

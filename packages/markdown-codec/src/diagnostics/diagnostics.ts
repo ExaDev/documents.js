@@ -78,11 +78,13 @@ export class MarkdownParseError extends Error {
   }
 }
 
-// The input bytes do not decode as valid UTF-8 -- thrown before any scanning begins, since there is no meaningful line/column position to attribute a recover-tier diagnostic to.
-export class MarkdownInvalidUtf8Error extends MarkdownParseError {
-  constructor(message = "input is not valid UTF-8") {
-    super("md/invalid-utf8", message);
-    this.name = "MarkdownInvalidUtf8Error";
+// The input bytes do not decode as text under any encoding byte-codec's decodeText supports, either because they are not text at all or because they match none of them. Thrown before any scanning begins, since there is no meaningful line/column position to attribute a recover-tier diagnostic to. Named for what it now means: the boundary stopped assuming UTF-8 and works the encoding out from the bytes, so "not valid UTF-8" is no longer the question being asked.
+export class MarkdownUndecodableTextError extends MarkdownParseError {
+  constructor(
+    message = "input does not decode as text under any supported encoding",
+  ) {
+    super("md/undecodable-text", message);
+    this.name = "MarkdownUndecodableTextError";
   }
 }
 
