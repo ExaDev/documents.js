@@ -1897,6 +1897,18 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
       9.12,
       2,
     );
+
+    // Lowering the FIRST glyph's vector instead moves the whole run, since the run's own matrices already carry that one, so the first glyph must move by exactly that 380/1000 em and no further. A walk that added each glyph's vector to the first's rather than subtracting it would move this glyph by its own vector twice over on top of that.
+    const firstLowered = glyphCentres(
+      type0Skeleton({
+        encoding: "/Identity-V",
+        descendantExtra: "/DW 1000 /DW2 [880 -1000] /W2 [0 [-1000 500 500]]",
+        content: twoCids,
+      }),
+    );
+    expect(
+      Math.abs((firstLowered[0]?.y ?? 0) - (shared[0]?.y ?? 0)),
+    ).toBeCloseTo(9.12, 2);
   });
 
   it("accepts Identity-V, whose CID mapping is the same identity one set vertically", () => {
