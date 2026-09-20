@@ -1,4 +1,4 @@
-// Direct unit tests for extractFrontMatter's own scalar/keyword-list parsing and block-boundary scanning -- lower.test.ts (round-tripped through readMarkdown) only exercises whichever quoting/whitespace/malformed shapes its own fixtures happen to contain, never the exact quote-length boundary (a lone quote character, an empty quoted value), a mismatched-bracket keywords list, a blank line inside the block, or a document with no front matter at all.
+// Direct unit tests for extractFrontMatter's own scalar/keyword-list parsing and block-boundary scanning — lower.test.ts (round-tripped through readMarkdown) only exercises whichever quoting/whitespace/malformed shapes its own fixtures happen to contain, never the exact quote-length boundary (a lone quote character, an empty quoted value), a mismatched-bracket keywords list, a blank line inside the block, or a document with no front matter at all.
 
 import { describe, expect, it } from "vitest";
 import { MarkdownDiagnosticCodes } from "../diagnostics/diagnostics";
@@ -15,7 +15,7 @@ describe("extractFrontMatter: no front matter present at all", () => {
     });
   });
 
-  it("leaves a document with an unclosed leading '---' unchanged -- CommonMark's own thematic-break-then-paragraph reading", () => {
+  it("leaves a document with an unclosed leading '---' unchanged — CommonMark's own thematic-break-then-paragraph reading", () => {
     const source = "---\ntitle: x\nno closing delimiter\n";
     const result = extractFrontMatter(source);
     expect(result).toStrictEqual({
@@ -91,7 +91,7 @@ describe("extractFrontMatter: scalar quote stripping, at the exact length-2 boun
     });
   });
 
-  it("does not strip when only the opening quote matches -- no closing quote at all", () => {
+  it("does not strip when only the opening quote matches — no closing quote at all", () => {
     expect(
       extractFrontMatter('---\ntitle: "abc\n---\n').metadata,
     ).toStrictEqual({
@@ -99,7 +99,7 @@ describe("extractFrontMatter: scalar quote stripping, at the exact length-2 boun
     });
   });
 
-  it("does not strip when only the closing quote matches -- no opening quote at all", () => {
+  it("does not strip when only the closing quote matches — no opening quote at all", () => {
     expect(
       extractFrontMatter('---\ntitle: abc"\n---\n').metadata,
     ).toStrictEqual({
@@ -123,7 +123,7 @@ describe("extractFrontMatter: scalar quote stripping, at the exact length-2 boun
     );
   });
 
-  // The single-quote checks mirror the double-quote ones above exactly -- isDoubleQuoted short-circuits on startsWith('"') before ever reaching endsWith for a single-quoted value, so only a value that itself exercises isSingleQuoted's own length/startsWith/endsWith checks at each boundary can kill a mutant in it.
+  // The single-quote checks mirror the double-quote ones above exactly — isDoubleQuoted short-circuits on startsWith('"') before ever reaching endsWith for a single-quoted value, so only a value that itself exercises isSingleQuoted's own length/startsWith/endsWith checks at each boundary can kill a mutant in it.
   it("does not strip a lone single-quote character (length 1, below the boundary)", () => {
     expect(extractFrontMatter("---\ntitle: '\n---\n").metadata).toStrictEqual({
       title: "'",
@@ -136,7 +136,7 @@ describe("extractFrontMatter: scalar quote stripping, at the exact length-2 boun
     });
   });
 
-  it("does not strip when only the opening single quote matches -- no closing quote at all", () => {
+  it("does not strip when only the opening single quote matches — no closing quote at all", () => {
     expect(
       extractFrontMatter("---\ntitle: 'abc\n---\n").metadata,
     ).toStrictEqual({
@@ -144,7 +144,7 @@ describe("extractFrontMatter: scalar quote stripping, at the exact length-2 boun
     });
   });
 
-  it("does not strip when only the closing single quote matches -- no opening quote at all", () => {
+  it("does not strip when only the closing single quote matches — no opening quote at all", () => {
     expect(
       extractFrontMatter("---\ntitle: abc'\n---\n").metadata,
     ).toStrictEqual({
@@ -173,7 +173,7 @@ describe("extractFrontMatter: keywords, both the bracketed and the bare comma-se
   });
 
   it("does not treat a value as bracketed when only the opening bracket is present", () => {
-    // Malformed: starts with "[" but never closes -- read as one bare comma-separated line instead, exactly as this module's own "not a real YAML parser" scope promises. The unstripped leading "[" survives on the first item.
+    // Malformed: starts with "[" but never closes — read as one bare comma-separated line instead, exactly as this module's own "not a real YAML parser" scope promises. The unstripped leading "[" survives on the first item.
     expect(
       extractFrontMatter("---\nkeywords: [a, b\n---\n").metadata.keywords,
     ).toStrictEqual(["[a", "b"]);
@@ -192,7 +192,7 @@ describe("extractFrontMatter: keywords, both the bracketed and the bare comma-se
   });
 
   it("does not treat a value as bracketed when only the closing bracket is present", () => {
-    // Malformed the other way round: ends with "]" but never opens -- still read as one bare comma-separated line, since both the opening AND closing bracket are required together. The unstripped trailing "]" survives on the last item.
+    // Malformed the other way round: ends with "]" but never opens — still read as one bare comma-separated line, since both the opening AND closing bracket are required together. The unstripped trailing "]" survives on the last item.
     expect(
       extractFrontMatter("---\nkeywords: a, b]\n---\n").metadata.keywords,
     ).toStrictEqual(["a", "b]"]);
@@ -213,7 +213,7 @@ describe("extractFrontMatter: direction, a two-member enum that silently drops a
     });
   });
 
-  it("silently drops an unrecognised direction value -- no FRONT_MATTER_KEY_UNMAPPED, since the key itself is recognised", () => {
+  it("silently drops an unrecognised direction value — no FRONT_MATTER_KEY_UNMAPPED, since the key itself is recognised", () => {
     const collector = createDiagnosticCollector();
     const result = extractFrontMatter(
       "---\ndirection: sideways\n---\n",

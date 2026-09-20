@@ -11,7 +11,7 @@ describe("matchMathInlineSpan", () => {
   });
 
   it("returns undefined when the char at index is not a backslash, even with a literal '(' immediately after and a '\\)' reachable later", () => {
-    // A=charAt(index)!=='\\' is true, B=charAt(index+1)!=='(' is false -- neither guard clause alone should let the scan fall through to a bogus match against the trailing '\)'.
+    // A=charAt(index)!=='\\' is true, B=charAt(index+1)!=='(' is false — neither guard clause alone should let the scan fall through to a bogus match against the trailing '\)'.
     expect(matchMathInlineSpan("x(later\\)", 0)).toBeUndefined();
   });
 

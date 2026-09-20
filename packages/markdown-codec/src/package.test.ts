@@ -331,7 +331,7 @@ describe("writeMarkdown: DocumentTree -> markdown text", () => {
     expect(written).toBe(writeMarkdown(base));
   });
 
-  it("reports nothing for a present but genuinely EMPTY table -- the guard is a real emptiness check, not merely 'is the key present'", () => {
+  it("reports nothing for a present but genuinely EMPTY table — the guard is a real emptiness check, not merely 'is the key present'", () => {
     const base = readMarkdown(SAMPLE).documentPackage;
     const withEmptyTables = {
       ...base,
@@ -642,7 +642,7 @@ describe("tree-only carries: reference definitions and front-matter residue", ()
 
   it("emits no front-matter block at all (returns the body untouched) when the metadata carries none of the fields it maps", () => {
     const base = readMarkdown("body").documentPackage;
-    // frontMatter: true with a metadata object none of STRING_FIELD_ENTRIES/keywords/direction can read anything from -- emitFrontMatter's own lines array stays empty, so it must return undefined (no block at all) rather than an empty "---\n---" shell.
+    // frontMatter: true with a metadata object none of STRING_FIELD_ENTRIES/keywords/direction can read anything from — emitFrontMatter's own lines array stays empty, so it must return undefined (no block at all) rather than an empty "---\n---" shell.
     expect(writeMarkdown(base, { frontMatter: true })).toBe("body");
   });
 

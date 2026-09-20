@@ -453,7 +453,7 @@ describe("every MarkdownDiagnosticCodes entry is reachable from real input", () 
   });
 });
 
-// Runs `fn`, returning whatever it throws (or undefined if it doesn't) -- lets a test assert on a thrown error's own fields without a try/catch block of its own, and without vitest's `expect(fn).toThrow(...)`, which only ever checks the constructor and (optionally) the message.
+// Runs `fn`, returning whatever it throws (or undefined if it doesn't) — lets a test assert on a thrown error's own fields without a try/catch block of its own, and without vitest's `expect(fn).toThrow(...)`, which only ever checks the constructor and (optionally) the message.
 function captureThrown(fn: () => void): unknown {
   try {
     fn();
@@ -466,7 +466,7 @@ function captureThrown(fn: () => void): unknown {
 // The throw tier's own error classes, exercised directly rather than only observed via .toThrow(SomeClass) at a real call site elsewhere: an instanceof check alone cannot distinguish a correct message/code/field from a mutated one, so each case here asserts every field the constructor sets, not just the class.
 describe("throw-tier error classes carry their own precise code, message, and fields", () => {
   it("MarkdownParseError: constructed directly (not through a subclass), name/code/message all carry the constructor's own arguments", () => {
-    // Every concrete subclass overwrites `this.name` in its own constructor right after calling super(), so a MarkdownInvalidUtf8Error/MarkdownInputTooLargeError/MarkdownNestingLimitExceededError instance can never observe MarkdownParseError's own `this.name = "MarkdownParseError"` assignment -- it is immediately clobbered. Only a direct instantiation of the base class exercises that line.
+    // Every concrete subclass overwrites `this.name` in its own constructor right after calling super(), so a MarkdownInvalidUtf8Error/MarkdownInputTooLargeError/MarkdownNestingLimitExceededError instance can never observe MarkdownParseError's own `this.name = "MarkdownParseError"` assignment — it is immediately clobbered. Only a direct instantiation of the base class exercises that line.
     const error = new MarkdownParseError("md/some-code", "some message");
     expect(error).toBeInstanceOf(MarkdownParseError);
     expect(error.name).toBe("MarkdownParseError");
@@ -475,7 +475,7 @@ describe("throw-tier error classes carry their own precise code, message, and fi
   });
 
   it("MarkdownWriteError: constructed directly (not through a subclass), name/code/message all carry the constructor's own arguments", () => {
-    // The write-side twin of the MarkdownParseError case above -- every concrete subclass (MarkdownUnbalancedConstructMarkersError and siblings) overwrites `this.name` immediately after super(), so only a direct instantiation observes the base class's own assignment.
+    // The write-side twin of the MarkdownParseError case above — every concrete subclass (MarkdownUnbalancedConstructMarkersError and siblings) overwrites `this.name` immediately after super(), so only a direct instantiation observes the base class's own assignment.
     const error = new MarkdownWriteError("md/some-code", "some message");
     expect(error).toBeInstanceOf(MarkdownWriteError);
     expect(error.name).toBe("MarkdownWriteError");
@@ -498,7 +498,7 @@ describe("throw-tier error classes carry their own precise code, message, and fi
   });
 
   it("MarkdownInputTooLargeError: lowerMarkdown enforces maxInputBytes against the input's own UTF-8 byte length, not its character count", () => {
-    // "é" is two UTF-8 bytes but one UTF-16 code unit -- a maxInputBytes check keyed on .length rather than TextEncoder byte length would let this through at limit 5.
+    // "é" is two UTF-8 bytes but one UTF-16 code unit — a maxInputBytes check keyed on .length rather than TextEncoder byte length would let this through at limit 5.
     const source = "aaéé";
     const error = captureThrown(() =>
       lowerMarkdown(source, { maxInputBytes: 5 }),
@@ -520,7 +520,7 @@ describe("throw-tier error classes carry their own precise code, message, and fi
   });
 
   it("MarkdownNestingLimitExceededError: parseMarkdown enforces maxNesting against the open-block stack depth", () => {
-    // Three levels of blockquote nesting against a maxNesting of 2 -- the third open (nestingDepth reaching the limit) must throw, not the first or second.
+    // Three levels of blockquote nesting against a maxNesting of 2 — the third open (nestingDepth reaching the limit) must throw, not the first or second.
     const source = "> > > deep";
     const error = captureThrown(() => parseMarkdown(source, { maxNesting: 2 }));
     expect(error).toBeInstanceOf(MarkdownNestingLimitExceededError);

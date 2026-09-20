@@ -1,4 +1,4 @@
-// Direct unit tests for lowerInlineNodes' own leaf-by-leaf construction, isolated from the parser -- the round-trip suites in lower.test.ts exercise this module only through whatever shapes the real CommonMark parser happens to produce, which never reaches several of its own branches (an empty inline rawHtml literal, the rawHtml: "drop" branch for an INLINE tag specifically, an empty text/entity node, a nested bold-in-bold or strike-in-strike pair, an untitled image). Building MarkdownInlineNode trees by hand here reaches those directly and pins the exact diagnostic message text lower.test.ts's own `collector.has(code)` checks never inspect.
+// Direct unit tests for lowerInlineNodes' own leaf-by-leaf construction, isolated from the parser — the round-trip suites in lower.test.ts exercise this module only through whatever shapes the real CommonMark parser happens to produce, which never reaches several of its own branches (an empty inline rawHtml literal, the rawHtml: "drop" branch for an INLINE tag specifically, an empty text/entity node, a nested bold-in-bold or strike-in-strike pair, an untitled image). Building MarkdownInlineNode trees by hand here reaches those directly and pins the exact diagnostic message text lower.test.ts's own `collector.has(code)` checks never inspect.
 
 import { describe, expect, it } from "vitest";
 import type { MarkdownInlineNode } from "../ast/ast";
@@ -20,7 +20,7 @@ function lower(
 }
 
 describe("lowerInlineNodes: buildRun's own conditional fields", () => {
-  it("a run with no active style carries only its own text -- no bold/italic/strike/hyperlink/fontFamily key at all, not even set to undefined", () => {
+  it("a run with no active style carries only its own text — no bold/italic/strike/hyperlink/fontFamily key at all, not even set to undefined", () => {
     const { runs } = lower([{ type: "text", value: "plain" }]);
     expect(runs).toHaveLength(1);
     expect(Object.keys(runs[0]!).sort()).toStrictEqual(["text"]);

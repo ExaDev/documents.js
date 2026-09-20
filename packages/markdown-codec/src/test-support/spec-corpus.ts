@@ -73,7 +73,7 @@ export function loadGfmExtensionExamples(extension: string): SpecExample[] {
     const line = lines[index]!;
     const heading = GFM_SECTION_PATTERN.exec(line);
     if (heading !== null) {
-      // GFM_SECTION_PATTERN's own capturing group is not inside an alternation, so a successful match always populates it -- only TypeScript's own RegExpExecArray typing needs told.
+      // GFM_SECTION_PATTERN's own capturing group is not inside an alternation, so a successful match always populates it — only TypeScript's own RegExpExecArray typing needs told.
       section = heading[1]!;
       index += 1;
       continue;
@@ -94,7 +94,7 @@ export function loadGfmExtensionExamples(extension: string): SpecExample[] {
     }
     index += 1;
     const html: string[] = [];
-    // Both reads below are guarded by the identical index < lines.length check, evaluated first in the while condition's own left-to-right && chain -- in range whenever reached.
+    // Both reads below are guarded by the identical index < lines.length check, evaluated first in the while condition's own left-to-right && chain — in range whenever reached.
     while (
       index < lines.length &&
       !GFM_EXAMPLE_END_PATTERN.test(lines[index]!)

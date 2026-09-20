@@ -29,7 +29,7 @@ function parseDefinition(
   content: string,
   start: number,
 ): ParsedDefinition | undefined {
-  // No separate "is the label at least [x] long" length guard: matchLinkLabel returns 0 (no bracket at all) or a real bracket-pair length of 2 or more, and a length-2 match ("[]") slices to an empty inner label just as a length-0 match's own empty slice does -- both already fall out of the label.length === 0 check below, so a dedicated minimum-length rejection could never see a case the empty-label check doesn't already reject.
+  // No separate "is the label at least [x] long" length guard: matchLinkLabel returns 0 (no bracket at all) or a real bracket-pair length of 2 or more, and a length-2 match ("[]") slices to an empty inner label just as a length-0 match's own empty slice does — both already fall out of the label.length === 0 check below, so a dedicated minimum-length rejection could never see a case the empty-label check doesn't already reject.
   const labelLength = matchLinkLabel(content, start);
   const label = normalizeLinkLabel(content.slice(start, start + labelLength));
   if (label.length === 0) {

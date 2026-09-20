@@ -39,7 +39,7 @@ function matchMarker(
 ): MarkerMatch | undefined {
   const bullet = BULLET_MARKER_PATTERN.exec(rest);
   if (bullet !== null) {
-    // BULLET_MARKER_PATTERN's own character class (`[*+-]`) is exactly MarkdownBulletMarker's three members, so a match's own char is never anything else -- no runtime check could ever see the "else" side of that, only TypeScript's own indexed-access typing needs told.
+    // BULLET_MARKER_PATTERN's own character class (`[*+-]`) is exactly MarkdownBulletMarker's three members, so a match's own char is never anything else — no runtime check could ever see the "else" side of that, only TypeScript's own indexed-access typing needs told.
     const char = bullet[0] as MarkdownBulletMarker;
     return {
       length: bullet[0].length,
@@ -50,7 +50,7 @@ function matchMarker(
   if (ordered === null) {
     return undefined;
   }
-  // Neither capturing group in ORDERED_MARKER_PATTERN is optional, so a successful match always populates both -- TypeScript's own RegExpExecArray typing has no way to say that (every capture reads as possibly-undefined, alternation or not), so both reads are cast the same way the bullet branch above already casts its own single capture.
+  // Neither capturing group in ORDERED_MARKER_PATTERN is optional, so a successful match always populates both — TypeScript's own RegExpExecArray typing has no way to say that (every capture reads as possibly-undefined, alternation or not), so both reads are cast the same way the bullet branch above already casts its own single capture.
   const digits = ordered[1]!;
   const delimiter = ordered[2] as MarkdownOrderedListDelimiter;
   const start = Number.parseInt(digits, 10);
@@ -94,7 +94,7 @@ export function parseListMarker(
   line.advanceToNextNonspace();
   line.advance(match.length);
 
-  // Measure the spaces following the marker in COLUMNS. No cap at the code-indent threshold here -- the branch below already resets the cursor back to afterMarkerMark and re-derives the item's own content indent from scratch whenever followingSpaces turns out to exceed it (or the rest of the line is blank), so a mid-scan cap would only change how many spaces this loop itself walks past, never the value parseListMarker returns or the cursor position it leaves behind.
+  // Measure the spaces following the marker in COLUMNS. No cap at the code-indent threshold here — the branch below already resets the cursor back to afterMarkerMark and re-derives the item's own content indent from scratch whenever followingSpaces turns out to exceed it (or the rest of the line is blank), so a mid-scan cap would only change how many spaces this loop itself walks past, never the value parseListMarker returns or the cursor position it leaves behind.
   const afterMarkerMark = line.mark();
   const afterMarkerColumn = line.column;
   // LineCursor.peek() reports a tab as a single space, one column at a time (src/scan), so testing for a space alone covers both -- there is no '\t' to compare against at this level.
@@ -104,11 +104,11 @@ export function parseListMarker(
   const followingSpaces = line.column - afterMarkerColumn;
   const startsBlank = line.atEnd;
 
-  // No separate `followingSpaces < 1` disjunct: the do-while above always runs its body at least once, and LineCursor.advance() only ever leaves `line.column` unchanged when the cursor was already at the absolute end of input before that call -- so followingSpaces can never come out to 0 without startsBlank also being true, and a disjunct that can never be true on its own is not a real second condition.
+  // No separate `followingSpaces < 1` disjunct: the do-while above always runs its body at least once, and LineCursor.advance() only ever leaves `line.column` unchanged when the cursor was already at the absolute end of input before that call — so followingSpaces can never come out to 0 without startsBlank also being true, and a disjunct that can never be true on its own is not a real second condition.
   if (followingSpaces > CODE_INDENT_COLUMNS || startsBlank) {
     // Either the content is indented code (5+ columns past the marker) or there is no content on this line at all: the item's own content indent is the marker plus a single column, and everything past that is content.
     line.reset(afterMarkerMark);
-    // Unconditional, not `if (line.peek() === " ") line.advance(1)`: the marker-follows-by check above already guarantees the character right after the marker is a space/tab or end of line, so this is either consuming that one space/tab (the followingSpaces > 4 case) or a no-op past the end of input (the startsBlank case) -- never a third, unguarded shape.
+    // Unconditional, not `if (line.peek() === " ") line.advance(1)`: the marker-follows-by check above already guarantees the character right after the marker is a space/tab or end of line, so this is either consuming that one space/tab (the followingSpaces > 4 case) or a no-op past the end of input (the startsBlank case) — never a third, unguarded shape.
     line.advance(1);
     return { ...match.data, padding: match.length + 1 };
   }
@@ -117,7 +117,7 @@ export function parseListMarker(
 
 // Whether a newly started item continues the list that is already open, or starts a fresh one. spec 0.31.2: "a list is a sequence of list items of the same type" -- changing the bullet character or the ordered delimiter starts a new list, even with no blank line in between.
 //
-// No separate a.type === b.type check: bulletChar is set only on a "bullet" marker and delimiter only on an "ordered" one (see ListMarkerData), so whenever the two markers are different variants exactly one of the two comparisons below pits a real value against undefined and is already false -- a same-type comparison could never survive that pairing without the field comparisons already agreeing too.
+// No separate a.type === b.type check: bulletChar is set only on a "bullet" marker and delimiter only on an "ordered" one (see ListMarkerData), so whenever the two markers are different variants exactly one of the two comparisons below pits a real value against undefined and is already false — a same-type comparison could never survive that pairing without the field comparisons already agreeing too.
 export function listsMatch(a: ListMarkerData, b: ListMarkerData): boolean {
   return a.delimiter === b.delimiter && a.bulletChar === b.bulletChar;
 }

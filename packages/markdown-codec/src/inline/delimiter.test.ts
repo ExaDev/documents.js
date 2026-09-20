@@ -108,14 +108,14 @@ describe("scanDelimiterRun", () => {
 });
 
 describe("closerSignature", () => {
-  it("encodes the delimiter character, whether it can open, and origCount % 3 -- distinctly for each", () => {
+  it("encodes the delimiter character, whether it can open, and origCount % 3 — distinctly for each", () => {
     expect(
       closerSignature(delimiter({ char: "*", origCount: 1, canOpen: true })),
     ).toBe("*11");
     expect(
       closerSignature(delimiter({ char: "*", origCount: 1, canOpen: false })),
     ).toBe("*01");
-    // origCount 4 falls in the same modulo-3 bucket as 1 -- same signature.
+    // origCount 4 falls in the same modulo-3 bucket as 1 — same signature.
     expect(
       closerSignature(delimiter({ char: "*", origCount: 4, canOpen: true })),
     ).toBe("*11");
@@ -146,7 +146,7 @@ describe("processEmphasis", () => {
 
   it("keeps a delimiter search bounded by the openers floor rather than re-walking the whole stack for every same-signature closer", () => {
     const stack = new DelimiterStack();
-    // A long run of inert, never-removed, never-matching delimiters of a different character sits below a batch of same-signature closers that can never match anything either -- without the floor, each of those closers re-walks the entire inert run from scratch, making the whole pass quadratic in its length.
+    // A long run of inert, never-removed, never-matching delimiters of a different character sits below a batch of same-signature closers that can never match anything either — without the floor, each of those closers re-walks the entire inert run from scratch, making the whole pass quadratic in its length.
     const inertCount = 50_000;
     for (let i = 0; i < inertCount; i++) {
       const node = new InlineNode("text");

@@ -75,7 +75,7 @@ function lowerInlineNodeInto(
   extents: RunConstructExtent[],
 ): void {
   switch (node.type) {
-    // text and entity both carry their materialised text in the same field, and are handled identically -- one shared body, rather than two separately-mutable cases whose bodies are textually forced to stay identical anyway.
+    // text and entity both carry their materialised text in the same field, and are handled identically — one shared body, rather than two separately-mutable cases whose bodies are textually forced to stay identical anyway.
     case "text":
     case "entity":
       if (node.value.length > 0) runs.push(buildRun(node.value, style));

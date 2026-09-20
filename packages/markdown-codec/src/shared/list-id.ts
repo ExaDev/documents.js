@@ -63,7 +63,7 @@ export function parseListNumId(numId: string): ListNumIdInfo | undefined {
     return undefined;
   }
   const type = match[2];
-  // NUMID_PATTERN's own second capturing group is a mandatory (bullet|ordered) alternation with no `?` -- a successful overall match always populates it, so this comparison also catches the `undefined` case a plain regex capture-group index type otherwise admits (noUncheckedIndexedAccess), with no second, separately-testable branch for a case the pattern already rules out.
+  // NUMID_PATTERN's own second capturing group is a mandatory (bullet|ordered) alternation with no `?` — a successful overall match always populates it, so this comparison also catches the `undefined` case a plain regex capture-group index type otherwise admits (noUncheckedIndexedAccess), with no second, separately-testable branch for a case the pattern already rules out.
   if (type !== "bullet" && type !== "ordered") {
     return undefined;
   }

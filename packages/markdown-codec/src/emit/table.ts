@@ -47,7 +47,7 @@ function delimiterCell(alignment: MarkdownTableAlignment): string {
 function escapeUnescapedPipes(text: string): string {
   let out = "";
   let index = 0;
-  // text.charAt(index) !== "", not index < text.length: the two are equivalent for every real index, but charAt already returns "" one past the end, which never matches "\\" or "|" either -- only this spelling's own mutation is reachable by a real test.
+  // text.charAt(index) !== "", not index < text.length: the two are equivalent for every real index, but charAt already returns "" one past the end, which never matches "\\" or "|" either — only this spelling's own mutation is reachable by a real test.
   while (text.charAt(index) !== "") {
     const char = text.charAt(index);
     // No separate "is there a character after the backslash" guard: when the backslash is the very last character, text.charAt(index + 1) is already "", and appending char + "" is the identical single backslash the no-escape fallthrough two branches down would append anyway.

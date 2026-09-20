@@ -32,7 +32,7 @@ describe("BlockNode.replaceWith", () => {
     const onlyChild = new BlockNode("paragraph", 1);
     parent.appendChild(onlyChild);
 
-    // A node whose own `.parent` points here, but that was never itself pushed into parent.children -- an inconsistent state replaceWith must not act on.
+    // A node whose own `.parent` points here, but that was never itself pushed into parent.children — an inconsistent state replaceWith must not act on.
     const detached = new BlockNode("paragraph", 2);
     detached.parent = parent;
 
@@ -67,7 +67,7 @@ describe("BlockNode.unlink", () => {
 
     detached.unlink();
 
-    // A wrong `index !== -1` check (forced true) would splice(-1, 1) here, which deletes the LAST element of the array -- exactly the bug this pins against.
+    // A wrong `index !== -1` check (forced true) would splice(-1, 1) here, which deletes the LAST element of the array — exactly the bug this pins against.
     expect(parent.children).toEqual([onlyChild]);
   });
 });

@@ -1,4 +1,4 @@
-// Direct unit tests for this module's own character-class predicates and codepoint helpers -- link.ts and delimiter.ts only exercise these through whatever characters the round-trip suites' own markdown sources happen to contain, never at the exact boundaries (0x1f/0x20, 0x7e/0x7f, and every one of the four surrogate-pair range edges individually) that distinguish a correct comparison from an off-by-one one.
+// Direct unit tests for this module's own character-class predicates and codepoint helpers — link.ts and delimiter.ts only exercise these through whatever characters the round-trip suites' own markdown sources happen to contain, never at the exact boundaries (0x1f/0x20, 0x7e/0x7f, and every one of the four surrogate-pair range edges individually) that distinguish a correct comparison from an off-by-one one.
 
 import { describe, expect, it } from "vitest";
 import {

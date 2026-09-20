@@ -114,7 +114,7 @@ export function extractFrontMatter(
     return { metadata: {}, rest: source, source: undefined };
   }
 
-  // Both loops below scan a slice (never a manually-bounded index/length comparison against the full array) and derive the 1-based line number from the slice's own offset -- lines[index] within either slice's real bounds is always a defined string (split() never produces a sparse array), so there is no further "missing element" fallback to write either.
+  // Both loops below scan a slice (never a manually-bounded index/length comparison against the full array) and derive the 1-based line number from the slice's own offset — lines[index] within either slice's real bounds is always a defined string (split() never produces a sparse array), so there is no further "missing element" fallback to write either.
   const closingOffset = lines
     .slice(1)
     .findIndex((line) => CLOSING_DELIMITER_PATTERN.test(line));
@@ -126,7 +126,7 @@ export function extractFrontMatter(
   const metadata: MutableLayoutMetadata = {};
   for (const [offset, line] of lines.slice(1, closingIndex).entries()) {
     const index = offset + 1;
-    // No separate blank-line skip: a blank (or all-whitespace) line never matches KEY_VALUE_LINE_PATTERN either (it requires a leading identifier character), so it already falls through to the "not key: value shaped" skip below -- a dedicated check here would only ever repeat a skip the match failure already produces on its own.
+    // No separate blank-line skip: a blank (or all-whitespace) line never matches KEY_VALUE_LINE_PATTERN either (it requires a leading identifier character), so it already falls through to the "not key: value shaped" skip below — a dedicated check here would only ever repeat a skip the match failure already produces on its own.
     const match = KEY_VALUE_LINE_PATTERN.exec(line);
     const key = match?.[1];
     const value = match?.[2];

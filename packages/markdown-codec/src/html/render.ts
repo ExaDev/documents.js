@@ -67,7 +67,7 @@ export function escapeHref(href: string): string {
   const bytes = new TextEncoder().encode(href);
   let result = "";
   for (const byte of bytes) {
-    // No separate "is this byte even ASCII" guard: ALPHANUMERIC_PATTERN and HREF_SAFE_PUNCTUATION are both pure-ASCII vocabularies on their own, so a byte >= 0x80 -- reinterpreted here as the single Latin-1 codepoint of that value, not as part of whatever multi-byte UTF-8 sequence it actually belongs to -- can never match either and falls through to percent-encoding regardless.
+    // No separate "is this byte even ASCII" guard: ALPHANUMERIC_PATTERN and HREF_SAFE_PUNCTUATION are both pure-ASCII vocabularies on their own, so a byte >= 0x80 — reinterpreted here as the single Latin-1 codepoint of that value, not as part of whatever multi-byte UTF-8 sequence it actually belongs to — can never match either and falls through to percent-encoding regardless.
     const char = String.fromCharCode(byte);
     if (ALPHANUMERIC_PATTERN.test(char) || HREF_SAFE_PUNCTUATION.has(char)) {
       result += char;
@@ -107,7 +107,7 @@ function renderTaskCheckbox(checked: boolean): string {
 
 function renderInline(node: MarkdownInlineNode): string {
   switch (node.type) {
-    // text and entity both carry their materialised text in the same field, and render identically -- one shared body, rather than two separately-mutable cases whose bodies are textually forced to stay identical anyway.
+    // text and entity both carry their materialised text in the same field, and render identically — one shared body, rather than two separately-mutable cases whose bodies are textually forced to stay identical anyway.
     case "text":
     case "entity":
       return escapeHtml(node.value);
@@ -211,12 +211,12 @@ class HtmlRenderer {
         this.out += `$$\n${escapeHtml(node.literal)}\n$$\n`;
         return;
       case "footnoteDefinition":
-        // See renderInline's own footnoteReference case: no fixture pins GitHub's own notes-section markup down, so the definition's source spelling is reconstructed around its rendered body, matching src/emit/emit.ts's own renderFootnoteDefinition. The body renders as ordinary blocks -- a definition holding several paragraphs shows all of them. No closing cr(), for the same reason blockquote's own closing tag needs none above.
+        // See renderInline's own footnoteReference case: no fixture pins GitHub's own notes-section markup down, so the definition's source spelling is reconstructed around its rendered body, matching src/emit/emit.ts's own renderFootnoteDefinition. The body renders as ordinary blocks — a definition holding several paragraphs shows all of them. No closing cr(), for the same reason blockquote's own closing tag needs none above.
         this.cr();
         this.out += `${escapeHtml(`[^${node.label}]:`)}\n`;
         this.render(node.children, false);
         return;
-      // Each is rendered only through its own parent, which knows the surrounding markup it needs -- an empty case (no consequent at all, not even a bare `return;`) since the switch is this method's last statement and falling off it already returns.
+      // Each is rendered only through its own parent, which knows the surrounding markup it needs — an empty case (no consequent at all, not even a bare `return;`) since the switch is this method's last statement and falling off it already returns.
       case "document":
       case "listItem":
       case "tableRow":
@@ -230,7 +230,7 @@ class HtmlRenderer {
   ): void {
     this.cr();
     // cmark takes the info string's first word as the language class and ignores the rest.
-    // String.prototype.split on a non-empty separator regex always returns at least one element (even splitting "" itself yields [""]), so index 0 is never undefined -- the assertion states that, since noUncheckedIndexedAccess cannot infer it from the split call alone.
+    // String.prototype.split on a non-empty separator regex always returns at least one element (even splitting "" itself yields [""]), so index 0 is never undefined — the assertion states that, since noUncheckedIndexedAccess cannot infer it from the split call alone.
     const language =
       infoString === undefined ? "" : infoString.split(/[ \t]/)[0]!;
     const attribute =

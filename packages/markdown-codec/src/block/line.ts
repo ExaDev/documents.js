@@ -79,7 +79,7 @@ export class LineCursor {
 
   // Advances up to `columns` columns, stopping at end of line. A tab straddling the target is consumed only as far as needed, leaving its remaining columns for rest() to materialise -- which is exactly how `>\tfoo` puts three columns of indentation, not a whole tab, into the block quote's content.
   advance(columns: number): void {
-    // No early exit at end of line: MarkdownScanCursor.next() is already a side-effect-free no-op once rawOffset reaches the source length (src/scan/scan.ts), so looping the remaining count down regardless produces the identical end state as returning early -- an early-return branch here would be unobservable by any test, on purpose or not.
+    // No early exit at end of line: MarkdownScanCursor.next() is already a side-effect-free no-op once rawOffset reaches the source length (src/scan/scan.ts), so looping the remaining count down regardless produces the identical end state as returning early — an early-return branch here would be unobservable by any test, on purpose or not.
     for (let remaining = columns; remaining > 0; remaining -= 1) {
       this.cursor.next();
     }
