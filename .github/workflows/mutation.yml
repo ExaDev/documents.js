@@ -2,13 +2,21 @@ name: Mutation testing
 
 # Repo-wide, sliced, incrementally cached mutation testing via Stryker. Every package is gated on its own merged score against the break threshold recorded in its stryker.config.ts (derived by the rule documented on `thresholds.break` in stryker.shared.ts), and the mutation-result job at the bottom is the one stable check context that reports the outcome.
 #
-# Two kinds of run share this file. A pull request run mutates only the packages the change affects. A scheduled or dispatched run mutates every package and is the run that gives main a completed result; it is deliberately not triggered by every push to main, because a run on each push is queued behind the previous one and cancelled by the next.
+# Three kinds of run share this file, and what each gates differs. A pull request run covers the packages the change can move a mutation result for (mutation-scope.ts decides, from the `_test:mutation` inputs in turbo.json, the packages' dependency graph and the lockfile) and, of those, only the ones that plan into a single slice; a change that cannot alter any result, such as documentation, starts no mutation job. A scheduled run covers every package, and is the run that gates the large ones and gives main a completed result. A dispatched run covers every package, or the ones named in its `packages` input, on whatever ref it is started against, which is how a large package is measured for a branch before it merges. Nothing runs on a push to main, so a threshold is checked before a merge only for the packages a pull request runs, and for every other package on the next scheduled run.
+#
+# Every run draws on one pool of runners that the whole account shares, the required checks included, so the parallelism of each kind of run is derived in plan-mutation-slices.ts from the account's documented concurrent-job limit rather than chosen here.
+
 on:
   pull_request:
   schedule:
     # Once a day, off the hour so it does not queue with the many other schedules that fire on it.
     - cron: "23 2 * * *"
   workflow_dispatch:
+    inputs:
+      packages:
+        description: Space-separated workspace package names to mutate. Empty means every package.
+        required: false
+        default: ""
 
 # GitHub allows one running and one pending run per concurrency group, and a newer run replaces the pending one (docs.github.com, "Control the concurrency of workflows and jobs"). A single group for every ref therefore starves everything but the first two runs: each new push cancels the pending run before it starts a job. So a pull request gets a group of its own, and a newer push to that pull request cancels only that pull request's stale run. Every other run (scheduled, dispatched) shares one group per ref and is never cancelled, so a full run always finishes and at most one more waits behind it.
 concurrency:
@@ -32,6 +40,7 @@ jobs:
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       has-packages: ${{ steps.plan.outputs.has-packages }}
+      max-parallel: ${{ steps.plan.outputs.max-parallel }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -46,6 +55,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Plan the mutation slices
         id: plan
+        env:
+          MUTATION_EVENT: ${{ github.event_name }}
+          # The dispatch input reaches the script as data through the environment, never as text in the command line.
+          MUTATION_PACKAGES: ${{ inputs.packages }}
         run: node --experimental-strip-types .github/scripts/plan-mutation-slices.ts $TURBO_FLAGS
 
   # One job per package slice: a package whose estimated cold cost fits the slice budget is one job, a larger one is split by file (plan-mutation-slices.ts holds the estimate and the derivation of both the slice size and each job's own timeout). A job's incremental cache is keyed by its package and slice, so it restores its own previous report rather than another package's.
@@ -57,8 +70,8 @@ jobs:
     timeout-minutes: ${{ matrix.timeoutMinutes }}
     strategy:
       fail-fast: false
-      # A ceiling on how many of this run's jobs occupy the shared runner pool at once, so one run cannot starve every other workflow (the required CI checks included) of runners. It bounds a single run, not the repository: with a group per pull request, the repository-wide ceiling is this value times the number of pull requests running at once. A pull request run is held lower than a full run because several of them are routinely open together, whereas the full run is one, off-hours.
-      max-parallel: ${{ github.event_name == 'pull_request' && 6 || 12 }}
+      # A ceiling on how many of this run's jobs occupy the account's shared runner pool at once, computed by the plan job for the kind of run (see maxParallelFor in plan-mutation-slices.ts): the account's documented concurrent-job limit, a stated share of it for mutation as a whole, split between full runs and pull request runs. It bounds one run, not the repository, which is why the pull request share is divided by the number of pull request runs expected at once.
+      max-parallel: ${{ fromJSON(needs.plan.outputs.max-parallel) }}
       matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
     env:
       # The package and its file list reach the shell as environment variables, never interpolated into the script text: a slice's file list is built from file names in the checked-out change, which a pull request controls.
