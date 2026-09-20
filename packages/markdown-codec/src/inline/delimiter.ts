@@ -12,10 +12,6 @@ import type { InlineNode } from "./node";
 
 export type DelimiterChar = "*" | "_" | "~";
 
-export function isDelimiterChar(char: string): char is DelimiterChar {
-  return char === "*" || char === "_" || char === "~";
-}
-
 // GFM's strikethrough extension recognises a run of exactly one or two tildes as a delimiter; a run of three or more is literal text. (cmark-gfm's own strikethrough extension applies the same bound.)
 const MAX_STRIKETHROUGH_RUN = 2;
 
