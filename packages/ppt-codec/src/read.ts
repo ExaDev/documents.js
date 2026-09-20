@@ -3,6 +3,7 @@ import {
   readSummaryInformation,
   summaryInformationToLayoutMetadata,
 } from "archive-codec";
+import { bytesToBase64 } from "byte-codec";
 import {
   type ContentBlock,
   type ContentDocument,
@@ -17,7 +18,6 @@ import {
   assembleTree,
 } from "document-schema.js";
 import { buildParagraphs } from "./content";
-import { bytesToBase64 } from "./base64";
 import {
   findSlideSchemeColorSchemeAtom,
   readSlideSchemeColorSchemeAtom,

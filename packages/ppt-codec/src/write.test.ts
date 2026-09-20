@@ -1,5 +1,5 @@
 import { readCompoundFile } from "archive-codec";
-import { encodePng } from "byte-codec";
+import { bytesToBase64, encodePng } from "byte-codec";
 import {
   ContentDocumentSchema,
   DocumentTreeSchema,
@@ -12,7 +12,6 @@ import {
   flattenTree,
 } from "document-schema.js";
 import { describe, expect, it } from "vitest";
-import { bytesToBase64 } from "./base64";
 import { readNotesContainerAtom } from "./document/notes";
 import { readExternalOleEmbeds } from "./ole/embedded";
 import { readNotesListWithText } from "./document/notes-list";
