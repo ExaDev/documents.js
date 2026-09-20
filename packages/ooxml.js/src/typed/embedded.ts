@@ -71,6 +71,8 @@ function localNameOf(tag: string): string {
 // A real OOXML package has exactly one main document part, so at most one row ever matches; a fixed probe order keeps detection deterministic even for a hand-built package that somehow carries two. A row only matches when its reader's own precondition holds too, so flavour detection genuinely guarantees the chosen reader's precondition already holds and the dispatch below cannot throw for precondition reasons.
 //
 // The main part is resolved the same way each of the three readers now resolves it -- from the package root's own officeDocument relationship -- and the flavour then comes from that one part's root element rather than from the name it happens to carry, so a nested package whose body sits at "word/document2.xml" is detected as readily as a conventionally named one (ExaDev/documents.js#1314). Only a nested package declaring no usable officeDocument relationship falls back to probing the three conventional entry paths.
+//
+// The root-element check applies on both routes, not only once a main part resolves. On the resolved route it is what tells the three rows apart, since all three then probe the same single part. On the fallback route the path already tells them apart, so requiring the root element as well only adds the demand that a part sitting at a conventional entry path actually opens the markup language that path implies, which is exactly what the reader about to be dispatched assumes.
 export function detectFlavour(nested: Package): EmbeddedOoxmlKind | undefined {
   const mainPartPath = findMainPartPath(nested);
   for (const candidate of ENTRY_PARTS) {
@@ -78,10 +80,7 @@ export function detectFlavour(nested: Package): EmbeddedOoxmlKind | undefined {
     if (root === undefined) {
       continue;
     }
-    if (
-      mainPartPath !== undefined &&
-      localNameOf(root.tag) !== candidate.rootLocalName
-    ) {
+    if (localNameOf(root.tag) !== candidate.rootLocalName) {
       continue;
     }
     if (

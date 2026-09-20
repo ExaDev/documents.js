@@ -142,6 +142,8 @@ export function resolveRelationships(
 }
 
 // The package root's own relationships, read from the fixed "_rels/.rels". The root is not itself a part, so its .rels path is stated rather than derived, and its targets resolve against the package root -- which is exactly what an empty base path makes resolveRelTarget do, so a root Relationship spelling "/word/document.xml", "word/document.xml" or even "./word/document.xml" all land on the same part key.
+//
+// The empty base path is an irreducible equivalent-mutation site, not an untested one: resolveRelTarget reads a base path only up to its last "/", so EVERY slash-free string it could be replaced with -- "" included -- yields the identical package-root resolution, and no test built on this function's observable output can tell one from another. Naming it as a constant would move the same literal rather than remove it.
 export function resolveRootRelationships(
   pkg: Package,
 ): Map<string, Relationship> {

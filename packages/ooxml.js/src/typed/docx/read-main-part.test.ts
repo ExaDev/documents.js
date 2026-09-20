@@ -284,6 +284,62 @@ describe("readDocxContent: main part named by the officeDocument relationship", 
     );
   });
 
+  // The conventional word/header*/word/footer* scan cannot see these parts: they are reachable only through the main part's own header/footer relationships. Without that half of headerFooterPartPaths the reference side still resolves (sectionHeaderFooters names the target), but the parts themselves are never walked, so their block flow is silently missing.
+  it("walks header and footer parts the conventional path scan cannot match, found only through the main part's relationships", () => {
+    const pkg = renamedMainPartPackage();
+    pkg.parts["word/_rels/document2.xml.rels"] = relsPart([
+      { id: "rId2", type: `${REL_BASE}/styles`, target: "styles2.xml" },
+      { id: "rId10", type: `${REL_BASE}/header`, target: "parts/hdr-a.xml" },
+      {
+        id: "rId11",
+        type: `${REL_BASE}/footer`,
+        target: "/word/parts/ftr-a.xml",
+      },
+    ]);
+    delete pkg.parts["word/header2.xml"];
+    delete pkg.parts["word/footer2.xml"];
+    pkg.parts["word/parts/hdr-a.xml"] = headerPart("Unconventional header");
+    pkg.parts["word/parts/ftr-a.xml"] = footerPart("Unconventional footer");
+
+    const doc = readDocxContent(pkg);
+    expect(doc.headerFooterParts.map((part) => part.path)).toEqual([
+      "word/parts/ftr-a.xml",
+      "word/parts/hdr-a.xml",
+    ]);
+    expect(doc.headerFooterParts.map((part) => part.kind)).toEqual([
+      "footer",
+      "header",
+    ]);
+    const headerText = doc.headerFooterParts
+      .flatMap((part) => part.blocks)
+      .flatMap((block) => (block.kind === "paragraph" ? block.runs : []))
+      .map((run) => run.text);
+    expect(headerText).toEqual([
+      "Unconventional footer",
+      "Unconventional header",
+    ]);
+  });
+
+  it("ignores an external header relationship, which names no part to walk", () => {
+    const pkg = renamedMainPartPackage();
+    pkg.parts["word/_rels/document2.xml.rels"] = {
+      kind: "xml",
+      nodes: [
+        el("Relationships", { xmlns: RELATIONSHIPS_NS }, [
+          el("Relationship", {
+            Id: "rId10",
+            Type: `${REL_BASE}/header`,
+            Target: "word/styles2.xml",
+            TargetMode: "External",
+          }),
+        ]),
+      ],
+    };
+    delete pkg.parts["word/header2.xml"];
+    delete pkg.parts["word/footer2.xml"];
+    expect(readDocxContent(pkg).headerFooterParts).toEqual([]);
+  });
+
   it("still reads a package that declares no root relationships at all, from the conventional path", () => {
     const pkg: Package = {
       parts: {
