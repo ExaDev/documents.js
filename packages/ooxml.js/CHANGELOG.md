@@ -1,3 +1,13 @@
+## [9.1.1](https://github.com/ExaDev/documents.js/compare/ooxml.js%409.1.0...ooxml.js%409.1.1) (2026-09-20)
+
+### Bug Fixes
+
+* **ooxml.js:** read and patch the core properties part the package names ([1ccb412](https://github.com/ExaDev/documents.js/commit/1ccb41209705c1b1e9e2e4365bb32691b1083291)), references [#1340](https://github.com/ExaDev/documents.js/issues/1340)
+
+### Tests
+
+* **ooxml.js:** cover the part-resolution branches a conventional package never exercises ([4766943](https://github.com/ExaDev/documents.js/commit/4766943ac7f276e763293e7379bb03678437597f))
+
 ## [9.1.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%409.0.0...ooxml.js%409.1.0) (2026-09-20)
 
 ### Features

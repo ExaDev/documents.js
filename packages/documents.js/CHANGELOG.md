@@ -1,3 +1,14 @@
+## [7.20.33](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.32...documents.js%407.20.33) (2026-09-20)
+
+### Bug Fixes
+
+* **documents.js:** open the docx and pptx main part the package names, not the conventional path ([c7f98b7](https://github.com/ExaDev/documents.js/commit/c7f98b7cebc781e753d234055d7ccc6aff3b9362)), references [#1339](https://github.com/ExaDev/documents.js/issues/1339)
+
+
+### Dependencies
+
+- Updated ooxml.js to 9.1.1
+
 ## [7.20.32](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.31...documents.js%407.20.32) (2026-09-20)
 
 ### Bug Fixes

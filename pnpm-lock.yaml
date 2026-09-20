@@ -468,7 +468,7 @@ importers:
         specifier: 7.11.4
         version: link:../document-schema.js
       documents.js:
-        specifier: 7.20.32
+        specifier: 7.20.33
         version: link:../documents.js
       ink:
         specifier: 7.1.1
@@ -563,7 +563,7 @@ importers:
         specifier: 26.2.0
         version: 26.2.0
       documents.js:
-        specifier: 7.20.32
+        specifier: 7.20.33
         version: link:../documents.js
       eslint:
         specifier: 10.8.1
@@ -599,10 +599,10 @@ importers:
         specifier: 2.0.0
         version: 2.0.0
       document-operations:
-        specifier: 1.1.33
+        specifier: 1.1.34
         version: link:../document-operations
       documents.js:
-        specifier: 7.20.32
+        specifier: 7.20.33
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -669,7 +669,7 @@ importers:
   packages/document-operations:
     dependencies:
       document-compute.js:
-        specifier: 1.5.35
+        specifier: 1.5.36
         version: link:../document-compute.js
       document-outline.js:
         specifier: 3.9.15
@@ -678,7 +678,7 @@ importers:
         specifier: 7.11.4
         version: link:../document-schema.js
       documents.js:
-        specifier: 7.20.32
+        specifier: 7.20.33
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -794,10 +794,10 @@ importers:
   packages/document-rest:
     dependencies:
       document-operations:
-        specifier: 1.1.33
+        specifier: 1.1.34
         version: link:../document-operations
       documents.js:
-        specifier: 7.20.32
+        specifier: 7.20.33
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -922,7 +922,7 @@ importers:
         specifier: 8.0.0
         version: link:../odf.js
       ooxml.js:
-        specifier: 9.1.0
+        specifier: 9.1.1
         version: link:../ooxml.js
       pdf-codec:
         specifier: 5.0.0
@@ -1603,7 +1603,7 @@ importers:
         specifier: 7.11.4
         version: link:../document-schema.js
       documents.js:
-        specifier: 7.20.32
+        specifier: 7.20.33
         version: link:../documents.js
       markdown-codec:
         specifier: 7.0.0
@@ -1685,7 +1685,7 @@ importers:
         specifier: 30.0.1
         version: 30.0.1
       ooxml.js:
-        specifier: 9.1.0
+        specifier: 9.1.1
         version: link:../ooxml.js
       semantic-release:
         specifier: 25.0.9
