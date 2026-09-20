@@ -6,6 +6,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Every check this repository's ruleset requires is produced by a job in this file, and a merge queue re-runs those same required checks against the temporary `gh-readonly-queue/main/...` branch it builds for each queue entry. A required check that never reports on that branch is not treated as skipped: the entry times out and the pull request is dropped back out of the queue, so omitting this trigger would stall every merge. checks_requested is the only activity type the event currently has; naming it keeps the trigger specific if more are added.
+  merge_group:
+    types: [checks_requested]
   workflow_dispatch:
     inputs:
       backfill_tags:
@@ -14,6 +17,8 @@ on:
         type: string
 
 # A new push to a pull request supersedes that PR's in-flight run. A push to main never cancels: the release job publishes to npm and pushes tags mid-run, and the audit job polls a dispatched run to decide whether to merge its own fix -- cancelling either partway leaves real work half-done. The release and Pages jobs keep their own narrower groups below; this one only stops a PR racing itself.
+#
+# A merge-queue run is isolated from all of that by the key alone, with no extra clause needed: github.ref on a merge_group event is the merge group's own ref (refs/heads/gh-readonly-queue/<base>/pr-...), which no pull_request run (refs/pull/<n>/merge) or push run (refs/heads/main) can ever produce. So a queue entry can neither be cancelled by a later push to a pull request it contains nor cancel that pull request's own run, and each queue entry gets its own group. cancel-in-progress stays false here too, since the expression is only ever true for pull_request.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -22,9 +27,11 @@ permissions:
   contents: read
 
 env:
-  # On a pull request, restrict every turbo task to the packages the branch actually changed (and their dependents); on main, run the whole workspace so the caches the next run restores from are complete and the release gate covers everything. --affected compares against the base branch, so the checkouts below use fetch-depth: 0.
-  TURBO_FLAGS: ${{ github.event_name == 'pull_request' && '--affected' || '' }}
-  TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+  # On a pull request or a merge-queue entry, restrict every turbo task to the packages that change actually touched (and their dependents); on main, run the whole workspace so the caches the next run restores from are complete and the release gate covers everything. --affected compares against the base commit named below, so the checkouts below use fetch-depth: 0.
+  #
+  # The merge group's base is github.event.merge_group.base_sha, which GitHub documents as the merge group's parent commit, meaning the tip of the target branch the queue built this entry on top of. It is therefore always an ancestor of the merge group ref being checked out, so fetch-depth: 0 guarantees turbo can resolve it without any extra fetch. Scoping matters more here than on a pull request, not less: every entry in the queue re-runs this whole suite, so an unscoped run would multiply the cost of a busy queue by the size of the workspace.
+  TURBO_FLAGS: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && '--affected' || '' }}
+  TURBO_SCM_BASE: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
 
 jobs:
   commitlint:
@@ -44,21 +51,30 @@ jobs:
       - name: Validate the last commit with commitlint
         if: github.event_name == 'push'
         run: pnpm exec commitlint --last --verbose
-      - name: Find the PR commit-lint range start
-        if: github.event_name == 'pull_request'
+      - name: Find the commit-lint range
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         id: lint-range
         # Every package's history was imported into packages/<name> verbatim rather than rewritten (see the root README on the migration), so it was authored -- and validated by commitlint -- under that package's own, now-superseded standalone config, not this workspace's. fc476c76 is the last of the ten import merges, the commit after which every commit on main is new workspace-native history this repo's own commitlint.config.ts actually governed when it was written. An ordinary PR's base is always a descendant of that commit once the migration itself has landed on main, so this only ever widens the range for the one-time landing PR whose base predates the migration; every later PR computes the identical `from` its base.sha would have given directly.
+        #
+        # A merge-queue entry supplies the same two endpoints from its own event instead: the merge group's parent commit and the merge group's tip, so the range is exactly the commits the queue is proposing to put on the target branch. Those are the pull request's own commits as the queue arranged them, which is not the same text the pull request itself was linted against whenever the queue's merge method rewrites them, so linting here is a real check rather than a repeat. Both endpoints come through the environment rather than being interpolated into the script, and an endpoint that resolves empty is a hard failure: a job whose only commitlint steps are gated on an event it did not receive reports success without validating a single commit, which is worse than no check at all once this is a required one.
+        env:
+          BASE: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || github.event.pull_request.head.sha }}
         run: |
           MIGRATION_BOUNDARY=9b5cdad3dece5c84a48448eed2b2aafa277dd490
-          BASE=${{ github.event.pull_request.base.sha }}
+          if [ -z "$BASE" ] || [ -z "$HEAD" ]; then
+            echo "::error::Could not determine a commit range to lint for a ${{ github.event_name }} event (base='$BASE', head='$HEAD'); failing rather than reporting success without linting anything."
+            exit 1
+          fi
           if git merge-base --is-ancestor "$MIGRATION_BOUNDARY" "$BASE"; then
             echo "from=$BASE" >> "$GITHUB_OUTPUT"
           else
             echo "from=$MIGRATION_BOUNDARY" >> "$GITHUB_OUTPUT"
           fi
-      - name: Validate every PR commit with commitlint
-        if: github.event_name == 'pull_request'
-        run: pnpm exec commitlint --from ${{ steps.lint-range.outputs.from }} --to ${{ github.event.pull_request.head.sha }} --verbose
+          echo "to=$HEAD" >> "$GITHUB_OUTPUT"
+      - name: Validate every commit in the range with commitlint
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        run: pnpm exec commitlint --from ${{ steps.lint-range.outputs.from }} --to ${{ steps.lint-range.outputs.to }} --verbose
 
   lint:
     name: Lint
