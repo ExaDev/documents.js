@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import type { PartialStrykerOptions } from "@stryker-mutator/api/core";
 
 // @stryker-mutator/vitest-runner's own option shape (dist/src/vitest-runner-options-with-stryker-options.d.ts) is deliberately not re-exported from the package's public entry point -- only strykerPlugins/strykerValidationSchema are -- so this is typed against the plugin's own documented options (configFile, dir, related; see its docs/vitest-runner.md) rather than a deep import into the plugin's dist internals, which is not a contract the plugin promises to keep stable.
@@ -10,6 +11,10 @@ interface VitestRunnerPluginOptions {
 type StrykerConfig = PartialStrykerOptions & {
   vitest?: VitestRunnerPluginOptions;
 };
+
+const RUNNER_PRELOAD = fileURLToPath(
+  new URL("./stryker.runner-preload.ts", import.meta.url),
+);
 
 export interface PackageStrykerOptions {
   // Glob(s) of source files Stryker should mutate, relative to the package root. Defaults to every TypeScript source file under src/, excluding tests -- the same scope every package's own _test task already covers.
@@ -71,6 +76,8 @@ export function packageStrykerConfig(
     },
     // dist/coverage/.turbo are build/tooling output Stryker would otherwise copy into every mutant's own sandbox for nothing -- none of it is ever read by a test.
     ignorePatterns: ["dist", "coverage", ".turbo"],
+    // stryker.runner-preload.ts, resolved to an absolute path because each runner child process runs from its own sandbox directory. It drops vitest's github-actions reporter from these processes; the file itself explains why.
+    testRunnerNodeArgs: ["--import", RUNNER_PRELOAD],
     reporters: ["progress", "clear-text", "html"],
     tempDirName: ".stryker-tmp",
     cleanTempDir: true,
