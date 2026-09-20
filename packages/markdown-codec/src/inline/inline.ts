@@ -18,12 +18,7 @@ import type {
 import { matchHtmlTag } from "../html/html";
 import { containsAsciiControlOrSpace, isAsciiPunctuation } from "./chars";
 import type { Delimiter, DelimiterChar } from "./delimiter";
-import {
-  DelimiterStack,
-  isDelimiterChar,
-  processEmphasis,
-  scanDelimiterRun,
-} from "./delimiter";
+import { DelimiterStack, processEmphasis, scanDelimiterRun } from "./delimiter";
 import { matchEntity } from "./entity";
 import type { FootnoteLabelSet } from "./footnote";
 import { matchFootnoteLabel } from "./footnote";
@@ -46,7 +41,7 @@ export interface InlineParseOptions {
   readonly gfmStrikethrough?: boolean;
 }
 
-// A run of characters that no inline construct can start with -- everything the dispatch below does NOT have a branch for. Sticky rather than sliced-and-anchored so scanning a long paragraph stays linear instead of re-copying the subject's tail on every plain-text run.
+// A run of characters that no inline construct can start with — everything the dispatch in step() does NOT have a branch for, which is what lets that run be claimed before the dispatch is consulted at all. Sticky rather than sliced-and-anchored so scanning a long paragraph stays linear instead of re-copying the subject's tail on every plain-text run.
 const PLAIN_TEXT_PATTERN = /[^\n`[\]\\!<&*_~]+/y;
 
 // spec 0.31.2: "a scheme is any sequence of 2-32 characters beginning with an ASCII letter and followed by any combination of ASCII letters, digits, or the symbols plus, period, or hyphen", then a colon, then "zero or more characters other than ASCII control characters, space, `<`, and `>`".
@@ -57,7 +52,7 @@ const EMAIL_AUTOLINK_PATTERN =
   /<([a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>/y;
 
 // A hard line break is "two or more spaces at the end of a line" (spec 0.31.2, "Hard line breaks"); one trailing space is a soft break with the space dropped.
-const HARD_BREAK_SPACES = "  ";
+const HARD_BREAK_SPACE_COUNT = 2;
 
 // A `]` closing a reference link needs the source text of the label between the brackets; a label of exactly two characters is `[]`, the COLLAPSED form, which carries no label of its own and reuses the link text instead.
 const EMPTY_LABEL_LENGTH = 2;
@@ -136,7 +131,15 @@ class InlineParser {
     return this.container;
   }
 
+  // One construct at the cursor. The plain-text run is claimed FIRST rather than as the dispatch's fallback, because PLAIN_TEXT_PATTERN excludes exactly the characters the switch below has a branch for: a run matched here is by construction text no construct could have started, and a run that fails to match leaves the cursor on a character one of those branches owns. The pattern's exclusion set and the case labels below are therefore one set written twice, and adding a character to either without the other is a bug — a character excluded from the pattern with no case of its own would reach a switch that consumes nothing and leave the scan stuck on it. The switch needs no arm beyond those characters: the only other one it can ever see is the empty string charAt returns once the cursor passes the end of the subject, which parse's own loop has already excluded.
   private step(): void {
+    PLAIN_TEXT_PATTERN.lastIndex = this.pos;
+    const plain = PLAIN_TEXT_PATTERN.exec(this.text);
+    if (plain !== null) {
+      this.appendText(plain[0]);
+      this.pos += plain[0].length;
+      return;
+    }
     const char = this.text.charAt(this.pos);
     switch (char) {
       case "\n":
@@ -163,12 +166,10 @@ class InlineParser {
       case "]":
         this.parseCloseBracket();
         return;
-      default:
-        if (isDelimiterChar(char)) {
-          this.parseDelimiterRun(char);
-          return;
-        }
-        this.parsePlainText();
+      case "*":
+      case "_":
+      case "~":
+        this.parseDelimiterRun(char);
     }
   }
 
@@ -178,32 +179,22 @@ class InlineParser {
     return node;
   }
 
-  private parsePlainText(): void {
-    PLAIN_TEXT_PATTERN.lastIndex = this.pos;
-    const match = PLAIN_TEXT_PATTERN.exec(this.text);
-    if (match === null) {
-      // Unreachable while the dispatch above covers every character PLAIN_TEXT_PATTERN excludes; consuming one character keeps the loop strictly progressing rather than resting on that invariant.
-      this.appendText(this.text.charAt(this.pos));
-      this.pos += 1;
-      return;
-    }
-    this.appendText(match[0]);
-    this.pos += match[0].length;
-  }
-
   // spec 0.31.2, "Hard line breaks"/"Soft line breaks": a line ending preceded by two or more spaces is a hard break (and the spaces are dropped); any other line ending is a soft break.
   private parseLineBreak(): void {
     this.pos += 1;
     const last = this.container.lastChild;
-    if (last?.kind === "text" && last.literal.endsWith(" ")) {
-      const hard = last.literal.endsWith(HARD_BREAK_SPACES);
-      last.literal = last.literal.replace(/ +$/, "");
-      this.container.appendChild(
-        new InlineNode(hard ? "hardBreak" : "softBreak"),
-      );
-    } else {
-      this.container.appendChild(new InlineNode("softBreak"));
+    // The spaces belong to the break rather than to the text before it, so they come off that text whichever kind of break this turns out to be, and how many there were is the only thing that decides which kind it is. A code span or any other non-text node ending the line carries no such marker: its own trailing spaces are content.
+    let hard = false;
+    if (last?.kind === "text") {
+      const withoutTrailingSpaces = last.literal.replace(/ +$/, "");
+      hard =
+        last.literal.length - withoutTrailingSpaces.length >=
+        HARD_BREAK_SPACE_COUNT;
+      last.literal = withoutTrailingSpaces;
     }
+    this.container.appendChild(
+      new InlineNode(hard ? "hardBreak" : "softBreak"),
+    );
     // Leading spaces on the next line are not content. The block phase already strips a paragraph continuation line's indentation, so this only matters for a block whose raw content keeps it.
     while (this.text.charAt(this.pos) === " ") {
       this.pos += 1;
@@ -222,16 +213,15 @@ class InlineParser {
       this.container.appendChild(new InlineNode("hardBreak"));
       return;
     }
-    if (next === "(") {
-      const span = matchMathInlineSpan(this.text, backslashIndex);
-      if (span !== undefined) {
-        const node = new InlineNode("mathInline");
-        // Strip the \( / \) delimiters (two characters each) -- literal is the inner LaTeX only, matching MarkdownCodeSpanNode's own convention (see src/ast/ast.ts's own MarkdownMathInlineNode comment for why this node does NOT keep its delimiters the way MarkdownRawHtmlNode does).
-        node.literal = span.slice(2, span.length - 2);
-        this.container.appendChild(node);
-        this.pos = backslashIndex + span.length;
-        return;
-      }
+    // No `next === "("` guard of its own ahead of this call: matchMathInlineSpan's own first act is to require a literal `\(` at the index it is given, so a second check here could only ever repeat that answer.
+    const span = matchMathInlineSpan(this.text, backslashIndex);
+    if (span !== undefined) {
+      const node = new InlineNode("mathInline");
+      // Strip the \( / \) delimiters (two characters each) — literal is the inner LaTeX only, matching MarkdownCodeSpanNode's own convention (see src/ast/ast.ts's own MarkdownMathInlineNode comment for why this node does NOT keep its delimiters the way MarkdownRawHtmlNode does).
+      node.literal = span.slice(2, span.length - 2);
+      this.container.appendChild(node);
+      this.pos = backslashIndex + span.length;
+      return;
     }
     if (isAsciiPunctuation(next)) {
       this.appendText(next);
@@ -251,7 +241,8 @@ class InlineParser {
     const afterOpen = start + openLength;
 
     let scan = afterOpen;
-    while (scan < this.text.length) {
+    // charAt(scan) !== "", not scan < this.text.length: the two agree for every real index, and charAt already returns "" one past the end, which neither of this loop's own backtick comparisons can match either — the same idiom matchLinkLabel (src/inline/link.ts) uses for its own unterminated-label scan.
+    while (this.text.charAt(scan) !== "") {
       if (this.text.charAt(scan) !== "`") {
         scan += 1;
         continue;
@@ -353,9 +344,8 @@ class InlineParser {
       this.text.slice(this.pos, this.pos + run.count),
     );
     this.pos += run.count;
-    if (run.canOpen || run.canClose) {
-      this.delimiters.push(char, run, node);
-    }
+    // Every run is pushed, including one that can neither open nor close (an `_` between two word characters is the everyday case). Such a run is inert on the stack rather than merely unused: processEmphasis (src/inline/delimiter.ts) skips any delimiter that cannot close when looking for a closer, and canMatch rejects any that cannot open as an opener, so it can take part in no match and the floor it would raise sits at the same boundary the delimiter below it would. Filtering it out here would only move that same decision earlier.
+    this.delimiters.push(char, run, node);
   }
 
   private parseLiteralRun(char: string): void {
@@ -521,9 +511,8 @@ class InlineParser {
       // Both the collapsed form (`[foo][]`) and the shortcut form (`[foo]`) look the label up under the link text itself.
       label = this.text.slice(opener.index, afterCloseBracket);
     }
-    if (labelLength > 0) {
-      this.pos = labelStart + labelLength;
-    }
+    // Past the second label when there was one. matchLinkLabel returns 0 when there was not, which puts the cursor back exactly where it already stood, since nothing above has moved it.
+    this.pos = labelStart + labelLength;
     if (label === undefined) {
       return undefined;
     }
@@ -686,9 +675,9 @@ export function parseInlines(
     footnotes,
     options,
   ).parse();
+  // No second merge after the autolink pass: the merge inside parse above leaves no text node with a text sibling at all, and the pass replaces a text node only with pieces that alternate text and link, each text piece sitting immediately before a link or last in the run. So it can produce no adjacent pair for a second merge to join.
   if (options.gfmAutolinks ?? true) {
     applyGfmAutolinks(root);
-    mergeAdjacentText(root);
   }
   return toChildAstNodes(root);
 }
