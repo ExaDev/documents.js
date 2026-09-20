@@ -1,6 +1,6 @@
 // Image reference resolution: an inline `![alt](src "title")` or reference-style `![alt][ref]` image's dimensions, for a data: URI image whose bytes are already in memory -- the markdown-side counterpart to document-schema.js's ContentImageBlock.widthPt/heightPt, which src/lower/image.ts's own px-to-pt conversion populates from these.
 //
-// This module exports readImageDimensions (a hand-written PNG/JPEG header reader -- no dependency, no filesystem access, the bytes always come from an already-decoded data: URI or a caller-supplied MarkdownImageResolver, never a path this module reads itself), detectImageFormat (the same PNG/JPEG signature check readImageDimensions already does internally, exposed so src/lower/image.ts can pick ContentImageBlock's own `format` field without a second, divergent signature check), and an isomorphic base64 encode/decode pair (no Node Buffer -- this package is platform-neutral per tsdown.config.ts, matching pdf-codec's own src/util/base64.ts precedent) for a `data:image/png;base64,...`/`data:image/jpeg;base64,...` URI's own payload and for re-encoding resolved image bytes back into one on write.
+// This module exports readImageDimensions (a hand-written PNG/JPEG header reader -- no dependency, no filesystem access, the bytes always come from an already-decoded data: URI or a caller-supplied MarkdownImageResolver, never a path this module reads itself) and detectImageFormat (the same PNG/JPEG signature check readImageDimensions already does internally, exposed so src/lower/image.ts can pick ContentImageBlock's own `format` field without a second, divergent signature check). The base64 a `data:image/png;base64,...` URI's payload is decoded from, and re-encoded into on write, comes from byte-codec, which holds the family's one implementation.
 
 export interface ImageDimensions {
   readonly widthPx: number;
@@ -8,68 +8,6 @@ export interface ImageDimensions {
 }
 
 export type ImageFormat = "png" | "jpeg";
-
-// --- Isomorphic base64 (Uint8Array <-> string), no Node Buffer. ---
-
-const BASE64_TABLE =
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-const BASE64_DECODE: Uint8Array = (() => {
-  const map = new Uint8Array(256).fill(255);
-  for (let index = 0; index < BASE64_TABLE.length; index += 1) {
-    map[BASE64_TABLE.charCodeAt(index)] = index;
-  }
-  return map;
-})();
-
-const BASE64_PADDING_CODE = 61; // '='
-
-export function bytesToBase64(bytes: Uint8Array): string {
-  let out = "";
-  const { length } = bytes;
-  for (let index = 0; index < length; index += 3) {
-    const b0 = bytes[index]!;
-    const b1 = index + 1 < length ? bytes[index + 1]! : 0;
-    const b2 = index + 2 < length ? bytes[index + 2]! : 0;
-    out += BASE64_TABLE.charAt(b0 >> 2);
-    out += BASE64_TABLE.charAt(((b0 & 0x03) << 4) | (b1 >> 4));
-    out +=
-      index + 1 < length
-        ? BASE64_TABLE.charAt(((b1 & 0x0f) << 2) | (b2 >> 6))
-        : "=";
-    out += index + 2 < length ? BASE64_TABLE.charAt(b2 & 0x3f) : "=";
-  }
-  return out;
-}
-
-export function base64ToBytes(base64: string): Uint8Array {
-  const clean = base64.replace(/[^A-Za-z0-9+/=]/g, "");
-  const { length } = clean;
-  const out = new Uint8Array(Math.floor((length * 3) / 4));
-  let position = 0;
-  for (let index = 0; index < length; index += 4) {
-    const c0 = BASE64_DECODE[clean.charCodeAt(index)]!;
-    const c1 = BASE64_DECODE[clean.charCodeAt(index + 1)]!;
-    const code2 = clean.charCodeAt(index + 2);
-    const code3 = clean.charCodeAt(index + 3);
-    if (c0 === 255 || c1 === 255) {
-      throw new Error("invalid base64 input");
-    }
-    out[position] = (c0 << 2) | (c1 >> 4);
-    position += 1;
-    if (code2 !== BASE64_PADDING_CODE) {
-      const d2 = BASE64_DECODE[code2]!;
-      out[position] = ((c1 & 0x0f) << 4) | (d2 >> 2);
-      position += 1;
-      if (code3 !== BASE64_PADDING_CODE) {
-        const d3 = BASE64_DECODE[code3]!;
-        out[position] = ((d2 & 0x03) << 6) | d3;
-        position += 1;
-      }
-    }
-  }
-  return out.subarray(0, position);
-}
 
 function readUint16BE(bytes: Uint8Array, offset: number): number {
   return ((bytes[offset]! << 8) | bytes[offset + 1]!) & 0xffff;

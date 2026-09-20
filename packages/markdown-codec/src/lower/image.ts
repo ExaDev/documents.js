@@ -1,11 +1,7 @@
-// Image resolution: a MarkdownImageNode's `destination` -> document-schema.js's ContentImageBlock, via a caller-supplied, SYNCHRONOUS MarkdownImageResolver port. This package never performs network I/O or filesystem access itself, matching its own "hand-write the format, no ambient I/O" convention -- a `data:image/png;base64,...`/`data:image/jpeg;base64,...` URI resolves NATIVELY (its bytes are already in the markdown source text, nothing to fetch), decoded via src/image/image.ts's own base64ToBytes and measured via readImageDimensions/detectImageFormat; anything else (a bare http(s):// URL, a relative path) is handed to the resolver port. An unresolved image -- no resolver supplied, the resolver returns undefined, or the resolved bytes are neither a readable PNG nor a readable JPEG (ContentImageBlockSchema's own `format` enum has no third member to fall back to) -- returns undefined here and NEVER becomes an invalid ContentImageBlock; the caller (src/lower/lower.ts) degrades it to a text run of alt text plus hyperlink instead, per MarkdownDiagnosticCodes.IMAGE_UNRESOLVED.
+// Image resolution: a MarkdownImageNode's `destination` -> document-schema.js's ContentImageBlock, via a caller-supplied, SYNCHRONOUS MarkdownImageResolver port. This package never performs network I/O or filesystem access itself, matching its own "hand-write the format, no ambient I/O" convention -- a `data:image/png;base64,...`/`data:image/jpeg;base64,...` URI resolves NATIVELY (its bytes are already in the markdown source text, nothing to fetch), decoded via byte-codec's own base64ToBytes and measured via readImageDimensions/detectImageFormat; anything else (a bare http(s):// URL, a relative path) is handed to the resolver port. An unresolved image -- no resolver supplied, the resolver returns undefined, or the resolved bytes are neither a readable PNG nor a readable JPEG (ContentImageBlockSchema's own `format` enum has no third member to fall back to) -- returns undefined here and NEVER becomes an invalid ContentImageBlock; the caller (src/lower/lower.ts) degrades it to a text run of alt text plus hyperlink instead, per MarkdownDiagnosticCodes.IMAGE_UNRESOLVED.
 
-import {
-  base64ToBytes,
-  bytesToBase64,
-  detectImageFormat,
-  readImageDimensions,
-} from "../image/image";
+import { base64ToBytes, bytesToBase64 } from "byte-codec";
+import { detectImageFormat, readImageDimensions } from "../image/image";
 import type { ImageFormat } from "../image/image";
 
 export interface MarkdownImageResolveContext {
