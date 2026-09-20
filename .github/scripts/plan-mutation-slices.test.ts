@@ -40,6 +40,66 @@ const COLD_SAMPLES: readonly (readonly [
   ["web", 6098, 3453],
 ];
 
+// Slice runs from the first full run of the sliced workflow, as [package and slice, source lines in the slice, wall-clock seconds of the slice's Stryker run]. Some restored results saved by an earlier layout, so they run faster than a cold slice would; the estimate only has to stay above them, and the slowest ones (a package whose tests are heavy per line) are what set its per-line cost. Add samples from later runs rather than editing these.
+const SLICE_SAMPLES: readonly (readonly [
+  name: string,
+  lines: number,
+  seconds: number,
+])[] = [
+  ["archive-codec 1", 3324, 265],
+  ["byte-codec 1", 1129, 360],
+  ["doc-codec 1", 4720, 537],
+  ["doc-codec 2", 4696, 519],
+  ["document-cli 1", 4799, 4935],
+  ["document-cli 2", 4795, 4638],
+  ["document-cli 3", 4798, 4526],
+  ["document-cli 4", 4800, 3796],
+  ["document-compute.js 1", 1491, 204],
+  ["document-mcp 1", 847, 403],
+  ["document-operations 1", 2194, 218],
+  ["document-outline.js 1", 3772, 2259],
+  ["document-rest 1", 255, 215],
+  ["document-schema.js 1", 3545, 1300],
+  ["document-schema.js 2", 3546, 1008],
+  ["documents.js 1", 5728, 3839],
+  ["documents.js 2", 5738, 1961],
+  ["documents.js 3", 5738, 1878],
+  ["documents.js 4", 5737, 2743],
+  ["documents.js 5", 5737, 2383],
+  ["documents.js 6", 5735, 2824],
+  ["documents.js 7", 5729, 3285],
+  ["documents.js 8", 5737, 2492],
+  ["documents.js 9", 5722, 3547],
+  ["epub-codec 1", 4723, 851],
+  ["excel-number-format 1", 414, 81],
+  ["markdown-codec 1", 5737, 615],
+  ["markdown-codec 2", 5744, 1381],
+  ["odf.js 1", 5233, 1742],
+  ["odf.js 2", 5235, 1531],
+  ["odf.js 3", 5234, 1566],
+  ["odf.js 4", 5233, 953],
+  ["ooxml.js 1", 5386, 1344],
+  ["ooxml.js 2", 5385, 1597],
+  ["ooxml.js 3", 5394, 1160],
+  ["pdf-codec 1", 6100, 1187],
+  ["pdf-codec 2", 6099, 1378],
+  ["pdf-codec 3", 6099, 1694],
+  ["pdf-codec 4", 6099, 2920],
+  ["pdf-codec 5", 6099, 2435],
+  ["pdf-codec 6", 6098, 2671],
+  ["pdf-raster-cpu 1", 821, 262],
+  ["ppt-codec 1", 3497, 276],
+  ["ppt-codec 2", 3473, 403],
+  ["rtf-codec 1", 4453, 1243],
+  ["rtf-codec 2", 4442, 789],
+  ["web 1", 6098, 3480],
+  ["wpd-codec 1", 4582, 97],
+  ["wpd-codec 2", 4585, 924],
+  ["xls-codec 1", 4983, 849],
+  ["xls-codec 2", 4978, 379],
+  ["xls-codec 3", 4985, 629],
+];
+
 const BYTE_CODEC = { name: "byte-codec", directory: "packages/byte-codec" };
 const BIG_PACKAGE = { name: "big-package", directory: "packages/big-package" };
 
@@ -89,6 +149,13 @@ describe("affectedMutationPackages", () => {
 describe("estimateColdSeconds", () => {
   it.each(COLD_SAMPLES)(
     "stays at or above the measured cold run of %s",
+    (_name, lines, seconds) => {
+      expect(estimateColdSeconds(lines)).toBeGreaterThanOrEqual(seconds);
+    },
+  );
+
+  it.each(SLICE_SAMPLES)(
+    "stays at or above the measured slice run of %s",
     (_name, lines, seconds) => {
       expect(estimateColdSeconds(lines)).toBeGreaterThanOrEqual(seconds);
     },
