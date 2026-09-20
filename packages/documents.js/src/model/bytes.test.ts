@@ -1,4 +1,5 @@
 import { ODF_MEDIA_TYPES, zipPackage } from "odf.js";
+import { RtfBytesSchema } from "rtf-codec";
 import { describe, expect, it } from "vitest";
 import { writeDocContent } from "doc-codec";
 import { writeXlsContent } from "xls-codec";
@@ -252,6 +253,66 @@ describe("bytes", () => {
       0x0a,
     );
     expect(CsvBytesSchema.safeParse(excelExport).success).toBe(true);
+  });
+
+  // Widening the two text schemas past UTF-8 could only change which codec reads a file if some code path chose a format by testing schemas in order and taking the first that accepted. None does: a format comes from a file extension (document-cli's and document-operations' inferFormatFromExtension, which returns undefined rather than inspecting bytes) or from an explicit format argument, and the registry and readers are records keyed by that format. These tests pin the property that makes that safe to rely on, from the other direction: no newly-accepted text input is accepted by any structural schema, so no input has gained a second plausible reader.
+  describe("text acceptance does not overlap any structural schema", () => {
+    const newlyAcceptedText: readonly (readonly [string, Uint8Array])[] = [
+      ["windows-1252", Uint8Array.of(0x43, 0x61, 0x66, 0xe9, 0x0a)],
+      [
+        "UTF-16LE behind a mark",
+        Uint8Array.of(0xff, 0xfe, 0x61, 0x00, 0x2c, 0x00, 0x62, 0x00),
+      ],
+      [
+        "UTF-16BE without a mark",
+        Uint8Array.of(0x00, 0x61, 0x00, 0x2c, 0x00, 0x62),
+      ],
+    ];
+
+    it.each(newlyAcceptedText)(
+      "%s text is accepted as markdown and csv",
+      (_name, bytes) => {
+        expect(MarkdownBytesSchema.safeParse(bytes).success).toBe(true);
+        expect(CsvBytesSchema.safeParse(bytes).success).toBe(true);
+      },
+    );
+
+    it.each(newlyAcceptedText)(
+      "%s text is refused by every schema that checks real format structure",
+      (_name, bytes) => {
+        for (const schema of [
+          DocxBytesSchema,
+          PptxBytesSchema,
+          OdtBytesSchema,
+          OdsBytesSchema,
+          OdpBytesSchema,
+          OdgBytesSchema,
+          PdfBytesSchema,
+          DocBytesSchema,
+          XlsBytesSchema,
+          PptBytesSchema,
+          RtfBytesSchema,
+        ]) {
+          expect(schema.safeParse(bytes).success).toBe(false);
+        }
+      },
+    );
+
+    it("rtf is still read as rtf: its own schema accepts it, and the text schemas' opinion of it is what it always was", () => {
+      // RTF is ASCII with a real magic header and no NUL bytes, so it satisfied the old well-formed-UTF-8 check and satisfies the new is-this-text check identically. Nothing chose between rtf and markdown by asking these schemas before, and nothing does now.
+      const rtf = new TextEncoder().encode("{\\rtf1\\ansi\\deff0 Hello}");
+      expect(RtfBytesSchema.safeParse(rtf).success).toBe(true);
+      expect(MarkdownBytesSchema.safeParse(rtf).success).toBe(true);
+      expect(CsvBytesSchema.safeParse(rtf).success).toBe(true);
+    });
+
+    it("a compound-file document is refused as text while its own schema still accepts it", () => {
+      // doc/xls/ppt all begin with the [MS-CFB] signature, whose own bytes include NULs, so the tightened text check refuses them. Previously the text schemas' answer depended on whether a given file happened to be valid UTF-8.
+
+      expect(DocBytesSchema.safeParse(docBytes).success).toBe(true);
+      expect(MarkdownBytesSchema.safeParse(docBytes).success).toBe(false);
+      expect(CsvBytesSchema.safeParse(docBytes).success).toBe(false);
+    });
   });
 
   it("CsvBytesSchema rejects bytes that are not text", () => {
