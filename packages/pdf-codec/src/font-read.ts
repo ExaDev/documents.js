@@ -360,19 +360,16 @@ function readCidVerticalMetrics(
     }
     const next = w2[i + 1];
     if (next?.kind === "array") {
-      // Counting whole triplets up front rather than testing a running offset against the array's end: the count IS the number of CIDs described, so it indexes them directly, and a trailing partial triplet the producer left behind is excluded by the division rather than by a bounds test that would have to read past the end to discover it.
-      const described = Math.floor(next.items.length / W2_TRIPLET_LENGTH);
-      for (let index = 0; index < described; index++) {
-        const at = index * W2_TRIPLET_LENGTH;
+      wholeTriplets(next.items).forEach((triplet, index) => {
         const entry = verticalEntryFrom(
-          asNumber(next.items[at]),
-          asNumber(next.items[at + 1]),
-          asNumber(next.items[at + 2]),
+          asNumber(triplet[0]),
+          asNumber(triplet[1]),
+          asNumber(triplet[2]),
         );
         if (entry !== undefined) {
           map.set(first + index, entry);
         }
-      }
+      });
       i += 2;
       continue;
     }
@@ -390,6 +387,20 @@ function readCidVerticalMetrics(
     i += 5;
   }
   return map;
+}
+
+// The array's items gathered into complete triplets, each triplet's index being the CID it describes relative to the entry's first. Grouping by filling rather than by indexing off a computed bound means nothing ever reads past the array's end: a trailing partial entry, which a producer really can leave behind, is one short group and is dropped by the length test rather than being discovered by an out-of-range read.
+function wholeTriplets(items: readonly PdfObject[]): PdfObject[][] {
+  const groups: PdfObject[][] = [];
+  for (const item of items) {
+    const last = groups[groups.length - 1];
+    if (last !== undefined && last.length < W2_TRIPLET_LENGTH) {
+      last.push(item);
+    } else {
+      groups.push([item]);
+    }
+  }
+  return groups.filter((group) => group.length === W2_TRIPLET_LENGTH);
 }
 
 function verticalEntryFrom(
