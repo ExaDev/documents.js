@@ -21,7 +21,10 @@ import type {
   ContentTableRow,
   ContentVector,
   LayoutFrame,
+  PositionedTableCell,
+  PositionedTableRow,
 } from "document-schema.js";
+import { denseTableRows } from "document-schema.js";
 
 // Deep-imported from pdf-codec's asset-free read-side modules rather than its root barrel: the reconstruction path is part of this package's read-only graph (documents.js/read), and the barrel's write half would drag the vendored font assets into it. See src/read-graph.test.ts.
 import { resolveStandardFont } from "pdf-codec/fonts";
@@ -2123,16 +2126,13 @@ function recoverTable(
       lattice.columnBoundariesAscPt[j + 1]! - lattice.columnBoundariesAscPt[j]!,
     );
   }
-  // Walks each atomic row left to right, jumping straight to a region's own colEnd once it is emitted -- exactly the positional bookkeeping ooxml.js's own docx/pptx table writers already do when they encounter a ContentTableCell with a colSpan (buildTable, docx/write.ts): one array entry consumes that many grid columns. A row strictly inside an earlier region's own rowSpan gets an empty placeholder entry at that same position instead of a second real cell, matching how a vMerge-continuation w:tc (or an hMerge/vMerge pptx a:tc) reads back on the way in (ooxml.js's own docx/pptx readTable).
-  const rows: ContentTableRow[] = [];
+  // Each region contributes one anchor at its top-left atomic position, and denseTableRows fills every other position the region covers (further columns of its first row, and every column of its later rows) with an empty covered cell, so each row holds one entry per grid column as ContentTable's own grid rule requires.
+  const positionedRows: PositionedTableRow[] = [];
   for (let i = 0; i < rowCount; i++) {
-    const cells: ContentTableCell[] = [];
-    let j = 0;
-    while (j < columnCount) {
+    const positioned: PositionedTableCell[] = [];
+    for (let j = 0; j < columnCount; j++) {
       const region = regionAt[i]![j]!;
-      if (region.rowStart !== i) {
-        cells.push({ blocks: [] });
-        j = region.colEnd;
+      if (region.rowStart !== i || region.colStart !== j) {
         continue;
       }
       const colSpan = region.colEnd - region.colStart;
@@ -2152,15 +2152,15 @@ function recoverTable(
         widthPt: cellRightXPt - cellLeftXPt,
         heightPt: cellTopYPt - cellBottomYPt,
       });
-      cells.push(cell);
-      j = region.colEnd;
+      positioned.push({ columnIndex: j, cell });
     }
-    rows.push({
-      cells,
+    positionedRows.push({
+      cells: positioned,
       heightPt:
         lattice.rowBoundariesDescPt[i]! - lattice.rowBoundariesDescPt[i + 1]!,
     });
   }
+  const rows = denseTableRows(positionedRows, columnCount);
 
   const leftXPt = lattice.columnBoundariesAscPt[0]!;
   const rightXPt = lattice.columnBoundariesAscPt[columnCount]!;

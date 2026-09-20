@@ -5,6 +5,8 @@ import type {
   ContentCellBorders,
   ContentImageBlock,
   ContentRun,
+  ContentTable,
+  ContentTableCell,
   ContentTableRow,
   LayoutFrame,
   MathFontMetrics,
@@ -20,7 +22,12 @@ import type {
   LayoutMetadata,
   StyledRun,
 } from "document-schema.js";
-import { COLOR_BLACK, DEFAULT_LAYOUT_FONT } from "document-schema.js";
+import {
+  COLOR_BLACK,
+  DEFAULT_LAYOUT_FONT,
+  tableCellColumnSpan,
+  walkTableGrid,
+} from "document-schema.js";
 import { crc32, decodePng, readJpegInfo } from "byte-codec";
 import { wrapRunsToWidth } from "./text-layout";
 import type { SourcedFragment, SourcedRun } from "./text-layout";
@@ -410,35 +417,71 @@ export function registerImage(
   return imageId;
 }
 
+/** The sum of `span` consecutive entries of `columnWidthsPt` from `startIndex`, stopping at the end of the array: a span reaching past the last entry (a spreadsheet merge running off the edge of the printed band, or a table whose declared grid is narrower than a cell claims) contributes only the entries that exist. */
 export function sumColumnWidthsPt(
   columnWidthsPt: readonly number[],
   startIndex: number,
   span: number,
 ): number {
-  let sum = 0;
-  for (
-    let i = startIndex;
-    i < startIndex + span && i < columnWidthsPt.length;
-    i++
-  ) {
-    sum += columnWidthsPt[i] ?? 0;
-  }
-  return sum;
+  return columnWidthsPt
+    .slice(startIndex, startIndex + span)
+    .reduce((sum, widthPt) => sum + widthPt, 0);
 }
 
-// A content-derived fallback for a table row with no explicit height of its own: the tallest single line any cell's paragraphs would produce at the given per-cell width. Deliberately approximate (it doesn't account for a cell wrapping to multiple lines) -- a real row height is expected to be present in essentially every real-world table; this only matters for hand-built or malformed input.
-export function estimateRowHeightPt(
-  row: ContentTableRow,
-  measurer: TextMeasurer,
-  columnWidthsPt: readonly number[],
+/** One anchor cell of a laid-out table row: the cell itself, its left edge measured from the table's left edge, and its width, both already scaled. */
+export interface TableAnchorBox {
+  readonly cell: ContentTableCell;
+  readonly xOffsetPt: number;
+  readonly widthPt: number;
+}
+
+/** One table row paired with the boxes of the anchor cells that are laid out in it. */
+export interface TableRowAnchorBoxes {
+  readonly row: ContentTableRow;
+  readonly anchors: readonly TableAnchorBox[];
+}
+
+/**
+ * Pairs each row of `table` with the boxes of its anchor cells. Only anchors are boxed: a position a merged region covers is part of that region's own anchor cell, so laying it out as well would draw a second, empty cell over the region. An anchor's column is its position in the row, and its width is the sum of the column widths it spans, all multiplied by `scale`.
+ */
+export function tableAnchorBoxes(
+  table: ContentTable,
   scale: number,
+): TableRowAnchorBoxes[] {
+  const positionsByRow = walkTableGrid(table);
+  return table.rows.map((row, rowIndex) => ({
+    row,
+    anchors: positionsByRow[rowIndex]!.flatMap((position) =>
+      position.anchorRowIndex === undefined
+        ? [
+            {
+              cell: position.cell,
+              xOffsetPt:
+                sumColumnWidthsPt(
+                  table.columnWidthsPt,
+                  0,
+                  position.columnIndex,
+                ) * scale,
+              widthPt:
+                sumColumnWidthsPt(
+                  table.columnWidthsPt,
+                  position.columnIndex,
+                  tableCellColumnSpan(position.cell),
+                ) * scale,
+            },
+          ]
+        : [],
+    ),
+  }));
+}
+
+// A content-derived fallback for a table row with no explicit height of its own: the tallest single line any anchor cell's paragraphs would produce at that cell's own width. Deliberately approximate (it doesn't account for a cell wrapping to multiple lines) -- a real row height is expected to be present in essentially every real-world table; this only matters for hand-built or malformed input.
+export function estimateRowHeightPt(
+  anchors: readonly TableAnchorBox[],
+  measurer: TextMeasurer,
 ): number {
   let max = FALLBACK_ROW_HEIGHT_PT;
-  let colIndex = 0;
-  for (const cell of row.cells) {
-    const span = cell.colSpan ?? 1;
-    const cellWidthPt =
-      sumColumnWidthsPt(columnWidthsPt, colIndex, span) * scale;
+  for (const { cell, widthPt } of anchors) {
     for (const block of cell.blocks) {
       if (block.kind !== "paragraph") {
         continue;
@@ -448,12 +491,11 @@ export function estimateRowHeightPt(
         1,
         headingStyleFor(block.styleId),
       );
-      const lines = wrapRunsToWidth(runs, measurer, cellWidthPt);
+      const lines = wrapRunsToWidth(runs, measurer, widthPt);
       for (const line of lines) {
         max = Math.max(max, lineNaturalHeightPt(line, measurer, runs[0]!));
       }
     }
-    colIndex += span;
   }
   return max;
 }

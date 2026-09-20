@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import type {
   ContentCellBorders,
   ContentRun,
-  ContentTableRow,
+  ContentTable,
+  ContentTableCell,
 } from "document-schema.js";
 import type { TextMeasurer } from "document-schema.js";
 import { encodePng } from "byte-codec";
@@ -19,8 +20,10 @@ import {
   registerImage,
   runFont,
   sumColumnWidthsPt,
+  tableAnchorBoxes,
   toStyledRuns,
 } from "./shared";
+import type { TableAnchorBox } from "./shared";
 import type { LayoutImageAsset, LayoutItem, LayoutLine } from "pdf-codec";
 
 const RED = { r: 1, g: 0, b: 0 };
@@ -269,21 +272,106 @@ describe("sumColumnWidthsPt", () => {
   });
 });
 
+function anchorCell(
+  text: string,
+  sizePt = NOMINAL_TEXT_SIZE_PT,
+): ContentTableCell {
+  return { blocks: [{ kind: "paragraph", runs: [run(text, { sizePt })] }] };
+}
+
+describe("tableAnchorBoxes", () => {
+  it("places each anchor at the summed width of the columns to its left and gives it the summed width of the columns it spans, scaled", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [10, 20, 30, 40],
+      rows: [
+        {
+          cells: [
+            { blocks: [], colSpan: 2 },
+            { blocks: [] },
+            { blocks: [] },
+            { blocks: [] },
+          ],
+        },
+      ],
+    };
+    const [first] = tableAnchorBoxes(table, 2);
+    expect(
+      first?.anchors.map(({ xOffsetPt, widthPt }) => ({ xOffsetPt, widthPt })),
+    ).toEqual([
+      { xOffsetPt: 0, widthPt: 60 },
+      { xOffsetPt: 60, widthPt: 60 },
+      { xOffsetPt: 120, widthPt: 80 },
+    ]);
+  });
+
+  it("boxes a horizontally merged region once, at its anchor's column, and leaves its covered positions out", () => {
+    const anchor: ContentTableCell = { blocks: [], colSpan: 2 };
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [10, 20, 30],
+      rows: [{ cells: [{ blocks: [] }, anchor, { blocks: [] }] }],
+    };
+    const [first] = tableAnchorBoxes(table, 1);
+    expect(first?.anchors).toHaveLength(2);
+    expect(first?.anchors[1]).toEqual({
+      cell: anchor,
+      xOffsetPt: 10,
+      widthPt: 50,
+    });
+  });
+
+  it("boxes a vertically merged region in its first row only, leaving the covered position in each later row out", () => {
+    const anchor: ContentTableCell = { blocks: [], rowSpan: 3 };
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [10, 20],
+      rows: [
+        { cells: [anchor, { blocks: [] }] },
+        { cells: [{ blocks: [] }, { blocks: [] }] },
+        { cells: [{ blocks: [] }, { blocks: [] }] },
+      ],
+    };
+    const boxes = tableAnchorBoxes(table, 1);
+    expect(boxes.map(({ anchors }) => anchors.length)).toEqual([2, 1, 1]);
+    expect(boxes[0]?.anchors[0]?.cell).toBe(anchor);
+    expect(boxes[1]?.anchors[0]).toMatchObject({ xOffsetPt: 10, widthPt: 20 });
+  });
+
+  it("pairs each box list with the table row it came from", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [10],
+      rows: [{ cells: [{ blocks: [] }] }, { cells: [{ blocks: [] }] }],
+    };
+    expect(tableAnchorBoxes(table, 1).map(({ row }) => row)).toEqual(
+      table.rows,
+    );
+  });
+});
+
 describe("estimateRowHeightPt", () => {
-  it("falls back to a nominal minimum for an empty row", () => {
-    const measurer = fakeMeasurer();
-    const row: ContentTableRow = { cells: [{ blocks: [] }] };
-    expect(estimateRowHeightPt(row, measurer, [100], 1)).toBeGreaterThan(0);
+  const boxOf = (cell: ContentTableCell, widthPt: number): TableAnchorBox => ({
+    cell,
+    xOffsetPt: 0,
+    widthPt,
+  });
+
+  it("falls back to a nominal minimum for a row with no anchors", () => {
+    expect(estimateRowHeightPt([], fakeMeasurer())).toBeGreaterThan(0);
+  });
+
+  it("falls back to a nominal minimum for an empty cell", () => {
+    expect(
+      estimateRowHeightPt([boxOf({ blocks: [] }, 100)], fakeMeasurer()),
+    ).toBeGreaterThan(0);
   });
 
   it("grows to fit the tallest wrapped line across all cells", () => {
-    const measurer = fakeMeasurer();
-    const row: ContentTableRow = {
-      cells: [
-        { blocks: [{ kind: "paragraph", runs: [run("hi", { sizePt: 100 })] }] },
-      ],
-    };
-    const height = estimateRowHeightPt(row, measurer, [100], 1);
+    const height = estimateRowHeightPt(
+      [boxOf(anchorCell("hi", 100), 100), boxOf(anchorCell("hi", 50), 100)],
+      fakeMeasurer(),
+    );
     expect(height).toBeCloseTo(100 * 1.2, 6); // lineHeightAtSize(100) via the fake measurer
   });
 });

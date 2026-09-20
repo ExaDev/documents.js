@@ -8,6 +8,7 @@ import type {
   ContentRun,
   ContentSection,
   ContentTable,
+  ContentTableCell,
 } from "document-schema.js";
 
 import type {
@@ -441,6 +442,120 @@ describe("convertWordprocessingToLayout: tables", () => {
     expect(
       decorations.filter((i) => i.sourcePath === "sections[0].blocks[0]"),
     ).toHaveLength(2); // the second cell's, falling back to the table's
+  });
+
+  it("lays a horizontally merged cell out once, at its anchor's column and spanning its full width, with nothing drawn or framed for the position it covers", () => {
+    const red = { r: 1, g: 0, b: 0 };
+    const blue = { r: 0, g: 0, b: 1 };
+    const anchor: ContentTableCell = {
+      blocks: [paragraph([run("AB", { sizePt: 10 })])],
+      colSpan: 2,
+      background: { kind: "solid", color: red },
+    };
+    const covered: ContentTableCell = {
+      blocks: [],
+      background: { kind: "solid", color: blue },
+    };
+    const after: ContentTableCell = {
+      blocks: [paragraph([run("C", { sizePt: 10 })])],
+    };
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [40, 30, 30],
+      rows: [{ heightPt: 20, cells: [anchor, covered, after] }],
+    };
+    const layout = convert([section([table])]);
+    const rects = layout.pages[0]!.items.filter(
+      (i): i is LayoutRect => i.kind === "rect",
+    );
+    expect(rects).toHaveLength(1);
+    expect(rects[0]).toMatchObject({ fill: red, xPt: 0, widthPt: 70 });
+    expect(anchor.frames).toHaveLength(1);
+    expect(anchor.frames?.[0]).toMatchObject({ xPt: 0, widthPt: 70 });
+    expect(covered.frames).toBeUndefined();
+    // The cell after the merge sits at the column following the region, not one column further along.
+    expect(after.frames?.[0]).toMatchObject({ xPt: 70, widthPt: 30 });
+    expect(
+      textItems(layout.pages[0]!.items).map((i) => [i.text, i.xPt]),
+    ).toEqual([
+      ["AB", 0],
+      ["C", 70],
+    ]);
+  });
+
+  it("lays a vertically merged cell out once, in its first row, with nothing drawn or framed for the covered position in the rows below", () => {
+    const red = { r: 1, g: 0, b: 0 };
+    const blue = { r: 0, g: 0, b: 1 };
+    const anchor: ContentTableCell = {
+      blocks: [paragraph([run("A", { sizePt: 10 })])],
+      rowSpan: 2,
+      background: { kind: "solid", color: red },
+    };
+    const covered: ContentTableCell = {
+      blocks: [],
+      background: { kind: "solid", color: blue },
+    };
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [50, 50],
+      rows: [
+        {
+          heightPt: 20,
+          cells: [anchor, { blocks: [paragraph([run("B", { sizePt: 10 })])] }],
+        },
+        {
+          heightPt: 20,
+          cells: [covered, { blocks: [paragraph([run("D", { sizePt: 10 })])] }],
+        },
+      ],
+    };
+    const layout = convert([section([table])]);
+    const rects = layout.pages[0]!.items.filter(
+      (i): i is LayoutRect => i.kind === "rect",
+    );
+    expect(rects).toHaveLength(1);
+    expect(rects[0]).toMatchObject({ fill: red, xPt: 0, widthPt: 50 });
+    expect(anchor.frames).toHaveLength(1);
+    expect(covered.frames).toBeUndefined();
+    expect(
+      textItems(layout.pages[0]!.items).map((i) => [i.text, i.xPt]),
+    ).toEqual([
+      ["A", 0],
+      ["B", 50],
+      ["D", 50],
+    ]);
+  });
+
+  it("sizes a row with no explicit height from its anchors alone, so a covered position cannot contribute a line of its own", () => {
+    const anchor: ContentTableCell = {
+      blocks: [paragraph([run("A", { sizePt: 10 })])],
+      colSpan: 2,
+    };
+    const covered: ContentTableCell = {
+      blocks: [paragraph([run("hidden", { sizePt: 100 })])],
+    };
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [50, 50],
+      rows: [{ cells: [anchor, covered] }],
+    };
+    convert([section([table])]);
+    // The anchor's own 12pt line is below the nominal row height, which is what the row takes; the covered position's 100pt text would have made it 120pt.
+    expect(anchor.frames?.[0]?.heightPt).toBe(20);
+  });
+
+  it("treats a grid of zero total width as unscaled rather than dividing by it", () => {
+    const cell: ContentTableCell = { blocks: [] };
+    convert([
+      section([
+        {
+          kind: "table",
+          columnWidthsPt: [0],
+          rows: [{ heightPt: 10, cells: [cell] }],
+        },
+      ]),
+    ]);
+    expect(cell.frames?.[0]?.widthPt).toBe(0);
   });
 
   it("scales column widths proportionally to fit the content width", () => {

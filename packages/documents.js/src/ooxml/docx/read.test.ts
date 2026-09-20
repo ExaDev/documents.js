@@ -1,4 +1,13 @@
 import { describe, expect, it } from "vitest";
+import type { ContentBlock } from "document-schema.js";
+import type { Package, XmlNode } from "ooxml.js";
+import {
+  childrenWithTag,
+  decodePackage,
+  readDocxContent as readDocxFlat,
+  rootElement,
+  zipPackage,
+} from "ooxml.js";
 import { writeXlsContent } from "xls-codec";
 import {
   docxWithLegacyOleObjectPackage,
@@ -6,9 +15,55 @@ import {
   minimalDocxPackage,
   renamedMainPartDocxPackage,
 } from "../../test-support/docx";
+import { spliceDocxEmbeddedObjects } from "./embedded-objects";
+import { docxMainPartPath } from "./parts";
 import { readDocxContent } from "./read";
 
 // readDocxContent is now a thin adapter over ooxml.js's own readDocxContent (the flat reader; the bare readDocx name reads the tree-form DocumentTree since ooxml.js 4.0.0): the WordprocessingML style cascade, theme resolution, and document-order section/block walking all live upstream in ooxml.js now, with their own test coverage there. These tests exercise only the wrapping this file is actually responsible for -- ContentDocument's discriminant/formatVersion, the metadata/sections passthrough -- not the OOXML semantics readDocx itself resolves.
+
+function docxPackageOfBody(bodyXml: string): Package {
+  const xml = (source: string): Uint8Array<ArrayBuffer> =>
+    new TextEncoder().encode(source);
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><w:body>${bodyXml}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+  return decodePackage(
+    zipPackage({
+      "[Content_Types].xml": xml(
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
+      ),
+      "_rels/.rels": xml(
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
+      ),
+      "word/document.xml": xml(documentXml),
+    }),
+  );
+}
+
+const EQUATION_PARAGRAPH =
+  "<w:p><m:oMath><m:r><m:t>x</m:t></m:r></m:oMath></w:p>";
+function bodyChildrenOf(pkg: Package): readonly XmlNode[] {
+  const root = rootElement(pkg.parts[docxMainPartPath(pkg)]);
+  if (root === undefined) {
+    throw new Error("expected a main document part");
+  }
+  const body = childrenWithTag(root, "w:body")[0];
+  if (body === undefined) {
+    throw new Error("expected a w:body");
+  }
+  return body.children;
+}
+
+const PLAIN_PARAGRAPH = "<w:p><w:r><w:t>p</w:t></w:r></w:p>";
+const GRID_3 =
+  '<w:tblGrid><w:gridCol w:w="3000"/><w:gridCol w:w="3000"/><w:gridCol w:w="3000"/></w:tblGrid>';
+
+// A horizontal merge is one w:tc carrying w:gridSpan, with no element for the column it reaches, while the dense ContentTable row holds an entry for every column. The equation in the last w:tc of the first two rows belongs to the cell at grid column 2, not to the second entry of the row, and the third row is plain so a splice pass has nothing to change in it.
+function mergedTableWithEquationsPackage(): Package {
+  const equationCell = `<w:tc>${EQUATION_PARAGRAPH}</w:tc>`;
+  const plainCell = `<w:tc>${PLAIN_PARAGRAPH}</w:tc>`;
+  return docxPackageOfBody(
+    `<w:tbl>${GRID_3}<w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/><w:vMerge w:val="restart"/></w:tcPr><w:p><w:r><w:t>Big</w:t></w:r></w:p></w:tc>${equationCell}</w:tr><w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/><w:vMerge/></w:tcPr><w:p/></w:tc>${equationCell}</w:tr><w:tr>${plainCell}${plainCell}${plainCell}</w:tr></w:tbl>`,
+  );
+}
 
 describe("readDocxContent", () => {
   it("wraps ooxml.js's readDocxContent into a wordprocessing ContentDocument", () => {
@@ -95,6 +150,119 @@ describe("readDocxContent", () => {
           block.kind === "embeddedObject" && block.objectKind === "formula",
       ),
     ).toBe(true);
+  });
+
+  it("splices an equation into the cell at the grid column its w:tc occupies when an earlier cell in the row is horizontally merged", () => {
+    const doc = readDocxContent(mergedTableWithEquationsPackage());
+    if (doc.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing document");
+    }
+    const table = doc.sections[0]?.blocks.find(
+      (block) => block.kind === "table",
+    );
+    if (table?.kind !== "table") {
+      throw new Error("expected a table");
+    }
+    const hasFormula = (blocks: readonly { kind: string }[]): boolean =>
+      blocks.some((block) => block.kind === "embeddedObject");
+    expect(
+      table.rows.map((row) => row.cells.map((cell) => hasFormula(cell.blocks))),
+    ).toEqual([
+      [false, false, true],
+      [false, false, true],
+      [false, false, false],
+    ]);
+    const formulaPaths = table.rows.map((row) => {
+      const block = row.cells[2]?.blocks[0];
+      return block?.kind === "embeddedObject" ? block.sourcePath : undefined;
+    });
+    expect(formulaPaths).toEqual([
+      "sections[0].blocks[0].rows[0].cells[2].blocks[0]",
+      "sections[0].blocks[0].rows[1].cells[2].blocks[0]",
+      undefined,
+    ]);
+  });
+
+  it("splices equations into the cells of a table nested in a cell, and after several paragraphs of the same cell", () => {
+    const nested = `<w:tbl><w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid><w:tr><w:tc>${EQUATION_PARAGRAPH}</w:tc></w:tr></w:tbl>`;
+    const pkg = docxPackageOfBody(
+      // The first cell holds two paragraphs, the equation second, then a nested table; the second holds nothing but a nested table (and the paragraph OOXML requires a cell to end with), so the nested table is the only thing there for the pass to change.
+      `<w:tbl>${GRID_3}<w:tr><w:tc>${PLAIN_PARAGRAPH}${EQUATION_PARAGRAPH}${nested}${nested}<w:p><w:r><w:t>t</w:t></w:r><m:oMath><m:r><m:t>y</m:t></m:r></m:oMath></w:p></w:tc><w:tc>${nested}<w:p/></w:tc><w:tc><w:p><w:r><w:t>t</w:t></w:r><m:oMath><m:r><m:t>z</m:t></m:r></m:oMath></w:p></w:tc></w:tr></w:tbl>`,
+    );
+    const doc = readDocxContent(pkg);
+    if (doc.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing document");
+    }
+    const table = doc.sections[0]?.blocks[0];
+    if (table?.kind !== "table") {
+      throw new Error("expected a table");
+    }
+    const [first, second, third] = table.rows[0]?.cells ?? [];
+    expect(first?.blocks.map((block) => block.kind)).toEqual([
+      "paragraph",
+      "embeddedObject",
+      "table",
+      "table",
+      "paragraph",
+      "embeddedObject",
+    ]);
+    // An equation set inline in a paragraph with other text is inserted after that paragraph, which is itself left in place, so nothing in this cell is consumed or rebuilt but the list still grows.
+    expect(third?.blocks.map((block) => block.kind)).toEqual([
+      "paragraph",
+      "embeddedObject",
+    ]);
+    const innerOf = (blocks: readonly ContentBlock[] | undefined): string[] => {
+      const inner = blocks?.find((block) => block.kind === "table");
+      return inner?.kind === "table"
+        ? (inner.rows[0]?.cells[0]?.blocks.map((block) => block.kind) ?? [])
+        : [];
+    };
+    expect(innerOf(first?.blocks)).toEqual(["embeddedObject"]);
+    expect(innerOf(second?.blocks)).toEqual(["embeddedObject"]);
+    const innerTable = first?.blocks[2];
+    if (innerTable?.kind !== "table") {
+      throw new Error("expected a nested table");
+    }
+    const formula = innerTable.rows[0]?.cells[0]?.blocks[0];
+    expect(
+      formula?.kind === "embeddedObject" ? formula.sourcePath : undefined,
+    ).toBe(
+      "sections[0].blocks[0].rows[0].cells[0].blocks[2].rows[0].cells[0].blocks[0]",
+    );
+    // Each of the two sibling tables is matched to its own w:tbl, so the second one is spliced as well.
+    const secondInner = first?.blocks[3];
+    expect(secondInner?.kind === "table" ? innerOf([secondInner]) : []).toEqual(
+      ["embeddedObject"],
+    );
+  });
+
+  it("keeps every cell, row and table the splice pass had nothing to change as the very object the upstream reader produced", () => {
+    const pkg = mergedTableWithEquationsPackage();
+    const upstream = readDocxFlat(pkg);
+    const [spliced] = spliceDocxEmbeddedObjects(
+      upstream.sections,
+      bodyChildrenOf(pkg),
+      pkg,
+    );
+    const before = upstream.sections[0]?.blocks[0];
+    const after = spliced?.blocks[0];
+    if (before?.kind !== "table" || after?.kind !== "table") {
+      throw new Error("expected a table");
+    }
+    // The rows carrying an equation are rebuilt around it; the plain row is the same object, and within a rebuilt row the cells with nothing to splice are too.
+    expect(after).not.toBe(before);
+    expect(after.rows[0]).not.toBe(before.rows[0]);
+    expect(after.rows[0]?.cells[0]).toBe(before.rows[0]?.cells[0]);
+    expect(after.rows[0]?.cells[2]).not.toBe(before.rows[0]?.cells[2]);
+    expect(after.rows[2]).toBe(before.rows[2]);
+    const plain = readDocxFlat(minimalDocxPackage());
+    const plainPkg = minimalDocxPackage();
+    const [plainSpliced] = spliceDocxEmbeddedObjects(
+      plain.sections,
+      bodyChildrenOf(plainPkg),
+      plainPkg,
+    );
+    expect(plainSpliced?.blocks[1]).toBe(plain.sections[0]?.blocks[1]);
   });
 
   // ExaDev/documents.js#921: a w:object whose payload is a classic OLE compound file holding native legacy streams (not a ZIP, and not a ZIP wrapped in the compound file's own "Package" stream) used to stay opaque -- ooxml.js's own readDocxContent has no reader for that shape at all, so the paragraph carrying the w:object recovered nothing. This second-pass splice (embedded-objects.ts's collectParagraphOleObjects/resolveLegacyOleObject) recovers it by trying doc-codec/xls-codec/ ppt-codec directly on the payload bytes.

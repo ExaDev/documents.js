@@ -32,7 +32,7 @@ import {
   registerImage,
   stampFragmentFrame,
   stampFrame,
-  sumColumnWidthsPt,
+  tableAnchorBoxes,
 } from "./shared";
 import type {
   LayoutDocument,
@@ -223,17 +223,11 @@ function layoutTable(
   const gridWidthPt = table.columnWidthsPt.reduce((sum, w) => sum + w, 0);
   const scale = gridWidthPt > 0 ? contentWidthPt / gridWidthPt : 1;
 
-  for (const row of table.rows) {
-    const rowHeightPt =
-      row.heightPt ??
-      estimateRowHeightPt(row, measurer, table.columnWidthsPt, scale);
-    let cellXDown = contentLeftXDown;
-    let colIndex = 0;
+  for (const { row, anchors } of tableAnchorBoxes(table, scale)) {
+    const rowHeightPt = row.heightPt ?? estimateRowHeightPt(anchors, measurer);
 
-    for (const cell of row.cells) {
-      const span = cell.colSpan ?? 1;
-      const cellWidthPt =
-        sumColumnWidthsPt(table.columnWidthsPt, colIndex, span) * scale;
+    for (const { cell, xOffsetPt, widthPt: cellWidthPt } of anchors) {
+      const cellXDown = contentLeftXDown + xOffsetPt;
 
       // The cell's own frame stamps the CELL node (PDF-space, unrotated -- the same no-rotation constraint the background rect below already obeys); the runs inside stamp their own frames through layoutParagraph below.
       const cellFrame = flipY(
@@ -283,9 +277,6 @@ function layoutTable(
           );
         }
       }
-
-      cellXDown += cellWidthPt;
-      colIndex += span;
     }
     cursorYDown += rowHeightPt;
   }
