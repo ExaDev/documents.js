@@ -4379,10 +4379,11 @@ describe("buildDocxPackageFromContent: table grid and vertical-merge arithmetic"
                 {
                   cells: [
                     { blocks: [], colSpan: 2, rowSpan: 2 },
+                    { blocks: [] },
                     { blocks: [], rowSpan: 2 },
                   ],
                 },
-                { cells: [{ blocks: [] }, { blocks: [] }] },
+                { cells: [{ blocks: [] }, { blocks: [] }, { blocks: [] }] },
               ],
               [100, 100, 100],
             ),
