@@ -1,3 +1,9 @@
+## [5.11.28](https://github.com/ExaDev/documents.js/compare/document-cli%405.11.27...document-cli%405.11.28) (2026-09-20)
+
+### Tests
+
+* **document-cli:** drive the status-line TTL tests with fake timers ([8218169](https://github.com/ExaDev/documents.js/commit/8218169e7cd31861e12b7ccfaa767cb9b781d970))
+
 ## [5.11.27](https://github.com/ExaDev/documents.js/compare/document-cli%405.11.26...document-cli%405.11.27) (2026-09-20)
 
 
