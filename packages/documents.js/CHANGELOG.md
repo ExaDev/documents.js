@@ -1,3 +1,12 @@
+## [7.20.26](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.25...documents.js%407.20.26) (2026-09-20)
+
+
+### Dependencies
+
+- Updated byte-codec to 1.6.0
+- Updated pdf-codec to 4.8.13
+- Updated ppt-codec to 1.7.10
+
 ## [7.20.25](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.24...documents.js%407.20.25) (2026-09-20)
 
 
