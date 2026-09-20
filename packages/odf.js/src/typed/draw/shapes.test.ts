@@ -3,7 +3,7 @@ import type { ContentShape } from "document-schema.js";
 import type { Package } from "../../model/package";
 import type { XmlElement, XmlNode } from "../../model/node";
 import { el, txt } from "../../xml/fragment";
-import { bytesToBase64 } from "../../util/base64";
+import { bytesToBase64 } from "byte-codec";
 import { readDrawFrame, readDrawPageContent, walkDrawShapes } from "./shapes";
 
 function contentPackage(

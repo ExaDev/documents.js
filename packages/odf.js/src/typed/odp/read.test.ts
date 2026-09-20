@@ -9,7 +9,7 @@ import type {
 } from "document-schema.js";
 import type { Package } from "../../model/package";
 import { el, txt } from "../../xml/fragment";
-import { bytesToBase64 } from "../../util/base64";
+import { bytesToBase64 } from "byte-codec";
 import { parsePackage } from "../../package-io/read";
 import {
   assertPackageRoundTrip,

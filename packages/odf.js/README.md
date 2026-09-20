@@ -30,6 +30,7 @@ graph TD
     pdfcodec --> documents
     mdcodec --> documents
     bytecodec --> pdfcodec
+    bytecodec --> odf
     bytecodec --> documents
     documents --> mcp
     pdfcodec --> mcp

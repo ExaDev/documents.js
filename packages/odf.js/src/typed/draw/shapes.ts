@@ -21,7 +21,7 @@ import type { XmlElement, XmlNode } from "../../model/node";
 import type { Package } from "../../model/package";
 import { attrValue, childrenWithTag, elementsWithTag } from "../../xml/query";
 import { decodeXmlText } from "../../xml/entities";
-import { base64ToBytes } from "../../util/base64";
+import { base64ToBytes } from "byte-codec";
 import { sniffImageFormat } from "../../image/sniff";
 import {
   readDrawObjectReference,

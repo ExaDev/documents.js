@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Package } from "./model/package";
-import { bytesToBase64 } from "./util/base64";
+import { bytesToBase64 } from "byte-codec";
 import { buildXml } from "./xml/build";
 import { el, txt } from "./xml/fragment";
 import { readMimetype } from "./mimetype";

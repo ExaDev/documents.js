@@ -7,7 +7,7 @@ import { sniffImageFormat } from "./image/sniff";
 import { readMimetype, writeMimetype } from "./mimetype";
 import { el } from "./xml/fragment";
 import { encodeXmlText } from "./xml/entities";
-import { base64ToBytes } from "./util/base64";
+import { base64ToBytes } from "byte-codec";
 import { MANIFEST_PART, MIMETYPE_PART } from "./package-io/write";
 
 // odf.js diverges from ooxml.js here deliberately: ooxml.js only ever READS OPC relationships (its own typed readers are one-way; writing new relationships/content-type entries is documents.js's job, a separate downstream package). odf.js has no such downstream package -- it owns both reading AND writing the manifest itself, because META-INF/manifest.xml is the one part every ODF package unconditionally requires, and getting its content right (every part listed, every media type correct, the root entry's type tied to the mimetype part) is exhaustive enough to need first-class support, not something left to a caller to hand-assemble from raw XML.

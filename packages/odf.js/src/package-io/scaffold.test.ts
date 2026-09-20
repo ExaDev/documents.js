@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildXml } from "../xml/build";
-import { base64ToBytes } from "../util/base64";
+import { base64ToBytes } from "byte-codec";
 import {
   createOdfPackage,
   odfPartContainer,
