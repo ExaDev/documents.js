@@ -22,9 +22,9 @@ import type {
   ContentSection,
   ContentStrokeStyle,
   ContentTable,
-  ContentTableCell,
   Margins,
   PageSize,
+  PositionedTableCell,
   ProvenanceChange,
   RunConstructExtent,
 } from "document-schema.js";
@@ -36,6 +36,7 @@ import {
   ContentSectionSchema,
   PAGE_SIZE_LETTER,
   clampHeadingLevel,
+  denseTableRows,
   rgbHexToColor,
 } from "document-schema.js";
 import { DocumentMetadataSchema, readCoreProperties } from "../shared/metadata";
@@ -1182,6 +1183,8 @@ function readRowHeightPt(tr: XmlElement): number | undefined {
 }
 
 // Column indices account for preceding cells' own gridSpan (a spanned cell occupies multiple grid columns); a vMerge-restart anchor's rowSpan is computed by scanning subsequent rows for a "continue" cell at the same column index, matching the anchor's own gridSpan -- ECMA-376 doesn't store the span count directly the way pptx's a:tc/@rowSpan does, so it must be derived.
+//
+// ECMA-376 spells a horizontal merge as ONE w:tc carrying w:gridSpan, with no element at all for the columns it covers, so those columns have no w:tc to read and are supplied by denseTableRows instead -- the grid rule (document-schema.js's ContentTableCell) wants one cell per grid column whatever the source format stores. A w:vMerge continuation does have its own w:tc, and it becomes the cell at its own column rather than being dropped, which is what lets its shading and borders survive the read; the further columns its own w:gridSpan reaches are filled the same way the anchor's are.
 function readTable(
   tbl: XmlElement,
   ctx: DocxReadContext,
@@ -1211,13 +1214,20 @@ function readTable(
     return indices;
   });
 
-  const rows = rawRows.map((row, rowIndex) => ({
+  const positioned = rawRows.map((row, rowIndex) => ({
     heightPt: readRowHeightPt(trs[rowIndex]!),
-    cells: row.map((cell, cellIndex): ContentTableCell => {
-      if (cell.isVMergeContinuation) {
-        return { blocks: [] };
-      }
+    cells: row.map((cell, cellIndex): PositionedTableCell => {
       const colIndex = rowColumnIndices[rowIndex]![cellIndex]!;
+      if (cell.isVMergeContinuation) {
+        return {
+          columnIndex: colIndex,
+          cell: {
+            blocks: [],
+            background: cell.background,
+            borders: cell.borders,
+          },
+        };
+      }
       let rowSpan = 1;
       for (let r = rowIndex + 1; r < rawRows.length; r++) {
         const matchIndex = rowColumnIndices[r]!.indexOf(colIndex);
@@ -1229,16 +1239,23 @@ function readTable(
         rowSpan++;
       }
       return {
-        blocks: cell.blocks,
-        colSpan: cell.gridSpan > 1 ? cell.gridSpan : undefined,
-        rowSpan: rowSpan > 1 ? rowSpan : undefined,
-        background: cell.background,
-        borders: cell.borders,
+        columnIndex: colIndex,
+        cell: {
+          blocks: cell.blocks,
+          colSpan: cell.gridSpan > 1 ? cell.gridSpan : undefined,
+          rowSpan: rowSpan > 1 ? rowSpan : undefined,
+          background: cell.background,
+          borders: cell.borders,
+        },
       };
     }),
   }));
 
-  return { kind: "table", columnWidthsPt, rows };
+  return {
+    kind: "table",
+    columnWidthsPt,
+    rows: denseTableRows(positioned, columnWidthsPt.length),
+  };
 }
 
 // --- the block flow walk, and the construct extents it discovers along the way ---------------------------------------

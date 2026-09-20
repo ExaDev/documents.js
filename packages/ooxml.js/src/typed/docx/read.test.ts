@@ -4279,7 +4279,58 @@ describe("readDocxContent: table column and merge arithmetic", () => {
     );
     const rows = asTable(doc.sections[0]?.blocks[0]).rows;
     expect(rows[0]?.cells[1]?.rowSpan).toBe(2);
-    expect(rows[1]?.cells[1]).toStrictEqual({ blocks: [] });
+    expect(rows[1]?.cells[1]).toStrictEqual({
+      blocks: [],
+      background: undefined,
+      borders: undefined,
+    });
+  });
+
+  it("keeps a vertical continuation's own shading rather than discarding the covered cell", () => {
+    const restart = el("w:tc", {}, [
+      el("w:tcPr", {}, [el("w:vMerge", { "w:val": "restart" })]),
+      el("w:p", {}, [textRun("merged")]),
+    ]);
+    const continuation = el("w:tc", {}, [
+      el("w:tcPr", {}, [
+        el("w:vMerge"),
+        el("w:shd", { "w:val": "clear", "w:fill": "FF0000" }),
+      ]),
+      el("w:p", {}, [textRun("hidden")]),
+    ]);
+    const doc = readDocxContent(
+      paragraphPackage(vMergeTable(restart, continuation)),
+    );
+    const rows = asTable(doc.sections[0]?.blocks[0]).rows;
+    expect(rows[1]?.cells[1]?.background).toEqual({
+      kind: "solid",
+      color: rgbHexToColor("FF0000"),
+    });
+    expect(rows[1]?.cells[1]?.blocks).toEqual([]);
+  });
+
+  it("supplies a cell at every column a w:gridSpan covers, so array index is grid column", () => {
+    const table = el("w:tbl", {}, [
+      el("w:tblGrid", {}, [
+        el("w:gridCol", { "w:w": "1440" }),
+        el("w:gridCol", { "w:w": "1440" }),
+        el("w:gridCol", { "w:w": "1440" }),
+      ]),
+      el("w:tr", {}, [
+        el("w:tc", {}, [
+          el("w:tcPr", {}, [el("w:gridSpan", { "w:val": "2" })]),
+          el("w:p", {}, [textRun("Region")]),
+        ]),
+        el("w:tc", {}, [el("w:p", {}, [textRun("Revenue")])]),
+      ]),
+    ]);
+    const rows = asTable(
+      readDocxContent(paragraphPackage(table)).sections[0]?.blocks[0],
+    ).rows;
+    expect(rows[0]?.cells.length).toBe(3);
+    expect(rows[0]?.cells[0]?.colSpan).toBe(2);
+    expect(rows[0]?.cells[1]?.blocks).toEqual([]);
+    expect(rows[0]?.cells[2]?.colSpan).toBeUndefined();
   });
 
   it("reads a grid column with no @w:w as zero width", () => {

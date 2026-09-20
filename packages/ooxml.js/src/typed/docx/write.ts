@@ -22,6 +22,9 @@ import {
   colorToRgbHex,
   findConstructMarkerImbalance,
   findRunConstructFault,
+  tableCellColumnSpan,
+  tableCellRowSpan,
+  walkTableGrid,
 } from "document-schema.js";
 import type { Package, XmlPart } from "../../model/package";
 import type { XmlElement, XmlNode } from "../../model/node";
@@ -816,11 +819,6 @@ const STROKE_STYLE_KEYWORD: Readonly<
   Record<"solid" | "dashed" | "dotted" | "double", string>
 > = { solid: "single", dashed: "dashed", dotted: "dotted", double: "double" };
 
-interface VerticalMerge {
-  remaining: number;
-  readonly span: number;
-}
-
 function buildCell(
   cell: ContentTableCell,
   state: WriteState,
@@ -852,7 +850,7 @@ function buildCell(
   ]);
 }
 
-// Vertical merges are written back the way ECMA-376 spells them -- a w:vMerge restart on the anchor and a bare w:vMerge on every covered cell below it -- derived from the anchors' own rowSpan, which is exactly what readTable derived that rowSpan from.
+// Vertical merges are written back the way ECMA-376 spells them -- a w:vMerge restart on the anchor and a bare w:vMerge below it -- derived from the anchors' own rowSpan, which is exactly what readTable derived that rowSpan from. Horizontal merges are the asymmetric half: ECMA-376 has no element for a column a w:gridSpan already reaches, so a position covered along its own row contributes no w:tc at all, while a position covered from an earlier row contributes one at the covering anchor's first column and none at the rest, carrying that anchor's gridSpan so the continuation is exactly as wide as the cell it continues.
 function buildTable(
   table: ContentTable,
   state: WriteState,
@@ -865,33 +863,39 @@ function buildTable(
       el("w:gridCol", { "w:w": String(ptToTwips(widthPt)) }),
     ),
   );
-  const active = new Map<number, VerticalMerge>();
-  const rows = table.rows.map((row) => {
+  const gridPositions = walkTableGrid(table);
+  const rows = table.rows.map((row, rowIndex) => {
     const cells: XmlElement[] = [];
-    let column = 0;
-    for (const cell of row.cells) {
-      const covered = active.get(column);
-      if (covered !== undefined && covered.remaining > 0) {
-        covered.remaining--;
-        cells.push(buildCell(cell, state, deleted, covered.span, "continue"));
-        column += covered.span;
+    for (const position of gridPositions[rowIndex]!) {
+      if (position.anchorRowIndex === undefined) {
+        const rowSpan = tableCellRowSpan(position.cell);
+        cells.push(
+          buildCell(
+            position.cell,
+            state,
+            deleted,
+            tableCellColumnSpan(position.cell),
+            rowSpan > 1 ? "restart" : undefined,
+          ),
+        );
         continue;
       }
-      const gridSpan = cell.colSpan ?? 1;
-      const rowSpan = cell.rowSpan ?? 1;
-      cells.push(
-        buildCell(
-          cell,
-          state,
-          deleted,
-          gridSpan,
-          rowSpan > 1 ? "restart" : undefined,
-        ),
-      );
-      if (rowSpan > 1) {
-        active.set(column, { remaining: rowSpan - 1, span: gridSpan });
+      const anchor =
+        gridPositions[position.anchorRowIndex]![position.anchorColumnIndex]!;
+      if (
+        position.anchorRowIndex < rowIndex &&
+        position.columnIndex === position.anchorColumnIndex
+      ) {
+        cells.push(
+          buildCell(
+            position.cell,
+            state,
+            deleted,
+            tableCellColumnSpan(anchor.cell),
+            "continue",
+          ),
+        );
       }
-      column += gridSpan;
     }
     const trPr =
       row.heightPt === undefined
