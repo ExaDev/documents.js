@@ -1,3 +1,13 @@
+## [1.5.6](https://github.com/ExaDev/documents.js/compare/byte-codec%401.5.5...byte-codec%401.5.6) (2026-09-20)
+
+### Performance Improvements
+
+* **byte-codec:** stop building an index array for every scanline and every pixel ([80df3e5](https://github.com/ExaDev/documents.js/commit/80df3e5ba6e45582d9e372c8e973a915ce684263))
+
+### Tests
+
+* **byte-codec:** pin the PNG scanline filters and the encode and decode path ([d7913ba](https://github.com/ExaDev/documents.js/commit/d7913babaa5a9714a07aa09eabd9de4f62fd9724))
+
 ## [1.5.5](https://github.com/ExaDev/documents.js/compare/byte-codec%401.5.4...byte-codec%401.5.5) (2026-09-14)
 
 ### Miscellaneous Chores
