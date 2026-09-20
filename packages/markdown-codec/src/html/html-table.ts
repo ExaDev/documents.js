@@ -217,16 +217,16 @@ function parseInlineHtml(text: string, style: RunStyle): ContentRun[] {
       pushPlainRun(runs, rest, style);
       return runs;
     }
-    pushPlainRun(runs, rest.slice(0, match.index), style);
     const tagName = match[1]!.toLowerCase();
     const attrs = match[2] ?? "";
     const openEnd = pos + match.index + match[0].length;
     const close = findBalancedClose(text, openEnd, [tagName]);
     if (close === undefined) {
-      // An unterminated recognised tag is not a shape worth guessing about -- the rest of this cell's own text stays literal, tag markup included, exactly as an unrecognised construct elsewhere in this package degrades to its own escaped/literal spelling rather than a best-effort repair.
+      // An unterminated recognised tag is not a shape worth guessing about: everything from here to the end of this cell stays literal, this tag's own markup included, exactly as an unrecognised construct elsewhere in this package degrades to its own escaped/literal spelling rather than a best-effort repair. The text preceding the tag is pushed AFTER this check rather than before it precisely so that literal remainder is one run spanning the whole of `rest`, not a second run repeating text a first run already carried.
       pushPlainRun(runs, rest, style);
       return runs;
     }
+    pushPlainRun(runs, rest.slice(0, match.index), style);
     runs.push(
       ...parseInlineHtml(
         text.slice(openEnd, close.start),
