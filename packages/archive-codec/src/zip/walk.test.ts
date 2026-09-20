@@ -183,13 +183,14 @@ describe("walkArchive cumulative-size guard", () => {
   });
 
   it("bounds a highly compressible entry by its decompressed size, not its compressed size", () => {
-    // Four megabytes of one repeated character compress to a few kilobytes -- the zip-bomb shape. The budget counts what the walk actually decompresses.
+    // The zip-bomb shape: one repeated character compresses to far below the budget while decompressing to far above it, so only a budget that counts what the walk actually decompresses can trip. The gap between the two sizes, not their absolute scale, is what the test needs, so the sizes stay small enough that compressing and decompressing them costs next to nothing.
+    const budget = 1024;
     const bytes = zipSync({
-      "zeros.txt": enc.encode("0".repeat(4 * 1024 * 1024)),
+      "zeros.txt": enc.encode("0".repeat(budget * 64)),
     });
+    expect(bytes.length).toBeLessThan(budget);
     expect(
-      catchLimit(() => walkArchive(bytes, { maxTotalBytes: 1024 * 1024 }))
-        .limit,
+      catchLimit(() => walkArchive(bytes, { maxTotalBytes: budget })).limit,
     ).toBe("total-bytes");
   });
 
