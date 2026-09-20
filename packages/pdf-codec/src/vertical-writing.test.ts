@@ -168,6 +168,17 @@ describe("/DW2 and /W2", () => {
     expect(item?.widthPt).toBeCloseTo(SIZE_PT * 0.5 + SIZE_PT * 0.25, 6);
   });
 
+  it("ignores a trailing partial triplet a producer left behind", () => {
+    // Four numbers describe one complete entry and the start of another. The complete one applies to CID 65; the fragment describes nothing and CID 66 keeps /DW2's default.
+    const item = textItems(
+      compositeFontWritingModePdf({
+        encoding: "/Identity-V",
+        verticalMetrics: "/W2 [65 [-500 200 900 -250]]",
+      }),
+    )[0];
+    expect(item?.widthPt).toBeCloseTo(SIZE_PT * 0.5 + SIZE_PT, 6);
+  });
+
   it("falls back to the defaults for a /W2 entry missing a number", () => {
     // A triplet whose position vector's x is not a number describes nothing usable, so the CID takes /DW2's own default full-em displacement rather than half of an entry.
     const item = textItems(
@@ -189,6 +200,42 @@ describe("/DW2 and /W2", () => {
     )[0];
     expect(item?.widthPt).toBeCloseTo(
       SIZE_PT * GLYPH_COUNT - 2 * GLYPH_COUNT,
+      6,
+    );
+  });
+
+  it("moves a TJ adjustment down the column rather than across the page", () => {
+    // A TJ number is subtracted from whichever coordinate the writing mode advances along. A vertical displacement is itself negative, so subtracting a positive number opens the column rather than closing it: 500/1000 em at 20pt adds 10pt to the two glyphs' own 40.
+    const item = textItems(
+      compositeFontWritingModePdf({
+        encoding: "/Identity-V",
+        content: "BT /F1 20 Tf 100 700 Td [<0041> 500 <0042>] TJ ET",
+      }),
+    )[0];
+    expect(item?.widthPt).toBeCloseTo(SIZE_PT * GLYPH_COUNT + SIZE_PT * 0.5, 6);
+  });
+
+  it("does not scale a vertical TJ adjustment by the horizontal scaling", () => {
+    // Tz stretches text space horizontally and has nothing to say about a column's own advance, so halving it leaves the vertical adjustment exactly where it was. The horizontal case below shows the same Tz genuinely does scale a TJ adjustment, so this is the writing mode deciding rather than Tz being ignored everywhere.
+    const item = textItems(
+      compositeFontWritingModePdf({
+        encoding: "/Identity-V",
+        content: "BT /F1 20 Tf 50 Tz 100 700 Td [<0041> 500 <0042>] TJ ET",
+      }),
+    )[0];
+    expect(item?.widthPt).toBeCloseTo(SIZE_PT * GLYPH_COUNT + SIZE_PT * 0.5, 6);
+  });
+
+  it("scales a horizontal TJ adjustment by the horizontal scaling", () => {
+    // The same content read horizontally, where the glyphs advance in the positive direction the adjustment is subtracted from, so the adjustment closes the gap rather than opening it. Tz of 50 then halves every term: 40 less 10 becomes 20 less 5.
+    const item = textItems(
+      compositeFontWritingModePdf({
+        encoding: "/Identity-H",
+        content: "BT /F1 20 Tf 50 Tz 100 700 Td [<0041> 500 <0042>] TJ ET",
+      }),
+    )[0];
+    expect(item?.widthPt).toBeCloseTo(
+      (SIZE_PT * GLYPH_COUNT - SIZE_PT * 0.5) / 2,
       6,
     );
   });

@@ -1845,6 +1845,29 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
     expect(centres[1]?.y).not.toBeCloseTo(centres[0]?.y ?? 0, 3);
   });
 
+  it("centres each vertical glyph over the column by its own position vector", () => {
+    // Widening one CID changes its default position vector, which is half its own width, and so moves that glyph sideways within the column. Comparing the same two glyphs rendered twice, once with equal widths and once with the second halved, isolates that shift from the glyphs' own differing outlines, which cancel exactly between the two renderings. Half of the 500/1000 em difference at 24pt is six points, and only the second glyph moves: the run's own matrices already carry the first glyph's vector.
+    const twoCids = "BT /F1 24 Tf 20 50 Td <00000001> Tj ET";
+    const equal = glyphCentres(
+      type0Skeleton({
+        encoding: "/Identity-V",
+        descendantExtra: "/DW 1000",
+        content: twoCids,
+      }),
+    );
+    const halved = glyphCentres(
+      type0Skeleton({
+        encoding: "/Identity-V",
+        descendantExtra: "/DW 1000 /W [1 [500]]",
+        content: twoCids,
+      }),
+    );
+    expect(equal).toHaveLength(2);
+    expect(halved).toHaveLength(2);
+    expect((halved[0]?.x ?? 0) - (equal[0]?.x ?? 0)).toBeCloseTo(0, 6);
+    expect((halved[1]?.x ?? 0) - (equal[1]?.x ?? 0)).toBeCloseTo(6, 3);
+  });
+
   it("accepts Identity-V, whose CID mapping is the same identity one set vertically", () => {
     const { diagnostics, rasteriser } = refusalDiagnostics(
       type0Skeleton({ encoding: "/Identity-V" }),
