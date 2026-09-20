@@ -20,6 +20,13 @@ import { asArray, asName, asNumber, dictGet, isName } from "./objects";
 
 // Resolves a /Font resource dict into everything the read pipeline needs: a glyph-width table (for interpret.ts's FontMetricsPort, so text positions advance correctly) and Unicode decoding (for turning an ExtractedTextRun's raw show-string bytes into real text, once interpretation is done). Two font shapes are handled -- simple (1-byte codes: /Type1, /TrueType, /MMType1) and composite Type0/Identity-H (2-byte codes, the dominant shape Word/PowerPoint/Chrome actually emit) -- everything else (predefined non-Identity CMaps, Type3) degrades to a best-effort width/decode with a diagnostic rather than throwing.
 
+// A glyph's vertical metrics, all in 1000ths of text space to match PDF's own /Widths and /W2 convention (ISO 32000-1 9.7.4.3). `displacementY` is w1y, the amount the text position moves per glyph, normally negative because a vertical line runs down the page. `positionX`/`positionY` are the position vector v, which maps the glyph's horizontal-writing origin onto its vertical-writing one, so the glyph paints v away from where the text position sits.
+export interface VerticalGlyphMetrics {
+  readonly displacementY: number;
+  readonly positionX: number;
+  readonly positionY: number;
+}
+
 export interface PdfFont {
   readonly composite: boolean; // 2-byte codes if true, 1-byte if false
   readonly family: string;
@@ -27,6 +34,8 @@ export interface PdfFont {
   readonly italic: boolean;
   widthOf(code: number): number; // 1000ths of em, matching PDF's own /Widths convention
   decodeToUnicode(codes: Uint8Array<ArrayBuffer>): string;
+  // Present only on a composite font whose /Encoding CMap selects vertical writing mode. Writing mode is a property of the CMap, and a simple font has no CMap at all, so a simple font is always horizontal by construction rather than by default.
+  readonly verticalMetricsOf?: (code: number) => VerticalGlyphMetrics;
 }
 
 export interface FontReadContext {
@@ -318,6 +327,104 @@ function readCidWidths(
 
 const DEFAULT_CID_WIDTH = 1000; // ISO 32000-1 9.7.4.3's own default for /DW when absent
 
+// ISO 32000-1 9.7.4.3's own default for /DW2 when absent: [880 -1000], the position vector's y followed by the vertical displacement. The position vector's x is not in /DW2 at all and defaults to half the glyph's own horizontal width, which centres an upright glyph over the column it sits in.
+const DEFAULT_VERTICAL_POSITION_Y = 880;
+const DEFAULT_VERTICAL_DISPLACEMENT_Y = -1000;
+const DW2_ENTRY_COUNT = 2;
+// One /W2 entry in the c [w1y vx vy ...] form describes a glyph with three numbers.
+const W2_TRIPLET_LENGTH = 3;
+// ISO 32000-1 9.7.5.1: writing mode 1 is vertical, 0 horizontal.
+const VERTICAL_WRITING_MODE = 1;
+
+// Per-CID vertical metrics from /W2. positionX is optional because only /W2 ever states one: a glyph falling back to /DW2 takes half its own horizontal width instead, which /DW2 cannot express since it carries no per-glyph width.
+interface CidVerticalEntry {
+  readonly displacementY: number;
+  readonly positionX: number | undefined;
+  readonly positionY: number;
+}
+
+// /W2 (ISO 32000-1 Table 117) in both of its forms: `c [w1y vx vy ...]`, one triplet per consecutive CID from c, and `cFirst cLast w1y vx vy`, one triplet shared by every CID in the range. Mirrors readCidWidths above, which reads /W's own two analogous forms.
+function readCidVerticalMetrics(
+  w2: readonly PdfObject[] | undefined,
+): Map<number, CidVerticalEntry> {
+  const map = new Map<number, CidVerticalEntry>();
+  if (w2 === undefined) {
+    return map;
+  }
+  let i = 0;
+  while (i < w2.length) {
+    const first = asNumber(w2[i]);
+    if (first === undefined) {
+      i++;
+      continue;
+    }
+    const next = w2[i + 1];
+    if (next?.kind === "array") {
+      for (
+        let at = 0;
+        at + W2_TRIPLET_LENGTH <= next.items.length;
+        at += W2_TRIPLET_LENGTH
+      ) {
+        const entry = verticalEntryFrom(
+          asNumber(next.items[at]),
+          asNumber(next.items[at + 1]),
+          asNumber(next.items[at + 2]),
+        );
+        if (entry !== undefined) {
+          map.set(first + at / W2_TRIPLET_LENGTH, entry);
+        }
+      }
+      i += 2;
+      continue;
+    }
+    const last = asNumber(next);
+    const entry = verticalEntryFrom(
+      asNumber(w2[i + 2]),
+      asNumber(w2[i + 3]),
+      asNumber(w2[i + 4]),
+    );
+    if (last !== undefined && entry !== undefined) {
+      for (let cid = first; cid <= last; cid++) {
+        map.set(cid, entry);
+      }
+    }
+    i += 5;
+  }
+  return map;
+}
+
+function verticalEntryFrom(
+  displacementY: number | undefined,
+  positionX: number | undefined,
+  positionY: number | undefined,
+): CidVerticalEntry | undefined {
+  if (
+    displacementY === undefined ||
+    positionX === undefined ||
+    positionY === undefined
+  ) {
+    return undefined;
+  }
+  return { displacementY, positionX, positionY };
+}
+
+// ISO 32000-1 9.7.5.1: the predefined CMaps come in horizontal/vertical pairs whose names differ only by an "H" or "V" suffix, and Adobe-Japan1's own pair is the bare "H" and "V". Matching the suffix rather than enumerating the fixed list is what lets a CMap this package has never heard of still declare its own writing mode correctly; the list is closed in the standard but long, and every member of it follows the rule.
+function predefinedCMapIsVertical(name: string): boolean {
+  return name === "V" || name.endsWith("-V");
+}
+
+// The writing mode a Type0 font's own /Encoding selects: a predefined CMap says so in its name, and an embedded CMap stream says so in its own /WMode entry. Absent, unreadable, or explicitly 0, the font is horizontal.
+function readsVertically(fontDict: PdfDict, context: FontReadContext): boolean {
+  const encoding = context.resolver.resolve(dictGet(fontDict, "Encoding"));
+  if (encoding?.kind === "name") {
+    return predefinedCMapIsVertical(encoding.name);
+  }
+  if (encoding?.kind === "stream") {
+    return asNumber(dictGet(encoding.dict, "WMode")) === VERTICAL_WRITING_MODE;
+  }
+  return false;
+}
+
 function buildCompositeFont(
   fontDict: PdfDict,
   context: FontReadContext,
@@ -348,14 +455,41 @@ function buildCompositeFont(
   );
   const widthOf = (cid: number): number => widthMap.get(cid) ?? dw;
 
+  const dw2 =
+    descendantDict !== undefined
+      ? asArray(dictGet(descendantDict, "DW2"))
+      : undefined;
+  const defaultPositionY =
+    (dw2?.length === DW2_ENTRY_COUNT ? asNumber(dw2[0]) : undefined) ??
+    DEFAULT_VERTICAL_POSITION_Y;
+  const defaultDisplacementY =
+    (dw2?.length === DW2_ENTRY_COUNT ? asNumber(dw2[1]) : undefined) ??
+    DEFAULT_VERTICAL_DISPLACEMENT_Y;
+  const verticalMap = readCidVerticalMetrics(
+    descendantDict !== undefined
+      ? asArray(dictGet(descendantDict, "W2"))
+      : undefined,
+  );
+  const verticalMetricsOf = (cid: number): VerticalGlyphMetrics => {
+    const entry = verticalMap.get(cid);
+    return {
+      displacementY: entry?.displacementY ?? defaultDisplacementY,
+      // Half the glyph's own horizontal width is what /DW2 cannot state and the standard supplies instead, centring an upright glyph over its column.
+      positionX: entry?.positionX ?? widthOf(cid) / 2,
+      positionY: entry?.positionY ?? defaultPositionY,
+    };
+  };
+
   const toUnicode = readToUnicodeCMap(fontDict, context);
   // With Identity-H and the default /CIDToGIDMap, a CID is the embedded program's own glyph ID, so the program itself can say what a glyph is when the font dictionary carries no /ToUnicode CMap (or an incomplete one) -- through the glyph's own name, or by reading the program's Unicode mapping backwards. Any other /Encoding or a /CIDToGIDMap stream breaks that identity, and the program is not consulted at all rather than being read against the wrong glyph.
   const cidToGidMap =
     descendantDict !== undefined
       ? dictGet(descendantDict, "CIDToGIDMap")
       : undefined;
+  const encodingName = dictGet(fontDict, "Encoding");
   const cidIsGlyphId =
-    isName(dictGet(fontDict, "Encoding"), "Identity-H") &&
+    (isName(encodingName, "Identity-H") ||
+      isName(encodingName, "Identity-V")) &&
     (cidToGidMap === undefined || isName(cidToGidMap, "Identity"));
   const programEncoding = cidIsGlyphId
     ? lazyFontProgram(descriptor, context)
@@ -398,6 +532,7 @@ function buildCompositeFont(
     italic,
     widthOf,
     decodeToUnicode,
+    ...(readsVertically(fontDict, context) ? { verticalMetricsOf } : {}),
   };
 }
 
@@ -447,7 +582,25 @@ export function createFontResolver(
       const code = font.composite
         ? ((codes[byteOffset] ?? 0) << 8) | (codes[byteOffset + 1] ?? 0)
         : (codes[byteOffset] ?? 0);
-      return { widthPer1000: font.widthOf(code), byteLengthConsumed };
+      const vertical = font.verticalMetricsOf?.(code);
+      return {
+        widthPer1000: font.widthOf(code),
+        byteLengthConsumed,
+        ...(vertical === undefined
+          ? {}
+          : {
+              vertical: {
+                displacementPer1000: vertical.displacementY,
+                positionXPer1000: vertical.positionX,
+                positionYPer1000: vertical.positionY,
+              },
+            }),
+      };
+    },
+    isVertical(fontResourceName, resources) {
+      return (
+        resolve(fontResourceName, resources)?.verticalMetricsOf !== undefined
+      );
     },
   };
   return { metrics, resolve };

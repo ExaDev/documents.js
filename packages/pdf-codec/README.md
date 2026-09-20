@@ -333,7 +333,25 @@ A run whose `widthPt` is absent states no advance, so where it ends is unknown a
 
 Gaps that are derivable become a word space at an eighth of an em (the narrowest genuine one: the standard fourteen faces set their space glyph at 250/1000 em, and justified setting compresses to no less than half of that) and a column boundary past a full em (wider than the em space, the widest single space character there is), so a table's row reads as `"North\t4.2m\t11%"` rather than as one sentence. `runsShareBaseline` and `runGapPt` are exported on their own for a consumer with its own pipeline around them, and every threshold is overridable.
 
-Limits, each inherent to what a PDF states rather than to the implementation: grouping is by baseline alone with no page segmentation, so on a multi-column page whose columns sit at different vertical offsets a line of one can fall within tolerance of a line of the next and the two are reported as one line with a column boundary between them, which is the cut a caller needs (`document-outline.js`'s `segmentPdfRegions` finds the gutter first if you want them genuinely apart); text comes out in visual order, so a right-to-left script needs the Unicode Bidi Algorithm applied to the result; vertical writing modes are not recognised, because the content interpreter does not read a CMap's `WMode` ([#1358](https://github.com/ExaDev/documents.js/issues/1358)); and a word hyphenated across a line end stays split, hyphen intact, because rejoining it is a paragraph-level judgement this package leaves to its consumers.
+Limits, each inherent to what a PDF states rather than to the implementation: grouping is by baseline alone with no page segmentation, so on a multi-column page whose columns sit at different vertical offsets a line of one can fall within tolerance of a line of the next and the two are reported as one line with a column boundary between them, which is the cut a caller needs (`document-outline.js`'s `segmentPdfRegions` finds the gutter first if you want them genuinely apart); text comes out in visual order, so a right-to-left script needs the Unicode Bidi Algorithm applied to the result; a vertically set run groups into a column instead of a line, reported with a `rotationDeg` of 270 and its own `writingMode`, with columns ordered right to left; and a word hyphenated across a line end stays split, hyphen intact, because rejoining it is a paragraph-level judgement this package leaves to its consumers.
+
+## Vertical writing mode
+
+A composite font's `/Encoding` CMap chooses a writing mode (ISO 32000-1 9.7.5.1). Mode 1 is vertical: the glyphs stay upright but the text position advances **down** the page, by the descendant CIDFont's own `/DW2` and `/W2` vertical metrics rather than by its horizontal widths, and each glyph paints offset from that position by its own position vector. `readPdf` reads all of it ([#1358](https://github.com/ExaDev/documents.js/issues/1358)), from a predefined CMap's `-V` name, from the bare `V` CMap, or from an embedded CMap stream's own `/WMode`.
+
+A vertically set run carries `writingMode: "vertical"`, and that is a separate fact from `rotationDeg`, which reports the text rendering matrix turning the glyphs themselves on their side. An ordinary Japanese column is `writingMode: "vertical"` with a `rotationDeg` of 0: upright glyphs, running downward. On such a run, `xPt`/`yPt` is the top of the column and `widthPt` measures downward.
+
+```ts
+const runs = page.items.filter((item) => item.kind === "text");
+for (const line of groupPdfTextRuns(runs)) {
+  // A vertical column reports rotationDeg 270 (the direction it advances) and writingMode "vertical".
+  console.log(line.writingMode ?? "horizontal", line.text);
+}
+```
+
+`groupPdfTextRuns` groups such runs into columns, ordered right to left, and never lets a column and a line merge even when they advance along the same axis: a column of upright glyphs and a line of glyphs turned on their side are not the same text, whatever direction they share.
+
+What is not supported: a **predefined non-Identity CMap's own byte decoding**. `90ms-RKSJ-V` and its siblings remap multi-byte character codes to CIDs through tables this package does not carry, so a font using one still has its codes read as two-byte CIDs. That is this package's long-standing composite-font limit, unchanged by and unrelated to writing mode; `Identity-V` (what modern producers emit) is read exactly. `writePdf` produces horizontal text only, and has no way to request a vertical one.
 
 ## JBIG2 scope
 

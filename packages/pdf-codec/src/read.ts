@@ -648,6 +648,7 @@ function convertText(
     color: item.color,
     widthPt,
     rotationDeg: rotationDeg !== 0 ? rotationDeg : undefined,
+    ...(item.vertical === true ? { writingMode: "vertical" as const } : {}),
     ...(item.layerName !== undefined ? { layer: item.layerName } : {}),
     ...(item.actualText !== undefined ? { actualText: item.actualText } : {}),
     ...(item.alt !== undefined ? { alt: item.alt } : {}),
