@@ -1,3 +1,4 @@
+import { bytesToBase64 } from "byte-codec";
 import type { ContentCellValue } from "document-schema.js";
 import type { FirebirdBackupReader } from "./reader";
 import { XdrReader } from "./reader";
@@ -101,29 +102,9 @@ function readBlobRecord(reader: FirebirdBackupReader): FirebirdBlob {
   return { fieldNumber, bytes };
 }
 
-// document-schema.js's ContentCellValue union has no binary kind at all (number/percentage/currency/boolean/date/time/dateTime/string/error/empty), so a recovered blob has to arrive as one of those or not at all. A TEXT blob (Firebird's own att_field_sub_type 1) is genuinely text and becomes an ordinary string, decoded as UTF-8 -- the same assumption every other character-typed column in this module already makes, and the charset a LibreOffice-created embedded Firebird database actually declares. A BINARY blob (any other sub-type) has no honest plain-string reading, so it becomes a base64 `data:` URI: self-describing, standard, losslessly decodable, and distinguishable from a string a column could genuinely have held, rather than a bare base64 run that would be indistinguishable from real text. This is a real, tracked schema gap rather than a decoding limit -- the bytes are fully recovered either way; what is missing is a `ContentCellValue` variant able to say "these are bytes", which belongs in document-schema.js rather than being invented here.
+// document-schema.js's ContentCellValue union has no binary kind at all (number/percentage/currency/boolean/date/time/dateTime/string/error/empty), so a recovered blob has to arrive as one of those or not at all. A TEXT blob (Firebird's own att_field_sub_type 1) is genuinely text and becomes an ordinary string, decoded as UTF-8 -- the same assumption every other character-typed column in this module already makes, and the charset a LibreOffice-created embedded Firebird database actually declares. A BINARY blob (any other sub-type) has no honest plain-string reading, so it becomes a base64 `data:` URI (encoded with byte-codec's bytesToBase64, the family's one implementation): self-describing, standard, losslessly decodable, and distinguishable from a string a column could genuinely have held, rather than a bare base64 run that would be indistinguishable from real text. This is a real, tracked schema gap rather than a decoding limit -- the bytes are fully recovered either way; what is missing is a `ContentCellValue` variant able to say "these are bytes", which belongs in document-schema.js rather than being invented here.
 const BINARY_BLOB_DATA_URI_PREFIX = "data:application/octet-stream;base64,";
 const BLOB_SUB_TYPE_TEXT = 1;
-const BASE64_ALPHABET =
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-// Standard RFC 4648 base64, hand-rolled rather than reached for from odf.js's own bytesToBase64: src/firebird/ deliberately imports nothing but document-schema.js's ContentCellValue type and src/hsqldb's own table shape (see this package's README on that isolation), and a dozen lines of alphabet indexing is a smaller price than making a byte-level backup-format decoder depend on an ODF package.
-function bytesToBase64(bytes: Uint8Array<ArrayBuffer>): string {
-  let result = "";
-  for (let i = 0; i < bytes.length; i += 3) {
-    const b0 = bytes[i] ?? 0;
-    const b1 = bytes[i + 1];
-    const b2 = bytes[i + 2];
-    const triple = (b0 << 16) | ((b1 ?? 0) << 8) | (b2 ?? 0);
-    result += BASE64_ALPHABET[(triple >> 18) & 0x3f] ?? "";
-    result += BASE64_ALPHABET[(triple >> 12) & 0x3f] ?? "";
-    result +=
-      b1 === undefined ? "=" : (BASE64_ALPHABET[(triple >> 6) & 0x3f] ?? "");
-    result += b2 === undefined ? "=" : (BASE64_ALPHABET[triple & 0x3f] ?? "");
-  }
-  return result;
-}
-
 function blobCellValue(
   field: FirebirdField,
   bytes: Uint8Array<ArrayBuffer>,
