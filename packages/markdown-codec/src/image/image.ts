@@ -14,63 +14,94 @@ export type ImageFormat = "png" | "jpeg";
 const BASE64_TABLE =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
+// Every byte value a character code can take, so the decode table covers the whole `charCodeAt` range a single-byte character can produce without a bounds check of its own.
+const CHAR_CODE_VALUES = 256;
+// The table entry for a character that is not in the alphabet at all. Any value above 63 would do, since a real six-bit value can never reach it.
+const BASE64_INVALID = 0xff;
+
 const BASE64_DECODE: Uint8Array = (() => {
-  const map = new Uint8Array(256).fill(255);
+  const map = new Uint8Array(CHAR_CODE_VALUES).fill(BASE64_INVALID);
   for (let index = 0; index < BASE64_TABLE.length; index += 1) {
     map[BASE64_TABLE.charCodeAt(index)] = index;
   }
   return map;
 })();
 
-const BASE64_PADDING_CODE = 61; // '='
+const BASE64_PADDING = "=";
+const BASE64_PADDING_CODE = BASE64_PADDING.charCodeAt(0);
+// Base64's own quantum: three bytes carry twenty-four bits, spelled by four characters of six bits each.
+const BASE64_GROUP_BYTES = 3;
+const BASE64_GROUP_CHARS = 4;
+const BASE64_CHAR_BITS = 6;
+const BASE64_CHAR_MASK = 0x3f;
+// A group of one data character carries six bits, which is not enough for even one byte, so such a group is malformed rather than merely short.
+const BASE64_MIN_GROUP_CHARS = 2;
+const BITS_PER_BYTE = 8;
+const BYTE_MASK = 0xff;
 
 export function bytesToBase64(bytes: Uint8Array): string {
-  let out = "";
   const { length } = bytes;
-  for (let index = 0; index < length; index += 3) {
-    const b0 = bytes[index]!;
-    const b1 = index + 1 < length ? bytes[index + 1]! : 0;
-    const b2 = index + 2 < length ? bytes[index + 2]! : 0;
-    out += BASE64_TABLE.charAt(b0 >> 2);
-    out += BASE64_TABLE.charAt(((b0 & 0x03) << 4) | (b1 >> 4));
-    out +=
-      index + 1 < length
-        ? BASE64_TABLE.charAt(((b1 & 0x0f) << 2) | (b2 >> 6))
-        : "=";
-    out += index + 2 < length ? BASE64_TABLE.charAt(b2 & 0x3f) : "=";
+  let out = "";
+  for (let index = 0; index < length; index += BASE64_GROUP_BYTES) {
+    const groupLength = Math.min(BASE64_GROUP_BYTES, length - index);
+    // Only the bytes that actually exist are read, then left-aligned within the twenty-four bits a whole group occupies, so each character below reads a fixed six-bit slice whatever the group's length and no read ever runs past the end of the input.
+    let group = 0;
+    for (let offset = 0; offset < groupLength; offset += 1) {
+      group = (group << BITS_PER_BYTE) | bytes[index + offset]!;
+    }
+    group <<= BITS_PER_BYTE * (BASE64_GROUP_BYTES - groupLength);
+    // A group of n bytes spells n + 1 characters, since n bytes carry 8n bits and each character consumes six; padding fills the rest of the four-character quantum.
+    for (let charIndex = 0; charIndex <= groupLength; charIndex += 1) {
+      const shift = BASE64_CHAR_BITS * (BASE64_GROUP_CHARS - 1 - charIndex);
+      out += BASE64_TABLE.charAt((group >> shift) & BASE64_CHAR_MASK);
+    }
+    out += BASE64_PADDING.repeat(BASE64_GROUP_BYTES - groupLength);
   }
   return out;
 }
 
 export function base64ToBytes(base64: string): Uint8Array {
+  // Characters outside the alphabet are not data: the line breaks a wrapped data: URI payload carries, and any other stray whitespace, are dropped before anything is decoded.
   const clean = base64.replace(/[^A-Za-z0-9+/=]/g, "");
-  const { length } = clean;
-  const out = new Uint8Array(Math.floor((length * 3) / 4));
+  // Padding carries no bits, so the data is whatever precedes the trailing run of it. `charCodeAt` before the start of a string returns NaN, which is not the padding code, so this stops at the start of the string without a bounds guard of its own.
+  let dataLength = clean.length;
+  while (clean.charCodeAt(dataLength - 1) === BASE64_PADDING_CODE) {
+    dataLength -= 1;
+  }
+  // Four data characters carry three whole bytes, and each leftover character a further six bits, so this is the exact decoded length: the array allocated here is the array returned, with no trailing trim that could hide a wrong size.
+  const out = new Uint8Array(
+    Math.floor((dataLength * BASE64_GROUP_BYTES) / BASE64_GROUP_CHARS),
+  );
   let position = 0;
-  for (let index = 0; index < length; index += 4) {
-    const c0 = BASE64_DECODE[clean.charCodeAt(index)]!;
-    const c1 = BASE64_DECODE[clean.charCodeAt(index + 1)]!;
-    const code2 = clean.charCodeAt(index + 2);
-    const code3 = clean.charCodeAt(index + 3);
-    if (c0 === 255 || c1 === 255) {
+  for (let index = 0; index < dataLength; index += BASE64_GROUP_CHARS) {
+    const groupChars = Math.min(BASE64_GROUP_CHARS, dataLength - index);
+    if (groupChars < BASE64_MIN_GROUP_CHARS) {
       throw new Error("invalid base64 input");
     }
-    out[position] = (c0 << 2) | (c1 >> 4);
-    position += 1;
-    if (code2 !== BASE64_PADDING_CODE) {
-      const d2 = BASE64_DECODE[code2]!;
-      out[position] = ((c1 & 0x0f) << 4) | (d2 >> 2);
-      position += 1;
-      if (code3 !== BASE64_PADDING_CODE) {
-        const d3 = BASE64_DECODE[code3]!;
-        out[position] = ((d2 & 0x03) << 6) | d3;
-        position += 1;
+    let group = 0;
+    for (let offset = 0; offset < groupChars; offset += 1) {
+      const code = BASE64_DECODE[clean.charCodeAt(index + offset)]!;
+      // The only alphabet-surviving character that decodes to nothing is padding, so this rejects a '=' anywhere other than the trailing run already stripped above.
+      if (code === BASE64_INVALID) {
+        throw new Error("invalid base64 input");
       }
+      group = (group << BASE64_CHAR_BITS) | code;
     }
+    // n characters carry 6n bits, of which only whole bytes are kept: the leftover low bits belong to a byte this group does not finish.
+    const groupBytes = Math.floor(
+      (groupChars * BASE64_CHAR_BITS) / BITS_PER_BYTE,
+    );
+    group >>= groupChars * BASE64_CHAR_BITS - groupBytes * BITS_PER_BYTE;
+    for (let byteIndex = groupBytes - 1; byteIndex >= 0; byteIndex -= 1) {
+      out[position + byteIndex] = group & BYTE_MASK;
+      group >>= BITS_PER_BYTE;
+    }
+    position += groupBytes;
   }
-  return out.subarray(0, position);
+  return out;
 }
 
+// A big-endian 16-bit field. A byte the input does not reach reads as undefined at runtime, which both the shift and the or coerce to zero, so a field a truncated file cannot hold reads as zero rather than throwing, which is exactly what readJpegDimensions relies on for a segment's own length field.
 function readUint16BE(bytes: Uint8Array, offset: number): number {
   return ((bytes[offset]! << 8) | bytes[offset + 1]!) & 0xffff;
 }
@@ -89,11 +120,14 @@ const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 // signature(8) + IHDR chunk length(4) + 'IHDR'(4) + width(4) + height(4) -- the minimum a PNG needs before its own dimensions are readable.
 const PNG_HEADER_BYTES = 24;
 
+// A short input needs no length check of its own: a signature byte the input does not reach reads as undefined, which equals no byte value.
 function isPng(bytes: Uint8Array): boolean {
-  if (bytes.length < PNG_SIGNATURE.length) {
-    return false;
-  }
   return PNG_SIGNATURE.every((byte, index) => bytes[index] === byte);
+}
+
+// As in isPng, a byte the input does not reach reads as undefined and equals nothing, so the length needs no check of its own.
+function isJpeg(bytes: Uint8Array): boolean {
+  return bytes[0] === 0xff && bytes[1] === 0xd8;
 }
 
 // IHDR is always the very first chunk after the signature (PNG spec section 5.6, "IHDR must appear first") -- no chunk-walking is needed at all.
@@ -135,13 +169,19 @@ function hasNoLengthField(marker: number): boolean {
 }
 
 // Walks JPEG marker segments from the SOI (0xFFD8) until a Start-Of-Frame marker's own segment: length(2, BE) + precision(1) + height(2, BE) + width(2, BE) -- height before width, unlike PNG. Every other marker segment is skipped by its own declared length (which includes the 2 length bytes themselves).
+//
+// A truncated file needs no length checks along the way, only the one end-of-input check the walk already makes each pass. A length field the input is too short to hold reads its missing bytes as zero (see readUint16BE). That either leaves the offset on the length field itself, whose own leading byte must then have been zero, so the next pass walks past it a byte at a time; or it pushes the offset straight past the end, which is also what a declared length that overshoots does. Either way the walk arrives at an offset the input does not reach, which is where a truncated segment is meant to end up.
 function readJpegDimensions(bytes: Uint8Array): ImageDimensions | undefined {
-  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+  if (!isJpeg(bytes)) {
     return undefined;
   }
   let offset = 2;
-  while (offset < bytes.length) {
-    if (bytes[offset] !== 0xff) {
+  for (;;) {
+    const byte = bytes[offset];
+    if (byte === undefined) {
+      return undefined;
+    }
+    if (byte !== 0xff) {
       offset += 1;
       continue;
     }
@@ -158,9 +198,6 @@ function readJpegDimensions(bytes: Uint8Array): ImageDimensions | undefined {
     if (hasNoLengthField(marker)) {
       continue;
     }
-    if (offset + 2 > bytes.length) {
-      return undefined;
-    }
     const length = readUint16BE(bytes, offset);
     if (isStartOfFrameMarker(marker)) {
       if (offset + 7 > bytes.length) {
@@ -176,11 +213,6 @@ function readJpegDimensions(bytes: Uint8Array): ImageDimensions | undefined {
     }
     offset += length;
   }
-  return undefined;
-}
-
-function isJpeg(bytes: Uint8Array): boolean {
-  return bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xd8;
 }
 
 // The same signature check readImageDimensions already makes internally to choose which reader to run, exposed so a caller (src/lower/image.ts) can pick ContentImageBlock's own `format` field from the identical bytes without a second, potentially-divergent sniff of its own. Returns undefined for anything that is neither a PNG nor a JPEG -- ContentImageBlockSchema's own `format` field has no third member to fall back to.
