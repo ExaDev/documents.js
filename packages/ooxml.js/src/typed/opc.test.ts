@@ -140,6 +140,30 @@ describe("findMainPartPath", () => {
     expect(findMainPartPath(pkg)).toBe("word/document.xml");
   });
 
+  it("ignores an external officeDocument relationship even when its target names a part the package holds", () => {
+    // An external Target is a URI the package does not own, and resolveRelationships hands it back verbatim rather than resolving it, so a relative-looking external target can collide with a real part key. Without the TargetMode check this external relationship would be taken as the main part ahead of the internal one below it.
+    const pkg: Package = {
+      parts: {
+        "_rels/.rels": relsPart([
+          {
+            id: "rId1",
+            type: `${TRANSITIONAL_BASE}/officeDocument`,
+            target: "word/decoy.xml",
+            targetMode: "External",
+          },
+          {
+            id: "rId2",
+            type: `${TRANSITIONAL_BASE}/officeDocument`,
+            target: "word/document.xml",
+          },
+        ]),
+        "word/decoy.xml": emptyXmlPart(),
+        "word/document.xml": emptyXmlPart(),
+      },
+    };
+    expect(findMainPartPath(pkg)).toBe("word/document.xml");
+  });
+
   it("ignores an external officeDocument relationship, which names no part at all", () => {
     const pkg: Package = {
       parts: {
@@ -263,6 +287,31 @@ describe("findRelatedPartPath", () => {
     expect(
       findRelatedPartPath(pkg, "word/document.xml", "/numbering"),
     ).toBeUndefined();
+  });
+
+  it("ignores an external relationship even when its target names a part the package holds", () => {
+    const pkg: Package = {
+      parts: {
+        "word/_rels/document.xml.rels": relsPart([
+          {
+            id: "rId1",
+            type: `${TRANSITIONAL_BASE}/footnotes`,
+            target: "word/decoy.xml",
+            targetMode: "External",
+          },
+          {
+            id: "rId2",
+            type: `${TRANSITIONAL_BASE}/footnotes`,
+            target: "footnotes2.xml",
+          },
+        ]),
+        "word/decoy.xml": emptyXmlPart(),
+        "word/footnotes2.xml": emptyXmlPart(),
+      },
+    };
+    expect(findRelatedPartPath(pkg, "word/document.xml", "/footnotes")).toBe(
+      "word/footnotes2.xml",
+    );
   });
 
   it("skips a relationship of the right type whose target part is missing", () => {
