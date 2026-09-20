@@ -1,3 +1,9 @@
+## [4.15.10](https://github.com/ExaDev/documents.js/compare/xls-codec%404.15.9...xls-codec%404.15.10) (2026-09-20)
+
+### Code Refactoring
+
+* **xls-codec:** encode a picture blip through byte-codec ([0c35ee2](https://github.com/ExaDev/documents.js/commit/0c35ee2ade4f4d967f08b0adb7949be367b1977d))
+
 ## [4.15.9](https://github.com/ExaDev/documents.js/compare/xls-codec%404.15.8...xls-codec%404.15.9) (2026-09-20)
 
 

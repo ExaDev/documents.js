@@ -1,3 +1,12 @@
+## [7.20.30](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.29...documents.js%407.20.30) (2026-09-20)
+
+
+### Dependencies
+
+- Updated markdown-codec to 6.7.6
+- Updated pdf-codec to 4.8.17
+- Updated xls-codec to 4.15.10
+
 ## [7.20.29](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.28...documents.js%407.20.29) (2026-09-20)
 
 ### Code Refactoring
