@@ -31,7 +31,7 @@ runs:
     #
     # Restored on every run and saved only by a push to main, and only ever one entry per task on main. An entry keyed by github.run_id (the previous design) is written by every run, including every pull request push and every merge-queue entry, and no later run can ever hit that exact key: the cache filled with write-once data, went over the repository's limit, and GitHub's least-recently-used eviction then removed the entries that were being used. A pull request or merge-group entry also belongs to its own ref, so a cache saved there is invisible to everything but reruns of that one ref. So those runs restore what main last saved, through the restore-keys prefix, and save nothing.
     #
-    # The key names the commit, which makes it unique per main push: that alone would be the same write-once growth as run_id, so the step after the save deletes every other entry for the task on main. What stays bounded is the number of entries (one per task), not the number of runs. The key still carries the lockfile and turbo.json hash so the restore prefers an entry from the same generation, and the fallback prefix takes the newest entry for the task otherwise.
+    # The key names the commit, which makes it unique per main push: that alone would be the same write-once growth as run_id, so the prune-caches job in ci.yml deletes every older entry for each task on main. What stays bounded is the number of entries (one per task), not the number of runs. The deletion is a separate job because it needs a token that can write to Actions, and a job that runs a merge-queue or pull request ref's code must not hold one. The key still carries the lockfile and turbo.json hash so the restore prefers an entry from the same generation, and the fallback prefix takes the newest entry for the task otherwise.
     - id: turbo-cache
       uses: actions/cache/restore@v6
       with:
@@ -53,16 +53,3 @@ runs:
       with:
         path: .turbo
         key: turbo-${{ inputs.task }}-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-${{ github.sha }}
-
-    # Keeps the one entry just saved and deletes the rest for this task on main. The prefix ends in the operating system and a hyphen, so it cannot match another task whose name merely begins with this one's (test and test-workers). Needs the job's token to allow actions: write, which ci.yml grants.
-    - name: Delete the superseded turbo caches for this task on main
-      if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-      shell: bash
-      env:
-        GH_TOKEN: ${{ github.token }}
-        PREFIX: turbo-${{ inputs.task }}-${{ runner.os }}-
-        CURRENT_KEY: turbo-${{ inputs.task }}-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-${{ github.sha }}
-      run: |
-        gh cache list --ref refs/heads/main --key "$PREFIX" --limit 100 --json id,key --jq ".[] | select(.key != \"$CURRENT_KEY\") | .id" | while read -r id; do
-          gh cache delete "$id"
-        done
