@@ -28,6 +28,7 @@ graph TD
     pdfcodec --> documents
     mdcodec --> documents
     bytecodec --> pdfcodec
+    bytecodec --> ooxml
     bytecodec --> documents
     documents --> mcp
     pdfcodec --> mcp
@@ -178,7 +179,7 @@ Three of the renames are silent under a plain call — `readDocx`, `readPptx`, a
 Every module under `src/` is importable directly, by the same path it has relative to `src/`, without going through the barrel:
 
 ```ts
-import { bytesToBase64, base64ToBytes } from "ooxml.js/util/base64";
+import { unzipPackage, zipPackage } from "ooxml.js/zip";
 import { readXlsxContent } from "ooxml.js/typed/xlsx/content";
 import { readDocx, buildDocxPackage } from "ooxml.js/typed/document-tree";
 ```
