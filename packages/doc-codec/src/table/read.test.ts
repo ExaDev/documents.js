@@ -1,4 +1,4 @@
-import type { ContentBorder } from "document-schema.js";
+import { walkTableGrid, type ContentBorder } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { DocFormatError } from "../errors";
 import { readDocContent } from "../read";
@@ -224,11 +224,12 @@ describe("readDocContent tables, from hand-assembled bytes", () => {
     expect(block.columnWidthsPt).toEqual([50, 50, 50]);
     expect(block.rows).toHaveLength(1);
     const cells = block.rows[0]?.cells ?? [];
-    expect(cells).toHaveLength(2);
+    expect(cells).toHaveLength(3);
     expect(cells[0]?.colSpan).toBe(2);
     expect(cellText(cells[0])).toBe("AB");
-    expect(cells[1]?.colSpan).toBeUndefined();
-    expect(cellText(cells[1])).toBe("C");
+    expect(cells[1]).toEqual({ blocks: [] });
+    expect(cells[2]?.colSpan).toBeUndefined();
+    expect(cellText(cells[2])).toBe("C");
   });
 
   it("folds sprmTMerge onto the column layout even when it precedes sprmTDefTable in the grpprl", () => {
@@ -255,9 +256,10 @@ describe("readDocContent tables, from hand-assembled bytes", () => {
     );
     const block = tableBlock(document);
     const cells = block.rows[0]?.cells ?? [];
-    expect(cells).toHaveLength(1);
+    expect(cells).toHaveLength(2);
     expect(cells[0]?.colSpan).toBe(2);
     expect(cellText(cells[0])).toBe("AB");
+    expect(cells[1]).toEqual({ blocks: [] });
   });
 
   it("reads a row's own TC80.tcgrf vertical merge across two rows with no sprmTMerge involved", () => {
@@ -529,11 +531,12 @@ describe("readDocContent tables, from hand-assembled bytes", () => {
     expect(block.columnWidthsPt).toEqual([50, 50, 50]);
     expect(block.rows).toHaveLength(2);
     const rowOneCells = block.rows[0]?.cells ?? [];
-    expect(rowOneCells).toHaveLength(2);
+    expect(rowOneCells).toHaveLength(3);
     expect(rowOneCells[0]?.colSpan).toBe(2);
     expect(cellText(rowOneCells[0])).toBe("wide");
-    expect(rowOneCells[1]?.colSpan).toBeUndefined();
-    expect(cellText(rowOneCells[1])).toBe("narrow");
+    expect(rowOneCells[1]).toEqual({ blocks: [] });
+    expect(rowOneCells[2]?.colSpan).toBeUndefined();
+    expect(cellText(rowOneCells[2])).toBe("narrow");
     const rowTwoCells = block.rows[1]?.cells ?? [];
     expect(rowTwoCells).toHaveLength(3);
     expect(rowTwoCells.map((cell) => cell.colSpan)).toEqual([
@@ -565,9 +568,10 @@ describe("readDocContent tables, from hand-assembled bytes", () => {
       }),
     );
     const block = tableBlock(document);
-    expect(block.rows[0]?.cells).toHaveLength(2);
+    expect(block.rows[0]?.cells).toHaveLength(3);
     expect(block.rows[0]?.cells[1]?.colSpan).toBe(2);
     expect(cellText(block.rows[0]?.cells[1])).toBe("b");
+    expect(block.rows[0]?.cells[2]).toEqual({ blocks: [] });
   });
 
   it("skips an orphaned legacy TCGRF.horzMerge continuation cell that has no anchor before it", () => {
@@ -592,8 +596,10 @@ describe("readDocContent tables, from hand-assembled bytes", () => {
       }),
     );
     const block = tableBlock(document);
-    expect(block.rows[0]?.cells).toHaveLength(1);
-    expect(cellText(block.rows[0]?.cells[0])).toBe("kept");
+    // The orphan states no cell of its own, so its grid column is filled with a block-less entry and "kept" stays at the column its own boundaries name.
+    expect(block.rows[0]?.cells).toHaveLength(2);
+    expect(block.rows[0]?.cells[0]).toEqual({ blocks: [] });
+    expect(cellText(block.rows[0]?.cells[1])).toBe("kept");
   });
 
   it("omits heightPt entirely from a row that states no sprmTDyaRowHeight, rather than stating it as undefined", () => {
@@ -1161,7 +1167,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
     // The shared grid still reconstructs three columns even though row 1's own array only ever states two -- the merged cell's own boundaries cover two of the canonical grid's segments at once.
     expect(block.columnWidthsPt).toHaveLength(3);
     expect(block.rows[0]?.cells).toHaveLength(3);
-    expect(block.rows[1]?.cells).toHaveLength(2);
+    expect(block.rows[1]?.cells).toHaveLength(3);
     const mergedCell = block.rows[1]?.cells[0];
     expect(mergedCell?.colSpan).toBe(2);
     expect(cellText(mergedCell)).toBe("merged");
@@ -1523,7 +1529,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
       }),
     );
     const block = tableBlock(document);
-    expect(block.rows[0]?.cells).toHaveLength(2);
+    expect(block.rows[0]?.cells).toHaveLength(3);
     expect(cellText(block.rows[0]?.cells[1])).toBe("b");
     expect(block.rows[0]?.cells[1]?.colSpan).toBe(2);
     expect(block.rows[0]?.cells[1]?.borders?.right).toEqual(RIGHT);
@@ -1693,8 +1699,8 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
     ]);
     expect(block.columnWidthsPt).toEqual([116.9, 1.05, 143.95, 220]);
     expect(colSpansPerRow(block)).toEqual([
-      [undefined, 2, undefined],
-      [2, undefined, undefined],
+      [undefined, 2, undefined, undefined],
+      [2, undefined, undefined, undefined],
     ]);
   });
 
@@ -1736,9 +1742,9 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
     ]);
     expect(block.columnWidthsPt).toEqual([5.4, 111.5, 145, 220]);
     expect(colSpansPerRow(block)).toEqual([
-      [2, undefined, undefined],
-      [undefined, undefined, undefined],
-      [2, undefined, undefined],
+      [2, undefined, undefined, undefined],
+      [undefined, undefined, undefined, undefined],
+      [2, undefined, undefined, undefined],
     ]);
   });
 
@@ -1760,15 +1766,15 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
     ]);
     expect(block.columnWidthsPt).toEqual(LIBREOFFICE_COLUMN_WIDTHS_PT);
     expect(colSpansPerRow(block)).toEqual([
-      [2, undefined],
+      [2, undefined, undefined],
       [undefined, undefined, undefined],
       [undefined, undefined, undefined],
     ]);
     expect(cellText(block.rows[0]?.cells[0])).toBe("merged");
   });
 
-  // rgdxaCenter's entries "MUST be in non-decreasing order" ([MS-DOC] 2.9.321) -- equal adjacent entries, and so a genuine zero-width physical cell, are explicitly legal. Such a cell covers no segment of the reconstructed grid, and ContentTableCell has no way to say "zero columns wide", so it comes back carrying its own content as an ordinary un-spanned cell rather than as a cell claiming a span of zero.
-  it("carries a legal zero-width physical cell as an ordinary un-spanned cell rather than one spanning no columns", () => {
+  // rgdxaCenter's entries "MUST be in non-decreasing order" ([MS-DOC] 2.9.321) -- equal adjacent entries, and so a genuine zero-width physical cell, are explicitly legal. Such a cell covers no segment of the reconstructed grid, and a dense row holds one entry per grid column, so it has no entry of its own: its content moves into the cell beside it rather than being dropped.
+  it("moves a legal zero-width physical cell's content into the preceding cell rather than giving it a grid column of its own", () => {
     // The same table's array with its third boundary pulled back onto its second, collapsing the middle column to nothing: 0, 2338, 2338, 9638.
     const block = readTableFromRowBoundaries([
       {
@@ -1781,12 +1787,37 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
       },
     ]);
     expect(block.columnWidthsPt).toEqual([116.9, 365]);
-    expect(colSpansPerRow(block)).toEqual([[undefined, undefined, undefined]]);
+    expect(colSpansPerRow(block)).toEqual([[undefined, undefined]]);
     expect(block.rows[0]?.cells.map((cell) => cellText(cell))).toEqual([
-      "a",
-      "b",
+      "a,b",
       "c",
     ]);
+  });
+
+  it("moves a zero-width cell at the table's right edge, whose own boundary is the grid's last, into the preceding cell", () => {
+    const block = readTableFromRowBoundaries([
+      { boundariesTwips: [0, 1000, 1000], cells: ["a", "z"] },
+    ]);
+    expect(block.columnWidthsPt).toEqual([50]);
+    expect(block.rows[0]?.cells.map((cell) => cellText(cell))).toEqual(["a,z"]);
+  });
+
+  it("moves a leading zero-width cell's content into the first following cell only, not into every later one", () => {
+    const block = readTableFromRowBoundaries([
+      { boundariesTwips: [0, 0, 1000, 2000], cells: ["z", "x", "y"] },
+    ]);
+    expect(block.columnWidthsPt).toEqual([50, 50]);
+    expect(block.rows[0]?.cells.map((cell) => cellText(cell))).toEqual([
+      "z,x",
+      "y",
+    ]);
+  });
+
+  it("keeps a row's zero-width cells as they stand when no cell of the row owns a grid column to take their content", () => {
+    const block = readTableFromRowBoundaries([
+      { boundariesTwips: [0, 0], cells: ["z"] },
+    ]);
+    expect(block.rows[0]?.cells.map((cell) => cellText(cell))).toEqual(["z"]);
   });
 
   // The clamp effectiveColumnBoundaryTolerance exists for: this writer has no equivalent of LibreOffice's own MINLAY minimum-cell-width widening, so nothing stops a real producer's rgdxaCenter from stating a column genuinely narrower than the tolerance's own one-point default -- and a single row's own adjacent boundaries are never ambiguous about how many columns that row states, whatever the gap between them. A single-row table with no cross-row drift at all isolates this: if the tolerance folded a real narrow column into its neighbour here, that would be exactly the same defect the drift tolerance exists to fix, applied to the wrong pair of boundaries.
@@ -1820,5 +1851,203 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
       { boundariesTwips: [0, 1025, 3000], cells: ["a", "b"] },
     ]);
     expect(block.columnWidthsPt).toEqual([50, 0.5, 0.75, 98.75]);
+  });
+});
+
+/** A cell to hand-assemble: its text, and the TC80 horizontal/vertical merge flags it states (both default to none). */
+interface MergeFlaggedCell {
+  readonly text: string;
+  readonly horzMerge?: number;
+  readonly vertMerge?: number;
+}
+
+// Like tableParagraphs, but each cell states its own TC80.tcgrf merge flags so a vertical merge can be hand-assembled alongside the boundary-derived horizontal ones.
+function mergeFlaggedTableParagraphs(
+  rows: readonly {
+    boundariesTwips: readonly number[];
+    cells: readonly MergeFlaggedCell[];
+  }[],
+): DocParagraphSpec[] {
+  return rows.flatMap((row): DocParagraphSpec[] => [
+    ...row.cells.map((cell): DocParagraphSpec => ({
+      runs: [{ text: cell.text }],
+      grpprl: SPRM_P_F_IN_TABLE,
+      mark: CELL_MARK,
+    })),
+    {
+      runs: [],
+      grpprl: [
+        ...SPRM_P_F_IN_TABLE,
+        ...SPRM_P_F_TTP,
+        ...sprmTDefTable(
+          row.boundariesTwips,
+          row.cells.map((cell) => ({
+            horzMerge: cell.horzMerge ?? 0,
+            vertMerge: cell.vertMerge ?? 0,
+          })),
+        ),
+      ],
+      mark: CELL_MARK,
+    },
+  ]);
+}
+
+// The rows' grid positions that walkTableGrid classifies as covered, as "row,column<-anchorRow,anchorColumn": the shared definition of which entries a merged region covers, run over what the reader produced.
+function coveredPositions(block: ReturnType<typeof tableBlock>): string[] {
+  return walkTableGrid(block)
+    .flat()
+    .flatMap((position) =>
+      position.anchorRowIndex === undefined
+        ? []
+        : [
+            `${position.rowIndex},${position.columnIndex}<-${position.anchorRowIndex},${position.anchorColumnIndex}`,
+          ],
+    );
+}
+
+const VERT_MERGE_RESTART = 3;
+const VERT_MERGE_CONTINUATION_FLAG = 1;
+
+describe("readDocContent tables state one entry per grid column (ExaDev/documents.js#1316)", () => {
+  it("emits a block-less entry at each column a horizontal merge covers, with the anchor carrying colSpan", () => {
+    const block = tableBlock(
+      readDocContent(
+        buildDoc({
+          paragraphs: mergeFlaggedTableParagraphs([
+            {
+              boundariesTwips: [0, 2000, 3000],
+              cells: [{ text: "wide" }, { text: "narrow" }],
+            },
+            {
+              boundariesTwips: [0, 1000, 2000, 3000],
+              cells: [{ text: "a" }, { text: "b" }, { text: "c" }],
+            },
+          ]),
+        }),
+      ),
+    );
+    expect(block.columnWidthsPt).toEqual([50, 50, 50]);
+    expect(block.rows.map((row) => row.cells.length)).toEqual([3, 3]);
+    expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
+    expect(block.rows[0]?.cells[1]).toEqual({ blocks: [] });
+    expect(cellText(block.rows[0]?.cells[2])).toBe("narrow");
+    expect(coveredPositions(block)).toEqual(["0,1<-0,0"]);
+  });
+
+  it("emits a block-less entry at each row a vertical merge covers, at the anchor's own column", () => {
+    const block = tableBlock(
+      readDocContent(
+        buildDoc({
+          paragraphs: mergeFlaggedTableParagraphs([
+            {
+              boundariesTwips: [0, 1000, 2000],
+              cells: [
+                { text: "tall", vertMerge: VERT_MERGE_RESTART },
+                { text: "r0" },
+              ],
+            },
+            {
+              boundariesTwips: [0, 1000, 2000],
+              cells: [
+                { text: "", vertMerge: VERT_MERGE_CONTINUATION_FLAG },
+                { text: "r1" },
+              ],
+            },
+            {
+              boundariesTwips: [0, 1000, 2000],
+              cells: [
+                { text: "", vertMerge: VERT_MERGE_CONTINUATION_FLAG },
+                { text: "r2" },
+              ],
+            },
+          ]),
+        }),
+      ),
+    );
+    expect(block.rows.map((row) => row.cells.length)).toEqual([2, 2, 2]);
+    expect(block.rows[0]?.cells[0]?.rowSpan).toBe(3);
+    expect(block.rows[1]?.cells[0]).toEqual({ blocks: [] });
+    expect(block.rows[2]?.cells[0]).toEqual({ blocks: [] });
+    expect(coveredPositions(block)).toEqual(["1,0<-0,0", "2,0<-0,0"]);
+  });
+
+  it("emits a block-less entry at every position a 2x2 merge covers, however the row's own physical cells state it", () => {
+    // Rows 0 and 1 state the merged region as one 2000-twip cell and a continuation of it; row 2 states the fuller grid that reveals the interior boundary.
+    const block = tableBlock(
+      readDocContent(
+        buildDoc({
+          paragraphs: mergeFlaggedTableParagraphs([
+            {
+              boundariesTwips: [0, 2000, 3000],
+              cells: [
+                { text: "big", vertMerge: VERT_MERGE_RESTART },
+                { text: "x0" },
+              ],
+            },
+            {
+              boundariesTwips: [0, 2000, 3000],
+              cells: [
+                { text: "", vertMerge: VERT_MERGE_CONTINUATION_FLAG },
+                { text: "x1" },
+              ],
+            },
+            {
+              boundariesTwips: [0, 1000, 2000, 3000],
+              cells: [{ text: "a" }, { text: "b" }, { text: "c" }],
+            },
+          ]),
+        }),
+      ),
+    );
+    expect(block.rows.map((row) => row.cells.length)).toEqual([3, 3, 3]);
+    const anchor = block.rows[0]?.cells[0];
+    expect(anchor?.colSpan).toBe(2);
+    expect(anchor?.rowSpan).toBe(2);
+    expect(cellText(anchor)).toBe("big");
+    expect(block.rows[0]?.cells[1]).toEqual({ blocks: [] });
+    expect(block.rows[1]?.cells[0]).toEqual({ blocks: [] });
+    expect(block.rows[1]?.cells[1]).toEqual({ blocks: [] });
+    expect(cellText(block.rows[1]?.cells[2])).toBe("x1");
+    expect(coveredPositions(block)).toEqual([
+      "0,1<-0,0",
+      "1,0<-0,0",
+      "1,1<-0,0",
+    ]);
+  });
+
+  it("fills a row narrower than the table's shared grid with block-less entries so every row is as long as columnWidthsPt", () => {
+    const block = readTableFromRowBoundaries([
+      { boundariesTwips: [0, 1000, 2000, 3000], cells: ["a", "b", "c"] },
+      { boundariesTwips: [0, 1000, 2000], cells: ["d", "e"] },
+    ]);
+    expect(block.rows.map((row) => row.cells.length)).toEqual([3, 3]);
+    expect(block.rows[1]?.cells[2]).toEqual({ blocks: [] });
+  });
+
+  it("carries a row's own height onto its dense row", () => {
+    const block = tableBlock(
+      readDocContent(
+        buildDoc({
+          paragraphs: [
+            {
+              runs: [{ text: "a" }],
+              grpprl: SPRM_P_F_IN_TABLE,
+              mark: CELL_MARK,
+            },
+            {
+              runs: [],
+              grpprl: [
+                ...SPRM_P_F_IN_TABLE,
+                ...SPRM_P_F_TTP,
+                ...sprmTDefTable([0, 1000], [{ horzMerge: 0, vertMerge: 0 }]),
+                ...[0x07, 0x94, 0x90, 0x01], // sprmTDyaRowHeight: 400 twips.
+              ],
+              mark: CELL_MARK,
+            },
+          ],
+        }),
+      ),
+    );
+    expect(block.rows[0]?.heightPt).toBe(20);
   });
 });

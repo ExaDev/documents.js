@@ -90,7 +90,7 @@ const FIXTURES = [
       tables: [
         {
           rows: 2,
-          cells: ["alpha", "wide", "beta", "gamma", "delta"],
+          cells: ["alpha", "wide", "", "beta", "gamma", "delta"],
           colSpanAt: { row: 0, cell: 1, span: 2 },
         },
       ],
