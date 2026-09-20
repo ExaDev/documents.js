@@ -1,12 +1,11 @@
 import { writeSummaryInformationStream } from "archive-codec";
-import { encodePng } from "byte-codec";
+import { bytesToBase64, encodePng } from "byte-codec";
 import {
   ContentDocumentSchema,
   DocumentTreeSchema,
   flattenTree,
 } from "document-schema.js";
 import { describe, expect, it } from "vitest";
-import { bytesToBase64 } from "./base64";
 import { PptEncryptedError } from "./errors";
 import {
   CURRENT_USER_STREAM,
