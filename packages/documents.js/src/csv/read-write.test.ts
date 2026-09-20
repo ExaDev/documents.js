@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ContentDocument } from "document-schema.js";
 
-import { CsvInvalidUtf8Error, decodeCsvText, encodeCsvText } from "./text";
+import { CsvUndecodableTextError, decodeCsvText, encodeCsvText } from "./text";
 import { TSV_DELIMITER, parseCsvRecords } from "./records";
 import { readCsvContent } from "./read";
 import type { CellTypeInference } from "../layout/cell-typing";
@@ -318,19 +318,59 @@ describe("decodeCsvText / encodeCsvText", () => {
     );
   });
 
-  it("throws CsvInvalidUtf8Error on malformed UTF-8 rather than producing U+FFFD replacement characters", () => {
-    expect(() => decodeCsvText(new Uint8Array([0xff, 0xfe, 0x00]))).toThrow(
-      CsvInvalidUtf8Error,
+  it("decodes an Excel-style windows-1252 export rather than turning it away", () => {
+    const bytes = Uint8Array.of(
+      0x4e,
+      0x6f,
+      0x6d,
+      0x0a,
+      0x43,
+      0x61,
+      0x66,
+      0xe9,
+      0x0a,
     );
+    expect(decodeCsvText(bytes)).toBe("Nom\nCaf\u00e9\n");
+  });
+
+  it("decodes UTF-16LE behind a byte order mark, without leaving the mark in the first header cell", () => {
+    const bytes = Uint8Array.of(0xff, 0xfe, 0x61, 0x00, 0x2c, 0x00, 0x62, 0x00);
+    expect(decodeCsvText(bytes)).toBe("a,b");
+  });
+
+  it("decodes under an explicitly declared encoding, skipping detection", () => {
+    const bytes = Uint8Array.of(0x61, 0x00, 0x2c, 0x00);
+    expect(decodeCsvText(bytes, { encoding: "utf-16le" })).toBe("a,");
+  });
+
+  it("throws CsvUndecodableTextError for bytes that are not text rather than producing U+FFFD replacement characters", () => {
+    const png = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
+    expect(() => decodeCsvText(png)).toThrow(CsvUndecodableTextError);
     let caught: unknown;
     try {
-      decodeCsvText(new Uint8Array([0xff, 0xfe, 0x00]));
+      decodeCsvText(png);
     } catch (error) {
       caught = error;
     }
-    expect((caught as Error).name).toBe("CsvInvalidUtf8Error");
-    expect((caught as Error).message).toBe(
-      "csv text must be well-formed UTF-8",
+    expect(caught).toMatchObject({
+      name: "CsvUndecodableTextError",
+      reason: "binary",
+    });
+    expect((caught as Error).message).toMatch(
+      /^csv bytes could not be decoded as text: /,
     );
+  });
+
+  it("reports a declared encoding the bytes contradict as a malformed decode", () => {
+    let caught: unknown;
+    try {
+      decodeCsvText(Uint8Array.of(0x61, 0xe9), { encoding: "utf-8" });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({
+      name: "CsvUndecodableTextError",
+      reason: "malformed",
+    });
   });
 });
