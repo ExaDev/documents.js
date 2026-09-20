@@ -359,3 +359,194 @@ describe("decodePng: RawImage shape", () => {
     expect("alpha" in decoded).toBe(true);
   });
 });
+
+// Differential test over every colour type and bit depth the decoder supports, on seeded random samples, against a reference conversion written from the PNG specification and this decoder's documented conventions: samples below 16 bits are scaled to 0..255 for grayscale (and used raw for truecolour and palette indices), a 16-bit sample keeps only its high byte, tRNS keys compare a pixel's (already reduced) samples with the key, and an alpha plane exists whenever the colour type carries alpha or a tRNS chunk is present. The fixtures are hand-assembled scanlines with filter type 0, so nothing here depends on the filters or on encodePng.
+function seededSamples(
+  count: number,
+  maxValue: number,
+  seed: number,
+): number[] {
+  const out: number[] = [];
+  let state = seed >>> 0;
+  for (let index = 0; index < count; index += 1) {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let mixed = Math.imul(state ^ (state >>> 15), state | 1);
+    mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
+    out.push(((mixed ^ (mixed >>> 14)) >>> 0) % (maxValue + 1));
+  }
+  return out;
+}
+
+// Packs one row of samples, most significant bit first, into bytes at the given bit depth.
+function packRow(samples: readonly number[], bitDepth: number): number[] {
+  if (bitDepth === 16)
+    return samples.flatMap((sample) => [sample >> 8, sample & 0xff]);
+  const bytes: number[] = [];
+  let accumulator = 0;
+  let bits = 0;
+  for (const sample of samples) {
+    accumulator = (accumulator << bitDepth) | sample;
+    bits += bitDepth;
+    if (bits === 8) {
+      bytes.push(accumulator);
+      accumulator = 0;
+      bits = 0;
+    }
+  }
+  if (bits > 0) bytes.push(accumulator << (8 - bits));
+  return bytes;
+}
+
+const SUPPORTED_MODES: readonly (readonly [number, readonly number[]])[] = [
+  [0, [1, 2, 4, 8, 16]],
+  [2, [8, 16]],
+  [3, [1, 2, 4, 8]],
+  [4, [8, 16]],
+  [6, [8, 16]],
+];
+const CHANNELS_FOR: Record<number, number> = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
+const DIFFERENTIAL_WIDTHS = [1, 2, 3, 5, 7, 8, 9, 13];
+const DIFFERENTIAL_HEIGHT = 3;
+
+function scaleGray(sample: number, bitDepth: number): number {
+  return bitDepth === 16
+    ? sample
+    : Math.round((sample * 255) / ((1 << bitDepth) - 1));
+}
+
+interface ExpectedImage {
+  readonly data: number[];
+  readonly alpha: number[] | undefined;
+}
+
+function referenceDecode(
+  colorType: number,
+  bitDepth: number,
+  width: number,
+  height: number,
+  samples: readonly number[],
+  palette: readonly number[] | undefined,
+  trns: readonly number[] | undefined,
+): ExpectedImage {
+  const channels = CHANNELS_FOR[colorType]!;
+  // A 16-bit sample is reduced to its high byte before anything else looks at it, exactly as the decoder documents.
+  const reduced = samples.map((sample) =>
+    bitDepth === 16 ? sample >> 8 : sample,
+  );
+  const hasAlpha = colorType === 4 || colorType === 6 || trns !== undefined;
+  const data: number[] = [];
+  const alpha: number[] = [];
+  for (let pixel = 0; pixel < width * height; pixel += 1) {
+    const at = (channel: number): number =>
+      reduced[pixel * channels + channel]!;
+    let opacity = 255;
+    if (colorType === 0) {
+      data.push(scaleGray(at(0), bitDepth));
+      if (trns !== undefined)
+        opacity = at(0) === ((trns[0]! << 8) | trns[1]!) ? 0 : 255;
+    } else if (colorType === 2) {
+      data.push(at(0), at(1), at(2));
+      if (trns !== undefined) {
+        const keyMatches = [0, 1, 2].every(
+          (c) => at(c) === ((trns[c * 2]! << 8) | trns[c * 2 + 1]!),
+        );
+        opacity = keyMatches ? 0 : 255;
+      }
+    } else if (colorType === 3) {
+      data.push(
+        palette![at(0) * 3]!,
+        palette![at(0) * 3 + 1]!,
+        palette![at(0) * 3 + 2]!,
+      );
+      if (trns !== undefined)
+        opacity = at(0) < trns.length ? trns[at(0)]! : 255;
+    } else if (colorType === 4) {
+      data.push(scaleGray(at(0), bitDepth));
+      opacity = scaleGray(at(1), bitDepth);
+    } else {
+      data.push(at(0), at(1), at(2));
+      opacity = at(3);
+    }
+    alpha.push(opacity);
+  }
+  return { data, alpha: hasAlpha ? alpha : undefined };
+}
+
+describe("decodePng against a reference conversion, for every supported colour type and bit depth", () => {
+  const cases = SUPPORTED_MODES.flatMap(([colorType, depths]) =>
+    depths.flatMap((bitDepth) =>
+      DIFFERENTIAL_WIDTHS.map((width) => [colorType, bitDepth, width] as const),
+    ),
+  );
+
+  it.each(cases)(
+    "colour type %i at bit depth %i, %i pixels wide, with and without transparency",
+    (colorType, bitDepth, width) => {
+      const channels = CHANNELS_FOR[colorType]!;
+      const maxSample = (1 << bitDepth) - 1;
+      const paletteEntries = 1 << Math.min(bitDepth, 8);
+      const palette =
+        colorType === 3
+          ? seededSamples(paletteEntries * 3, 255, 41)
+          : undefined;
+      const trnsOptions: (readonly number[] | undefined)[] =
+        colorType === 3
+          ? [undefined, seededSamples(Math.max(1, paletteEntries - 1), 255, 43)]
+          : colorType === 0
+            ? [undefined, [0, 1]]
+            : colorType === 2
+              ? [undefined, [0, 1, 0, 2, 0, 3]]
+              : [undefined];
+      for (const trns of trnsOptions) {
+        const samples = seededSamples(
+          width * DIFFERENTIAL_HEIGHT * channels,
+          maxSample,
+          width * 1000 + bitDepth * 10 + colorType,
+        );
+        // Make the transparency key actually occur in the data, so a wrong comparison cannot pass by never matching.
+        if (trns !== undefined && colorType === 0) samples[0] = 1;
+        if (trns !== undefined && colorType === 2)
+          samples.splice(0, 3, 1, 2, 3);
+        const rows = Array.from(
+          { length: DIFFERENTIAL_HEIGHT },
+          (_unused, y) => [
+            0,
+            ...packRow(
+              samples.slice(y * width * channels, (y + 1) * width * channels),
+              bitDepth,
+            ),
+          ],
+        );
+        const chunks = [
+          realChunk(
+            "IHDR",
+            ihdrData(width, DIFFERENTIAL_HEIGHT, bitDepth, colorType),
+          ),
+          ...(palette === undefined ? [] : [realChunk("PLTE", palette)]),
+          ...(trns === undefined ? [] : [realChunk("tRNS", trns)]),
+          idatChunk(rows.flat()),
+          realChunk("IEND", []),
+        ];
+        const decoded = decodePng(pngBytes(chunks));
+        const expected = referenceDecode(
+          colorType,
+          bitDepth,
+          width,
+          DIFFERENTIAL_HEIGHT,
+          samples,
+          palette,
+          trns,
+        );
+        expect(Array.from(decoded.data)).toEqual(expected.data);
+        expect(
+          decoded.alpha === undefined ? undefined : Array.from(decoded.alpha),
+        ).toEqual(expected.alpha);
+        expect(decoded.channels).toBe(
+          colorType === 0 || colorType === 4 ? 1 : 3,
+        );
+        expect(decoded.width).toBe(width);
+        expect(decoded.height).toBe(DIFFERENTIAL_HEIGHT);
+      }
+    },
+  );
+});
