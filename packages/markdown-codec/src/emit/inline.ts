@@ -65,12 +65,16 @@ const ESCAPE_CHARS: ReadonlySet<string> = new Set([
 export function escapeMarkdownText(text: string): string {
   let out = "";
   let index = 0;
-  while (index < text.length) {
-    const char = text.charAt(index);
+  // No separate `index < text.length` bound: `text[index]` running off the end already returns undefined, which the very next check breaks on, so an explicit length comparison here would be redundant with that undefined check on every real input, never independently true or false.
+  for (;;) {
+    const char = text[index];
+    if (char === undefined) {
+      break;
+    }
     if (char === "\n" || char === "\r") {
       // A hard line break's own literal line ending (src/lower/inline.ts's own mapping) -- rendered as a backslash immediately before a real newline, CommonMark's own unambiguous hard-break spelling (as opposed to the whitespace-sensitive "two trailing spaces" form). This package's own lower.ts always spells its own hard breaks with a bare LF, but run.text is a schema-level field a foreign producer can populate with any of CommonMark's other two line-ending forms (spec 0.31.2, "Lines": a CR not followed by an LF, or a CRLF pair) just as legitimately -- normalising every one of the three to the SAME "\\\n" spelling here, rather than reproducing the input's own CR/CRLF/LF choice verbatim, is what keeps every LINE_ENDING_PATTERN/ESCAPED_HARD_BREAK_PATTERN-based collapse downstream of this function (renderParagraphBody's ATX-heading fallback, emitRunsSingleLine's table-cell collapse) working against a single guaranteed shape instead of having to re-detect all three again. Consuming a CRLF's own LF here, together with its CR, in the SAME step is what a naive `char === "\n"`-only check missed: left as two independent single-character branches, a literal CR falls through as an unescaped literal character first, and the LF immediately after it is escaped on its own -- correct as backslash-then-LF in isolation, but now with the CR's own line-ending-ness stranded one character behind that backslash instead of consumed by it, which is exactly what let a single hard break collapse into TWO spaces downstream instead of one (ESCAPED_HARD_BREAK_PATTERN's own "\\\\(?:\\r\\n|\\n|\\r)" strips the backslash+LF pair as designed, but the CR ahead of it survives as a second, separate line ending for the following LINE_ENDING_PATTERN split to also collapse).
       out += "\\\n";
-      index += char === "\r" && text.charAt(index + 1) === "\n" ? 2 : 1;
+      index += char === "\r" && text[index + 1] === "\n" ? 2 : 1;
       continue;
     }
     if (ESCAPE_CHARS.has(char)) {
@@ -97,10 +101,10 @@ function renderCodeSpan(text: string): string {
     }
   }
   const fence = "`".repeat(longestBacktickRun + 1);
-  const isAllSpaces = text.length > 0 && text.trim().length === 0;
   const risksFenceCollision = text.startsWith("`") || text.endsWith("`");
+  // The rule's own "doesn't consist entirely of space characters" clause is spelled here as a third conjunct rather than a separate all-spaces binding: a content string with nothing but spaces in it, the empty string included, has no non-space character left once trimmed, and is exactly the content a reparse strips nothing from, so it must be written back unpadded through the same one condition every other content string is decided by.
   const wouldBeStrippedOnReparse =
-    !isAllSpaces && text.startsWith(" ") && text.endsWith(" ");
+    text.startsWith(" ") && text.endsWith(" ") && text.trim().length > 0;
   const needsPadding = risksFenceCollision || wouldBeStrippedOnReparse;
   return needsPadding ? `${fence} ${text} ${fence}` : `${fence}${text}${fence}`;
 }
@@ -174,10 +178,8 @@ function styleActive(run: ContentRun, key: StyleKey): boolean {
 // CommonMark's own emphasis rule (spec 0.31.2, "Emphasis and strong emphasis", rules 1-4): a `*` delimiter run may open/close emphasis regardless of what is adjacent to it on the inner side, but a `_` run may NOT do so "intraword" -- immediately adjacent, with no separating whitespace, to a letter or digit on the inner side. `foo*bar*` is `foo<em>bar</em>`, but the underscore spelling `foo_bar_` is not emphasis at all: the intraword restriction only exists for `_`, so writing an intraword-adjacent emphasis span back out with the configured emphasisMarker when that marker is `_` would silently produce LITERAL underscores on reparse rather than emphasis -- a real correctness bug, not a style nit.
 const WORD_CHAR_PATTERN = /[\p{L}\p{N}]/u;
 
+// No empty-body guard of its own: String.prototype.charAt past a string's own end returns the EMPTY string rather than undefined, and WORD_CHAR_PATTERN cannot match that, so an empty body already answers false through the very same two tests every other body takes.
 function isIntrawordRisk(body: string): boolean {
-  if (body.length === 0) {
-    return false;
-  }
   return (
     WORD_CHAR_PATTERN.test(body.charAt(0)) ||
     WORD_CHAR_PATTERN.test(body.charAt(body.length - 1))
@@ -193,10 +195,8 @@ function hasMarkerConflict(
   if (candidate === "_" && isIntrawordRisk(body)) {
     return true;
   }
-  if (
-    body.length > 0 &&
-    (body.startsWith(candidate) || body.endsWith(candidate))
-  ) {
+  // No separate "is the body non-empty" guard: `candidate` is always one of the two single-character delimiters CommonMark offers, and the empty string neither starts nor ends with one of those.
+  if (body.startsWith(candidate) || body.endsWith(candidate)) {
     return true;
   }
   return precedingText.endsWith(candidate);
@@ -257,7 +257,8 @@ function pickSplitKey(
 ): StyleKey {
   let best = remaining[0]!;
   let bestCount = groupCount(runs, best);
-  for (const key of remaining.slice(1)) {
+  // Every key is measured, the seed key's own first entry included: a count can never be strictly less than itself, so re-measuring the seed decides nothing, where skipping it would add an index-offset boundary with no observable effect of its own.
+  for (const key of remaining) {
     const count = groupCount(runs, key);
     if (count < bestCount) {
       best = key;
@@ -284,7 +285,8 @@ function renderNestedStyles(
   const rest = remainingKeys.filter((candidate) => candidate !== key);
   let out = "";
   let index = 0;
-  while (index < runs.length) {
+  // No separate `index < runs.length` bound: `runs[index]` running off the end already returns undefined, which the very next check breaks on.
+  for (;;) {
     const current = runs[index];
     if (current === undefined) {
       break;
@@ -381,14 +383,20 @@ export function emitRuns(
 ): string {
   let out = "";
   let index = 0;
-  while (index < runs.length) {
+  // No separate `index < runs.length` bound: `runs[index]` running off the end already returns undefined, which the very next check breaks on.
+  for (;;) {
     const run = runs[index];
     if (run === undefined) {
       break;
     }
     if (run.hyperlink === undefined) {
       let end = index + 1;
-      while (end < runs.length && runs[end]?.hyperlink === undefined) {
+      // The stretch's bound is the next run's own PRESENCE, checked before its hyperlink: `runs[end]` running off the end returns undefined, whose optional-chained hyperlink reads as undefined too, indistinguishable on its own from a genuinely hyperlink-free run.
+      for (;;) {
+        const next = runs[end];
+        if (next === undefined || next.hyperlink !== undefined) {
+          break;
+        }
         end += 1;
       }
       out += renderNestedStyles(
@@ -403,7 +411,12 @@ export function emitRuns(
     }
     const hyperlink = run.hyperlink;
     let groupEnd = index + 1;
-    while (groupEnd < runs.length && runs[groupEnd]?.hyperlink === hyperlink) {
+    // No separate `groupEnd < runs.length` bound: `runs[groupEnd]` running off the end returns undefined, whose optional-chained hyperlink reads as undefined, which never equals this group's own (defined) hyperlink, so the group's end is already the only bound the comparison needs.
+    for (;;) {
+      const next = runs[groupEnd];
+      if (next?.hyperlink !== hyperlink) {
+        break;
+      }
       groupEnd += 1;
     }
     const group = runs.slice(index, groupEnd);

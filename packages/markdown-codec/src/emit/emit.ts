@@ -135,6 +135,15 @@ function renderSetextHeading(level: number, text: string): string {
   return `${text}\n${underline}`;
 }
 
+// The ATX spelling of a heading, with every line ending in its own rendered text collapsed to a single space. ATX is a single physical line, and writing a line ending into one would split it in two on reparse rather than merely lose formatting. The escaped hard-break spelling (a backslash immediately before the line ending) is stripped first via ESCAPED_HARD_BREAK_PATTERN, together with the line ending it precedes, in one collapse: this package's own escapeMarkdownText always spells it with a trailing LF, but a run's own markdown residue can carry the identical backslash-escape spelling against a CRLF or lone CR just as legitimately, and an LF-only strip would leave that backslash behind as a stray literal character once the LINE_ENDING_PATTERN split below removes the CRLF/CR out from under it. Everything left over is then split on LINE_ENDING_PATTERN and rejoined with spaces, collapsing every remaining line ending (a bare soft-break LF, plus a bare CR or CRLF a run's own text or markdown residue can carry) to the single space ATX's own grammar requires. A text with no line ending in it at all passes through both steps unchanged, which is why every ATX return below goes through here rather than only the break-carrying ones.
+function renderAtxHeading(level: number, text: string): string {
+  const collapsed = text
+    .replace(ESCAPED_HARD_BREAK_PATTERN, " ")
+    .split(LINE_ENDING_PATTERN)
+    .join(" ");
+  return `${"#".repeat(level)} ${collapsed}`;
+}
+
 // A fenced code block's own closing condition (spec 0.31.2, "Fenced code blocks") is "a code fence of the same type as the code block that opened it, of length AT LEAST as great as the opening fence" -- so a fence of exactly 3 characters closes prematurely the moment the code block's own literal content happens to contain a run of 3-or-more of that same character on its own line (a real, common case: this package always re-renders a code block as fenced regardless of whether it was originally fenced or indented, so an indented block whose own text happens to contain a backtick fence is exactly the scenario this guards). The fix real fenced-code-block writers already use: pick a fence one character longer than the longest run of the fence character anywhere in the content, so no line inside the block can ever be mistaken for the closing fence.
 const MIN_CODE_FENCE_LENGTH = 3;
 
@@ -201,7 +210,8 @@ function firstContentLineIndex(text: string): number {
 // Whether a line's own leading run of spaces and tabs reaches CommonMark's own 4-column indented-code-block threshold (spec 0.31.2, "Tabs": "in contexts where spaces help to define block structure, tabs behave as if they were replaced by spaces with a tab stop of 4 characters", counted from the start of the LINE, not the whole document). Shares MARKDOWN_TAB_STOP_WIDTH with src/scan/scan.ts's own MarkdownScanCursor so a tab's width agrees with the read side's parse of the very text this function is predicting the reparse of. The sole caller below only ever asks a >= CODE_INDENT_COLUMNS boundary question, never the exact column count beyond it, so this returns that boundary directly. Once the leading run of plain spaces ends, only the SINGLE character right after it can still change the answer: a tab there is always itself sufficient to reach the threshold (CODE_INDENT_COLUMNS <= MARKDOWN_TAB_STOP_WIDTH means expanding a tab from any column short of the threshold already lands exactly on it), and anything else stops the leading run outright -- so this needs no loop-exhausted fallback the way a step-by-step scan through every remaining character would: `line[column]` reads as `undefined` past the string's own end, which compares unequal to "\t" exactly as a real non-tab character would.
 function leadingIndentReachesCodeThreshold(line: string): boolean {
   let column = 0;
-  while (column < line.length && line[column] === " ") {
+  // No separate `column < line.length` bound: `line[column]` running off the end reads as undefined, which compares unequal to " " exactly as a real non-space character does, so the leading run's own end is the only bound this needs.
+  while (line[column] === " ") {
     column += 1;
   }
   if (column >= CODE_INDENT_COLUMNS) {
@@ -257,13 +267,12 @@ type UnsafeSetextBreakReason =
   "leading-indentation" | "blank-line" | "interrupting-line" | undefined;
 
 function unsafeSetextBreakReason(text: string): UnsafeSetextBreakReason {
-  let sawContentLine = false;
   let leadingBlankLines = 0;
-  // The immediately preceding CONTENT line's own text -- unset until sawContentLine's own first line, and updated on every content line thereafter -- so tableDelimiterRowPromotesPrecedingLine can check a delimiter row against the exact line it would promote, the same pairing src/block/block.ts's own tryTableHeader checks at reparse.
-  let precedingLine = "";
+  // The immediately preceding CONTENT line's own text, undefined until the run's first content line is reached and updated on every content line thereafter, so tableDelimiterRowPromotesPrecedingLine can check a delimiter row against the exact line it would promote, the same pairing src/block/block.ts's own tryTableHeader checks at reparse. Its own undefined-ness doubles as the "no content line seen yet" state, rather than a second flag moving in lockstep with it: a line can only be checked against a preceding content line once one actually exists, which is the very same condition.
+  let precedingLine: string | undefined;
   for (const line of text.split(LINE_ENDING_PATTERN)) {
     const isBlank = BLANK_OR_WHITESPACE_ONLY_LINE.test(line);
-    if (!sawContentLine) {
+    if (precedingLine === undefined) {
       if (isBlank) {
         leadingBlankLines += 1;
         if (leadingBlankLines > MAX_LEADING_BLANK_LINES_FOR_SETEXT) {
@@ -272,7 +281,6 @@ function unsafeSetextBreakReason(text: string): UnsafeSetextBreakReason {
         }
         continue;
       }
-      sawContentLine = true;
       if (leadingIndentReachesCodeThreshold(line)) {
         return "leading-indentation";
       }
@@ -294,7 +302,7 @@ function unsafeSetextBreakReason(text: string): UnsafeSetextBreakReason {
     precedingLine = line;
   }
   // Every line was blank -- nothing survives as heading content for the underline to attach to, the same corruption a trailing blank line causes.
-  return sawContentLine ? undefined : "blank-line";
+  return precedingLine === undefined ? "blank-line" : undefined;
 }
 
 function embedsUnsafeBreakForSetext(text: string): boolean {
@@ -425,7 +433,7 @@ function renderParagraphBody(
       });
     }
     const text = emitRuns(paragraph.runs, context, paragraph.constructs);
-    // ATX is a single physical line; a hard OR soft break embedded in this heading's own runs (src/emit/inline.ts's renderLeaf) leaves a genuine CommonMark line ending in `text` regardless of the configured headingStyle, and ATX has no way to hold it -- writing it out anyway would split the ATX line in two on reparse rather than lose formatting, which is strictly worse. This is detected via LINE_ENDING_PATTERN, not a bare '\n' check: this package's own hard-break escaping (escapeMarkdownText) and soft-break residue always use LF, but a run's plain text field or a foreign producer's own markdown residue (src/emit/inline.ts's renderLeaf, the run.source.xml case) can carry a bare CR or CRLF just as legitimately -- an un-widened check would let that slip through to the plain `text` return at the very bottom of this function with the line ending never escaped or collapsed, embedding it unrepresented in what is supposed to be ATX's single physical line. Setext's own grammar is exactly "one or more lines of heading text", so promote to it whenever the level admits one (<=2), overriding the configured style; only a genuinely unrepresentable level 3-6 heading, OR a level<=2 heading whose own break placement would leave a blank line setext cannot survive (embedsUnsafeBreakForSetext above), falls through to the collapse-with-diagnostic path below. A level<=2 heading with NO embedded break at all can still fall through the same unsafe path: headingStyle: 'setext' is itself a second, independent trigger for candidacy (setextRequested below), so an explicit caller request against an already-unsafe break-free heading (a 4+-column-indented or wholly blank first line) is refused with the identical diagnostic rather than being silently written as an unmarked ATX fallback.
+    // ATX is a single physical line; a hard OR soft break embedded in this heading's own runs (src/emit/inline.ts's renderLeaf) leaves a genuine CommonMark line ending in `text` regardless of the configured headingStyle, and ATX has no way to hold it — writing it out anyway would split the ATX line in two on reparse rather than lose formatting, which is strictly worse. This is detected via LINE_ENDING_PATTERN, not a bare '\n' check: this package's own hard-break escaping (escapeMarkdownText) and soft-break residue always use LF, but a run's plain text field or a foreign producer's own markdown residue (src/emit/inline.ts's renderLeaf, the run.source.xml case) can carry a bare CR or CRLF just as legitimately, and an un-widened check would leave such a heading treated as break-free throughout: never a setext candidate whose own grammar could have held the break, and collapsed by renderAtxHeading below with no HEADING_LINE_BREAK_COLLAPSED diagnostic reporting that anything was lost. Setext's own grammar is exactly "one or more lines of heading text", so promote to it whenever the level admits one (<=2), overriding the configured style; only a genuinely unrepresentable level 3-6 heading, OR a level<=2 heading whose own break placement would leave a blank line setext cannot survive (embedsUnsafeBreakForSetext above), falls through to the collapse-with-diagnostic path below. A level<=2 heading with NO embedded break at all can still fall through the same unsafe path: headingStyle: 'setext' is itself a second, independent trigger for candidacy (setextRequested below), so an explicit caller request against an already-unsafe break-free heading (a 4+-column-indented or wholly blank first line) is refused with the identical diagnostic rather than being silently written as an unmarked ATX fallback.
     const embedsLineBreak = LINE_ENDING_PATTERN.test(text);
     const unsafeSetextReason = unsafeSetextBreakReason(text);
     const unsafeForSetext = unsafeSetextReason !== undefined;
@@ -457,12 +465,8 @@ function renderParagraphBody(
           embedsLineBreak,
         ),
       });
-      if (embedsLineBreak) {
-        // The escaped hard-break spelling (backslash immediately before the line ending) is stripped first via ESCAPED_HARD_BREAK_PATTERN, together with the line ending it precedes, in one collapse -- this package's own escapeMarkdownText always spells it with a trailing LF, but a run's own markdown residue can carry the identical backslash-escape spelling against a CRLF or lone CR just as legitimately, and an LF-only strip would leave that backslash behind as a stray literal character once the LINE_ENDING_PATTERN split below removes the CRLF/CR out from under it. Everything left over is then split on LINE_ENDING_PATTERN and rejoined with spaces, collapsing every remaining line ending -- a bare soft-break LF exactly as before, plus a bare CR or CRLF a run's own text or markdown residue can carry -- to the single space ATX's own single-physical-line grammar requires.
-        return `${"#".repeat(level)} ${text.replace(ESCAPED_HARD_BREAK_PATTERN, " ").split(LINE_ENDING_PATTERN).join(" ")}`;
-      }
-      // No break to collapse -- the hazard here is the break-free heading's own first-line indentation or wholly blank text, and `text` already has no CommonMark line ending in it for the ATX single-physical-line grammar to trip over.
-      return `${"#".repeat(level)} ${text}`;
+      // No separate break-free return: the hazard here can just as well be the break-free heading's own first-line indentation or wholly blank text, and such a text carries no CommonMark line ending for either collapse step to act on, so renderAtxHeading leaves it exactly as it stands.
+      return renderAtxHeading(level, text);
     }
     if (embedsLineBreak) {
       context.sink({
@@ -470,9 +474,8 @@ function renderParagraphBody(
         severity: "info",
         message: `a level ${String(level)} heading's own content contains a line break; only setext's own level-1/2 grammar can hold one, so ATX collapses it to a single space`,
       });
-      return `${"#".repeat(level)} ${text.replace(ESCAPED_HARD_BREAK_PATTERN, " ").split(LINE_ENDING_PATTERN).join(" ")}`;
     }
-    return `${"#".repeat(level)} ${text}`;
+    return renderAtxHeading(level, text);
   }
   return emitRuns(paragraph.runs, context, paragraph.constructs);
 }
@@ -621,14 +624,15 @@ function firstBlockCheckbox(
   if (!taskNumId || first.kind !== "paragraph") {
     return { checkboxText: "", strippedFirstBlock: undefined };
   }
-  const leading = first.block.runs[0]?.text ?? "";
-  if (leading.startsWith(`${TASK_CHECKBOX_CHECKED} `)) {
+  // A paragraph with no runs at all has no leading text to sniff a glyph from, which `leading?.startsWith(...) === true` answers directly. No stand-in empty string is substituted for the absent run, since an absent run and a run whose text merely fails to start with a glyph are the same answer here anyway.
+  const leading = first.block.runs[0]?.text;
+  if (leading?.startsWith(`${TASK_CHECKBOX_CHECKED} `) === true) {
     return {
       checkboxText: "[x] ",
       strippedFirstBlock: stripCheckboxRun(first.block),
     };
   }
-  if (leading.startsWith(`${TASK_CHECKBOX_UNCHECKED} `)) {
+  if (leading?.startsWith(`${TASK_CHECKBOX_UNCHECKED} `) === true) {
     return {
       checkboxText: "[ ] ",
       strippedFirstBlock: stripCheckboxRun(first.block),
@@ -889,7 +893,8 @@ function renderListRegion(
     );
     const indent = " ".repeat(marker.bareLength);
 
-    let text = "";
+    // Seeded with the marker itself rather than with an empty string: segments[0] is always an 'own' segment holding at least the block `first` was just read from (collectListItem's own leading run), so the first block below always appends its own first line straight onto this marker.
+    let text = marker.full;
     let renderedFirstLine = false;
     let previousStyleId: string | undefined;
     for (const segment of segments) {
@@ -913,8 +918,8 @@ function renderListRegion(
             listRegionItemBody(block, context, strippedFirstBlock),
             "\n",
           );
-          text = [
-            `${marker.full}${firstLine}`,
+          text += [
+            firstLine,
             ...restLines.map((line) => `${indent}${line}`),
           ].join("\n");
           renderedFirstLine = true;
@@ -940,12 +945,12 @@ function renderListRegion(
   for (const [partIndex, part] of parts.entries()) {
     if (partIndex > 0) {
       const previous = parts[partIndex - 1]!;
-      const sameList = previous.numId === part.numId;
-      const loose =
-        sameList &&
-        previous.numId !== undefined &&
-        (parseListNumId(previous.numId)?.loose ?? false);
-      out += sameList && !loose ? "\n" : "\n\n";
+      // Looseness is read only once the two parts are already known to belong to the same list: a boundary between two DIFFERENT numIds always gets a blank line regardless of either side's own loose flag, so that flag is never consulted there. A depth-only membership (numId undefined) has no numId to read a flag from and always continues tightly, matching listInfoFor's own fallback to a tight bullet list.
+      const continuesTightly =
+        previous.numId === part.numId &&
+        (previous.numId === undefined ||
+          parseListNumId(previous.numId)?.loose !== true);
+      out += continuesTightly ? "\n" : "\n\n";
     }
     out += part.text;
   }
@@ -967,6 +972,9 @@ function isConstructItem(item: EmitItem): item is ConstructItem {
 }
 
 // Whether a construct's own rendered spelling opens with a self-delimiting marker on every line ('> ' for a division, per renderConstruct below) rather than rendering transparently as its own children's content with nothing distinguishing it -- see renderConstruct's own comment for why the blockquote spelling is gated on the wrapped paragraphs' own indentLeftPt dual carry rather than on descriptor.kind alone (a division whose paragraphs carry no such indent is a FOREIGN one, and renders transparently). This same test doubles as the write-side "does this construct's own marker unconditionally interrupt an open paragraph" signal renderListRegion below needs (a materialised division's '> ' does, per CommonMark spec 0.31.2's own list of blocks that can interrupt a paragraph; a transparent construct instead defers to whatever its own first child renders as).
+// The left indent a paragraph that carries no indentLeftPt field at all effectively has: document-schema.js leaves the field optional, and an absent one is no indentation rather than an unknown amount of it.
+const UNINDENTED_PT = 0;
+
 function isMaterialisedDivision(item: ConstructItem): boolean {
   return (
     item.descriptor.kind === "division" &&
@@ -974,10 +982,10 @@ function isMaterialisedDivision(item: ConstructItem): boolean {
       if (isConstructItem(child)) {
         return true;
       }
+      // A paragraph carrying no indentLeftPt at all answers this threshold question identically to one carrying less than a quote level of it, so the absence is defaulted into the comparison rather than tested separately ahead of it.
       return (
         child.block.kind !== "paragraph" ||
-        (child.block.indentLeftPt !== undefined &&
-          child.block.indentLeftPt >= QUOTE_INDENT_PT)
+        (child.block.indentLeftPt ?? UNINDENTED_PT) >= QUOTE_INDENT_PT
       );
     })
   );
