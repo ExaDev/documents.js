@@ -104,7 +104,7 @@ jobs:
               args=(-- --mutate "$MUTATE")
             fi
             pnpm exec turbo run _test:mutation --filter="$PACKAGE" "${args[@]}"
-      # Saved even when the run was cancelled or hit its timeout: Stryker writes a partial incremental report when it is interrupted, and a slice that never completes would otherwise start cold on every attempt.
+      # Saved by a step that runs even when an earlier step failed or was cancelled: GitHub runs `always()` steps on cancellation, and a job that exceeds its timeout is cancelled the same way. What it can save is limited by Stryker, which writes its incremental report only when its run finishes, so a run killed by the timeout leaves nothing to save. That is why slice size and timeout are derived (plan-mutation-slices.ts) so a slice finishes well inside its limit, and why a slice that does not finish costs one slice's rerun rather than the whole package's.
       - uses: actions/cache/save@v6
         if: always()
         with:
