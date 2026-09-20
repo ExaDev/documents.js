@@ -20,13 +20,13 @@ import {
 export const GITHUB_JOB_LIMIT_MINUTES = 360;
 
 /** The share of the job limit a slice's cold estimate may consume. A slice planned at this share still leaves the rest of the limit as headroom for the estimate being wrong, which is what keeps a slice from ever being the job that hits the limit. */
-export const SLICE_SHARE_OF_JOB_LIMIT = 1 / 6;
+export const SLICE_SHARE_OF_JOB_LIMIT = 1 / 4;
 
 /** Cold-run cost that does not depend on package size, in seconds: the build, Stryker's dry run and the checker's start-up. Taken from the smallest measured packages, rounded up. */
 export const COLD_FIXED_SECONDS = 240;
 
-/** Cold-run cost per mutable source line, in seconds. The smallest value for which the envelope through COLD_FIXED_SECONDS clears every measured cold sample. */
-export const COLD_SECONDS_PER_LINE = 0.55;
+/** Cold-run cost per mutable source line, in seconds. A round value at or just above the smallest one for which the envelope through COLD_FIXED_SECONDS clears every measured sample; the slowest sample per line, a package whose tests are heavy, sets it. */
+export const COLD_SECONDS_PER_LINE = 1;
 
 /** How many standard GitHub-hosted Linux jobs one account may run at once, from GitHub's "Actions limits" reference (job concurrency limits, by plan). The account this repository belongs to is on the plan this figure is for, and every workflow of every repository in it draws on the same pool, including the required checks a merge waits on. */
 export const ACCOUNT_RUNNER_LIMIT = 20;
