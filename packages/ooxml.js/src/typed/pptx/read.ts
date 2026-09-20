@@ -48,6 +48,7 @@ import {
   rootElement,
   textContent,
 } from "../util";
+import { findMainPartPath } from "../opc";
 import { base64ToBytes } from "byte-codec";
 import { assignReadingOrder } from "./reading-order";
 import type { DefaultRunProperties, SlideInheritanceContext } from "./inherit";
@@ -71,7 +72,8 @@ export const PptxDocumentSchema = z.object({
 });
 export type PptxDocument = z.infer<typeof PptxDocumentSchema>;
 
-const PRESENTATION_PATH = "ppt/presentation.xml";
+// The conventional name for the presentation part. OPC names it through the package root's own officeDocument relationship, so this is only the fallback for a package that declares no usable one -- see typed/opc.ts.
+const CONVENTIONAL_PRESENTATION_PATH = "ppt/presentation.xml";
 const SLIDE_REL_TYPE =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
 const TABLE_GRAPHIC_URI =
@@ -98,6 +100,7 @@ function readSlideSize(presentationRoot: XmlElement | undefined): PageSize {
 // Slide order comes from p:presentation/p:sldIdLst, resolved through the presentation's own relationships -- never from slide part filenames, which carry no ordering guarantee.
 function readSlidePathsInOrder(
   pkg: Package,
+  presentationPath: string,
   presentationRoot: XmlElement | undefined,
 ): string[] {
   if (presentationRoot === undefined) {
@@ -107,7 +110,7 @@ function readSlidePathsInOrder(
   if (sldIdLst === undefined) {
     return [];
   }
-  const presentationRels = resolveRelationships(pkg, PRESENTATION_PATH);
+  const presentationRels = resolveRelationships(pkg, presentationPath);
   const paths: string[] = [];
   for (const sldId of childrenWithTag(sldIdLst, "p:sldId")) {
     const rId = attr(sldId, "r:id");
@@ -1032,11 +1035,15 @@ function readSlide(
 
 // Resolves a generic OOXML Package into PptxDocument: slide order via p:sldIdLst (never slide filename order), the placeholder -> layout -> master -> theme inheritance cascade, DrawingML geometry, and embedded images sniffed from their media parts. It is a one-way read, not a round-trip path, and a PptxDocument cannot be written back to a package.
 export function readPptxContent(pkg: Package): PptxDocument {
-  const presentationRoot = rootElement(pkg.parts[PRESENTATION_PATH]);
+  const presentationPath =
+    findMainPartPath(pkg) ?? CONVENTIONAL_PRESENTATION_PATH;
+  const presentationRoot = rootElement(pkg.parts[presentationPath]);
   const size = readSlideSize(presentationRoot);
-  const slides = readSlidePathsInOrder(pkg, presentationRoot).map((slidePath) =>
-    readSlide(pkg, slidePath, size),
-  );
+  const slides = readSlidePathsInOrder(
+    pkg,
+    presentationPath,
+    presentationRoot,
+  ).map((slidePath) => readSlide(pkg, slidePath, size));
   slides.forEach((slide, slideIndex) => {
     slide.shapes.forEach((shape, shapeIndex) => {
       const shapePath = `slides[${slideIndex}].shapes[${shapeIndex}]`;

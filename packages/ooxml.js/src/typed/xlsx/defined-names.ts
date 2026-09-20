@@ -5,6 +5,7 @@ import type {
 } from "document-schema.js";
 import type { Package } from "../../model/package";
 import { attr, childrenWithTag, rootElement, textContent } from "../util";
+import { workbookPartPath } from "./parts";
 import {
   columnIndexToLetters,
   columnLettersToIndex,
@@ -26,7 +27,7 @@ export function readDefinedNamesBySheet(
   pkg: Package,
 ): Map<number, SheetDefinedNames> {
   const map = new Map<number, SheetDefinedNames>();
-  const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
+  const workbook = rootElement(pkg.parts[workbookPartPath(pkg)]);
   if (workbook === undefined) {
     return map;
   }
@@ -62,7 +63,7 @@ export function readDefinedNamesBySheet(
 
 // Every defined name in xl/workbook.xml as the schema's own ContentDefinedName carries it: refersTo VERBATIM (the element's own text, in Excel's own formula language -- the identical "no closed grammar without a general formula engine" reasoning ContentSheetCell.formula already records), and a sheet-scoped name's localSheetId mapped onto scopeSheetIndex, which indexes the SAME <sheets> document order this package reads sheets in. The _xlnm built-ins are included rather than filtered: they are definedName entries like any other, and the two print names the print-settings reader additionally promotes into structured printRange/repeatRows fields still belong to the workbook's own name list. Order is the file's own document order, the only order a same-format writer can hope to reproduce.
 export function readWorkbookNames(pkg: Package): ContentDefinedName[] {
-  const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
+  const workbook = rootElement(pkg.parts[workbookPartPath(pkg)]);
   if (workbook === undefined) {
     return [];
   }
