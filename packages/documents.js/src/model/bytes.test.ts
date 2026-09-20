@@ -198,39 +198,64 @@ describe("bytes", () => {
     expect(OdtBytesSchema.safeParse(deflated).success).toBe(false);
   });
 
-  // MarkdownBytesSchema is architecturally different from every schema above -- it asserts nothing about format structure at all (no header, no magic bytes, no reserved byte sequence exists for markdown), only well-formed UTF-8.
-  it("MarkdownBytesSchema accepts well-formed UTF-8 text, including bytes that would fail every OTHER schema above", () => {
+  // MarkdownBytesSchema is architecturally different from every schema above: it asserts nothing about format structure at all (no header, no magic bytes, no reserved byte sequence exists for markdown), only that the bytes are text in some character encoding.
+  it("MarkdownBytesSchema accepts text, including bytes that would fail every OTHER schema above", () => {
     const markdownBytes = new TextEncoder().encode(
       "# Hello\n\nSome *markdown* text.",
     );
     expect(MarkdownBytesSchema.parse(markdownBytes)).toBe(markdownBytes);
-    // Plain text is not a ZIP and has no %PDF- header -- every other schema in this file rejects it, MarkdownBytesSchema is the one exception.
+    // Plain text is not a ZIP and has no %PDF- header, so every other schema in this file rejects it and MarkdownBytesSchema is the one exception.
     expect(DocxBytesSchema.safeParse(markdownBytes).success).toBe(false);
     expect(PdfBytesSchema.safeParse(markdownBytes).success).toBe(false);
   });
 
-  it("MarkdownBytesSchema rejects malformed UTF-8", () => {
-    const malformed = new Uint8Array([0xff, 0xfe, 0x00]);
-    expect(MarkdownBytesSchema.safeParse(malformed).success).toBe(false);
+  it("MarkdownBytesSchema accepts a file saved in the Windows code page, which no longer has to be UTF-8", () => {
+    const windows1252 = Uint8Array.of(0x23, 0x20, 0x43, 0x61, 0x66, 0xe9);
+    expect(MarkdownBytesSchema.safeParse(windows1252).success).toBe(true);
   });
 
-  it("MarkdownBytesSchema accepts real docx/pdf/odt bytes too, since UTF-8 well-formedness says nothing about format structure", () => {
-    // Not a claim that docx/pdf/odt bytes ARE markdown -- only that this schema's one check (well-formed UTF-8) cannot distinguish them, unlike every structure-checking schema above. zipBytes/pdfBytes/odtBytes are all valid UTF-8 byte sequences even though they are binary formats.
-    expect(MarkdownBytesSchema.safeParse(zipBytes).success).toBe(true);
+  it("MarkdownBytesSchema accepts UTF-16 behind a byte order mark", () => {
+    const utf16 = Uint8Array.of(0xff, 0xfe, 0x23, 0x00, 0x20, 0x00, 0x41, 0x00);
+    expect(MarkdownBytesSchema.safeParse(utf16).success).toBe(true);
+  });
+
+  it("MarkdownBytesSchema rejects real docx bytes, which are binary whatever encoding is tried", () => {
+    // The judgement this schema can honestly make without a magic number is whether the bytes are text at all, and a ZIP is not: its local file header carries NUL bytes, which belong to no text document format. It passed while the check was UTF-8 well-formedness alone, which it happens to satisfy.
+    expect(MarkdownBytesSchema.safeParse(zipBytes).success).toBe(false);
+    // pdfBytes is deliberately NOT asserted here alongside it: that fixture is the UTF-8 encoding of a string spelling a PDF header, so it genuinely is text, and a schema with no format check of its own has nothing to say against it. A real PDF, whose object streams carry NULs, is refused (byte-codec's own decodeText tests cover that case with the stream bytes intact).
     expect(MarkdownBytesSchema.safeParse(pdfBytes).success).toBe(true);
   });
 
-  // CsvBytesSchema shares MarkdownBytesSchema's architecture exactly: RFC 4180 defines no magic bytes either, so the schema checks only well-formed UTF-8 -- the same validation gap, stated here for the same reason.
-  it("CsvBytesSchema accepts well-formed UTF-8 csv text, including bytes that would fail every structure-checking schema above", () => {
+  it("MarkdownBytesSchema rejects bytes matching no supported encoding", () => {
+    const undecodable = new Uint8Array([0x41, 0x81, 0x42]);
+    expect(MarkdownBytesSchema.safeParse(undecodable).success).toBe(false);
+  });
+
+  // CsvBytesSchema shares MarkdownBytesSchema's architecture exactly: RFC 4180 defines no magic bytes either, so the schema checks only whether the bytes are text, stated here for the same reason.
+  it("CsvBytesSchema accepts csv text, including bytes that would fail every structure-checking schema above", () => {
     const csvTextBytes = new TextEncoder().encode("Name,Amount\nWidget,42.5\n");
     expect(CsvBytesSchema.parse(csvTextBytes)).toBe(csvTextBytes);
     expect(DocxBytesSchema.safeParse(csvTextBytes).success).toBe(false);
     expect(PdfBytesSchema.safeParse(csvTextBytes).success).toBe(false);
   });
 
-  it("CsvBytesSchema rejects malformed UTF-8", () => {
-    expect(
-      CsvBytesSchema.safeParse(new Uint8Array([0xff, 0xfe, 0x00])).success,
-    ).toBe(false);
+  it("CsvBytesSchema accepts an Excel-style windows-1252 export", () => {
+    const excelExport = Uint8Array.of(
+      0x4e,
+      0x6f,
+      0x6d,
+      0x0a,
+      0x43,
+      0x61,
+      0x66,
+      0xe9,
+      0x0a,
+    );
+    expect(CsvBytesSchema.safeParse(excelExport).success).toBe(true);
+  });
+
+  it("CsvBytesSchema rejects bytes that are not text", () => {
+    const png = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
+    expect(CsvBytesSchema.safeParse(png).success).toBe(false);
   });
 });
