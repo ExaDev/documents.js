@@ -271,6 +271,16 @@ Release, CI, and commit-message conventions are workspace-wide, not package-loca
 
 Conventional Commits, enforced workspace-wide by commitlint through a root `commit-msg` hook. Work inside `packages/rtf-codec/`; see [CONTRIBUTING.md](../../CONTRIBUTING.md) for the shared git hooks and history conventions.
 
+## Removed: base64 from `rtf-codec/base64`
+
+`rtf-codec/base64` still exists and still exports this package's own `base64ToBytes` (which returns `undefined` rather than throwing, see above) and its hex conversion, but it no longer exports `bytesToBase64`. That encoder was this package's own copy of one every codec carried separately, and it lives in [`byte-codec`](../byte-codec/README.md) now, as one implementation ([ExaDev/documents.js#1282](https://github.com/ExaDev/documents.js/issues/1282)).
+
+Import from `byte-codec` directly:
+
+```ts
+import { base64ToBytes, bytesToBase64 } from "byte-codec";
+```
+
 ## License
 
 MIT
