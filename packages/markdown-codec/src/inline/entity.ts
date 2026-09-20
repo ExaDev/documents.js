@@ -35,7 +35,7 @@ function codepointToString(codepoint: number): string {
 }
 
 // Matches an entity or numeric character reference starting at `start` (which must be the `&`). Returns undefined when what follows is not a valid reference at all -- a bare `&` is ordinary text, never an error.
-// No separate "does text[start] even open with '&'?" guard: ENTITY_PATTERN's own source is anchored at `^&`, so a slice that doesn't open with '&' can never match regardless -- the same reasoning src/html/html.ts's matchHtmlTag/matchHtmlBlockStart apply to their own leading '<' checks.
+// No separate "does text[start] even open with '&'?" guard: ENTITY_PATTERN's own source is anchored at `^&`, so a slice that doesn't open with '&' can never match regardless — the same reasoning src/html/html.ts's matchHtmlTag/matchHtmlBlockStart apply to their own leading '<' checks.
 export function matchEntity(
   text: string,
   start: number,
@@ -64,7 +64,7 @@ export function matchEntity(
 
 // Resolves backslash escapes and character references inside a string that is NOT itself parsed as inline content -- a link destination or a link title. spec 0.31.2: "backslash escapes and entity and numeric character references are recognized" in both. This is a flattening operation with no node structure of its own, which is exactly why it lives here rather than being expressed in terms of the inline parser's own dispatch loop.
 export function unescapeString(text: string): string {
-  // No "does text hold neither '\\' nor '&' at all?" fast path: for a string with neither, the loop below never takes the backslash/entity branches, so it does nothing but copy every character straight through -- reconstructing `text` exactly, just one character-append at a time rather than in a single return. The fast path changed how much work this function did for that input, never what it produced.
+  // No "does text hold neither '\\' nor '&' at all?" fast path: for a string with neither, the loop below never takes the backslash/entity branches, so it does nothing but copy every character straight through — reconstructing `text` exactly, just one character-append at a time rather than in a single return. The fast path changed how much work this function did for that input, never what it produced.
   let result = "";
   let index = 0;
   // text.charAt(index) !== "", not index < text.length: the two are equivalent for every real index (charAt already returns "" one past the end, which never matches "\\" or "&" either), but only this spelling's own mutation is actually reachable by a test.
@@ -81,7 +81,7 @@ export function unescapeString(text: string): string {
       index += 1;
       continue;
     }
-    // No separate char === "&" guard: matchEntity's own ENTITY_PATTERN is anchored at "^&" (see its own comment above), so calling it at a non-"&" index can never match regardless -- the same reasoning already applied to matchEntity's own leading-character check.
+    // No separate char === "&" guard: matchEntity's own ENTITY_PATTERN is anchored at "^&" (see its own comment above), so calling it at a non-"&" index can never match regardless — the same reasoning already applied to matchEntity's own leading-character check.
     const entity = matchEntity(text, index);
     if (entity !== undefined) {
       result += entity.value;

@@ -1,4 +1,4 @@
-// Direct tests for extractDefinitions -- the higher-level parseMarkdown suite (src/block/block.test.ts) exercises this through whole documents, which never isolates the exact cursor arithmetic that decides where one definition ends and the residual paragraph content begins.
+// Direct tests for extractDefinitions — the higher-level parseMarkdown suite (src/block/block.test.ts) exercises this through whole documents, which never isolates the exact cursor arithmetic that decides where one definition ends and the residual paragraph content begins.
 
 import { describe, expect, it } from "vitest";
 import { extractDefinitions } from "./definitions";

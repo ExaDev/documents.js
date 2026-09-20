@@ -680,7 +680,7 @@ describe("headings", () => {
 
   describe("an explicit headingStyle: 'setext' request against a break-free heading that is unsafe on its own terms is still refused, with a diagnostic (ExaDev/documents.js#940)", () => {
     // Every OTHER unsafe-for-setext test in this file exercises a heading whose text embeds an actual line break -- the break itself is what makes setext a candidate rendering at all when headingStyle is left at its 'atx' default. This heading has NO embedded break anywhere: headingStyle: 'setext' is the ONLY reason setext is even attempted, and unsafeSetextBreakReason's own first-line-indentation check applies exactly as much to a single-line heading as to a multi-line one. Pre-fix, every heading-related diagnostic sat behind an `embedsLineBreak` guard, so this exact shape silently fell through to a bare, unmarked ATX heading -- an explicit caller preference honoured in appearance (setext was refused, correctly) but with zero signal that it happened.
-    it("does NOT fire HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT for a break-free, 4+-column-indented level-3 heading even with headingStyle: 'setext' requested -- level <= MAX_SETEXT_LEVEL is its own genuine gate, not implied by setextRequested and unsafeForSetext alone", () => {
+    it("does NOT fire HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT for a break-free, 4+-column-indented level-3 heading even with headingStyle: 'setext' requested — level <= MAX_SETEXT_LEVEL is its own genuine gate, not implied by setextRequested and unsafeForSetext alone", () => {
       const collector = createDiagnosticCollector();
       const written = emitMarkdown(
         doc([
@@ -708,7 +708,7 @@ describe("headings", () => {
       ).toBe(false);
     });
 
-    it("does NOT fire HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT for a break-free, 4+-column-indented level-1 heading when setext was never requested at all -- unsafeForSetext alone, with setextRequested false, must not enter the unsafe-diagnostic branch", () => {
+    it("does NOT fire HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT for a break-free, 4+-column-indented level-1 heading when setext was never requested at all — unsafeForSetext alone, with setextRequested false, must not enter the unsafe-diagnostic branch", () => {
       const collector = createDiagnosticCollector();
       const written = emitMarkdown(
         doc([
@@ -893,7 +893,7 @@ describe("headings", () => {
       expect(headingBlock.runs.map((run) => run.text).join("")).toBe("foo");
     });
 
-    it("refuses to promote a break-free heading whose ENTIRE text is an ordered-list marker not starting at 1 -- interruptsSetextParagraph's first-line call must use the genuine block-start sense (any start number counts), not the paragraph-continuation sense (only start-at-1 counts)", () => {
+    it("refuses to promote a break-free heading whose ENTIRE text is an ordered-list marker not starting at 1 — interruptsSetextParagraph's first-line call must use the genuine block-start sense (any start number counts), not the paragraph-continuation sense (only start-at-1 counts)", () => {
       const collector = createDiagnosticCollector();
       const written = emitMarkdown(
         doc([
@@ -918,7 +918,7 @@ describe("headings", () => {
       ).toBe(true);
     });
 
-    it("still safely promotes to setext when a NON-FIRST line is an ordered-list marker not starting at 1 -- interruptsSetextParagraph's non-first-line call must use the paragraph-continuation sense (CommonMark's own exception absorbs it as continuation text), not the block-start sense", () => {
+    it("still safely promotes to setext when a NON-FIRST line is an ordered-list marker not starting at 1 — interruptsSetextParagraph's non-first-line call must use the paragraph-continuation sense (CommonMark's own exception absorbs it as continuation text), not the block-start sense", () => {
       const written = emitMarkdown(
         doc([
           {
@@ -961,7 +961,7 @@ describe("headings", () => {
             d.code ===
             MarkdownDiagnosticCodes.HEADING_STYLE_OVERRIDDEN_FOR_LINE_BREAK,
         );
-        // Unlike the genuinely-absorbed leading-break case above, this break survives losslessly -- the diagnostic must say so, not claim it was absorbed.
+        // Unlike the genuinely-absorbed leading-break case above, this break survives losslessly — the diagnostic must say so, not claim it was absorbed.
         expect(diagnostic?.message).toContain("so the break survives");
         expect(diagnostic?.message).not.toContain("absorbed");
 
@@ -1599,7 +1599,7 @@ describe("math (ExaDev/markdown-codec#53)", () => {
     ).toBe("$$\n$$");
   });
 
-  it("does not render the $$ math shortcut when objectKind disagrees with the document's own kind, even though the document itself is a formula carrying real presentation LaTeX -- both fields must agree, not just the document's own kind", () => {
+  it("does not render the $$ math shortcut when objectKind disagrees with the document's own kind, even though the document itself is a formula carrying real presentation LaTeX — both fields must agree, not just the document's own kind", () => {
     expect(
       emitMarkdown(
         doc([
@@ -1796,7 +1796,7 @@ describe("blockquotes", () => {
     expect(diagnostic?.message).toContain("no markdown syntax");
   });
 
-  it("renders a division transparently (no '> ' wrapping) when only SOME of its wrapped paragraphs carry the dual-carry quote indent, not all of them -- isMaterialisedDivision requires EVERY child to qualify, not just one", () => {
+  it("renders a division transparently (no '> ' wrapping) when only SOME of its wrapped paragraphs carry the dual-carry quote indent, not all of them — isMaterialisedDivision requires EVERY child to qualify, not just one", () => {
     const markdown = emitMarkdown(
       doc([
         {
@@ -1813,7 +1813,7 @@ describe("blockquotes", () => {
         { kind: "constructEnd" },
       ]),
     );
-    // Transparent, not materialised -- so each wrapped paragraph still recovers (or doesn't) its own quote depth independently, exactly as if the division weren't there at all: "quoted" keeps its own '> ' from indentLeftPt, "plain" has none.
+    // Transparent, not materialised — so each wrapped paragraph still recovers (or doesn't) its own quote depth independently, exactly as if the division weren't there at all: "quoted" keeps its own '> ' from indentLeftPt, "plain" has none.
     expect(markdown).toBe("> quoted\n\nplain");
   });
 
@@ -1964,7 +1964,7 @@ describe("lists", () => {
         },
       ]),
     );
-    // stripGlyph must be false here -- the checkbox already came from membership.checked, so this run's own text is ordinary content, never a legacy glyph prefix to strip back off.
+    // stripGlyph must be false here — the checkbox already came from membership.checked, so this run's own text is ordinary content, never a legacy glyph prefix to strip back off.
     expect(markdown).toBe("- [x] ☒ literal text not a glyph to strip");
   });
 
@@ -2032,7 +2032,7 @@ describe("lists", () => {
     expect(markdown.split("\n")).toContain("");
   });
 
-  it("recognises a construct as carrying an item's own itemId when ONLY ONE of its several children actually carries it, not requiring every child to -- constructCarriesListItemId is an ANY match, not an ALL match", () => {
+  it("recognises a construct as carrying an item's own itemId when ONLY ONE of its several children actually carries it, not requiring every child to — constructCarriesListItemId is an ANY match, not an ALL match", () => {
     const markdown = emitMarkdown(
       doc([
         {
@@ -2057,7 +2057,7 @@ describe("lists", () => {
     expect(markdown).toBe("- a\n\n  carries i1\n\n  other");
   });
 
-  it("pops a SIBLING item's own membership off openMemberships before pushing the next one at the SAME level, not just a genuinely deeper one -- a stale sibling entry left on the stack could wrongly absorb a later construct that only carries THAT earlier sibling's own itemId", () => {
+  it("pops a SIBLING item's own membership off openMemberships before pushing the next one at the SAME level, not just a genuinely deeper one — a stale sibling entry left on the stack could wrongly absorb a later construct that only carries THAT earlier sibling's own itemId", () => {
     const markdown = emitMarkdown(
       doc([
         {
@@ -2082,7 +2082,7 @@ describe("lists", () => {
         { kind: "constructEnd" },
       ]),
     );
-    // i1's own membership must already be off the stack once i2 (its sibling at the SAME level) is pushed -- so this construct, which carries only i1's itemId, cannot still be absorbed into the (no-longer-open) i1 item; it fractures out and re-enters as its OWN fresh list region instead (its wrapped paragraph still carries itemId i1, but as a new region, not a continuation of the item above).
+    // i1's own membership must already be off the stack once i2 (its sibling at the SAME level) is pushed — so this construct, which carries only i1's itemId, cannot still be absorbed into the (no-longer-open) i1 item; it fractures out and re-enters as its OWN fresh list region instead (its wrapped paragraph still carries itemId i1, but as a new region, not a continuation of the item above).
     expect(markdown).toBe("- i1\n- i2\n\n- carries i1");
   });
 
@@ -2107,11 +2107,11 @@ describe("lists", () => {
         },
       ]),
     );
-    // No forced blank line before "z": the nested sub-list's own last (and only) item is a CodeBlock, which terminates cleanly -- reading segment.blocks[segment.blocks.length - 1] must actually find that item, not silently report undefined (which would wrongly force a blank line here).
+    // No forced blank line before "z": the nested sub-list's own last (and only) item is a CodeBlock, which terminates cleanly — reading segment.blocks[segment.blocks.length - 1] must actually find that item, not silently report undefined (which would wrongly force a blank line here).
     expect(markdown).toBe("- a\n  - ```\n    b\n    ```\n  z");
   });
 
-  it("needs no forced blank line before a construct whose own FIRST child is an EMPTY, non-division nested construct, in the SAME list item -- emitItemCanInterrupt's construct-recursion base case (an empty children array) defaults to interrupting, exactly like the non-paragraph fallback it mirrors", () => {
+  it("needs no forced blank line before a construct whose own FIRST child is an EMPTY, non-division nested construct, in the SAME list item — emitItemCanInterrupt's construct-recursion base case (an empty children array) defaults to interrupting, exactly like the non-paragraph fallback it mirrors", () => {
     const markdown = emitMarkdown(
       doc([
         {
@@ -2142,7 +2142,7 @@ describe("lists", () => {
     expect(markdown).toBe("- a\n  caption");
   });
 
-  it("needs no forced blank line between an open (styleId-less) paragraph and a following link-construct whose FIRST child is a non-paragraph IMAGE block, in the SAME list item -- a non-paragraph block always interrupts an open paragraph unconditionally, per emitItemCanInterrupt's non-construct fallback", () => {
+  it("needs no forced blank line between an open (styleId-less) paragraph and a following link-construct whose FIRST child is a non-paragraph IMAGE block, in the SAME list item — a non-paragraph block always interrupts an open paragraph unconditionally, per emitItemCanInterrupt's non-construct fallback", () => {
     const markdown = emitMarkdown(
       doc([
         {
@@ -2204,11 +2204,11 @@ describe("lists", () => {
         },
       ]),
     );
-    // No forced blank line before "z": the construct's own last (and only) wrapped block is a CodeBlock, which terminates cleanly -- lastStyleIdOf must actually find that CodeBlock styleId through the construct's own children, not silently report undefined (which would wrongly force a blank line here).
+    // No forced blank line before "z": the construct's own last (and only) wrapped block is a CodeBlock, which terminates cleanly — lastStyleIdOf must actually find that CodeBlock styleId through the construct's own children, not silently report undefined (which would wrongly force a blank line here).
     expect(markdown).toBe("- a\n  ```\n  mid\n  ```\n  z");
   });
 
-  it("renders every block of one itemId as a single item -- a blank line and the continuation indent between blocks, one marker only", () => {
+  it("renders every block of one itemId as a single item — a blank line and the continuation indent between blocks, one marker only", () => {
     const markdown = emitMarkdown(
       doc([
         {
@@ -2264,7 +2264,7 @@ describe("lists", () => {
     expect(markdown).toBe("- a\n- b");
   });
 
-  it("keeps one item per paragraph for memberships with no itemId at all -- the cross-format shape every foreign producer sends", () => {
+  it("keeps one item per paragraph for memberships with no itemId at all — the cross-format shape every foreign producer sends", () => {
     const markdown = emitMarkdown(
       doc([
         {
@@ -2289,7 +2289,7 @@ describe("lists", () => {
       lowerMarkdown(task),
     );
 
-    // A loose multi-block item re-emits with the loose sibling spacing the numId itself records, so the text is not byte-identical to a source whose author ran the sibling tight -- but the reparse reproduces the identical document and a second pass is a fixed point.
+    // A loose multi-block item re-emits with the loose sibling spacing the numId itself records, so the text is not byte-identical to a source whose author ran the sibling tight — but the reparse reproduces the identical document and a second pass is a fixed point.
     const multi = lowerMarkdown("- a\n\n  continuation of a\n- b");
     const written = emitMarkdown(multi);
     expect(lowerMarkdown(written)).toEqual(multi);
@@ -2311,7 +2311,7 @@ describe("lists", () => {
     ) {
       throw new Error("expected three paragraph blocks");
     }
-    // "a" and the fenced code block are ONE item -- same itemId -- while "b" is a genuinely separate sibling item, never sharing it.
+    // "a" and the fenced code block are ONE item — same itemId — while "b" is a genuinely separate sibling item, never sharing it.
     expect(paragraphA.list?.itemId).toBeDefined();
     expect(codeBlock.list?.itemId).toBe(paragraphA.list?.itemId);
     expect(paragraphB.list?.itemId).not.toBe(paragraphA.list?.itemId);
@@ -2321,7 +2321,7 @@ describe("lists", () => {
     expect(lowerMarkdown(written)).toEqual(first);
   });
 
-  it("keeps a construct (blockquote) directly inside a multi-block list item nested inside that item's own contiguous run on write, rather than fracturing it out as separate top-level content -- ExaDev/documents.js#990", () => {
+  it("keeps a construct (blockquote) directly inside a multi-block list item nested inside that item's own contiguous run on write, rather than fracturing it out as separate top-level content — ExaDev/documents.js#990", () => {
     const source = doc([
       {
         kind: "paragraph",
@@ -2737,7 +2737,7 @@ describe("lists", () => {
     expect(headingBlock.runs.map((run) => run.text).join("")).toBe("h");
   });
 
-  it("inserts a blank line between a paragraph and a following Heading2 rendered as setext too, not just Heading1 -- willRenderAsSetext's own level > MAX_SETEXT_LEVEL check must correctly admit level 2 AT the boundary, not treat it the same as a level that exceeds it", () => {
+  it("inserts a blank line between a paragraph and a following Heading2 rendered as setext too, not just Heading1 — willRenderAsSetext's own level > MAX_SETEXT_LEVEL check must correctly admit level 2 AT the boundary, not treat it the same as a level that exceeds it", () => {
     const written = emitMarkdown(
       doc([
         {
@@ -2757,7 +2757,7 @@ describe("lists", () => {
     expect(written).toBe("- a\n\n  h\n  -");
   });
 
-  it("keeps a paragraph and a following Heading3 TIGHT even with headingStyle: 'setext' requested -- level 3 always renders as ATX regardless of the configured style (there is no setext spelling beyond level 2), so willRenderAsSetext must still refuse it rather than treating any level as eligible whenever setext is merely requested", () => {
+  it("keeps a paragraph and a following Heading3 TIGHT even with headingStyle: 'setext' requested — level 3 always renders as ATX regardless of the configured style (there is no setext spelling beyond level 2), so willRenderAsSetext must still refuse it rather than treating any level as eligible whenever setext is merely requested", () => {
     const written = emitMarkdown(
       doc([
         {
@@ -3125,7 +3125,7 @@ describe("lists", () => {
     expect(mathBlock?.kind).toBe("embeddedObject");
   });
 
-  it("needs no forced blank line between a CodeBlock and a following plain paragraph in the SAME tight list item -- a fenced code block's own closing fence terminates cleanly, with nothing left open for the next line to lazily continue", () => {
+  it("needs no forced blank line between a CodeBlock and a following plain paragraph in the SAME tight list item — a fenced code block's own closing fence terminates cleanly, with nothing left open for the next line to lazily continue", () => {
     const source = doc([
       {
         kind: "paragraph",
@@ -3142,7 +3142,7 @@ describe("lists", () => {
     expect(emitMarkdown(source)).toBe("- ```\n  x\n  ```\n  y");
   });
 
-  it("needs no forced blank line between a MathBlock and a following plain paragraph in the SAME tight list item -- a $$ block's own closing delimiter terminates cleanly", () => {
+  it("needs no forced blank line between a MathBlock and a following plain paragraph in the SAME tight list item — a $$ block's own closing delimiter terminates cleanly", () => {
     const source = doc([
       {
         kind: "paragraph",
@@ -3159,7 +3159,7 @@ describe("lists", () => {
     expect(emitMarkdown(source)).toBe("- $$\n  x\n  $$\n  y");
   });
 
-  it("needs no forced blank line between a HorizontalRule and a following plain paragraph in the SAME tight list item -- a thematic break is a single complete line with nothing left open", () => {
+  it("needs no forced blank line between a HorizontalRule and a following plain paragraph in the SAME tight list item — a thematic break is a single complete line with nothing left open", () => {
     const source = doc([
       {
         kind: "paragraph",
@@ -3176,7 +3176,7 @@ describe("lists", () => {
     expect(emitMarkdown(source, { thematicBreakChar: "*" })).toBe("- ***\n  y");
   });
 
-  it("DOES force a blank line between two plain paragraphs sharing an unrecognised, non-quotable, non-clean-terminating styleId in the same tight list item -- src/lower's own reader can only ever have produced this pair from a genuine source blank line, so the write side must reinsert it even though the list itself is tight", () => {
+  it("DOES force a blank line between two plain paragraphs sharing an unrecognised, non-quotable, non-clean-terminating styleId in the same tight list item — src/lower's own reader can only ever have produced this pair from a genuine source blank line, so the write side must reinsert it even though the list itself is tight", () => {
     const source = doc([
       {
         kind: "paragraph",
@@ -3807,7 +3807,7 @@ describe("link and image titles (the `link` construct annotation)", () => {
     );
   });
 
-  it("does NOT render the image-shortcut spelling for a link construct wrapping MORE than one child, even when the first of them is an image -- the mint condition is exactly one child, not merely 'starts with an image'", () => {
+  it("does NOT render the image-shortcut spelling for a link construct wrapping MORE than one child, even when the first of them is an image — the mint condition is exactly one child, not merely 'starts with an image'", () => {
     const collector = createDiagnosticCollector();
     const markdown = emitMarkdown(
       doc([
@@ -3831,7 +3831,7 @@ describe("link and image titles (the `link` construct annotation)", () => {
       ]),
       { sink: collector.sink },
     );
-    // The construct falls through to the generic, transparent rendering -- its own image child renders as ITSELF (a plain data: URI image, not the link-shortcut's own remote-destination spelling), and the caption follows as an ordinary paragraph.
+    // The construct falls through to the generic, transparent rendering — its own image child renders as ITSELF (a plain data: URI image, not the link-shortcut's own remote-destination spelling), and the caption follows as an ordinary paragraph.
     expect(markdown).toBe("![alt](data:image/png;base64,AAAA)\n\ncaption");
     expect(collector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(
       true,
@@ -3996,7 +3996,7 @@ describe("link and image titles (the `link` construct annotation)", () => {
     );
   });
 
-  it("also throws for an invalid run-level construct extent buried inside a TABLE CELL's own paragraph, not just a top-level one -- validateRunConstructExtents must actually recurse into every row's every cell", () => {
+  it("also throws for an invalid run-level construct extent buried inside a TABLE CELL's own paragraph, not just a top-level one — validateRunConstructExtents must actually recurse into every row's every cell", () => {
     const table: ContentTable = {
       kind: "table",
       columnWidthsPt: [100],
@@ -4196,7 +4196,7 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     ).toBe(false);
   });
 
-  it("PARAGRAPH_INDENT_DROPPED also fires for a DEFINED but unrecognised styleId carrying indentLeftPt, not only an absent styleId -- isQuotableStyle's own QUOTABLE_STYLE_IDS/heading check must actually run, not just its undefined short-circuit", () => {
+  it("PARAGRAPH_INDENT_DROPPED also fires for a DEFINED but unrecognised styleId carrying indentLeftPt, not only an absent styleId — isQuotableStyle's own QUOTABLE_STYLE_IDS/heading check must actually run, not just its undefined short-circuit", () => {
     const collector = createDiagnosticCollector();
     const markdown = emitMarkdown(
       doc([
@@ -4518,7 +4518,7 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
 });
 
 describe("quoteDepthOf, longestRunLength, and leadingIndentColumns boundaries", () => {
-  it("treats indentLeftPt: 0 the same as no indentLeftPt at all -- no quote depth, no '>' prefix", () => {
+  it("treats indentLeftPt: 0 the same as no indentLeftPt at all — no quote depth, no '>' prefix", () => {
     expect(
       emitMarkdown(
         doc([
@@ -4550,7 +4550,7 @@ describe("quoteDepthOf, longestRunLength, and leadingIndentColumns boundaries", 
   });
 
   it("expands a leading tab to the correct tab-stop-aligned column count, not merely to SOME value past the 4-column indented-code-block threshold, when the tab is not the first character of the line", () => {
-    // Two leading spaces (column 2) then a tab: the correct tab-stop rule rounds up to the NEXT multiple of 4, landing on column 4 (2 + 2) -- exactly at, not past, CODE_INDENT_COLUMNS. A `%` -> `*` mutation of the tab-stop arithmetic computes 2 + (4 - 2*4) = 2 + -4 = -2 instead, which is NOT >= 4 and would wrongly let this promote to setext.
+    // Two leading spaces (column 2) then a tab: the correct tab-stop rule rounds up to the NEXT multiple of 4, landing on column 4 (2 + 2) — exactly at, not past, CODE_INDENT_COLUMNS. A `%` -> `*` mutation of the tab-stop arithmetic computes 2 + (4 - 2*4) = 2 + -4 = -2 instead, which is NOT >= 4 and would wrongly let this promote to setext.
     const collector = createDiagnosticCollector();
     const written = emitMarkdown(
       doc([
@@ -4592,8 +4592,8 @@ describe("quoteDepthOf, longestRunLength, and leadingIndentColumns boundaries", 
     ).toBe(false);
   });
 
-  it("does not treat a heading's own SECOND line, indented 4+ columns, as an interrupting construct -- CommonMark absorbs indented content as ordinary paragraph continuation, exactly like its own indented-code paragraph-interruption exception requires", () => {
-    // "    - item" would itself match parseListMarker if the leading 4-column indent were not first exempted -- indented content is absorbed as continuation instead, so this must still promote safely to setext rather than being refused as an interrupting list marker.
+  it("does not treat a heading's own SECOND line, indented 4+ columns, as an interrupting construct — CommonMark absorbs indented content as ordinary paragraph continuation, exactly like its own indented-code paragraph-interruption exception requires", () => {
+    // "    - item" would itself match parseListMarker if the leading 4-column indent were not first exempted — indented content is absorbed as continuation instead, so this must still promote safely to setext rather than being refused as an interrupting list marker.
     const written = emitMarkdown(
       doc([
         {
@@ -4693,7 +4693,7 @@ describe("renderConstruct's own unrepresentable shapes", () => {
         { kind: "paragraph", runs: [{ text: "b" }] },
       ]),
     );
-    // Exactly one blank line between "a" and "b" -- not two, which pushing the page break's own empty string into the joined parts array would produce.
+    // Exactly one blank line between "a" and "b" — not two, which pushing the page break's own empty string into the joined parts array would produce.
     expect(markdown).toBe("a\n\nb");
   });
 
@@ -4713,7 +4713,7 @@ describe("renderConstruct's own unrepresentable shapes", () => {
         { kind: "constructEnd" },
       ]),
     );
-    // Exactly one level of '> ' from the division itself -- NOT '> > x', which double-counting the paragraph's own indentLeftPt (72pt, two quote levels' worth) on top of the division's own wrapping would produce.
+    // Exactly one level of '> ' from the division itself — NOT '> > x', which double-counting the paragraph's own indentLeftPt (72pt, two quote levels' worth) on top of the division's own wrapping would produce.
     expect(markdown).toBe("> x");
   });
 
@@ -4739,7 +4739,7 @@ describe("renderConstruct's own unrepresentable shapes", () => {
         },
       ]),
     );
-    // A STANDALONE paragraph after the division closes must recover its own '> ' from indentLeftPt alone -- a decrement that failed to restore divisionDepth to 0 would leave this second paragraph's own quote prefix wrongly suppressed, rendering plain "y" instead of "> y".
+    // A STANDALONE paragraph after the division closes must recover its own '> ' from indentLeftPt alone — a decrement that failed to restore divisionDepth to 0 would leave this second paragraph's own quote prefix wrongly suppressed, rendering plain "y" instead of "> y".
     expect(markdown).toBe("> x\n\n> y");
   });
 

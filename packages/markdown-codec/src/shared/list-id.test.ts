@@ -92,7 +92,7 @@ describe("mintListNumId / parseListNumId", () => {
     expect(mintedListType("md1:ordered@7+task")).toBe("ordered");
   });
 
-  it("ignores a start value on a bullet mint -- the suffix is ordered-only", () => {
+  it("ignores a start value on a bullet mint — the suffix is ordered-only", () => {
     const state = createNumIdMintState();
     expect(
       mintListNumId(state, {
@@ -111,7 +111,7 @@ describe("mintListNumId / parseListNumId", () => {
     ).toBe("md1:ordered");
   });
 
-  it("ignores a numeric @N suffix on a bullet numId when parsing -- start is ordered-only", () => {
+  it("ignores a numeric @N suffix on a bullet numId when parsing — start is ordered-only", () => {
     expect(parseListNumId("md1:bullet@3")).toEqual({
       type: "bullet",
       start: undefined,

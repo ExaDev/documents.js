@@ -1,4 +1,4 @@
-// Direct tests for the corpus loader's own type guards, which a well-formed vendored spec.json never exercises the failure side of -- loadSpecExamples' own "not an array of {markdown, html, example, section} examples" throw only fires against malformed input, so pinning it means testing the guard functions themselves rather than the loader end to end.
+// Direct tests for the corpus loader's own type guards, which a well-formed vendored spec.json never exercises the failure side of — loadSpecExamples' own "not an array of {markdown, html, example, section} examples" throw only fires against malformed input, so pinning it means testing the guard functions themselves rather than the loader end to end.
 
 import type * as NodeFs from "node:fs";
 import { describe, expect, it, vi } from "vitest";
@@ -31,7 +31,7 @@ describe("isSpecExample", () => {
     expect(isSpecExample(42)).toBe(false);
   });
 
-  it('rejects a function even when it carries all four fields with the right types -- typeof a function is "function", never "object"', () => {
+  it('rejects a function even when it carries all four fields with the right types — typeof a function is "function", never "object"', () => {
     // Cast is unavoidable: TypeScript has no narrower type for "a function with these extra own properties attached" than a manual intersection, and Object.assign would build it unsoundly (banned by exadev/no-object-assign).
     const fn = (() => {}) as (() => void) & typeof VALID_EXAMPLE;
     fn.markdown = VALID_EXAMPLE.markdown;
