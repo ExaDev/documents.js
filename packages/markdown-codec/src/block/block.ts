@@ -61,9 +61,6 @@ const TASK_LIST_MARKER_PATTERN = /^\[([ xX])\][ \t]/;
 const NUL_REPLACEMENT = "�";
 const NUL_PATTERN = /\0/g;
 
-// A cheap first filter before the block-start list is tried at all: no block start, and no paragraph promotion, can begin with any other character. `|` and `:` are here for the GFM table delimiter row (`| --- |`, `:-: | ---:`), the only construct in this package that can start with either. `$` is here for a $$ math block's own opening line (ExaDev/markdown-codec#53), and `[` for a footnote definition's own `[^label]:` marker (ExaDev/markdown-codec#66).
-const MAYBE_SPECIAL_PATTERN = /^[#$`~*+_=<>[0-9|:-]/;
-
 // spec 0.31.2, "ATX headings": one to six `#` characters, followed by spaces/tabs or the end of the line. Exported for src/emit/emit.ts's own setext-safety check (the setext grammar's third clause, spec 0.31.2 "Setext headings": a non-first line of a would-be setext heading's text may not itself be interpretable as an ATX heading among other constructs) -- reusing this pattern rather than restating it there is what keeps the write side's promotion refusal and this module's own reparse from ever drifting apart.
 export const ATX_MARKER_PATTERN = /^#{1,6}(?:[ \t]+|$)/;
 const ATX_ONLY_CLOSING_SEQUENCE_PATTERN = /^[ \t]*#+[ \t]*$/;
@@ -75,7 +72,9 @@ const CLOSING_CODE_FENCE_PATTERN = /^(?:`{3,}|~{3,})(?=[ \t]*$)/;
 
 // Pandoc/GitHub math-extension display math (ExaDev/markdown-codec#53): a line consisting of exactly $$, optionally followed by trailing spaces/tabs and nothing else -- deliberately stricter than the code-fence pattern above (no "info string", no variable length): both the opening and the closing line must match this exact shape, which is what makes a bare "$$" line on its own unambiguous rather than colliding with GFM's own single-dollar-free inline math (this package never adds inline $$ recognition at all, only \( \)). Exported for the same setext-safety reuse as ATX_MARKER_PATTERN above: a $$ line interrupts an open paragraph exactly as a code fence does (see src/emit/emit.ts's own canInterruptOpenParagraph), so a would-be setext heading's own line matching it is just as much a paragraph-interrupting construct as the six CommonMark names explicitly.
 export const MATH_BLOCK_MARKER_PATTERN = /^\$\$[ \t]*$/;
-const MATH_BLOCK_MARKER_LENGTH = 2;
+
+// The line ending addLine puts after every line it accumulates, whatever the source line itself ended with (see addLine, and the note on BLOCK_EDGE_SPACE_OR_TAB_PATTERN below for why it is there at all).
+const ACCUMULATED_LINE_ENDING = "\n";
 
 // spec 0.31.2, "Setext headings": a sequence of `=` or of `-`, optionally followed by spaces/tabs, and nothing else.
 const SETEXT_UNDERLINE_PATTERN = /^(?:=+|-+)[ \t]*$/;
@@ -154,8 +153,8 @@ class BlockParser {
   // The tip as it stood before the current line was processed, and the deepest block that line matched -- together they say exactly which blocks the line failed to continue, which closeUnmatchedBlocks then closes.
   private oldTip: BlockNode = this.document;
   private lastMatchedContainer: BlockNode = this.document;
-  private allClosed = true;
-  private line = new LineCursor("");
+  // No initial value: incorporateLine constructs the line's own cursor as its first act, so every read below happens against the line currently being processed and a seed here could never be observed. LineCursor.lineIsBlank carries no default for the same reason (src/block/line.ts).
+  private line!: LineCursor;
   private lineNumber = 0;
   // Depth of `this.tip` below `this.document` -- maintained incrementally (incremented in addChild, decremented in finalize) rather than walked from `parent` on every check, so the guard costs nothing per line for ordinary, shallow documents.
   private nestingDepth = 0;
@@ -180,7 +179,8 @@ class BlockParser {
         this.incorporateLine(text);
       }
     }
-    while (this.tip.open) {
+    // Close every block the input left open, innermost first: finalize moves the tip to the closed block's own parent, so this walks up the open chain and stops at the document. The document itself is deliberately never finalised: it is the one block that never went through addChild, so leaving it out is what lets finalize decrement the nesting depth unconditionally, and its own finalizeContent case does nothing anyway.
+    while (this.tip !== this.document) {
       this.reportUnterminatedAtEof(this.tip);
       this.finalize(this.tip);
     }
@@ -189,7 +189,8 @@ class BlockParser {
 
   // Recover-tier diagnostics for a leaf block that reached end-of-input without ever meeting its own proper closing condition: a fenced code block whose closing fence never arrived, or an HTML block of type 1-5 (whose end condition is a pattern in the line's own text, not a blank line) that reached EOF without ever matching it. Types 6/7 end at a blank line OR at EOF alike -- both are the block's own ordinary, spec-legal end condition, so EOF is not a diagnostic there.
   private reportUnterminatedAtEof(node: BlockNode): void {
-    if (node.kind === "codeBlock" && node.fenced) {
+    // `fenced` is set by the fenced-code start and by nothing else, so it identifies the block on its own, with no kind to test alongside it.
+    if (node.fenced) {
       this.sink({
         code: MarkdownDiagnosticCodes.UNCLOSED_FENCE,
         severity: "warning",
@@ -230,7 +231,6 @@ class BlockParser {
       return;
     }
 
-    this.allClosed = matched === this.oldTip;
     this.lastMatchedContainer = matched;
 
     this.addTextToContainer(this.openNewBlocks(matched));
@@ -246,11 +246,9 @@ class BlockParser {
       }
       this.line.findNextNonspace();
       const result = this.continueBlock(lastChild);
-      if (result === "finished") {
-        return undefined;
-      }
-      if (result === "not-matched") {
-        return container;
+      if (result !== "matched") {
+        // 'finished': the block took this line as its own closing delimiter and closed itself on it, so there is nothing left of the line for anything to see. 'not-matched': the line does not continue `lastChild`, so `container` is the deepest block it does continue.
+        return result === "finished" ? undefined : container;
       }
       container = lastChild;
     }
@@ -399,13 +397,6 @@ class BlockParser {
       acceptsLines(container.kind);
     while (!matchedLeaf) {
       this.line.findNextNonspace();
-      if (
-        !this.line.indented &&
-        !MAYBE_SPECIAL_PATTERN.test(this.line.restFromNextNonspace())
-      ) {
-        this.line.advanceToNextNonspace();
-        break;
-      }
       const result = this.tryBlockStart(container);
       if (result === "none") {
         this.line.advanceToNextNonspace();
@@ -417,7 +408,7 @@ class BlockParser {
     return container;
   }
 
-  // The fixed precedence order. See this module's own top-of-file note for what depends on it.
+  // The fixed precedence order. See this module's own top-of-file note for what depends on it. Each start declines on its own, on the line's indentation or on its first character, before doing any real work, so the list is a complete answer for every line, ordinary paragraph text included.
   private tryBlockStart(container: BlockNode): BlockStartResult {
     const starts = [
       () => this.tryBlockquoteStart(),
@@ -425,7 +416,7 @@ class BlockParser {
       () => this.tryCodeFenceStart(),
       () => this.tryMathBlockStart(),
       () => this.tryFootnoteDefinitionStart(container),
-      () => this.tryHtmlBlockStart(container),
+      () => this.tryHtmlBlockStart(),
       () => this.tryPromoteParagraph(container),
       () => this.tryThematicBreakStart(),
       () => this.tryListItemStart(container),
@@ -458,7 +449,6 @@ class BlockParser {
     if (match === null) {
       return "none";
     }
-    this.line.advanceToNextNonspace();
     this.closeUnmatchedBlocks();
     const heading = this.addChild("heading");
     heading.level = headingLevelOf(match[0].trim().length);
@@ -467,6 +457,7 @@ class BlockParser {
       .slice(match[0].length)
       .replace(ATX_ONLY_CLOSING_SEQUENCE_PATTERN, "")
       .replace(ATX_TRAILING_CLOSING_SEQUENCE_PATTERN, "");
+    // The whole line is the heading, its own leading indentation included, so there is nothing left for any later step to read a position out of.
     this.line.advanceToEndOfLine();
     return "leaf";
   }
@@ -495,7 +486,7 @@ class BlockParser {
     return "leaf";
   }
 
-  // A $$ line -- the whole line, nothing else (MATH_BLOCK_MARKER_PATTERN) -- opens a math block, interrupting an open paragraph exactly as a code fence does. The cursor advances past "$$" only, not to end of line, leaving whatever (should only be trailing whitespace) remains as the block's own first content line -- finalizeMathBlock strips that first line back off, mirroring finalizeCodeBlock's own info-string slot.
+  // A $$ line, meaning the whole line and nothing else (MATH_BLOCK_MARKER_PATTERN), opens a math block, interrupting an open paragraph exactly as a code fence does. The whole opening line is consumed here, unlike a code fence's own opening line: the marker pattern has already matched the line to its end, so there is nothing after the marker that could be an info string or content. What the block accumulates is therefore exactly its literal, once the line ending addLine appends to that consumed opening line is dropped (finalizeMathBlock).
   private tryMathBlockStart(): BlockStartResult {
     if (this.line.indented) {
       return "none";
@@ -505,8 +496,7 @@ class BlockParser {
     }
     this.closeUnmatchedBlocks();
     this.addChild("mathBlock");
-    this.line.advanceToNextNonspace();
-    this.line.advance(MATH_BLOCK_MARKER_LENGTH);
+    this.line.advanceToEndOfLine();
     return "leaf";
   }
 
@@ -559,14 +549,12 @@ class BlockParser {
     );
   }
 
-  private tryHtmlBlockStart(container: BlockNode): BlockStartResult {
-    if (this.line.indented || this.line.peekNextNonspace() !== "<") {
+  private tryHtmlBlockStart(): BlockStartResult {
+    if (this.line.indented) {
       return "none";
     }
-    // Start condition 7 may not interrupt a paragraph -- neither the paragraph this line would break out of, nor one this line could instead continue lazily.
-    const interruptsParagraph =
-      container.kind === "paragraph" ||
-      (!this.allClosed && !this.line.blank && this.tip.kind === "paragraph");
+    // Start condition 7 may not interrupt a paragraph: neither the paragraph this line would break out of, nor one this line could instead continue lazily. One test covers both, because a paragraph is a leaf. While one is open it IS the tip, whether the line reached it (the first case) or stopped at some container above it (the second).
+    const interruptsParagraph = this.tip.kind === "paragraph";
     const type = matchHtmlBlockStart(
       this.line.restFromNextNonspace(),
       interruptsParagraph,
@@ -581,6 +569,8 @@ class BlockParser {
   }
 
   // The paragraph-promotion hook. Both constructs it covers convert an ALREADY-OPEN paragraph because of the line that follows it, rather than starting a block of their own from that line.
+  //
+  // Neither promotion closes unmatched blocks, and neither needs to: a paragraph is a leaf, so an open one is always the tip, and this hook only runs when the line's own continuation walk reached that very paragraph, which is to say when there is nothing left open below the deepest block the line matched.
   //
   // Precedence between the two, and against the thematic-break matcher that runs after this hook: a bare `---` is genuinely ambiguous between a thematic break, a setext level-2 underline, and -- on the face of the GFM prose, which defines a row as cells "separated by pipes" and so allows a one-cell row with no pipe at all -- a single-column table delimiter row. It is resolved by testing the setext underline FIRST and by requiring a delimiter row to contain a pipe (see src/block/table.ts), which between them make the three cases disjoint rather than merely ordered: `---` is never a delimiter row, `--- | ---` is never a setext underline, and a thematic break is only ever reached when the open paragraph rejected both.
   private tryPromoteParagraph(container: BlockNode): BlockStartResult {
@@ -598,7 +588,6 @@ class BlockParser {
     if (match === null) {
       return "none";
     }
-    this.closeUnmatchedBlocks();
     // Definitions at the front of the paragraph are consumed here rather than at paragraph finalisation, since what is left decides whether there is a heading at all: `[foo]: /url` followed by `---` is a definition and a thematic break, not an empty heading.
     paragraph.content = extractDefinitions(
       paragraph.content,
@@ -638,12 +627,11 @@ class BlockParser {
       return "none";
     }
 
-    this.closeUnmatchedBlocks();
     paragraph.content = lines
       .slice(0, -2)
       .map((text) => `${text}\n`)
       .join("");
-    this.finalize(paragraph);
+    // The paragraph is closed by addChild rather than here: a paragraph cannot contain a table, so the table's own start walks the tip up past it, finalising it on the way and leaving whatever is left of the paragraph as the table's preceding sibling.
     const table = this.addChild("table");
     table.alignments = alignments;
     table.headerLine = headerLine;
@@ -699,8 +687,8 @@ class BlockParser {
 
   // Step 3: whatever is left of the line becomes content.
   private addTextToContainer(container: BlockNode): void {
-    if (!this.allClosed && !this.line.blank && this.tip.kind === "paragraph") {
-      // Lazy continuation: the line failed to continue some enclosing container, but it is ordinary paragraph text, so the paragraph absorbs it and nothing closes.
+    // An open paragraph is always the tip, so any non-blank line reaching this point is that paragraph's own next line: either the continuation walk reached the paragraph itself, or it stopped at some container above it and this is LAZY CONTINUATION, where the paragraph absorbs the line and nothing closes. The two are one step, not two: neither closes anything, and neither records a blank line, since the line is not one.
+    if (this.tip.kind === "paragraph" && !this.line.blank) {
       this.addLine();
       return;
     }
@@ -723,22 +711,22 @@ class BlockParser {
       return;
     }
     if (!this.line.atEnd && !this.line.blank) {
+      // No advanceToNextNonspace before the line is added: this branch is only ever reached through openNewBlocks' own "nothing starts here" exit, which has already moved the cursor to the line's first non-space character.
       this.addChild("paragraph");
-      this.line.advanceToNextNonspace();
       this.addLine();
     }
   }
 
-  // A block quote's own lines are never blank (they start with `>`), a fenced code block's blank lines are content rather than separators, and an empty list item's first blank line is the one the spec explicitly allows -- none of the three may make a list loose. Every other blank line is recorded on the whole open chain, since a blank line deep inside a list separates the blocks of every ancestor it sits in.
+  // A block quote's own lines are never blank (they start with `>`), a fenced block's blank lines are content rather than separators (`fenced` is set by the fenced-code start and by nothing else, so it names that block on its own), and a list item is never itself the block a blank line separates. None of the three may make a list loose. Every other blank line is recorded on the whole open chain, since a blank line deep inside a list separates the blocks of every ancestor it sits in.
+  //
+  // The list-item case covers both halves of the spec's own rule with one test, because a blank line reaches this function with an item as its deepest matched container in exactly two situations. An item that already has content records the blank line on its own last child instead (the lastLineBlank assignment in addTextToContainer above), which is the block the separation is really between and the one endsWithBlankLine finds by descending (src/block/list.ts). An item with no content at all can only be one whose own marker is on this very line, since continueListItem refuses a blank line for a childless item, and that first blank line is the one the spec explicitly allows an item to begin with.
   private recordBlankLineForTightness(container: BlockNode): void {
     const blank =
       this.line.blank &&
       !(
         container.kind === "blockquote" ||
-        (container.kind === "codeBlock" && container.fenced) ||
-        (container.kind === "listItem" &&
-          container.children.length === 0 &&
-          container.startLine === this.lineNumber)
+        container.fenced ||
+        container.kind === "listItem"
       );
     for (
       let node: BlockNode | undefined = container;
@@ -750,7 +738,7 @@ class BlockParser {
   }
 
   private addLine(): void {
-    this.tip.content += `${this.line.rest()}\n`;
+    this.tip.content += `${this.line.rest()}${ACCUMULATED_LINE_ENDING}`;
   }
 
   private addChild(kind: BlockNodeKind): BlockNode {
@@ -767,10 +755,8 @@ class BlockParser {
     return node;
   }
 
+  // Closes every block the current line failed to continue, innermost first. The walk up from `oldTip` stops at the deepest block the line did match, so calling this twice in one line is safe: the second call finds the two already equal and does nothing.
   private closeUnmatchedBlocks(): void {
-    if (this.allClosed) {
-      return;
-    }
     while (this.oldTip !== this.lastMatchedContainer) {
       const parent = this.oldTip.parent;
       this.finalize(this.oldTip);
@@ -779,18 +765,15 @@ class BlockParser {
       }
       this.oldTip = parent;
     }
-    this.allClosed = true;
   }
 
   private finalize(node: BlockNode): void {
     const above = node.parent;
     node.open = false;
     this.finalizeContent(node);
-    // The document itself is never pushed through addChild, so it never incremented nestingDepth -- only a real child's own close pays back the push that opened it.
-    if (node !== this.document) {
-      this.nestingDepth -= 1;
-    }
-    // The document has no parent: closing it leaves the tip on the now-closed root, which is exactly the terminating condition parse()'s own close-everything loop tests.
+    // Every block that reaches here was pushed through addChild, which is what incremented nestingDepth. The document, the one block that was not, is never finalised (see parse).
+    this.nestingDepth -= 1;
+    // A node whose own parent is gone, as a paragraph replaced in place by a promotion is, leaves the tip on the document rather than nowhere.
     this.tip = above ?? this.document;
   }
 
@@ -823,8 +806,6 @@ class BlockParser {
       case "list":
         finalizeListTightness(node);
         return;
-      default:
-        return;
     }
   }
 
@@ -839,10 +820,9 @@ class BlockParser {
     node.literal = node.content.slice(breakIndex + 1);
   }
 
-  // Mirrors finalizeCodeBlock's own fenced branch: the opening "$$" line's own (whitespace-only) remainder is always present as content's first line -- see tryMathBlockStart -- and is stripped off here the same way an opening fence's info-string line is.
+  // The opening "$$" line is consumed in full by tryMathBlockStart, so the only thing it leaves behind in `content` is the line ending addLine appends to every line it accumulates. Dropping that one character is the whole of the conversion: there is no info-string line to find and slice past, as there is for a fenced code block.
   private finalizeMathBlock(node: BlockNode): void {
-    const breakIndex = node.content.indexOf("\n");
-    node.literal = breakIndex === -1 ? "" : node.content.slice(breakIndex + 1);
+    node.literal = node.content.slice(ACCUMULATED_LINE_ENDING.length);
   }
 }
 
@@ -976,8 +956,9 @@ function toTableNode(
       context,
     ),
   ];
-  for (const rowLine of node.content.split("\n")) {
-    if (rowLine.trim().length === 0) {
+  for (const rowLine of node.content.split(ACCUMULATED_LINE_ENDING)) {
+    // The only empty elements here are the delimiter row's own consumed line and the one the final line ending leaves after it: a blank line does not continue a table at all (see continueBlock), so no line the table actually accumulated is ever whitespace-only.
+    if (rowLine.length === 0) {
       continue;
     }
     const cells = splitTableRow(rowLine);
