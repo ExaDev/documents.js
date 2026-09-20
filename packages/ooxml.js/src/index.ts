@@ -18,8 +18,11 @@ export {
   decodeEntities,
   textContent,
   resolveRelationships,
+  resolveRootRelationships,
 } from "./typed/util";
 export type { Relationship } from "./typed/util";
+
+export { findMainPartPath, findRelatedPartPath, hasPart } from "./typed/opc";
 
 export {
   XmlNodeSchema,
