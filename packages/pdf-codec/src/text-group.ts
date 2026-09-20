@@ -126,16 +126,31 @@ export function runsShareBaseline(
   b: PdfTextRunGeometry,
   options: PdfTextGroupingOptions = {},
 ): boolean {
+  const separation = baselineSeparation(
+    a,
+    b,
+    options.baselineToleranceEm ?? DEFAULT_BASELINE_TOLERANCE_EM,
+  );
+  return separation?.withinTolerance === true;
+}
+
+// How far apart two runs' baselines are, and whether that clears the tolerance the smaller of them sets, or undefined when the two are set at different angles and so share no axis to measure across. One derivation serving both the exported predicate and the clustering below, so the rule the caller can test with is literally the rule the grouping applies.
+function baselineSeparation(
+  a: PdfTextRunGeometry,
+  b: PdfTextRunGeometry,
+  toleranceEm: number,
+): { distancePt: number; withinTolerance: boolean } | undefined {
   const rotationDeg = normaliseRotationDeg(a.rotationDeg);
   if (rotationDeg !== normaliseRotationDeg(b.rotationDeg)) {
-    return false;
+    return undefined;
   }
-  const toleranceEm =
-    options.baselineToleranceEm ?? DEFAULT_BASELINE_TOLERANCE_EM;
-  const tolerancePt = toleranceEm * Math.min(a.sizePt, b.sizePt);
-  const projectedA = project(a, rotationDeg);
-  const projectedB = project(b, rotationDeg);
-  return Math.abs(projectedA.acrossPt - projectedB.acrossPt) <= tolerancePt;
+  const distancePt = Math.abs(
+    project(a, rotationDeg).acrossPt - project(b, rotationDeg).acrossPt,
+  );
+  return {
+    distancePt,
+    withinTolerance: distancePt <= toleranceEm * Math.min(a.sizePt, b.sizePt),
+  };
 }
 
 /**
@@ -165,12 +180,11 @@ export function runGapPt(
 }
 
 interface WorkingLine<TRun extends PdfTextRunGeometry> {
-  baselineAcrossPt: number;
-  toleranceSizePt: number;
+  readonly anchor: Projected<TRun>; // the run that opened the line; its baseline is the line's, and its size is the one every later candidate's tolerance is taken against
   readonly entries: Projected<TRun>[];
 }
 
-// Greedy baseline clustering: each run joins the open line whose baseline is nearest to it among those within tolerance, and opens a new one when none is. Nearest rather than first-found so a run falling between two lines joins the one it is actually closer to, which first-found decides by iteration order instead. The tolerance is re-derived per comparison from the smaller of the run's own size and the smallest size already on the line, so a line that has admitted small text can never subsequently reach as far as its largest run alone would.
+// Greedy baseline clustering: each run joins the open line whose baseline is nearest to it among those it shares a baseline with, and opens a new one when there is none. Nearest rather than first-found, so a run falling between two lines joins the one it is actually closer to instead of whichever the iteration order reached first.
 function clusterIntoLines<TRun extends PdfTextRunGeometry>(
   entries: readonly Projected<TRun>[],
   toleranceEm: number,
@@ -178,24 +192,25 @@ function clusterIntoLines<TRun extends PdfTextRunGeometry>(
   const lines: WorkingLine<TRun>[] = [];
   for (const entry of entries) {
     let best: WorkingLine<TRun> | undefined;
-    let bestDistance = Number.POSITIVE_INFINITY;
+    let bestDistancePt = Number.POSITIVE_INFINITY;
     for (const line of lines) {
-      const distance = Math.abs(line.baselineAcrossPt - entry.acrossPt);
-      const tolerancePt =
-        toleranceEm * Math.min(line.toleranceSizePt, entry.sizePt);
-      if (distance <= tolerancePt && distance < bestDistance) {
+      const separation = baselineSeparation(
+        line.anchor.run,
+        entry.run,
+        toleranceEm,
+      );
+      if (
+        separation !== undefined &&
+        separation.withinTolerance &&
+        separation.distancePt < bestDistancePt
+      ) {
         best = line;
-        bestDistance = distance;
+        bestDistancePt = separation.distancePt;
       }
     }
     if (best === undefined) {
-      lines.push({
-        baselineAcrossPt: entry.acrossPt,
-        toleranceSizePt: entry.sizePt,
-        entries: [entry],
-      });
+      lines.push({ anchor: entry, entries: [entry] });
     } else {
-      best.toleranceSizePt = Math.min(best.toleranceSizePt, entry.sizePt);
       best.entries.push(entry);
     }
   }
@@ -343,7 +358,7 @@ function buildWords<TRun extends PdfTextRunGeometry>(
           bounds: boundsOf(
             word.minAlongPt,
             word.maxAlongEndPt,
-            line.baselineAcrossPt,
+            line.anchor.acrossPt,
             word.maxSizePt,
             rotationDeg,
           ),
@@ -378,14 +393,14 @@ function buildLine<TRun extends PdfTextRunGeometry>(
   return {
     text,
     words,
-    baselineYPt: line.baselineAcrossPt,
+    baselineYPt: line.anchor.acrossPt,
     rotationDeg,
     ...(measurable
       ? {
           bounds: boundsOf(
             minAlongPt,
             maxAlongEndPt,
-            line.baselineAcrossPt,
+            line.anchor.acrossPt,
             maxSizePt,
             rotationDeg,
           ),
