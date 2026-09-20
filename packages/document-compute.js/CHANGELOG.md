@@ -1,3 +1,10 @@
+## [1.5.39](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.5.38...document-compute.js%401.5.39) (2026-09-20)
+
+
+### Dependencies
+
+- Updated documents.js to 7.20.36
+
 ## [1.5.38](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.5.37...document-compute.js%401.5.38) (2026-09-20)
 
 

@@ -1,3 +1,18 @@
+## [5.2.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.1.0...pdf-codec%405.2.0) (2026-09-20)
+
+### Features
+
+* **pdf-codec:** read vertical writing mode from a composite font's CMap ([1b6fd6b](https://github.com/ExaDev/documents.js/commit/1b6fd6be2db00b2fd035f0bccb48216e8790a603))
+
+### Tests
+
+* **pdf-codec:** check a vertical glyph's vector against an absolute position ([71ca7ee](https://github.com/ExaDev/documents.js/commit/71ca7eefc64b97ed97a2041c5b5fe5e9c7eff677))
+* **pdf-codec:** measure a vertical run's advance rather than only its sign ([09d6684](https://github.com/ExaDev/documents.js/commit/09d66846ad1b19a9236d1034a5e17ca751de77b2))
+* **pdf-codec:** pin a vertical glyph's own position vector and TJ axis ([9b03579](https://github.com/ExaDev/documents.js/commit/9b0357999678bfeb009d7653cdeca95f87f2f1c2))
+* **pdf-codec:** pin a vertical glyph's position vector along both axes ([33d21bb](https://github.com/ExaDev/documents.js/commit/33d21bb0370275eb16afb392ae32402e16da4740))
+* **pdf-codec:** pin the vertical metric parse and the CID-glyph identity ([3c14731](https://github.com/ExaDev/documents.js/commit/3c1473106dd0328b8469ee7d849e7e4d3aa3df2f))
+* **pdf-codec:** tell a vertical column from a line that merely runs downward ([c5ec33b](https://github.com/ExaDev/documents.js/commit/c5ec33be2c061b66133c34b70294e1137ce670dc))
+
 ## [5.1.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.0.1...pdf-codec%405.1.0) (2026-09-20)
 
 ### Features
