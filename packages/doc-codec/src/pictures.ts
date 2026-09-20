@@ -1,5 +1,5 @@
 import type { ContentImageBlock } from "document-schema.js";
-import { bytesToBase64 } from "./base64";
+import { bytesToBase64 } from "byte-codec";
 import {
   readInt16LE,
   readUint16LE,
