@@ -1234,6 +1234,9 @@ importers:
       archive-codec:
         specifier: 1.11.5
         version: link:../archive-codec
+      byte-codec:
+        specifier: 1.6.0
+        version: link:../byte-codec
       document-schema.js:
         specifier: 7.11.4
         version: link:../document-schema.js

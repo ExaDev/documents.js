@@ -9,7 +9,7 @@ import type {
   ContentTable,
 } from "document-schema.js";
 import { el, txt } from "../../xml/fragment";
-import { bytesToBase64 } from "../../util/base64";
+import { bytesToBase64 } from "byte-codec";
 import { zipPackage } from "../../zip";
 import { oleObjectBin } from "../../test-support/cfb";
 import { minimalXlsxBytes } from "../../test-support/embedded";
