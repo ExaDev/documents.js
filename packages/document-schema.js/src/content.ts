@@ -318,10 +318,16 @@ export const ContentConstructEndSchema = z.object({
 export type ContentConstructEnd = z.infer<typeof ContentConstructEndSchema>;
 
 // ContentTable is mutually recursive with ContentBlock (a cell contains blocks, which may themselves be tables) -- hand-written, mirroring ooxml.js's own XmlElement/isXmlNode pattern, since z.lazy() collapses to `unknown` for recursive children in the pinned Zod version.
+//
+// THE GRID RULE, binding on every producer and consumer of a ContentTable (ExaDev/documents.js#1316): a row's `cells` array is DENSE. It holds exactly one entry per grid column, so `row.cells[n]` is the cell occupying grid column n and ContentTable.columnWidthsPt[n] is that same column's width, and every row of one table has the same length. A merged region is one ANCHOR entry at its top-left position carrying colSpan and/or rowSpan, plus one entry at each remaining position the region covers. Array index is therefore grid column outright: no consumer accumulates preceding spans to recover a column, and no consumer pads a row it is handed.
+//
+// A COVERED ENTRY IS A REAL CELL, not a hole. It carries no blocks of its own -- the region's content belongs to the anchor and appears there exactly once, so a consumer extracting text or counting content visits it once whichever position it reads -- but it may carry that position's own background, borders, verticalAlign, sourcePath and source residue. That is the entire reason the rule is dense rather than sparse: a format that models covered positions explicitly (ODF's table:covered-table-cell, a pptx a:tc with hMerge/vMerge="1", each with its own tcPr) has per-covered-position properties with nowhere else to live, while a format that models only anchors (a docx w:tc with w:gridSpan, an HTML td with colspan) loses nothing by having empty placeholders synthesised on read and dropped again on write. Dense is also the form that degrades safely: a consumer oblivious to spans renders a merged table as an unmerged grid of the correct width, where the sparse alternative would silently shift every later column left.
+//
+// WHICH POSITIONS ARE COVERED IS DERIVED, NEVER STORED. No field marks a covered entry, because the anchors' own spans already determine coverage completely and a flag would be a second source of truth able to contradict them. walkTableGrid (src/table-grid.ts) is the one shared derivation, alongside denseTableRows and placeAnchorTableRows, the two constructions a reader whose source format omits covered positions uses to satisfy this rule rather than re-deriving the placement itself. A well-formed table's anchors tile the grid: the footprints of any two anchors are disjoint, and together with the anchors themselves they cover every position exactly once.
 export interface ContentTableCell {
   blocks: ContentBlock[];
-  colSpan?: number;
-  rowSpan?: number;
+  colSpan?: number; // grid columns this cell occupies, set on the anchor only; absent means one. See THE GRID RULE above for where the columns it covers appear.
+  rowSpan?: number; // grid rows this cell occupies, set on the anchor only; absent means one. See THE GRID RULE above for where the rows it covers appear.
   background?: ContentCellFill;
   borders?: ContentCellBorders;
   verticalAlign?: "top" | "center" | "bottom"; // RTF's \clvertalt/\clvertalc/\clvertalb; absent means the format's own default (top)

@@ -6,6 +6,7 @@ export * from "./metadata";
 export * from "./mathml";
 export * from "./math";
 export * from "./content";
+export * from "./table-grid";
 export * from "./definitions";
 export * from "./source";
 export * from "./construct";
