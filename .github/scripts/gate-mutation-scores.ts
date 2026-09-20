@@ -44,6 +44,18 @@ export function reportFiles(
   return files;
 }
 
+/** The files of a slice's report that the slice was planned to mutate. A slice restores incremental results saved by other slices of the same package, so its report can carry results for files another slice owns; keeping only the files named in its own `--mutate` list is what makes the union count each file once. An empty list means the slice covers the whole package. */
+export function filesOwnedBySlice(
+  files: Record<string, FileResult>,
+  mutate: string,
+): Record<string, FileResult> {
+  if (mutate === "") return files;
+  const owned = new Set(mutate.split(","));
+  return Object.fromEntries(
+    Object.entries(files).filter(([path]) => owned.has(path)),
+  );
+}
+
 /** Unions the files of a package's slice reports. A file in two slices would be counted twice, so it is an error rather than a silent overwrite. */
 export function mergeSliceFiles(
   slices: readonly Record<string, FileResult>[],
@@ -184,9 +196,9 @@ async function evaluate(
       });
       continue;
     }
-    const slices = reportPaths.map(({ file }) => {
+    const slices = reportPaths.map(({ entry, file }) => {
       const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
-      return reportFiles(parsed, file);
+      return filesOwnedBySlice(reportFiles(parsed, file), entry.mutate);
     });
     const metrics = calculateMetrics(mergeSliceFiles(slices)).metrics;
     const directory = entries[0]?.directory;
