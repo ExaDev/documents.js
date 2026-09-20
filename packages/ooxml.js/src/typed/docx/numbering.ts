@@ -4,6 +4,7 @@ import type { XmlElement } from "../../model/node";
 import { el } from "../../xml/fragment";
 import { encodeXmlText } from "../../xml/entities";
 import { attr, childrenWithTag, rootElement } from "../util";
+import { findMainPartPath, findRelatedPartPath } from "../opc";
 
 // Resolves word/numbering.xml's real w:abstractNum/w:num definitions -- the glyph/format, start-at value, and restart rule a consumer needs to actually render a list's own markers -- as a companion to (not a replacement for) ContentListMembership (document-schema.js), which read.ts's readListMembership already tracks unchanged: a paragraph's own numId/level membership. NumberingDefinitions is deliberately a separate, top-level structure exported alongside DocxDocument rather than folded into ContentListMembership itself, for two reasons: (1) ContentListMembership is document-schema.js's own schema, shared verbatim across ooxml.js/odf.js/documents.js -- widening it with an ooxml-specific numbering-definition payload would leak this package's own model into a schema the sibling packages also depend on; (2) a definition is a genuinely document-level resource referenced by numId, not a per-paragraph one -- every paragraph sharing a numId would otherwise carry an identical copy of that numId's full level table repeated on every paragraph, rather than the keyed-map-once, referenced-by-id-many-times shape this file provides.
 
@@ -30,7 +31,10 @@ export type NumberingDefinitions = Readonly<
   Record<string, NumberingDefinition>
 >;
 
+// The conventional name for the numbering part. OPC names it through the main part's own numbering relationship, so this is the fallback for a package that declares no usable one -- see typed/opc.ts.
 export const NUMBERING_PART_PATH = "word/numbering.xml";
+const NUMBERING_REL_SUFFIX = "/numbering";
+const CONVENTIONAL_DOCUMENT_PART_PATH = "word/document.xml";
 
 // word/numbering.xml is its own standalone part, so its root element carries the wordprocessingml namespace declaration itself rather than inheriting one from an enclosing word/document.xml the way a fragment nested in the body would -- the same reason typed/docx/write.ts's own WML_NS is duplicated here rather than imported (importing it would pull that module's own writer surface into this read-and-write-shared one, the dependency direction the write side already takes in the other direction).
 const WML_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -108,9 +112,19 @@ function applyLevelOverrides(
   return levels;
 }
 
-// Resolves every w:num's own numId to its abstractNumId's level table, with that num's own w:lvlOverride entries (if any) merged on top. A w:num with no matching w:abstractNumId, or whose abstractNumId doesn't resolve to a known w:abstractNum, is skipped entirely -- a malformed reference, not a partial definition worth returning. Returns an empty record when word/numbering.xml itself is absent (a document with no lists at all).
+// The numbering part the package's main part declares a numbering relationship to, falling back to the conventional path when it declares none. Resolved here rather than passed in so readNumberingDefinitions keeps its published single-argument signature.
+function numberingPartPath(pkg: Package): string {
+  const documentPartPath =
+    findMainPartPath(pkg) ?? CONVENTIONAL_DOCUMENT_PART_PATH;
+  return (
+    findRelatedPartPath(pkg, documentPartPath, NUMBERING_REL_SUFFIX) ??
+    NUMBERING_PART_PATH
+  );
+}
+
+// Resolves every w:num's own numId to its abstractNumId's level table, with that num's own w:lvlOverride entries (if any) merged on top. A w:num with no matching w:abstractNumId, or whose abstractNumId doesn't resolve to a known w:abstractNum, is skipped entirely -- a malformed reference, not a partial definition worth returning. Returns an empty record when the numbering part itself is absent (a document with no lists at all).
 export function readNumberingDefinitions(pkg: Package): NumberingDefinitions {
-  const root = rootElement(pkg.parts[NUMBERING_PART_PATH]);
+  const root = rootElement(pkg.parts[numberingPartPath(pkg)]);
   if (root === undefined) {
     return {};
   }
