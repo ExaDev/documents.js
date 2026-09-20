@@ -58,8 +58,8 @@ jobs:
         #
         # A merge-queue entry supplies the same two endpoints from its own event instead: the merge group's parent commit and the merge group's tip, so the range is exactly the commits the queue is proposing to put on the target branch. Those are the pull request's own commits as the queue arranged them, which is not the same text the pull request itself was linted against whenever the queue's merge method rewrites them, so linting here is a real check rather than a repeat. Both endpoints come through the environment rather than being interpolated into the script, and an endpoint that resolves empty is a hard failure: a job whose only commitlint steps are gated on an event it did not receive reports success without validating a single commit, which is worse than no check at all once this is a required one.
         env:
-          BASE: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || github.event.pull_request.head.sha }}
+          BASE: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          HEAD: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
         run: |
           MIGRATION_BOUNDARY=9b5cdad3dece5c84a48448eed2b2aafa277dd490
           if [ -z "$BASE" ] || [ -z "$HEAD" ]; then
