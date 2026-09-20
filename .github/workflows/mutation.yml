@@ -108,9 +108,10 @@ jobs:
               args=(-- --mutate "$MUTATE")
             fi
             pnpm exec turbo run _test:mutation --filter="$PACKAGE" "${args[@]}"
+      # Saved only by scheduled and dispatched runs, never by a pull request: a pull request restores what the last full run on main saved, so an entry it wrote would only be a write-once one, since the pull request's next run restores main's newest anyway and nothing else can see a pull request ref's entry. The prune-caches job keeps the newest entry per slice on main.
       # Saved by a step that runs even when an earlier step failed or was cancelled: GitHub runs `always()` steps on cancellation, and a job that exceeds its timeout is cancelled the same way. What it can save is limited by Stryker, which writes its incremental report only when its run finishes, so a run killed by the timeout leaves nothing to save. That is why slice size and timeout are derived (plan-mutation-slices.ts) so a slice finishes well inside its limit, and why a slice that does not finish costs one slice's rerun rather than the whole package's.
       - uses: actions/cache/save@v6
-        if: always()
+        if: always() && github.event_name != 'pull_request'
         with:
           path: ${{ matrix.directory }}/reports/stryker-incremental.json
           key: mutation-incremental-${{ matrix.cacheKey }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -186,3 +187,22 @@ jobs:
         run: |
           echo "::error::Mutation slice planning failed; see the Plan mutation slices job."
           exit 1
+
+  # Keeps the newest incremental entry of each slice on main and deletes the older ones, so the entries stay at one per slice however many full runs there are. The key ends in the run id and attempt, so entries are grouped by the key with that suffix removed. It is its own job so that actions: write is held by a job that runs no workspace code and only on main, the same shape as ci.yml's prune-caches.
+  prune-caches:
+    name: Prune mutation caches
+    needs: mutation-test
+    if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Keep the newest incremental cache entry of each slice
+        run: |
+          gh cache list --ref refs/heads/main --key mutation-incremental- --limit 1000 --json id,key,createdAt \
+            --jq 'group_by(.key | sub("-[0-9]+-[0-9]+$"; "")) | .[] | sort_by(.createdAt) | .[:-1] | .[].id' \
+            | while read -r id; do gh cache delete "$id"; done
