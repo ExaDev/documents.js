@@ -1,3 +1,9 @@
+## [1.5.7](https://github.com/ExaDev/documents.js/compare/byte-codec%401.5.6...byte-codec%401.5.7) (2026-09-20)
+
+### Performance Improvements
+
+* **byte-codec:** filter and score each PNG row in one pass over padded rows ([b2fd4ba](https://github.com/ExaDev/documents.js/commit/b2fd4bac7dfdd4b19e70ad80177d637e7ad48496))
+
 ## [1.5.6](https://github.com/ExaDev/documents.js/compare/byte-codec%401.5.5...byte-codec%401.5.6) (2026-09-20)
 
 ### Performance Improvements
