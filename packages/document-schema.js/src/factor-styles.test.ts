@@ -590,7 +590,7 @@ describe("factorStyles minting", () => {
   });
 
   it("factors a paragraph tuple nested inside a shape-flow construct group onto the construct group's own ref (document-schema.js 4.1.0)", () => {
-    // The section-flow test above exercises rebuildSectionConstructGroup and the isConstructGroup arm in rebuildSectionChild; this mirrors it through the shape/list-flow vocabulary instead -- a ShapeConstructGroupNode sat inside a ShapeGroupNode's own children, nested under a SlideGroupNode -- so rebuildShapeConstructGroup and the isConstructGroup dispatch arm in rebuildListChild get their own coverage rather than riding untested on the section-flow rebuilder's coattails.
+    // The section-flow test above exercises a SectionConstructGroupNode through rebuildWrapper; this mirrors it through the shape/list-flow vocabulary instead -- a ShapeConstructGroupNode sat inside a ShapeGroupNode's own children, nested under a SlideGroupNode -- so a construct group in a shape flow gets its own coverage rather than riding untested on the section-flow case's coattails.
     const outside = paragraph([run("outside")], { alignment: "right" });
     const insideA = paragraph([run("a")], { indentLeftPt: 20 });
     const insideB = paragraph([run("b")], { indentLeftPt: 20 });

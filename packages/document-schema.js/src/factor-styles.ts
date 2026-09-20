@@ -94,22 +94,6 @@ function isAnchorGroupWrapper(
   return "kind" in wrapper.node && wrapper.node.kind === "paragraph";
 }
 
-// Heading vs list within the anchor arm, discriminated the way decompose constructs them (a paragraph carrying both signals becomes a heading anchor -- headings win).
-function isHeadingGroup(
-  group: HeadingGroupNode | ListGroupNode,
-): group is HeadingGroupNode {
-  return group.node.headingLevel !== undefined;
-}
-
-// A section- or shape-flow child position whose own node is a construct descriptor rather than a paragraph -- the same structural narrow flatten.ts uses (node.kind is never 'paragraph' for a ConstructDescriptor), needed here in the rebuild walk below to dispatch a construct-group position to its own rebuilder rather than treating it as a heading/list anchor.
-function isConstructGroup(
-  child: SectionChild | ListChild,
-): child is SectionConstructGroupNode | ShapeConstructGroupNode {
-  return (
-    "node" in child && "children" in child && child.node.kind !== "paragraph"
-  );
-}
-
 // Assembles the tree-form DocumentTree every construction site reports: decompose the flat content into its children, splice the envelope fields (kind, metadata, symbolTable) out of the content onto the root, carry `pages` when a layout pass produced rendered page sizes, then mint the styles table over the result. `pages` is spread-copied because the schema's array field is mutable while callers hand us readonly views of the layout engine's own array.
 export function assembleTree(
   content: ContentDocument,
@@ -589,7 +573,7 @@ function rebuildSectionGroup(
 ): SectionGroupNode {
   const inner = innerChain(group, chain, state);
   const children = group.children.map((child) =>
-    rebuildSectionChild(child, inner, state),
+    rebuildFlowChild(child, inner, state),
   );
   const ref = state.wrapperRefs.get(group);
   const unchanged = children.every(
@@ -604,19 +588,29 @@ function rebuildSectionGroup(
       };
 }
 
-// One section-flow child position: a construct group recurses through its own rebuilder (no anchor to narrow), a heading group recurses through the section-flow vocabulary, a list group through the list-flow vocabulary (its own children are ListChild, the shared list/shape vocabulary), a bare paragraph leaf is copied only when stripped, every other leaf passes through as the same object.
-function rebuildSectionChild(
+// One block-flow child position. Overloaded so a list-flow child comes back as a list-flow child (listed first because ListChild is a subset of SectionChild, so the wider overload would otherwise match it) and a section-flow child as a section-flow child; the union overload serves a walk over a group whose exact flow is only known through its own type parameter. Every group kind rebuilds through the one rebuildWrapper below, so the flow a group's children belong to never needs a runtime test: a group hands its children back in the same vocabulary it received them in, which the overloads state and the body cannot get wrong.
+function rebuildFlowChild(
+  child: ListChild,
+  chain: ChainStrips,
+  state: MintState,
+): ListChild;
+function rebuildFlowChild(
   child: SectionChild,
   chain: ChainStrips,
   state: MintState,
-): SectionChild {
-  if (isConstructGroup(child)) {
-    return rebuildSectionConstructGroup(child, chain, state);
-  }
+): SectionChild;
+function rebuildFlowChild(
+  child: SectionChild | ListChild,
+  chain: ChainStrips,
+  state: MintState,
+): SectionChild | ListChild;
+function rebuildFlowChild(
+  child: SectionChild | ListChild,
+  chain: ChainStrips,
+  state: MintState,
+): SectionChild | ListChild {
   if ("node" in child && "children" in child) {
-    return isHeadingGroup(child)
-      ? rebuildHeadingGroup(child, chain, state, rebuildSectionChild)
-      : rebuildListGroup(child, chain, state, rebuildListChild);
+    return rebuildWrapper(child, chain, state);
   }
   if (child.kind === "paragraph") {
     return rebuildParagraph(child, chain);
@@ -624,22 +618,33 @@ function rebuildSectionChild(
   return child;
 }
 
-// One list-flow child position -- the shared vocabulary of list-group children and shape flows.
-function rebuildListChild(
-  child: ListChild,
-  chain: ChainStrips,
-  state: MintState,
-): ListChild {
-  if (isConstructGroup(child)) {
-    return rebuildShapeConstructGroup(child, chain, state);
-  }
-  if ("node" in child && "children" in child) {
-    return rebuildListGroup(child, chain, state, rebuildListChild);
-  }
-  if (child.kind === "paragraph") {
-    return rebuildParagraph(child, chain);
-  }
-  return child;
+// One heading, list, or construct group: stamp its ref when minted, rebuild its own anchor paragraph when it has one (a construct group's node is a descriptor, never a paragraph), rebuild its children below it, and return the same object when nothing changed. Generic over the group's own type so the rebuilt group keeps the exact kind it came in as.
+function rebuildWrapper<
+  G extends
+    | HeadingGroupNode
+    | ListGroupNode
+    | SectionConstructGroupNode
+    | ShapeConstructGroupNode,
+>(group: G, chain: ChainStrips, state: MintState): G {
+  const inner = innerChain(group, chain, state);
+  const anchor = isAnchorGroupWrapper(group)
+    ? rebuildParagraph(group.node, inner)
+    : group.node;
+  const children = group.children.map((child) =>
+    rebuildFlowChild(child, inner, state),
+  );
+  const ref = state.wrapperRefs.get(group);
+  const unchanged =
+    anchor === group.node &&
+    children.every((child, index) => child === group.children[index]);
+  if (unchanged) return group;
+  const rebuilt = {
+    ...group,
+    node: anchor,
+    ...(ref !== undefined ? { style: ref } : {}),
+    children,
+  };
+  return rebuilt;
 }
 
 // A shape group: no anchor of its own, its list-flow children rebuilt through the shared walk.
@@ -650,7 +655,7 @@ function rebuildShapeGroup(
 ): ShapeGroupNode {
   const inner = innerChain(group, chain, state);
   const children = group.children.map((child) =>
-    rebuildListChild(child, inner, state),
+    rebuildFlowChild(child, inner, state),
   );
   const ref = state.wrapperRefs.get(group);
   const unchanged = children.every(
@@ -663,100 +668,6 @@ function rebuildShapeGroup(
         ...(ref !== undefined ? { style: ref } : {}),
         children,
       };
-}
-
-// A construct group sat in a section flow: no anchor of its own (its node is a ConstructDescriptor, never a paragraph), so it rebuilds exactly like rebuildSectionGroup -- stamp its own ref when minted, rebuild its section-flow children below it.
-function rebuildSectionConstructGroup(
-  group: SectionConstructGroupNode,
-  chain: ChainStrips,
-  state: MintState,
-): SectionConstructGroupNode {
-  const inner = innerChain(group, chain, state);
-  const children = group.children.map((child) =>
-    rebuildSectionChild(child, inner, state),
-  );
-  const ref = state.wrapperRefs.get(group);
-  const unchanged = children.every(
-    (child, index) => child === group.children[index],
-  );
-  return unchanged
-    ? group
-    : {
-        node: group.node,
-        ...(ref !== undefined ? { style: ref } : {}),
-        children,
-      };
-}
-
-// A construct group sat in a shape or list-item flow: the same shape as rebuildSectionConstructGroup, over the list-flow vocabulary instead.
-function rebuildShapeConstructGroup(
-  group: ShapeConstructGroupNode,
-  chain: ChainStrips,
-  state: MintState,
-): ShapeConstructGroupNode {
-  const inner = innerChain(group, chain, state);
-  const children = group.children.map((child) =>
-    rebuildListChild(child, inner, state),
-  );
-  const ref = state.wrapperRefs.get(group);
-  const unchanged = children.every(
-    (child, index) => child === group.children[index],
-  );
-  return unchanged
-    ? group
-    : {
-        node: group.node,
-        ...(ref !== undefined ? { style: ref } : {}),
-        children,
-      };
-}
-
-function rebuildHeadingGroup(
-  group: HeadingGroupNode,
-  chain: ChainStrips,
-  state: MintState,
-  rebuildChild: (
-    child: SectionChild,
-    chain: ChainStrips,
-    state: MintState,
-  ) => SectionChild,
-): HeadingGroupNode {
-  const inner = innerChain(group, chain, state);
-  const anchor = rebuildParagraph(group.node, inner);
-  const children = group.children.map((child) =>
-    rebuildChild(child, inner, state),
-  );
-  const ref = state.wrapperRefs.get(group);
-  const unchanged =
-    anchor === group.node &&
-    children.every((child, index) => child === group.children[index]);
-  return unchanged
-    ? group
-    : { node: anchor, ...(ref !== undefined ? { style: ref } : {}), children };
-}
-
-function rebuildListGroup(
-  group: ListGroupNode,
-  chain: ChainStrips,
-  state: MintState,
-  rebuildChild: (
-    child: ListChild,
-    chain: ChainStrips,
-    state: MintState,
-  ) => ListChild,
-): ListGroupNode {
-  const inner = innerChain(group, chain, state);
-  const anchor = rebuildParagraph(group.node, inner);
-  const children = group.children.map((child) =>
-    rebuildChild(child, inner, state),
-  );
-  const ref = state.wrapperRefs.get(group);
-  const unchanged =
-    anchor === group.node &&
-    children.every((child, index) => child === group.children[index]);
-  return unchanged
-    ? group
-    : { node: anchor, ...(ref !== undefined ? { style: ref } : {}), children };
 }
 
 // One paragraph (leaf or anchor): stripped -- copied sans its minted keys -- when a wrapper on its chain factored it (chain-scoped, so an aliased position is stripped by its own branch's minter, never another branch's), with its runs rebuilt through the same copy-or-share rule. Returns the same object when nothing under it changed.
