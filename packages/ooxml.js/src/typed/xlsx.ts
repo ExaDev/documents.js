@@ -5,9 +5,11 @@ import {
   attr,
   childrenWithTag,
   elementsWithTag,
+  resolveRelationships,
   rootElement,
   textContent,
 } from "./util";
+import { workbookPartPath } from "./xlsx/parts";
 import { loadSharedStrings } from "./xlsx/shared-strings";
 
 // Lossy ergonomic projection of a SpreadsheetML (xlsx) package into a reading view. This is a one-way read view over the generic Package model: it keeps sheet names, cell references, resolved string and numeric values, cell formulas, merged-cell ranges, and defined names, and discards everything else (formats, styles, charts, and all other markup). It is not a round-trip path — encoding this view back to OOXML is not supported.
@@ -42,56 +44,29 @@ export type XlsxWorkbook = z.infer<typeof XlsxWorkbookSchema>;
 
 const SHEET_PATH_RE = /^xl\/worksheets\/sheet(\d+)\.xml$/;
 
-// Targets in xl/_rels/workbook.xml.rels are relative to the rels part's directory (xl/), so "worksheets/sheet1.xml" resolves to "xl/worksheets/sheet1.xml"; a leading slash is already package-rooted.
-function resolveRelTarget(target: string): string {
-  if (target.startsWith("/")) {
-    return target.slice(1);
-  }
-  return `xl/${target}`;
-}
-
-// Maps relationship Id -> resolved worksheet part name, so a workbook <sheet r:id="..."> can be matched to its xl/worksheets/sheetN.xml path.
-function relTargets(pkg: Package): Map<string, string> {
-  const map = new Map<string, string>();
-  const rels = rootElement(pkg.parts["xl/_rels/workbook.xml.rels"]);
-  if (rels === undefined) {
-    return map;
-  }
-  for (const rel of childrenWithTag(rels, "Relationship")) {
-    const id = attr(rel, "Id");
-    const target = attr(rel, "Target");
-    if (id !== undefined && target !== undefined) {
-      map.set(id, resolveRelTarget(target));
-    }
-  }
-  return map;
-}
-
-// Maps worksheet part name -> display name by correlating xl/workbook.xml <sheet name r:id> entries through the workbook rels.
+// Maps worksheet part name -> display name by correlating the workbook's own <sheet name r:id> entries through the workbook's relationships. Both the workbook part and its relationship targets are resolved rather than assumed, so a package that names its workbook something other than xl/workbook.xml still yields sheet names (ExaDev/documents.js#1314).
 function resolveSheetNames(pkg: Package): Map<string, string> {
   const names = new Map<string, string>();
-  const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
+  const workbook = rootElement(pkg.parts[workbookPartPath(pkg)]);
   if (workbook === undefined) {
     return names;
   }
-  const targets = relTargets(pkg);
+  const rels = resolveRelationships(pkg, workbookPartPath(pkg));
   for (const sheet of elementsWithTag(workbook.children, "sheet")) {
     const name = attr(sheet, "name");
     const rid = attr(sheet, "r:id");
-    if (name !== undefined && rid !== undefined) {
-      const partName = targets.get(rid);
-      if (partName !== undefined) {
-        names.set(partName, name);
-      }
+    const rel = rid === undefined ? undefined : rels.get(rid);
+    if (name !== undefined && rel !== undefined) {
+      names.set(rel.target, name);
     }
   }
   return names;
 }
 
-// Workbook-level defined names (named ranges), one per <definedName> child under <definedNames> in xl/workbook.xml: the name attribute identifies the range, the element text is its reference.
+// Workbook-level defined names (named ranges), one per <definedName> child under <definedNames> in the workbook part: the name attribute identifies the range, the element text is its reference.
 function readDefinedNames(pkg: Package): DefinedName[] {
   const names: DefinedName[] = [];
-  const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
+  const workbook = rootElement(pkg.parts[workbookPartPath(pkg)]);
   if (workbook === undefined) {
     return names;
   }
