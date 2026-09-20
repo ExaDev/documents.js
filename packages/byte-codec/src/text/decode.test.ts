@@ -130,6 +130,17 @@ describe("decodeText byte order marks", () => {
     expect(result.source).toBe("bom");
   });
 
+  it("refuses binary that happens to begin with a UTF-16 mark", () => {
+    // A mark says which encoding, not that what follows is text. Under the previous UTF-8-only boundary these bytes were refused for not being UTF-8 at all; they must still be refused, rather than decoding into a page of control characters.
+    const bytes = bytesOf(
+      UTF16LE_BOM,
+      Array.from({ length: 80 }, (_unused, index) =>
+        index % 2 === 0 ? 0x07 : 0x00,
+      ),
+    );
+    expect(refusal(bytes).reason).toBe("binary");
+  });
+
   it("does not take a partial match for a mark", () => {
     const result = decodeText(bytesOf([0xef, 0x41, 0x42]));
     expect(result.text).toBe("ïAB");
@@ -289,6 +300,25 @@ describe("decodeText UTF-16 without a byte order mark", () => {
     expect(result.warnings).toEqual([
       "encoding was guessed as utf-16be: the bytes carry no byte order mark, but interleave NUL bytes in the pattern UTF-16 gives Latin-script text. Pass an explicit encoding if that is wrong.",
     ]);
+  });
+
+  it("refuses binary whose NUL interleave imitates Latin-script UTF-16", () => {
+    // A compound-file document ([MS-CFB], which is what a .doc, .xls or .ppt is) spells its directory entry names in UTF-16 and pads with NULs, so its bytes carry the same odd-versus-even NUL imbalance real UTF-16 text does. Reading it as UTF-16 succeeds and yields a run of C0 control characters, which is what tells the two apart: the guess is judged on the characters it produced, not on the bytes it came from.
+    const units = Array.from({ length: 64 }, (_unused, unit) =>
+      unit % 16 === 0 ? [0x61, 0x00] : [0x01, 0x00],
+    ).flat();
+    const bytes = bytesOf(units);
+    const asUtf16 = decodeText(bytes, { encoding: "utf-16le" });
+    expect(asUtf16.text.startsWith("a\u0001")).toBe(true);
+    expect(refusal(bytes).reason).toBe("binary");
+  });
+
+  it("refuses bytes whose NUL interleave is there but which do not decode as UTF-16 at all", () => {
+    // Three quarters of the units are ASCII with a NUL high byte, enough for the interleave to fire, and the rest are lone high surrogates, which makes the UTF-16 reading malformed rather than merely unconvincing. The answer is still that these bytes are binary, since the NULs that produced the guess are exactly what the byte-level check refuses.
+    const units = Array.from({ length: 40 }, (_unused, unit) =>
+      unit % 4 === 3 ? [0x00, 0xd8] : [0x61, 0x00],
+    ).flat();
+    expect(refusal(bytesOf(units)).reason).toBe("binary");
   });
 
   it("refuses bytes whose NUL interleave covers only half the code units", () => {
@@ -595,6 +625,12 @@ describe("isProbablyText", () => {
 
   it("rejects a density of other C0 control bytes", () => {
     expect(isProbablyText(bytesOf([0x1b, 0x1b, 0x41, 0x41]))).toBe(false);
+  });
+
+  it("is not consulted for a mark-less UTF-16 guess, whose own bytes it always rejects", () => {
+    const markless = bytesOf(utf16("hello", true));
+    expect(isProbablyText(markless)).toBe(false);
+    expect(decodeText(markless).encoding).toBe("utf-16le");
   });
 
   it("accepts bytes above ASCII, which say nothing about whether the content is text", () => {
