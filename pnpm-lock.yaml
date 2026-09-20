@@ -192,8 +192,8 @@ importers:
         specifier: 2.12.1
         version: 2.12.1(eslint-plugin-jsx-a11y@6.10.2(eslint@10.8.1(jiti@2.7.0)(supports-color@10.2.2)))(eslint-plugin-react-hooks@7.1.1(eslint@10.8.1(jiti@2.7.0)(supports-color@10.2.2))(supports-color@10.2.2))(eslint@10.8.1(jiti@2.7.0)(supports-color@10.2.2))(supports-color@10.2.2)(typescript-eslint@8.66.0(eslint@10.8.1(jiti@2.7.0)(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3))(typescript@6.0.3)
       '@exadev/semantic-release-workspace':
-        specifier: 1.2.3
-        version: 1.2.3(@semantic-release/changelog@7.0.0(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3)))(@semantic-release/commit-analyzer@13.0.1(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2))(@semantic-release/git@11.0.1(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2))(@semantic-release/github@12.0.9(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2))(@semantic-release/npm@13.1.5(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3)))(@semantic-release/release-notes-generator@14.1.1(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2))(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(typescript@6.0.3)
+        specifier: 3.0.1
+        version: 3.0.1(@semantic-release/changelog@7.0.0(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3)))(@semantic-release/commit-analyzer@13.0.1(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2))(@semantic-release/git@11.0.1(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2))(@semantic-release/github@12.0.9(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2))(@semantic-release/npm@13.1.5(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3)))(@semantic-release/release-notes-generator@14.1.1(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2))(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2)(typescript@6.0.3)
       '@semantic-release/changelog':
         specifier: 7.0.0
         version: 7.0.0(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))
@@ -3189,9 +3189,13 @@ packages:
       eslint-plugin-react-hooks:
         optional: true
 
-  '@exadev/semantic-release-workspace@1.2.3':
-    resolution: {integrity: sha512-OYbmlcLBSNJ80mq1YhY+iWAoAk+jaTWuGqNn3JGrJUoV0+Mec3RkL4dY5Zt84P35qoQDZGZkkmTDcqmQ8+oY/w==}
+  '@exadev/release-gate@1.0.1':
+    resolution: {integrity: sha512-VKU6qZlvl6C+xOLC12mYvv1ygcLm4Gt28rcd2K20fMJB4jz/2IeK5Nn+Ivk4a4xv7TmzvoJCmHUfo7nmwnrVYw==}
     engines: {node: '>=20'}
+
+  '@exadev/semantic-release-workspace@3.0.1':
+    resolution: {integrity: sha512-mKHv1ChOEFf2M3FDcqtcTOovLre5bsEtverfdknv6GWGGUlgUnxBrGgZhJq/gmYFKEoeN7NnGUk5TQ0832hYpg==}
+    engines: {node: ^22.18 || >=24}
     hasBin: true
     peerDependencies:
       '@semantic-release/changelog': ^7.0.0
@@ -5423,6 +5427,10 @@ packages:
       '@types/node': '*'
       cosmiconfig: '>=9'
       typescript: '>=5'
+
+  cosmiconfig@10.0.1:
+    resolution: {integrity: sha512-/zvGoYn0y27QTBmK+0B+oPdEPC4fKGUmJsMTQbDjqph00TrkqfVFW/M+C6ya54sYCgHC6QCwK/mI6djt8cEGHQ==}
+    engines: {node: ^22.18 || >= 24}
 
   cosmiconfig@9.0.2:
     resolution: {integrity: sha512-gtTZxTDau1wL7Y7zifc2dd8jHSK/k6BTx/2Xp/BpdlAdnlYWFVt7qhJqgwi7637yRwRQ3qL4ZidbB4I8tA5VOg==}
@@ -10202,8 +10210,19 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@exadev/semantic-release-workspace@1.2.3(@semantic-release/changelog@7.0.0(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3)))(@semantic-release/commit-analyzer@13.0.1(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2))(@semantic-release/git@11.0.1(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2))(@semantic-release/github@12.0.9(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2))(@semantic-release/npm@13.1.5(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3)))(@semantic-release/release-notes-generator@14.1.1(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2))(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(typescript@6.0.3)':
+  '@exadev/release-gate@1.0.1(supports-color@10.2.2)(typescript@6.0.3)':
     dependencies:
+      env-ci: 11.2.0
+      semantic-release: 25.0.9(supports-color@10.2.2)(typescript@6.0.3)
+      semver: 7.8.5
+    transitivePeerDependencies:
+      - kerberos
+      - supports-color
+      - typescript
+
+  '@exadev/semantic-release-workspace@3.0.1(@semantic-release/changelog@7.0.0(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3)))(@semantic-release/commit-analyzer@13.0.1(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2))(@semantic-release/git@11.0.1(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2))(@semantic-release/github@12.0.9(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2))(@semantic-release/npm@13.1.5(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3)))(@semantic-release/release-notes-generator@14.1.1(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2))(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2)(typescript@6.0.3)':
+    dependencies:
+      '@exadev/release-gate': 1.0.1(supports-color@10.2.2)(typescript@6.0.3)
       '@semantic-release/changelog': 7.0.0(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))
       '@semantic-release/commit-analyzer': 13.0.1(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2)
       '@semantic-release/git': 11.0.1(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2)
@@ -10211,12 +10230,14 @@ snapshots:
       '@semantic-release/npm': 13.1.5(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))
       '@semantic-release/release-notes-generator': 14.1.1(semantic-release@25.0.9(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2)
       commander: 15.0.0
-      cosmiconfig: 9.0.2(typescript@6.0.3)
+      cosmiconfig: 10.0.1
       semantic-release: 25.0.9(supports-color@10.2.2)(typescript@6.0.3)
       tinyglobby: 0.2.17
       validate-npm-package-name: 8.0.0
       yaml: 2.9.0
     transitivePeerDependencies:
+      - kerberos
+      - supports-color
       - typescript
 
   '@exodus/bytes@1.15.1': {}
@@ -12330,6 +12351,11 @@ snapshots:
       cosmiconfig: 9.0.2(typescript@6.0.3)
       jiti: 2.6.1
       typescript: 6.0.3
+
+  cosmiconfig@10.0.1:
+    dependencies:
+      env-paths: 2.2.1
+      js-yaml: 4.3.2
 
   cosmiconfig@9.0.2(typescript@6.0.3):
     dependencies:
