@@ -236,6 +236,16 @@ Release, CI, and commit-message conventions are all workspace-wide, not package-
 
 Conventional Commits, enforced workspace-wide by commitlint through a root `commit-msg` hook. Work inside `packages/wpd-codec/`; see [CONTRIBUTING.md](../../CONTRIBUTING.md) for the shared git hooks and history conventions.
 
+## Removed: base64 from `wpd-codec/bytes/base64`
+
+`bytesToBase64` was this package's own copy of an encoder every codec in the family carried separately. It lives in [`byte-codec`](../byte-codec/README.md) now, as one implementation ([ExaDev/documents.js#1282](https://github.com/ExaDev/documents.js/issues/1282)), so the module behind the `wpd-codec/bytes/base64` deep import is gone. This package is read-only and never carried a decoder.
+
+Import from `byte-codec` directly:
+
+```ts
+import { bytesToBase64 } from "byte-codec";
+```
+
 ## License
 
 MIT
