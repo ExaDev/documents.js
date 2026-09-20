@@ -1,3 +1,126 @@
+## [5.11.24](https://github.com/ExaDev/documents.js/compare/document-cli%405.11.23...document-cli%405.11.24) (2026-09-20)
+
+### Bug Fixes
+
+* **document-cli:** allow doc/xls/ppt documents to undo through their own live-view editors ([5694210](https://github.com/ExaDev/documents.js/commit/56942108f68eee5adf329e11ccca840725a45b04))
+* **document-cli:** drop the redundant '-' guard in inferFormatFromExtension ([a45f771](https://github.com/ExaDev/documents.js/commit/a45f7716b0bc26feb924270321acec2339b46dc0))
+* **document-cli:** let Esc dismiss the slide-table-detail screen when its table is gone ([0e91197](https://github.com/ExaDev/documents.js/commit/0e91197fdb6e28b60d0a7c9c57579175f423c837))
+* **document-cli:** remove exit-code branches the fallthrough already covers ([466acd0](https://github.com/ExaDev/documents.js/commit/466acd023c04d3842c29a7808f02520c30450a84))
+* **document-cli:** restore the unit project's testTimeout under Stryker ([6c1ca23](https://github.com/ExaDev/documents.js/commit/6c1ca2356b4e8042909d0b1c384c3624fe5df0a4))
+* **document-cli:** type the doc/markdown/odt guard-test harness return as optional ([3a5308b](https://github.com/ExaDev/documents.js/commit/3a5308b82a0fe26ff9a4c7b5cea7f5edceb57e85))
+* **document-cli:** use a real FontSubstitution reason in the fallback-message test ([dd08e4d](https://github.com/ExaDev/documents.js/commit/dd08e4d40ce1dde833484a29c2b76c71d66a91b7))
+
+### Reverts
+
+* Revert "chore(document-cli): run mutation testing at concurrency 1" ([c9e8328](https://github.com/ExaDev/documents.js/commit/c9e83283e16385db10137e1dde2f341e1eb4aabc))
+
+### Code Refactoring
+
+* **document-cli:** collapse pushSnapshot's undo-cap branch into one slice ([6dfb2d8](https://github.com/ExaDev/documents.js/commit/6dfb2d8ddb4ae287e9c3419bdb156867c6a16053))
+* **document-cli:** drop dead already-aborted guards from combineSignals ([f4bfceb](https://github.com/ExaDev/documents.js/commit/f4bfceb8ceb094ee11c30712f65b4ba90805ebf5))
+* **document-cli:** drop parseOptionalNumberField's dead blank check ([fdc5659](https://github.com/ExaDev/documents.js/commit/fdc565944b11b62bfc9a593a66132d86c316efee))
+* **document-cli:** drop the redundant markdown branch from APPEND_PARAGRAPH ([d52716e](https://github.com/ExaDev/documents.js/commit/d52716ef1a9f2f1ce97274c9df5d287632ea8e5d))
+* **document-cli:** extract ErrorDetail's detail node so it is directly assertable ([7eb63f2](https://github.com/ExaDev/documents.js/commit/7eb63f27b6a3d1776d18d9617683bdce892a8877))
+* **document-cli:** extract the list-row selection colour into a tested helper ([e39055d](https://github.com/ExaDev/documents.js/commit/e39055dab4ac92a77188a89d3eb3ad5786980a90))
+* **document-cli:** move FieldWizard's out-of-range guard before its state ([fdb600b](https://github.com/ExaDev/documents.js/commit/fdb600bd043e5237104868f3065e397ed60755e4))
+* **document-cli:** rebuild formula presets per-call instead of a module constant ([27e4e68](https://github.com/ExaDev/documents.js/commit/27e4e6834599786d515320a2eb319f3d23e0ca2a))
+* **document-cli:** rebuild the format-to-extension table per call ([fb4adca](https://github.com/ExaDev/documents.js/commit/fb4adca4eed9c162c4f30ac9aa54c24eedc26efa))
+
+### Documentation
+
+* **document-cli:** state combineSignals' no-await precondition precisely ([dd1e2bd](https://github.com/ExaDev/documents.js/commit/dd1e2bd66e1b914f37c922c7c8dc413f89021c48))
+
+### Tests
+
+* **document-cli:** accept agreeing --out and positional destinations ([e9c1046](https://github.com/ExaDev/documents.js/commit/e9c10462670d15d540366f4869ad29a08018a7af))
+* **document-cli:** assert convert's own exact usage-error messages ([fbcc52b](https://github.com/ExaDev/documents.js/commit/fbcc52b6be5338914176ed4e5be74bd3d8869698))
+* **document-cli:** assert every registered option's own help text ([dc0ebc4](https://github.com/ExaDev/documents.js/commit/dc0ebc49f7f8b27540955320bbfb19d304434883))
+* **document-cli:** assert exact status text for four out-of-range and wrong-doc-type warnings ([b05a825](https://github.com/ExaDev/documents.js/commit/b05a825a2f1ef35ae7c7ece0ee1757e890216476))
+* **document-cli:** assert the diagnostics panel's own cyan selection colour and its --help text ([1bb47d9](https://github.com/ExaDev/documents.js/commit/1bb47d9219377896c2eb052d262def135063e567))
+* **document-cli:** close mutation-coverage gaps across reducer.ts's action handlers ([8e7dd73](https://github.com/ExaDev/documents.js/commit/8e7dd73681e77b688ad3e5b3381da4c46e7ddfa6))
+* **document-cli:** cover ADD_LIST_ITEM's docx/markdown paragraph-copy branch ([115b164](https://github.com/ExaDev/documents.js/commit/115b1643faa56f123f0c66deeb001c85652899e6))
+* **document-cli:** cover ADD_PDF_TEXT and INSERT_DOCX_FORMULA ([00f417a](https://github.com/ExaDev/documents.js/commit/00f417a11620aeb7e452c039b935b67ded752b0d))
+* **document-cli:** cover AppStateProvider's cwd prop and the outside-provider guards ([504aa44](https://github.com/ExaDev/documents.js/commit/504aa446ee05c4f67fc74b27acd7799141cf16f1))
+* **document-cli:** cover CANCEL_QUIT and SAVE_ERROR ([351b2ac](https://github.com/ExaDev/documents.js/commit/351b2ac72e62067478ea9756eff5551d9b5180c2))
+* **document-cli:** cover cli-main's bare/tui/command dispatch ([8b0e0fd](https://github.com/ExaDev/documents.js/commit/8b0e0fd272aad743d34555e7006a8a5a91ee8c0b))
+* **document-cli:** cover convert's csv/svg option wiring and command descriptions ([d555855](https://github.com/ExaDev/documents.js/commit/d555855200732a2398da0d522687f5f1ba7d6240))
+* **document-cli:** cover createProgram's description, version, and exit-code mapping ([6c1d6a8](https://github.com/ExaDev/documents.js/commit/6c1d6a88d90be1949acf0cb731f79239530a466a))
+* **document-cli:** cover describeError and the async save-action wrapper ([f0c8893](https://github.com/ExaDev/documents.js/commit/f0c8893a4120a4e7047ebf83292545e98bdbbc63))
+* **document-cli:** cover docx-extras's own error path and signal threading ([37a260f](https://github.com/ExaDev/documents.js/commit/37a260fc44492aa75d05e72392431ae073424b67))
+* **document-cli:** cover every remaining PDF field-edit wrong-kind branch ([c85801a](https://github.com/ExaDev/documents.js/commit/c85801a626905111f5d83785ae856c2713d30aff))
+* **document-cli:** cover fonts' style suffix and unresolved-format error ([fda3181](https://github.com/ExaDev/documents.js/commit/fda318112d7bf3d591e477fd5f0bfa8ca4850cd9))
+* **document-cli:** cover footnote type, table-cell recursion, and numbering restart ([3be30cc](https://github.com/ExaDev/documents.js/commit/3be30ccfc3c238843fc4ec66b636ed95aed5f390))
+* **document-cli:** cover from-package's output-conflict, csv/svg targets, and version-gate errors ([89423d3](https://github.com/ExaDev/documents.js/commit/89423d37d36dbb82a4e65ac2c698916d11e504e4))
+* **document-cli:** cover INSERT_ODT_FORMULA's tree rebuild and wrong-doc guard ([1fb89e1](https://github.com/ExaDev/documents.js/commit/1fb89e1b236863e7662c9304ac477a4c9b3fe943))
+* **document-cli:** cover legacy binary and flowable formats in the format table ([5ec7ceb](https://github.com/ExaDev/documents.js/commit/5ec7ceb5c6ec76d83af4dbd8ad0ab0252eacb7c7))
+* **document-cli:** cover mergePptxTableCells boundaries and the doc-format union arms ([fe76f35](https://github.com/ExaDev/documents.js/commit/fe76f359df98becc1ff234790a658e75ee8fa81f))
+* **document-cli:** cover metadata's no-metadata sentinel and error path ([dc531f6](https://github.com/ExaDev/documents.js/commit/dc531f6940950dbf0e0b7b0eb08d6e30cfa82941))
+* **document-cli:** cover odb-structure's plural, nesting, and omitted-field edges ([a659c57](https://github.com/ExaDev/documents.js/commit/a659c57175f6c4f1e86cbabb5ae9ea15ca0db3dd))
+* **document-cli:** cover odb-to-xlsx, odb-to-csv, and odb-tables ([ae35d0d](https://github.com/ExaDev/documents.js/commit/ae35d0d7b44aa11e365729de81a4145349f49f5d))
+* **document-cli:** cover OdbHarness's own loading gate and effect deps ([305841e](https://github.com/ExaDev/documents.js/commit/305841e447b452ae4f06f0c3881483f0b2325485))
+* **document-cli:** cover odm-to-pdf's --out flag and font-substitution reporting ([d42bbd3](https://github.com/ExaDev/documents.js/commit/d42bbd3317c8590c7306cd00a7b7f1ab75af32d9))
+* **document-cli:** cover odm-to-pdf's own chapter/destination edges ([4b1978f](https://github.com/ExaDev/documents.js/commit/4b1978f688a54d4ce77675c7af32cbf8eb0b8755))
+* **document-cli:** cover open-document's unrecognised-extension and odf cases ([58a1479](https://github.com/ExaDev/documents.js/commit/58a1479907904791ace9b1fd0a3e4c6f56eab82f))
+* **document-cli:** cover outline's own error paths and help text ([926d0b6](https://github.com/ExaDev/documents.js/commit/926d0b6b6351522352374203b42f3de1a48b1b79))
+* **document-cli:** cover outline's whitespace collapse and textless-leaf bracket rendering ([e084db9](https://github.com/ExaDev/documents.js/commit/e084db94fc51fd63d86b87b7b74c4f337de6f5dd))
+* **document-cli:** cover paragraph-detail's own three guard fallbacks ([47db349](https://github.com/ExaDev/documents.js/commit/47db3494a3e88f61082a89b1a93bd7a702c6b99d))
+* **document-cli:** cover parseHexColorInput's own trim, not just validation's ([d84a63e](https://github.com/ExaDev/documents.js/commit/d84a63e484454b94261c2cd55d700d73a68baa89))
+* **document-cli:** cover PDF item actions and every reopenEditable format branch ([ef5b276](https://github.com/ExaDev/documents.js/commit/ef5b276642d6f6a7ba23453e1194aaf6bd11eac3))
+* **document-cli:** cover pdf-inspect's default and --json report modes ([1508ee3](https://github.com/ExaDev/documents.js/commit/1508ee351d69561f5c7bdc64946ad8659d93cbda))
+* **document-cli:** cover resolveSlideTable's table-kind filter and content-kind guard ([53c501f](https://github.com/ExaDev/documents.js/commit/53c501fc70571199cf7d296d0294946d8416e074))
+* **document-cli:** cover resolveTargetFormat and formatError directly ([934e2e1](https://github.com/ExaDev/documents.js/commit/934e2e13e83088422655baf2b5ba89d1793d6f69))
+* **document-cli:** cover rotation-field selection colour and the odp/pptx slide-list guard throws ([17c0910](https://github.com/ExaDev/documents.js/commit/17c091065d1078a60a8f0f5ab1637627fce501c9))
+* **document-cli:** cover RunEditorScreen's own commit and cancel dispatch ([dcf29b0](https://github.com/ExaDev/documents.js/commit/dcf29b0096cf809561db159df68c04e6b0f14db5))
+* **document-cli:** cover SET_TABLE_CELL_TEXT's happy path and both guards ([cd4a6a4](https://github.com/ExaDev/documents.js/commit/cd4a6a4019581a1a9660dac8d5ef218cf969f046))
+* **document-cli:** cover set-metadata's own error paths and help text ([8040412](https://github.com/ExaDev/documents.js/commit/8040412b0f2640e94cf8b2c81fd26b8d24f9c575))
+* **document-cli:** cover six previously untested slide/page/shape actions ([67ea0b9](https://github.com/ExaDev/documents.js/commit/67ea0b9eef1fc786547a66404775a02383655ef2))
+* **document-cli:** cover slide-table-detail's missing-table and edge-clamp paths ([e1491e0](https://github.com/ExaDev/documents.js/commit/e1491e041f0b9a83571a7b4ab21079653747f2cf))
+* **document-cli:** cover TextField's own focus-gated Escape handling and its local query echo ([ad926cc](https://github.com/ExaDev/documents.js/commit/ad926cc29f4ee27249541de59baac1b9111df9ae))
+* **document-cli:** cover the abort-signal passthrough into readFile ([6939d9a](https://github.com/ExaDev/documents.js/commit/6939d9a309785b75949d2eb028636f954c19d0ac))
+* **document-cli:** cover the command palette's parsing and dispatch ([5d949e1](https://github.com/ExaDev/documents.js/commit/5d949e12b864620a703f6f30e7fbb7256a6480bb))
+* **document-cli:** cover the confirm/help/diagnostics/error/search ([c6ca5e4](https://github.com/ExaDev/documents.js/commit/c6ca5e4eef1a521ca9dc66492c5d06599b4a8b5a))
+* **document-cli:** cover the doc/markdown/odt body-list format guards ([72bd85b](https://github.com/ExaDev/documents.js/commit/72bd85b4fb01e68539e14c1e52cbed41293fda97))
+* **document-cli:** cover the formats command and the shared CLI option registrars ([415f938](https://github.com/ExaDev/documents.js/commit/415f93818180bb1c4b882e5a2e5bdc7482d0f6cd))
+* **document-cli:** cover the generic convert command's own dispatch ([8874dbf](https://github.com/ExaDev/documents.js/commit/8874dbf30b7102d5802a87f53f5f75ff038ed6be))
+* **document-cli:** cover the global key table and the shared navigation-input hook ([0b5d3b9](https://github.com/ExaDev/documents.js/commit/0b5d3b9936529ca6d6928f4d7b6475faf5d60c76))
+* **document-cli:** cover the odg ellipse/line/path vector-add cases ([4bdec19](https://github.com/ExaDev/documents.js/commit/4bdec19f57b1c4fe775ad3fa87432a842cd5b425))
+* **document-cli:** cover the odg page-vs-slide wording branch and remaining format/kind guards ([d912476](https://github.com/ExaDev/documents.js/commit/d91247631712d8683ca9336bc6afbaadf04843ec))
+* **document-cli:** cover the odm-to-pdf command end to end ([6dbefdb](https://github.com/ExaDev/documents.js/commit/6dbefdb14cdab640be104b191d24201b3c9f5a21))
+* **document-cli:** cover the ods editor's shared cell/sheet helpers ([cfd0728](https://github.com/ExaDev/documents.js/commit/cfd07288e3de6a6824775cf08445f6e5a7f59b52))
+* **document-cli:** cover the ooxml-fixture test-support builders ([d50b951](https://github.com/ExaDev/documents.js/commit/d50b951c2de9399a9d4ed6131502dfb45e2f8f17))
+* **document-cli:** cover the pdf and odb editor screens' shared helpers ([a94834d](https://github.com/ExaDev/documents.js/commit/a94834d8c05bb8a25b3319630ee5e78d85b21755))
+* **document-cli:** cover the ppt slide-list and slide-detail screens ([391986a](https://github.com/ExaDev/documents.js/commit/391986aeb7e349149f3ce780411d91da8ce26ba2))
+* **document-cli:** cover the previously-untested runtime helpers ([dd26926](https://github.com/ExaDev/documents.js/commit/dd2692623758f4f216b92de83031558101cd0dbe))
+* **document-cli:** cover the reducer's close/overlay/undo-cap/merge-validation branches ([c72206e](https://github.com/ExaDev/documents.js/commit/c72206e92e733309c4ae586b092edd1efeb17daa))
+* **document-cli:** cover the shared colour, text-field, and slide-table helpers ([e623de4](https://github.com/ExaDev/documents.js/commit/e623de4596cdaee14550d26a8fbab10874168575))
+* **document-cli:** cover the SQL result-set table renderer ([b03a463](https://github.com/ExaDev/documents.js/commit/b03a4638ea98b71c1025927f17d191160a7769a0))
+* **document-cli:** cover the standalone status/stack/run actions ([99311ea](https://github.com/ExaDev/documents.js/commit/99311ea61e772035dd3fc8e2b2c97897ff8146b3))
+* **document-cli:** cover the tui metadata dispatcher's per-format cases ([b041d12](https://github.com/ExaDev/documents.js/commit/b041d1261b45c5306f5b242040c734b7f270d4cb))
+* **document-cli:** cover the tui state module's format/screen predicates ([07bbf08](https://github.com/ExaDev/documents.js/commit/07bbf086c849f5155a700d73853a22fabb9eddff))
+* **document-cli:** cover the tui's own odb report render pipeline ([34b0521](https://github.com/ExaDev/documents.js/commit/34b0521f83a145a39de1c01ff30543fba19dd539))
+* **document-cli:** cover the vector-field parsers and formula presets ([28e5441](https://github.com/ExaDev/documents.js/commit/28e5441c0abc2cc15f8fa6874cddcfa226a6d41b))
+* **document-cli:** cover the xls sheet-list and spreadsheet-grid screens ([57c3582](https://github.com/ExaDev/documents.js/commit/57c3582defa6095a6dbdd11295a373dd062fbe02))
+* **document-cli:** cover UNDO's own per-format read-only warning ([303891b](https://github.com/ExaDev/documents.js/commit/303891b6f522c740ecbcbe2a81ff6686bbedb923))
+* **document-cli:** cover withShape's own odg page-vs-slide wording ([5a6e654](https://github.com/ExaDev/documents.js/commit/5a6e6546c37e5455e86b3830e68c2d7a40d8933d))
+* **document-cli:** isolate loadProvidedFonts's own abort-signal wiring ([bb48de7](https://github.com/ExaDev/documents.js/commit/bb48de72c44e2db28348b88fd958e8f88aeba728))
+* **document-cli:** open a real .odb through openDocumentAtPath ([937bba3](https://github.com/ExaDev/documents.js/commit/937bba3ade1c134c7e821dfef4e0931c4eaef0fb))
+* **document-cli:** propagate a genuine bug through cli-main-sea's own dispatch ([5047c0c](https://github.com/ExaDev/documents.js/commit/5047c0c08652f81952e67e96a510be62bcf7df92))
+* **document-cli:** prove metadataFor dispatches to its own case's reader ([2e45b94](https://github.com/ExaDev/documents.js/commit/2e45b94b303e1e6504fa6a0b3bd872a94887716a))
+* **document-cli:** prove renderOdbReportTo threads its report name through ([6ee1331](https://github.com/ExaDev/documents.js/commit/6ee13319eb14b119065762b5543a1e6dfa15b23b))
+* **document-cli:** prove the empty/data:/scheme guards actually run ([1fecea8](https://github.com/ExaDev/documents.js/commit/1fecea835be447fb4ca4efa50b8e45b9d480ab33))
+* **document-cli:** type callback mocks as void-returning ([907e05c](https://github.com/ExaDev/documents.js/commit/907e05c55306158959187ccb71b5d60d83aef173))
+* **document-cli:** widen settle()'s effect-flush wait against contention ([41f5d4c](https://github.com/ExaDev/documents.js/commit/41f5d4c676d3aed4596df005ea83d54b0f4ae764))
+* **document-cli:** widen the status-line TTL-expiry wait buffer ([9bd6d61](https://github.com/ExaDev/documents.js/commit/9bd6d6170d1db64b6161dd63c5de0748747bfa75))
+
+### Build System
+
+* **document-cli:** serialise mutation test runs and extend the dry-run timeout ([8fe9075](https://github.com/ExaDev/documents.js/commit/8fe9075caaa3968f1d37af42c155dab1ee491145))
+
+### Miscellaneous Chores
+
+* **document-cli:** raise the mutation break threshold to 57 ([4863e6d](https://github.com/ExaDev/documents.js/commit/4863e6d154de765da9f2aea75244110069eee510))
+* **document-cli:** run mutation testing at concurrency 1 ([0fcde39](https://github.com/ExaDev/documents.js/commit/0fcde391bba66552f8ad43a5b6dbc5aba58a5209))
+
 ## [5.11.23](https://github.com/ExaDev/documents.js/compare/document-cli%405.11.22...document-cli%405.11.23) (2026-09-20)
 
 
