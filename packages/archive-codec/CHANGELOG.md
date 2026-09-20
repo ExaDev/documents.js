@@ -1,3 +1,9 @@
+## [1.11.6](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.5...archive-codec%401.11.6) (2026-09-20)
+
+### Tests
+
+* **archive-codec:** shrink the zip-bomb walk test to a size that costs nothing ([66586d9](https://github.com/ExaDev/documents.js/commit/66586d9ba8ed4177a347b3e050a8ec3906315c1e))
+
 ## [1.11.5](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.4...archive-codec%401.11.5) (2026-09-20)
 
 

@@ -1,3 +1,14 @@
+## [4.8.16](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.8.15...pdf-codec%404.8.16) (2026-09-20)
+
+### Documentation
+
+* **pdf-codec:** state the mutation threshold's method, not its measurement ([0e41539](https://github.com/ExaDev/documents.js/commit/0e41539cb528e69ff81ae1310042570bcc054224)), references [#1306](https://github.com/ExaDev/documents.js/issues/1306) [#1294](https://github.com/ExaDev/documents.js/issues/1294)
+
+
+### Dependencies
+
+- Updated byte-codec to 1.6.1
+
 ## [4.8.15](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.8.14...pdf-codec%404.8.15) (2026-09-20)
 
 ### Code Refactoring

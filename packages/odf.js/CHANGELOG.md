@@ -1,3 +1,14 @@
+## [7.25.7](https://github.com/ExaDev/documents.js/compare/odf.js%407.25.6...odf.js%407.25.7) (2026-09-20)
+
+### Code Refactoring
+
+* **odf.js:** encode and decode base64 through byte-codec ([771392d](https://github.com/ExaDev/documents.js/commit/771392dbc945a23129dae3f90853d110517e31d0))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.6.1
+
 ## [7.25.6](https://github.com/ExaDev/documents.js/compare/odf.js%407.25.5...odf.js%407.25.6) (2026-09-20)
 
 

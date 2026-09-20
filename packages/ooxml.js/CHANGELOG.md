@@ -1,3 +1,15 @@
+## [8.14.11](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.14.10...ooxml.js%408.14.11) (2026-09-20)
+
+### Code Refactoring
+
+* **ooxml.js:** encode and decode base64 through byte-codec ([d3343a7](https://github.com/ExaDev/documents.js/commit/d3343a7df4789980f223881f3ef85fc9ddd718fd))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.6.1
+- Updated archive-codec to 1.11.6
+
 ## [8.14.10](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.14.9...ooxml.js%408.14.10) (2026-09-20)
 
 

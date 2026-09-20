@@ -1,3 +1,15 @@
+## [4.4.7](https://github.com/ExaDev/documents.js/compare/rtf-codec%404.4.6...rtf-codec%404.4.7) (2026-09-20)
+
+### Code Refactoring
+
+* **rtf-codec:** encode base64 through byte-codec ([84b3938](https://github.com/ExaDev/documents.js/commit/84b39382cccb4345ecc80e13aea1ec2cedf04a1c)), references [#SDATA](https://github.com/ExaDev/documents.js/issues/SDATA)
+
+
+### Dependencies
+
+- Updated byte-codec to 1.6.1
+- Updated archive-codec to 1.11.6
+
 ## [4.4.6](https://github.com/ExaDev/documents.js/compare/rtf-codec%404.4.5...rtf-codec%404.4.6) (2026-09-20)
 
 

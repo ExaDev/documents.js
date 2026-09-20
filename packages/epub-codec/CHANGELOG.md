@@ -1,3 +1,14 @@
+## [1.5.8](https://github.com/ExaDev/documents.js/compare/epub-codec%401.5.7...epub-codec%401.5.8) (2026-09-20)
+
+### Code Refactoring
+
+* **epub-codec:** encode and decode base64 through byte-codec ([ef2b72c](https://github.com/ExaDev/documents.js/commit/ef2b72c0b34de0399cf9bfc7fadd804242ef64d4))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.6.1
+
 ## [1.5.7](https://github.com/ExaDev/documents.js/compare/epub-codec%401.5.6...epub-codec%401.5.7) (2026-09-20)
 
 
