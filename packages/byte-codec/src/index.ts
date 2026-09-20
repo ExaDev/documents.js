@@ -4,6 +4,7 @@ export * from "./bytes/reader";
 export * from "./bytes/base64";
 export * from "./bytes/crc32";
 export * from "./bytes/flate";
+export * from "./text/decode";
 export * from "./image/png-encode";
 export * from "./image/png-decode";
 export * from "./image/png-filter";
