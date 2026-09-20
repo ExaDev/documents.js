@@ -310,6 +310,31 @@ Reading a program's built-in encoding is what stops a symbol-encoded subset — 
 
 **Where nothing states an answer, the answer is the replacement character plus a `text/unmapped-encoding` diagnostic, never a guess.** Two cases reach it in practice: a symbolic font with no embedded program and no `/ToUnicode`, and a subsetted font that both strips its glyph names and maps its glyphs only from private-use code points — a private-use code point identifies a glyph inside one font and says nothing about the character it draws, so it is treated as no answer rather than a wrong one.
 
+## Grouping text runs into lines and words
+
+`readPdf` reports one positioned run per text-showing operator, and a PDF says nothing about lines or words: a line of prose can arrive as one run, as one run per word, or as one run per glyph, entirely at the producer's discretion. `groupPdfTextRuns` turns those runs back into lines of words, and `pdf-codec/text-group` serves it without the write half or the vendored fonts, alongside `pdf-codec/read`.
+
+```ts
+import { readPdf } from "pdf-codec/read";
+import { groupPdfTextRuns } from "pdf-codec/text-group";
+
+const page = readPdf(bytes).pages[0];
+const runs = page.items.filter((item) => item.kind === "text");
+for (const line of groupPdfTextRuns(runs)) {
+  console.log(line.text);
+}
+```
+
+Two rules decide everything, and both were got wrong often enough by hand ([#1317](https://github.com/ExaDev/documents.js/issues/1317)) to be worth stating.
+
+Two runs are on one line when their baselines sit within a fraction of an em of each other, measured against **the smaller of the two**. Taken from the larger, a 30pt heading's own window reaches the 9pt line beneath it, the merged line's runs sort by x into a sequence whose gaps are negative, a negative gap reads as one word, and the two lines concatenate into exactly the run-together text the grouping exists to prevent. The default fraction is two thirds, bounded on both sides by real typography: two consecutive lines are never closer than solid setting puts them, one full em, so it has to stay under 1; a superscript raised by at most a third of its parent's size at no less than half that size shifts by at most two thirds of its own em, so anything tighter cuts footnote markers off the line they annotate.
+
+A run whose `widthPt` is absent states no advance, so where it ends is unknown and the gap after it is underivable. `runGapPt` reports `undefined` for that, and an undefined gap is **no evidence of a space**. Reading it as zero puts the previous run's end at its own start, turns its whole advance into an apparent gap, and produces "Com plete ly".
+
+Gaps that are derivable become a word space at an eighth of an em (the narrowest genuine one: the standard fourteen faces set their space glyph at 250/1000 em, and justified setting compresses to no less than half of that) and a column boundary past a full em (wider than the em space, the widest single space character there is), so a table's row reads as `"North\t4.2m\t11%"` rather than as one sentence. `runsShareBaseline` and `runGapPt` are exported on their own for a consumer with its own pipeline around them, and every threshold is overridable.
+
+Limits, each inherent to what a PDF states rather than to the implementation: grouping is by baseline alone with no page segmentation, so on a multi-column page whose columns sit at different vertical offsets a line of one can fall within tolerance of a line of the next and the two are reported as one line with a column boundary between them, which is the cut a caller needs (`document-outline.js`'s `segmentPdfRegions` finds the gutter first if you want them genuinely apart); text comes out in visual order, so a right-to-left script needs the Unicode Bidi Algorithm applied to the result; vertical writing modes are not recognised, because the content interpreter does not read a CMap's `WMode` ([#1358](https://github.com/ExaDev/documents.js/issues/1358)); and a word hyphenated across a line end stays split, hyphen intact, because rejoining it is a paragraph-level judgement this package leaves to its consumers.
+
 ## JBIG2 scope
 
 `src/image/jbig2*.ts` is a hand-written ITU-T T.88 decoder covering what real scanned PDFs actually contain.
