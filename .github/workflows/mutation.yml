@@ -140,19 +140,14 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      # To open, update and close the one tracking issue below; nothing else in this workflow writes.
+      issues: write
     steps:
-      - name: Fail when the plan failed
-        # A plan failure is a real failure (nothing can be said about the mutation state); a plan that found no affected packages is a pass (nothing to mutate).
-        if: needs.plan.result != 'success'
-        run: |
-          echo "::error::Mutation slice planning failed; see the Plan mutation slices job."
-          exit 1
       - uses: actions/checkout@v7
-        if: needs.plan.outputs.has-packages == 'true'
       - uses: pnpm/action-setup@v6
-        if: needs.plan.outputs.has-packages == 'true'
       - uses: actions/setup-node@v7
-        if: needs.plan.outputs.has-packages == 'true'
         with:
           node-version-file: .tool-versions
           cache: pnpm
@@ -170,4 +165,19 @@ jobs:
         env:
           # The matrix crosses into the script as data through the environment, not as text in the command line.
           MATRIX: ${{ needs.plan.outputs.matrix }}
-        run: node --experimental-strip-types .github/scripts/gate-mutation-scores.ts mutation-reports "$MATRIX"
+        run: node --experimental-strip-types .github/scripts/gate-mutation-scores.ts mutation-reports "$MATRIX" "$RUNNER_TEMP/mutation-gate-result.json"
+      # A red scheduled or dispatched run on main must not go unnoticed, so one tracking issue is opened when it fails, updated in place while it keeps failing, and closed when a later run passes (report-mutation-outcome.ts). Pull requests and runs against other refs report through their own check and leave the issue alone.
+      - name: Keep the tracking issue in step with this run
+        if: always() && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN_RESULT: ${{ needs.plan.result }}
+          SLICE_RESULT: ${{ needs.mutation-test.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node --experimental-strip-types .github/scripts/report-mutation-outcome.ts "$RUNNER_TEMP/mutation-gate-result.json" "$RUN_URL"
+      - name: Fail when the plan failed
+        # Last, so the tracking issue above still hears about a failed plan. A plan failure is a real failure (nothing can be said about the mutation state); a plan that found no affected packages is a pass (nothing to mutate).
+        if: always() && needs.plan.result != 'success'
+        run: |
+          echo "::error::Mutation slice planning failed; see the Plan mutation slices job."
+          exit 1
