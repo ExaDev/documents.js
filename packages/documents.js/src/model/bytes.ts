@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { tryDecodeText } from "byte-codec";
 import { ODF_MEDIA_TYPES } from "odf.js";
 import { isDocBytes } from "doc-codec";
 import { isXlsFile } from "xls-codec";
@@ -208,7 +209,23 @@ export const PptBytesSchema = z
       "not a valid ppt file: not an [MS-CFB] compound file holding both a 'Current User' and a 'PowerPoint Document' stream",
   });
 
-// MarkdownBytesSchema is architecturally different from every schema above: it is the one schema in this file asserting nothing about FORMAT STRUCTURE at all. Docx/pptx/xlsx check the generic ZIP local-file-header signature; PDF checks its own %PDF- magic header; odt/ods/odp/odg check ODF's own declared mimetype entry, byte for byte. Markdown is plain text with no header, no magic bytes, and no reserved byte sequence of its own -- CommonMark's own grammar has no "this is not markdown" rejection path at all (a genuinely unparseable line just becomes an ordinary paragraph), so there is no format-level check to write here, ever. The one thing actually worth validating at the bytes boundary is well-formed UTF-8, matching markdown-codec's own MarkdownBytesSchema (that package's src/codec.ts) exactly, so a malformed byte sequence is caught here, at the schema, rather than surfacing later as silently-mangled U+FFFD replacement characters deep inside readMarkdownContent's own output.
+// MarkdownBytesSchema is architecturally different from every schema above: it is the one schema in this file asserting nothing about FORMAT STRUCTURE at all. Docx/pptx/xlsx check the generic ZIP local-file-header signature; PDF checks its own %PDF- magic header; odt/ods/odp/odg check ODF's own declared mimetype entry, byte for byte. Markdown is plain text with no header, no magic bytes, and no reserved byte sequence of its own (CommonMark's own grammar has no "this is not markdown" rejection path at all, since a genuinely unparseable line just becomes an ordinary paragraph), so there is no format-level check to write here, ever. The one thing worth validating at the bytes boundary is whether the bytes are text at all, which byte-codec's decodeText answers by working the encoding out from the bytes instead of assuming UTF-8: binary content is still caught here, at the schema, rather than surfacing later as silently-mangled U+FFFD replacement characters deep inside readMarkdownContent's own output, while a markdown file in the Windows system code page or in UTF-16 now passes instead of being turned away. Matches markdown-codec's own MarkdownBytesSchema (that package's src/codec.ts) exactly, as it always has.
+function isDecodableText(bytes: Uint8Array): boolean {
+  return tryDecodeText(bytes) !== undefined;
+}
+
+export const MarkdownBytesSchema = z
+  .instanceof(Uint8Array)
+  .refine(isDecodableText, {
+    message: "not text in any supported character encoding",
+  });
+
+// CsvBytesSchema rests on the identical no-magic-bytes architecture as MarkdownBytesSchema above: csv shares markdown's plain-text nature (no header, no reserved byte sequence, RFC 4180 text being just fields and delimiters), so "are these bytes text" is the one honest bytes-level check, and the same refinement covers both. Widening it past UTF-8 matters more for csv than for anything else here, since Excel's own "CSV (Comma delimited)" export writes the Windows ANSI code page rather than UTF-8. The parse errors that ARE specific to csv (an unterminated quoted field) surface as CsvParseError from parseCsvRecords, which is where the text is actually understood.
+export const CsvBytesSchema = z.instanceof(Uint8Array).refine(isDecodableText, {
+  message: "not text in any supported character encoding",
+});
+
+// SvgBytesSchema deliberately keeps the stricter fatal-mode UTF-8 decode the two schemas above have moved off. SVG is XML, and XML carries its own authoritative encoding declaration in its prolog; a general-purpose text detector that ignored that declaration would be a worse answer than refusing, not a better one, so widening this one needs the declaration read first (ExaDev/documents.js#1359).
 function isWellFormedUtf8Text(bytes: Uint8Array): boolean {
   try {
     new TextDecoder("utf-8", { fatal: true }).decode(bytes);
@@ -218,16 +235,7 @@ function isWellFormedUtf8Text(bytes: Uint8Array): boolean {
   }
 }
 
-export const MarkdownBytesSchema = z
-  .instanceof(Uint8Array)
-  .refine(isWellFormedUtf8Text, { message: "not well-formed UTF-8 text" });
-
-// CsvBytesSchema rests on the identical no-magic-bytes architecture as MarkdownBytesSchema above: csv shares markdown's plain-text nature (no header, no reserved byte sequence -- RFC 4180 text is just fields and delimiters), so well-formed UTF-8 is the one honest bytes-level check, and the same fatal-decode refinement covers both. The parse errors that ARE specific to csv (an unterminated quoted field) surface as CsvParseError from parseCsvRecords, which is where the text is actually understood.
-export const CsvBytesSchema = z
-  .instanceof(Uint8Array)
-  .refine(isWellFormedUtf8Text, { message: "not well-formed UTF-8 text" });
-
-// SvgBytesSchema shares the plain-text architecture above but can honestly check one step more structure: SVG, unlike csv/markdown, HAS a recognisable root -- an XML document whose outermost element is <svg>. The check is deliberately loose (a case-insensitive substring, not an XML parse, so a DOCTYPE, XML declaration, or comment ahead of the root still passes and trailing junk is left to the reader), because this schema's job is pre-flight rejection of obviously-wrong bytes, not validation. A fatal decode already proved well-formed UTF-8 by the time the substring is tested, so decoding it again here cannot mangle.
+// SvgBytesSchema shares the plain-text architecture above but can honestly check one step more structure: SVG, unlike csv/markdown, HAS a recognisable root, an XML document whose outermost element is <svg>. The check is deliberately loose (a case-insensitive substring, not an XML parse, so a DOCTYPE, XML declaration, or comment ahead of the root still passes and trailing junk is left to the reader), because this schema's job is pre-flight rejection of obviously-wrong bytes, not validation. A fatal decode already proved well-formed UTF-8 by the time the substring is tested, so decoding it again here cannot mangle.
 export const SvgBytesSchema = z.instanceof(Uint8Array).refine(
   (bytes) => {
     if (!isWellFormedUtf8Text(bytes)) {

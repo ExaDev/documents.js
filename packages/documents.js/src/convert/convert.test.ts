@@ -28,7 +28,7 @@ import { readPptContent } from "../ppt/read";
 import { writePptContent } from "../ppt/write";
 import { requireArrayBufferBytes } from "../model/bytes";
 import { createStandardFontMeasurer, readPdf } from "pdf-codec";
-import { MarkdownInvalidUtf8Error } from "markdown-codec";
+import { MarkdownUndecodableTextError } from "markdown-codec";
 import { decodeMarkdownText, encodeMarkdownText } from "../markdown/text";
 import { minimalOdgBytes, minimalOdgPackage } from "../test-support/odg";
 import { chapterOdtBytes, odmBytes, odmPackage } from "../test-support/odm";
@@ -499,10 +499,11 @@ describe("markdownToPdf", () => {
     expect(text).toContain("A1");
   });
 
-  it("throws MarkdownInvalidUtf8Error for malformed UTF-8 bytes", () => {
-    expect(() => markdownToPdf(new Uint8Array([0xff, 0xfe, 0x00]))).toThrow(
-      MarkdownInvalidUtf8Error,
-    );
+  it("throws MarkdownUndecodableTextError for bytes that are not text", () => {
+    const png = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ]);
+    expect(() => markdownToPdf(png)).toThrow(MarkdownUndecodableTextError);
   });
 
   it("throws when the signal is already aborted", () => {
