@@ -1,0 +1,2 @@
+// What Stryker's own config discovery finds in this package. It looks for stryker.conf / stryker.config with a .js, .mjs, .cjs or .json extension and never a .ts one, so without this a `stryker run` typed by hand here would find no config at all and fall back to Stryker's defaults. See stryker.shared.ts for why that fallback is dangerous rather than merely inconvenient.
+export { default } from "./stryker.config.ts";

@@ -136,6 +136,18 @@ pnpm exec turbo run _test _build --affected            # whatever the current br
 pnpm exec turbo run web#test                            # the web UI alone
 ```
 
+A mutation run is the one case that does not go through turbo when you scope it. Raising a package's score means running Stryker over a few files at a time from inside that package, which needs Stryker's own `--mutate`:
+
+```sh
+cd packages/ooxml.js
+pnpm exec stryker run --mutate "src/typed/opc.ts,src/typed/util.ts" --concurrency 2
+pnpm exec stryker run --mutate "src/typed/docx/read.ts:1675-1720"     # a line range, for one function
+```
+
+Build the package's workspace dependencies first (`pnpm exec turbo run _build --filter=<package>^...`); Stryker's typescript checker resolves them from `dist/`, and in a fresh worktree it stops with `Cannot find module` until they exist.
+
+Read the first line of the output. `No config file specified. Running with command line arguments` means Stryker did not find this package's configuration and is running with its own defaults: the command test runner, no vitest plugin, no typescript checker, and no per-test coverage. That run still completes and still writes a full report, with every mutant classified as Survived and a score of zero, so it looks like a result rather than a mistake. Each package carries a `stryker.conf.mjs` re-exporting its `stryker.config.ts` precisely so the command above cannot land in that state (Stryker's config discovery does not look for a `.ts` file, which is why the `_test:mutation` script names it positionally); `stryker.shared.ts` explains the arrangement.
+
 Each package also keeps its own scripts, so `pnpm --dir packages/odf.js test:watch` (or running the script from inside that directory) still works for focused work on a single package.
 
 ### How the task pipeline is wired
