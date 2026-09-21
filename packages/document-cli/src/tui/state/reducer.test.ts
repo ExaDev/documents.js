@@ -12,6 +12,8 @@ import {
   formulaOfBlock,
   LAYOUT_FORMAT_VERSION,
   type LayoutDocument,
+  type PptxTableCell,
+  type PptxTableRow,
   type MathMlNode,
   odsToXlsx,
   openDoc,
@@ -34,6 +36,11 @@ import {
   writePdf,
   xlsxToPdf,
 } from "documents.js";
+import {
+  type ContentDocument,
+  type ContentTable,
+  walkTableGrid,
+} from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import type { Action } from "./actions.js";
 import { appReducer, createInitialState } from "./reducer.js";
@@ -1055,8 +1062,9 @@ describe("appReducer APPEND_TABLE and MERGE_TABLE_CELLS on docx/odt", () => {
     const anchor = tableBlock.rows[0]?.cells[0];
     expect(anchor?.colSpan).toBe(2);
     expect(anchor?.rowSpan).toBe(2);
-    // docx collapses a horizontal merge into one real w:tc -- row 0 now has 2 real cells (the merged one plus the untouched third column), not 3.
-    expect(tableBlock.rows[0]?.cells).toHaveLength(2);
+    // docx stores a horizontal merge as one real w:tc, but the ContentTable it reads into is dense: row 0 still has one entry per grid column, with a covered, block-less entry where the merge swallowed a column.
+    expect(tableBlock.rows[0]?.cells).toHaveLength(3);
+    expect(tableBlock.rows[0]?.cells[1]?.blocks).toEqual([]);
   });
 
   it("appends a real odt table with cells pre-merged in one pass, verified through readOdtContent", () => {
@@ -2472,6 +2480,200 @@ describe("appReducer ADD_SLIDE_TABLE", () => {
     });
     expect(result.status?.severity).toBe("warning");
     expect(result.status?.text).toContain("pptx or odp");
+  });
+});
+
+// The grid rule (ContentTableCell in document-schema.js): a merged region reads back as one anchor plus a real, block-less covered entry at every other position it spans, and every row has one entry per grid column. Checks a 3x3 table whose top-left 2x2 region was merged, by classifying every position through walkTableGrid rather than by index arithmetic of its own.
+function expectTopLeftTwoByTwoMerge(table: ContentTable): void {
+  expect(table.rows.map((row) => row.cells.length)).toEqual([3, 3, 3]);
+  const covered = walkTableGrid(table).map((row) =>
+    row.map((position) => position.anchorRowIndex !== undefined),
+  );
+  expect(covered).toEqual([
+    [false, true, false],
+    [true, true, false],
+    [false, false, false],
+  ]);
+  const anchor = table.rows[0]?.cells[0];
+  expect(anchor?.colSpan).toBe(2);
+  expect(anchor?.rowSpan).toBe(2);
+  for (const position of walkTableGrid(table).flat()) {
+    if (position.anchorRowIndex !== undefined) {
+      expect(position.cell.blocks).toEqual([]);
+    }
+  }
+}
+
+// The number of a:p paragraphs in a cell's a:txBody, which the schema requires to be at least one even for an empty cell.
+function paragraphElementCount(cell: PptxTableCell): number {
+  const txBody = cell.element.children.find(
+    (child) => child.type === "element" && child.tag === "a:txBody",
+  );
+  if (txBody?.type !== "element") {
+    throw new Error("expected the cell to have an a:txBody");
+  }
+  return txBody.children.filter(
+    (child) => child.type === "element" && child.tag === "a:p",
+  ).length;
+}
+
+function fillPptxTableWithText(
+  rows: readonly PptxTableRow[] | undefined,
+): void {
+  if (rows === undefined) {
+    throw new Error("expected a table on the first slide");
+  }
+  for (const [rowIndex, row] of rows.entries()) {
+    for (const [columnIndex, cell] of row.cells().entries()) {
+      cell.setParagraphs([
+        { runs: [{ text: `cell ${rowIndex}${columnIndex}` }] },
+      ]);
+    }
+  }
+}
+
+function firstTable(content: ContentDocument): ContentTable {
+  const blocks =
+    content.kind === "wordprocessing"
+      ? content.sections[0]?.blocks
+      : content.kind === "presentation"
+        ? content.slides[0]?.shapes[0]?.blocks
+        : undefined;
+  const block = blocks?.[0];
+  if (block?.kind !== "table") {
+    throw new Error(`expected a table block, got ${block?.kind}`);
+  }
+  return block;
+}
+
+describe("appReducer merges read back as dense ContentTables", () => {
+  const CELL_TEXT_ACTIONS: readonly Action[] = [0, 1, 2].flatMap((row) =>
+    [0, 1, 2].map((column): Action => ({
+      type: "SET_TABLE_CELL_TEXT",
+      tableIndex: 0,
+      row,
+      column,
+      text: `cell ${row}${column}`,
+    })),
+  );
+  const MERGE_TOP_LEFT: Action = {
+    type: "MERGE_TABLE_CELLS",
+    tableIndex: 0,
+    startRow: 0,
+    startColumn: 0,
+    rowSpan: 2,
+    colSpan: 2,
+  };
+
+  it("keeps a docx 2x2 merge as one anchor plus covered entries, before and after a save and reopen", () => {
+    const merged = applyAll([
+      { type: "CREATE_DOCUMENT", format: "docx" },
+      { type: "APPEND_TABLE", rows: 3, columns: 3 },
+      ...CELL_TEXT_ACTIONS,
+      MERGE_TOP_LEFT,
+    ]);
+    const live = readDocxContent(docxDocument(merged).editor.toPackage());
+    expectTopLeftTwoByTwoMerge(firstTable(live));
+    const reopened = readDocxContent(
+      openDocx(docxDocument(merged).editor.toBytes()).toPackage(),
+    );
+    expectTopLeftTwoByTwoMerge(firstTable(reopened));
+  });
+
+  it("keeps an odt 2x2 merge as one anchor plus covered entries, before and after a save and reopen", () => {
+    const merged = applyAll([
+      { type: "CREATE_DOCUMENT", format: "odt" },
+      { type: "APPEND_TABLE", rows: 3, columns: 3 },
+      ...CELL_TEXT_ACTIONS,
+      MERGE_TOP_LEFT,
+    ]);
+    const live = readOdtContent(odtDocument(merged).editor.toPackage());
+    expectTopLeftTwoByTwoMerge(firstTable(live));
+    const reopened = readOdtContent(
+      openOdt(odtDocument(merged).editor.toBytes()).toPackage(),
+    );
+    expectTopLeftTwoByTwoMerge(firstTable(reopened));
+  });
+
+  it("keeps a pptx 2x2 merge as one anchor plus covered entries, before and after a save and reopen", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const withTable = appReducer(openPptxDocument(editor.toBytes()), {
+      type: "ADD_SLIDE_TABLE",
+      slideIndex: 0,
+      frame: { xPt: 10, yPt: 10, widthPt: 200, heightPt: 100 },
+      rows: 3,
+      columns: 3,
+    });
+    const rows = pptxDocument(withTable)
+      .editor.slides()[0]
+      ?.tables()[0]
+      ?.rows();
+    fillPptxTableWithText(rows);
+    const merged = appReducer(withTable, {
+      type: "MERGE_SLIDE_TABLE_CELLS",
+      slideIndex: 0,
+      tableIndex: 0,
+      startRow: 0,
+      startColumn: 0,
+      rowSpan: 2,
+      colSpan: 2,
+    });
+    const live = readPptxContent(pptxDocument(merged).editor.toPackage());
+    expectTopLeftTwoByTwoMerge(firstTable(live));
+    const reopened = readPptxContent(
+      openPptx(pptxDocument(merged).editor.toBytes()).toPackage(),
+    );
+    expectTopLeftTwoByTwoMerge(firstTable(reopened));
+    expect(firstTable(reopened).rows[0]?.cells[0]?.blocks).toHaveLength(1);
+  });
+
+  it("clears the text of every pptx cell a merge covers, so no hidden content survives in the file", () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const withTable = appReducer(openPptxDocument(editor.toBytes()), {
+      type: "ADD_SLIDE_TABLE",
+      slideIndex: 0,
+      frame: { xPt: 10, yPt: 10, widthPt: 200, heightPt: 100 },
+      rows: 3,
+      columns: 3,
+    });
+    const rows = pptxDocument(withTable)
+      .editor.slides()[0]
+      ?.tables()[0]
+      ?.rows();
+    fillPptxTableWithText(rows);
+    const merged = appReducer(withTable, {
+      type: "MERGE_SLIDE_TABLE_CELLS",
+      slideIndex: 0,
+      tableIndex: 0,
+      startRow: 0,
+      startColumn: 0,
+      rowSpan: 2,
+      colSpan: 2,
+    });
+    const mergedRows = pptxDocument(merged)
+      .editor.slides()[0]
+      ?.tables()[0]
+      ?.rows();
+    const cellAt = (row: number, column: number): PptxTableCell => {
+      const cell = mergedRows?.[row]?.cells()[column];
+      if (cell === undefined) {
+        throw new Error(`expected a cell at ${row},${column}`);
+      }
+      return cell;
+    };
+    const serialised = (row: number, column: number): string =>
+      JSON.stringify(cellAt(row, column).element);
+    expect(serialised(0, 0)).toContain("cell 00");
+    expect(serialised(0, 1)).not.toContain("cell 01");
+    expect(serialised(1, 0)).not.toContain("cell 10");
+    expect(serialised(1, 1)).not.toContain("cell 11");
+    // The cleared cells keep the one (empty) paragraph a text body must have.
+    expect(paragraphElementCount(cellAt(0, 1))).toBe(1);
+    expect(paragraphElementCount(cellAt(1, 1))).toBe(1);
+    // A cell outside the rectangle keeps its own text.
+    expect(serialised(0, 2)).toContain("cell 02");
   });
 });
 
