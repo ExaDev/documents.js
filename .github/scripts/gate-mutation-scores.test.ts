@@ -277,6 +277,7 @@ describe("sliceReportFile", () => {
         mutate: "",
         timeoutMinutes: 30,
         cacheKey: "p-1of1",
+        configHash: "0123456789ab",
       }),
     ).toBe("p-1of1.json");
   });

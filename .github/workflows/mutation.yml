@@ -87,16 +87,16 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      # Stryker's own incremental report: reuses a prior run's per-mutant kill or survive result for anything unchanged since it was written, instead of re-testing every mutant every run. Restored by the slice's own key first, then by any earlier slice layout of the same package, since a report for a file stays valid wherever the file was sliced.
+      # Stryker's own incremental report: reuses a prior run's per-mutant kill or survive result for anything unchanged since it was written, instead of re-testing every mutant every run. Restored by the slice's own key first, then by any earlier slice layout of the same package, since a report for a file stays valid wherever the file was sliced, and for either fallback only within the same configHash (plan-mutation-slices.ts's strykerConfigHash), a fingerprint of the package's stryker.config.ts and the shared stryker.shared.ts it is built through. Stryker's incremental mode decides what to reuse purely from whether a mutated file's own content changed, with no idea the configuration governing what gets mutated changed too, so without configHash in the key a mutate-glob or shared-option change can restore a report computed under the old configuration and silently carry its mutants forward as though nothing changed.
       #
       # run_attempt in the save key because actions/cache silently drops a save whose key already exists, and a re-run of the same run reuses run_id.
       - uses: actions/cache/restore@v6
         with:
           path: ${{ matrix.directory }}/reports/stryker-incremental.json
-          key: mutation-incremental-${{ matrix.cacheKey }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: mutation-incremental-${{ matrix.cacheKey }}-${{ matrix.configHash }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            mutation-incremental-${{ matrix.cacheKey }}-
-            mutation-incremental-${{ matrix.package }}-
+            mutation-incremental-${{ matrix.cacheKey }}-${{ matrix.configHash }}-
+            mutation-incremental-${{ matrix.package }}-${{ matrix.configHash }}-
       - uses: ./.github/actions/setup-workspace
         with:
           # matrix.cacheKey in the turbo cache's own task name for the identical reason as the Stryker cache above: the composite action's key is task-scoped, so slices of different packages must not share one.
@@ -114,7 +114,7 @@ jobs:
         if: always() && github.event_name != 'pull_request'
         with:
           path: ${{ matrix.directory }}/reports/stryker-incremental.json
-          key: mutation-incremental-${{ matrix.cacheKey }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: mutation-incremental-${{ matrix.cacheKey }}-${{ matrix.configHash }}-${{ github.run_id }}-${{ github.run_attempt }}
       # The json report is renamed after its slice before upload, so that every slice's report lands in one flat directory with a distinct name when the result job downloads them. The layout of a downloaded artifact otherwise depends on how many artifacts matched, which a gate reading fixed paths cannot tolerate.
       - name: Name the json report after its slice
         if: always()
