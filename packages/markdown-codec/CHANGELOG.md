@@ -1,3 +1,10 @@
+## [11.0.1](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.0.0...markdown-codec%4011.0.1) (2026-09-21)
+
+### Tests
+
+* **markdown-codec:** assert MarkdownBytesSchema rejects undecodable bytes on its own ([f79d50b](https://github.com/ExaDev/documents.js/commit/f79d50b6ac6c601af8dccd967cde903ea7e6e2d6))
+* **markdown-codec:** pin the synthesised-header-row diagnostic to isHeader's own value ([a8ee1a4](https://github.com/ExaDev/documents.js/commit/a8ee1a4d17bab95fc62fc7bcbc78c3fa0ad28248))
+
 ## [11.0.0](https://github.com/ExaDev/documents.js/compare/markdown-codec%4010.0.0...markdown-codec%4011.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES
