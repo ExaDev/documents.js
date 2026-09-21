@@ -1,3 +1,20 @@
+## [5.0.0](https://github.com/ExaDev/documents.js/compare/wpd-codec%404.0.1...wpd-codec%405.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **wpd-codec:** a WordPerfect table read by this package now has one
+  ContentTableCell per grid column in every row.
+
+### Bug Fixes
+
+* **wpd-codec:** keep a WordPerfect table's covered cells instead of dropping them ([55ae6ba](https://github.com/ExaDev/documents.js/commit/55ae6ba6d0e588b393fb987f7cf503036e2ce37a))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.12.0
+- Updated archive-codec to 1.11.8
+
 ## [4.0.1](https://github.com/ExaDev/documents.js/compare/wpd-codec%404.0.0...wpd-codec%404.0.1) (2026-09-20)
 
 ### Documentation

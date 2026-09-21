@@ -1,3 +1,15 @@
+## [2.0.2](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.0.1...ppt-codec%402.0.2) (2026-09-21)
+
+### Bug Fixes
+
+* **odf.js:** derive a table's covered positions from the anchors' spans and keep their decoration ([dd2796e](https://github.com/ExaDev/documents.js/commit/dd2796eff88262df05533c5267b4871dea8cf36e))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.12.0
+- Updated archive-codec to 1.11.8
+
 ## [2.0.1](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.0.0...ppt-codec%402.0.1) (2026-09-20)
 
 ### Documentation

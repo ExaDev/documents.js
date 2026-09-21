@@ -1,3 +1,15 @@
+## [3.9.19](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.9.18...document-outline.js%403.9.19) (2026-09-21)
+
+### Bug Fixes
+
+* **document-outline.js:** join a merged table's anchor text without the covered positions ([133ec93](https://github.com/ExaDev/documents.js/commit/133ec9347ed3bc064dd68ada7d965feee6671856))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.12.0
+- Updated pdf-codec to 5.2.1
+
 ## [3.9.18](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.9.17...document-outline.js%403.9.18) (2026-09-20)
 
 

@@ -1,3 +1,22 @@
+## [10.0.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%409.1.2...ooxml.js%4010.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **ooxml.js:** a docx table read by readDocxContent now has one ContentTableCell
+  per grid column in every row. A consumer that padded colSpan - 1 placeholders of its
+  own, or that counted a row's cells to find the column count, must stop padding and
+  read the array directly.
+
+### Bug Fixes
+
+* **ooxml.js:** give a docx table one cell per grid column in both directions ([8e86558](https://github.com/ExaDev/documents.js/commit/8e8655830553e1e8c006d10fced4868a4557dae9))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.12.0
+- Updated archive-codec to 1.11.8
+
 ## [9.1.2](https://github.com/ExaDev/documents.js/compare/ooxml.js%409.1.1...ooxml.js%409.1.2) (2026-09-20)
 
 ### Documentation

@@ -1,3 +1,20 @@
+## [3.0.0](https://github.com/ExaDev/documents.js/compare/epub-codec%402.0.1...epub-codec%403.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **epub-codec:** an XHTML table read by this package now has one ContentTableCell
+  per grid column in every row, and columnWidthsPt states the real grid width rather
+  than the widest row's cell count.
+
+### Bug Fixes
+
+* **epub-codec:** place XHTML table cells on the grid their spans imply ([03b740d](https://github.com/ExaDev/documents.js/commit/03b740dd9e6071b16685aa390dc097179a8bfbed))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.12.0
+
 ## [2.0.1](https://github.com/ExaDev/documents.js/compare/epub-codec%402.0.0...epub-codec%402.0.1) (2026-09-20)
 
 ### Documentation

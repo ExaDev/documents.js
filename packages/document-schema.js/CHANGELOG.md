@@ -1,3 +1,9 @@
+## [7.12.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.11.5...document-schema.js%407.12.0) (2026-09-21)
+
+### Features
+
+* **document-schema.js:** hold one table cell per grid column and derive coverage from spans ([403cdd3](https://github.com/ExaDev/documents.js/commit/403cdd3ed4837fb5b3afa14d4bfe943f00a7c272))
+
 ## [7.11.5](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.11.4...document-schema.js%407.11.5) (2026-09-20)
 
 ### Documentation

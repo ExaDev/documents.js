@@ -1,3 +1,21 @@
+## [4.0.0](https://github.com/ExaDev/documents.js/compare/doc-codec%403.0.1...doc-codec%404.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **doc-codec:** a .doc table read by this package now has one ContentTableCell per
+  grid column in every row. A consumer that padded colSpan - 1 placeholders of its own
+  must stop padding and read the array directly.
+
+### Bug Fixes
+
+* **doc-codec:** give a .doc table one cell per grid column in both directions ([e28aa07](https://github.com/ExaDev/documents.js/commit/e28aa07101c9e30af58eeb7ce4de031832bd7f9d))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.12.0
+- Updated archive-codec to 1.11.8
+
 ## [3.0.1](https://github.com/ExaDev/documents.js/compare/doc-codec%403.0.0...doc-codec%403.0.1) (2026-09-20)
 
 ### Documentation

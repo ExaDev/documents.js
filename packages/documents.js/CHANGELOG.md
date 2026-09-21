@@ -1,3 +1,37 @@
+## [8.0.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.36...documents.js%408.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **documents.js:** DocTableCell.remove is gone. Use DocTable.mergeCells to merge, and
+  build a table with the rows and columns it should have rather than deleting cells
+  from a wider one.
+
+### Bug Fixes
+
+* **documents.js:** lay out and write a table's anchors, not its covered positions ([7ff607d](https://github.com/ExaDev/documents.js/commit/7ff607de4ea2991b16655902ad75ee5ec6cc8e1d))
+* **documents.js:** merge table cells through a span-setting operation rather than by deleting them ([69171d6](https://github.com/ExaDev/documents.js/commit/69171d661b3b1f7a48754ec68cb5658f8a40e96b))
+* **documents.js:** write a covered table position's own decoration in the ODF and pptx editors ([a0527b4](https://github.com/ExaDev/documents.js/commit/a0527b49b233b23188dfb932b5fcdfd936685f31))
+
+### Tests
+
+* **documents.js:** hold every format's table reader and writer to one grid ([d138ad8](https://github.com/ExaDev/documents.js/commit/d138ad8443011eec1998717071ea217a9e8ce723))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.12.0
+- Updated archive-codec to 1.11.8
+- Updated epub-codec to 3.0.0
+- Updated markdown-codec to 8.0.0
+- Updated odf.js to 8.0.2
+- Updated pdf-codec to 5.2.1
+- Updated doc-codec to 4.0.0
+- Updated ooxml.js to 10.0.0
+- Updated ppt-codec to 2.0.2
+- Updated rtf-codec to 6.0.0
+- Updated wpd-codec to 5.0.0
+- Updated xls-codec to 4.15.13
+
 ## [7.20.36](https://github.com/ExaDev/documents.js/compare/documents.js%407.20.35...documents.js%407.20.36) (2026-09-20)
 
 
