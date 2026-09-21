@@ -1,4 +1,6 @@
 import {
+  describeTableGridFault,
+  findTableGridFault,
   tableCellColumnSpan,
   tableCellRowSpan,
   walkTableGrid,
@@ -200,11 +202,6 @@ function physicalCellsForRow(
       });
       continue;
     }
-    if (position.cell.blocks.length > 0) {
-      throw new DocFormatError(
-        `a table cell at row ${position.rowIndex}, column ${position.columnIndex} lies inside the merged region anchored at row ${position.anchorRowIndex}, column ${position.anchorColumnIndex} but carries content of its own; a merged region's content belongs to its anchor`,
-      );
-    }
     if (position.anchorRowIndex === rowIndex) continue;
     const previous = physical[physical.length - 1];
     if (previous?.anchorColumn === position.anchorColumnIndex) {
@@ -402,6 +399,12 @@ function flattenTable(
   if (columnCount === 0 || table.rows.length === 0) {
     throw new DocFormatError(
       "a table must have at least one column and one row to write",
+    );
+  }
+  const gridFault = findTableGridFault(table);
+  if (gridFault !== undefined) {
+    throw new DocFormatError(
+      `doc-codec: table at block ${blockIndex} breaks the grid rule: ${describeTableGridFault(gridFault)}`,
     );
   }
   const boundaries = columnBoundariesTwips(table.columnWidthsPt);
