@@ -4,6 +4,7 @@ import {
   RtfNestingLimitExceededError,
   RtfNotAnRtfDocumentError,
   RtfParseError,
+  RtfTableGridFaultError,
   RtfUnsupportedDocumentKindError,
   RtfWriteError,
 } from "./diagnostics";
@@ -78,6 +79,24 @@ describe("RtfUnsupportedDocumentKindError", () => {
     expect(error.documentKind).toBe("spreadsheet");
     expect(error.message).toBe(
       "RTF is a wordprocessing format; a 'spreadsheet' ContentDocument has no RTF representation",
+    );
+    expect(error).toBeInstanceOf(RtfWriteError);
+  });
+});
+
+describe("RtfTableGridFaultError", () => {
+  it("names its own code, carries the fault whole, and states it in words", () => {
+    const fault = {
+      kind: "anchorOverrunsRows",
+      rowIndex: 2,
+      columnIndex: 1,
+    } as const;
+    const error = new RtfTableGridFaultError(fault);
+    expect(error.name).toBe("RtfTableGridFaultError");
+    expect(error.code).toBe("rtf/table-grid-fault");
+    expect(error.fault).toBe(fault);
+    expect(error.message).toBe(
+      "a table breaks the grid rule: the merged region anchored at row 2, column 1 spans past the last row of the table",
     );
     expect(error).toBeInstanceOf(RtfWriteError);
   });

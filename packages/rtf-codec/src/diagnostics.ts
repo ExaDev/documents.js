@@ -1,3 +1,8 @@
+import {
+  describeTableGridFault,
+  type TableGridFault,
+} from "document-schema.js";
+
 // The read/write diagnostic sink, matching markdown-codec's and pdf-codec's own three-tier policy exactly (see markdown-codec's src/diagnostics/diagnostics.ts and pdf-codec's src/diagnostics.ts): throw for input this package cannot meaningfully process at all; recover-with-diagnostic for RTF that is spec-legal but almost certainly not what the producer meant, where continuing is more useful than failing; degrade-with-diagnostic for an individual construct this package's own ContentDocument mapping cannot represent, while the rest of the document still reads.
 //
 // RTF makes that third tier load-bearing in a way the XML formats do not. The specification's own reader conventions require an unknown control word to be ignored and an unknown `{\*` destination to be skipped whole (RTF 1.9.1, "Conventions of an RTF Reader"), so "I did not understand this" is the format's normal, specified operating mode rather than an error condition -- but a reader that silently drops a construct a caller cared about is indistinguishable from one that never saw it. Every drop this package makes deliberately therefore names itself through a code below.
@@ -115,5 +120,19 @@ export class RtfUnsupportedDocumentKindError extends RtfWriteError {
     );
     this.name = "RtfUnsupportedDocumentKindError";
     this.documentKind = documentKind;
+  }
+}
+
+// Thrown by writeRtfContent when handed a ContentDocument holding a table that breaks the grid rule (ContentTableCell in document-schema.js): rows of differing lengths, content or a span on a position a merged region covers, or a region running past the grid or into another. RTF writes a covered position as an empty cell slot, so a covered position's content has nowhere to go and any repair would be a guess at which of two regions the producer meant. Detected via document-schema.js's own findTableGridFault, the one shared definition of the rule, and carried whole so a caller can locate the fault without re-running the check.
+export class RtfTableGridFaultError extends RtfWriteError {
+  readonly fault: TableGridFault;
+
+  constructor(fault: TableGridFault) {
+    super(
+      "rtf/table-grid-fault",
+      `a table breaks the grid rule: ${describeTableGridFault(fault)}`,
+    );
+    this.name = "RtfTableGridFaultError";
+    this.fault = fault;
   }
 }

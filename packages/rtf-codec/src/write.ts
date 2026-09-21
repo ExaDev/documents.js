@@ -27,6 +27,7 @@ import {
   type TableGridPosition,
   clampHeadingLevel,
   colorToRgbHex,
+  findTableGridFault,
   flattenTree,
   tableCellColumnSpan,
   tableCellRowSpan,
@@ -42,6 +43,7 @@ import { base64ToBytes, bytesToHex } from "./base64";
 import { writeEmbeddedObjectData } from "./embedded-object";
 import {
   RtfDiagnosticCodes,
+  RtfTableGridFaultError,
   RtfUnsupportedDocumentKindError,
   type RtfDiagnosticSink,
 } from "./diagnostics";
@@ -1029,6 +1031,10 @@ class RtfWriter {
   }
 
   private writeTable(table: ContentTable): void {
+    const fault = findTableGridFault(table);
+    if (fault !== undefined) {
+      throw new RtfTableGridFaultError(fault);
+    }
     // ContentTable's rows are dense (one entry per grid column) and RTF's are too (one \cellxN and one \cell per grid column), so each grid position maps to exactly one RTF cell slot. The walk classifies each as an anchor or as covered by a merged region.
     for (const [rowIndex, positions] of walkTableGrid(table).entries()) {
       // "\cellxN Defines the right boundary of a cell", cumulative from the row's own left edge, so the boundaries are a running total of the column widths.
@@ -1050,10 +1056,8 @@ class RtfWriter {
       // Word 2002 onward writes the row properties both before and after the row, which the spec explicitly calls out as the shape a reader should not assume otherwise; emitting both makes the output readable by either kind of reader.
       this.line(rowDefinition);
       for (const position of positions) {
-        // A covered position's content belongs to its region's anchor, which writes it exactly once.
-        this.writeCellBlocks(
-          position.anchorRowIndex === undefined ? position.cell.blocks : [],
-        );
+        // A covered position holds no blocks, its content belonging to its region's anchor, which writes it exactly once; the grid-rule check above has already refused a table where one does.
+        this.writeCellBlocks(position.cell.blocks);
         this.raw("\\cell");
       }
       this.line(`${rowDefinition}\\row`);

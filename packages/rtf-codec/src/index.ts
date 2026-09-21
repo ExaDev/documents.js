@@ -25,6 +25,7 @@ export {
   RtfNestingLimitExceededError,
   RtfNotAnRtfDocumentError,
   RtfParseError,
+  RtfTableGridFaultError,
   RtfUnsupportedDocumentKindError,
   RtfWriteError,
 } from "./diagnostics";
