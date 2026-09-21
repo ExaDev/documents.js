@@ -176,6 +176,50 @@ describe("buildDrawingTable / PptxTable", () => {
     );
     expect(cell.borders).toBeUndefined();
   });
+
+  // ExaDev/documents.js#1376: PptxTableCell had no property for a:tcPr/@anchor at all.
+  it("verticalAlign round-trips all three values through a:tcPr/@anchor", () => {
+    const tableElement = buildDrawingTable({ rows: 1, columns: 3 });
+    const table = new PptxTable(tableElement);
+    table.cell(0, 0).verticalAlign = "top";
+    table.cell(0, 1).verticalAlign = "center";
+    table.cell(0, 2).verticalAlign = "bottom";
+    expect(table.cell(0, 0).verticalAlign).toBe("top");
+    expect(table.cell(0, 1).verticalAlign).toBe("center");
+    expect(table.cell(0, 2).verticalAlign).toBe("bottom");
+    const tcPr = directChildElement(table.cell(0, 0).element, "a:tcPr");
+    if (tcPr === undefined) {
+      throw new Error("expected a:tcPr");
+    }
+    expect(tcPr.attributes).toContainEqual({ name: "anchor", value: "t" });
+  });
+
+  it("verticalAlign getter returns undefined when a:tcPr carries no @anchor, and the setter removes @anchor when set back to undefined", () => {
+    const tableElement = buildDrawingTable({ rows: 1, columns: 1 });
+    const table = new PptxTable(tableElement);
+    const cell = table.cell(0, 0);
+    expect(cell.verticalAlign).toBeUndefined();
+    cell.verticalAlign = "center";
+    expect(cell.verticalAlign).toBe("center");
+    cell.verticalAlign = undefined;
+    expect(cell.verticalAlign).toBeUndefined();
+    const tcPr = directChildElement(cell.element, "a:tcPr");
+    expect(tcPr?.attributes.some((a) => a.name === "anchor")).toBe(false);
+  });
+
+  it("verticalAlign setter creates a:tcPr when the cell has none yet", () => {
+    const tableElement = buildDrawingTable({ rows: 1, columns: 1 });
+    const table = new PptxTable(tableElement);
+    const cell = table.cell(0, 0);
+    const tcPr = directChildElement(cell.element, "a:tcPr");
+    if (tcPr !== undefined) {
+      cell.element.children.splice(cell.element.children.indexOf(tcPr), 1);
+    }
+    expect(directChildElement(cell.element, "a:tcPr")).toBeUndefined();
+    cell.verticalAlign = "bottom";
+    expect(cell.verticalAlign).toBe("bottom");
+    expect(directChildElement(cell.element, "a:tcPr")).toBeDefined();
+  });
 });
 
 describe("buildTableGraphicFrame", () => {
