@@ -1052,7 +1052,10 @@ class RtfWriter {
           : direction === "ltr"
             ? "\\ltrrow"
             : "";
-      const rowDefinition = `\\trowd\\trgaph108\\trleft0${rowWrite}${definitions.join("")}`;
+      // "\trhdr Table row header. This row should appear at the top of every page on which the current table appears" (RTF 1.9.1, "Table Definitions"): a row-level property of the same <tbldef>, written alongside the <rowwrite> member and before the <celldef> run. It has no off-word of its own, so an ordinary row writes nothing and the reader's own \trowd reset is what keeps the previous row's flag from carrying over.
+      const rowHeader =
+        table.rows[rowIndex]?.isHeader === true ? "\\trhdr" : "";
+      const rowDefinition = `\\trowd\\trgaph108\\trleft0${rowHeader}${rowWrite}${definitions.join("")}`;
       // Word 2002 onward writes the row properties both before and after the row, which the spec explicitly calls out as the shape a reader should not assume otherwise; emitting both makes the output readable by either kind of reader.
       this.line(rowDefinition);
       for (const position of positions) {

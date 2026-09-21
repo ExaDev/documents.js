@@ -2355,6 +2355,53 @@ describe("body constructs", () => {
     expect(out).toContain("Consolas;");
   });
 
+  it("writes a header row's \\trhdr inside its own \\trowd, and nothing for an ordinary row", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "table",
+          columnWidthsPt: [72],
+          rows: [
+            {
+              isHeader: true,
+              cells: [
+                { blocks: [{ kind: "paragraph", runs: [{ text: "H" }] }] },
+              ],
+            },
+            {
+              cells: [
+                { blocks: [{ kind: "paragraph", runs: [{ text: "B" }] }] },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\trowd\\trgaph108\\trleft0\\trhdr\\cellx");
+    expect(out).toContain("\\trowd\\trgaph108\\trleft0\\cellx");
+  });
+
+  it("writes a header row's direction and \\trhdr together, header first", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "table",
+          columnWidthsPt: [72],
+          rows: [
+            {
+              isHeader: true,
+              direction: "rtl",
+              cells: [
+                { blocks: [{ kind: "paragraph", runs: [{ text: "H" }] }] },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\trowd\\trgaph108\\trleft0\\trhdr\\rtlrow\\cellx");
+  });
+
   it("writes a row's direction as the \\rtlrow/\\ltrrow <rowwrite> member inside its own \\trowd", () => {
     const out = write(
       wordprocessing([
