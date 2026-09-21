@@ -20,8 +20,10 @@ import type {
 } from "document-schema.js";
 import {
   colorToRgbHex,
+  describeTableGridFault,
   findConstructMarkerImbalance,
   findRunConstructFault,
+  findTableGridFault,
   tableCellColumnSpan,
   tableCellRowSpan,
   walkTableGrid,
@@ -856,6 +858,12 @@ function buildTable(
   state: WriteState,
   deleted: boolean,
 ): XmlElement {
+  const gridFault = findTableGridFault(table);
+  if (gridFault !== undefined) {
+    throw new Error(
+      `buildDocxPackageFromContent: table breaks the grid rule (${describeTableGridFault(gridFault)})`,
+    );
+  }
   const grid = el(
     "w:tblGrid",
     {},

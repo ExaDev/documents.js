@@ -3,6 +3,7 @@ import type {
   ConstructDescriptor,
   ContentBlock,
   ContentSection,
+  ContentTable,
 } from "document-schema.js";
 import {
   findConstructMarkerImbalance,
@@ -869,6 +870,69 @@ describe("buildDocxPackageFromContent: content round trip", () => {
     expect(written.rows[0]?.cells[0]?.colSpan).toBe(2);
   });
 
+  describe("a table breaking the grid rule", () => {
+    const paragraphOf = (text: string): ContentBlock => ({
+      kind: "paragraph",
+      runs: [{ text }],
+    });
+    // A merged header whose covered position carries a second copy of the anchor's content, which a w:tc with a gridSpan has no cell to hold.
+    const coveredContentTable: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100, 100],
+      rows: [
+        {
+          cells: [
+            { blocks: [paragraphOf("anchor")], colSpan: 2 },
+            { blocks: [paragraphOf("copy")] },
+          ],
+        },
+      ],
+    };
+
+    function buildWith(table: ContentTable): unknown {
+      return buildDocxPackageFromContent({
+        sections: [
+          {
+            pageSize: { widthPt: 612, heightPt: 792 },
+            margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+            blocks: [table],
+          },
+        ],
+      });
+    }
+
+    it("refuses a table whose covered position carries content, naming the entry point and the fault", () => {
+      expect(() => buildWith(coveredContentTable)).toThrow(
+        "buildDocxPackageFromContent: table breaks the grid rule (the cell at row 0, column 1 lies inside the merged region anchored at row 0, column 0 but carries content of its own, and a merged region's content belongs to its anchor)",
+      );
+    });
+
+    it("refuses a table whose rows differ in length", () => {
+      expect(() =>
+        buildWith({
+          kind: "table",
+          columnWidthsPt: [100, 100],
+          rows: [
+            { cells: [{ blocks: [paragraphOf("a")] }, { blocks: [] }] },
+            { cells: [{ blocks: [paragraphOf("b")] }] },
+          ],
+        }),
+      ).toThrow(
+        /^buildDocxPackageFromContent: table breaks the grid rule \(row 1 holds 1 cells/,
+      );
+    });
+
+    it("refuses a table nested inside a cell", () => {
+      expect(() =>
+        buildWith({
+          kind: "table",
+          columnWidthsPt: [100],
+          rows: [{ cells: [{ blocks: [coveredContentTable] }] }],
+        }),
+      ).toThrow(/^buildDocxPackageFromContent: table breaks the grid rule/);
+    });
+  });
+
   it("writes a table's exact tblPr, tblGrid, gridSpan, vMerge, and trHeight XML, not just a round-trippable one", () => {
     // A round trip through readTable can mask a writer defect the reader happens to tolerate (a wrong tag name it still recognises, a swapped constant it still parses back the same way), so this asserts the actual written XML shape directly rather than only the read-back content.
     const written = buildDocxPackageFromContent({
@@ -890,6 +954,7 @@ describe("buildDocxPackageFromContent: content round trip", () => {
                       ],
                       colSpan: 2,
                     },
+                    { blocks: [] },
                   ],
                 },
                 {
