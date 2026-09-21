@@ -114,16 +114,10 @@ export interface ParagraphFamilyParagraph {
   runs(): readonly ParagraphFamilyRun[];
 }
 
-export interface ParagraphFamilyTableCell {
-  readonly text: string;
-}
-
-export interface ParagraphFamilyTableRow {
-  cells(): readonly ParagraphFamilyTableCell[];
-}
-
+// A table is summarised by its row count and its width in GRID columns. The width comes from the table's own gridColumnCount rather than from counting a row's cells: a row's cells() are the physical cells, which after a horizontal merge are fewer than the grid has columns.
 export interface ParagraphFamilyTable {
-  rows(): readonly ParagraphFamilyTableRow[];
+  rows(): readonly unknown[];
+  gridColumnCount(): number;
 }
 
 // odt keeps lists as a genuinely separate tree (OdtList/OdtListItem, reached via OdtEditor.lists()) rather than docx's flat per-paragraph list membership -- so this is the one adapter member docx's own factory call simply omits. It only ever carries an item count, not each item's own text (OdtListItem.text is real, but reading it here as well would mean this summary-row adapter fetching every item of every list just to render one row per list -- screens/editors/odt/list-editor.tsx reads each item's real text directly, once a list is actually opened).
@@ -208,9 +202,7 @@ function paragraphBadges(paragraph: ParagraphFamilyParagraph): string {
 }
 
 function tableSummary(table: ParagraphFamilyTable): string {
-  const rows = table.rows();
-  const columnCount = rows[0]?.cells().length ?? 0;
-  return `Table ${rows.length}×${columnCount}`;
+  return `Table ${table.rows().length}×${table.gridColumnCount()}`;
 }
 
 function listSummary(list: ParagraphFamilyList, index: number): string {

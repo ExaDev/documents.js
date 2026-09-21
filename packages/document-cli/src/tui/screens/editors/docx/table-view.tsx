@@ -18,6 +18,8 @@ interface CellAddress {
 
 // A table's own cursor is genuinely two-dimensional (row and column together), which does not fit `SelectionState`'s one-scalar-index-per-key model (`SET_SELECTION` carries a single `index: number`) -- so unlike the body list and paragraph-detail screens, this one does not record its cursor into `state.selection` at all; inventing an encoding (e.g. `row * columnCount + column`) for a shape the shared state was not designed to carry would be speculative, not a fix for a real gap. Rendered as a simple, unvirtualised 2D grid rather than through ListView: documents.js tables in practice are modest-sized, and ListView's own single-axis virtualisation does not generalise to two dimensions without reimplementing it.
 //
+// A position a merged region covers is drawn empty: the region's text belongs to its anchor and is drawn there once. The cursor still moves over every grid position, and Enter on a covered position opens the region's anchor cell.
+//
 // 'm' merges cells in this ALREADY-BUILT table (a retrofit onto a table that may have existed long before this session, or been appended plain via the body-list wizard) -- the same range-select-then-merge convention the ODS spreadsheet grid and the pptx/odp slide-table-detail screen both use: 'm' anchors the merge rectangle at the cursor, hjkl/arrows move the OPPOSITE corner, a second 'm' (or Enter) commits MERGE_TABLE_CELLS, Esc cancels a pending merge without leaving the screen.
 export function TableViewScreen(): ReactElement {
   const state = useAppState();
@@ -33,9 +35,10 @@ export function TableViewScreen(): ReactElement {
     screen.kind === "tableView" && doc !== undefined
       ? liveTableAt(doc, screen.blockIndex)
       : undefined;
-  const rows = table === undefined ? [] : table.rows();
+  // The grid view, not rows()[r].cells(): a row's cells() are its physical cells, which after a horizontal merge are fewer than the table has grid columns, so neither the cursor nor the merge rectangle could address the columns a merge covers. Every position here is a grid column, the same one MERGE_TABLE_CELLS takes.
+  const rows = table === undefined ? [] : table.gridRows();
   const rowCount = rows.length;
-  const columnCount = rows[0]?.cells().length ?? 0;
+  const columnCount = table === undefined ? 0 : table.gridColumnCount();
   const clampedRow = rowCount === 0 ? 0 : Math.min(cursor.row, rowCount - 1);
   const clampedColumn =
     columnCount === 0 ? 0 : Math.min(cursor.column, columnCount - 1);
@@ -154,7 +157,7 @@ export function TableViewScreen(): ReactElement {
       ) : (
         rows.map((row, rowIndex) => (
           <Box key={rowIndex}>
-            {row.cells().map((cell, columnIndex) => {
+            {row.map((position, columnIndex) => {
               const isSelected =
                 rowIndex === clampedRow && columnIndex === clampedColumn;
               const isAnchor =
@@ -170,7 +173,9 @@ export function TableViewScreen(): ReactElement {
                   }
                 >
                   <Text color={selectedColor(isSelected)} inverse={isSelected}>
-                    {truncatePreview(cell.text, CELL_WIDTH - 2)}
+                    {position?.isAnchor === true
+                      ? truncatePreview(position.cell.text, CELL_WIDTH - 2)
+                      : ""}
                   </Text>
                 </Box>
               );

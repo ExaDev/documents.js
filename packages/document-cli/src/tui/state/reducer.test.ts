@@ -1333,6 +1333,94 @@ describe("appReducer SET_TABLE_CELL_TEXT", () => {
   });
 });
 
+// The plain text of every cell of the first table, read back through the content pivot, so a write can be traced to the grid column it landed in.
+function firstTableCellTexts(state: AppState): string[][] {
+  const doc = state.openDocument;
+  if (doc?.format !== "docx" && doc?.format !== "odt") {
+    throw new Error("expected an open docx or odt document");
+  }
+  const content =
+    doc.format === "docx"
+      ? readDocxContent(doc.editor.toPackage())
+      : readOdtContent(doc.editor.toPackage());
+  if (content.kind !== "wordprocessing") {
+    throw new Error(
+      `expected a wordprocessing ContentDocument, got ${content.kind}`,
+    );
+  }
+  const tableBlock = content.sections[0]?.blocks[0];
+  if (tableBlock?.kind !== "table") {
+    throw new Error(`expected a table block, got ${tableBlock?.kind}`);
+  }
+  return tableBlock.rows.map((row) =>
+    row.cells.map((cell) =>
+      cell.blocks
+        .flatMap((block) => (block.kind === "paragraph" ? block.runs : []))
+        .map((run) => run.text)
+        .join(""),
+    ),
+  );
+}
+
+describe.each(["docx", "odt"] as const)(
+  "appReducer SET_TABLE_CELL_TEXT addresses grid columns on a merged %s table",
+  (format) => {
+    // A 2x3 table whose first row holds a horizontal merge of grid columns 0 and 1, so that row has two physical cells for three grid columns.
+    function mergedTable(): AppState {
+      return applyAll([
+        { type: "CREATE_DOCUMENT", format },
+        {
+          type: "APPEND_TABLE",
+          rows: 2,
+          columns: 3,
+          merge: { startRow: 0, startColumn: 0, rowSpan: 1, colSpan: 2 },
+        },
+      ]);
+    }
+
+    it("writes to the cell at the grid column past the merge, not to the physical cell at that index", () => {
+      const edited = appReducer(mergedTable(), {
+        type: "SET_TABLE_CELL_TEXT",
+        tableIndex: 0,
+        row: 0,
+        column: 2,
+        text: "third",
+      });
+      expect(firstTableCellTexts(edited)).toEqual([
+        ["", "", "third"],
+        ["", "", ""],
+      ]);
+    });
+
+    it("writes a covered position's text to the region's anchor cell", () => {
+      const edited = appReducer(mergedTable(), {
+        type: "SET_TABLE_CELL_TEXT",
+        tableIndex: 0,
+        row: 0,
+        column: 1,
+        text: "region",
+      });
+      expect(firstTableCellTexts(edited)).toEqual([
+        ["region", "", ""],
+        ["", "", ""],
+      ]);
+    });
+
+    it("warns for a grid column beyond the table's width", () => {
+      const result = appReducer(mergedTable(), {
+        type: "SET_TABLE_CELL_TEXT",
+        tableIndex: 0,
+        row: 0,
+        column: 3,
+        text: "x",
+      });
+      expect(result.status?.text).toBe(
+        "There is no cell at row 0, column 3 of table 0",
+      );
+    });
+  },
+);
+
 describe("appReducer SET_LIST_ITEM_TEXT on odt", () => {
   it("replaces a real list item's text and the change round-trips through re-decoding the package", () => {
     const editor = createOdt();

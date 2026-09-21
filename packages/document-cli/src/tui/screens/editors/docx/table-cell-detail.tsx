@@ -21,13 +21,10 @@ export function TableCellDetailScreen(): ReactElement {
     screen.kind === "tableCellDetail" && doc !== undefined
       ? liveTableAt(doc, screen.blockIndex)
       : undefined;
-  const row =
-    screen.kind === "tableCellDetail" && table !== undefined
-      ? table.rows()[screen.row]
-      : undefined;
+  // The screen's column is a grid column, so a position inside a merged region resolves to the region's anchor cell.
   const cell =
-    screen.kind === "tableCellDetail" && row !== undefined
-      ? row.cells()[screen.col]
+    screen.kind === "tableCellDetail" && table !== undefined
+      ? table.gridRows()[screen.row]?.[screen.col]?.cell
       : undefined;
 
   useInput(
