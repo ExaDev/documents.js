@@ -1,3 +1,9 @@
+## [11.1.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%4011.0.0...ooxml.js%4011.1.0) (2026-09-21)
+
+### Features
+
+* **ooxml.js:** read a pptx table cell's vertical alignment from a:tcPr/[@anchor](https://github.com/anchor) ([368667d](https://github.com/ExaDev/documents.js/commit/368667dc8cba8a308a88369cbfc1ba1d49664378))
+
 ## [11.0.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%4010.0.2...ooxml.js%4011.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES
