@@ -16,17 +16,15 @@ import { addFormulaObject } from "../../odf-package/formula";
 import { addImageMedia } from "../../odf-package/media";
 import { directChildElement } from "../../xml/edit";
 import { el } from "../../xml/fragment";
+import { COLUMN_TAG, HEADER_COLUMNS_TAG, HEADER_ROWS_TAG } from "./address";
 import {
   COLUMN_REPEAT_ATTR,
-  COLUMN_TAG,
-  HEADER_COLUMNS_TAG,
-  HEADER_ROWS_TAG,
-  ROW_REPEAT_ATTR,
-  ROW_TAG,
   collectRunMembers,
   isElementWithTag,
   readRunRepeatCount,
-} from "./address";
+  ROW_REPEAT_ATTR,
+  ROW_TAG,
+} from "../odf-repeated-runs";
 
 // A floating draw:frame in a spreadsheet (an image, or an embedded OLE sub-object) is a direct child of table:table's own table:shapes wrapper -- NOT of office:spreadsheet, and NOT anchored inline in any cell's own text:p the way a docx/odt drawing can be. Confirmed against the OASIS ODF 1.3 RelaxNG content model for table:table: table:shapes (when present) precedes every table:table-column/table:table-header-columns/table:table-row/table:table-header-rows group -- this editor never writes table:table-source/office:dde-source/table:scenario (the only elements that could precede table:shapes), so table:shapes is always tableElement's own first child. svg:x/svg:y/svg:width/svg:height inside are absolute, relative to the table's own top-left origin -- the same convention src/edit/odp/shape.ts's buildImageFrame already uses for a slide, just resolved here from a ContentSheetImage's own anchorRow/anchorColumn/offsetXPt/offsetYPt rather than accepted as an already-absolute Box, since that is the shape document-schema.js's ContentSheetImage models a spreadsheet anchor with (a Box has no ROW/COLUMN concept at all).
 const SHAPES_TAG = "table:shapes";
