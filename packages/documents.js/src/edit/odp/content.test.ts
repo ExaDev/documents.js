@@ -363,3 +363,74 @@ describe("buildOdpPackage", () => {
     expect(firstVector.frame.yPt).toBeCloseTo(firstFixture.frame.yPt + 50, 6);
   });
 });
+
+describe("buildOdpPackage: a slide table's own rows", () => {
+  it("writes one table row per ContentTableRow, with no blank rows ahead of the content", () => {
+    const content = presentationDoc([
+      {
+        size: { widthPt: 720, heightPt: 540 },
+        notes: "",
+        shapes: [
+          {
+            frame: { xPt: 36, yPt: 36, widthPt: 480, heightPt: 240 },
+            ...ZERO_INSETS,
+            blocks: [
+              {
+                kind: "table",
+                columnWidthsPt: [120, 120],
+                rows: [
+                  {
+                    cells: [
+                      {
+                        blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }],
+                      },
+                      {
+                        blocks: [{ kind: "paragraph", runs: [{ text: "b" }] }],
+                      },
+                    ],
+                  },
+                  {
+                    cells: [
+                      {
+                        blocks: [{ kind: "paragraph", runs: [{ text: "c" }] }],
+                      },
+                      {
+                        blocks: [{ kind: "paragraph", runs: [{ text: "d" }] }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    const read = readOdpContent(
+      decodePackage(encodePackage(buildOdpPackage(content))),
+    );
+    const block =
+      read.kind === "presentation"
+        ? read.slides[0]?.shapes[0]?.blocks[0]
+        : undefined;
+    if (block?.kind !== "table") {
+      throw new Error("expected the slide's shape to hold a table");
+    }
+    expect(
+      block.rows.map((row) =>
+        row.cells.map((cell) =>
+          cell.blocks
+            .flatMap((cellBlock) =>
+              cellBlock.kind === "paragraph"
+                ? cellBlock.runs.map((run) => run.text)
+                : [],
+            )
+            .join(""),
+        ),
+      ),
+    ).toEqual([
+      ["a", "b"],
+      ["c", "d"],
+    ]);
+  });
+});

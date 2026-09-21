@@ -89,10 +89,11 @@ function appendShape(slide: OdpSlide, shape: ContentShape): void {
     return;
   }
   if (shape.blocks.length === 1 && onlyBlock?.kind === "table") {
+    // The table is created with no rows of its own, exactly as the document-level path in ../odt/content.ts creates one: populateOdtTable appends a row per ContentTableRow, so a scaffold row here would not be filled but preceded by the real content, leaving the slide's table taller than its own rows and every leading row blank.
     const { shape: tableFrame, table } = slide.addTable({
       frame: shape.frame,
       table: {
-        rows: onlyBlock.rows.length,
+        rows: 0,
         columns: onlyBlock.columnWidthsPt.length,
         columnWidthsPt: onlyBlock.columnWidthsPt,
       },
