@@ -710,7 +710,29 @@ function readTableCellFill(
     : readPatternFill(pattFill, context);
 }
 
-// One a:tc as the ContentTableCell at its own grid position (ContentTable's grid rule, document-schema.js). DrawingML states a merged-away position as a real a:tc marked hMerge="1" or vMerge="1" (both, for the interior of a region wider and taller than one cell), and it carries an a:tcPr of its own, so the fill and borders come from a:tcPr for a covered position exactly as for an anchor. A covered position holds no blocks and no spans: its content and the region's spans belong to the anchor a:tc.
+// a:tcPr/@anchor (ECMA-376 21.1.3.8, ST_TextAnchoringType) -- the pptx-side counterpart to ODF's style:vertical-align (odf.js's typed/shared/table.ts, PIVOT_VERTICAL_ALIGN_BY_ODF) and RTF's \clvertalt/\clvertalc/\clvertalb, all three converging on ContentTableCell.verticalAlign's own three-member vocabulary. ST_TextAnchoringType has five members -- t/ctr/b plus just and dist -- but "just" (justified, first and last lines flush to both edges) and "dist" (distributed, every line evenly spaced) describe how multiple lines fill the cell's vertical extent, not a position among three discrete slots, so neither has a pivot equivalent to map onto; both are left unread here, the same "no member to guess at" convention isVerticalAlign applies in odf.js. An anchor attribute absent entirely, or set to just/dist, both read as undefined.
+const PIVOT_VERTICAL_ALIGN_BY_ANCHOR: ReadonlyMap<
+  string,
+  NonNullable<ContentTableCell["verticalAlign"]>
+> = new Map([
+  ["t", "top"],
+  ["ctr", "center"],
+  ["b", "bottom"],
+]);
+
+function readTableCellVerticalAlign(
+  tcPr: XmlElement | undefined,
+): ContentTableCell["verticalAlign"] {
+  if (tcPr === undefined) {
+    return undefined;
+  }
+  const anchor = attr(tcPr, "anchor");
+  return anchor === undefined
+    ? undefined
+    : PIVOT_VERTICAL_ALIGN_BY_ANCHOR.get(anchor);
+}
+
+// One a:tc as the ContentTableCell at its own grid position (ContentTable's grid rule, document-schema.js). DrawingML states a merged-away position as a real a:tc marked hMerge="1" or vMerge="1" (both, for the interior of a region wider and taller than one cell), and it carries an a:tcPr of its own, so the fill, borders and vertical alignment come from a:tcPr for a covered position exactly as for an anchor. A covered position holds no blocks and no spans: its content and the region's spans belong to the anchor a:tc.
 function readTableCell(
   tc: XmlElement,
   context: SlideInheritanceContext,
@@ -719,8 +741,9 @@ function readTableCell(
   const tcPr = childrenWithTag(tc, "a:tcPr")[0];
   const background = readTableCellFill(tcPr, context);
   const borders = readTableCellBorders(tcPr, context);
+  const verticalAlign = readTableCellVerticalAlign(tcPr);
   if (attr(tc, "hMerge") === "1" || attr(tc, "vMerge") === "1") {
-    return { blocks: [], background, borders };
+    return { blocks: [], background, borders, verticalAlign };
   }
   const txBody = childrenWithTag(tc, "a:txBody")[0];
   const gridSpan = attr(tc, "gridSpan");
@@ -731,6 +754,7 @@ function readTableCell(
     rowSpan: rowSpan === undefined ? undefined : Number(rowSpan),
     background,
     borders,
+    verticalAlign,
   };
 }
 
