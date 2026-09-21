@@ -39,14 +39,14 @@ export interface TableInit {
   readonly columnWidthsPt?: readonly number[];
 }
 
-// 468pt (6.5in) -- US Letter page width (612pt) minus 1in margins either side (2 x 72pt), matching createEmptyOdtPackage's own default page-layout (scaffold.ts) and docx's identical DEFAULT_TABLE_WIDTH_TWIPS (src/edit/docx/table.ts, in twips: 9360 / 20 = 468pt) -- the content width a new table defaults to when no explicit widths are given.
+// 468pt (6.5in) — US Letter page width (612pt) minus 1in margins either side (2 x 72pt), matching createEmptyOdtPackage's own default page-layout (scaffold.ts) and docx's identical DEFAULT_TABLE_WIDTH_TWIPS (src/edit/docx/table.ts, in twips: 9360 / 20 = 468pt) — the content width a new table defaults to when no explicit widths are given.
 const DEFAULT_TABLE_WIDTH_PT = 468;
 
 const TABLE_COLUMN_STYLE_PREFIX = "OdtCol";
 const TABLE_CELL_STYLE_PREFIX = "OdtCell";
 const TABLE_ROW_STYLE_PREFIX = "OdtRow";
 
-// odf.js's own reader resolves a cell's background and borders out of style:table-cell-properties (fo:background-color and fo:border-left/right/top/bottom, each a "<width> <style> <color>" shorthand -- see typed/shared/table.ts readCellStyleDecoration). But odf.js's StyleRegistry/StyleProperties model only text/paragraph formatting and never emit a style:table-cell-properties element at all, exactly the same hole src/edit/odg/style.ts closes for style:graphic-properties. This is the table-cell counterpart: a small, self-contained, append-only writer scoped to exactly the two attributes a cell's background and borders need, reusing ensureAutomaticStyles/nextStyleName (the shared find-or-create office:automatic-styles + mint-next-name logic) rather than a third reimplementation of that lookup -- mirroring both internTableColumnWidth above and odg/style.ts's own graphic-family writer.
+// odf.js's own reader resolves a cell's background and borders out of style:table-cell-properties (fo:background-color and fo:border-left/right/top/bottom, each a "<width> <style> <color>" shorthand — see typed/shared/table.ts readCellStyleDecoration). But odf.js's StyleRegistry/StyleProperties model only text/paragraph formatting and never emit a style:table-cell-properties element at all, exactly the same hole src/edit/odg/style.ts closes for style:graphic-properties. This is the table-cell counterpart: a small, self-contained, append-only writer scoped to exactly the two attributes a cell's background and borders need, reusing ensureAutomaticStyles/nextStyleName (the shared find-or-create office:automatic-styles + mint-next-name logic) rather than a third reimplementation of that lookup — mirroring both internTableColumnWidth above and odg/style.ts's own graphic-family writer.
 
 const BORDER_EDGE_ATTRS: Readonly<
   Record<"top" | "right" | "bottom" | "left", string>
@@ -204,7 +204,7 @@ export function buildCellStyle(
   return name;
 }
 
-// odf.js's StyleRegistry cannot express a table column's width at all -- StylePropertiesSchema (src/styles/properties.ts) has no columnWidthPt field, so style:table-column-properties/@style:column-width (the only place ODF records it) is entirely outside what StyleRegistry.intern can produce. This is therefore hand-rolled, mirroring StyleRegistry.intern's own append-only, fingerprint-deduplicated contract by hand: reuse an existing table-column style if one with the exact same formatted width is already present, otherwise mint a fresh name (via automatic-styles.ts's nextStyleName) and append a new entry -- never mutate or remove an existing one.
+// odf.js's StyleRegistry cannot express a table column's width at all — StylePropertiesSchema (src/styles/properties.ts) has no columnWidthPt field, so style:table-column-properties/@style:column-width (the only place ODF records it) is entirely outside what StyleRegistry.intern can produce. This is therefore hand-rolled, mirroring StyleRegistry.intern's own append-only, fingerprint-deduplicated contract by hand: reuse an existing table-column style if one with the exact same formatted width is already present, otherwise mint a fresh name (via automatic-styles.ts's nextStyleName) and append a new entry — never mutate or remove an existing one.
 function internTableColumnWidth(pkg: Package, widthPt: number): string {
   const automaticStyles = ensureAutomaticStyles(pkg);
   const formatted = formatOdfLength(widthPt, "pt");
@@ -243,7 +243,7 @@ function internTableColumnWidth(pkg: Package, widthPt: number): string {
   return name;
 }
 
-// The row's own CURRENT style:table-row-properties element -- via table:style-name -> style:style[family="table-row"] -> style:table-row-properties -- or undefined when the row carries no style, or its style has no such properties element. findStyleElement itself resolves across BOTH content.xml and styles.xml (including office:styles' common/named styles), so a row referencing a shared named style rather than its own automatic one still resolves here -- but cloneCurrentRowProperties below copies only the resolved style's own style:table-row-properties element, discarding that style's own style:parent-style-name and any sibling properties element a named style might also carry (style:table-cell-properties and the like); harmless within this ecosystem, since a table-row family style never carries anything but style:table-row-properties in practice and odf.js's own table-row resolution does no parent-chain walk either (typed/shared/table.ts's own resolveRowHeightPt convention, for the identical "standalone in practice" reason).
+// The row's own CURRENT style:table-row-properties element — via table:style-name -> style:style[family="table-row"] -> style:table-row-properties — or undefined when the row carries no style, or its style has no such properties element. findStyleElement itself resolves across BOTH content.xml and styles.xml (including office:styles' common/named styles), so a row referencing a shared named style rather than its own automatic one still resolves here — but cloneCurrentRowProperties below copies only the resolved style's own style:table-row-properties element, discarding that style's own style:parent-style-name and any sibling properties element a named style might also carry (style:table-cell-properties and the like); harmless within this ecosystem, since a table-row family style never carries anything but style:table-row-properties in practice and odf.js's own table-row resolution does no parent-chain walk either (typed/shared/table.ts's own resolveRowHeightPt convention, for the identical "standalone in practice" reason).
 function currentRowPropertiesElement(
   pkg: Package,
   rowElement: XmlElement,
@@ -261,7 +261,7 @@ function currentRowPropertiesElement(
       );
 }
 
-// A structural clone of the row's own current style:table-row-properties element (currentRowPropertiesElement above), or a fresh empty one when the row has none -- structuredClone is safe here exactly as it is at src/edit/ods/address.ts's own identical use: an XmlElement is plain, serializable data with no methods or non-cloneable values. Cloning the WHOLE element, rather than reconstructing it attribute-by-attribute the way this file's own previous version did, is what lets every OTHER property already on it survive a heightPt write untouched -- fo:break-before, fo:keep-together, and fo:background-color are all properties this file has NO dedicated getter/setter for at all (heightPt/style:row-height is the only one), which is exactly why cloning the whole element, rather than enumerating named properties one at a time, is the right approach; it also carries across this element's one permitted CHILD, style:background-image (OASIS ODF 1.3 RelaxNG: style:table-row-properties-content permits exactly that one optional child), without this file ever needing to enumerate each one by name. style:use-optimal-row-height is the one exception: the caller deliberately mutates it (alongside style:row-height itself) on the returned clone; see the heightPt setter below for why.
+// A structural clone of the row's own current style:table-row-properties element (currentRowPropertiesElement above), or a fresh empty one when the row has none — structuredClone is safe here exactly as it is at src/edit/ods/address.ts's own identical use: an XmlElement is plain, serializable data with no methods or non-cloneable values. Cloning the WHOLE element, rather than reconstructing it attribute-by-attribute the way this file's own previous version did, is what lets every OTHER property already on it survive a heightPt write untouched — fo:break-before, fo:keep-together, and fo:background-color are all properties this file has NO dedicated getter/setter for at all (heightPt/style:row-height is the only one), which is exactly why cloning the whole element, rather than enumerating named properties one at a time, is the right approach; it also carries across this element's one permitted CHILD, style:background-image (OASIS ODF 1.3 RelaxNG: style:table-row-properties-content permits exactly that one optional child), without this file ever needing to enumerate each one by name. style:use-optimal-row-height is the one exception: the caller deliberately mutates it (alongside style:row-height itself) on the returned clone; see the heightPt setter below for why.
 function cloneCurrentRowProperties(
   pkg: Package,
   rowElement: XmlElement,
@@ -272,7 +272,7 @@ function cloneCurrentRowProperties(
     : structuredClone(props);
 }
 
-// Structural equality between two XML nodes -- used by xmlElementsEqual below to compare a style:table-row-properties element's CHILDREN, not just its attributes. style:background-image, the one child the schema permits here, is itself an element, so the element branch is the one that actually matters; text/cdata/comment are covered too since a hand-pretty-printed source document could carry whitespace between an opening tag and its child. An XmlDeclaration/XmlPi can never occur as an element's own child in a tree odf.js's parser produces (both appear only at the document root), so either one simply compares unequal to anything here rather than this function pretending to model a case that cannot arise.
+// Structural equality between two XML nodes — used by xmlElementsEqual below to compare a style:table-row-properties element's CHILDREN, not just its attributes. style:background-image, the one child the schema permits here, is itself an element, so the element branch is the one that actually matters; text/cdata/comment are covered too since a hand-pretty-printed source document could carry whitespace between an opening tag and its child. An XmlDeclaration/XmlPi can never occur as an element's own child in a tree odf.js's parser produces (both appear only at the document root), so either one simply compares unequal to anything here rather than this function pretending to model a case that cannot arise.
 function xmlNodesEqual(a: XmlNode, b: XmlNode): boolean {
   if (a.type === "element" && b.type === "element") {
     return xmlElementsEqual(a, b);
@@ -289,7 +289,7 @@ function xmlNodesEqual(a: XmlNode, b: XmlNode): boolean {
   return false;
 }
 
-// Structural equality between two elements: the same tag, the identical set of attributes (order-independent, mirroring this file's own established attribute-set comparison), and the identical children in the same document order. internTableRowProperties below uses this to decide whether an existing automatic style's own style:table-row-properties element can be reused for a new request -- comparing attributes alone (this file's previous rowStylePropertiesMatch) let a plain height-only row reuse a style that also carried an extra child element such as style:background-image, silently importing it onto a row that never had one. Comparing the WHOLE element closes that generally, for any property or child this file has never enumerated by name, rather than special-casing style:background-image specifically.
+// Structural equality between two elements: the same tag, the identical set of attributes (order-independent, mirroring this file's own established attribute-set comparison), and the identical children in the same document order. internTableRowProperties below uses this to decide whether an existing automatic style's own style:table-row-properties element can be reused for a new request — comparing attributes alone (this file's previous rowStylePropertiesMatch) let a plain height-only row reuse a style that also carried an extra child element such as style:background-image, silently importing it onto a row that never had one. Comparing the WHOLE element closes that generally, for any property or child this file has never enumerated by name, rather than special-casing style:background-image specifically.
 function xmlElementsEqual(a: XmlElement, b: XmlElement): boolean {
   if (a.tag !== b.tag || a.attributes.length !== b.attributes.length) {
     return false;
@@ -317,7 +317,7 @@ function xmlElementsEqual(a: XmlElement, b: XmlElement): boolean {
   return true;
 }
 
-// The row-height counterpart to internTableColumnWidth above, generalised beyond a single attribute: mints (or reuses) a style:style[family="table-row"] carrying `properties` -- already a full style:table-row-properties element, attributes and any children both -- as its own child. Reuse requires the FULL element to match (xmlElementsEqual above: same attributes, same children, same order), never attributes alone, so a request carrying no extra child never reuses a style whose element carries one. Callers pass a clone of the row's own current properties element with heightPt's own change already applied (cloneCurrentRowProperties plus the heightPt setter's own mutation below) -- never mutate an existing automatic style in place, since other rows may still reference it.
+// The row-height counterpart to internTableColumnWidth above, generalised beyond a single attribute: mints (or reuses) a style:style[family="table-row"] carrying `properties` — already a full style:table-row-properties element, attributes and any children both — as its own child. Reuse requires the FULL element to match (xmlElementsEqual above: same attributes, same children, same order), never attributes alone, so a request carrying no extra child never reuses a style whose element carries one. Callers pass a clone of the row's own current properties element with heightPt's own change already applied (cloneCurrentRowProperties plus the heightPt setter's own mutation below) — never mutate an existing automatic style in place, since other rows may still reference it.
 function internTableRowProperties(
   pkg: Package,
   properties: XmlElement,
@@ -364,7 +364,7 @@ export class OdtTableCell {
     this.pkg = pkg;
   }
 
-  // A cell's direct paragraph-level children -- text:p and text:h both, exactly the two tags odf.js's own cell reader walks (typed/shared/table.ts) and the same both-tag scope OdtBody.paragraphs gives office:text, so a heading promoted into a cell (by OdtParagraph's headingLevel setter or buildOdtPackage's cell population) stays visible here with its headingLevel readable rather than vanishing from the editor surface.
+  // A cell's direct paragraph-level children — text:p and text:h both, exactly the two tags odf.js's own cell reader walks (typed/shared/table.ts) and the same both-tag scope OdtBody.paragraphs gives office:text, so a heading promoted into a cell (by OdtParagraph's headingLevel setter or buildOdtPackage's cell population) stays visible here with its headingLevel readable rather than vanishing from the editor surface.
   paragraphs(): OdtParagraph[] {
     const out: OdtParagraph[] = [];
     for (const child of this.node.children) {
@@ -395,7 +395,7 @@ export class OdtTableCell {
     return raw === undefined ? undefined : Number(raw);
   }
 
-  // Marks this cell as the top-left of an N-column merge (ODF's own table:number-columns-spanned) -- the write-side inverse of odf.js's own readTableCell, whose ContentTableCell.colSpan this mirrors. Unlike docx's gridSpan, ODF still needs one real element per covered grid column even for a horizontal merge -- OdtTableRow.appendCoveredCell writes those, this setter only marks the merge's own starting cell.
+  // Marks this cell as the top-left of an N-column merge (ODF's own table:number-columns-spanned) — the write-side inverse of odf.js's own readTableCell, whose ContentTableCell.colSpan this mirrors. Unlike docx's gridSpan, ODF still needs one real element per covered grid column even for a horizontal merge — OdtTableRow.appendCoveredCell writes those, this setter only marks the merge's own starting cell.
   set colSpan(value: number | undefined) {
     if (value === undefined) {
       removeAttr(this.node, "table:number-columns-spanned");
@@ -409,7 +409,7 @@ export class OdtTableCell {
     return raw === undefined ? undefined : Number(raw);
   }
 
-  // Marks this cell as the top of an N-row merge (ODF's own table:number-rows-spanned) -- the write-side inverse of odf.js's own readTableCell, whose ContentTableCell.rowSpan this mirrors. The rows below still need a real table:covered-table-cell element at the same grid column (OdtTableRow.appendCoveredCell) -- ODF has no attribute-only way to express "this cell continues one above it" the way docx's w:vMerge does.
+  // Marks this cell as the top of an N-row merge (ODF's own table:number-rows-spanned) — the write-side inverse of odf.js's own readTableCell, whose ContentTableCell.rowSpan this mirrors. The rows below still need a real table:covered-table-cell element at the same grid column (OdtTableRow.appendCoveredCell) — ODF has no attribute-only way to express "this cell continues one above it" the way docx's w:vMerge does.
   set rowSpan(value: number | undefined) {
     if (value === undefined) {
       removeAttr(this.node, "table:number-rows-spanned");
@@ -418,7 +418,7 @@ export class OdtTableCell {
     setAttr(this.node, "table:number-rows-spanned", String(value));
   }
 
-  // Cell background and per-edge borders live in style:table-cell-properties (fo:background-color and fo:border-top/right/bottom/left) -- outside what odf.js's StyleRegistry can express, so each setter re-mints a fresh table-cell automatic style carrying BOTH the change and the other decoration already on the cell (read back via readCellDecoration), repointing table:style-name at the result. Mirrors src/edit/odg/style.ts's setGraphicFill/setGraphicStroke (read-current, merge, mint) so setting background then borders -- or vice versa -- lands both in one style rather than the second clobbering the first.
+  // Cell background and per-edge borders live in style:table-cell-properties (fo:background-color and fo:border-top/right/bottom/left) — outside what odf.js's StyleRegistry can express, so each setter re-mints a fresh table-cell automatic style carrying BOTH the change and the other decoration already on the cell (read back via readCellDecoration), repointing table:style-name at the result. Mirrors src/edit/odg/style.ts's setGraphicFill/setGraphicStroke (read-current, merge, mint) so setting background then borders — or vice versa — lands both in one style rather than the second clobbering the first.
   get background(): Color | undefined {
     return readCellDecoration(this.pkg, this.node).background;
   }
@@ -462,7 +462,7 @@ function writeCellBorders(
   setAttr(node, "table:style-name", name);
 }
 
-// A live view over a table:covered-table-cell -- the grid position a merge anchored elsewhere covers. It carries no content and no span of its own, but ODF gives the element its own table:style-name like any cell, so it holds its own background and borders through the same style mint OdtTableCell uses; that is what lets a ContentTable's covered entry, which may carry them, round-trip.
+// A live view over a table:covered-table-cell — the grid position a merge anchored elsewhere covers. It carries no content and no span of its own, but ODF gives the element its own table:style-name like any cell, so it holds its own background and borders through the same style mint OdtTableCell uses; that is what lets a ContentTable's covered entry, which may carry them, round-trip.
 export class OdtCoveredTableCell {
   private readonly node: XmlElement;
   private readonly pkg: Package;
@@ -501,7 +501,7 @@ function retagAsCovered(element: XmlElement): void {
   element.children = [];
 }
 
-// A row's own true grid columns, one entry per logical position, in document order: BOTH real table:table-cell and placeholder table:covered-table-cell children, each expanded by its own table:number-columns-repeated (ExaDev/documents.js#1374) -- a repeated element stands for that many IDENTICAL adjacent grid columns (ODF's own repeat semantics, matching odf.js's read-side expansion in typed/shared/table.ts's readTableRow), not one, so this is the count every grid-addressed read or write in this file must reckon against, never a row's own physical child count. Every entry past the first for a given element shares that SAME element: the row genuinely has fewer physical children than grid columns until something individuates one of them (individuateGridColumn below).
+// A row's own true grid columns, one entry per logical position, in document order: BOTH real table:table-cell and placeholder table:covered-table-cell children, each expanded by its own table:number-columns-repeated (ExaDev/documents.js#1374) — a repeated element stands for that many IDENTICAL adjacent grid columns (ODF's own repeat semantics, matching odf.js's read-side expansion in typed/shared/table.ts's readTableRow), not one, so this is the count every grid-addressed read or write in this file must reckon against, never a row's own physical child count. Every entry past the first for a given element shares that SAME element: the row genuinely has fewer physical children than grid columns until something individuates one of them (individuateGridColumn below).
 function gridColumnElements(
   row: XmlElement,
 ): { readonly columnIndex: number; readonly element: XmlElement }[] {
@@ -521,7 +521,7 @@ function gridColumnElements(
   return out;
 }
 
-// The row's own grid width: the count of logical positions its real and covered cells together stand for, honouring repeats -- the bound every grid-column-addressed read or write in this file validates against, never the row's own physical child count.
+// The row's own grid width: the count of logical positions its real and covered cells together stand for, honouring repeats — the bound every grid-column-addressed read or write in this file validates against, never the row's own physical child count.
 function rowGridColumnCount(row: XmlElement): number {
   return collectRunMembers(row.children, isCellOrCoveredCell, undefined).reduce(
     (sum, member) => sum + readRunRepeatCount(member.node, COLUMN_REPEAT_ATTR),
@@ -529,7 +529,7 @@ function rowGridColumnCount(row: XmlElement): number {
   );
 }
 
-// Reads the element at grid column `columnIndex` of `row` without mutating anything, even when that column falls inside a repeated run -- used for a check (planMerge's anchor lookup) that must inspect a position's tag before deciding whether the operation is even valid, so that a refusal leaves the table exactly as it found it. Returns undefined for a negative or out-of-range columnIndex, matching this file's own established "does not exist" error wording at every call site.
+// Reads the element at grid column `columnIndex` of `row` without mutating anything, even when that column falls inside a repeated run — used for a check (planMerge's anchor lookup) that must inspect a position's tag before deciding whether the operation is even valid, so that a refusal leaves the table exactly as it found it. Returns undefined for a negative or out-of-range columnIndex, matching this file's own established "does not exist" error wording at every call site.
 function locateGridColumnElement(
   row: XmlElement,
   columnIndex: number,
@@ -552,7 +552,7 @@ function locateGridColumnElement(
   return undefined;
 }
 
-// Individuates grid column `columnIndex` of `row`: when it falls inside a repeated run, splits that run in place (odf-repeated-runs.ts's replaceRun) into an optional shortened "before" run, a single un-repeated element at exactly this column, and an optional shortened "after" run -- the un-repeat an edit to one repeated column needs, applied only to the column the edit actually touches, so the rest of the run (and whatever content it carries) survives untouched. Callers must bounds-check columnIndex against rowGridColumnCount first: replaceRun's own gap-filling fallback (its third case, for ODS's sparse-sheet addressing) would otherwise silently grow this row with a placeholder cell it was never asked to have, which is never correct for an ODT table -- every grid column an odt row states already has a real backing element, repeated or not, so an out-of-range column is always a caller error, not a gap to fill.
+// Individuates grid column `columnIndex` of `row`: when it falls inside a repeated run, splits that run in place (odf-repeated-runs.ts's replaceRun) into an optional shortened "before" run, a single un-repeated element at exactly this column, and an optional shortened "after" run — the un-repeat an edit to one repeated column needs, applied only to the column the edit actually touches, so the rest of the run (and whatever content it carries) survives untouched. Callers must bounds-check columnIndex against rowGridColumnCount first: replaceRun's own gap-filling fallback (its third case, for ODS's sparse-sheet addressing) would otherwise silently grow this row with a placeholder cell it was never asked to have, which is never correct for an ODT table — every grid column an odt row states already has a real backing element, repeated or not, so an out-of-range column is always a caller error, not a gap to fill.
 function individuateGridColumn(
   row: XmlElement,
   columnIndex: number,
@@ -564,7 +564,7 @@ function individuateGridColumn(
     COLUMN_REPEAT_ATTR,
     () => {
       throw new Error(
-        `individuateGridColumn: column ${columnIndex} has no existing element to individuate in this row -- callers must bounds-check against rowGridColumnCount first`,
+        `individuateGridColumn: column ${columnIndex} has no existing element to individuate in this row — callers must bounds-check against rowGridColumnCount first`,
       );
     },
   );
@@ -575,7 +575,7 @@ function tableRowElements(table: XmlElement): XmlElement[] {
   return tableRowEntries(table).map((entry) => entry.element);
 }
 
-// The real cells of one row, each with the grid column its element sits at. A covered position has no cell of its own to place: the anchor that covers it owns it. A cell carrying its own table:number-columns-repeated (ExaDev/documents.js#1374) places once per logical column it stands for (gridColumnElements above), each entry wrapping the SAME underlying element -- reading any of those positions reads the same live content, exactly as ODF's repeat semantics say they are the same cell repeated, until an edit that touches one of them individuates it (OdtTableRow.mergeCellsHorizontally/markCellCovered, OdtTable.mergeCells).
+// The real cells of one row, each with the grid column its element sits at. A covered position has no cell of its own to place: the anchor that covers it owns it. A cell carrying its own table:number-columns-repeated (ExaDev/documents.js#1374) places once per logical column it stands for (gridColumnElements above), each entry wrapping the SAME underlying element — reading any of those positions reads the same live content, exactly as ODF's repeat semantics say they are the same cell repeated, until an edit that touches one of them individuates it (OdtTableRow.mergeCellsHorizontally/markCellCovered, OdtTable.mergeCells).
 function placedCells(
   row: XmlElement,
   pkg: Package,
@@ -690,7 +690,7 @@ function describeRegionAnchor(region: GridRegion): string {
   return `the merge anchored at row ${region.row}, column ${region.column}`;
 }
 
-// A single grid position: the table:table-row element it belongs to and its grid column within that row. planMerge below resolves a merge's anchor and every consumed position to positions rather than to elements, since a position inside a repeated run (ExaDev/documents.js#1374) has no element of its own until applyMerge's own individuateGridColumn call gives it one -- resolving straight to an element here, the way this used to, would mutate whichever OTHER grid columns happened to share that element's repeat run at the time planMerge ran.
+// A single grid position: the table:table-row element it belongs to and its grid column within that row. planMerge below resolves a merge's anchor and every consumed position to positions rather than to elements, since a position inside a repeated run (ExaDev/documents.js#1374) has no element of its own until applyMerge's own individuateGridColumn call gives it one — resolving straight to an element here, the way this used to, would mutate whichever OTHER grid columns happened to share that element's repeat run at the time planMerge ran.
 interface GridPosition {
   readonly row: XmlElement;
   readonly column: number;
@@ -720,7 +720,7 @@ function refuseMerge(rowIndex: number, reason: string): MergeRefused {
 //
 // A merge is refused when it would leave the grid rule broken, which is when its rectangle cuts through a merged region: a region the rectangle reaches that is not wholly inside it would either keep positions the new merge takes while losing its anchor, or lose positions to the new merge while keeping its anchor. A merged region wholly inside the rectangle is swallowed whole, as any unmerged cell in it is, so it leaves no orphan behind. The one merge that reaches a region without being wholly around it is one that changes nothing: a rectangle one row high over an anchor that already spans exactly its columns.
 //
-// The refusal names the row of the rectangle it was found in, the grid column, and the anchor of the region in the way. Every column this reads is a GRID column (locateGridColumnElement/rowGridColumnCount, honouring table:number-columns-repeated -- ExaDev/documents.js#1374): a position an earlier repeated cell stands for is reached the same way any other position is. Nothing here mutates the row: the anchor and every consumed position are resolved to plain (row, column) pairs, never to an element, so a refusal leaves the table exactly as it found it and a later individuation (applyMerge) is the only thing that ever splits a repeated run.
+// The refusal names the row of the rectangle it was found in, the grid column, and the anchor of the region in the way. Every column this reads is a GRID column (locateGridColumnElement/rowGridColumnCount, honouring table:number-columns-repeated — ExaDev/documents.js#1374): a position an earlier repeated cell stands for is reached the same way any other position is. Nothing here mutates the row: the anchor and every consumed position are resolved to plain (row, column) pairs, never to an element, so a refusal leaves the table exactly as it found it and a later individuation (applyMerge) is the only thing that ever splits a repeated run.
 function planMerge(
   table: XmlElement,
   pkg: Package,
@@ -782,7 +782,7 @@ function planMerge(
   return { anchor: { row: anchorRow, column: target.column }, consumed };
 }
 
-// Carries out a merge planMerge allowed: individuates and retags every consumed position (individuateGridColumn, un-repeating exactly the columns this merge touches -- ExaDev/documents.js#1374 -- and leaving the rest of any repeated run, and whatever content it carries, untouched) and states the region's spans on its own individuated anchor. A rectangle one row high leaves the anchor's row span alone, since it is either unstated or a vertical merge the rectangle leaves as it is.
+// Carries out a merge planMerge allowed: individuates and retags every consumed position (individuateGridColumn, un-repeating exactly the columns this merge touches — ExaDev/documents.js#1374 — and leaving the rest of any repeated run, and whatever content it carries, untouched) and states the region's spans on its own individuated anchor. A rectangle one row high leaves the anchor's row span alone, since it is either unstated or a vertical merge the rectangle leaves as it is.
 function applyMerge(
   plan: MergeAllowed,
   target: GridRegion,
@@ -861,7 +861,7 @@ export class OdtTableRow {
     return out;
   }
 
-  // Row height (ODF's own style:table-row-properties/@style:row-height, on the row's own referenced table:style-name) -- the ODF-side mirror of DocxTableRow.heightPt (src/edit/docx/table.ts), read via currentRowPropertiesElement above (family "table-row", a single-level lookup with no parent-chain walk, matching typed/shared/table.ts's own resolveRowHeightPt convention for the identical reason: real ODF table-row automatic styles are standalone in practice) and written via internTableRowProperties's append-only, fingerprint-deduplicated mint above. An unresolvable height is genuinely "no height specified" (the layout engine measures content instead), never 0, matching odf.js's own reader.
+  // Row height (ODF's own style:table-row-properties/@style:row-height, on the row's own referenced table:style-name) — the ODF-side mirror of DocxTableRow.heightPt (src/edit/docx/table.ts), read via currentRowPropertiesElement above (family "table-row", a single-level lookup with no parent-chain walk, matching typed/shared/table.ts's own resolveRowHeightPt convention for the identical reason: real ODF table-row automatic styles are standalone in practice) and written via internTableRowProperties's append-only, fingerprint-deduplicated mint above. An unresolvable height is genuinely "no height specified" (the layout engine measures content instead), never 0, matching odf.js's own reader.
   get heightPt(): number | undefined {
     const props = currentRowPropertiesElement(this.pkg, this.node);
     const raw =
@@ -869,7 +869,7 @@ export class OdtTableRow {
     return raw === undefined ? undefined : parseOdfLength(raw);
   }
 
-  // Clones the row's CURRENT style:table-row-properties element (cloneCurrentRowProperties above) and mutates only the attributes this setter itself owns, so every other property already on it -- including its one permitted child element -- survives untouched; see cloneCurrentRowProperties's own comment for why cloning the whole element, rather than continuing to merge named attributes one at a time, is the general fix. Setting an explicit height ALSO forces a pre-existing style:use-optimal-row-height="true" to "false": left alone, that flag tells a real consumer (LibreOffice confirmed) to auto-fit the row to its own content and ignore style:row-height entirely, so the height this setter just wrote would silently never render even though the getter above keeps reporting it back -- an explicit height is a stronger, more recent statement of intent than a pre-existing autofit flag, so it wins, and is stated as an explicit "false" (never merely removed) so the outcome holds even against a consumer that treats an absent attribute as inheriting some other default rather than the OASIS-stated one. The flag is left untouched when it was never "true" to begin with, so a plain height write on a row with no pre-existing style never grows one it didn't need. Clearing the height removes only style:row-height and leaves every other property -- use-optimal-row-height included, whichever way an earlier call left it -- exactly as found, minting a style carrying them alone; only when nothing else remains does clearing remove table:style-name outright, since only then does the row's style exist purely to carry a height.
+  // Clones the row's CURRENT style:table-row-properties element (cloneCurrentRowProperties above) and mutates only the attributes this setter itself owns, so every other property already on it — including its one permitted child element — survives untouched; see cloneCurrentRowProperties's own comment for why cloning the whole element, rather than continuing to merge named attributes one at a time, is the general fix. Setting an explicit height ALSO forces a pre-existing style:use-optimal-row-height="true" to "false": left alone, that flag tells a real consumer (LibreOffice confirmed) to auto-fit the row to its own content and ignore style:row-height entirely, so the height this setter just wrote would silently never render even though the getter above keeps reporting it back — an explicit height is a stronger, more recent statement of intent than a pre-existing autofit flag, so it wins, and is stated as an explicit "false" (never merely removed) so the outcome holds even against a consumer that treats an absent attribute as inheriting some other default rather than the OASIS-stated one. The flag is left untouched when it was never "true" to begin with, so a plain height write on a row with no pre-existing style never grows one it didn't need. Clearing the height removes only style:row-height and leaves every other property — use-optimal-row-height included, whichever way an earlier call left it — exactly as found, minting a style carrying them alone; only when nothing else remains does clearing remove table:style-name outright, since only then does the row's style exist purely to carry a height.
   set heightPt(value: number | undefined) {
     const props = cloneCurrentRowProperties(this.pkg, this.node);
     if (value === undefined) {
@@ -891,14 +891,14 @@ export class OdtTableRow {
     );
   }
 
-  // Appends one ordinary table:table-cell to this row, for a caller (buildOdtPackage's own appendTable) building a row's cells one at a time rather than all at once via OdtTable.appendRow -- needed so a merged table's covered grid positions can be interleaved with real cells in document order.
+  // Appends one ordinary table:table-cell to this row, for a caller (buildOdtPackage's own appendTable) building a row's cells one at a time rather than all at once via OdtTable.appendRow — needed so a merged table's covered grid positions can be interleaved with real cells in document order.
   appendCell(): OdtTableCell {
     const cellElement = buildCell(this.pkg);
     this.node.children.push(cellElement);
     return new OdtTableCell(cellElement, this.pkg);
   }
 
-  // Appends a table:covered-table-cell -- ODF's own placeholder for a grid position consumed by a horizontal (table:number-columns-spanned) or vertical (table:number-rows-spanned) merge starting elsewhere. Carries no content at all, matching odf.js's own readTableRow, which reads one back as a block-less entry regardless of what (if anything) real-world producers ever put inside one; the returned view is for stating the position's own background and borders, which readTableRow reads back onto that entry.
+  // Appends a table:covered-table-cell — ODF's own placeholder for a grid position consumed by a horizontal (table:number-columns-spanned) or vertical (table:number-rows-spanned) merge starting elsewhere. Carries no content at all, matching odf.js's own readTableRow, which reads one back as a block-less entry regardless of what (if anything) real-world producers ever put inside one; the returned view is for stating the position's own background and borders, which readTableRow reads back onto that entry.
   appendCoveredCell(): OdtCoveredTableCell {
     const coveredElement = el("table:covered-table-cell");
     this.node.children.push(coveredElement);
@@ -930,7 +930,7 @@ export class OdtTableRow {
     return applyMerge(plan, target, this.pkg);
   }
 
-  // Marks the grid position at columnIndex as covered by a merge anchored elsewhere, retagging it in place through retagAsCovered. It is refused, naming the position, when the position is itself the anchor of a merged region: covering it would leave the rest of that region covered with nothing anchoring it, so a merge over an anchor is made through OdtTable.mergeCells, which swallows the whole region or refuses. A position another merge already covers, and an unmerged cell, are retagged. columnIndex is a grid column (rowGridColumnCount, honouring table:number-columns-repeated -- ExaDev/documents.js#1374): the bounds and anchor-orphan checks read the row without mutating it, and only once both pass does individuateGridColumn split whatever repeated run columnIndex falls inside before retagAsCovered retags the one resulting element.
+  // Marks the grid position at columnIndex as covered by a merge anchored elsewhere, retagging it in place through retagAsCovered. It is refused, naming the position, when the position is itself the anchor of a merged region: covering it would leave the rest of that region covered with nothing anchoring it, so a merge over an anchor is made through OdtTable.mergeCells, which swallows the whole region or refuses. A position another merge already covers, and an unmerged cell, are retagged. columnIndex is a grid column (rowGridColumnCount, honouring table:number-columns-repeated — ExaDev/documents.js#1374): the bounds and anchor-orphan checks read the row without mutating it, and only once both pass does individuateGridColumn split whatever repeated run columnIndex falls inside before retagAsCovered retags the one resulting element.
   markCellCovered(columnIndex: number): void {
     const totalColumns = rowGridColumnCount(this.node);
     if (columnIndex < 0 || columnIndex >= totalColumns) {
