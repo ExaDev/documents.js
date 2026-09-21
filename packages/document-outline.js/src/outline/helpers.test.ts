@@ -101,6 +101,90 @@ describe("outlineLeafText", () => {
     expect(outlineLeafText(outer)).toBe("x1 x2");
   });
 
+  describe("a merged table's dense rows", () => {
+    // A merged region is one anchor plus block-less covered entries at every other position it spans, so the covered entries must contribute no text and no separator.
+    const covered = { blocks: [] };
+    const anchorCell = (
+      text: string,
+      spans: { colSpan?: number; rowSpan?: number } = {},
+    ) => ({ blocks: [paragraph(text)], ...spans });
+
+    it("adds no separator for the covered positions of a horizontal merge", () => {
+      const merged: ContentTable = {
+        kind: "table",
+        columnWidthsPt: [10, 10, 10],
+        rows: [
+          {
+            cells: [anchorCell("a", { colSpan: 2 }), covered, anchorCell("b")],
+          },
+          { cells: [anchorCell("c"), anchorCell("d"), anchorCell("e")] },
+        ],
+      };
+      expect(outlineLeafText(merged)).toBe("a b\nc d e");
+    });
+
+    it("adds no separator for the covered positions of a vertical merge", () => {
+      const merged: ContentTable = {
+        kind: "table",
+        columnWidthsPt: [10, 10],
+        rows: [
+          { cells: [anchorCell("a", { rowSpan: 2 }), anchorCell("b")] },
+          { cells: [covered, anchorCell("c")] },
+        ],
+      };
+      expect(outlineLeafText(merged)).toBe("a b\nc");
+    });
+
+    it("visits a two by two merged region once, at its anchor", () => {
+      const merged: ContentTable = {
+        kind: "table",
+        columnWidthsPt: [10, 10, 10],
+        rows: [
+          {
+            cells: [
+              anchorCell("a", { colSpan: 2, rowSpan: 2 }),
+              covered,
+              anchorCell("b"),
+            ],
+          },
+          { cells: [covered, covered, anchorCell("c")] },
+        ],
+      };
+      expect(outlineLeafText(merged)).toBe("a b\nc");
+    });
+
+    it("keeps an anchor whose own text is empty, since it is still a cell of the row", () => {
+      const merged: ContentTable = {
+        kind: "table",
+        columnWidthsPt: [10, 10, 10],
+        rows: [
+          {
+            cells: [{ blocks: [], colSpan: 2 }, covered, anchorCell("b")],
+          },
+        ],
+      };
+      expect(outlineLeafText(merged)).toBe(" b");
+    });
+
+    it("applies the same rule to a merged table nested inside a cell", () => {
+      const nested: ContentTable = {
+        kind: "table",
+        columnWidthsPt: [10, 10, 10],
+        rows: [
+          {
+            cells: [anchorCell("x", { colSpan: 2 }), covered, anchorCell("y")],
+          },
+        ],
+      };
+      const outer: ContentTable = {
+        kind: "table",
+        columnWidthsPt: [30],
+        rows: [{ cells: [{ blocks: [nested] }] }],
+      };
+      expect(outlineLeafText(outer)).toBe("x y");
+    });
+  });
+
   it("returns an image altText, empty when absent", () => {
     expect(outlineLeafText(imageBlock("A chart"))).toBe("A chart");
     expect(outlineLeafText(imageBlock())).toBe("");
