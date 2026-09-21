@@ -159,6 +159,8 @@ interface FormatCase {
   // Whether this format's own writer can state a merge at all. A format that cannot still has to hold the grid's shape: it writes the region's content once and keeps every grid position, so the table stays the right width and the anchor's text is not duplicated across the positions it covered.
   readonly spans: "stated" | "dropped";
   readonly envelope: Envelope;
+  // What this format's writer does with a table whose covered position carries blocks of its own, which the grid rule forbids because a region's content belongs to its anchor. "refuses" throws rather than write a file that has lost the content; "keeps" is a format with no merge record at all, whose writer places every entry at its own grid position and so loses nothing, reporting the fault through its own diagnostic sink instead.
+  readonly coveredContent: "refuses" | "keeps";
 }
 
 // Why a registry format is not exercised here. A spreadsheet or drawing format has no ContentTable to round-trip at all -- a sheet's merges live on ContentSheetCell, a separate sparse model the grid rule deliberately does not govern -- and a read-only format has no writer to round-trip through.
@@ -175,32 +177,76 @@ const EXCLUDED: Readonly<Partial<Record<DocumentFormat, string>>> = {
 };
 
 const FORMATS: Readonly<Partial<Record<DocumentFormat, FormatCase>>> = {
-  docx: { spans: "stated", envelope: "wordprocessing" },
-  odt: { spans: "stated", envelope: "wordprocessing" },
-  rtf: { spans: "stated", envelope: "wordprocessing" },
-  doc: { spans: "stated", envelope: "wordprocessing" },
-  epub: { spans: "stated", envelope: "wordprocessing" },
-  markdown: { spans: "stated", envelope: "wordprocessing" },
-  pptx: { spans: "stated", envelope: "presentation" },
-  odp: { spans: "stated", envelope: "presentation" },
+  docx: {
+    spans: "stated",
+    envelope: "wordprocessing",
+    coveredContent: "refuses",
+  },
+  odt: {
+    spans: "stated",
+    envelope: "wordprocessing",
+    coveredContent: "refuses",
+  },
+  rtf: {
+    spans: "stated",
+    envelope: "wordprocessing",
+    coveredContent: "refuses",
+  },
+  doc: {
+    spans: "stated",
+    envelope: "wordprocessing",
+    coveredContent: "refuses",
+  },
+  epub: {
+    spans: "stated",
+    envelope: "wordprocessing",
+    coveredContent: "refuses",
+  },
+  markdown: {
+    spans: "stated",
+    envelope: "wordprocessing",
+    coveredContent: "refuses",
+  },
+  pptx: {
+    spans: "stated",
+    envelope: "presentation",
+    coveredContent: "refuses",
+  },
+  odp: {
+    spans: "stated",
+    envelope: "presentation",
+    coveredContent: "refuses",
+  },
   // The legacy binary presentation format has no merge record of any kind, so its writer reports a dropped span rather than inventing one; the grid itself still survives.
-  ppt: { spans: "dropped", envelope: "presentation" },
+  ppt: { spans: "dropped", envelope: "presentation", coveredContent: "keeps" },
 };
 
-function roundTrip(format: DocumentFormat, table: ContentTable): ContentTable {
+function writeThrough(
+  format: DocumentFormat,
+  table: ContentTable,
+): () => Uint8Array {
   const entry = FORMATS[format];
   if (entry === undefined) {
     throw new Error(`no conformance case declared for ${format}`);
   }
   const codec = DOCUMENT_FORMAT_CODECS[format].content;
-  if (codec?.write === undefined) {
+  const write = codec?.write?.bind(codec);
+  if (write === undefined) {
     throw new Error(`${format} has no content writer to round-trip through`);
   }
   const document =
     entry.envelope === "wordprocessing"
       ? wordprocessingDocument(table)
       : presentationDocument(table);
-  return firstTable(codec.read(codec.write(document)));
+  return () => write(document);
+}
+
+function roundTrip(format: DocumentFormat, table: ContentTable): ContentTable {
+  const codec = DOCUMENT_FORMAT_CODECS[format].content;
+  if (codec === undefined) {
+    throw new Error(`${format} has no content codec`);
+  }
+  return firstTable(codec.read(writeThrough(format, table)()));
 }
 
 const CASES = Object.entries(FORMATS) as [DocumentFormat, FormatCase][];
@@ -277,6 +323,30 @@ describe("every format reads back a merged table on the same grid", () => {
     ].sort();
     expect(accounted).toEqual(registered);
   });
+});
+
+// A merged header whose covered position carries a second copy of content, the one thing the grid rule says has nowhere to go: the region's content belongs to its anchor, so a covered position holding blocks is a table that contradicts the rule (ExaDev/documents.js#1367). Before the shared check each writer had its own opinion of this input, and all but one silently dropped the blocks.
+function coveredContentTable(): ContentTable {
+  return tableOf([[textCell("Region", { colSpan: 2 }), textCell("stray")]]);
+}
+
+describe("every format refuses or reports a table whose covered position carries content", () => {
+  it.each(CASES.filter(([, entry]) => entry.coveredContent === "refuses"))(
+    "%s refuses to write it, rather than silently losing the covered content",
+    (format) => {
+      expect(writeThrough(format, coveredContentTable())).toThrow();
+    },
+  );
+
+  it.each(CASES.filter(([, entry]) => entry.coveredContent === "keeps"))(
+    "%s writes every entry at its own grid position, so the covered content survives",
+    (format) => {
+      expect(gridText(roundTrip(format, coveredContentTable()))[0]).toEqual([
+        "Region",
+        "stray",
+      ]);
+    },
+  );
 });
 
 describe("every format's readers agree with each other", () => {

@@ -1205,3 +1205,38 @@ describe("buildOdtPackage", () => {
     expect(decodeEntities(stored ?? "")).toBe(hostile);
   });
 });
+
+describe("buildOdtPackage: a table breaking the grid rule", () => {
+  // A merged header whose covered position carries a second copy of the anchor's content, which a table:covered-table-cell has no room for.
+  const coveredContentTable: ContentTable = {
+    kind: "table",
+    columnWidthsPt: [100, 100],
+    rows: [
+      {
+        cells: [
+          {
+            blocks: [{ kind: "paragraph", runs: [{ text: "anchor" }] }],
+            colSpan: 2,
+          },
+          { blocks: [{ kind: "paragraph", runs: [{ text: "copy" }] }] },
+        ],
+      },
+    ],
+  };
+
+  it("refuses the table, naming the fault, rather than dropping the covered content", () => {
+    expect(() =>
+      buildOdtPackage(
+        wordDoc([
+          {
+            pageSize: { widthPt: 612, heightPt: 792 },
+            margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+            blocks: [coveredContentTable],
+          },
+        ]),
+      ),
+    ).toThrow(
+      "populateOdtTable: table breaks the grid rule (the cell at row 0, column 1 lies inside the merged region anchored at row 0, column 0 but carries content of its own, and a merged region's content belongs to its anchor)",
+    );
+  });
+});
