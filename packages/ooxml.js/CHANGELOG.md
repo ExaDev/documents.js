@@ -1,3 +1,9 @@
+## [10.0.2](https://github.com/ExaDev/documents.js/compare/ooxml.js%4010.0.1...ooxml.js%4010.0.2) (2026-09-21)
+
+### Bug Fixes
+
+* **ooxml.js:** keep a merged-away pptx cell's own fill and borders ([41be60b](https://github.com/ExaDev/documents.js/commit/41be60bfecb2f2f79fcf9055857e2450533f72f3))
+
 ## [10.0.1](https://github.com/ExaDev/documents.js/compare/ooxml.js%4010.0.0...ooxml.js%4010.0.1) (2026-09-21)
 
 
