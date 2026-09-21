@@ -14,6 +14,7 @@ import {
   selectRequested,
   planSlices,
   sliceBudgetSeconds,
+  strykerConfigHash,
   timeoutMinutesFor,
   type SourceFile,
 } from "./plan-mutation-slices";
@@ -244,9 +245,36 @@ describe("planSlices", () => {
   });
 });
 
+const CONFIG_HASH = "0123456789ab";
+
+describe("strykerConfigHash", () => {
+  it("is stable for the same package config and shared config text", () => {
+    expect(strykerConfigHash("breakThreshold: 100", "shared")).toBe(
+      strykerConfigHash("breakThreshold: 100", "shared"),
+    );
+  });
+
+  it("changes when the package's own config text changes", () => {
+    expect(strykerConfigHash("breakThreshold: 100", "shared")).not.toBe(
+      strykerConfigHash("breakThreshold: 90", "shared"),
+    );
+  });
+
+  it("changes when the shared config text changes, even if the package config did not", () => {
+    expect(strykerConfigHash("breakThreshold: 100", "shared v1")).not.toBe(
+      strykerConfigHash("breakThreshold: 100", "shared v2"),
+    );
+  });
+
+  it("does not collide across the boundary between the two texts", () => {
+    // Without a separator, ("ab", "c") and ("a", "bc") would hash identically.
+    expect(strykerConfigHash("ab", "c")).not.toBe(strykerConfigHash("a", "bc"));
+  });
+});
+
 describe("packageMatrixEntries", () => {
   it("emits one entry with an empty mutate list for a package that runs whole", () => {
-    expect(packageMatrixEntries(BYTE_CODEC, files(300))).toEqual([
+    expect(packageMatrixEntries(BYTE_CODEC, files(300), CONFIG_HASH)).toEqual([
       {
         package: "byte-codec",
         directory: "packages/byte-codec",
@@ -255,13 +283,14 @@ describe("packageMatrixEntries", () => {
         mutate: "",
         timeoutMinutes: timeoutMinutesFor(300),
         cacheKey: "byte-codec-1of1",
+        configHash: CONFIG_HASH,
       },
     ]);
   });
 
   it("numbers slices from one and lists each slice's own files", () => {
     const input = files(...Array.from({ length: 40 }, () => 1200));
-    const entries = packageMatrixEntries(BIG_PACKAGE, input);
+    const entries = packageMatrixEntries(BIG_PACKAGE, input, CONFIG_HASH);
     expect(entries.length).toBeGreaterThan(1);
     expect(entries.map((entry) => entry.slice)).toEqual(
       entries.map((_, index) => index + 1),
@@ -271,6 +300,7 @@ describe("packageMatrixEntries", () => {
       expect(entry.cacheKey).toBe(
         `big-package-${String(entry.slice)}of${String(entries.length)}`,
       );
+      expect(entry.configHash).toBe(CONFIG_HASH);
       expect(entry.mutate.split(",").length).toBeGreaterThan(0);
     }
     expect(entries.flatMap((entry) => entry.mutate.split(",")).sort()).toEqual(
@@ -282,7 +312,7 @@ describe("packageMatrixEntries", () => {
     "refuses %s, which --mutate would read as syntax",
     (path) => {
       expect(() =>
-        packageMatrixEntries(BYTE_CODEC, [{ path, lines: 10 }]),
+        packageMatrixEntries(BYTE_CODEC, [{ path, lines: 10 }], CONFIG_HASH),
       ).toThrow(/--mutate/);
     },
   );
@@ -291,6 +321,7 @@ describe("packageMatrixEntries", () => {
     const entries = packageMatrixEntries(
       BIG_PACKAGE,
       files(...Array.from({ length: 40 }, () => 1200)),
+      CONFIG_HASH,
     );
     for (const entry of entries) {
       expect(entry.timeoutMinutes).toBeGreaterThan(0);
@@ -339,13 +370,14 @@ describe("maxParallelFor", () => {
 describe("partitionForEvent", () => {
   const small = {
     package: "small",
-    entries: packageMatrixEntries(BYTE_CODEC, files(300)),
+    entries: packageMatrixEntries(BYTE_CODEC, files(300), CONFIG_HASH),
   };
   const large = {
     package: "large",
     entries: packageMatrixEntries(
       BIG_PACKAGE,
       files(...Array.from({ length: 40 }, () => 1200)),
+      CONFIG_HASH,
     ),
   };
 

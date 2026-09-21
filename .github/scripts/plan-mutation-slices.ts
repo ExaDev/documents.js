@@ -2,6 +2,7 @@
 //
 // The cost estimate is a linear upper envelope over source lines: a fixed cost that does not depend on size (build, dry run, checker start-up) plus a per-line cost, both chosen so that every measured cold run of a real package lies at or below the line (plan-mutation-slices.test.ts holds the samples and fails when one rises above it). Source lines are free to compute, whereas the only direct measure of a package's mutant count is Stryker's own dry run, which would cost as much as the planning is meant to save. An envelope rather than a fit is deliberate: an underestimate produces a slice that hits its job timeout, an overestimate only produces an extra slice that starts warm from its cache.
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { appendFileSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -82,6 +83,25 @@ export interface SliceMatrixEntry {
   readonly timeoutMinutes: number;
   /** Stable across runs for the same package and slice layout, so a slice restores its own previous incremental report. */
   readonly cacheKey: string;
+  /** Stable across runs for the same effective Stryker configuration (see strykerConfigHash), and folded into the incremental cache key alongside cacheKey so a config change invalidates a slice's cache rather than silently reusing mutant results computed under the old configuration. */
+  readonly configHash: string;
+}
+
+/**
+ * A short, stable fingerprint of a package's effective Stryker configuration: its own `stryker.config.ts` plus the shared derivation every package's config is built through. Included in the incremental cache key precisely because Stryker's own incremental mode has no idea the configuration changed: it decides what to reuse purely from whether a mutated file's content changed since the cached report was written. A change to a mutate glob, an excluded pattern, or the shared option-merging logic in stryker.shared.ts alters which mutants should exist or which files should be instrumented at all, without changing the mutated files themselves, so without this fingerprint a stale incremental report can silently carry forward mutants a fresh run would never generate (or drop ones a fresh run would).
+ *
+ * Confirmed empirically: packages/web's stryker.config.ts excluded `*.css.ts` from its mutate glob on 2026-09-14, and a full run on 2026-09-20 still reported NoCoverage mutants inside excluded `*.css.ts` files, dragging a package pinned at breakThreshold: 100 down to 92.43, not from a real regression but from a six-day-old incremental report the mutate-glob change never invalidated.
+ */
+export function strykerConfigHash(
+  packageConfigText: string,
+  sharedConfigText: string,
+): string {
+  return createHash("sha256")
+    .update(packageConfigText)
+    .update("\0")
+    .update(sharedConfigText)
+    .digest("hex")
+    .slice(0, 12);
 }
 
 /** Extracts the `_test:mutation` task's own package list from a `turbo run ... --dry-run=json` plan, rather than re-deriving affectedness independently, since this is the exact computation the real run uses and the slice plan cannot disagree with the run it plans for. */
@@ -167,6 +187,7 @@ export function planSlices(
 export function packageMatrixEntries(
   pkg: AffectedPackage,
   files: readonly SourceFile[],
+  configHash: string,
 ): readonly SliceMatrixEntry[] {
   const name = pkg.name;
   for (const file of files) {
@@ -188,6 +209,7 @@ export function packageMatrixEntries(
       sliceFiles.reduce((total, file) => total + file.lines, 0),
     ),
     cacheKey: `${name}-${String(index + 1)}of${String(slices.length)}`,
+    configHash,
   }));
 }
 
@@ -330,9 +352,17 @@ function main(): void {
     event === "pull_request"
       ? pullRequestPackages(affected)
       : selectRequested(affected, requested);
+  const sharedConfigText = readFileSync("stryker.shared.ts", "utf8");
   const plans = candidates.map((pkg) => ({
     package: pkg.name,
-    entries: packageMatrixEntries(pkg, packageSourceFiles(pkg.directory)),
+    entries: packageMatrixEntries(
+      pkg,
+      packageSourceFiles(pkg.directory),
+      strykerConfigHash(
+        readFileSync(`${pkg.directory}/stryker.config.ts`, "utf8"),
+        sharedConfigText,
+      ),
+    ),
   }));
   const { run, deferred } = partitionForEvent(plans, event);
   const include = run.flatMap((plan) => plan.entries);
