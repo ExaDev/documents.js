@@ -1,17 +1,15 @@
 import type { XmlElement, XmlNode } from "odf.js";
 import { describe, expect, it } from "vitest";
 import { el } from "../../xml/fragment";
+import { COLUMN_TAG, ensureColumnCoverage, resolveCellNode } from "./address";
 import {
   COLUMN_REPEAT_ATTR,
-  COLUMN_TAG,
   COVERED_CELL_TAG,
-  ROW_REPEAT_ATTR,
-  ROW_TAG,
-  ensureColumnCoverage,
   isElementWithTag,
   replaceRun,
-  resolveCellNode,
-} from "./address";
+  ROW_REPEAT_ATTR,
+  ROW_TAG,
+} from "../odf-repeated-runs";
 
 function repeatAttr(node: XmlElement, name: string): string | undefined {
   return node.attributes.find((a) => a.name === name)?.value;

@@ -2,13 +2,13 @@ import type { Package, XmlElement } from "odf.js";
 import { readOdsContent } from "odf.js";
 import { describe, expect, it } from "vitest";
 import { minimalOdsBytes } from "../../test-support/ods";
+import { COLUMN_TAG } from "./address";
 import {
   COLUMN_REPEAT_ATTR,
-  COLUMN_TAG,
+  isElementWithTag,
   ROW_REPEAT_ATTR,
   ROW_TAG,
-  isElementWithTag,
-} from "./address";
+} from "../odf-repeated-runs";
 import { createOds, openOds } from "./editor";
 
 function directChild(parent: XmlElement, tag: string): XmlElement | undefined {
