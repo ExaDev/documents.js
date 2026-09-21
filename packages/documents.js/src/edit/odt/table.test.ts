@@ -1,6 +1,10 @@
 import type { XmlElement } from "odf.js";
 import { decodePackage, encodePackage, rootElement } from "odf.js";
-import { tableGridColumnCount, walkTableGrid } from "document-schema.js";
+import {
+  findTableGridFault,
+  tableGridColumnCount,
+  walkTableGrid,
+} from "document-schema.js";
 import { attr } from "ooxml.js";
 import { describe, expect, it } from "vitest";
 import { readOdtContent } from "../../odf/odt/read";
@@ -519,7 +523,7 @@ describe("OdtTableRow.mergeCellsHorizontally", () => {
     const table = editor.body.appendTable({ rows: 1, columns: 4 });
     table.rows()[0]!.mergeCellsHorizontally(0, 2);
     expect(() => table.rows()[0]!.mergeCellsHorizontally(1, 1)).toThrow(
-      /already covered/,
+      /^mergeCellsHorizontally: column 1 is covered by the merge anchored at row 0, column 0$/,
     );
   });
 
@@ -607,22 +611,29 @@ describe("a cell retagged as covered keeps its own style and drops its content a
     });
   });
 
-  it("markCellCovered drops the span attributes but keeps the style, on a cell that was itself an anchor", () => {
+  it("a merge that swallows a whole merged region drops the anchor's span attributes but keeps its style", () => {
     const editor = createOdt();
     const table = editor.body.appendTable({ rows: 2, columns: 2 });
-    const below = table.cell(1, 0);
+    table.mergeCells(1, 0, 1, 2);
+    const below = table.gridRows()[1]?.[0]?.cell;
+    if (below === undefined) {
+      throw new Error("expected a cell at row 1, column 0");
+    }
     below.background = RED;
-    below.colSpan = 2;
-    below.rowSpan = 2;
+    const styleName = attr(
+      contentElements(editor, "table:table-cell")[2]!,
+      "table:style-name",
+    );
+    expect(styleName).toBeDefined();
 
-    table.mergeCells(0, 0, 2, 1);
+    table.mergeCells(0, 0, 2, 2);
 
     const covered = coveredCellElements(editor);
-    expect(covered).toHaveLength(1);
-    expect(covered[0]?.attributes.map((a) => a.name)).toEqual([
-      "table:style-name",
+    expect(covered).toHaveLength(3);
+    expect(covered[1]?.attributes).toEqual([
+      { name: "table:style-name", value: styleName },
     ]);
-    expect(covered[0]?.children).toEqual([]);
+    expect(covered[1]?.children).toEqual([]);
   });
 
   it("a covered cell that had no style carries no attributes at all", () => {
@@ -817,11 +828,13 @@ describe("OdtTable.mergeCells", () => {
     expect(roundTrippedTable.rows[0]?.cells[1]?.rowSpan).toBe(2);
   });
 
-  it("throws a clear error when the already-covered-anchor guard fires through mergeCells", () => {
+  it("refuses a rectangle that starts in a position another merge covers, naming the row, the column and the merge", () => {
     const editor = createOdt();
     const table = editor.body.appendTable({ rows: 2, columns: 3 });
     table.mergeCells(0, 0, 2, 2);
-    expect(() => table.mergeCells(0, 1, 1, 1)).toThrow(/already covered/);
+    expect(() => table.mergeCells(0, 1, 1, 1)).toThrow(
+      /^mergeCells: row 0: column 1 is covered by the merge anchored at row 0, column 0$/,
+    );
   });
 
   it("silently discards consumed content, matching the docx primitive's own precedent", () => {
@@ -847,5 +860,355 @@ describe("OdtTable.mergeCells", () => {
     expect(() => table.mergeCells(5, 0, 1, 1)).toThrow(/does not exist/);
     expect(() => table.mergeCells(0, 0, 5, 1)).toThrow(/exceeds/);
     expect(() => table.mergeCells(0, 0, 0, 1)).toThrow(/positive integer/);
+  });
+});
+
+// The content.xml part as text, so a refused edit can be shown to have changed nothing at all rather than nothing a chosen accessor happens to read.
+function contentXml(editor: ReturnType<typeof createOdt>): string {
+  const part = editor.toPackage().parts["content.xml"];
+  if (part?.kind !== "xml") {
+    throw new Error("expected an xml content.xml part");
+  }
+  return JSON.stringify(part.nodes);
+}
+
+function expectRefusedUntouched(
+  editor: ReturnType<typeof createOdt>,
+  action: () => unknown,
+  message: RegExp,
+): void {
+  const before = contentXml(editor);
+  expect(action).toThrow(message);
+  expect(contentXml(editor)).toBe(before);
+}
+
+// Asserts the table is well formed in both views the editor offers: no position is left without an owner (an orphaned covered element reads back through the pivot as an ordinary blank cell, so the pivot's own grid rule alone would not notice it), and the content pivot obeys the grid rule.
+function expectWellFormedGrid(
+  editor: ReturnType<typeof createOdt>,
+  table: OdtTable,
+): void {
+  const unowned = table
+    .gridRows()
+    .flatMap((row, r) =>
+      row.flatMap((position, c) =>
+        position === undefined ? [`${r},${c}`] : [],
+      ),
+    );
+  expect(unowned).toEqual([]);
+  const content = readOdtContent(editor.toPackage());
+  if (content.kind !== "wordprocessing") {
+    throw new Error("expected wordprocessing content");
+  }
+  const pivot = content.sections[0]?.blocks.find((b) => b.kind === "table");
+  if (pivot?.kind !== "table") {
+    throw new Error("expected a table block");
+  }
+  expect(findTableGridFault(pivot)).toBeUndefined();
+}
+
+describe("merging over a merged region", () => {
+  it("refuses a rectangle whose columns cut through a horizontal merge, through mergeCells and through the row", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 3, columns: 4 });
+    table.mergeCells(0, 1, 1, 3);
+
+    expectRefusedUntouched(
+      editor,
+      () => table.mergeCells(0, 0, 1, 2),
+      /^mergeCells: row 0: column 1 belongs to the merge anchored at row 0, column 1, which reaches outside the region being merged and cannot be merged over$/,
+    );
+    expectRefusedUntouched(
+      editor,
+      () => table.rows()[0]!.mergeCellsHorizontally(0, 2),
+      /^mergeCellsHorizontally: column 1 belongs to the merge anchored at row 0, column 1, which reaches outside/,
+    );
+    expectWellFormedGrid(editor, table);
+  });
+
+  it("refuses a rectangle that ends inside a horizontal merge that started before it", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 3, columns: 4 });
+    table.mergeCells(1, 0, 1, 3);
+
+    expectRefusedUntouched(
+      editor,
+      () => table.mergeCells(1, 1, 1, 2),
+      /^mergeCells: row 1: column 1 is covered by the merge anchored at row 1, column 0$/,
+    );
+    expectRefusedUntouched(
+      editor,
+      () => table.mergeCells(0, 2, 2, 2),
+      /^mergeCells: row 1: column 2 belongs to the merge anchored at row 1, column 0, which reaches outside/,
+    );
+  });
+
+  it("names the row of the rectangle a merge was found in, for a row below the first", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 3, columns: 4 });
+    table.mergeCells(1, 1, 1, 3);
+
+    expectRefusedUntouched(
+      editor,
+      () => table.rows()[1]!.mergeCellsHorizontally(0, 2),
+      /^mergeCellsHorizontally: column 1 belongs to the merge anchored at row 1, column 1,/,
+    );
+    expectRefusedUntouched(
+      editor,
+      () => {
+        table.rows()[1]!.markCellCovered(1);
+      },
+      /^markCellCovered: column 1 anchors a merge with rowSpan 1 and colSpan 3, so covering it would leave the rest of that merge without an anchor$/,
+    );
+  });
+
+  it("refuses a merge over the anchor of a vertical merge, from its own row and from a row it covers", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 3, columns: 4 });
+    table.mergeCells(0, 1, 3, 1);
+
+    expectRefusedUntouched(
+      editor,
+      () => table.rows()[0]!.mergeCellsHorizontally(0, 2),
+      /^mergeCellsHorizontally: column 1 belongs to the merge anchored at row 0, column 1,/,
+    );
+    expectRefusedUntouched(
+      editor,
+      () => table.mergeCells(1, 0, 1, 2),
+      /^mergeCells: row 1: column 1 belongs to the merge anchored at row 0, column 1,/,
+    );
+    expectRefusedUntouched(
+      editor,
+      () => table.mergeCells(0, 0, 2, 2),
+      /^mergeCells: row 0: column 1 belongs to the merge anchored at row 0, column 1,/,
+    );
+    expectWellFormedGrid(editor, table);
+  });
+
+  it("refuses a rectangle one row high over a vertical merge whose column span it would change", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 3, columns: 4 });
+    table.mergeCells(0, 1, 3, 1);
+
+    expectRefusedUntouched(
+      editor,
+      () => table.mergeCells(0, 1, 1, 2),
+      /^mergeCells: row 0: column 1 belongs to the merge anchored at row 0, column 1,/,
+    );
+  });
+
+  it("refuses a rectangle that reaches into an interior position of a 2x2 merge, whether it starts outside the merge or inside it", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 3, columns: 4 });
+    table.mergeCells(0, 1, 2, 2);
+
+    expectRefusedUntouched(
+      editor,
+      () => table.mergeCells(1, 0, 1, 2),
+      /^mergeCells: row 1: column 1 belongs to the merge anchored at row 0, column 1,/,
+    );
+    expectRefusedUntouched(
+      editor,
+      () => table.mergeCells(0, 2, 2, 2),
+      /^mergeCells: row 0: column 2 is covered by the merge anchored at row 0, column 1$/,
+    );
+    expectRefusedUntouched(
+      editor,
+      () => table.mergeCells(1, 2, 2, 2),
+      /^mergeCells: row 1: column 2 is covered by the merge anchored at row 0, column 1$/,
+    );
+    expectWellFormedGrid(editor, table);
+  });
+
+  it("names the merge that covers a start position in the same column as its anchor, from a row above", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 3, columns: 3 });
+    table.mergeCells(0, 1, 3, 1);
+
+    expectRefusedUntouched(
+      editor,
+      () => table.rows()[1]!.mergeCellsHorizontally(1, 1),
+      /^mergeCellsHorizontally: column 1 is covered by the merge anchored at row 0, column 1$/,
+    );
+  });
+
+  it("refuses a rectangle that reaches a merge starting above it even when the merge ends inside the rectangle", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 3, columns: 3 });
+    table.mergeCells(0, 1, 2, 1);
+
+    expectRefusedUntouched(
+      editor,
+      () => table.mergeCells(1, 0, 2, 2),
+      /^mergeCells: row 1: column 1 belongs to the merge anchored at row 0, column 1,/,
+    );
+  });
+
+  it("refuses a rectangle taller than it is over a merge that starts where it starts and ends below it", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 3, columns: 3 });
+    table.mergeCells(0, 1, 3, 1);
+
+    expectRefusedUntouched(
+      editor,
+      () => table.mergeCells(0, 1, 2, 1),
+      /^mergeCells: row 0: column 1 belongs to the merge anchored at row 0, column 1,/,
+    );
+  });
+
+  it("checks every row of the rectangle before changing any, so a refusal in a lower row leaves the anchor row alone", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 3, columns: 3 });
+    table.mergeCells(1, 1, 2, 2);
+
+    expectRefusedUntouched(
+      editor,
+      () => table.mergeCells(0, 0, 2, 2),
+      /^mergeCells: row 1: column 1 belongs to the merge anchored at row 1, column 1,/,
+    );
+  });
+
+  it("checks the rows a rectangle covers exist before changing the anchor row", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 2, columns: 2 });
+
+    expectRefusedUntouched(
+      editor,
+      () => table.mergeCells(0, 0, 3, 2),
+      /^mergeCells: rowSpan 3 starting at row 0 exceeds this table's own 2 rows$/,
+    );
+  });
+
+  it("refuses a rectangle wider than a row it covers, naming that row, and leaves the anchor row alone", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 2 });
+    table.appendEmptyRow().appendCell();
+
+    expectRefusedUntouched(
+      editor,
+      () => table.mergeCells(0, 0, 2, 2),
+      /^mergeCells: row 1: colSpan 2 starting at column 0 exceeds this row's own 1 grid columns$/,
+    );
+  });
+
+  it("refuses a merge that starts at a covered element no merge anchors, and swallows one inside the region", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 0, columns: 3 });
+    const row = table.appendEmptyRow();
+    row.appendCell();
+    row.appendCoveredCell();
+    row.appendCell();
+    const below = table.appendEmptyRow();
+    below.appendCell();
+    below.appendCell();
+    below.appendCell();
+
+    expectRefusedUntouched(
+      editor,
+      () => row.mergeCellsHorizontally(1, 2),
+      /^mergeCellsHorizontally: column 1 is a covered position that no merge anchors$/,
+    );
+    expect(row.mergeCellsHorizontally(0, 3).colSpan).toBe(3);
+    expectWellFormedGrid(editor, table);
+  });
+
+  it("merges a row appended after the table was built", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 3 });
+    const appended = table.appendRow(3);
+
+    expect(appended.mergeCellsHorizontally(1, 2).colSpan).toBe(2);
+    expect(() => appended.mergeCellsHorizontally(0, 2)).toThrow(
+      /^mergeCellsHorizontally: column 1 belongs to the merge anchored at row 1, column 1,/,
+    );
+    expectWellFormedGrid(editor, table);
+  });
+
+  it("widens a horizontal merge over the cells beside it", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 2, columns: 4 });
+    table.mergeCells(0, 0, 1, 2);
+
+    const anchor = table.mergeCells(0, 0, 1, 3);
+
+    expect(anchor.colSpan).toBe(3);
+    expect(anchor.rowSpan).toBeUndefined();
+    expect(coveredCellElements(editor)).toHaveLength(2);
+    expectWellFormedGrid(editor, table);
+  });
+
+  it("swallows a merged region wholly inside the rectangle, whether it runs along a row or down a column", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 3, columns: 3 });
+    table.mergeCells(1, 1, 1, 2);
+    table.mergeCells(0, 0, 3, 3);
+    expect(coveredCellElements(editor)).toHaveLength(8);
+    expectWellFormedGrid(editor, table);
+
+    const other = createOdt();
+    const tall = other.body.appendTable({ rows: 3, columns: 3 });
+    tall.mergeCells(0, 1, 2, 1);
+    const anchor = tall.mergeCells(0, 0, 3, 2);
+    expect(anchor.colSpan).toBe(2);
+    expect(anchor.rowSpan).toBe(3);
+    expect(coveredCellElements(other)).toHaveLength(5);
+    expectWellFormedGrid(other, tall);
+  });
+
+  it("leaves a table as it was when the same rectangle is merged again, and when a merge changes nothing", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 3, columns: 4 });
+    table.mergeCells(0, 0, 2, 2);
+    table.mergeCells(0, 3, 3, 1);
+    const before = contentXml(editor);
+
+    table.mergeCells(0, 0, 2, 2);
+    table.rows()[0]!.mergeCellsHorizontally(3, 1);
+
+    expect(contentXml(editor)).toBe(before);
+  });
+
+  it("refuses to cover the anchor of a merged region, whichever way the region runs", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 3, columns: 4 });
+    table.mergeCells(0, 0, 1, 2);
+    table.mergeCells(1, 0, 2, 1);
+    table.mergeCells(1, 2, 2, 2);
+
+    expectRefusedUntouched(
+      editor,
+      () => {
+        table.rows()[0]!.markCellCovered(0);
+      },
+      /^markCellCovered: column 0 anchors a merge with rowSpan 1 and colSpan 2, so covering it would leave the rest of that merge without an anchor$/,
+    );
+    expectRefusedUntouched(
+      editor,
+      () => {
+        table.rows()[1]!.markCellCovered(0);
+      },
+      /^markCellCovered: column 0 anchors a merge with rowSpan 2 and colSpan 1,/,
+    );
+    expectRefusedUntouched(
+      editor,
+      () => {
+        table.rows()[1]!.markCellCovered(2);
+      },
+      /^markCellCovered: column 2 anchors a merge with rowSpan 2 and colSpan 2,/,
+    );
+  });
+
+  it("still covers an unmerged cell, a cell another merge covers, and a cell that states a span of one", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 2, columns: 4 });
+    table.mergeCells(0, 0, 2, 2);
+    table.cell(0, 1).colSpan = 1;
+    table.cell(0, 1).rowSpan = 1;
+    const rows = table.rows();
+
+    rows[0]!.markCellCovered(3);
+    rows[1]!.markCellCovered(1);
+    rows[0]!.markCellCovered(2);
+
+    expect(coveredCellElements(editor)).toHaveLength(5);
   });
 });
