@@ -1,8 +1,10 @@
 import type {
   ContentCellBorders,
   ContentStrokeStyle,
+  ContentTableCell,
   Color,
 } from "document-schema.js";
+import { tableCellColumnSpan, tableCellRowSpan } from "document-schema.js";
 import type { Package, XmlElement, XmlNode } from "odf.js";
 import {
   findStyleElement,
@@ -14,7 +16,11 @@ import {
 import { attr } from "ooxml.js";
 import { removeAttr, removeChild, setAttr } from "../../xml/edit";
 import { el } from "../../xml/fragment";
-import type { PlacedLiveCell, TableGridRows } from "../table-grid";
+import type {
+  LiveTableGrid,
+  PlacedLiveCell,
+  TableGridRows,
+} from "../table-grid";
 import { resolveLiveTableGrid } from "../table-grid";
 import { ensureAutomaticStyles, nextStyleName } from "./automatic-styles";
 import type { ParagraphInit } from "./paragraph";
@@ -503,13 +509,237 @@ function gridCellElements(row: XmlElement): XmlElement[] {
   return out;
 }
 
+// The table:table-row children of a table:table element, in document order.
+function tableRowElements(table: XmlElement): XmlElement[] {
+  return table.children.filter(
+    (child): child is XmlElement =>
+      child.type === "element" && child.tag === "table:table-row",
+  );
+}
+
+// The real cells of one row, each with the grid column its element sits at. A covered position has no cell of its own to place: the anchor that covers it owns it.
+function placedCells(
+  row: XmlElement,
+  pkg: Package,
+): PlacedLiveCell<OdtTableCell>[] {
+  return gridCellElements(row).flatMap((element, columnIndex) => {
+    if (element.tag !== "table:table-cell") {
+      return [];
+    }
+    const cell = new OdtTableCell(element, pkg);
+    return [
+      { columnIndex, cell, colSpan: cell.colSpan, rowSpan: cell.rowSpan },
+    ];
+  });
+}
+
+// The grid of one table:table element: its declared table:table-column count and every table:table-row's real cells, resolved through the same walkTableGrid classification the content pivot uses.
+function resolveOdtGrid(
+  table: XmlElement,
+  pkg: Package,
+): LiveTableGrid<OdtTableCell> {
+  const placedRows: PlacedLiveCell<OdtTableCell>[][] = [];
+  let declaredColumns = 0;
+  for (const child of table.children) {
+    if (child.type !== "element") {
+      continue;
+    }
+    if (child.tag === "table:table-column") {
+      declaredColumns++;
+    } else if (child.tag === "table:table-row") {
+      placedRows.push(placedCells(child, pkg));
+    }
+  }
+  return resolveLiveTableGrid(placedRows, declaredColumns);
+}
+
+// A block of grid positions: the rows from `row` up to `row + rowSpan` and the columns from `column` up to `column + columnSpan`.
+interface GridRegion {
+  readonly row: number;
+  readonly column: number;
+  readonly rowSpan: number;
+  readonly columnSpan: number;
+}
+
+function regionCovers(
+  region: GridRegion,
+  rowIndex: number,
+  columnIndex: number,
+): boolean {
+  return (
+    region.row <= rowIndex &&
+    rowIndex < region.row + region.rowSpan &&
+    region.column <= columnIndex &&
+    columnIndex < region.column + region.columnSpan
+  );
+}
+
+function regionsIntersect(a: GridRegion, b: GridRegion): boolean {
+  return (
+    a.row < b.row + b.rowSpan &&
+    b.row < a.row + a.rowSpan &&
+    a.column < b.column + b.columnSpan &&
+    b.column < a.column + a.columnSpan
+  );
+}
+
+function regionContains(outer: GridRegion, inner: GridRegion): boolean {
+  return (
+    outer.row <= inner.row &&
+    outer.column <= inner.column &&
+    inner.row + inner.rowSpan <= outer.row + outer.rowSpan &&
+    inner.column + inner.columnSpan <= outer.column + outer.columnSpan
+  );
+}
+
+// The region every anchor of the grid occupies, from the spans its own element states: an unmerged cell is a one-position region. A covered position is never an anchor, so a position no anchor's region reaches is one no merge owns.
+function anchorRegions(grid: LiveTableGrid<OdtTableCell>): GridRegion[] {
+  return grid.rows.flatMap((positions, row) =>
+    positions.flatMap((position, column) => {
+      if (!position?.isAnchor) {
+        return [];
+      }
+      const spans: ContentTableCell = {
+        blocks: [],
+        colSpan: position.cell.colSpan,
+        rowSpan: position.cell.rowSpan,
+      };
+      return [
+        {
+          row,
+          column,
+          rowSpan: tableCellRowSpan(spans),
+          columnSpan: tableCellColumnSpan(spans),
+        },
+      ];
+    }),
+  );
+}
+
+// Whether merging `target` over `region` would change nothing: a rectangle one row high over a region anchored at the rectangle's own first column that already spans exactly the rectangle's columns. Such a merge states the anchor's column span again and consumes nothing, whatever the region's row span. The region is anchored in the rectangle's row because it reaches that row and the rectangle's first position is not one a merge covers, which planMerge has already established.
+function isUnchangedAnchor(region: GridRegion, target: GridRegion): boolean {
+  return (
+    target.rowSpan === 1 &&
+    region.column === target.column &&
+    region.columnSpan === target.columnSpan
+  );
+}
+
+// Names a merge by the grid position it is anchored at.
+function describeRegionAnchor(region: GridRegion): string {
+  return `the merge anchored at row ${region.row}, column ${region.column}`;
+}
+
+// A merge the table allows: the table:table-cell that becomes the merged region's anchor and the elements the merge retags to table:covered-table-cell.
+interface MergeAllowed {
+  readonly anchor: XmlElement;
+  readonly consumed: readonly XmlElement[];
+  readonly refusal?: never;
+}
+
+// A merge the table refuses, the row of the rectangle it was found in, and why, phrased to follow the name of the operation that refused it.
+interface MergeRefused {
+  readonly refusal: { readonly rowIndex: number; readonly reason: string };
+  readonly anchor?: never;
+  readonly consumed?: never;
+}
+
+type MergePlan = MergeAllowed | MergeRefused;
+
+function refuseMerge(rowIndex: number, reason: string): MergeRefused {
+  return { refusal: { rowIndex, reason } };
+}
+
+// Decides the merge of `target` without changing anything, so that a merge covering several rows finds out that a later row refuses before any earlier row has changed. `rows` are the table:table-row elements of the rectangle, top row first.
+//
+// A merge is refused when it would leave the grid rule broken, which is when its rectangle cuts through a merged region: a region the rectangle reaches that is not wholly inside it would either keep positions the new merge takes while losing its anchor, or lose positions to the new merge while keeping its anchor. A merged region wholly inside the rectangle is swallowed whole, as any unmerged cell in it is, so it leaves no orphan behind. The one merge that reaches a region without being wholly around it is one that changes nothing: a rectangle one row high over an anchor that already spans exactly its columns.
+//
+// The refusal names the row of the rectangle it was found in, the grid column, and the anchor of the region in the way.
+function planMerge(
+  table: XmlElement,
+  pkg: Package,
+  target: GridRegion,
+  rows: readonly [XmlElement, ...XmlElement[]],
+): MergePlan {
+  const [anchorRow, ...coveredRows] = rows;
+  const anchorCells = gridCellElements(anchorRow);
+  const coveredCells = coveredRows.map(gridCellElements);
+  const anchor = anchorCells[target.column];
+  if (anchor === undefined) {
+    return refuseMerge(
+      target.row,
+      `column ${target.column} does not exist in this row`,
+    );
+  }
+  const endColumn = target.column + target.columnSpan;
+  for (const [offset, cells] of [anchorCells, ...coveredCells].entries()) {
+    if (endColumn > cells.length) {
+      return refuseMerge(
+        target.row + offset,
+        `colSpan ${target.columnSpan} starting at column ${target.column} exceeds this row's own ${cells.length} grid columns`,
+      );
+    }
+  }
+  const regions = anchorRegions(resolveOdtGrid(table, pkg));
+  if (anchor.tag === "table:covered-table-cell") {
+    const covering = regions.find((region) =>
+      regionCovers(region, target.row, target.column),
+    );
+    return refuseMerge(
+      target.row,
+      covering === undefined
+        ? `column ${target.column} is a covered position that no merge anchors`
+        : `column ${target.column} is covered by ${describeRegionAnchor(covering)}`,
+    );
+  }
+  const cutting = regions.find(
+    (region) =>
+      regionsIntersect(region, target) &&
+      !regionContains(target, region) &&
+      !isUnchangedAnchor(region, target),
+  );
+  if (cutting !== undefined) {
+    const column = Math.max(cutting.column, target.column);
+    return refuseMerge(
+      Math.max(cutting.row, target.row),
+      `column ${column} belongs to ${describeRegionAnchor(cutting)}, which reaches outside the region being merged and cannot be merged over`,
+    );
+  }
+  return {
+    anchor,
+    consumed: [
+      ...anchorCells.slice(target.column + 1, endColumn),
+      ...coveredCells.flatMap((cells) => cells.slice(target.column, endColumn)),
+    ],
+  };
+}
+
+// Carries out a merge planMerge allowed: retags every consumed element and states the region's spans on its anchor. A rectangle one row high leaves the anchor's row span alone, since it is either unstated or a vertical merge the rectangle leaves as it is.
+function applyMerge(
+  plan: MergeAllowed,
+  target: GridRegion,
+  pkg: Package,
+): OdtTableCell {
+  for (const element of plan.consumed) {
+    retagAsCovered(element);
+  }
+  const anchor = new OdtTableCell(plan.anchor, pkg);
+  anchor.colSpan = target.columnSpan;
+  if (target.rowSpan > 1) {
+    anchor.rowSpan = target.rowSpan;
+  }
+  return anchor;
+}
+
 export class OdtTableRow {
   private readonly node: XmlElement;
   private readonly pkg: Package;
+  private readonly table: XmlElement;
 
-  constructor(node: XmlElement, pkg: Package) {
+  constructor(node: XmlElement, pkg: Package, table: XmlElement) {
     this.node = node;
     this.pkg = pkg;
+    this.table = table;
   }
 
   // The row's PHYSICAL real cells: one view per table:table-cell, with every table:covered-table-cell omitted. A merged region's covered positions are elements of their own in ODF, so after a merge this holds fewer cells than the table has grid columns and an index into it is not a grid column. OdtTable.gridRows is the grid-addressed view; OdtTableRow.mergeCellsHorizontally takes a grid column, not an index into this list.
@@ -567,7 +797,9 @@ export class OdtTableRow {
     return new OdtCoveredTableCell(coveredElement, this.pkg);
   }
 
-  // Merges colSpan grid columns of THIS row into one cell: the anchor at startColumnIndex gets table:number-columns-spanned (via OdtTableCell.colSpan), and every OTHER covered position is RETAGGED in place to table:covered-table-cell (see retagAsCovered: the cell keeps its own table:style-name and loses its content and spans), never removed and reinserted, since ODF's grid model requires one child element per grid position regardless of merge state. Consumed cells' own content is discarded silently and unconditionally -- no check, no guard -- matching that same precedent exactly: documented, intentional behaviour, not a silent trap.
+  // Merges colSpan grid columns of THIS row into one cell: the anchor at startColumnIndex gets table:number-columns-spanned (via OdtTableCell.colSpan), and every OTHER position in the region is RETAGGED in place to table:covered-table-cell (see retagAsCovered: the cell keeps its own table:style-name and loses its content and spans), never removed and reinserted, since ODF's grid model requires one child element per grid position regardless of merge state. Consumed cells' own content is discarded silently and unconditionally, as it is throughout the spreadsheet and docx editors: documented, intentional behaviour, not a silent trap.
+  //
+  // startColumnIndex is a GRID column. The merge is refused, with an error naming the grid column and the anchor of the merge in the way, when it cannot be carried out without breaking the grid rule (ContentTableCell in document-schema.js): the start column is covered by a merge anchored elsewhere, or the region would cut through a merged region, whether that region runs down from a row above, down from this row, or along this row past the last merged column. A merged region wholly inside the region is swallowed whole. The cases that cut through a vertical merge are refused rather than extended because widening one row of a merged chain means rewriting every row of it and swallowing whatever those rows hold in the widened columns, which may belong to other merges; that is a rectangle merge, and OdtTable.mergeCells is where it is decided, after the vertical merge has been unmerged. A merge that would change nothing is never refused.
   mergeCellsHorizontally(
     startColumnIndex: number,
     colSpan: number,
@@ -577,41 +809,37 @@ export class OdtTableRow {
         `mergeCellsHorizontally: colSpan must be a positive integer, got ${colSpan}`,
       );
     }
-    const gridCells = gridCellElements(this.node);
-    const anchorElement = gridCells[startColumnIndex];
-    if (anchorElement === undefined) {
-      throw new Error(
-        `mergeCellsHorizontally: column ${startColumnIndex} does not exist in this row`,
-      );
+    const target: GridRegion = {
+      row: tableRowElements(this.table).indexOf(this.node),
+      column: startColumnIndex,
+      rowSpan: 1,
+      columnSpan: colSpan,
+    };
+    const plan = planMerge(this.table, this.pkg, target, [this.node]);
+    if (plan.refusal !== undefined) {
+      throw new Error(`mergeCellsHorizontally: ${plan.refusal.reason}`);
     }
-    if (anchorElement.tag === "table:covered-table-cell") {
-      throw new Error(
-        `mergeCellsHorizontally: column ${startColumnIndex} is already covered by another merge -- address that merge's own anchor cell instead`,
-      );
-    }
-    if (startColumnIndex + colSpan > gridCells.length) {
-      throw new Error(
-        `mergeCellsHorizontally: colSpan ${colSpan} starting at column ${startColumnIndex} exceeds this row's own ${gridCells.length} grid columns`,
-      );
-    }
-    for (let i = 1; i < colSpan; i++) {
-      const consumedElement = gridCells[startColumnIndex + i];
-      if (consumedElement !== undefined) {
-        retagAsCovered(consumedElement);
-      }
-    }
-    const anchor = new OdtTableCell(anchorElement, this.pkg);
-    anchor.colSpan = colSpan;
-    return anchor;
+    return applyMerge(plan, target, this.pkg);
   }
 
-  // Marks the grid position at columnIndex as covered by a merge anchored elsewhere (typically a different row, in a vertical merge's own covered rows) -- the single-position primitive OdtTable.mergeCells uses to stamp every covered position in a rowSpan x colSpan rectangle below the anchor row. Retags in place through retagAsCovered, exactly like mergeCellsHorizontally's own consumed-cell handling above.
+  // Marks the grid position at columnIndex as covered by a merge anchored elsewhere, retagging it in place through retagAsCovered. It is refused, naming the position, when the position is itself the anchor of a merged region: covering it would leave the rest of that region covered with nothing anchoring it, so a merge over an anchor is made through OdtTable.mergeCells, which swallows the whole region or refuses. A position another merge already covers, and an unmerged cell, are retagged.
   markCellCovered(columnIndex: number): void {
-    const gridCells = gridCellElements(this.node);
-    const element = gridCells[columnIndex];
+    const element = gridCellElements(this.node)[columnIndex];
     if (element === undefined) {
       throw new Error(
         `markCellCovered: column ${columnIndex} does not exist in this row`,
+      );
+    }
+    const rowIndex = tableRowElements(this.table).indexOf(this.node);
+    const anchored = anchorRegions(resolveOdtGrid(this.table, this.pkg)).find(
+      (region) =>
+        region.row === rowIndex &&
+        region.column === columnIndex &&
+        (region.rowSpan > 1 || region.columnSpan > 1),
+    );
+    if (anchored !== undefined) {
+      throw new Error(
+        `markCellCovered: column ${columnIndex} anchors a merge with rowSpan ${anchored.rowSpan} and colSpan ${anchored.columnSpan}, so covering it would leave the rest of that merge without an anchor`,
       );
     }
     retagAsCovered(element);
@@ -655,7 +883,7 @@ export class OdtTable {
     const out: OdtTableRow[] = [];
     for (const child of this.live().children) {
       if (child.type === "element" && child.tag === "table:table-row") {
-        out.push(new OdtTableRow(child, this.pkg));
+        out.push(new OdtTableRow(child, this.pkg, this.node));
       }
     }
     return out;
@@ -672,33 +900,7 @@ export class OdtTable {
   }
 
   private grid() {
-    const table = this.live();
-    const placedRows: PlacedLiveCell<OdtTableCell>[][] = [];
-    let declaredColumns = 0;
-    for (const child of table.children) {
-      if (child.type !== "element") {
-        continue;
-      }
-      if (child.tag === "table:table-column") {
-        declaredColumns++;
-      } else if (child.tag === "table:table-row") {
-        placedRows.push(this.placedCells(child));
-      }
-    }
-    return resolveLiveTableGrid(placedRows, declaredColumns);
-  }
-
-  // The real cells of one row, each with the grid column its element sits at. A covered position has no cell of its own to place: the anchor that covers it owns it.
-  private placedCells(row: XmlElement): PlacedLiveCell<OdtTableCell>[] {
-    return gridCellElements(row).flatMap((element, columnIndex) => {
-      if (element.tag !== "table:table-cell") {
-        return [];
-      }
-      const cell = new OdtTableCell(element, this.pkg);
-      return [
-        { columnIndex, cell, colSpan: cell.colSpan, rowSpan: cell.rowSpan },
-      ];
-    });
+    return resolveOdtGrid(this.live(), this.pkg);
   }
 
   // The PHYSICAL real cell at columnIndex of row rowIndex: an index into OdtTableRow.cells(), which omits covered positions, not a grid column, so once a row holds a merge it is not the cell at that grid column. gridRows() is the grid-addressed lookup.
@@ -720,7 +922,7 @@ export class OdtTable {
     const node = this.live();
     const row = buildRow(this.pkg, columnCount);
     node.children.push(row);
-    return new OdtTableRow(row, this.pkg);
+    return new OdtTableRow(row, this.pkg, node);
   }
 
   // Appends an empty table:table-row with no cells yet, for a caller (buildOdtPackage's own appendTable) that needs to build a merged table's cells one at a time via OdtTableRow.appendCell/appendCoveredCell rather than the uniform-grid shape appendRow(columnCount) always produces.
@@ -728,10 +930,12 @@ export class OdtTable {
     const node = this.live();
     const row = el("table:table-row");
     node.children.push(row);
-    return new OdtTableRow(row, this.pkg);
+    return new OdtTableRow(row, this.pkg, node);
   }
 
-  // Merges the rowSpan x colSpan rectangle anchored at (startRow, startColumn): calls OdtTableRow.mergeCellsHorizontally on the anchor row (which sets the anchor's own colSpan), sets rowSpan on that same anchor cell when rowSpan > 1, then calls markCellCovered for every column the rectangle covers on every row below the anchor -- unlike docx, ODF's grid model means only the FIRST row of a vertical merge needs a real horizontal merge; every row below it just needs its own covered positions stamped, since table:number-rows-spanned on the anchor already says how many rows the merge covers.
+  // Merges the rowSpan x colSpan rectangle anchored at (startRow, startColumn), both columns being grid columns: the anchor gets table:number-columns-spanned, and table:number-rows-spanned when rowSpan > 1, and every other position of the rectangle is retagged to table:covered-table-cell. Unlike docx, ODF's grid model needs no per-row merge on the rows below the anchor: table:number-rows-spanned on the anchor already says how many rows the merge covers, and each of those rows only needs its own covered positions stamped.
+  //
+  // Every row of the rectangle is checked before any row changes, so a refusal leaves the table exactly as it was. The rectangle is refused, naming the row and the grid column, wherever OdtTableRow.mergeCellsHorizontally would refuse: when it starts in a position covered by a merge anchored elsewhere, or cuts through a merged region. A merged region wholly inside the rectangle is swallowed whole, with the content of its anchor, like any unmerged cell in it.
   mergeCells(
     startRow: number,
     startColumn: number,
@@ -748,29 +952,34 @@ export class OdtTable {
         `mergeCells: rowSpan and colSpan must be positive integers, got rowSpan=${rowSpan}, colSpan=${colSpan}`,
       );
     }
-    const rows = this.rows();
+    const rows = tableRowElements(this.live());
     const anchorRow = rows[startRow];
     if (anchorRow === undefined) {
       throw new Error(
         `mergeCells: row ${startRow} does not exist in this table`,
       );
     }
-    const anchor = anchorRow.mergeCellsHorizontally(startColumn, colSpan);
-    if (rowSpan > 1) {
-      anchor.rowSpan = rowSpan;
-      for (let r = 1; r < rowSpan; r++) {
-        const coveredRow = rows[startRow + r];
-        if (coveredRow === undefined) {
-          throw new Error(
-            `mergeCells: rowSpan ${rowSpan} starting at row ${startRow} exceeds this table's own ${rows.length} rows`,
-          );
-        }
-        for (let c = 0; c < colSpan; c++) {
-          coveredRow.markCellCovered(startColumn + c);
-        }
-      }
+    if (startRow + rowSpan > rows.length) {
+      throw new Error(
+        `mergeCells: rowSpan ${rowSpan} starting at row ${startRow} exceeds this table's own ${rows.length} rows`,
+      );
     }
-    return anchor;
+    const target: GridRegion = {
+      row: startRow,
+      column: startColumn,
+      rowSpan,
+      columnSpan: colSpan,
+    };
+    const plan = planMerge(this.live(), this.pkg, target, [
+      anchorRow,
+      ...rows.slice(startRow + 1, startRow + rowSpan),
+    ]);
+    if (plan.refusal !== undefined) {
+      throw new Error(
+        `mergeCells: row ${plan.refusal.rowIndex}: ${plan.refusal.reason}`,
+      );
+    }
+    return applyMerge(plan, target, this.pkg);
   }
 
   remove(): void {
