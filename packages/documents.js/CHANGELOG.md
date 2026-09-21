@@ -1,3 +1,23 @@
+## [13.0.0](https://github.com/ExaDev/documents.js/compare/documents.js%4012.1.0...documents.js%4013.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **documents.js:** gridColumnCount()/gridRows() on a table whose row or declared columns carry
+  table:number-columns-repeated now report the table's true, repeat-expanded grid width and
+  resolve each repeated position to its own live cell, rather than under-counting to the row's
+  physical element count. mergeCellsHorizontally/markCellCovered on such a row now address the
+  same true grid column a repeat-aware reader would, individuating (un-repeating) the specific
+  column an edit touches rather than throwing a false "does not exist" past the row's physical
+  element count or silently targeting the wrong physical cell.
+
+### Bug Fixes
+
+* **documents.js:** expand table:number-columns-repeated in the odt edit layer's table grid ([1185bb1](https://github.com/ExaDev/documents.js/commit/1185bb1091fcb673f82ee2429def76ebd863cf31))
+
+### Code Refactoring
+
+* **documents.js:** share ODF repeat-run individuation between ods and odt table editors ([b16cea8](https://github.com/ExaDev/documents.js/commit/b16cea8065d30607e42b0f7fac7a3f2f45973da6))
+
 ## [12.1.0](https://github.com/ExaDev/documents.js/compare/documents.js%4012.0.0...documents.js%4012.1.0) (2026-09-21)
 
 ### Features
