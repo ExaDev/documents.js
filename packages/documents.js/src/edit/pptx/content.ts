@@ -10,6 +10,7 @@ import {
   resolveCellFillColor,
   tableCellColumnSpan,
   tableCellRowSpan,
+  tableGridColumnCount,
   walkTableGrid,
 } from "document-schema.js";
 import type { Package } from "ooxml.js";
@@ -130,12 +131,19 @@ function appendShape(
     return;
   }
   if (shape.blocks.length === 1 && onlyBlock?.kind === "table") {
+    // A table with no rows is refused rather than written as an a:tbl holding a grid and nothing else: ODF requires at least one row, so the same table is refused in every presentation format instead of written by one and not the other.
+    if (onlyBlock.rows.length === 0) {
+      throw new Error(
+        "buildPptxPackage: table has no rows, and a table with no rows cannot be written in every presentation format (ODF requires at least one table:table-row)",
+      );
+    }
+    // The grid is as wide as the rows and columnWidthsPt together state, so a table that states no column widths still gets one a:gridCol per grid column; a column with no stated width takes an equal share of the default table width, the same as any column created without one.
     const table = slide.addTable({
       frame: shape.frame,
       rotationDeg: shape.rotationDeg,
       table: {
         rows: onlyBlock.rows.length,
-        columns: onlyBlock.columnWidthsPt.length,
+        columns: tableGridColumnCount(onlyBlock),
         columnWidthsPt: onlyBlock.columnWidthsPt,
       },
     });

@@ -1,6 +1,7 @@
 import type {
   ContentDocument,
   ContentTable,
+  ContentTableCell,
   ContentVector,
 } from "document-schema.js";
 import { walkTableGrid } from "document-schema.js";
@@ -1238,5 +1239,134 @@ describe("buildOdtPackage: a table breaking the grid rule", () => {
     ).toThrow(
       "populateOdtTable: table breaks the grid rule (the cell at row 0, column 1 lies inside the merged region anchored at row 0, column 0 but carries content of its own, and a merged region's content belongs to its anchor)",
     );
+  });
+});
+
+describe("buildOdtPackage: a table that states no column widths", () => {
+  function cellOf(text: string): ContentTableCell {
+    return { blocks: [{ kind: "paragraph", runs: [{ text }] }] };
+  }
+
+  function documentOf(table: ContentTable): ContentDocument {
+    return wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [table],
+      },
+    ]);
+  }
+
+  function writtenTable(table: ContentTable): ContentTable {
+    const reread = readOdtContent(buildOdtPackage(documentOf(table)));
+    if (reread.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const block = reread.sections[0]?.blocks[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected the section to hold a table");
+    }
+    return block;
+  }
+
+  function cellTexts(table: ContentTable): string[][] {
+    return table.rows.map((row) =>
+      row.cells.map((cell) =>
+        cell.blocks
+          .flatMap((block) =>
+            block.kind === "paragraph" ? block.runs.map((run) => run.text) : [],
+          )
+          .join(""),
+      ),
+    );
+  }
+
+  it("is written with one column per grid column the rows state, rather than dropped", () => {
+    const written = writtenTable({
+      kind: "table",
+      columnWidthsPt: [],
+      rows: [
+        { cells: [cellOf("a"), cellOf("b")] },
+        { cells: [cellOf("c"), cellOf("d")] },
+      ],
+    });
+    expect(written.columnWidthsPt).toHaveLength(2);
+    expect(cellTexts(written)).toEqual([
+      ["a", "b"],
+      ["c", "d"],
+    ]);
+  });
+
+  it("gives each column with no stated width a positive width", () => {
+    const written = writtenTable({
+      kind: "table",
+      columnWidthsPt: [],
+      rows: [{ cells: [cellOf("a"), cellOf("b")] }],
+    });
+    for (const widthPt of written.columnWidthsPt) {
+      expect(widthPt).toBeGreaterThan(0);
+    }
+  });
+
+  it("writes a merged region across columns the rows state and the widths do not", () => {
+    const written = writtenTable({
+      kind: "table",
+      columnWidthsPt: [],
+      rows: [
+        { cells: [{ ...cellOf("wide"), colSpan: 2 }, { blocks: [] }] },
+        { cells: [cellOf("c"), cellOf("d")] },
+      ],
+    });
+    expect(written.columnWidthsPt).toHaveLength(2);
+    expect(written.rows[0]?.cells[0]).toMatchObject({ colSpan: 2 });
+    expect(cellTexts(written)[1]).toEqual(["c", "d"]);
+  });
+
+  it("widens a grid whose stated widths are fewer than the columns the rows occupy, keeping the widths it does state", () => {
+    const written = writtenTable({
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [{ cells: [cellOf("a"), cellOf("b")] }],
+    });
+    expect(written.columnWidthsPt).toHaveLength(2);
+    expect(written.columnWidthsPt[0]).toBe(100);
+  });
+
+  it("writes the stated widths unchanged when the table states one per column", () => {
+    const written = writtenTable({
+      kind: "table",
+      columnWidthsPt: [50, 70],
+      rows: [{ cells: [cellOf("a"), cellOf("b")] }],
+    });
+    expect(written.columnWidthsPt).toEqual([50, 70]);
+  });
+
+  it("still reports a grid fault in a table with no widths, rather than dropping it", () => {
+    expect(() =>
+      buildOdtPackage(
+        documentOf({
+          kind: "table",
+          columnWidthsPt: [],
+          rows: [
+            { cells: [cellOf("a"), cellOf("b")] },
+            { cells: [cellOf("c")] },
+          ],
+        }),
+      ),
+    ).toThrow(
+      "populateOdtTable: table breaks the grid rule (row 1 holds 1 cells where the widest row holds 2, but every row of a table covers the same grid)",
+    );
+  });
+
+  it("refuses a table with no rows, with or without stated widths, rather than dropping it", () => {
+    for (const columnWidthsPt of [[], [100, 100]]) {
+      expect(() =>
+        buildOdtPackage(
+          documentOf({ kind: "table", columnWidthsPt, rows: [] }),
+        ),
+      ).toThrow(
+        "buildOdtPackage: table has no rows, and ODF requires a table:table to hold at least one table:table-row",
+      );
+    }
   });
 });

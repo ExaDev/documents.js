@@ -11,6 +11,7 @@ import {
   resolveCellFillColor,
   tableCellColumnSpan,
   tableCellRowSpan,
+  tableGridColumnCount,
   walkTableGrid,
 } from "document-schema.js";
 import type { Package } from "ooxml.js";
@@ -382,13 +383,16 @@ function docxRowCells(
 
 function appendTable(body: DocxBody, block: ContentTable): void {
   assertTableObeysGridRule(block, "buildDocxPackage");
-  const columns = block.columnWidthsPt.length;
-  if (block.rows.length === 0 || columns === 0) {
-    return;
+  // A table with no rows has no row to carry a grid and no fault for the check above to report, and dropping it would lose it without a trace; ODF, the other word-processing target, requires at least one row, so it is refused here too rather than written by one format and not the other.
+  if (block.rows.length === 0) {
+    throw new Error(
+      "buildDocxPackage: table has no rows, and a table with no rows cannot be written in every word-processing format (ODF requires at least one table:table-row)",
+    );
   }
+  // The grid is as wide as the rows and columnWidthsPt together state, so a table that states no column widths still gets one w:gridCol per grid column; a column with no stated width takes an equal share of the default table width, the same as any column created without one.
   const table = body.appendTable({
     rows: 0,
-    columns,
+    columns: tableGridColumnCount(block),
     columnWidthsTwips: block.columnWidthsPt.map(ptToTwips),
   });
   const positionsByRow = walkTableGrid(block);

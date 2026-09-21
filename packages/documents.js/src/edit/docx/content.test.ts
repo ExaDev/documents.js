@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import type { ContentDocument, ContentTable } from "document-schema.js";
+import type {
+  ContentDocument,
+  ContentTable,
+  ContentTableCell,
+} from "document-schema.js";
 import type { XmlElement } from "ooxml.js";
 import {
   attr,
@@ -399,35 +403,6 @@ describe("buildDocxPackage", () => {
       colSpan: 2,
       rowSpan: 2,
     });
-  });
-
-  it("writes no table at all for a table with no rows or no columns", () => {
-    const tableDoc = (table: ContentTable): ContentDocument =>
-      wordDoc([
-        {
-          pageSize: { widthPt: 612, heightPt: 792 },
-          margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
-          blocks: [table],
-        },
-      ]);
-    const tablesOf = (content: ContentDocument): number => {
-      const root = rootElement(
-        buildDocxPackage(content).parts["word/document.xml"],
-      );
-      return root === undefined ? -1 : descendants(root, "w:tbl").length;
-    };
-    expect(
-      tablesOf(tableDoc({ kind: "table", columnWidthsPt: [100], rows: [] })),
-    ).toBe(0);
-    expect(
-      tablesOf(
-        tableDoc({
-          kind: "table",
-          columnWidthsPt: [],
-          rows: [{ cells: [{ blocks: [] }] }],
-        }),
-      ),
-    ).toBe(0);
   });
 
   it("writes a row's own height, and none for a row that states no height", () => {
@@ -1065,5 +1040,122 @@ describe("buildDocxPackage: a table breaking the grid rule", () => {
         ]),
       ),
     ).toThrow(/^buildDocxPackage: table breaks the grid rule/);
+  });
+});
+
+describe("buildDocxPackage: a table that states no column widths", () => {
+  function cellOf(text: string): ContentTableCell {
+    return { blocks: [{ kind: "paragraph", runs: [{ text }] }] };
+  }
+
+  function documentOf(table: ContentTable): ContentDocument {
+    return wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [table],
+      },
+    ]);
+  }
+
+  function writtenTable(table: ContentTable): ContentTable {
+    const reread = readDocxContent(buildDocxPackage(documentOf(table)));
+    if (reread.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const block = reread.sections[0]?.blocks[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected the section to hold a table");
+    }
+    return block;
+  }
+
+  function gridColumns(table: ContentTable): number {
+    const root = rootElement(
+      buildDocxPackage(documentOf(table)).parts["word/document.xml"],
+    );
+    if (root === undefined) {
+      throw new Error("expected a word/document.xml root element");
+    }
+    return descendants(root, "w:gridCol").length;
+  }
+
+  it("is written with one w:gridCol per grid column the rows state, rather than dropped", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [],
+      rows: [
+        { cells: [cellOf("a"), cellOf("b")] },
+        { cells: [cellOf("c"), cellOf("d")] },
+      ],
+    };
+    expect(gridColumns(table)).toBe(2);
+    const written = writtenTable(table);
+    expect(written.columnWidthsPt).toHaveLength(2);
+    for (const widthPt of written.columnWidthsPt) {
+      expect(widthPt).toBeGreaterThan(0);
+    }
+    expect(written.rows.map((row) => row.cells.length)).toEqual([2, 2]);
+  });
+
+  it("writes a merged region across columns the rows state and the widths do not", () => {
+    const written = writtenTable({
+      kind: "table",
+      columnWidthsPt: [],
+      rows: [
+        { cells: [{ ...cellOf("wide"), colSpan: 2 }, { blocks: [] }] },
+        { cells: [cellOf("c"), cellOf("d")] },
+      ],
+    });
+    expect(written.columnWidthsPt).toHaveLength(2);
+    expect(written.rows[0]?.cells[0]).toMatchObject({ colSpan: 2 });
+  });
+
+  it("widens a grid whose stated widths are fewer than the columns the rows occupy, keeping the widths it does state", () => {
+    const written = writtenTable({
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [{ cells: [cellOf("a"), cellOf("b")] }],
+    });
+    expect(written.columnWidthsPt).toHaveLength(2);
+    expect(written.columnWidthsPt[0]).toBe(100);
+  });
+
+  it("writes the stated widths unchanged when the table states one per column", () => {
+    const written = writtenTable({
+      kind: "table",
+      columnWidthsPt: [50, 70],
+      rows: [{ cells: [cellOf("a"), cellOf("b")] }],
+    });
+    expect(written.columnWidthsPt).toEqual([50, 70]);
+  });
+
+  it("still reports a grid fault in a table with no widths, rather than dropping it", () => {
+    expect(() =>
+      buildDocxPackage(
+        documentOf({
+          kind: "table",
+          columnWidthsPt: [],
+          rows: [
+            { cells: [cellOf("a"), cellOf("b")] },
+            { cells: [cellOf("c")] },
+          ],
+        }),
+      ),
+    ).toThrow(
+      "buildDocxPackage: table breaks the grid rule (row 1 holds 1 cells where the widest row holds 2, but every row of a table covers the same grid)",
+    );
+  });
+
+  it("refuses a table with no rows, with or without stated widths, rather than dropping it", () => {
+    for (const columnWidthsPt of [[], [100, 100]]) {
+      expect(() =>
+        buildDocxPackage(
+          documentOf({ kind: "table", columnWidthsPt, rows: [] }),
+        ),
+      ).toThrow(
+        "buildDocxPackage: table has no rows, and a table with no rows cannot be written in every word-processing format (ODF requires at least one table:table-row)",
+      );
+    }
   });
 });
