@@ -265,12 +265,22 @@ describe("denseTableRows", () => {
           cells: [{ columnIndex: 0, cell: cell("a") }],
           heightPt: 24,
           direction: "rtl",
+          isHeader: true,
         },
       ],
       1,
     );
     expect(rows[0]?.heightPt).toBe(24);
     expect(rows[0]?.direction).toBe("rtl");
+    expect(rows[0]?.isHeader).toBe(true);
+  });
+
+  it("leaves a row that states no header flag without one, rather than writing false", () => {
+    const rows = denseTableRows(
+      [{ cells: [{ columnIndex: 0, cell: cell("a") }] }],
+      1,
+    );
+    expect(rows[0]).toEqual({ cells: [cell("a")] });
   });
 });
 
@@ -330,11 +340,12 @@ describe("placeAnchorTableRows", () => {
 
   it("carries the row's own properties through unchanged", () => {
     const rows = placeAnchorTableRows(
-      [{ cells: [cell("a")], heightPt: 18, direction: "ltr" }],
+      [{ cells: [cell("a")], heightPt: 18, direction: "ltr", isHeader: true }],
       1,
     );
     expect(rows[0]?.heightPt).toBe(18);
     expect(rows[0]?.direction).toBe("ltr");
+    expect(rows[0]?.isHeader).toBe(true);
   });
 
   it("places a second anchor past a first one's own columns", () => {
