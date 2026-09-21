@@ -4,6 +4,7 @@ import type {
   ContentShape,
   ContentTable,
 } from "document-schema.js";
+import { describeTableGridFault, findTableGridFault } from "document-schema.js";
 import { buildTextBody } from "../content-write";
 import { isBlipFormat } from "./blips";
 import {
@@ -363,6 +364,16 @@ function writeTableGroup(
   context: DrawingWriteContext,
 ): { readonly bytes: Uint8Array<ArrayBuffer>; readonly shapeCount: number } {
   const { frame } = shape;
+  const gridFault = findTableGridFault(table);
+  if (gridFault !== undefined) {
+    context.sink({
+      code: PptDiagnosticCodes.TABLE_GRID_FAULT,
+      severity: "warning",
+      message: context.describeMessage(
+        `a table breaks the grid rule (${describeTableGridFault(gridFault)}); every entry is still written at its own grid position`,
+      ),
+    });
+  }
   const rowHeights = tableRowHeights(
     table,
     pointsToMasterUnits(frame.heightPt),

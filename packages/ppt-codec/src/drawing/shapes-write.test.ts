@@ -580,6 +580,68 @@ describe("writeSlideDrawing: table cell spans and content", () => {
     ).toHaveLength(2);
   });
 
+  it("reports a table breaking the grid rule, naming the fault, and still writes every entry at its own grid position", () => {
+    const diagnostics: PptDiagnostic[] = [];
+    const written = writeSlideDrawing(
+      [
+        {
+          shape: tableShape(
+            [
+              {
+                cells: [
+                  {
+                    blocks: [{ kind: "paragraph", runs: [{ text: "anchor" }] }],
+                    colSpan: 2,
+                  },
+                  {
+                    blocks: [{ kind: "paragraph", runs: [{ text: "copy" }] }],
+                  },
+                ],
+              },
+            ],
+            [50, 50],
+          ),
+          clientData: undefined,
+        },
+      ],
+      {
+        ...CONTEXT,
+        describeMessage: (reason) => `slide 1: ${reason}`,
+        sink: (diagnostic) => diagnostics.push(diagnostic),
+      },
+    );
+    expect(
+      diagnostics.filter((d) => d.code === PptDiagnosticCodes.TABLE_GRID_FAULT),
+    ).toEqual([
+      {
+        code: PptDiagnosticCodes.TABLE_GRID_FAULT,
+        severity: "warning",
+        message:
+          "slide 1: a table breaks the grid rule (the cell at row 0, column 1 lies inside the merged region anchored at row 0, column 0 but carries content of its own, and a merged region's content belongs to its anchor); every entry is still written at its own grid position",
+      },
+    ]);
+    const [entry] = readDrawingShapes(readRecordAt(written.bytes, 0));
+    if (entry === undefined || !("cells" in entry)) {
+      throw new Error("expected a table entry");
+    }
+    expect(entry.cells).toHaveLength(2);
+  });
+
+  it("reports no grid fault for a table obeying the grid rule", () => {
+    const diagnostics = collectDiagnostics([
+      {
+        shape: tableShape(
+          [{ cells: [{ blocks: [], colSpan: 2 }, { blocks: [] }] }],
+          [50, 50],
+        ),
+        clientData: undefined,
+      },
+    ]);
+    expect(
+      diagnostics.some((d) => d.code === PptDiagnosticCodes.TABLE_GRID_FAULT),
+    ).toBe(false);
+  });
+
   it("reports neither span diagnostic for a colSpan/rowSpan of exactly 1", () => {
     const diagnostics = collectDiagnostics([
       {
