@@ -450,8 +450,17 @@ function writeTableGroup(
     writeClientAnchor(frame.xPt, frame.yPt, frame.widthPt, frame.heightPt),
   ]);
   let cellSpid = spid + 1;
-  const cellShapes = table.rows.flatMap((row, rowIndex) =>
-    row.cells.map((cell, columnIndex) => {
+  const cellShapes = table.rows.flatMap((row, rowIndex) => {
+    if (row.isHeader === true) {
+      context.sink({
+        code: PptDiagnosticCodes.TABLE_HEADER_ROW_DROPPED,
+        severity: "warning",
+        message: context.describeMessage(
+          `table row ${String(rowIndex)} is a header row, and that is dropped; a PowerPoint 97-2003 table is a strict grid of shapes with no row record at all, so the row is written exactly as any other`,
+        ),
+      });
+    }
+    return row.cells.map((cell, columnIndex) => {
       // columnIndex is always < cellCount (cellCount is derived as the max of every row's own cell count) and rowIndex always < table.rows.length (rowHeights carries exactly one entry per row), so columnBoundaries/rowBoundaries -- each one element longer than the count they bound -- always have both `[index]` and `[index + 1]` defined for a real cell. TypeScript's indexed-access typing cannot see that derivation across the two arrays, so this asserts it once, by construction, rather than guarding against an out-of-range case no real table can produce.
       const cellLeft = definiteAt(columnBoundaries, columnIndex);
       const cellRight = definiteAt(columnBoundaries, columnIndex + 1);
@@ -507,8 +516,8 @@ function writeTableGroup(
         children.push(textbox);
       }
       return writeContainer(OfficeArtSpContainer, children);
-    }),
-  );
+    });
+  });
   return {
     bytes: writeContainer(OfficeArtSpgrContainer, [groupShape, ...cellShapes]),
     // The group shape itself plus one shape per cell.
