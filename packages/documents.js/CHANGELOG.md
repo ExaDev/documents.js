@@ -1,3 +1,14 @@
+## [12.1.0](https://github.com/ExaDev/documents.js/compare/documents.js%4012.0.0...documents.js%4012.1.0) (2026-09-21)
+
+### Features
+
+* **documents.js:** write a pptx table cell's vertical alignment to a:tcPr/[@anchor](https://github.com/anchor) ([c4a3694](https://github.com/ExaDev/documents.js/commit/c4a3694b455b90c702cc9a7beb4cc52f39605edb)), references [ExaDev/documents.js#1376](https://github.com/ExaDev/documents.js/issues/1376)
+
+
+### Dependencies
+
+- Updated ooxml.js to 11.1.0
+
 ## [12.0.0](https://github.com/ExaDev/documents.js/compare/documents.js%4011.0.0...documents.js%4012.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES
