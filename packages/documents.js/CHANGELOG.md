@@ -1,3 +1,22 @@
+## [9.0.0](https://github.com/ExaDev/documents.js/compare/documents.js%408.0.1...documents.js%409.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **documents.js:** mergeCellsHorizontally's column argument is a grid column rather
+  than an index into the row's physical cells, so the same call addresses a different
+  cell in any row with an earlier gridSpan, and a merge that would consume part of a
+  vertical merge now throws instead of applying partially.
+
+### Bug Fixes
+
+* **documents.js:** address a table merge by grid column and keep a covered cell's style ([821996a](https://github.com/ExaDev/documents.js/commit/821996a2c076be83f10d421d50afa04f5d1a1654))
+
+
+### Dependencies
+
+- Updated odf.js to 9.0.0
+- Updated ooxml.js to 10.0.2
+
 ## [8.0.1](https://github.com/ExaDev/documents.js/compare/documents.js%408.0.0...documents.js%408.0.1) (2026-09-21)
 
 

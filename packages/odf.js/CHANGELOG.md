@@ -1,3 +1,16 @@
+## [9.0.0](https://github.com/ExaDev/documents.js/compare/odf.js%408.0.3...odf.js%409.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **odf.js:** a table whose rows or columns sit inside a header or group wrapper
+  now reads back with those rows and columns present, so a consumer indexing rows or
+  columnWidthsPt sees a different shape for exactly the documents that were being
+  read wrongly before. Cells stating a vertical alignment now carry verticalAlign.
+
+### Bug Fixes
+
+* **odf.js:** read a table's grouped rows and columns, and a cell's vertical alignment ([4575ad2](https://github.com/ExaDev/documents.js/commit/4575ad25031f72abd26078497d41889e6485b2a4))
+
 ## [8.0.3](https://github.com/ExaDev/documents.js/compare/odf.js%408.0.2...odf.js%408.0.3) (2026-09-21)
 
 

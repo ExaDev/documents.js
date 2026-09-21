@@ -1,3 +1,15 @@
+## [5.11.41](https://github.com/ExaDev/documents.js/compare/document-cli%405.11.40...document-cli%405.11.41) (2026-09-21)
+
+### Bug Fixes
+
+* **document-cli:** count and address a docx table's grid columns, not its physical cells ([4858cca](https://github.com/ExaDev/documents.js/commit/4858cca478e49b7d23ec129ccdb1a7439fb504ee))
+
+
+### Dependencies
+
+- Updated odf.js to 9.0.0
+- Updated documents.js to 9.0.0
+
 ## [5.11.40](https://github.com/ExaDev/documents.js/compare/document-cli%405.11.39...document-cli%405.11.40) (2026-09-21)
 
 
