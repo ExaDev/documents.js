@@ -278,6 +278,37 @@ describe.each(["pptx", "odp"] as const)(
       expect(merged).toContain("anchor a merge");
     });
 
+    it("draws a merged 2x2 region as one anchor box and one continuation box, not as several empty cells, keeping the grid's own 3x3 dimensions", async () => {
+      const bytes =
+        format === "pptx"
+          ? buildPptxTableDeckBytes()
+          : buildOdpTableDeckBytes();
+      const { lastFrame, stdin } = renderAtSlideDetail(format, bytes);
+      await waitForText(lastFrame, "Tables (1)");
+      await sendKey(stdin, ENTER_KEY);
+      const unmerged = await waitForText(lastFrame, "table 1 (3x3)");
+      expect(unmerged).toContain("Slide 1, table 1 (3x3");
+      expect(unmerged.match(/┌/g)).toHaveLength(9);
+      expect(unmerged).not.toContain("↑");
+
+      await sendKey(stdin, "m");
+      await waitForText(lastFrame, "m/Enter to merge");
+      await sendKey(stdin, "l");
+      await sendKey(stdin, "j");
+      await sendKey(stdin, "m");
+      const merged = await waitForText(
+        lastFrame,
+        "probe:anchorColSpan=2 anchorRowSpan=2",
+      );
+
+      expect(merged).toContain("table 1 (3x3)");
+      // The anchor and its continuation are each exactly two cells wide (two 16-column cells, borders included), and the third column stays one cell wide.
+      expect(merged.match(/┌─{30}┐┌─{14}┐/g)).toHaveLength(2);
+      // Row 0: the wide anchor plus the third column; row 1: the wide continuation plus the third column; row 2: three ordinary cells.
+      expect(merged.match(/┌/g)).toHaveLength(7);
+      expect(merged).toContain("↑");
+    });
+
     it("cancels a pending merge on Escape without touching the document, then Escape again returns to slide-detail", async () => {
       const bytes =
         format === "pptx"
@@ -396,3 +427,35 @@ describe.each(["pptx", "odp"] as const)(
     });
   },
 );
+
+describe("SlideTableDetailScreen text fitting for a merged region", () => {
+  it("truncates an anchor's text to the merged box's full width, not to one cell's", async () => {
+    const editor = createPptx();
+    const slide = editor.addSlide();
+    slide.addTable({
+      frame: { xPt: 10, yPt: 10, widthPt: 300, heightPt: 150 },
+      table: { rows: 3, columns: 3 },
+    });
+    const longText = "x".repeat(40);
+    slide
+      .tables()[0]
+      ?.rows()[0]
+      ?.cells()[0]
+      ?.setParagraphs([{ runs: [{ text: longText }] }]);
+    const { lastFrame, stdin } = renderAtSlideDetail("pptx", editor.toBytes());
+    await waitForText(lastFrame, "Tables (1)");
+    await sendKey(stdin, ENTER_KEY);
+    await waitForText(lastFrame, "table 1 (3x3)");
+    await sendKey(stdin, "m");
+    await waitForText(lastFrame, "m/Enter to merge");
+    await sendKey(stdin, "l");
+    await sendKey(stdin, "j");
+    await sendKey(stdin, "m");
+    const merged = await waitForText(
+      lastFrame,
+      "probe:anchorColSpan=2 anchorRowSpan=2",
+    );
+    // A merged box two cells wide has 32 columns, 30 inside its borders: 29 characters and an ellipsis.
+    expect(merged).toContain(`│${"x".repeat(29)}…│`);
+  });
+});

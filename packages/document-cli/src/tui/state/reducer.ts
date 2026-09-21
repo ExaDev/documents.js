@@ -269,7 +269,7 @@ function mutateGuarded(
   }
 }
 
-// The pptx-side counterpart to DocxTable.mergeCells/OdtTable.mergeCells: a DrawingML table has no such convenience on PptxTable itself (see documents.js's own edit/pptx/table.ts doc comment -- every row always carries exactly `columns` a:tc elements, and a merge is expressed purely via gridSpan/rowSpan/hMerge/vMerge attributes on cells that already exist, never by removing or retagging an element the way docx/ODF each do). The anchor cell gets colSpan/rowSpan; every other cell in the rectangle gets horizontalMerge (covered from the left, in the SAME row) and/or verticalMerge (covered from above) set, matching real PowerPoint output for a rectangular merge's interior/trailing cells (both attributes set together).
+// The pptx-side counterpart to DocxTable.mergeCells/OdtTable.mergeCells: a DrawingML table has no such convenience on PptxTable itself (see documents.js's own edit/pptx/table.ts doc comment -- every row always carries exactly `columns` a:tc elements, and a merge is expressed purely via gridSpan/rowSpan/hMerge/vMerge attributes on cells that already exist, never by removing or retagging an element the way docx/ODF each do). The anchor cell gets colSpan/rowSpan; every other cell in the rectangle gets horizontalMerge (covered from the left, in the SAME row) and/or verticalMerge (covered from above) set, matching real PowerPoint output for a rectangular merge's interior/trailing cells (both attributes set together), and its own content cleared.
 function mergePptxTableCells(
   table: PptxTable,
   startRow: number,
@@ -331,6 +331,8 @@ function mergePptxTableCells(
       if (rowOffset > 0) {
         cell.verticalMerge = true;
       }
+      // A covered cell holds no content of its own: the merged region's content belongs to the anchor (ContentTableCell's grid rule), and ooxml.js's reader ignores a hMerge/vMerge cell's a:txBody, so text left here would stay in the file while being invisible in every view of it. A single empty paragraph is the body of a freshly built cell.
+      cell.setParagraphs([{ runs: [] }]);
     }
   }
 }

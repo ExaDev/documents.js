@@ -5,15 +5,19 @@ import { anyOverlayOpen, type Screen } from "../../../state/types.js";
 import { assertRichPresentationDocument } from "../../shared/slide-family.js";
 import {
   resolveSlideTable,
-  slideTableCellText,
+  segmentContains,
+  segmentText,
+  slideTableRowSegments,
 } from "../../shared/slide-table.js";
-import { truncatePreview } from "../../shared/text.js";
 
 export interface SlideTableDetailScreenProps {
   readonly screen: Extract<Screen, { kind: "slideTableDetail" }>;
 }
 
 const CELL_WIDTH = 16;
+
+// The columns a single-line border takes from a box's own width (one each side), which the text inside must fit within.
+const BORDER_COLUMNS = 2;
 
 interface Cursor {
   readonly row: number;
@@ -132,18 +136,18 @@ export function SlideTableDetailScreen(
       {rows.length === 0 ? (
         <Text dimColor>This table has no rows.</Text>
       ) : (
-        rows.map((row, rowIndex) => (
+        slideTableRowSegments(table).map((segments, rowIndex) => (
           <Box key={rowIndex}>
-            {row.cells.map((cell, columnIndex) => {
-              const isCursor =
-                rowIndex === clampedRow && columnIndex === clampedColumn;
-              const isAnchor =
-                rowIndex === mergeAnchor?.row &&
-                columnIndex === mergeAnchor.column;
+            {segments.map((segment) => {
+              const isCursor = segmentContains(segment, {
+                row: clampedRow,
+                column: clampedColumn,
+              });
+              const isAnchor = segmentContains(segment, mergeAnchor);
               return (
                 <Box
-                  key={columnIndex}
-                  width={CELL_WIDTH}
+                  key={segment.columnIndex}
+                  width={CELL_WIDTH * segment.columnSpan}
                   borderStyle="single"
                   borderColor={isCursor ? "cyan" : isAnchor ? "yellow" : "gray"}
                 >
@@ -151,7 +155,10 @@ export function SlideTableDetailScreen(
                     color={isCursor ? "cyan" : undefined}
                     inverse={isCursor}
                   >
-                    {truncatePreview(slideTableCellText(cell), CELL_WIDTH - 2)}
+                    {segmentText(
+                      segment,
+                      CELL_WIDTH * segment.columnSpan - BORDER_COLUMNS,
+                    )}
                   </Text>
                 </Box>
               );
