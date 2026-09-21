@@ -876,8 +876,11 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
       strayNodes.push(section);
       continue;
     }
+    // A <thead>'s rows are header rows outright, whatever tags their own cells use: the row group is HTML's own statement of which rows head the table, and it is the one this reader trusts first.
+    const inHeadGroup = section.tag === "thead";
     for (const tr of rowContainers) {
       const cells: ContentTableCell[] = [];
+      let headerCellCount = 0;
       let strayCellNodes: XmlNode[] = [];
       const flushStrayCell = (): void => {
         // No `strayCellNodes.length === 0` short-circuit is needed ahead of this: readContainerChildren([], ...) is itself already a genuine no-op, so the recovered-length check immediately below already returns for a genuinely empty strayCellNodes the same either way.
@@ -902,13 +905,15 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
         ) {
           flushStrayCell();
           const isHeader = cellNode.tag === "th";
-          const cellStyle = isHeader ? { bold: true } : {};
+          // A <th> is not read as bold runs. Its header-ness is carried on the row instead (ContentTableRow.isHeader, ExaDev/documents.js#1377) and this package's own writer states it back as a <th>, so synthesising bold here would add styling the source never spelled out and write it back as real <strong> markup on the next pass. Browsers render <th> bold through their own default stylesheet, which is a rendering convention rather than anything the document states -- the identical reasoning markdown-codec's own lowerTable already records for a GFM header cell.
           // <td>/<th> are Flow content per the HTML Standard: a <pre>, a nested list, or more than one paragraph is real, conformant markup, not something to flatten and lose (ExaDev/documents.js#1023). An empty or whitespace-only cell produces no blocks at all here, matching readContainerChildren's own empty-segment rule elsewhere, rather than the single bogus empty paragraph a bare buildInlineRuns call used to always produce.
           const cellBlocks = readContainerChildren(
             cellNode.children,
             withDirection(state, cellNode),
-            cellStyle,
           );
+          if (isHeader) {
+            headerCellCount++;
+          }
           const colSpan = positiveIntAttr(cellNode, "colspan");
           const rowSpan = positiveIntAttr(cellNode, "rowspan");
           cells.push({
@@ -922,7 +927,10 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
         strayCellNodes.push(cellNode);
       }
       flushStrayCell();
-      anchorRows.push({ cells });
+      // Outside a <thead>, a row is a header row when every one of its cells is a <th> -- the shape this package's own writer produces for a row carrying isHeader. A row mixing <th> and <td> is not one: <th scope="row"> is a real HTML shape stating a row LABEL, and reading it as a header row would turn an ordinary body row into one on every read.
+      const isHeaderRow =
+        inHeadGroup || (cells.length > 0 && headerCellCount === cells.length);
+      anchorRows.push({ cells, ...(isHeaderRow ? { isHeader: true } : {}) });
     }
   }
   // No `strayNodes.length === 0` short-circuit is needed ahead of this call: readContainerChildren([], ...) is itself already a genuine no-op, so the length check immediately below already treats a genuinely empty strayNodes the same either way.
