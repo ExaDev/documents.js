@@ -1321,6 +1321,68 @@ describe("tables", () => {
     ]);
   });
 
+  it("marks a thead's row as a header row even when its cells are td, since the row group is the statement and the cell tags are not", () => {
+    const blocks = read(
+      body(
+        "<table><thead><tr><td>H</td></tr></thead><tbody><tr><td>d</td></tr></tbody></table>",
+      ),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "H" }] }] }],
+            isHeader: true,
+          },
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "d" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+  });
+
+  it("leaves a cell-less row out of header-ness, rather than counting its zero th cells as covering all zero of its cells", () => {
+    const blocks = read(
+      body("<table><tbody><tr></tr><tr><td>d</td></tr></tbody></table>"),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          // Header-ness is decided on the row's own collected cells, before the grid pass pads this cell-less row out to the table's one column, so the padded entry here is not a th the row could ever have been judged on.
+          { cells: [{ blocks: [] }] },
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "d" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+  });
+
+  it("leaves a row mixing th and td out of header-ness, since a th scope=row states a row label rather than a header row", () => {
+    const blocks = read(
+      body('<table><tr><th scope="row">L</th><td>d</td></tr></table>'),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              { blocks: [{ kind: "paragraph", runs: [{ text: "L" }] }] },
+              { blocks: [{ kind: "paragraph", runs: [{ text: "d" }] }] },
+            ],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT / 2, CONTENT_WIDTH_PT / 2],
+      },
+    ]);
+  });
+
   it("reads a CDATA section's own literal content inside a <td>, rather than silently dropping it", () => {
     const blocks = read(
       body("<table><tr><td><![CDATA[cell & data]]></td></tr></table>"),
