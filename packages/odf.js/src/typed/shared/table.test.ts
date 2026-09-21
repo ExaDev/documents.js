@@ -1264,3 +1264,559 @@ describe("a covered position's own background and borders", () => {
     expect(writtenCells[1]?.attributes).toHaveLength(0);
   });
 });
+
+// The text of every cell of every row, so a test states the flattened rows and their order as data rather than by indexing into blocks.
+function rowTexts(table: ContentTable): string[][] {
+  return table.rows.map((row) =>
+    row.cells.map((tableCell) =>
+      tableCell.blocks
+        .flatMap((block) =>
+          block.kind === "paragraph"
+            ? block.runs.map((run) => ("text" in run ? run.text : ""))
+            : [],
+        )
+        .join(""),
+    ),
+  );
+}
+
+describe("readOdfTable: row wrappers (table:table-header-rows, table:table-rows, table:table-row-group)", () => {
+  it("reads the rows inside table:table-header-rows in document order, ahead of the body rows that follow", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-column", { "table:number-columns-repeated": "2" }),
+        el("table:table-header-rows", {}, [
+          el("table:table-row", {}, [cell("H1"), cell("H2")]),
+        ]),
+        el("table:table-row", {}, [cell("B1"), cell("B2")]),
+      ]),
+      { parts: {} },
+    );
+    expect(rowTexts(table)).toEqual([
+      ["H1", "H2"],
+      ["B1", "B2"],
+    ]);
+  });
+
+  it("reads several rows inside one table:table-header-rows, and honours table:number-rows-repeated on a row inside it", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-header-rows", {}, [
+          el("table:table-row", {}, [cell("H1")]),
+          el("table:table-row", { "table:number-rows-repeated": "2" }, [
+            cell("H2"),
+          ]),
+        ]),
+        el("table:table-row", {}, [cell("B")]),
+      ]),
+      { parts: {} },
+    );
+    expect(rowTexts(table)).toEqual([["H1"], ["H2"], ["H2"], ["B"]]);
+  });
+
+  it("keeps a row before, a header-rows wrapper, and a row after in the order the file states them", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-row", {}, [cell("first")]),
+        el("table:table-header-rows", {}, [
+          el("table:table-row", {}, [cell("header")]),
+        ]),
+        el("table:table-row", {}, [cell("last")]),
+      ]),
+      { parts: {} },
+    );
+    expect(rowTexts(table)).toEqual([["first"], ["header"], ["last"]]);
+  });
+
+  it("reads the rows inside table:table-rows", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-rows", {}, [
+          el("table:table-row", {}, [cell("a")]),
+          el("table:table-row", {}, [cell("b")]),
+        ]),
+      ]),
+      { parts: {} },
+    );
+    expect(rowTexts(table)).toEqual([["a"], ["b"]]);
+  });
+
+  it("reads the rows inside table:table-row-group", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-row", {}, [cell("before")]),
+        el("table:table-row-group", {}, [
+          el("table:table-row", {}, [cell("g1")]),
+          el("table:table-row", {}, [cell("g2")]),
+        ]),
+        el("table:table-row", {}, [cell("after")]),
+      ]),
+      { parts: {} },
+    );
+    expect(rowTexts(table)).toEqual([["before"], ["g1"], ["g2"], ["after"]]);
+  });
+
+  it("reads a table:table-row-group nested inside another, and a table:table-header-rows inside a group, all in document order", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-row-group", {}, [
+          el("table:table-header-rows", {}, [
+            el("table:table-row", {}, [cell("outer-header")]),
+          ]),
+          el("table:table-row", {}, [cell("outer-row")]),
+          el("table:table-row-group", {}, [
+            el("table:table-row", {}, [cell("inner-1")]),
+            el("table:table-row-group", {}, [
+              el("table:table-row", {}, [cell("innermost")]),
+            ]),
+            el("table:table-row", {}, [cell("inner-2")]),
+          ]),
+          el("table:table-rows", {}, [
+            el("table:table-row", {}, [cell("outer-rows")]),
+          ]),
+        ]),
+        el("table:table-row", {}, [cell("tail")]),
+      ]),
+      { parts: {} },
+    );
+    expect(rowTexts(table)).toEqual([
+      ["outer-header"],
+      ["outer-row"],
+      ["inner-1"],
+      ["innermost"],
+      ["inner-2"],
+      ["outer-rows"],
+      ["tail"],
+    ]);
+  });
+
+  it("does not read a table:table-row that sits inside a column wrapper", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-column-group", {}, [
+          el("table:table-row", {}, [cell("stray")]),
+        ]),
+        el("table:table-row", {}, [cell("real")]),
+      ]),
+      { parts: {} },
+    );
+    expect(rowTexts(table)).toEqual([["real"]]);
+  });
+
+  it("does not descend into a cell, so a table nested in a cell contributes no rows to the outer table", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-header-rows", {}, [
+          el("table:table-row", {}, [
+            el("table:table-cell", {}, [
+              el("table:table", {}, [
+                el("table:table-header-rows", {}, [
+                  el("table:table-row", {}, [cell("inner")]),
+                ]),
+              ]),
+            ]),
+          ]),
+        ]),
+      ]),
+      { parts: {} },
+    );
+    expect(table.rows).toHaveLength(1);
+    const nested = table.rows[0]?.cells[0]?.blocks[0];
+    expect(nested).toMatchObject({ kind: "table" });
+    expect(nested?.kind === "table" ? rowTexts(nested) : []).toEqual([
+      ["inner"],
+    ]);
+  });
+
+  it("keeps the grid rule when a merged region sits inside table:table-header-rows", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-column", { "table:number-columns-repeated": "3" }),
+        el("table:table-header-rows", {}, [
+          el("table:table-row", {}, [
+            cell("H", { "table:number-columns-spanned": "2" }),
+            el("table:covered-table-cell"),
+            cell("R", { "table:number-rows-spanned": "2" }),
+          ]),
+        ]),
+        el("table:table-row", {}, [
+          cell("a"),
+          cell("b"),
+          el("table:covered-table-cell"),
+        ]),
+      ]),
+      { parts: {} },
+    );
+    expect(table.columnWidthsPt).toHaveLength(3);
+    for (const row of table.rows) {
+      expect(row.cells).toHaveLength(3);
+    }
+    expect(rowTexts(table)).toEqual([
+      ["H", "", "R"],
+      ["a", "b", ""],
+    ]);
+    expect(table.rows[0]?.cells[0]).toMatchObject({ colSpan: 2 });
+    expect(table.rows[0]?.cells[2]).toMatchObject({ rowSpan: 2 });
+    const covered = walkTableGrid(table)
+      .flat()
+      .filter((position) => position.anchorRowIndex !== undefined)
+      .map(
+        (position) =>
+          `${String(position.rowIndex)},${String(position.columnIndex)}<-${String(position.anchorRowIndex)},${String(position.anchorColumnIndex)}`,
+      );
+    expect(covered).toEqual(["0,1<-0,0", "1,2<-0,2"]);
+  });
+
+  it("reads a row height from a row inside a wrapper", () => {
+    const pkg: Package = {
+      parts: { "content.xml": contentPackage([rowStyle("ro1", 18)]) },
+    };
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-header-rows", {}, [
+          el("table:table-row", { "table:style-name": "ro1" }, [cell("H")]),
+        ]),
+      ]),
+      pkg,
+    );
+    expect(table.rows[0]?.heightPt).toBe(18);
+  });
+});
+
+describe("readOdfTable: column wrappers (table:table-header-columns, table:table-columns, table:table-column-group)", () => {
+  function widthPkg(): Package {
+    return {
+      parts: {
+        "content.xml": contentPackage([
+          columnStyle("co1", 10),
+          columnStyle("co2", 20),
+          columnStyle("co3", 30),
+          columnStyle("co4", 40),
+        ]),
+      },
+    };
+  }
+
+  it("counts the columns inside table:table-header-columns, in document order with the plain columns around them", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-header-columns", {}, [
+          el("table:table-column", { "table:style-name": "co1" }),
+        ]),
+        el("table:table-column", { "table:style-name": "co2" }),
+      ]),
+      widthPkg(),
+    );
+    expect(table.columnWidthsPt).toEqual([10, 20]);
+  });
+
+  it("honours table:number-columns-repeated on a column inside a wrapper", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-header-columns", {}, [
+          el("table:table-column", {
+            "table:style-name": "co1",
+            "table:number-columns-repeated": "2",
+          }),
+        ]),
+      ]),
+      widthPkg(),
+    );
+    expect(table.columnWidthsPt).toEqual([10, 10]);
+  });
+
+  it("counts the columns inside table:table-columns", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-columns", {}, [
+          el("table:table-column", { "table:style-name": "co1" }),
+          el("table:table-column", { "table:style-name": "co2" }),
+        ]),
+      ]),
+      widthPkg(),
+    );
+    expect(table.columnWidthsPt).toEqual([10, 20]);
+  });
+
+  it("counts the columns inside table:table-column-group, including a nested group and a header-columns wrapper inside one", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-column", { "table:style-name": "co1" }),
+        el("table:table-column-group", {}, [
+          el("table:table-header-columns", {}, [
+            el("table:table-column", { "table:style-name": "co2" }),
+          ]),
+          el("table:table-column-group", {}, [
+            el("table:table-column", { "table:style-name": "co3" }),
+          ]),
+        ]),
+        el("table:table-column", { "table:style-name": "co4" }),
+      ]),
+      widthPkg(),
+    );
+    expect(table.columnWidthsPt).toEqual([10, 20, 30, 40]);
+  });
+
+  it("does not read a table:table-column that sits inside a row wrapper", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-header-rows", {}, [
+          el("table:table-column", { "table:style-name": "co1" }),
+        ]),
+        el("table:table-column", { "table:style-name": "co2" }),
+      ]),
+      widthPkg(),
+    );
+    expect(table.columnWidthsPt).toEqual([20]);
+  });
+
+  it("states a grid as wide as the columns the file declares across wrappers, with every row as wide", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-header-columns", {}, [el("table:table-column")]),
+        el("table:table-column-group", {}, [
+          el("table:table-column", { "table:number-columns-repeated": "2" }),
+        ]),
+        el("table:table-header-rows", {}, [
+          el("table:table-row", {}, [cell("a"), cell("b"), cell("c")]),
+        ]),
+      ]),
+      { parts: {} },
+    );
+    expect(table.columnWidthsPt).toHaveLength(3);
+    expect(table.rows[0]?.cells).toHaveLength(3);
+  });
+});
+
+describe("readOdfTable: a cell's vertical alignment", () => {
+  function verticalAlignPkg(): Package {
+    return {
+      parts: {
+        "content.xml": contentPackage([
+          cellBorderStyle("ce-top", { "style:vertical-align": "top" }),
+          cellBorderStyle("ce-middle", { "style:vertical-align": "middle" }),
+          cellBorderStyle("ce-bottom", { "style:vertical-align": "bottom" }),
+          cellBorderStyle("ce-auto", { "style:vertical-align": "automatic" }),
+          cellBorderStyle("ce-fill", { "fo:background-color": "#ff0000" }),
+        ]),
+      },
+    };
+  }
+
+  function verticalAlignOf(styleName: string | undefined) {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-row", {}, [
+          cell(
+            "x",
+            styleName === undefined ? {} : { "table:style-name": styleName },
+          ),
+        ]),
+      ]),
+      verticalAlignPkg(),
+    );
+    return table.rows[0]?.cells[0]?.verticalAlign;
+  }
+
+  it('reads style:vertical-align "top" as "top"', () => {
+    expect(verticalAlignOf("ce-top")).toBe("top");
+  });
+
+  it('reads style:vertical-align "middle" as the pivot\'s own "center"', () => {
+    expect(verticalAlignOf("ce-middle")).toBe("center");
+  });
+
+  it('reads style:vertical-align "bottom" as "bottom"', () => {
+    expect(verticalAlignOf("ce-bottom")).toBe("bottom");
+  });
+
+  it('leaves verticalAlign undefined for "automatic", which the pivot has no member for', () => {
+    expect(verticalAlignOf("ce-auto")).toBeUndefined();
+  });
+
+  it("leaves verticalAlign undefined for a cell whose style states none, and for a cell with no style", () => {
+    expect(verticalAlignOf("ce-fill")).toBeUndefined();
+    expect(verticalAlignOf(undefined)).toBeUndefined();
+  });
+
+  it("reads it together with the fill and borders the same style states", () => {
+    const pkg: Package = {
+      parts: {
+        "content.xml": contentPackage([
+          cellBorderStyle("ce-all", {
+            "style:vertical-align": "middle",
+            "fo:background-color": "#00ff00",
+            "fo:border": "1pt solid #000000",
+          }),
+        ]),
+      },
+    };
+    const decorated = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-row", {}, [
+          cell("x", { "table:style-name": "ce-all" }),
+        ]),
+      ]),
+      pkg,
+    ).rows[0]?.cells[0];
+    expect(decorated?.verticalAlign).toBe("center");
+    expect(decorated?.background).toBeDefined();
+    expect(decorated?.borders?.left).toBeDefined();
+  });
+
+  it("reads it onto a table:covered-table-cell as well, since a covered position carries its own decoration", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-column", { "table:number-columns-repeated": "2" }),
+        el("table:table-row", {}, [
+          cell("A", { "table:number-columns-spanned": "2" }),
+          el("table:covered-table-cell", { "table:style-name": "ce-bottom" }),
+        ]),
+      ]),
+      verticalAlignPkg(),
+    );
+    expect(table.rows[0]?.cells[1]?.verticalAlign).toBe("bottom");
+    expect(table.rows[0]?.cells[0]?.verticalAlign).toBeUndefined();
+  });
+
+  it("reads it for a cell inside a header-rows wrapper", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-header-rows", {}, [
+          el("table:table-row", {}, [
+            cell("H", { "table:style-name": "ce-middle" }),
+          ]),
+        ]),
+      ]),
+      verticalAlignPkg(),
+    );
+    expect(table.rows[0]?.cells[0]?.verticalAlign).toBe("center");
+  });
+});
+
+describe("writeOdfTable: a cell's vertical alignment", () => {
+  function roundTrip(table: ContentTable): {
+    written: XmlElement;
+    reread: ContentTable;
+    automaticStyles: XmlElement;
+  } {
+    const automaticStyles = el("office:automatic-styles", {}, []);
+    const pkg: Package = {
+      parts: {
+        "content.xml": {
+          kind: "xml",
+          nodes: [el("office:document-content", {}, [automaticStyles])],
+        },
+      },
+    };
+    const context: OdfTableWriteContext = {
+      registry: StyleRegistry.forPart(pkg, "content.xml"),
+      mintTableName: () => "Table1",
+      mintListStyleName: (kind) => `L${kind}`,
+    };
+    const written = writeOdfTable(table, context);
+    return { written, reread: readOdfTable(written, pkg), automaticStyles };
+  }
+
+  function writtenCell(
+    written: XmlElement,
+    columnIndex: number,
+  ): XmlElement | undefined {
+    const row = written.children.find(
+      (n): n is XmlElement =>
+        n.type === "element" && n.tag === "table:table-row",
+    );
+    return row?.children.filter((n): n is XmlElement => n.type === "element")[
+      columnIndex
+    ];
+  }
+
+  // The style:vertical-align the cell's own table:style-name resolves to in the minted automatic styles, or undefined when the cell names no style or its style states none.
+  function styleAttribute(
+    written: XmlElement,
+    automaticStyles: XmlElement,
+    columnIndex: number,
+  ): string | undefined {
+    const cellElement = writtenCell(written, columnIndex);
+    const styleName =
+      cellElement === undefined
+        ? undefined
+        : attrValue(cellElement, "table:style-name");
+    const style = automaticStyles.children.find(
+      (n): n is XmlElement =>
+        n.type === "element" &&
+        n.tag === "style:style" &&
+        attrValue(n, "style:name") === styleName,
+    );
+    const properties = style?.children.find(
+      (n): n is XmlElement =>
+        n.type === "element" && n.tag === "style:table-cell-properties",
+    );
+    return properties === undefined
+      ? undefined
+      : attrValue(properties, "style:vertical-align");
+  }
+
+  it.each([
+    ["top", "top"],
+    ["center", "middle"],
+    ["bottom", "bottom"],
+  ] as const)(
+    "writes verticalAlign %s as style:vertical-align %s and reads it back",
+    (pivot, odf) => {
+      const { written, reread, automaticStyles } = roundTrip({
+        kind: "table",
+        columnWidthsPt: [10],
+        rows: [{ cells: [{ blocks: [], verticalAlign: pivot }] }],
+      });
+      expect(styleAttribute(written, automaticStyles, 0)).toBe(odf);
+      expect(reread.rows[0]?.cells[0]?.verticalAlign).toBe(pivot);
+    },
+  );
+
+  it("writes no style for a cell that states no verticalAlign", () => {
+    const { written, automaticStyles } = roundTrip({
+      kind: "table",
+      columnWidthsPt: [10],
+      rows: [{ cells: [{ blocks: [] }] }],
+    });
+    const cellElement = writtenCell(written, 0);
+    expect(cellElement).toBeDefined();
+    expect(
+      cellElement === undefined
+        ? "missing"
+        : attrValue(cellElement, "table:style-name"),
+    ).toBeUndefined();
+    expect(styleAttribute(written, automaticStyles, 0)).toBeUndefined();
+  });
+
+  it("states it beside the fill on one shared cell style and reads both back", () => {
+    const fill = { kind: "solid", color: { r: 1, g: 0, b: 0 } } as const;
+    const { reread } = roundTrip({
+      kind: "table",
+      columnWidthsPt: [10],
+      rows: [
+        { cells: [{ blocks: [], background: fill, verticalAlign: "center" }] },
+      ],
+    });
+    expect(reread.rows[0]?.cells[0]?.verticalAlign).toBe("center");
+    expect(reread.rows[0]?.cells[0]?.background).toEqual(fill);
+  });
+
+  it("writes it onto a covered entry and reads it back", () => {
+    const { written, reread, automaticStyles } = roundTrip({
+      kind: "table",
+      columnWidthsPt: [10, 10],
+      rows: [
+        {
+          cells: [
+            { blocks: [], colSpan: 2 },
+            { blocks: [], verticalAlign: "bottom" },
+          ],
+        },
+      ],
+    });
+    expect(styleAttribute(written, automaticStyles, 1)).toBe("bottom");
+    expect(reread.rows[0]?.cells[1]?.verticalAlign).toBe("bottom");
+  });
+});
