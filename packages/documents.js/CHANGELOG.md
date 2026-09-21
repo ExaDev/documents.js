@@ -1,3 +1,31 @@
+## [10.0.0](https://github.com/ExaDev/documents.js/compare/documents.js%409.0.0...documents.js%4010.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **documents.js:** a ContentTable violating the grid rule stated on ContentTableCell
+  is now refused by the docx, ODT, ODP and pptx builders rather than written with the
+  offending content silently dropped.
+
+### Bug Fixes
+
+* **documents.js:** refuse a table that breaks the grid rule rather than writing past it ([9bfcec5](https://github.com/ExaDev/documents.js/commit/9bfcec5824e7c08f16b97152efb33a8ca07f5e45))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.13.0
+- Updated archive-codec to 1.11.9
+- Updated epub-codec to 4.0.0
+- Updated markdown-codec to 9.0.0
+- Updated odf.js to 10.0.0
+- Updated pdf-codec to 5.2.3
+- Updated doc-codec to 5.0.0
+- Updated ooxml.js to 11.0.0
+- Updated ppt-codec to 2.0.4
+- Updated rtf-codec to 7.0.0
+- Updated wpd-codec to 5.0.2
+- Updated xls-codec to 4.15.15
+
 ## [9.0.0](https://github.com/ExaDev/documents.js/compare/documents.js%408.0.1...documents.js%409.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES

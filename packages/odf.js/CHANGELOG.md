@@ -1,3 +1,21 @@
+## [10.0.0](https://github.com/ExaDev/documents.js/compare/odf.js%409.0.0...odf.js%4010.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **odf.js:** a ContentTable violating the grid rule stated on ContentTableCell
+  is now refused rather than written with the offending content silently dropped. A
+  caller building a table by hand must give every row one cell per grid column, keep
+  a merged region's content on its anchor, and state each span once, on the anchor.
+
+### Bug Fixes
+
+* **odf.js:** refuse a table that breaks the grid rule rather than writing past it ([f5a254c](https://github.com/ExaDev/documents.js/commit/f5a254c87a19839b918c9f9cf777aec023210f2f))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.13.0
+
 ## [9.0.0](https://github.com/ExaDev/documents.js/compare/odf.js%408.0.3...odf.js%409.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES
