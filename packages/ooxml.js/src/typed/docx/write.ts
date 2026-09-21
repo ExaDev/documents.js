@@ -905,12 +905,16 @@ function buildTable(
         );
       }
     }
+    // w:trHeight is written before w:tblHeader because that is the order CT_TrPr's own property list runs in (cnfStyle, divId, gridBefore, gridAfter, wBefore, wAfter, cantSplit, trHeight, tblHeader, tblCellSpacing, jc, hidden), transcribed from the schema by python-docx's CT_TrPr._tag_seq and not guessed at here. The reader finds each child by tag rather than by position, so nothing on this side depends on the order; a real consumer reading the file might.
+    const trProperties = [
+      ...(row.heightPt === undefined
+        ? []
+        : [el("w:trHeight", { "w:val": String(ptToTwips(row.heightPt)) })]),
+      // An on/off property states itself by being present: no w:val is the same as w:val="true", and the reader's own readToggle reads it back that way.
+      ...(row.isHeader === true ? [el("w:tblHeader", {})] : []),
+    ];
     const trPr =
-      row.heightPt === undefined
-        ? undefined
-        : el("w:trPr", {}, [
-            el("w:trHeight", { "w:val": String(ptToTwips(row.heightPt)) }),
-          ]);
+      trProperties.length === 0 ? undefined : el("w:trPr", {}, trProperties);
     return el("w:tr", {}, [...(trPr === undefined ? [] : [trPr]), ...cells]);
   });
   const tblPr = el("w:tblPr", {}, [
