@@ -100,6 +100,25 @@ describe("OdtTable", () => {
     expect(table.rows()[0]!.cells()[0]!.text).toBe("A1");
   });
 
+  it("appendCoveredCell returns a view that states the covered position's own background and borders, read back through the same style", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 0, columns: 2 });
+    const row = table.appendEmptyRow();
+    row.appendCell().colSpan = 2;
+    const covered = row.appendCoveredCell();
+    expect(covered.background).toBeUndefined();
+    expect(covered.borders).toBeUndefined();
+    covered.background = { r: 1, g: 0, b: 0 };
+    covered.borders = { top: { color: { r: 0, g: 0, b: 1 }, widthPt: 2 } };
+    expect(covered.background).toEqual({ r: 1, g: 0, b: 0 });
+    // Setting borders after the background mints a style carrying both, rather than the second setter clobbering the first.
+    expect(covered.borders.top).toMatchObject({
+      color: { r: 0, g: 0, b: 1 },
+      widthPt: 2,
+    });
+    expect(covered.background).toEqual({ r: 1, g: 0, b: 0 });
+  });
+
   it("remove() removes the table and throws on any further use", () => {
     const editor = createOdt();
     const table = editor.body.appendTable({ rows: 1, columns: 1 });

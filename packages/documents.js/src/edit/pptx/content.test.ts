@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import type {
   ContentDocument,
   ContentEmbeddedObjectBlock,
+  ContentTable,
+  ContentTableCell,
 } from "document-schema.js";
+import { walkTableGrid } from "document-schema.js";
 import type { Package, XmlElement } from "ooxml.js";
 import {
   attr,
@@ -368,5 +371,202 @@ describe("embeddedPresentationSerialiser", () => {
         ? readPptxContent(decodePackage(base64ToBytes(payloadPart.base64)))
         : undefined;
     expect(reread?.kind).toBe("presentation");
+  });
+});
+
+// ContentTable's grid rule (ContentTableCell in document-schema.js): a row's `cells` holds one entry per grid column, so each entry's array index is its a:tc's own column, and the merge attributes follow from walkTableGrid's classification of the entries.
+describe("buildPptxPackage: table merges follow the dense grid", () => {
+  function textCell(
+    text: string,
+    extra: Partial<ContentTableCell> = {},
+  ): ContentTableCell {
+    return { blocks: [{ kind: "paragraph", runs: [{ text }] }], ...extra };
+  }
+
+  function builtCells(table: ContentTable): XmlElement[][] {
+    const pkg = buildPptxPackage(
+      presentationDoc([
+        {
+          size: SLIDE_SIZE,
+          notes: "",
+          shapes: [
+            {
+              frame: { xPt: 10, yPt: 10, widthPt: 300, heightPt: 100 },
+              ...ZERO_INSETS,
+              blocks: [table],
+            },
+          ],
+        },
+      ]),
+    );
+    return [...walkElements(firstSlideRoot(pkg).children)]
+      .filter((cursor) => cursor.node.tag === "a:tr")
+      .map((row) =>
+        row.node.children.filter(
+          (child): child is XmlElement =>
+            child.type === "element" && child.tag === "a:tc",
+        ),
+      );
+  }
+
+  // The merge attributes an a:tc states, as one comparable string.
+  function mergeAttributes(cell: XmlElement | undefined): string {
+    if (cell === undefined) {
+      throw new Error("expected an a:tc");
+    }
+    return ["gridSpan", "rowSpan", "hMerge", "vMerge"]
+      .flatMap((name) => {
+        const value = attr(cell, name);
+        return value === undefined ? [] : [`${name}=${value}`];
+      })
+      .join(" ");
+  }
+
+  const empty: ContentTableCell = { blocks: [] };
+
+  it("marks the position a horizontal merge covers hMerge and leaves its neighbours plain", () => {
+    const cells = builtCells({
+      kind: "table",
+      columnWidthsPt: [100, 100, 100],
+      rows: [
+        { cells: [textCell("A", { colSpan: 2 }), empty, textCell("C")] },
+        { cells: [textCell("D"), textCell("E"), textCell("F")] },
+      ],
+    });
+    expect(cells[0]!.map(mergeAttributes)).toEqual([
+      "gridSpan=2",
+      "hMerge=1",
+      "",
+    ]);
+    expect(cells[1]!.map(mergeAttributes)).toEqual(["", "", ""]);
+  });
+
+  it("marks the position a vertical merge covers in the rows below vMerge", () => {
+    const cells = builtCells({
+      kind: "table",
+      columnWidthsPt: [100, 100],
+      rows: [
+        { cells: [textCell("A", { rowSpan: 3 }), textCell("B")] },
+        { cells: [empty, textCell("D")] },
+        { cells: [empty, textCell("F")] },
+      ],
+    });
+    expect(cells.map((row) => mergeAttributes(row[0]))).toEqual([
+      "rowSpan=3",
+      "vMerge=1",
+      "vMerge=1",
+    ]);
+    expect(cells.map((row) => mergeAttributes(row[1]))).toEqual(["", "", ""]);
+  });
+
+  it("marks a 2x2 merge's covered positions by the side of the region they lie on, the interior one on both", () => {
+    const cells = builtCells({
+      kind: "table",
+      columnWidthsPt: [100, 100, 100],
+      rows: [
+        {
+          cells: [
+            textCell("A", { colSpan: 2, rowSpan: 2 }),
+            empty,
+            textCell("C"),
+          ],
+        },
+        { cells: [empty, empty, textCell("F")] },
+      ],
+    });
+    expect(cells[0]!.map(mergeAttributes)).toEqual([
+      "gridSpan=2 rowSpan=2",
+      "hMerge=1",
+      "",
+    ]);
+    expect(cells[1]!.map(mergeAttributes)).toEqual([
+      "vMerge=1",
+      "hMerge=1 vMerge=1",
+      "",
+    ]);
+  });
+
+  it("writes a covered entry's own background and borders onto its a:tc", () => {
+    const fill = { kind: "solid", color: { r: 1, g: 0, b: 0 } } as const;
+    const borders = {
+      left: { color: { r: 0, g: 0, b: 1 }, widthPt: 2 },
+    } as const;
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100, 100],
+      rows: [
+        {
+          cells: [
+            textCell("A", { colSpan: 2 }),
+            { blocks: [], background: fill, borders },
+          ],
+        },
+      ],
+    };
+    const covered = builtCells(table)[0]![1]!;
+    const tcPr = covered.children.find(
+      (child): child is XmlElement =>
+        child.type === "element" && child.tag === "a:tcPr",
+    );
+    expect(tcPr).toBeDefined();
+    const tcPrTags = tcPr!.children.flatMap((child) =>
+      child.type === "element" ? [child.tag] : [],
+    );
+    expect(tcPrTags).toContain("a:solidFill");
+    expect(tcPrTags).toContain("a:lnL");
+  });
+
+  it("reads a 2x2 merge back as one entry per grid column, the anchor carrying both spans", () => {
+    const pkg = buildPptxPackage(
+      presentationDoc([
+        {
+          size: SLIDE_SIZE,
+          notes: "",
+          shapes: [
+            {
+              frame: { xPt: 10, yPt: 10, widthPt: 300, heightPt: 100 },
+              ...ZERO_INSETS,
+              blocks: [
+                {
+                  kind: "table",
+                  columnWidthsPt: [100, 100, 100],
+                  rows: [
+                    {
+                      cells: [
+                        textCell("A", { colSpan: 2, rowSpan: 2 }),
+                        empty,
+                        textCell("C"),
+                      ],
+                    },
+                    { cells: [empty, empty, textCell("F")] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    const reread = readPptxContent(pkg);
+    if (reread.kind !== "presentation") {
+      throw new Error("expected a presentation ContentDocument");
+    }
+    const block = reread.slides[0]!.shapes[0]!.blocks[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    for (const row of block.rows) {
+      expect(row.cells).toHaveLength(block.columnWidthsPt.length);
+    }
+    expect(block.rows[0]?.cells[0]).toMatchObject({ colSpan: 2, rowSpan: 2 });
+    expect(
+      walkTableGrid(block)
+        .flat()
+        .filter((position) => position.anchorRowIndex !== undefined)
+        .map(
+          (position) =>
+            `${String(position.rowIndex)},${String(position.columnIndex)}`,
+        ),
+    ).toEqual(["0,1", "1,0", "1,1"]);
   });
 });
