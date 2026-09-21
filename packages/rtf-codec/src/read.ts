@@ -669,6 +669,8 @@ export interface RawTableRow {
   readonly definitions: readonly PendingCell[];
   // The row-level scope of the four RTF states text direction at: "\rtlrow Cells in this table row will have right-to-left precedence" / "\ltrrow ... left-to-right precedence (the default)" (RTF 1.9.1, "Table Row Formatting"), a <rowwrite> member of the row's own <tbldef>.
   readonly direction: TextDirection | undefined;
+  // "\trhdr Table row header. This row should appear at the top of every page on which the current table appears" (RTF 1.9.1, "Table Definitions"), a row-level property of the row's own <tbldef>: ContentTableRow.isHeader, in RTF's own spelling. A bare on-word with no off-word of its own, so an unstated row is simply not a header and \trowd's own reset is what ends a previous row's flag.
+  readonly isHeader: boolean;
 }
 
 // How many grid columns the cell at `index` occupies: one, plus each immediately following cell flagged \clmrg. "\clmgf The first cell in a range of table cells to be merged" / "\clmrg Contents of the table cell are merged with those of the preceding cell", so the count is the length of the continuation run rather than a stored number.
@@ -719,6 +721,7 @@ interface BuilderAccumulatorState {
   pendingCell: PendingCell;
   rowLeftTwips: number;
   rowDirection: TextDirection | undefined;
+  rowIsHeader: boolean;
   paragraphSerial: symbol;
   openBookmarks: Map<string, OpenBookmark>;
   sectionBlockExtents: BlockConstructExtent[];
@@ -745,6 +748,7 @@ function freshAccumulatorState(): BuilderAccumulatorState {
     pendingCell: newPendingCell(),
     rowLeftTwips: 0,
     rowDirection: undefined,
+    rowIsHeader: false,
     paragraphSerial: Symbol("paragraph"),
     openBookmarks: new Map(),
     sectionBlockExtents: [],
@@ -806,6 +810,8 @@ class ContentBuilder {
   private rowLeftTwips = 0;
   // The <rowwrite> member (\ltrrow | \rtlrow) of the row definition currently accumulating -- reset by startRowDefinition with the rest of the pending row state, so a \rtlrow anywhere between a \trowd and its \cellxN run (where the spec's own <tbldef> production places it) reaches the row it belongs to.
   private rowDirection: TextDirection | undefined;
+  // The \trhdr row property of the row definition currently accumulating, reset by startRowDefinition with the rest of the pending row state exactly as rowDirection is, so a \trhdr anywhere between a \trowd and its \cellxN run reaches the row it belongs to.
+  private rowIsHeader = false;
   // Bookmark bookkeeping. A bookmark's two halves are matched by name and may bracket a sub-sequence of one paragraph's runs or a run of whole paragraphs, and document-schema.js gives those two scopes two different encodings -- a RunConstructExtent on the paragraph, or a constructStart/constructEnd marker pair in the block list. Which one applies is not knowable when the start is seen, only when its end arrives, so a start is held open here and resolved then.
   private paragraphSerial = Symbol("paragraph");
   private openBookmarks = new Map<string, OpenBookmark>();
@@ -1103,6 +1109,7 @@ class ContentBuilder {
     this.pendingCell = newPendingCell();
     this.rowLeftTwips = 0;
     this.rowDirection = undefined;
+    this.rowIsHeader = false;
   }
 
   setRowLeft(twips: number): void {
@@ -1111,6 +1118,10 @@ class ContentBuilder {
 
   setRowDirection(direction: TextDirection): void {
     this.rowDirection = direction;
+  }
+
+  setRowHeader(): void {
+    this.rowIsHeader = true;
   }
 
   // Every control word of the <celldef> currently accumulating. Void: applyControlWord's own dispatch chain calls this unconditionally now (see its own comment on why that is safe), so the caller no longer needs this wrapper's own report of whether the word was one of the cell-definition's -- only applyCellDefinitionControlWord's own return value, which its own direct unit tests already exercise on its own terms.
@@ -1155,6 +1166,7 @@ class ContentBuilder {
       cells: this.rowCells,
       definitions: this.pendingCellDefinitions,
       direction: this.rowDirection,
+      isHeader: this.rowIsHeader,
     });
     if (this.tableColumnRights.length === 0) {
       this.tableColumnRights = [...this.pendingCellRights];
@@ -1191,6 +1203,8 @@ class ContentBuilder {
       return {
         // The row's own <rowwrite> member (\ltrrow | \rtlrow), absent meaning the default the spec states for \ltrrow. Every consumer reads .direction by value, never by key presence.
         direction: row.direction,
+        // Absent rather than false for an ordinary row, so a table with no header row reads back as the object a producer that has never heard of \trhdr would build.
+        isHeader: row.isHeader ? true : undefined,
         cells: row.cells.map((cell, column) => ({
           columnIndex: column,
           cell: this.resolveCell(row, rowsBelow, column, cell),
@@ -1321,6 +1335,7 @@ class ContentBuilder {
       pendingCell: this.pendingCell,
       rowLeftTwips: this.rowLeftTwips,
       rowDirection: this.rowDirection,
+      rowIsHeader: this.rowIsHeader,
       paragraphSerial: this.paragraphSerial,
       openBookmarks: this.openBookmarks,
       sectionBlockExtents: this.sectionBlockExtents,
@@ -1347,6 +1362,7 @@ class ContentBuilder {
     this.pendingCell = saved.pendingCell;
     this.rowLeftTwips = saved.rowLeftTwips;
     this.rowDirection = saved.rowDirection;
+    this.rowIsHeader = saved.rowIsHeader;
     this.paragraphSerial = saved.paragraphSerial;
     this.openBookmarks = saved.openBookmarks;
     this.sectionBlockExtents = saved.sectionBlockExtents;
@@ -2472,6 +2488,10 @@ function applyStructureControlWord(
       break;
     case "ltrrow":
       builder.setRowDirection("ltr");
+      break;
+    // "\trhdr Table row header. This row should appear at the top of every page on which the current table appears" (RTF 1.9.1, "Table Definitions"): a bare on-word with no off-word, reset along with the rest of the pending row definition by \trowd.
+    case "trhdr":
+      builder.setRowHeader();
       break;
     case "cellx":
       if (param !== undefined) builder.addCellBoundary(param);
