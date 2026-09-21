@@ -136,10 +136,13 @@ function rowMarkExtraGrpprl(
   boundaries: readonly number[],
   cellsToWrite: readonly TableCellToWrite[],
   heightPt: number | undefined,
+  isHeader: boolean,
 ): number[] {
   const bytes = inTableGrpprl();
   pushSprm(bytes, SPRM_P_F_TTP, [0x01]);
-  bytes.push(...encodeTableRowGrpprl(boundaries, cellsToWrite, heightPt));
+  bytes.push(
+    ...encodeTableRowGrpprl(boundaries, cellsToWrite, heightPt, isHeader),
+  );
   return bytes;
 }
 
@@ -349,11 +352,17 @@ function rowMarkParagraph(
   rowBoundariesTwips: readonly number[],
   cellsToWrite: readonly TableCellToWrite[],
   heightPt: number | undefined,
+  isHeader: boolean,
 ): WriteParagraph {
   return {
     runs: [],
     properties: {},
-    extraGrpprl: rowMarkExtraGrpprl(rowBoundariesTwips, cellsToWrite, heightPt),
+    extraGrpprl: rowMarkExtraGrpprl(
+      rowBoundariesTwips,
+      cellsToWrite,
+      heightPt,
+      isHeader,
+    ),
     terminator: CELL_MARK,
   };
 }
@@ -370,6 +379,7 @@ function rowSplitFits(
   boundaries: readonly number[],
   candidateBoundaries: ReadonlySet<number>,
   heightPt: number | undefined,
+  isHeader: boolean,
 ): boolean {
   const trial = flattenRow(
     physicalCells,
@@ -382,6 +392,7 @@ function rowSplitFits(
     trial.rowBoundariesTwips,
     trial.cellsToWrite,
     heightPt,
+    isHeader,
   );
   return fitsAloneOnPapxPage(trialGrpprl);
 }
@@ -412,6 +423,7 @@ function flattenTable(
     physicalCellsForRow(positions, rowIndex),
   );
   const heightsPt = table.rows.map((row) => row.heightPt);
+  const headerFlags = table.rows.map((row) => row.isHeader === true);
   const stated = recoverableBoundaries(physicalRows);
   // Every internal boundary (1..columnCount - 1), by construction rather than by a loop condition a mutant could push one step past columnCount: `stated` always contains columnCount itself (every row's own last cell necessarily reaches it, the identical invariant flattenRow's own column !== columnCount check enforces below for every row that write ever reaches), so an off-by-one here would check `stated.has(columnCount)`, already always true.
   const lostBoundaries = Array.from(
@@ -425,6 +437,8 @@ function flattenTable(
   const output: WriteParagraph[] = [];
   physicalRows.forEach((physicalCells, rowIndex) => {
     const heightPt = heightsPt[rowIndex];
+    // The row's own sprmTTableHeader costs three bytes of the same PapxInFkp budget the split search below spends, so it is part of every trial rather than added after one was accepted.
+    const isHeader = headerFlags[rowIndex] === true;
     const rowLostBoundaries = lostBoundariesByRow[rowIndex];
     if (rowLostBoundaries === undefined) {
       throw new DocFormatError(LOST_BOUNDARIES_FEWER_ROW_BUCKETS_MESSAGE);
@@ -439,6 +453,7 @@ function flattenTable(
         boundaries,
         rowLostBoundaries,
         heightPt,
+        isHeader,
       )
     ) {
       // The row's own full assigned split doesn't fit. Rather than drop every one of its assigned boundaries -- this fallback's own original, all-or-nothing behaviour -- trim it down: `rowLostBoundaries` is a Set whose insertion order tracks distributeLostBoundaries' own ascending boundary order, so dropping from the end drops the row's highest-valued (and, since #992's own round-robin assignment is otherwise arbitrary, no more or less significant) boundaries first. The loop below is an exhaustive downward scan trying every prefix length in turn, not a binary search over boundary count, because a downward scan finds the true largest fitting prefix by construction regardless of whether fitting behaves monotonically as boundaries are dropped -- it never has to assume monotonicity to be correct, only to try every candidate in order. The record's own encoded byte size genuinely isn't monotonic in how many boundaries a split states: dropping one boundary always removes exactly one physical cell -- 22 bytes (a 2-byte rgdxaCenter boundary plus its cell's own 20-byte TC80, tap-write.ts's own per-column cost) -- but it also shifts every later cell's index down by one, and tap-write.ts's shadingPrls packs a row's shading into one DefTableShdOperand per 22-cell window whose rgShd array runs from the window's own first cell up to its last SHADED cell; shifting a shaded cell out of the cheap head of one window and into the tail of the previous window forces that window's own array to stretch across up to all 22 of its cells (SHD_SIZE, 10 bytes each) to reach it, up to 210 bytes where before that cell needed only its own single 10-byte entry -- net worst case, -22 bytes from the removed cell against +210 bytes from the shifted shading array, is +188 bytes LARGER for removing a boundary. That jump can never actually reach a candidate this loop accepts, though: the second shading window's own first cell (tap-write.ts's SHD_ARRAYS, `first: 22`) only exists once a row holds at least 23 physical cells, and 23 cells alone -- with no shading, no exact-colour border overrides, no row height, nothing but the bare sprmTDefTable -- already cost 15 fixed bytes (sprmPFInTable and sprmPFTtp at 3 bytes each, sprmTDefTable's own opcode and cb at 2 bytes each with no istd field of its own, TDefTableOperand's own NumberOfColumns byte and the extra (n+1)th rgdxaCenter boundary every row's TAP carries beyond the per-cell figure below, and GrpPrlAndIstd's own istd prefix that buildPapxPage adds ahead of any paragraph's grpprl) plus 22 bytes per cell: 15+22*23 = 521 bytes, 34 bytes past the 487-byte grpPrlAndIstd ceiling a lone paragraph can claim (fitsAloneOnPapxPage) before a single shading byte is even counted. Every byte this format can add past that bare minimum only grows the record further, so no 23-cell-or-wider candidate can ever fit no matter how its shading falls, and rowSplitFits rejects it on cell count and base size alone long before the cross-window shift above could matter -- the non-monotonicity is real, but it lives entirely past the cell count any row within this budget can reach, so the scan below never needs to worry it will stop on a candidate a larger, skipped-past one would also have fit.
@@ -452,6 +467,7 @@ function flattenTable(
           boundaries,
           new Set(kept),
           heightPt,
+          isHeader,
         )
       ) {
         kept = kept.slice(0, -1);
@@ -472,7 +488,9 @@ function flattenTable(
       rowLostBoundariesToApply,
     );
     output.push(...paragraphs);
-    output.push(rowMarkParagraph(rowBoundariesTwips, cellsToWrite, heightPt));
+    output.push(
+      rowMarkParagraph(rowBoundariesTwips, cellsToWrite, heightPt, isHeader),
+    );
   });
   return output;
 }

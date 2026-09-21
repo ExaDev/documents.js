@@ -23,6 +23,8 @@ import {
 const SPRM_T_DEF_TABLE = 0xd608;
 /** sprmTDyaRowHeight (0x9407). */
 const SPRM_T_DYA_ROW_HEIGHT = 0x9407;
+/** sprmTTableHeader (0x3404): a one-byte flag setting TAP.fTableHeader, the row repeating at the top of each page the table continues onto. Opcode confirmed against Apache POI's TableSprmUncompressor (table sprm operation 0x04 sets fTableHeader) and LibreOffice's sprmids.hxx (TTableHeader = sprmTbl<0x04, 0, operand_1b_1>). */
+const SPRM_T_TABLE_HEADER = 0x3404;
 /** sprmTDefTableShd (0xD612): a DefTableShdOperand ([MS-DOC] 2.9.53) shading cells 1-22 of the row, then sprmTDefTableShd2nd (0xD616) for 23-44 and sprmTDefTableShd3rd (0xD60C) for 45-63. Three sprms rather than one because a DefTableShdOperand's own cb is a single byte and its rgShd "MUST NOT exceed 22 elements", which is exactly why [MS-DOC] splits a row's shading across three opcodes at all. */
 const SPRM_T_DEF_TABLE_SHD = 0xd612;
 const SPRM_T_DEF_TABLE_SHD_2ND = 0xd616;
@@ -156,6 +158,7 @@ export function encodeTableRowGrpprl(
   columnBoundariesTwips: readonly number[],
   cells: readonly TableCellToWrite[],
   heightPt: number | undefined,
+  isHeader = false,
 ): number[] {
   if (columnBoundariesTwips.length !== cells.length + 1) {
     throw new DocFormatError(
@@ -186,6 +189,10 @@ export function encodeTableRowGrpprl(
       ...le16(SPRM_T_DYA_ROW_HEIGHT),
       ...int16(dyaRowHeight, "table row heightPt"),
     );
+  }
+  // An ordinary row writes nothing rather than a zero-valued flag: a row's TAP starts with fTableHeader clear, so stating it off costs three bytes of a budget the row-ending mark's own PapxInFkp record measures in tens (see this module's own top-of-file note) and says nothing the absence does not.
+  if (isHeader) {
+    bytes.push(...le16(SPRM_T_TABLE_HEADER), 0x01);
   }
   return bytes;
 }

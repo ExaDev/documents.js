@@ -91,6 +91,18 @@ describe("applyTableSprms", () => {
     expect(result.heightPt).toBeUndefined();
   });
 
+  it("reads sprmTTableHeader's own flag byte, and treats a zero as the row not being a header", () => {
+    expect(applied([tablePrl(0x3404, [1])]).isHeader).toBe(true);
+    expect(applied([tablePrl(0x3404, [0])]).isHeader).toBeUndefined();
+    expect(applied([]).isHeader).toBeUndefined();
+  });
+
+  it("lets a later sprmTTableHeader clear an earlier one in the same grpprl", () => {
+    expect(
+      applied([tablePrl(0x3404, [1]), tablePrl(0x3404, [0])]).isHeader,
+    ).toBeUndefined();
+  });
+
   it("applies sprmTMerge's own ItcFirstLim range exactly, anchor first then continuations, nothing outside it", () => {
     const def = defTablePrl([0, 100, 200, 300, 400, 500]); // 5 columns.
     const merge = tablePrl(0x5624, [1, 3]); // itcFirst=1, itcLim=3 -> cells 1,2.

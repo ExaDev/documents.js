@@ -2050,4 +2050,34 @@ describe("readDocContent tables state one entry per grid column (ExaDev/document
     );
     expect(block.rows[0]?.heightPt).toBe(20);
   });
+
+  it("carries a row's own sprmTTableHeader onto its dense row, and leaves an ordinary row unflagged", () => {
+    const rowMarkGrpprl = (header: boolean): number[] => [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000], [{ horzMerge: 0, vertMerge: 0 }]),
+      ...(header ? [0x04, 0x34, 0x01] : []), // sprmTTableHeader, one-byte flag.
+    ];
+    const block = tableBlock(
+      readDocContent(
+        buildDoc({
+          paragraphs: [
+            {
+              runs: [{ text: "h" }],
+              grpprl: SPRM_P_F_IN_TABLE,
+              mark: CELL_MARK,
+            },
+            { runs: [], grpprl: rowMarkGrpprl(true), mark: CELL_MARK },
+            {
+              runs: [{ text: "b" }],
+              grpprl: SPRM_P_F_IN_TABLE,
+              mark: CELL_MARK,
+            },
+            { runs: [], grpprl: rowMarkGrpprl(false), mark: CELL_MARK },
+          ],
+        }),
+      ),
+    );
+    expect(block.rows.map((row) => row.isHeader)).toEqual([true, undefined]);
+  });
 });
