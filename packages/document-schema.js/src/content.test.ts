@@ -24,6 +24,7 @@ import {
   type ContentTable,
   ContentTableCellSchema,
   ContentTableRowSchema,
+  ContentTableSchema,
   clampHeadingLevel,
   findConstructMarkerImbalance,
   findRunConstructFault,
@@ -1658,6 +1659,61 @@ describe("ContentTableRow direction", () => {
     expect(
       ContentTableRowSchema.parse({ cells: [], direction: "rtl" }).direction,
     ).toBe("rtl");
+  });
+});
+
+describe("ContentTableRow isHeader", () => {
+  it("parses a header row", () => {
+    expect(
+      ContentTableRowSchema.parse({ cells: [], isHeader: true }).isHeader,
+    ).toBe(true);
+  });
+
+  it("leaves a row that states nothing without the field, rather than defaulting it to false", () => {
+    expect(ContentTableRowSchema.parse({ cells: [] })).toEqual({ cells: [] });
+  });
+
+  it("rejects a non-boolean flag", () => {
+    expect(
+      ContentTableRowSchema.safeParse({ cells: [], isHeader: "yes" }).success,
+    ).toBe(false);
+  });
+
+  // The flag says nothing about where a header row sits: any row may carry it, including a non-leading or non-contiguous one, which is exactly the shape a docx w:tblHeader can legally state and a leading-header-count field could not hold.
+  it("accepts a table whose header rows are neither leading nor contiguous", () => {
+    const table = ContentTableSchema.parse({
+      kind: "table",
+      rows: [
+        { cells: [] },
+        { cells: [], isHeader: true },
+        { cells: [] },
+        { cells: [], isHeader: true },
+      ],
+      columnWidthsPt: [],
+    });
+    expect(table.rows.map((row) => row.isHeader)).toEqual([
+      undefined,
+      true,
+      undefined,
+      true,
+    ]);
+  });
+
+  it("guards the flag's type on the recursive block guard as well as the schema", () => {
+    expect(
+      isContentBlock({
+        kind: "table",
+        rows: [{ cells: [], isHeader: true }],
+        columnWidthsPt: [],
+      }),
+    ).toBe(true);
+    expect(
+      isContentBlock({
+        kind: "table",
+        rows: [{ cells: [], isHeader: "yes" }],
+        columnWidthsPt: [],
+      }),
+    ).toBe(false);
   });
 });
 

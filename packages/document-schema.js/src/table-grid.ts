@@ -294,6 +294,7 @@ export interface PositionedTableRow {
   readonly cells: readonly PositionedTableCell[];
   readonly heightPt?: number;
   readonly direction?: TextDirection;
+  readonly isHeader?: boolean;
 }
 
 function placedGridWidth(
@@ -335,6 +336,7 @@ export interface AnchorTableRow {
   readonly cells: readonly ContentTableCell[];
   readonly heightPt?: number;
   readonly direction?: TextDirection;
+  readonly isHeader?: boolean;
 }
 
 function occupiedColumns(

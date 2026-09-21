@@ -339,11 +339,15 @@ export interface ContentTableCell {
   interpretation?: ContentInterpretation;
 }
 
+// THE HEADER RULE (ExaDev/documents.js#1377): header-ness is a fact about ONE row, stated per row, never a count or a range on the table. Every format that states it at all states it on the row -- docx's w:tblHeader on w:trPr (ECMA-376 17.4.78), RTF's \trhdr, HTML's own <th> cells and the <thead> its rows sit in -- and ODF, the one format whose spelling is a wrapper element around a block of rows (table:table-header-rows, OASIS ODF 1.3 part 3, 9.1.7), is read and written by deriving that wrapper from the per-row flags rather than the other way round: its reader sets isHeader on every row inside a wrapper, and its writer wraps each contiguous run of flagged rows in its own wrapper. A count of leading header rows on ContentTable would have been a smaller field and a lossy one -- it cannot state docx's own legal "row 3 is a repeat header and rows 0-2 are not", so a docx carrying that would have to be refused or silently flattened on the way in, before any writer ever saw it.
+//
+// The flags carry no contiguity or position constraint of their own, for that same reason: any subset of rows may be flagged, including a non-leading or non-contiguous one, and no reader, writer or consumer may assume a flagged run starts at row 0. What a format DOES with a flag it cannot spell natively is that format's own writer's business, stated in its own code: ODF wraps each run separately (its grammar allows several table:table-header-rows blocks in one table, and a consumer that only repeats the first degrades exactly as docx's own spec says a mid-table w:tblHeader should), while a format with no header concept at all drops the flag and says so through its diagnostic sink rather than silently.
 export interface ContentTableRow {
   cells: ContentTableCell[];
   // pptx tables carry an explicit row height (a:tr/@h); docx tables do not model one at the row level in the same way, so this is undefined there.
   heightPt?: number;
   direction?: TextDirection; // RTF's own \rtlrow/\ltrrow scope -- the row-level of the four this format states direction at (see ContentRun.direction, ContentParagraph.direction, LayoutMetadata.direction for the other three)
+  isHeader?: boolean; // this row is a header row: a heading band over the columns below it, which a paginating consumer repeats at the top of each page the table continues onto. Absent means it is not, the same absent-means-false optional-boolean convention ContentRun.bold and ContentParagraph.preformatted already follow -- so a row a format states nothing about reads back byte-identically rather than gaining an `isHeader: false` no producer wrote. See THE HEADER RULE above for why this is per-row.
 }
 
 export interface ContentTable {
@@ -418,7 +422,8 @@ function isContentTableRow(value: unknown): value is ContentTableRow {
     isRecord(value) &&
     Array.isArray(value.cells) &&
     value.cells.every(isContentTableCell) &&
-    (value.heightPt === undefined || typeof value.heightPt === "number")
+    (value.heightPt === undefined || typeof value.heightPt === "number") &&
+    (value.isHeader === undefined || typeof value.isHeader === "boolean")
   );
 }
 
@@ -732,6 +737,7 @@ export const ContentTableRowSchema = z.object({
   cells: z.array(ContentTableCellSchema),
   heightPt: z.number().positive().optional(),
   direction: TextDirectionSchema.optional(), // RTF's own \rtlrow/\ltrrow scope -- the row-level of the four this format states direction at (see ContentRun.direction, ContentParagraph.direction, LayoutMetadata.direction for the other three)
+  isHeader: z.boolean().optional(), // this row is a header row -- see THE HEADER RULE on the ContentTableRow interface above for why it is stated per row rather than as a count or range on the table
 });
 
 export const ContentTableSchema = z.object({

@@ -552,6 +552,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       cells: { type: "array", items: { $ref: "#/$defs/ContentTableCell" } },
       heightPt: { type: "number", exclusiveMinimum: 0 },
       direction: { type: "string", enum: ["ltr", "rtl"] }, // RTF's \rtlrow/\ltrrow scope -- see src/content.ts's own field comment
+      isHeader: { type: "boolean" }, // this row is a header row -- see THE HEADER RULE on src/content.ts's own ContentTableRow interface
     },
     required: ["cells"],
     additionalProperties: false,
