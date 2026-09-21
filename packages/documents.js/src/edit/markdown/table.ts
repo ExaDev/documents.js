@@ -5,6 +5,8 @@ import type {
   ContentTableCell as ContentTableCellNode,
   ContentTableRow as ContentTableRowNode,
 } from "document-schema.js";
+import type { TableGridRows } from "../table-grid";
+import { resolvePivotTableGrid } from "../table-grid";
 import type { ParagraphInit } from "./paragraph";
 import { buildParagraph, MarkdownParagraph } from "./paragraph";
 
@@ -97,6 +99,23 @@ export class MarkdownTable {
 
   rows(): MarkdownTableRow[] {
     return this.live().rows.map((row) => new MarkdownTableRow(row));
+  }
+
+  // The grid's own view of the table: gridRows()[r][c] is the position at grid row r and grid column c. This table's rows are already dense, so it is the same positions rows()[r].cells() lists, resolved so that a position a merged region covers yields the region's anchor cell, with isAnchor false.
+  gridRows(): TableGridRows<MarkdownTableCell> {
+    return this.grid().rows;
+  }
+
+  // The table's width in grid columns: the larger of the declared column count and the widest row.
+  gridColumnCount(): number {
+    return this.grid().columnCount;
+  }
+
+  private grid() {
+    return resolvePivotTableGrid(
+      this.live(),
+      (cell) => new MarkdownTableCell(cell),
+    );
   }
 
   // Appends a row with the same column count as this table's own columnWidthsPt. rows()[0] is always treated as the GFM header row on write (markdown-codec's own dist/emit/table.js emitTable destructures `const [header, ...body] = table.rows`, deriving the delimiter row's per-column alignment from the header row alone and never re-emitting it as a body row) -- appendRow does not distinguish header from body itself, so the FIRST row appended (or the first row TableInit built) is the one that becomes the header on write.

@@ -1,11 +1,13 @@
 import type { XmlElement } from "odf.js";
 import { decodePackage, encodePackage, rootElement } from "odf.js";
+import { tableGridColumnCount, walkTableGrid } from "document-schema.js";
 import { attr } from "ooxml.js";
 import { describe, expect, it } from "vitest";
 import { readOdtContent } from "../../odf/odt/read";
 import { el } from "../../xml/fragment";
 import { findDescendantElement, walkElements } from "../../xml/query";
 import { createOdt } from "./editor";
+import type { OdtTable } from "./table";
 
 // Finds styleName's own style:table-row-properties inside automaticStyles, throwing rather than returning undefined -- every caller below already knows the style must exist by this point.
 function findRowStyleProperties(
@@ -546,6 +548,240 @@ describe("OdtTableRow.mergeCellsHorizontally", () => {
   });
 });
 
+// Every element with the given tag in the package's content.xml, in document order, as the raw elements the editor wrote.
+function contentElements(
+  editor: ReturnType<typeof createOdt>,
+  tag: string,
+): XmlElement[] {
+  const part = editor.toPackage().parts["content.xml"];
+  if (part?.kind !== "xml") {
+    throw new Error("expected an xml content.xml part");
+  }
+  const out: XmlElement[] = [];
+  for (const { node } of walkElements(part.nodes)) {
+    if (node.tag === tag) {
+      out.push(node);
+    }
+  }
+  return out;
+}
+
+function coveredCellElements(
+  editor: ReturnType<typeof createOdt>,
+): XmlElement[] {
+  return contentElements(editor, "table:covered-table-cell");
+}
+
+describe("a cell retagged as covered keeps its own style and drops its content and spans", () => {
+  const RED = { r: 1, g: 0, b: 0 };
+
+  it("mergeCellsHorizontally keeps the consumed cell's table:style-name, so its background and borders survive", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 3 });
+    table.cell(0, 1).appendParagraph({ text: "consumed" });
+    table.cell(0, 1).background = RED;
+    const consumed = contentElements(editor, "table:table-cell")[1];
+    const styleName = consumed && attr(consumed, "table:style-name");
+    expect(styleName).toBeDefined();
+
+    table.rows()[0]!.mergeCellsHorizontally(0, 2);
+
+    const [covered, ...rest] = coveredCellElements(editor);
+    expect(rest).toHaveLength(0);
+    expect(covered?.attributes).toEqual([
+      { name: "table:style-name", value: styleName },
+    ]);
+    expect(covered?.children).toEqual([]);
+
+    const content = readOdtContent(editor.toPackage());
+    if (content.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing content");
+    }
+    const block = content.sections[0]?.blocks.find((b) => b.kind === "table");
+    if (block?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    expect(block.rows[0]?.cells[1]).toEqual({
+      blocks: [],
+      background: { kind: "solid", color: RED },
+    });
+  });
+
+  it("markCellCovered drops the span attributes but keeps the style, on a cell that was itself an anchor", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 2, columns: 2 });
+    const below = table.cell(1, 0);
+    below.background = RED;
+    below.colSpan = 2;
+    below.rowSpan = 2;
+
+    table.mergeCells(0, 0, 2, 1);
+
+    const covered = coveredCellElements(editor);
+    expect(covered).toHaveLength(1);
+    expect(covered[0]?.attributes.map((a) => a.name)).toEqual([
+      "table:style-name",
+    ]);
+    expect(covered[0]?.children).toEqual([]);
+  });
+
+  it("a covered cell that had no style carries no attributes at all", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 2 });
+    table.rows()[0]!.mergeCellsHorizontally(0, 2);
+    expect(coveredCellElements(editor)[0]?.attributes).toEqual([]);
+  });
+});
+
+// Builds a table of rows x columns whose cells hold the text "<row>,<column>", so a grid position can be traced to the live cell that owns it.
+function labelledOdtTable(rows: number, columns: number): OdtTable {
+  const table = createOdt().body.appendTable({ rows, columns });
+  for (let row = 0; row < rows; row++) {
+    for (let column = 0; column < columns; column++) {
+      table.cell(row, column).appendParagraph({ text: `${row},${column}` });
+    }
+  }
+  return table;
+}
+
+// The grid as text: each position's owning cell's label, with a trailing "*" on the positions that are not the owner's own.
+function odtGridLabels(table: OdtTable): string[][] {
+  return table
+    .gridRows()
+    .map((row) =>
+      row.map((position) =>
+        position === undefined
+          ? "-"
+          : `${position.cell.text.trim()}${position.isAnchor ? "" : "*"}`,
+      ),
+    );
+}
+
+describe("OdtTable grid view", () => {
+  it("reports the grid width and resolves every position of a table with no merges to its own cell", () => {
+    const table = labelledOdtTable(2, 3);
+    expect(table.gridColumnCount()).toBe(3);
+    expect(odtGridLabels(table)).toEqual([
+      ["0,0", "0,1", "0,2"],
+      ["1,0", "1,1", "1,2"],
+    ]);
+  });
+
+  it("keeps the grid width after a 2x2 merge, where the row's own real-cell count under-reports it", () => {
+    const table = labelledOdtTable(3, 3);
+    table.mergeCells(0, 0, 2, 2);
+    expect(table.rows()[0]!.cells()).toHaveLength(2);
+    expect(table.gridColumnCount()).toBe(3);
+    expect(odtGridLabels(table)).toEqual([
+      ["0,0", "0,0*", "0,2"],
+      ["0,0*", "0,0*", "1,2"],
+      ["2,0", "2,1", "2,2"],
+    ]);
+  });
+
+  it("resolves a position covered along its own row and a position covered from a row above to the same anchor", () => {
+    const table = labelledOdtTable(3, 3);
+    table.mergeCells(0, 0, 3, 1);
+    table.rows()[1]!.mergeCellsHorizontally(1, 2);
+    expect(odtGridLabels(table)).toEqual([
+      ["0,0", "0,1", "0,2"],
+      ["0,0*", "1,1", "1,1*"],
+      ["0,0*", "2,1", "2,2"],
+    ]);
+  });
+
+  it("takes the declared table:table-column count as the width when no row states one", () => {
+    const table = createOdt().body.appendTable({ rows: 0, columns: 3 });
+    expect(table.gridColumnCount()).toBe(3);
+    expect(table.gridRows()).toEqual([]);
+  });
+
+  it("widens the grid to a row wider than the declared columns, and leaves the positions a shorter row lacks undefined", () => {
+    const table = createOdt().body.appendTable({ rows: 1, columns: 2 });
+    const wide = table.appendEmptyRow();
+    for (let column = 0; column < 3; column++) {
+      wide.appendCell();
+    }
+    expect(table.gridColumnCount()).toBe(3);
+    expect(
+      table.gridRows().map((row) => row.map((entry) => entry === undefined)),
+    ).toEqual([
+      [false, false, true],
+      [false, false, false],
+    ]);
+  });
+
+  it("leaves a covered position no live cell can own undefined, and ignores elements of a row that are not cells", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 0, columns: 2 });
+    const row = table.appendEmptyRow();
+    row.appendCell();
+    row.appendCoveredCell();
+    contentElements(editor, "table:table-row")[0]?.children.push(
+      el("text:soft-page-break"),
+    );
+    expect(
+      table.gridRows().map((r) => r.map((entry) => entry === undefined)),
+    ).toEqual([[false, true]]);
+    expect(table.gridColumnCount()).toBe(2);
+  });
+
+  it("ignores children of the table that are neither columns nor rows", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 2 });
+    contentElements(editor, "table:table")[0]?.children.push(
+      el("table:table-header-rows"),
+    );
+    expect(table.gridRows()).toHaveLength(1);
+    expect(table.gridColumnCount()).toBe(2);
+  });
+
+  it("agrees with the content pivot on the grid width and on which positions a merge covers", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 3, columns: 4 });
+    table.mergeCells(0, 1, 2, 2);
+    table.rows()[2]!.mergeCellsHorizontally(2, 2);
+
+    const content = readOdtContent(editor.toPackage());
+    if (content.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing content");
+    }
+    const pivot = content.sections[0]?.blocks.find((b) => b.kind === "table");
+    if (pivot?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    expect(table.gridColumnCount()).toBe(tableGridColumnCount(pivot));
+    expect(
+      table.gridRows().map((row) => row.map((entry) => entry?.isAnchor)),
+    ).toEqual(
+      walkTableGrid(pivot).map((row) =>
+        row.map((position) => position.anchorRowIndex === undefined),
+      ),
+    );
+  });
+});
+
+describe("OdtTableRow grid columns ignore elements that are not cells", () => {
+  it("does not count a stray element as a grid column when merging or marking a cell covered", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 3 });
+    const rowElement = contentElements(editor, "table:table-row")[0];
+    rowElement?.children.unshift(el("text:soft-page-break"));
+    const row = table.rows()[0]!;
+
+    expect(() => row.mergeCellsHorizontally(0, 4)).toThrow(
+      /exceeds this row's own 3 grid columns/,
+    );
+    row.mergeCellsHorizontally(0, 2);
+    expect(row.cells().map((cell) => cell.colSpan)).toEqual([2, undefined]);
+    expect(() => {
+      row.markCellCovered(3);
+    }).toThrow(/markCellCovered: column 3 does not exist in this row/);
+    row.markCellCovered(2);
+    expect(coveredCellElements(editor)).toHaveLength(2);
+  });
+});
+
 describe("OdtTable.mergeCells", () => {
   it("merges a rowSpan x colSpan rectangle, proving the true-grid-column-index property through a prior horizontal merge", () => {
     const editor = createOdt();
@@ -594,6 +830,15 @@ describe("OdtTable.mergeCells", () => {
     table.cell(0, 1).appendParagraph({ text: "discarded" });
     table.cell(1, 0).appendParagraph({ text: "also discarded" });
     expect(() => table.mergeCells(0, 0, 2, 2)).not.toThrow();
+  });
+
+  it("states no rowSpan for a rectangle one row high, and rejects a colSpan below one", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 2, columns: 3 });
+    expect(table.mergeCells(0, 0, 1, 2).rowSpan).toBeUndefined();
+    expect(() => table.mergeCells(0, 0, 1, 0)).toThrow(
+      /^mergeCells: rowSpan and colSpan must be positive integers/,
+    );
   });
 
   it("throws for an out-of-range startRow or a rowSpan exceeding the table height", () => {

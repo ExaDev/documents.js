@@ -239,3 +239,32 @@ describe("DocTable rows and removal", () => {
     expect(container).toEqual([other]);
   });
 });
+
+describe("DocTable grid view", () => {
+  it("resolves a merged region's covered positions to its anchor, leaving the row as wide as the table", () => {
+    const table = tableOf(3, 3);
+    table.mergeCells(0, 0, 2, 2);
+
+    expect(table.gridColumnCount()).toBe(3);
+    const grid = table.gridRows();
+    expect(
+      grid.map((row) =>
+        row.map((position) =>
+          position === undefined
+            ? "-"
+            : `${position.cell.text}${position.isAnchor ? "" : "*"}`,
+        ),
+      ),
+    ).toEqual([
+      ["r0c0", "r0c0*", "r0c2"],
+      ["r0c0*", "r0c0*", "r1c2"],
+      ["r2c0", "r2c1", "r2c2"],
+    ]);
+  });
+
+  it("is empty for a table with no rows and no columns", () => {
+    const table = createDoc().appendTable({ rows: 0, columns: 0 });
+    expect(table.gridColumnCount()).toBe(0);
+    expect(table.gridRows()).toEqual([]);
+  });
+});
