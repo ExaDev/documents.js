@@ -1,3 +1,19 @@
+## [10.0.0](https://github.com/ExaDev/documents.js/compare/markdown-codec%409.0.0...markdown-codec%4010.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **markdown-codec:** MarkdownInvalidUtf8Error is now
+  MarkdownUndecodableTextError, and its code is md/undecodable-text
+  rather than md/invalid-utf8.
+  MarkdownBytesSchema and markdownCodec accept bytes in any encoding
+  byte-codec's decodeText recognises, and refuse bytes carrying a NUL or
+  a density of other C0 control bytes even where those bytes are
+  well-formed UTF-8.
+
+### Features
+
+* **markdown-codec:** accept markdown bytes in any detected character encoding ([e0f638f](https://github.com/ExaDev/documents.js/commit/e0f638f7c60eb6653a814be1a075f76aed7793d2))
+
 ## [9.0.0](https://github.com/ExaDev/documents.js/compare/markdown-codec%408.0.1...markdown-codec%409.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES

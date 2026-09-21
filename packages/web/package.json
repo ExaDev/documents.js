@@ -1,7 +1,7 @@
 {
   "name": "web",
   "private": true,
-  "version": "2.11.51",
+  "version": "2.11.52",
   "type": "module",
   "description": "A client-only, statically-built web UI for every conversion and editing tool in the documents.js ecosystem.",
   "repository": {
@@ -56,8 +56,8 @@
     "dexie": "4.4.4",
     "dexie-react-hooks": "4.4.0",
     "document-schema.js": "7.13.0",
-    "documents.js": "10.0.0",
-    "markdown-codec": "9.0.0",
+    "documents.js": "11.0.0",
+    "markdown-codec": "10.0.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zod": "4.4.3"
