@@ -3222,6 +3222,56 @@ describe("readDocxContent: table span and row-height edge cases", () => {
       ).rows[0]?.heightPt,
     ).toBeUndefined();
   });
+
+  function headerFlagsOf(rows: XmlElement[]): (boolean | undefined)[] {
+    const table = el("w:tbl", {}, [
+      el("w:tblGrid", {}, [el("w:gridCol", { "w:w": "1440" })]),
+      ...rows,
+    ]);
+    return asTable(
+      readDocxContent(paragraphPackage(table)).sections[0]?.blocks[0],
+    ).rows.map((row) => row.isHeader);
+  }
+
+  function rowWithTrPr(children: XmlElement[]): XmlElement {
+    return el("w:tr", {}, [
+      el("w:trPr", {}, children),
+      el("w:tc", {}, [el("w:p", {}, [textRun("a")])]),
+    ]);
+  }
+
+  it("reads w:trPr/w:tblHeader into the row's own isHeader, and leaves a row without one unflagged", () => {
+    expect(
+      headerFlagsOf([
+        rowWithTrPr([el("w:tblHeader", {})]),
+        rowWithTrPr([]),
+        el("w:tr", {}, [el("w:tc", {}, [el("w:p", {}, [textRun("b")])])]),
+      ]),
+    ).toEqual([true, undefined, undefined]);
+  });
+
+  it("reads w:tblHeader as the on/off property it is, so an explicitly disabled one is not a header", () => {
+    expect(
+      headerFlagsOf([
+        rowWithTrPr([el("w:tblHeader", { "w:val": "true" })]),
+        rowWithTrPr([el("w:tblHeader", { "w:val": "1" })]),
+        rowWithTrPr([el("w:tblHeader", { "w:val": "0" })]),
+        rowWithTrPr([el("w:tblHeader", { "w:val": "false" })]),
+      ]),
+    ).toEqual([true, true, undefined, undefined]);
+  });
+
+  // Word only repeats a mid-table header row when every row above it is marked too, but that is its own rendering rule: the reader states what the file states, so the flag is not quietly moved or dropped on the way in.
+  it("reads a header flag on a row that is neither the first nor contiguous with the first", () => {
+    expect(
+      headerFlagsOf([
+        rowWithTrPr([]),
+        rowWithTrPr([el("w:tblHeader", {})]),
+        rowWithTrPr([]),
+        rowWithTrPr([el("w:tblHeader", {})]),
+      ]),
+    ).toEqual([undefined, true, undefined, true]);
+  });
 });
 
 describe("readDocxContent: block-level bookmarks, duplicate ids, and out-of-order halves", () => {
