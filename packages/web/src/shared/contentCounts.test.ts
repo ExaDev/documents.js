@@ -147,6 +147,40 @@ describe("contentSummary", () => {
     expect(contentSummary(doc)).toEqual(["1 section", "5 blocks"]);
   });
 
+  it("counts a merged region's blocks once, since its covered entries hold none", () => {
+    const doc: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: PAGE_SIZE,
+          margins: MARGINS,
+          blocks: [
+            {
+              kind: "table",
+              rows: [
+                {
+                  cells: [
+                    {
+                      colSpan: 2,
+                      rowSpan: 2,
+                      blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }],
+                    },
+                    { blocks: [] },
+                  ],
+                },
+                { cells: [{ blocks: [] }, { blocks: [] }] },
+              ],
+              columnWidthsPt: [100, 100],
+            },
+          ],
+        },
+      ],
+    };
+    // 1 table + the anchor's 1 paragraph; the 3 covered entries add nothing.
+    expect(contentSummary(doc)).toEqual(["1 section", "2 blocks"]);
+  });
+
   it("summarises a spreadsheet with sheet and cell counts", () => {
     expect(contentSummary(spreadsheet(2, 50))).toEqual([
       "2 sheets",

@@ -510,6 +510,85 @@ describe("renderTable", () => {
     expect(seen).toHaveLength(1);
     expect(seen[0]).toBe(table.rows[0]!.cells[0]!.blocks);
   });
+
+  function textCell(
+    text: string,
+    spans: { colSpan?: number; rowSpan?: number } = {},
+  ) {
+    return { blocks: [paragraph({ runs: [{ text }] })], ...spans };
+  }
+
+  function cellsOfRows(table: ContentTable): HTMLTableCellElement[][] {
+    const rendered = renderNode(renderTable(table, renderBlocksNeutral));
+    return Array.from(rendered.querySelectorAll("tr")).map((tr) =>
+      Array.from(tr.querySelectorAll("td")),
+    );
+  }
+
+  it("renders a horizontally merged region as one td, omitting its covered positions", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [10, 10, 10],
+      rows: [
+        {
+          cells: [textCell("a", { colSpan: 2 }), { blocks: [] }, textCell("b")],
+        },
+        { cells: [textCell("c"), textCell("d"), textCell("e")] },
+      ],
+    };
+    const rows = cellsOfRows(table);
+    expect(rows.map((row) => row.length)).toEqual([2, 3]);
+    expect(rows[0]!.map((td) => td.textContent)).toEqual(["a", "b"]);
+    expect(rows[0]![0]!.colSpan).toBe(2);
+  });
+
+  it("renders a vertically merged region as one td, omitting its covered positions in the rows below", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [10, 10],
+      rows: [
+        { cells: [textCell("a", { rowSpan: 3 }), textCell("b")] },
+        { cells: [{ blocks: [] }, textCell("c")] },
+        { cells: [{ blocks: [] }, textCell("d")] },
+      ],
+    };
+    const rows = cellsOfRows(table);
+    expect(rows.map((row) => row.length)).toEqual([2, 1, 1]);
+    expect(rows[0]![0]!.rowSpan).toBe(3);
+    expect(rows[2]![0]!.textContent).toBe("d");
+  });
+
+  it("renders a two by two merged region as a single td", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [10, 10, 10],
+      rows: [
+        {
+          cells: [
+            textCell("a", { colSpan: 2, rowSpan: 2 }),
+            { blocks: [] },
+            textCell("b"),
+          ],
+        },
+        { cells: [{ blocks: [] }, { blocks: [] }, textCell("c")] },
+        { cells: [textCell("d"), textCell("e"), textCell("f")] },
+      ],
+    };
+    const rows = cellsOfRows(table);
+    expect(rows.map((row) => row.length)).toEqual([2, 1, 3]);
+    expect(rows[0]![0]!.colSpan).toBe(2);
+    expect(rows[0]![0]!.rowSpan).toBe(2);
+    expect(rows[1]![0]!.textContent).toBe("c");
+  });
+
+  it("renders every entry of an unmerged table as a td", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [10, 10],
+      rows: [{ cells: [textCell("a"), textCell("b")] }],
+    };
+    expect(cellsOfRows(table).map((row) => row.length)).toEqual([2]);
+  });
 });
 
 describe("buildListForest", () => {

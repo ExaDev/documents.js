@@ -6,6 +6,7 @@ import type {
   ContentRun,
   ContentTable,
 } from "documents.js";
+import { walkTableGrid } from "document-schema.js";
 import type { ReactNode } from "react";
 
 import {
@@ -76,7 +77,7 @@ export function renderImage(block: ContentImageBlock): ReactNode {
   );
 }
 
-// Takes a renderBlocks callback so each component's own block-grouping logic (which dispatches to its own paragraph/list renderers) handles the recursion into cell content.
+// Takes a renderBlocks callback so each component's own block-grouping logic (which dispatches to its own paragraph/list renderers) handles the recursion into cell content. A ContentTable's rows are dense (a merged region's covered positions are real, block-less entries), whereas HTML omits covered positions, so only anchors become a <td>.
 export function renderTable(
   table: ContentTable,
   renderBlocks: (blocks: readonly ContentBlock[]) => ReactNode,
@@ -84,18 +85,20 @@ export function renderTable(
   return (
     <table className={tableStyle}>
       <tbody>
-        {table.rows.map((row, rowIndex) => (
+        {walkTableGrid(table).map((positions, rowIndex) => (
           <tr key={rowIndex}>
-            {row.cells.map((cell, cellIndex) => (
-              <td
-                key={cellIndex}
-                colSpan={cell.colSpan}
-                rowSpan={cell.rowSpan}
-                className={tableCellStyle}
-              >
-                {renderBlocks(cell.blocks)}
-              </td>
-            ))}
+            {positions.map((position) =>
+              position.anchorRowIndex === undefined ? (
+                <td
+                  key={position.columnIndex}
+                  colSpan={position.cell.colSpan}
+                  rowSpan={position.cell.rowSpan}
+                  className={tableCellStyle}
+                >
+                  {renderBlocks(position.cell.blocks)}
+                </td>
+              ) : null,
+            )}
           </tr>
         ))}
       </tbody>
