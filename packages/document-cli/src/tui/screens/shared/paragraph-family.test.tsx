@@ -429,6 +429,12 @@ describe.each(["docx", "odt", "markdown"] as const)(
           );
         }
         expect(lastFrame()).toContain("ON tableView");
+
+        // The body list summarises the table by its grid width: the merged row holds fewer physical cells than the table has columns, and the summary must still say 3x3.
+        stdin.write(ESCAPE);
+        await flush({ afterEscape: true });
+        expect(lastFrame()).toContain("ON bodyList");
+        expect(lastFrame()).toContain("Table 3×3");
       },
       WIZARD_TEST_TIMEOUT_MS,
     );
