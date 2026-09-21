@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { ContentDocument, ContentVector } from "document-schema.js";
+import type {
+  ContentDocument,
+  ContentTable,
+  ContentTableCell,
+  ContentVector,
+} from "document-schema.js";
 import type { Package, XmlElement } from "odf.js";
 import {
   bytesToBase64,
@@ -478,5 +483,117 @@ describe("buildOdpPackage: a slide table breaking the grid rule", () => {
     ).toThrow(
       "populateOdtTable: table breaks the grid rule (the cell at row 0, column 1 lies inside the merged region anchored at row 0, column 0 but carries content of its own, and a merged region's content belongs to its anchor)",
     );
+  });
+});
+
+describe("buildOdpPackage: a slide table that states no column widths", () => {
+  function cellOf(text: string): ContentTableCell {
+    return { blocks: [{ kind: "paragraph", runs: [{ text }] }] };
+  }
+
+  function documentOf(table: ContentTable): ContentDocument {
+    return presentationDoc([
+      {
+        size: { widthPt: 720, heightPt: 540 },
+        notes: "",
+        shapes: [
+          {
+            frame: { xPt: 36, yPt: 36, widthPt: 480, heightPt: 240 },
+            ...ZERO_INSETS,
+            blocks: [table],
+          },
+        ],
+      },
+    ]);
+  }
+
+  function columnCount(table: ContentTable): number {
+    const pkg = buildOdpPackage(documentOf(table));
+    const part = pkg.parts["content.xml"];
+    const root = part?.kind === "xml" ? rootElement(part.nodes) : undefined;
+    if (root === undefined) {
+      throw new Error("expected an xml content.xml part with a root element");
+    }
+    return elementsWithTag(root.children, "table:table-column").length;
+  }
+
+  function writtenTable(table: ContentTable): ContentTable {
+    const read = readOdpContent(
+      decodePackage(encodePackage(buildOdpPackage(documentOf(table)))),
+    );
+    const block =
+      read.kind === "presentation"
+        ? read.slides[0]?.shapes[0]?.blocks[0]
+        : undefined;
+    if (block?.kind !== "table") {
+      throw new Error("expected the slide's shape to hold a table");
+    }
+    return block;
+  }
+
+  it("is written with one table:table-column per grid column the rows state", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [],
+      rows: [
+        { cells: [cellOf("a"), cellOf("b")] },
+        { cells: [cellOf("c"), cellOf("d")] },
+      ],
+    };
+    expect(columnCount(table)).toBe(2);
+    const written = writtenTable(table);
+    expect(written.columnWidthsPt).toHaveLength(2);
+    for (const widthPt of written.columnWidthsPt) {
+      expect(widthPt).toBeGreaterThan(0);
+    }
+    expect(written.rows.map((row) => row.cells.length)).toEqual([2, 2]);
+  });
+
+  it("widens a grid whose stated widths are fewer than the columns the rows occupy, keeping the widths it does state", () => {
+    const written = writtenTable({
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [{ cells: [cellOf("a"), cellOf("b")] }],
+    });
+    expect(written.columnWidthsPt).toHaveLength(2);
+    expect(written.columnWidthsPt[0]).toBe(100);
+  });
+
+  it("writes the stated widths unchanged when the table states one per column", () => {
+    const written = writtenTable({
+      kind: "table",
+      columnWidthsPt: [50, 70],
+      rows: [{ cells: [cellOf("a"), cellOf("b")] }],
+    });
+    expect(written.columnWidthsPt).toEqual([50, 70]);
+  });
+
+  it("still reports a grid fault in a table with no widths, rather than writing past it", () => {
+    expect(() =>
+      buildOdpPackage(
+        documentOf({
+          kind: "table",
+          columnWidthsPt: [],
+          rows: [
+            { cells: [cellOf("a"), cellOf("b")] },
+            { cells: [cellOf("c")] },
+          ],
+        }),
+      ),
+    ).toThrow(
+      "populateOdtTable: table breaks the grid rule (row 1 holds 1 cells where the widest row holds 2, but every row of a table covers the same grid)",
+    );
+  });
+
+  it("refuses a table with no rows, with or without stated widths, rather than writing one ODF forbids", () => {
+    for (const columnWidthsPt of [[], [100, 100]]) {
+      expect(() =>
+        buildOdpPackage(
+          documentOf({ kind: "table", columnWidthsPt, rows: [] }),
+        ),
+      ).toThrow(
+        "buildOdpPackage: table has no rows, and ODF requires a table:table to hold at least one table:table-row",
+      );
+    }
   });
 });

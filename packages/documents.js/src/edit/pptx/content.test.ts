@@ -616,3 +616,111 @@ describe("buildPptxPackage: a slide table breaking the grid rule", () => {
     );
   });
 });
+
+describe("buildPptxPackage: a slide table that states no column widths", () => {
+  function cellOf(text: string): ContentTableCell {
+    return { blocks: [{ kind: "paragraph", runs: [{ text }] }] };
+  }
+
+  function documentOf(table: ContentTable): ContentDocument {
+    return presentationDoc([
+      {
+        size: SLIDE_SIZE,
+        notes: "",
+        shapes: [
+          {
+            frame: { xPt: 10, yPt: 10, widthPt: 300, heightPt: 100 },
+            ...ZERO_INSETS,
+            blocks: [table],
+          },
+        ],
+      },
+    ]);
+  }
+
+  function writtenTable(table: ContentTable): ContentTable {
+    const reread = readPptxContent(buildPptxPackage(documentOf(table)));
+    if (reread.kind !== "presentation") {
+      throw new Error("expected a presentation ContentDocument");
+    }
+    const block = reread.slides[0]?.shapes[0]?.blocks[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected the slide's shape to hold a table");
+    }
+    return block;
+  }
+
+  function gridColumns(table: ContentTable): number {
+    return [
+      ...walkElements(
+        firstSlideRoot(buildPptxPackage(documentOf(table))).children,
+      ),
+    ].filter((cursor) => cursor.node.tag === "a:gridCol").length;
+  }
+
+  it("is written with one a:gridCol per grid column the rows state", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [],
+      rows: [
+        { cells: [cellOf("a"), cellOf("b")] },
+        { cells: [cellOf("c"), cellOf("d")] },
+      ],
+    };
+    expect(gridColumns(table)).toBe(2);
+    const written = writtenTable(table);
+    expect(written.columnWidthsPt).toHaveLength(2);
+    for (const widthPt of written.columnWidthsPt) {
+      expect(widthPt).toBeGreaterThan(0);
+    }
+    expect(written.rows.map((row) => row.cells.length)).toEqual([2, 2]);
+  });
+
+  it("widens a grid whose stated widths are fewer than the columns the rows occupy, keeping the widths it does state", () => {
+    const written = writtenTable({
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [{ cells: [cellOf("a"), cellOf("b")] }],
+    });
+    expect(written.columnWidthsPt).toHaveLength(2);
+    expect(written.columnWidthsPt[0]).toBe(100);
+  });
+
+  it("writes the stated widths unchanged when the table states one per column", () => {
+    const written = writtenTable({
+      kind: "table",
+      columnWidthsPt: [50, 70],
+      rows: [{ cells: [cellOf("a"), cellOf("b")] }],
+    });
+    expect(written.columnWidthsPt).toEqual([50, 70]);
+  });
+
+  it("still reports a grid fault in a table with no widths, naming the fault rather than a missing cell", () => {
+    expect(() =>
+      buildPptxPackage(
+        documentOf({
+          kind: "table",
+          columnWidthsPt: [],
+          rows: [
+            { cells: [cellOf("a"), cellOf("b")] },
+            { cells: [cellOf("c")] },
+          ],
+        }),
+      ),
+    ).toThrow(
+      "buildPptxPackage: table breaks the grid rule (row 1 holds 1 cells where the widest row holds 2, but every row of a table covers the same grid)",
+    );
+  });
+
+  it("refuses a table with no rows, with or without stated widths, rather than writing a grid with nothing in it", () => {
+    for (const columnWidthsPt of [[], [100, 100]]) {
+      expect(() =>
+        buildPptxPackage(
+          documentOf({ kind: "table", columnWidthsPt, rows: [] }),
+        ),
+      ).toThrow(
+        "buildPptxPackage: table has no rows, and a table with no rows cannot be written in every presentation format (ODF requires at least one table:table-row)",
+      );
+    }
+  });
+});

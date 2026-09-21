@@ -9,7 +9,11 @@ import { formulaOfBlock, formulaPlaceholderText } from "../../model/formula";
 import { resolveMetadataTimestamps } from "../../model/metadata";
 import type { ClockPort } from "../../ports/clock";
 import { systemClock } from "../../ports/clock";
-import { populateOdtTable, populateParagraph } from "../odt/content";
+import {
+  odtTableInit,
+  populateOdtTable,
+  populateParagraph,
+} from "../odt/content";
 import { OdpEditor } from "./editor";
 import { createEmptyOdpPackage } from "./scaffold";
 import type { OdpSlide } from "./slide";
@@ -92,11 +96,7 @@ function appendShape(slide: OdpSlide, shape: ContentShape): void {
     // The table is created with no rows of its own, exactly as the document-level path in ../odt/content.ts creates one: populateOdtTable appends a row per ContentTableRow, so a scaffold row here would not be filled but preceded by the real content, leaving the slide's table taller than its own rows and every leading row blank.
     const { shape: tableFrame, table } = slide.addTable({
       frame: shape.frame,
-      table: {
-        rows: 0,
-        columns: onlyBlock.columnWidthsPt.length,
-        columnWidthsPt: onlyBlock.columnWidthsPt,
-      },
+      table: odtTableInit(onlyBlock, "buildOdpPackage"),
     });
     if (shape.rotationDeg !== undefined) {
       tableFrame.rotationDeg = shape.rotationDeg;
