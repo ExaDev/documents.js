@@ -218,6 +218,7 @@ interface TableState {
   cellBlocks: ContentBlock[];
   definingColumns: boolean;
   rowHeightPt: number | undefined;
+  rowIsHeader: boolean;
 }
 
 interface ReaderState {
@@ -443,7 +444,11 @@ function readCellAttributes(
   state: ReaderState,
   nonDeletable: Uint8Array,
   sink: WpdDiagnosticSink,
-): { attributes: CellAttributes; rowHeightPt: number | undefined } {
+): {
+  attributes: CellAttributes;
+  rowHeightPt: number | undefined;
+  rowIsHeader: boolean;
+} {
   const { subfunctions, truncated } = readEmbeddedSubfunctions(nonDeletable);
   if (truncated) {
     reportOnce(
@@ -513,6 +518,9 @@ function readCellAttributes(
     },
     rowHeightPt:
       row === undefined ? undefined : readRowInformation(row)?.heightPt,
+    // The Row Information subfunction's own header-row flag (stream/table.ts's ROW_FLAG_HEADER_ROW), which WordPerfect repeats at the top of each page the table continues onto: ContentTableRow.isHeader, in this format's own spelling.
+    rowIsHeader:
+      row === undefined ? false : readRowInformation(row)?.headerRow === true,
   };
 }
 
@@ -572,9 +580,11 @@ function closeRow(table: TableState): void {
   const row: ContentTableRow = {
     cells: table.cells,
     ...(table.rowHeightPt === undefined ? {} : { heightPt: table.rowHeightPt }),
+    ...(table.rowIsHeader ? { isHeader: true } : {}),
   };
   table.cells = [];
   table.rowHeightPt = undefined;
+  table.rowIsHeader = false;
   table.rows.push(row);
 }
 
@@ -648,13 +658,17 @@ function applyEolMapping(
         flushParagraph(state, sink);
         return;
       }
-      const { attributes, rowHeightPt } = readCellAttributes(
+      const { attributes, rowHeightPt, rowIsHeader } = readCellAttributes(
         state,
         nonDeletable,
         sink,
       );
       if (rowHeightPt !== undefined) {
         table.rowHeightPt = rowHeightPt;
+      }
+      // Every End-of-Line function in a header row carries the row's own flag, so the first one that states it settles the row: a later cell of the same row cannot unstate it, and closeRow clears it again for the row after.
+      if (rowIsHeader) {
+        table.rowIsHeader = true;
       }
       // A cell boundary always closes a cell, even an empty one -- a blank cell in the middle of a row is real content the grid has a position for. Table Off is the exception: a document that already ended its last row with a row code leaves nothing open, so closing a cell there would append a spurious empty one. Both spellings occur, and the difference is exactly whether anything is still accumulating.
       const cellIsOpen =
@@ -957,6 +971,7 @@ function applyCharacterGroup(
         cellBlocks: [],
         definingColumns: true,
         rowHeightPt: undefined,
+        rowIsHeader: false,
       };
       return;
     case CHARACTER_TABLE_COLUMN: {

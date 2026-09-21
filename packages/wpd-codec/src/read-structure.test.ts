@@ -729,6 +729,53 @@ describe("tables", () => {
     expect(tablesOf(document)[0]?.rows[0]?.heightPt).toBe(72);
   });
 
+  // The Row Information subfunction's own header-row flag (0x04) is the format's own statement that the row repeats at the top of each page the table continues onto, and it reaches ContentTableRow.isHeader rather than being parsed and dropped.
+  it("reads the Row Information header-row flag onto the row's own isHeader", () => {
+    const document = readDocumentArea([
+      ...tableDefinition([1200]),
+      ...text("H"),
+      ...eolFunction({
+        subgroup: EOL_TABLE_ROW,
+        embedded: embeddedSubfunction(ROW_INFORMATION, [0x04, ...word(0)]),
+      }),
+      ...text("B"),
+      ...eolFunction({ subgroup: EOL_TABLE_ROW }),
+      ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+    ]);
+    expect(tablesOf(document)[0]?.rows.map((row) => row.isHeader)).toEqual([
+      true,
+      undefined,
+    ]);
+  });
+
+  it("reads a header row that also states a fixed height, carrying both", () => {
+    const document = readDocumentArea([
+      ...tableDefinition([1200]),
+      ...text("H"),
+      ...eolFunction({
+        subgroup: EOL_TABLE_ROW,
+        embedded: embeddedSubfunction(ROW_INFORMATION, [0x06, ...word(1200)]),
+      }),
+      ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+    ]);
+    const row = tablesOf(document)[0]?.rows[0];
+    expect(row?.isHeader).toBe(true);
+    expect(row?.heightPt).toBe(72);
+  });
+
+  it("leaves a row whose Row Information states no header flag unflagged", () => {
+    const document = readDocumentArea([
+      ...tableDefinition([1200]),
+      ...text("a"),
+      ...eolFunction({
+        subgroup: EOL_TABLE_ROW,
+        embedded: embeddedSubfunction(ROW_INFORMATION, [0x02, ...word(1200)]),
+      }),
+      ...eolFunction({ subgroup: EOL_TABLE_OFF }),
+    ]);
+    expect(tablesOf(document)[0]?.rows[0]?.isHeader).toBeUndefined();
+  });
+
   // A cell boundary must still close a cell whose pending text is empty but whose runs are not (a run already split off by an attribute change) -- checking only pending text and accumulated cell blocks would wrongly drop it, even at Table Off, which otherwise skips closing an already-closed cell.
   it("closes a Table Off cell whose pending text is empty but whose runs are not", () => {
     const document = readDocumentArea([
