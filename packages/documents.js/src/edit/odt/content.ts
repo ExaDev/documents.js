@@ -11,6 +11,7 @@ import {
   resolveCellFillColor,
   tableCellColumnSpan,
   tableCellRowSpan,
+  tableGridColumnCount,
   walkTableGrid,
 } from "document-schema.js";
 import type { Package } from "odf.js";
@@ -31,7 +32,7 @@ import { createEmptyOdtPackage } from "./scaffold";
 import type { OdtList, OdtListItem } from "./list";
 import type { OdtParagraph } from "./paragraph";
 import { headingStyleName } from "./paragraph";
-import type { OdtTable, OdtTableCell } from "./table";
+import type { OdtTable, OdtTableCell, TableInit } from "./table";
 
 // clock resolves content.metadata's own createdIso/modifiedIso the same way createOdt does (src/model/metadata.ts's resolveMetadataTimestamps) -- systemClock by default, never overwriting a createdIso/modifiedIso the source content already carried.
 export interface BuildOdtPackageOptions {
@@ -320,16 +321,31 @@ function applyCellDecoration(
   }
 }
 
-function appendTable(body: OdtBody, block: ContentTable): void {
-  const columns = block.columnWidthsPt.length;
-  if (block.rows.length === 0 || columns === 0) {
-    return;
+/**
+ * The arguments that create the empty `table:table` a ContentTable is written into: no rows, since populateOdtTable appends one per ContentTableRow, and as many columns as the table's grid is wide.
+ *
+ * The grid width is what the rows and `columnWidthsPt` together state (tableGridColumnCount), so a table whose rows carry cells but which states no column widths still gets one `table:table-column` per grid column; a column with no stated width takes an equal share of the default table width, the same as any column created without one. `columnWidthsPt` is passed through untouched, so a width the table does state is always written.
+ *
+ * Throws when the table has no rows: ODF requires a `table:table` to hold at least one `table:table-row`, so no faithful spelling exists, and dropping the table would lose it without a trace. `entryPoint` names the caller in the message. A table that breaks the grid rule is refused by populateOdtTable before it writes anything, and a table with no rows has no grid fault to report, so the two checks never compete.
+ */
+export function odtTableInit(
+  block: ContentTable,
+  entryPoint: string,
+): TableInit {
+  if (block.rows.length === 0) {
+    throw new Error(
+      `${entryPoint}: table has no rows, and ODF requires a table:table to hold at least one table:table-row`,
+    );
   }
-  const table = body.appendTable({
+  return {
     rows: 0,
-    columns,
+    columns: tableGridColumnCount(block),
     columnWidthsPt: block.columnWidthsPt,
-  });
+  };
+}
+
+function appendTable(body: OdtBody, block: ContentTable): void {
+  const table = body.appendTable(odtTableInit(block, "buildOdtPackage"));
   populateOdtTable(table, block);
 }
 
