@@ -98,6 +98,25 @@ function isVerticalAlign(value: string): value is "top" | "middle" | "bottom" {
   return value === "top" || value === "middle" || value === "bottom";
 }
 
+// ODF spells the middle of a cell's vertical extent "middle" (the OASIS style:vertical-align vocabulary, shared with ContentSheetCell.verticalAlignment), while ContentTableCell.verticalAlign spells it "center" as rtf-codec does, so the table cell's own reading and writing map between the two vocabularies here and nowhere else.
+const PIVOT_VERTICAL_ALIGN_BY_ODF = {
+  top: "top",
+  middle: "center",
+  bottom: "bottom",
+} as const satisfies Record<
+  NonNullable<CellStyleDecoration["verticalAlignment"]>,
+  NonNullable<ContentTableCell["verticalAlign"]>
+>;
+
+const ODF_VERTICAL_ALIGN_BY_PIVOT = {
+  top: "top",
+  center: "middle",
+  bottom: "bottom",
+} as const satisfies Record<
+  NonNullable<ContentTableCell["verticalAlign"]>,
+  NonNullable<CellStyleDecoration["verticalAlignment"]>
+>;
+
 // Applies one style:table-cell-properties element's own fo:border/fo:border-* onto the running per-edge accumulator: the shorthand (if present) seeds all four edges first, then each per-edge attribute (if present on this SAME element) overrides just that one edge -- matching how a single real style element can legitimately carry both (three sides via the shorthand, one side overridden individually).
 function applyBorderEdgeUpdates(
   accumulated: Partial<Record<BorderEdgeKey, ContentBorder>>,
@@ -240,20 +259,27 @@ function readCellListParagraph(
   return readParagraphOrHeading(element, readOdfParagraph(element, pkg));
 }
 
-// The fill and borders a table:table-cell or table:covered-table-cell states through its own table:style-name. Both element kinds carry the attribute and resolve it identically, which is what lets a covered position hold its own decoration.
+// The fill, borders and vertical alignment a table:table-cell or table:covered-table-cell states through its own table:style-name. Both element kinds carry the attribute and resolve it identically, which is what lets a covered position hold its own decoration.
 function readTableCellDecoration(
   cellElement: XmlElement,
   pkg: Package,
-): Pick<ContentTableCell, "background" | "borders"> {
+): Pick<ContentTableCell, "background" | "borders" | "verticalAlign"> {
   const styleName = attrValue(cellElement, "table:style-name");
   const styleElement =
     styleName === undefined
       ? undefined
       : findStyleElement(styleName, "table-cell", pkg);
-  const { background, borders } = readCellStyleDecoration(
+  const { background, borders, verticalAlignment } = readCellStyleDecoration(
     styleElement === undefined ? [] : [styleElement],
   );
-  return { background, borders };
+  return {
+    background,
+    borders,
+    verticalAlign:
+      verticalAlignment === undefined
+        ? undefined
+        : PIVOT_VERTICAL_ALIGN_BY_ODF[verticalAlignment],
+  };
 }
 
 function readTableCell(
@@ -284,15 +310,14 @@ function readTableCell(
   }
   const colSpanRaw = attrValue(cellElement, "table:number-columns-spanned");
   const rowSpanRaw = attrValue(cellElement, "table:number-rows-spanned");
-  const { background, borders } = readTableCellDecoration(cellElement, pkg);
+  const decoration = readTableCellDecoration(cellElement, pkg);
   return {
     blocks,
     colSpan:
       colSpanRaw === undefined ? undefined : Number.parseInt(colSpanRaw, 10),
     rowSpan:
       rowSpanRaw === undefined ? undefined : Number.parseInt(rowSpanRaw, 10),
-    background,
-    borders,
+    ...decoration,
   };
 }
 
@@ -386,6 +411,10 @@ function tableCellStyle(
         attributes[BORDER_EDGE_ATTRS[edge]] = formatBorderEdge(border);
       }
     }
+  }
+  if (cell.verticalAlign !== undefined) {
+    attributes["style:vertical-align"] =
+      ODF_VERTICAL_ALIGN_BY_PIVOT[cell.verticalAlign];
   }
   if (Object.keys(attributes).length === 0) {
     return undefined;
@@ -551,6 +580,39 @@ export function writeOdfTable(
   );
 }
 
+// The elements ODF's table grammar (OASIS ODF 1.3 part 1, 9.1.2 to 9.1.9) allows between a table:table and its table:table-column or table:table-row children. The header and plain wrappers hold leaves only, and the group wrappers hold leaves, header wrappers and further groups, so one recursion that treats every listed tag as transparent covers the whole grammar. Columns and rows are kept as separate lists because a row wrapper never legitimately holds a column, nor a column wrapper a row: a stray one is not part of the grid this reader states.
+const COLUMN_WRAPPER_TAGS: ReadonlySet<string> = new Set([
+  "table:table-columns",
+  "table:table-header-columns",
+  "table:table-column-group",
+]);
+
+const ROW_WRAPPER_TAGS: ReadonlySet<string> = new Set([
+  "table:table-rows",
+  "table:table-header-rows",
+  "table:table-row-group",
+]);
+
+// Every `leafTag` element under `parent` in document order, descending through the wrapper elements in `wrapperTags` and through nothing else, so a table nested inside a cell (which is a child of a cell, never of a wrapper) is never mistaken for part of this table's own grid.
+function flattenTableParts(
+  parent: XmlElement,
+  leafTag: string,
+  wrapperTags: ReadonlySet<string>,
+): XmlElement[] {
+  const leaves: XmlElement[] = [];
+  for (const child of parent.children) {
+    if (child.type !== "element") {
+      continue;
+    }
+    if (child.tag === leafTag) {
+      leaves.push(child);
+    } else if (wrapperTags.has(child.tag)) {
+      leaves.push(...flattenTableParts(child, leafTag, wrapperTags));
+    }
+  }
+  return leaves;
+}
+
 // `listIdState` mints numId identity for a text:list found inside one of this table's own cells (readTableCell's own recursive walk), threaded through every nested table the same way -- so two lists in two different cells (or in a cell of a table nested inside another cell) get different identities exactly as two lists in different sections of an odt body do. Defaults to a fresh per-call counter, matching typed/draw/shapes.ts's own readDrawFrame convention, so every pre-existing call site that has no document-wide state to thread (a chart's own local data table, this module's own tests) keeps working unchanged; a caller walking a whole document threads its own state so identities stay unique across the whole read.
 export function readOdfTable(
   tableElement: XmlElement,
@@ -558,7 +620,11 @@ export function readOdfTable(
   listIdState: OdfListIdState = { next: 1 },
 ): ContentTable {
   const columnWidthsPt: number[] = [];
-  for (const column of childrenWithTag(tableElement, "table:table-column")) {
+  for (const column of flattenTableParts(
+    tableElement,
+    "table:table-column",
+    COLUMN_WRAPPER_TAGS,
+  )) {
     const widthPt = resolveColumnWidthPt(column, pkg);
     const repeat = readRepeatCount(column, "table:number-columns-repeated");
     for (let i = 0; i < repeat; i++) {
@@ -567,7 +633,11 @@ export function readOdfTable(
   }
 
   const rows: ContentTableRow[] = [];
-  for (const rowElement of childrenWithTag(tableElement, "table:table-row")) {
+  for (const rowElement of flattenTableParts(
+    tableElement,
+    "table:table-row",
+    ROW_WRAPPER_TAGS,
+  )) {
     const row = readTableRow(rowElement, pkg, listIdState);
     const repeat = readRepeatCount(rowElement, "table:number-rows-repeated");
     for (let i = 0; i < repeat; i++) {
