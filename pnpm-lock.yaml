@@ -471,7 +471,7 @@ importers:
         specifier: 7.14.0
         version: link:../document-schema.js
       documents.js:
-        specifier: 14.0.2
+        specifier: 14.0.3
         version: link:../documents.js
       ink:
         specifier: 7.1.1
@@ -566,7 +566,7 @@ importers:
         specifier: 26.2.0
         version: 26.2.0
       documents.js:
-        specifier: 14.0.2
+        specifier: 14.0.3
         version: link:../documents.js
       eslint:
         specifier: 10.8.1
@@ -575,7 +575,7 @@ importers:
         specifier: 9.1.7
         version: 9.1.7
       markdown-codec:
-        specifier: 11.0.0
+        specifier: 11.0.1
         version: link:../markdown-codec
       publint:
         specifier: 0.3.22
@@ -602,10 +602,10 @@ importers:
         specifier: 2.0.0
         version: 2.0.0
       document-operations:
-        specifier: 1.1.48
+        specifier: 1.1.49
         version: link:../document-operations
       documents.js:
-        specifier: 14.0.2
+        specifier: 14.0.3
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -672,7 +672,7 @@ importers:
   packages/document-operations:
     dependencies:
       document-compute.js:
-        specifier: 1.5.50
+        specifier: 1.5.51
         version: link:../document-compute.js
       document-outline.js:
         specifier: 3.9.22
@@ -681,7 +681,7 @@ importers:
         specifier: 7.14.0
         version: link:../document-schema.js
       documents.js:
-        specifier: 14.0.2
+        specifier: 14.0.3
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -797,10 +797,10 @@ importers:
   packages/document-rest:
     dependencies:
       document-operations:
-        specifier: 1.1.48
+        specifier: 1.1.49
         version: link:../document-operations
       documents.js:
-        specifier: 14.0.2
+        specifier: 14.0.3
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -919,7 +919,7 @@ importers:
         specifier: 0.8.3
         version: 0.8.3
       markdown-codec:
-        specifier: 11.0.0
+        specifier: 11.0.1
         version: link:../markdown-codec
       odf.js:
         specifier: 11.0.0
@@ -934,7 +934,7 @@ importers:
         specifier: 2.1.0
         version: link:../ppt-codec
       rtf-codec:
-        specifier: 8.0.0
+        specifier: 8.0.1
         version: link:../rtf-codec
       temml:
         specifier: 0.13.4
@@ -1606,10 +1606,10 @@ importers:
         specifier: 7.14.0
         version: link:../document-schema.js
       documents.js:
-        specifier: 14.0.2
+        specifier: 14.0.3
         version: link:../documents.js
       markdown-codec:
-        specifier: 11.0.0
+        specifier: 11.0.1
         version: link:../markdown-codec
       react:
         specifier: 19.2.8

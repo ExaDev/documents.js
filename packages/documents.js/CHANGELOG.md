@@ -1,3 +1,11 @@
+## [14.0.3](https://github.com/ExaDev/documents.js/compare/documents.js%4014.0.2...documents.js%4014.0.3) (2026-09-21)
+
+
+### Dependencies
+
+- Updated markdown-codec to 11.0.1
+- Updated rtf-codec to 8.0.1
+
 ## [14.0.2](https://github.com/ExaDev/documents.js/compare/documents.js%4014.0.1...documents.js%4014.0.2) (2026-09-21)
 
 

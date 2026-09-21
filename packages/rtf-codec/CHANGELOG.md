@@ -1,3 +1,9 @@
+## [8.0.1](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.0.0...rtf-codec%408.0.1) (2026-09-21)
+
+### Tests
+
+* **rtf-codec:** pin a table row's isHeader default when no \trowd ever resets it ([b485bcc](https://github.com/ExaDev/documents.js/commit/b485bcc4edcac7891bf252fb153aa7e3c69f3f95))
+
 ## [8.0.0](https://github.com/ExaDev/documents.js/compare/rtf-codec%407.0.0...rtf-codec%408.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES
