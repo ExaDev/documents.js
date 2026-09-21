@@ -1,6 +1,11 @@
 import type { ContentBlock } from "document-schema.js";
 import { describe, expect, it } from "vitest";
-import { EpubDiagnosticCodes, type EpubDiagnostic } from "../diagnostics";
+import {
+  EpubDiagnosticCodes,
+  EpubTableGridFaultError,
+  EpubWriteError,
+  type EpubDiagnostic,
+} from "../diagnostics";
 import { buildXml } from "../xml/build";
 import { readXhtmlBody } from "./read";
 import { MONOSPACE_FONT_FAMILY } from "./style-constants";
@@ -297,6 +302,8 @@ describe("writeXhtmlBody", () => {
               },
             ],
           },
+          { cells: [{ blocks: [] }] },
+          { cells: [{ blocks: [] }] },
         ],
         columnWidthsPt: [100],
       },
@@ -1323,5 +1330,82 @@ describe("writeXhtmlBody", () => {
       },
     ]);
     expect(xml).toContain('alt=""');
+  });
+});
+
+describe("writeXhtmlBody: a table breaking the grid rule", () => {
+  const paragraph = (text: string): ContentBlock => ({
+    kind: "paragraph",
+    runs: [{ text }],
+  });
+  // A merged header whose covered position carries a second copy of the anchor's content, which an HTML table has no cell to hold.
+  const coveredContentTable: ContentBlock = {
+    kind: "table",
+    columnWidthsPt: [100, 100],
+    rows: [
+      {
+        cells: [
+          { blocks: [paragraph("anchor")], colSpan: 2 },
+          { blocks: [paragraph("second copy")] },
+        ],
+      },
+    ],
+  };
+
+  function thrownBy(blocks: ContentBlock[]): unknown {
+    try {
+      write(blocks);
+    } catch (error) {
+      return error;
+    }
+    return expect.unreachable("writeXhtmlBody should have thrown");
+  }
+
+  it("throws EpubTableGridFaultError naming the fault, rather than dropping the covered content", () => {
+    const error = thrownBy([coveredContentTable]);
+    expect(error).toBeInstanceOf(EpubTableGridFaultError);
+    expect(error).toBeInstanceOf(EpubWriteError);
+    if (!(error instanceof EpubTableGridFaultError)) {
+      throw new Error("unreachable");
+    }
+    expect(error.name).toBe("EpubTableGridFaultError");
+    expect(error.code).toBe("epub/table-grid-fault");
+    expect(error.fault).toEqual({
+      kind: "coveredContent",
+      rowIndex: 0,
+      columnIndex: 1,
+      anchorRowIndex: 0,
+      anchorColumnIndex: 0,
+    });
+    expect(error.message).toBe(
+      "a table breaks the grid rule: the cell at row 0, column 1 lies inside the merged region anchored at row 0, column 0 but carries content of its own, and a merged region's content belongs to its anchor",
+    );
+  });
+
+  it("throws for rows of differing lengths", () => {
+    const error = thrownBy([
+      {
+        kind: "table",
+        columnWidthsPt: [100, 100],
+        rows: [
+          {
+            cells: [{ blocks: [paragraph("a")] }, { blocks: [paragraph("b")] }],
+          },
+          { cells: [{ blocks: [paragraph("c")] }] },
+        ],
+      },
+    ]);
+    expect(error).toBeInstanceOf(EpubTableGridFaultError);
+  });
+
+  it("throws for a table nested inside a cell", () => {
+    const error = thrownBy([
+      {
+        kind: "table",
+        columnWidthsPt: [100],
+        rows: [{ cells: [{ blocks: [coveredContentTable] }] }],
+      },
+    ]);
+    expect(error).toBeInstanceOf(EpubTableGridFaultError);
   });
 });

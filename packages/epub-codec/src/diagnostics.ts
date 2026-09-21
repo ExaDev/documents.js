@@ -1,3 +1,8 @@
+import {
+  describeTableGridFault,
+  type TableGridFault,
+} from "document-schema.js";
+
 // The read-side diagnostic sink, matching markdown-codec's own three-tier MarkdownDiagnosticSink policy exactly (which itself matches pdf-codec's PdfDiagnosticSink): throw for input this package cannot meaningfully process at all; recover-with-diagnostic for a package that is spec-legal but almost certainly a producer mistake, where continuing with a reasonable fallback is more useful than failing the whole read; degrade-with-diagnostic for an individual construct this package's own ContentDocument mapping cannot represent, while the rest of the document still reads. A hand-written EPUB reader this size cannot match a mature reading system's robustness against adversarial or malformed real-world files, so every situation is assigned to one of these three tiers explicitly rather than picked ad hoc at the call site that first encounters it.
 //
 // No Zod schema wraps EpubDiagnostic, matching PdfDiagnostic's/MarkdownDiagnostic's own precedent: a diagnostic is produced exclusively by this package's own read pipeline, is consumed by a caller-supplied sink rather than round-tripped through JSON, and validating our own output would validate nothing a caller couldn't already see from the TypeScript type itself.
@@ -147,6 +152,20 @@ export class EpubUnbalancedConstructMarkersError extends EpubWriteError {
     this.name = "EpubUnbalancedConstructMarkersError";
     this.imbalanceKind = imbalanceKind;
     this.blockIndex = blockIndex;
+  }
+}
+
+// Thrown by writeEpubContent when handed a ContentDocument holding a table that breaks the grid rule (ContentTableCell in document-schema.js): rows of differing lengths, content or a span on a position a merged region covers, or a region running past the grid or into another. The throw tier rather than a degrade for the same reason as an unbalanced marker list: an HTML table states anchors only, so a covered position's content has no cell to go in and any repair would be a guess at which of the two regions the producer meant. Detected via document-schema.js's own findTableGridFault, the one shared definition of the rule, and carried whole so a caller can locate the fault without re-running the check.
+export class EpubTableGridFaultError extends EpubWriteError {
+  readonly fault: TableGridFault;
+
+  constructor(fault: TableGridFault) {
+    super(
+      "epub/table-grid-fault",
+      `a table breaks the grid rule: ${describeTableGridFault(fault)}`,
+    );
+    this.name = "EpubTableGridFaultError";
+    this.fault = fault;
   }
 }
 

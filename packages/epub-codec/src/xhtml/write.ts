@@ -1,4 +1,5 @@
 import {
+  findTableGridFault,
   isHeadingGroupNode,
   isListGroupNode,
   isSectionConstructGroupNode,
@@ -17,7 +18,11 @@ import {
   type TreeBlockLeaf,
 } from "document-schema.js";
 import { decomposeSection } from "document-schema.js/decompose";
-import { EpubDiagnosticCodes, type EpubDiagnosticSink } from "../diagnostics";
+import {
+  EpubDiagnosticCodes,
+  EpubTableGridFaultError,
+  type EpubDiagnosticSink,
+} from "../diagnostics";
 import { base64ToBytes } from "byte-codec";
 import type { Attribute, XmlElement, XmlNode } from "../xml/node";
 import { encodeEntities } from "../xml/entities";
@@ -554,6 +559,10 @@ function writeTable(
   table: ContentTable,
   context: XhtmlWriteContext,
 ): XmlElement {
+  const fault = findTableGridFault(table);
+  if (fault !== undefined) {
+    throw new EpubTableGridFaultError(fault);
+  }
   // HTML states anchors only: a covered position of a merged region has no <td> of its own, its extent being carried by the anchor's colspan/rowspan, so emitting one would widen the row past the grid.
   const gridPositions = walkTableGrid(table);
   const rows = gridPositions.map((rowPositions) =>
