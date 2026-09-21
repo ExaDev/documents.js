@@ -1,3 +1,23 @@
+## [11.0.0](https://github.com/ExaDev/documents.js/compare/odf.js%4010.0.0...odf.js%4011.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **odf.js:** an odt, odp or odg table whose rows carry isHeader
+  now writes a table:table-header-rows wrapper around each run of them,
+  where every row was previously a direct table:table-row child of the
+  table:table. A table whose rows state no header flag writes byte
+  identically to before.
+
+### Features
+
+* **odf.js:** read and write table:table-header-rows as per-row header flags ([0dadbf5](https://github.com/ExaDev/documents.js/commit/0dadbf55092d9801ce172a35401e8e44f92fcf3f)), references [#1377](https://github.com/ExaDev/documents.js/issues/1377)
+
+
+### Dependencies
+
+- Updated byte-codec to 1.8.0
+- Updated document-schema.js to 7.14.0
+
 ## [10.0.0](https://github.com/ExaDev/documents.js/compare/odf.js%409.0.0...odf.js%4010.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES

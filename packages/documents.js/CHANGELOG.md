@@ -1,3 +1,42 @@
+## [14.0.0](https://github.com/ExaDev/documents.js/compare/documents.js%4013.0.0...documents.js%4014.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **documents.js:** SvgInvalidUtf8Error is replaced by two errors:
+  SvgUnsupportedEncodingError for a declared encoding outside
+  byte-codec's bounded decodeText set, and SvgUndecodableTextError for
+  bytes that contradict the encoding a mark or declaration named.
+
+### Features
+
+* **documents.js:** read an svg's own xml encoding declaration before decoding ([bd53688](https://github.com/ExaDev/documents.js/commit/bd53688697d2a538d46e23f9f6f01346ba1775f0))
+* **documents.js:** write a table's header rows from docx and ODF ([03b5da5](https://github.com/ExaDev/documents.js/commit/03b5da527da086f70b5f1add8149c09a13fdf249)), references [#1377](https://github.com/ExaDev/documents.js/issues/1377)
+
+### Documentation
+
+* **documents.js:** replace the banned double-hyphen dash with a real em-dash ([fc9dde6](https://github.com/ExaDev/documents.js/commit/fc9dde6b22d0c1ec69421ff6c223cea619cbb94b))
+
+### Tests
+
+* **documents.js:** hold every format to one meaning of a header row ([fa88b33](https://github.com/ExaDev/documents.js/commit/fa88b333941dbbbce663437291953199d80b58f6)), references [#1377](https://github.com/ExaDev/documents.js/issues/1377)
+
+
+### Dependencies
+
+- Updated byte-codec to 1.8.0
+- Updated document-schema.js to 7.14.0
+- Updated archive-codec to 1.11.10
+- Updated epub-codec to 5.0.0
+- Updated markdown-codec to 11.0.0
+- Updated odf.js to 11.0.0
+- Updated pdf-codec to 5.2.4
+- Updated doc-codec to 6.0.0
+- Updated ooxml.js to 12.0.0
+- Updated ppt-codec to 2.1.0
+- Updated rtf-codec to 8.0.0
+- Updated wpd-codec to 5.1.0
+- Updated xls-codec to 4.15.16
+
 ## [13.0.0](https://github.com/ExaDev/documents.js/compare/documents.js%4012.1.0...documents.js%4013.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES

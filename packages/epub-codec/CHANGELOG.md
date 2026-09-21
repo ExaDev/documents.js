@@ -1,3 +1,21 @@
+## [5.0.0](https://github.com/ExaDev/documents.js/compare/epub-codec%404.0.0...epub-codec%405.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **epub-codec:** a th cell's text no longer reads as bold runs, and a
+  row carrying isHeader writes th cells where every row previously wrote
+  td. A table whose rows state no header flag writes as before.
+
+### Features
+
+* **epub-codec:** read and write a table row's header-ness as th cells ([c7b3ba5](https://github.com/ExaDev/documents.js/commit/c7b3ba52fd21911a39eb68992329ab112b9bf4bd)), references [#1377](https://github.com/ExaDev/documents.js/issues/1377)
+
+
+### Dependencies
+
+- Updated byte-codec to 1.8.0
+- Updated document-schema.js to 7.14.0
+
 ## [4.0.0](https://github.com/ExaDev/documents.js/compare/epub-codec%403.0.1...epub-codec%404.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES

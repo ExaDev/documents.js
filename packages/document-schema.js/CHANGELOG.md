@@ -1,3 +1,9 @@
+## [7.14.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.13.0...document-schema.js%407.14.0) (2026-09-21)
+
+### Features
+
+* **document-schema.js:** state per-row header-ness on ContentTableRow ([9e7634e](https://github.com/ExaDev/documents.js/commit/9e7634e6435476e8705f254814382238b3e9ecf6)), references [#1377](https://github.com/ExaDev/documents.js/issues/1377)
+
 ## [7.13.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.12.0...document-schema.js%407.13.0) (2026-09-21)
 
 ### Features

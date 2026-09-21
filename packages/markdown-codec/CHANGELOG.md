@@ -1,3 +1,23 @@
+## [11.0.0](https://github.com/ExaDev/documents.js/compare/markdown-codec%4010.0.0...markdown-codec%4011.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **markdown-codec:** the HTML-table fallback writes th for the cells of a
+  row carrying isHeader rather than for every cell of row 0, so a table
+  whose rows state no header at all now writes td throughout where it
+  previously wrote a th row. A table read from markdown carries isHeader
+  on its first row, so a markdown-to-markdown round trip is unchanged.
+
+### Features
+
+* **markdown-codec:** state a table's header rows instead of assuming row zero ([f527ff0](https://github.com/ExaDev/documents.js/commit/f527ff0b7bf146b0ed0806c7f45c99c4540de756)), references [#1377](https://github.com/ExaDev/documents.js/issues/1377)
+
+
+### Dependencies
+
+- Updated byte-codec to 1.8.0
+- Updated document-schema.js to 7.14.0
+
 ## [10.0.0](https://github.com/ExaDev/documents.js/compare/markdown-codec%409.0.0...markdown-codec%4010.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES

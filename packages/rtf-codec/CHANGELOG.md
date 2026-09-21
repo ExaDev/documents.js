@@ -1,3 +1,26 @@
+## [8.0.0](https://github.com/ExaDev/documents.js/compare/rtf-codec%407.0.0...rtf-codec%408.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **rtf-codec:** an RTF row carrying isHeader now writes \trhdr into
+  its own \trowd, where nothing was written before. A table whose rows
+  state no header flag writes byte identically to before.
+
+### Features
+
+* **rtf-codec:** read and write a table row's \trhdr ([fb94b67](https://github.com/ExaDev/documents.js/commit/fb94b671f9284406dc1bcd74cb946e3b8dbae39f)), references [#1377](https://github.com/ExaDev/documents.js/issues/1377)
+
+### Tests
+
+* **ooxml.js:** type a table fixture row's own header flag ([9ca72f5](https://github.com/ExaDev/documents.js/commit/9ca72f55b95d81c00b3c38c78082ef3020e17f5a)), references [#1377](https://github.com/ExaDev/documents.js/issues/1377)
+
+
+### Dependencies
+
+- Updated byte-codec to 1.8.0
+- Updated document-schema.js to 7.14.0
+- Updated archive-codec to 1.11.10
+
 ## [7.0.0](https://github.com/ExaDev/documents.js/compare/rtf-codec%406.0.1...rtf-codec%407.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES

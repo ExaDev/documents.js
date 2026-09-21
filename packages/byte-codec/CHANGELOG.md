@@ -1,3 +1,11 @@
+## [1.8.0](https://github.com/ExaDev/documents.js/compare/byte-codec%401.7.0...byte-codec%401.8.0) (2026-09-21)
+
+### Features
+
+* **byte-codec:** accept every WHATWG legacy single-byte encoding in decodeText's declared option ([83010c9](https://github.com/ExaDev/documents.js/commit/83010c95c0bf70c95d0cd7a50510e71af07dca97))
+* **byte-codec:** export a byte order mark detector ([2e87a0d](https://github.com/ExaDev/documents.js/commit/2e87a0d2de77a8aa21c34446bf7a204e46664da2))
+* **byte-codec:** resolve a document's declared encoding label onto a decodeText encoding ([06a69ae](https://github.com/ExaDev/documents.js/commit/06a69ae84bc78f6392e805613957be0fc6c14766))
+
 ## [1.7.0](https://github.com/ExaDev/documents.js/compare/byte-codec%401.6.3...byte-codec%401.7.0) (2026-09-21)
 
 ### Features

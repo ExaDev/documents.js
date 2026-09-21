@@ -1,3 +1,16 @@
+## [2.1.0](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.0.4...ppt-codec%402.1.0) (2026-09-21)
+
+### Features
+
+* **ppt-codec:** report a header row this format cannot state ([097c6fb](https://github.com/ExaDev/documents.js/commit/097c6fbc0a9ab547416c8f2bd113b727856eb17b)), references [#1377](https://github.com/ExaDev/documents.js/issues/1377)
+
+
+### Dependencies
+
+- Updated byte-codec to 1.8.0
+- Updated document-schema.js to 7.14.0
+- Updated archive-codec to 1.11.10
+
 ## [2.0.4](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.0.3...ppt-codec%402.0.4) (2026-09-21)
 
 ### Bug Fixes
