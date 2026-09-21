@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { DecodeTextOptions } from "./decode";
 import {
   decodeText,
+  detectByteOrderMark,
   isProbablyText,
   TEXT_DECODE_CHUNK_CODE_UNITS,
   tryDecodeText,
@@ -666,5 +667,37 @@ describe("UndecodableTextError", () => {
     expect(error.name).toBe("UndecodableTextError");
     expect(error).toBeInstanceOf(Error);
     expect(error.reason).toBe("binary");
+  });
+});
+
+describe("detectByteOrderMark", () => {
+  it("reports each of the five marks decodeText itself recognises, with its own length", () => {
+    expect(
+      detectByteOrderMark(bytesOf(UTF32BE_BOM, utf32([0x41], false))),
+    ).toEqual({ encoding: "utf-32be", length: 4 });
+    expect(
+      detectByteOrderMark(bytesOf(UTF32LE_BOM, utf32([0x41], true))),
+    ).toEqual({ encoding: "utf-32le", length: 4 });
+    expect(detectByteOrderMark(bytesOf(UTF8_BOM, utf8("a")))).toEqual({
+      encoding: "utf-8",
+      length: 3,
+    });
+    expect(
+      detectByteOrderMark(bytesOf(UTF16BE_BOM, utf16("a", false))),
+    ).toEqual({ encoding: "utf-16be", length: 2 });
+    expect(detectByteOrderMark(bytesOf(UTF16LE_BOM, utf16("a", true)))).toEqual(
+      { encoding: "utf-16le", length: 2 },
+    );
+  });
+
+  it("returns undefined for bytes carrying no mark", () => {
+    expect(detectByteOrderMark(bytesOf(utf8("hello")))).toBe(undefined);
+    expect(detectByteOrderMark(new Uint8Array())).toBe(undefined);
+  });
+
+  it("prefers the four-byte UTF-32LE mark over the UTF-16LE mark it begins with, exactly as decodeText's own detection does", () => {
+    expect(detectByteOrderMark(bytesOf(UTF32LE_BOM))?.encoding).toBe(
+      "utf-32le",
+    );
   });
 });
