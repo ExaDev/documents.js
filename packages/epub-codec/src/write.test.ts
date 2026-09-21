@@ -6,6 +6,7 @@ import type {
 import * as documentSchema from "document-schema.js";
 import { describe, expect, it, vi } from "vitest";
 import {
+  EpubTableGridFaultError,
   EpubUnbalancedConstructMarkersError,
   EpubUnsupportedDocumentKindError,
 } from "./diagnostics";
@@ -205,6 +206,33 @@ describe("writeEpubContent: an unbalanced construct marker", () => {
     expect(() => writeEpubContent(document)).toThrow(
       EpubUnbalancedConstructMarkersError,
     );
+  });
+});
+
+describe("writeEpubContent: a table breaking the grid rule", () => {
+  it("lets EpubTableGridFaultError through unwrapped", () => {
+    const document = doc([
+      section([
+        {
+          kind: "table",
+          columnWidthsPt: [100, 100],
+          rows: [
+            {
+              cells: [
+                {
+                  blocks: [{ kind: "paragraph", runs: [{ text: "anchor" }] }],
+                  colSpan: 2,
+                },
+                {
+                  blocks: [{ kind: "paragraph", runs: [{ text: "copy" }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    ]);
+    expect(() => writeEpubContent(document)).toThrow(EpubTableGridFaultError);
   });
 });
 
