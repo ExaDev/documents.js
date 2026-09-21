@@ -25,6 +25,7 @@ export {
   MarkdownInvalidUtf8Error,
   MarkdownNestingLimitExceededError,
   MarkdownParseError,
+  MarkdownTableGridFaultError,
   MarkdownUnbalancedConstructMarkersError,
   MarkdownUnsupportedDocumentKindError,
   MarkdownWriteError,

@@ -306,7 +306,7 @@ describe("every MarkdownDiagnosticCodes entry is reachable from real input", () 
     const collector = createDiagnosticCollector();
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columnWidthsPt: [100, 100],
       rows: [
         {
           cells: [
@@ -315,6 +315,7 @@ describe("every MarkdownDiagnosticCodes entry is reachable from real input", () 
               colSpan: 2,
               background: { kind: "pattern", patternType: "percent50" },
             },
+            { blocks: [] },
           ],
         },
       ],
@@ -330,7 +331,7 @@ describe("every MarkdownDiagnosticCodes entry is reachable from real input", () 
     const collector = createDiagnosticCollector();
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columnWidthsPt: [100, 100],
       rows: [
         {
           cells: [
@@ -338,6 +339,7 @@ describe("every MarkdownDiagnosticCodes entry is reachable from real input", () 
               blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }],
               colSpan: 2,
             },
+            { blocks: [] },
           ],
         },
       ],
