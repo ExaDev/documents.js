@@ -1351,6 +1351,33 @@ describe("writeDocContent tables", () => {
     expect(block.rows[0]?.heightPt).toBe(40);
   });
 
+  it("round-trips a row's own header flag, and structurally omits the key for an ordinary row rather than carrying it through as an explicit false or undefined", () => {
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [100],
+        rows: [
+          {
+            cells: [{ blocks: [paragraph([{ text: "head" }])] }],
+            isHeader: true,
+          },
+          {
+            cells: [{ blocks: [paragraph([{ text: "body" }])] }],
+          },
+        ],
+      },
+    ]);
+    const result = roundTrip(input);
+    const block = blocksOf(result)[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    expect(block.rows[0]?.isHeader).toBe(true);
+    expect(block.rows[1]?.isHeader).toBeUndefined();
+    expect(Object.hasOwn(block.rows[0] ?? {}, "isHeader")).toBe(true);
+    expect(Object.hasOwn(block.rows[1] ?? {}, "isHeader")).toBe(false);
+  });
+
   it("round-trips a horizontally merged cell's colSpan via the merged row's own narrower, wider physical cells", () => {
     // A real, independent [MS-DOC] implementation (LibreOffice 26.2.5.2) was confirmed not to read TCGRF.horzMerge/sprmTMerge at all for a horizontal merge -- it states one purely through a merged row's own physical cell layout: fewer, wider cells than an unmerged row in the same table (ExaDev/documents.js#895). This writer matches that encoding whenever some other row in the table would otherwise reveal the merged boundary anyway, so the merged row genuinely has 2 physical cells here, not 3 -- the reader recovers colSpan by comparing this row's own boundaries against the second, unmerged row's, which is what reveals that the table has 3 conceptual columns at all (see the dedicated "recovers colSpan and columnWidthsPt" test below for the fallback this writer uses instead when no row ever reveals that boundary on its own).
     const input = document([
