@@ -263,6 +263,9 @@ importers:
       lint-staged:
         specifier: 17.3.0
         version: 17.3.0
+      minimatch:
+        specifier: 10.2.6
+        version: 10.2.6
       mutation-testing-metrics:
         specifier: 3.9.0
         version: 3.9.0
