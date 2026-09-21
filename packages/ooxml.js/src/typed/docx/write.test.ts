@@ -4327,6 +4327,7 @@ describe("buildDocxPackageFromContent: table grid and vertical-merge arithmetic"
   interface TableFixtureRow {
     cells: TableFixtureCell[];
     heightPt?: number;
+    isHeader?: boolean;
   }
 
   function tableOf(

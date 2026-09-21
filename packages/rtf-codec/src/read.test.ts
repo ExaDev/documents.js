@@ -4462,10 +4462,30 @@ describe("internal invariants exercised directly (no legitimate RTF input can re
     });
     const ordinary = () => ({ ...newPendingCell() });
     const rowsBelow = [
-      { cells: [], definitions: [continuation()], direction: undefined },
-      { cells: [], definitions: [continuation()], direction: undefined },
-      { cells: [], definitions: [ordinary()], direction: undefined },
-      { cells: [], definitions: [continuation()], direction: undefined },
+      {
+        cells: [],
+        definitions: [continuation()],
+        direction: undefined,
+        isHeader: false,
+      },
+      {
+        cells: [],
+        definitions: [continuation()],
+        direction: undefined,
+        isHeader: false,
+      },
+      {
+        cells: [],
+        definitions: [ordinary()],
+        direction: undefined,
+        isHeader: false,
+      },
+      {
+        cells: [],
+        definitions: [continuation()],
+        direction: undefined,
+        isHeader: false,
+      },
     ];
     // The run stops at the first ordinary row, so the continuation after it does not count.
     expect(verticalMergeRowSpan(rowsBelow, 0)).toBe(3);
@@ -4482,6 +4502,7 @@ describe("internal invariants exercised directly (no legitimate RTF input can re
         cells: [],
         definitions: [ordinary(), continuation()],
         direction: undefined,
+        isHeader: false,
       },
     ];
     expect(verticalMergeRowSpan(rowsBelow, 0)).toBe(1);
