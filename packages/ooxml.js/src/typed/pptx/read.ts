@@ -710,20 +710,18 @@ function readTableCellFill(
     : readPatternFill(pattFill, context);
 }
 
+// One a:tc as the ContentTableCell at its own grid position (ContentTable's grid rule, document-schema.js). DrawingML states a merged-away position as a real a:tc marked hMerge="1" or vMerge="1" (both, for the interior of a region wider and taller than one cell), and it carries an a:tcPr of its own, so the fill and borders come from a:tcPr for a covered position exactly as for an anchor. A covered position holds no blocks and no spans: its content and the region's spans belong to the anchor a:tc.
 function readTableCell(
   tc: XmlElement,
   context: SlideInheritanceContext,
   slideRels: ReadonlyMap<string, Relationship>,
 ): ContentTableCell {
-  const hMerge = attr(tc, "hMerge");
-  const vMerge = attr(tc, "vMerge");
-  if (hMerge === "1" || vMerge === "1") {
-    // A merged-away continuation cell -- the anchor cell's own gridSpan/rowSpan already communicates the merge; ContentTableCell has no "covered by a preceding span" concept of its own.
-    return { blocks: [] };
-  }
   const tcPr = childrenWithTag(tc, "a:tcPr")[0];
   const background = readTableCellFill(tcPr, context);
   const borders = readTableCellBorders(tcPr, context);
+  if (attr(tc, "hMerge") === "1" || attr(tc, "vMerge") === "1") {
+    return { blocks: [], background, borders };
+  }
   const txBody = childrenWithTag(tc, "a:txBody")[0];
   const gridSpan = attr(tc, "gridSpan");
   const rowSpan = attr(tc, "rowSpan");
