@@ -15,7 +15,11 @@ import {
 } from "document-schema.js";
 import { z } from "zod";
 import { describe, expect, it } from "vitest";
-import { markdownCodec, markdownContentCodec } from "./codec";
+import {
+  MarkdownBytesSchema,
+  markdownCodec,
+  markdownContentCodec,
+} from "./codec";
 import { createDiagnosticCollector } from "./test-support/diagnostics";
 import {
   MarkdownDiagnosticCodes,
@@ -658,6 +662,23 @@ describe("tree-only carries: reference definitions and front-matter residue", ()
     const flat = readMarkdownContent(source).document;
     expect(flat.kind).toBe("wordprocessing");
     expect(writeMarkdownContent(flat)).toBe('[foo](/url "t")');
+  });
+});
+
+describe("MarkdownBytesSchema", () => {
+  it("rejects bytes that decode under no supported character encoding", () => {
+    // NUL bytes are binary under decodeText's own rules whatever encoding is tried (see codec.ts and byte-codec's decode.ts), so tryDecodeText returns undefined and the refine must reject them. This exercises the schema directly, independent of markdownCodec's own decode step, which would also throw for the same bytes via decodeText and so cannot tell a rejected schema apart from a rejected decode.
+    const result = MarkdownBytesSchema.safeParse(
+      new Uint8Array([0x00, 0x01, 0x02, 0x00]),
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts bytes that decode as text", () => {
+    const result = MarkdownBytesSchema.safeParse(
+      new TextEncoder().encode("# Title"),
+    );
+    expect(result.success).toBe(true);
   });
 });
 
