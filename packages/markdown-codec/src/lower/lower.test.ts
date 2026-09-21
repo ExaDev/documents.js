@@ -442,6 +442,16 @@ describe("GFM tables", () => {
     });
   });
 
+  it("marks the first row as the header row and no other, GFM having exactly one", () => {
+    const [table] = blocks("| a | b |\n| - | - |\n| 1 | 2 |\n| 3 | 4 |");
+    if (table?.kind !== "table") throw new Error("expected a table block");
+    expect(table.rows.map((row) => row.isHeader)).toEqual([
+      true,
+      undefined,
+      undefined,
+    ]);
+  });
+
   it("divides the section's own content width evenly across columns, not some other arithmetic on the same two numbers", () => {
     const [table] = blocks("| a | b |\n| - | - |\n| 1 | 2 |", {
       pageSize: { widthPt: 220, heightPt: 800 },

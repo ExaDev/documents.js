@@ -48,7 +48,7 @@ function tableOfRows(rows: readonly ContentTableRow[]): ContentTable {
 
 function tableWithBodyCell(cell: ContentTableCell): ContentTable {
   return tableOfRows([
-    { cells: [paragraphCell(HEADER_TEXT)] },
+    { cells: [paragraphCell(HEADER_TEXT)], isHeader: true },
     { cells: [cell] },
   ]);
 }
@@ -279,7 +279,7 @@ describe("emitHtmlTable", () => {
     };
     const { html } = emit(
       tableOfRows([
-        { cells: [paragraphCell("h"), paragraphCell("i")] },
+        { cells: [paragraphCell("h"), paragraphCell("i")], isHeader: true },
         { cells: [anchor, COVERED_CELL] },
         { cells: [COVERED_CELL, COVERED_CELL] },
       ]),
@@ -329,7 +329,10 @@ describe("emitHtmlTable", () => {
   it("writes a covered position in the header row as no tag, and the row below as ordinary <td>", () => {
     const { html } = emit(
       tableOfRows([
-        { cells: [{ ...paragraphCell("h"), rowSpan: 2 }, paragraphCell("i")] },
+        {
+          cells: [{ ...paragraphCell("h"), rowSpan: 2 }, paragraphCell("i")],
+          isHeader: true,
+        },
         { cells: [COVERED_CELL, paragraphCell("a")] },
       ]),
     );
@@ -422,7 +425,9 @@ describe("emitHtmlTable", () => {
   });
 
   it("renders a cell whose entire content is one nested table as a nested <table> element", () => {
-    const nested: ContentTable = tableOfRows([{ cells: [paragraphCell("n")] }]);
+    const nested: ContentTable = tableOfRows([
+      { cells: [paragraphCell("n")], isHeader: true },
+    ]);
     const { html, collector } = emit(tableWithBodyCell({ blocks: [nested] }));
     expect(html).toBe(
       expectedHtml("<td><table>\n<tr><th>n</th></tr>\n</table></td>"),

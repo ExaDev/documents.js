@@ -351,6 +351,22 @@ describe("every MarkdownDiagnosticCodes entry is reachable from real input", () 
     reached.add(MarkdownDiagnosticCodes.TABLE_HTML_FALLBACK);
   });
 
+  it("TABLE_HEADER_ROW_SYNTHESISED: a table stating no header row still gets GFM's required one", () => {
+    const collector = createDiagnosticCollector();
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] }] },
+      ],
+    };
+    emitMarkdown(minimalDocument([table]), { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.TABLE_HEADER_ROW_SYNTHESISED),
+    ).toBe(true);
+    reached.add(MarkdownDiagnosticCodes.TABLE_HEADER_ROW_SYNTHESISED);
+  });
+
   it("TABLE_CELL_MULTI_PARAGRAPH_JOINED: a cell with two blocks", () => {
     const collector = createDiagnosticCollector();
     const table: ContentTable = {
