@@ -1979,7 +1979,7 @@ describe("writeDocContent tables", () => {
       },
     ]);
     expect(() => writeDocContent(input)).toThrow(
-      "a table cell at row 1, column 0 lies inside the merged region anchored at row 0, column 0 but carries content of its own; a merged region's content belongs to its anchor",
+      "doc-codec: table at block 0 breaks the grid rule: the cell at row 1, column 0 lies inside the merged region anchored at row 0, column 0 but carries content of its own, and a merged region's content belongs to its anchor",
     );
   });
 
@@ -2000,7 +2000,98 @@ describe("writeDocContent tables", () => {
       },
     ]);
     expect(() => writeDocContent(input)).toThrow(
-      "a table cell at row 0, column 1 lies inside the merged region anchored at row 0, column 0 but carries content of its own; a merged region's content belongs to its anchor",
+      "doc-codec: table at block 0 breaks the grid rule: the cell at row 0, column 1 lies inside the merged region anchored at row 0, column 0 but carries content of its own, and a merged region's content belongs to its anchor",
+    );
+  });
+
+  it("throws a DocFormatError, the type every other malformed-table refusal here uses, for a table breaking the grid rule", () => {
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [50, 50],
+        rows: [
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "wide" }])], colSpan: 2 },
+              { blocks: [paragraph([{ text: "hidden" }])] },
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(() => writeDocContent(input)).toThrow(DocFormatError);
+  });
+
+  it("names the block index of a table breaking the grid rule when other blocks precede it", () => {
+    const input = document([
+      paragraph([{ text: "before" }]),
+      {
+        kind: "table",
+        columnWidthsPt: [50, 50],
+        rows: [
+          { cells: [{ blocks: [] }, { blocks: [] }] },
+          { cells: [{ blocks: [] }] },
+        ],
+      },
+    ]);
+    expect(() => writeDocContent(input)).toThrow(
+      "doc-codec: table at block 1 breaks the grid rule: row 1 holds 1 cells where the widest row holds 2, but every row of a table covers the same grid",
+    );
+  });
+
+  it.each([
+    {
+      name: "a span on a covered position",
+      rows: [
+        {
+          cells: [
+            { blocks: [paragraph([{ text: "wide" }])], colSpan: 2 },
+            { blocks: [], colSpan: 2 },
+            { blocks: [] },
+          ],
+        },
+      ],
+      columnWidthsPt: [50, 50, 50],
+    },
+    {
+      name: "a region running past the last column",
+      rows: [
+        {
+          cells: [
+            { blocks: [paragraph([{ text: "a" }])] },
+            { blocks: [paragraph([{ text: "b" }])], colSpan: 2 },
+          ],
+        },
+      ],
+      columnWidthsPt: [50, 50],
+    },
+    {
+      name: "a region running past the last row",
+      rows: [{ cells: [{ blocks: [paragraph([{ text: "a" }])], rowSpan: 2 }] }],
+      columnWidthsPt: [50],
+    },
+    {
+      name: "two regions sharing a position",
+      rows: [
+        {
+          cells: [
+            { blocks: [paragraph([{ text: "a" }])] },
+            { blocks: [paragraph([{ text: "b" }])], rowSpan: 2 },
+          ],
+        },
+        {
+          cells: [
+            { blocks: [paragraph([{ text: "c" }])], colSpan: 2 },
+            { blocks: [] },
+          ],
+        },
+      ],
+      columnWidthsPt: [50, 50],
+    },
+  ])("throws for $name", ({ rows, columnWidthsPt }) => {
+    const input = document([{ kind: "table", columnWidthsPt, rows }]);
+    expect(() => writeDocContent(input)).toThrow(
+      /^doc-codec: table at block 0 breaks the grid rule: /,
     );
   });
 
@@ -2286,8 +2377,9 @@ describe("writeDocContent tables", () => {
         rows: [
           {
             cells: [
-              { blocks: [paragraph([{ text: "wide" }])], colSpan: 3 },
+              { blocks: [paragraph([{ text: "wide" }])], colSpan: 2 },
               ...coveredCells(1),
+              { blocks: [paragraph([{ text: "extra" }])] },
             ],
           },
         ],
@@ -2732,6 +2824,7 @@ describe("writeDocContent tables", () => {
                     bottom: { color: { r: 1, g: 0, b: 0 }, widthPt: 1.5 },
                   },
                 },
+                ...coveredCells(1),
               ],
             },
             {
