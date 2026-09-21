@@ -1,3 +1,21 @@
+## [4.0.0](https://github.com/ExaDev/documents.js/compare/epub-codec%403.0.1...epub-codec%404.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **epub-codec:** a ContentTable violating the grid rule stated on ContentTableCell
+  is now refused rather than written with the offending content silently dropped. A
+  caller building a table by hand must give every row one cell per grid column, keep
+  a merged region's content on its anchor, and state each span once, on the anchor.
+
+### Bug Fixes
+
+* **epub-codec:** refuse a table that breaks the grid rule rather than writing past it ([eac3212](https://github.com/ExaDev/documents.js/commit/eac32120ccca53200af3586244d26758ae73bf90))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.13.0
+
 ## [3.0.1](https://github.com/ExaDev/documents.js/compare/epub-codec%403.0.0...epub-codec%403.0.1) (2026-09-21)
 
 

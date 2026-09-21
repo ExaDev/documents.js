@@ -1,3 +1,9 @@
+## [7.13.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.12.0...document-schema.js%407.13.0) (2026-09-21)
+
+### Features
+
+* **document-schema.js:** state the table grid rule as a check a writer can run ([13b3620](https://github.com/ExaDev/documents.js/commit/13b3620bd8d0076a086cd019dcecab989806f679))
+
 ## [7.12.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.11.5...document-schema.js%407.12.0) (2026-09-21)
 
 ### Features

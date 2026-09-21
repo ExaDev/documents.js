@@ -1,3 +1,22 @@
+## [11.0.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%4010.0.2...ooxml.js%4011.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **ooxml.js:** a ContentTable violating the grid rule stated on ContentTableCell
+  is now refused rather than written with the offending content silently dropped. A
+  caller building a table by hand must give every row one cell per grid column, keep
+  a merged region's content on its anchor, and state each span once, on the anchor.
+
+### Bug Fixes
+
+* **ooxml.js:** refuse a table that breaks the grid rule rather than writing past it ([186198d](https://github.com/ExaDev/documents.js/commit/186198d9c8e8ad689f49d4111ca681eaf310b4ad))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.13.0
+- Updated archive-codec to 1.11.9
+
 ## [10.0.2](https://github.com/ExaDev/documents.js/compare/ooxml.js%4010.0.1...ooxml.js%4010.0.2) (2026-09-21)
 
 ### Bug Fixes

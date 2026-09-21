@@ -1,3 +1,22 @@
+## [7.0.0](https://github.com/ExaDev/documents.js/compare/rtf-codec%406.0.1...rtf-codec%407.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **rtf-codec:** a ContentTable violating the grid rule stated on ContentTableCell
+  is now refused rather than written with the offending content silently dropped. A
+  caller building a table by hand must give every row one cell per grid column, keep
+  a merged region's content on its anchor, and state each span once, on the anchor.
+
+### Bug Fixes
+
+* **rtf-codec:** refuse a table that breaks the grid rule rather than writing past it ([80f3efe](https://github.com/ExaDev/documents.js/commit/80f3efe498d8d492e98fd3baa6d37e2bc6511685))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.13.0
+- Updated archive-codec to 1.11.9
+
 ## [6.0.1](https://github.com/ExaDev/documents.js/compare/rtf-codec%406.0.0...rtf-codec%406.0.1) (2026-09-21)
 
 

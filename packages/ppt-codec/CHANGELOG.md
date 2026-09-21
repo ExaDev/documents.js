@@ -1,3 +1,15 @@
+## [2.0.4](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.0.3...ppt-codec%402.0.4) (2026-09-21)
+
+### Bug Fixes
+
+* **ppt-codec:** report a table that breaks the grid rule rather than writing past it ([6f47013](https://github.com/ExaDev/documents.js/commit/6f47013f1d4e75af70c13c3a4d2bb9d7ac2e5e49))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.13.0
+- Updated archive-codec to 1.11.9
+
 ## [2.0.3](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.0.2...ppt-codec%402.0.3) (2026-09-21)
 
 

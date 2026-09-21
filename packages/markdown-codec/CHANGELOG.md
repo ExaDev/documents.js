@@ -1,3 +1,21 @@
+## [9.0.0](https://github.com/ExaDev/documents.js/compare/markdown-codec%408.0.1...markdown-codec%409.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **markdown-codec:** a ContentTable violating the grid rule stated on ContentTableCell
+  is now refused rather than written with the offending content silently dropped. A
+  caller building a table by hand must give every row one cell per grid column, keep
+  a merged region's content on its anchor, and state each span once, on the anchor.
+
+### Bug Fixes
+
+* **markdown-codec:** refuse a table that breaks the grid rule rather than writing past it ([c78ca62](https://github.com/ExaDev/documents.js/commit/c78ca6207f2f0fe99dcf57983c0c02a577fd25df))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.13.0
+
 ## [8.0.1](https://github.com/ExaDev/documents.js/compare/markdown-codec%408.0.0...markdown-codec%408.0.1) (2026-09-21)
 
 
