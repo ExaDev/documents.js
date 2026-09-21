@@ -78,6 +78,24 @@ describe("encodeTableRowGrpprl", () => {
     expect(decoded.heightPt).toBeCloseTo(36, 5);
   });
 
+  it("writes no sprmTTableHeader for an ordinary row, and round-trips one for a header row", () => {
+    expect(
+      decode(encodeTableRowGrpprl([0, 100], [PLAIN_CELL], undefined)).isHeader,
+    ).toBeUndefined();
+    expect(
+      decode(encodeTableRowGrpprl([0, 100], [PLAIN_CELL], undefined, true))
+        .isHeader,
+    ).toBe(true);
+  });
+
+  it("round-trips a header row that also states a height, carrying both", () => {
+    const decoded = decode(
+      encodeTableRowGrpprl([0, 100], [PLAIN_CELL], 36, true),
+    );
+    expect(decoded.isHeader).toBe(true);
+    expect(decoded.heightPt).toBeCloseTo(36, 5);
+  });
+
   it("throws for a column boundary outside the signed-16-bit range", () => {
     expect(() =>
       encodeTableRowGrpprl([0, 0x8000], [PLAIN_CELL], undefined),

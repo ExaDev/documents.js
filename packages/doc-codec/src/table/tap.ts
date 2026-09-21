@@ -38,6 +38,8 @@ import {
 
 const SPRM_T_DEF_TABLE = 0xd608;
 const SPRM_T_DYA_ROW_HEIGHT = 0x9407;
+/** sprmTTableHeader (0x3404): a one-byte flag setting TAP.fTableHeader, the row repeating at the top of each page the table continues onto. Opcode confirmed against two independent [MS-DOC] implementations, Apache POI's TableSprmUncompressor (table sprm operation 0x04 sets fTableHeader) and LibreOffice's sprmids.hxx (TTableHeader = sprmTbl<0x04, 0, operand_1b_1>), rather than from the ispmd arithmetic alone. */
+const SPRM_T_TABLE_HEADER = 0x3404;
 /** sprmTMerge: an ItcFirstLim naming a range of cells to horizontally merge, the first cell becoming the anchor -- a spec-conformant mechanism this reader still honours for a genuine third-party producer, even though this package's own writer no longer emits it (see this module's own top-of-file note and table/write.ts's). */
 const SPRM_T_MERGE = 0x5624;
 /** sprmTVertMerge (0xD62B): a VertMergeOperand naming one cell (itc) and its own VerticalMergeFlag, the incremental per-cell equivalent of sprmTMerge for a vertical merge. */
@@ -114,6 +116,8 @@ export interface TableRowDefinition {
 export interface TableRowProperties {
   definition?: TableRowDefinition;
   heightPt?: number;
+  /** TAP.fTableHeader, as sprmTTableHeader states it: ContentTableRow.isHeader. Absent when the row's own grpprl never mentions it. */
+  isHeader?: boolean;
 }
 
 function readTdefTableOperand(operand: Uint8Array): TableRowDefinition {
@@ -265,6 +269,11 @@ export function applyTableSprms(
         const dyaRowHeight = readInt16LE(prl.operand, 0);
         const heightPt = Math.abs(dyaRowHeight) / TWIPS_PER_POINT;
         into.heightPt = heightPt > 0 ? heightPt : undefined;
+        break;
+      }
+      case SPRM_T_TABLE_HEADER: {
+        // A one-byte flag, so a zero operand is a real "this row is not a header" statement and clears whatever an earlier Prl in the same grpprl set, exactly as sprmTDyaRowHeight's own zero does for the height.
+        into.isHeader = readUint8(prl.operand, 0) !== 0 ? true : undefined;
         break;
       }
       case SPRM_T_MERGE: {

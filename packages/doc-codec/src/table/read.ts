@@ -208,6 +208,7 @@ function tryAssembleTable(
   const rawRows: RawCell[][] = [];
   const rowDefinitions: TableRowDefinition[] = [];
   const rowHeights: (number | undefined)[] = [];
+  const rowHeaderFlags: boolean[] = [];
 
   let cellEntries: ParagraphEntry[] = [];
   let rowCells: { blocks: ContentBlock[] }[] = [];
@@ -238,6 +239,7 @@ function tryAssembleTable(
       );
       rowDefinitions.push(definition);
       rowHeights.push(rowProperties.heightPt);
+      rowHeaderFlags.push(rowProperties.isHeader === true);
       rowCells = [];
       cellEntries = [];
       continue;
@@ -280,6 +282,7 @@ function tryAssembleTable(
       rowDefinitions,
       columnBoundariesTwips,
       rowHeights,
+      rowHeaderFlags,
       toleranceTwips,
     ),
     columnWidthsPt: columnWidthsFromBoundaries(columnBoundariesTwips),
@@ -618,6 +621,7 @@ function buildRows(
   rowDefinitions: readonly TableRowDefinition[],
   canonicalBoundariesTwips: readonly number[],
   rowHeights: readonly (number | undefined)[],
+  rowHeaderFlags: readonly boolean[],
   toleranceTwips: number,
 ): ContentTableRow[] {
   const logicalRows = rawRows.map((row, rowIndex): LogicalCell[] => {
@@ -642,7 +646,13 @@ function buildRows(
         }),
       );
       const heightPt = rowHeights[rowIndex];
-      return heightPt !== undefined ? { cells, heightPt } : { cells };
+      // Absent rather than false for an ordinary row, so a table whose rows state no sprmTTableHeader reads back as the object a producer that has never heard of it would build.
+      const isHeader = rowHeaderFlags[rowIndex] === true ? true : undefined;
+      return {
+        cells,
+        ...(heightPt === undefined ? {} : { heightPt }),
+        ...(isHeader === undefined ? {} : { isHeader }),
+      };
     },
   );
   return denseTableRows(positionedRows, canonicalBoundariesTwips.length - 1);
