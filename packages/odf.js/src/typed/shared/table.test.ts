@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Package } from "../../model/package";
 import type { XmlElement } from "../../model/node";
 import type { ContentTable, ContentTableCell } from "document-schema.js";
+import { walkTableGrid } from "document-schema.js";
 import { el, txt } from "../../xml/fragment";
 import { attrValue } from "../../xml/query";
 import { StyleRegistry } from "../../styles/registry";
@@ -244,6 +245,33 @@ describe("readOdfTable: cell content, spans, and covered cells", () => {
     expect(row?.cells.every((c) => c.blocks[0]?.kind === "paragraph")).toBe(
       true,
     );
+  });
+});
+
+describe("readOdfTable: elements that are not cells", () => {
+  it("skips a row child that is neither a table:table-cell nor a table:covered-table-cell", () => {
+    const table = el("table:table", {}, [
+      el("table:table-row", {}, [
+        cell("A"),
+        el("text:soft-page-break"),
+        cell("B"),
+      ]),
+    ]);
+    expect(readOdfTable(table, { parts: {} }).rows[0]?.cells).toHaveLength(2);
+  });
+
+  it("reads only paragraphs, headings, lists and tables out of a cell, ignoring any other child element", () => {
+    const table = el("table:table", {}, [
+      el("table:table-row", {}, [
+        el("table:table-cell", {}, [
+          el("text:soft-page-break"),
+          el("text:p", {}, [txt("kept")]),
+        ]),
+      ]),
+    ]);
+    const blocks = readOdfTable(table, { parts: {} }).rows[0]?.cells[0]?.blocks;
+    expect(blocks).toHaveLength(1);
+    expect(blocks?.[0]?.kind).toBe("paragraph");
   });
 });
 
@@ -704,6 +732,32 @@ describe("writeOdfTable", () => {
     expect(row1Cells[1]?.tag).toBe("table:table-cell");
   });
 
+  it("writes the anchor's own table:number-rows-spanned and table:number-columns-spanned values", () => {
+    const table: ContentTable = {
+      kind: "table",
+      rows: [
+        {
+          cells: [
+            { ...paragraphCell("a"), colSpan: 2, rowSpan: 3 },
+            { blocks: [] },
+          ],
+        },
+        { cells: [{ blocks: [] }, { blocks: [] }] },
+        { cells: [{ blocks: [] }, { blocks: [] }] },
+      ],
+      columnWidthsPt: [10, 10],
+    };
+    const { context } = writeContext();
+    const written = writeOdfTable(table, context);
+    const row = elementsWithTag(written.children, "table:table-row")[0];
+    const anchor =
+      row === undefined
+        ? undefined
+        : row.children.find((n): n is XmlElement => n.type === "element");
+    expect(attr(anchor, "table:number-columns-spanned")).toBe("2");
+    expect(attr(anchor, "table:number-rows-spanned")).toBe("3");
+  });
+
   it("writes table:number-columns-spanned/table:number-rows-spanned only when the cell actually states a span", () => {
     const table: ContentTable = {
       kind: "table",
@@ -934,5 +988,279 @@ describe("writeOdfTable", () => {
     };
     const { context } = writeContext();
     expect(() => writeOdfTable(table, context)).toThrow(/image/);
+  });
+});
+
+// ContentTable's grid rule (ContentTableCell in document-schema.js): a row's `cells` holds one entry per grid column, a merged region is an anchor plus a block-less entry at every other position it covers, and which entries are covered is derived from the anchors' spans.
+describe("the grid rule: readOdfTable output is dense", () => {
+  function coveredPositions(table: ContentTable): string[] {
+    return walkTableGrid(table)
+      .flat()
+      .filter((position) => position.anchorRowIndex !== undefined)
+      .map(
+        (position) =>
+          `${String(position.rowIndex)},${String(position.columnIndex)}<-${String(position.anchorRowIndex)},${String(position.anchorColumnIndex)}`,
+      );
+  }
+
+  function threeColumns(): XmlElement {
+    return el("table:table-column", { "table:number-columns-repeated": "3" });
+  }
+
+  function expectEveryRowAsWideAsTheColumns(table: ContentTable): void {
+    expect(table.columnWidthsPt).toHaveLength(3);
+    for (const row of table.rows) {
+      expect(row.cells).toHaveLength(table.columnWidthsPt.length);
+    }
+  }
+
+  it("keeps a real entry at the position a horizontal merge covers, so every row is as wide as the columns", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        threeColumns(),
+        el("table:table-row", {}, [
+          cell("A", { "table:number-columns-spanned": "2" }),
+          el("table:covered-table-cell"),
+          cell("C"),
+        ]),
+        el("table:table-row", {}, [cell("D"), cell("E"), cell("F")]),
+      ]),
+      { parts: {} },
+    );
+    expectEveryRowAsWideAsTheColumns(table);
+    expect(table.rows[0]?.cells[0]).toMatchObject({ colSpan: 2 });
+    expect(table.rows[0]?.cells[1]?.blocks).toEqual([]);
+    expect(table.rows[0]?.cells[2]?.blocks).toHaveLength(1);
+    expect(coveredPositions(table)).toEqual(["0,1<-0,0"]);
+  });
+
+  it("keeps a real entry at the position a vertical merge covers in the rows below", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        threeColumns(),
+        el("table:table-row", {}, [
+          cell("A", { "table:number-rows-spanned": "2" }),
+          cell("B"),
+          cell("C"),
+        ]),
+        el("table:table-row", {}, [
+          el("table:covered-table-cell"),
+          cell("E"),
+          cell("F"),
+        ]),
+      ]),
+      { parts: {} },
+    );
+    expectEveryRowAsWideAsTheColumns(table);
+    expect(table.rows[0]?.cells[0]).toMatchObject({ rowSpan: 2 });
+    expect(table.rows[1]?.cells[0]?.blocks).toEqual([]);
+    expect(table.rows[1]?.cells[1]?.blocks).toHaveLength(1);
+    expect(coveredPositions(table)).toEqual(["1,0<-0,0"]);
+  });
+
+  it("keeps a real entry at every position a 2x2 merge covers, including one produced by table:number-columns-repeated", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        threeColumns(),
+        el("table:table-row", {}, [
+          cell("A", {
+            "table:number-columns-spanned": "2",
+            "table:number-rows-spanned": "2",
+          }),
+          el("table:covered-table-cell"),
+          cell("C"),
+        ]),
+        el("table:table-row", {}, [
+          el("table:covered-table-cell", {
+            "table:number-columns-repeated": "2",
+          }),
+          cell("F"),
+        ]),
+      ]),
+      { parts: {} },
+    );
+    expectEveryRowAsWideAsTheColumns(table);
+    expect(table.rows[0]?.cells[0]).toMatchObject({ colSpan: 2, rowSpan: 2 });
+    expect(coveredPositions(table)).toEqual([
+      "0,1<-0,0",
+      "1,0<-0,0",
+      "1,1<-0,0",
+    ]);
+  });
+
+  it("never reads a covered element's own content, since the region's content belongs to the anchor", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-row", {}, [
+          cell("A", { "table:number-columns-spanned": "2" }),
+          el("table:covered-table-cell", {}, [el("text:p", {}, [txt("lost")])]),
+        ]),
+      ]),
+      { parts: {} },
+    );
+    expect(table.rows[0]?.cells[1]?.blocks).toEqual([]);
+  });
+
+  it("gives a covered position no span of its own, whatever its element states", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-row", {}, [
+          cell("A", { "table:number-columns-spanned": "2" }),
+          el("table:covered-table-cell", {
+            "table:number-columns-spanned": "5",
+            "table:number-rows-spanned": "5",
+          }),
+        ]),
+      ]),
+      { parts: {} },
+    );
+    expect(table.rows[0]?.cells[1]?.colSpan).toBeUndefined();
+    expect(table.rows[0]?.cells[1]?.rowSpan).toBeUndefined();
+  });
+});
+
+describe("a covered position's own background and borders", () => {
+  const coveredStyle = el(
+    "style:style",
+    { "style:name": "ce1", "style:family": "table-cell" },
+    [
+      el("style:table-cell-properties", {
+        "fo:background-color": "#00ff00",
+        "fo:border-left": "2pt solid #0000ff",
+      }),
+    ],
+  );
+
+  const expectedBackground = {
+    kind: "solid",
+    color: { r: 0, g: 1, b: 0 },
+  } as const;
+  const expectedBorders = {
+    left: { color: { r: 0, g: 0, b: 1 }, widthPt: 2, style: "solid" },
+  } as const;
+
+  it("are read from the table:covered-table-cell's own table:style-name", () => {
+    const table = el("table:table", {}, [
+      el("table:table-row", {}, [
+        cell("A", { "table:number-columns-spanned": "2" }),
+        el("table:covered-table-cell", { "table:style-name": "ce1" }),
+      ]),
+    ]);
+    const pkg: Package = {
+      parts: { "content.xml": contentPackage([coveredStyle]) },
+    };
+    const covered = readOdfTable(table, pkg).rows[0]?.cells[1];
+    expect(covered?.background).toEqual(expectedBackground);
+    expect(covered?.borders).toEqual(expectedBorders);
+    expect(covered?.blocks).toEqual([]);
+  });
+
+  it("are carried onto every entry a repeated covered element expands into", () => {
+    const table = el("table:table", {}, [
+      el("table:table-row", {}, [
+        cell("A", { "table:number-columns-spanned": "3" }),
+        el("table:covered-table-cell", {
+          "table:style-name": "ce1",
+          "table:number-columns-repeated": "2",
+        }),
+      ]),
+    ]);
+    const pkg: Package = {
+      parts: { "content.xml": contentPackage([coveredStyle]) },
+    };
+    const cells = readOdfTable(table, pkg).rows[0]?.cells;
+    expect(cells?.[1]?.background).toEqual(expectedBackground);
+    expect(cells?.[2]?.background).toEqual(expectedBackground);
+  });
+
+  it("are written onto the table:covered-table-cell and read back after a round trip", () => {
+    const automaticStyles = el("office:automatic-styles", {}, []);
+    const pkg: Package = {
+      parts: {
+        "content.xml": {
+          kind: "xml",
+          nodes: [el("office:document-content", {}, [automaticStyles])],
+        },
+      },
+    };
+    let nextTable = 1;
+    const context: OdfTableWriteContext = {
+      registry: StyleRegistry.forPart(pkg, "content.xml"),
+      mintTableName: () => `Table${nextTable++}`,
+      mintListStyleName: (kind) => `L${kind}`,
+    };
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [10, 10],
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [{ kind: "paragraph", runs: [{ text: "A" }] }],
+              colSpan: 2,
+            },
+            {
+              blocks: [],
+              background: expectedBackground,
+              borders: expectedBorders,
+            },
+          ],
+        },
+      ],
+    };
+    const written = writeOdfTable(table, context);
+    const row = written.children.find(
+      (n): n is XmlElement =>
+        n.type === "element" && n.tag === "table:table-row",
+    );
+    const writtenCells =
+      row === undefined
+        ? []
+        : row.children.filter((n): n is XmlElement => n.type === "element");
+    expect(writtenCells[1]?.tag).toBe("table:covered-table-cell");
+    expect(attrValue(writtenCells[1]!, "table:style-name")).toBeDefined();
+    expect(attrValue(writtenCells[1]!, "table:number-columns-spanned")).toBe(
+      undefined,
+    );
+
+    const reread = readOdfTable(written, pkg);
+    expect(reread.rows[0]?.cells[1]?.background).toEqual(expectedBackground);
+    expect(reread.rows[0]?.cells[1]?.borders).toEqual(expectedBorders);
+    expect(reread.rows[0]?.cells[1]?.blocks).toEqual([]);
+  });
+
+  it("are written without a table:style-name when the covered entry states neither", () => {
+    const automaticStyles = el("office:automatic-styles", {}, []);
+    const pkg: Package = {
+      parts: {
+        "content.xml": {
+          kind: "xml",
+          nodes: [el("office:document-content", {}, [automaticStyles])],
+        },
+      },
+    };
+    const context: OdfTableWriteContext = {
+      registry: StyleRegistry.forPart(pkg, "content.xml"),
+      mintTableName: () => "Table1",
+      mintListStyleName: (kind) => `L${kind}`,
+    };
+    const written = writeOdfTable(
+      {
+        kind: "table",
+        columnWidthsPt: [10, 10],
+        rows: [{ cells: [{ blocks: [], colSpan: 2 }, { blocks: [] }] }],
+      },
+      context,
+    );
+    const row = written.children.find(
+      (n): n is XmlElement =>
+        n.type === "element" && n.tag === "table:table-row",
+    );
+    const writtenCells =
+      row === undefined
+        ? []
+        : row.children.filter((n): n is XmlElement => n.type === "element");
+    expect(writtenCells[1]?.tag).toBe("table:covered-table-cell");
+    expect(writtenCells[1]?.attributes).toHaveLength(0);
   });
 });

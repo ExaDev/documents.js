@@ -509,6 +509,42 @@ describe("what the canonical form restates, and why", () => {
     expectRoundTrip(document);
   });
 
+  it("keeps a covered cell's own background and borders across a write and a read, while dropping its content", () => {
+    const document = documentOf([
+      {
+        kind: "table",
+        columnWidthsPt: [40, 40],
+        rows: [
+          {
+            cells: [
+              {
+                colSpan: 2,
+                blocks: [{ kind: "paragraph", runs: [{ text: "wide" }] }],
+              },
+              {
+                blocks: [{ kind: "paragraph", runs: [{ text: "ignored" }] }],
+                background: { kind: "solid", color: { r: 1, g: 0, b: 0 } },
+                borders: { left: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 } },
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    const table = normaliseOdtContent(document).sections[0]!.blocks[0]!;
+    if (table.kind !== "table") {
+      throw new Error("expected a table");
+    }
+    const covered = table.rows[0]!.cells[1]!;
+    expect(covered.blocks).toEqual([]);
+    expect(covered.background).toEqual({
+      kind: "solid",
+      color: { r: 1, g: 0, b: 0 },
+    });
+    expect(covered.borders?.left?.style).toBe("solid");
+    expectRoundTrip(document);
+  });
+
   it("quantises a colour to eight bits per channel, because ODF states colour as six hex digits", () => {
     const document = documentOf([
       {

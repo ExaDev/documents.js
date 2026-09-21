@@ -10,7 +10,7 @@ import type {
   ContentTableCell,
   ContentTableRow,
 } from "document-schema.js";
-import { resolveCellFillColor } from "document-schema.js";
+import { resolveCellFillColor, walkTableGrid } from "document-schema.js";
 import type { DefinitionEntry, ProvenanceDescriptor } from "document-schema.js";
 import type { XmlElement, XmlNode } from "../../model/node";
 import type { Package } from "../../model/package";
@@ -240,6 +240,22 @@ function readCellListParagraph(
   return readParagraphOrHeading(element, readOdfParagraph(element, pkg));
 }
 
+// The fill and borders a table:table-cell or table:covered-table-cell states through its own table:style-name. Both element kinds carry the attribute and resolve it identically, which is what lets a covered position hold its own decoration.
+function readTableCellDecoration(
+  cellElement: XmlElement,
+  pkg: Package,
+): Pick<ContentTableCell, "background" | "borders"> {
+  const styleName = attrValue(cellElement, "table:style-name");
+  const styleElement =
+    styleName === undefined
+      ? undefined
+      : findStyleElement(styleName, "table-cell", pkg);
+  const { background, borders } = readCellStyleDecoration(
+    styleElement === undefined ? [] : [styleElement],
+  );
+  return { background, borders };
+}
+
 function readTableCell(
   cellElement: XmlElement,
   pkg: Package,
@@ -268,14 +284,7 @@ function readTableCell(
   }
   const colSpanRaw = attrValue(cellElement, "table:number-columns-spanned");
   const rowSpanRaw = attrValue(cellElement, "table:number-rows-spanned");
-  const styleName = attrValue(cellElement, "table:style-name");
-  const styleElement =
-    styleName === undefined
-      ? undefined
-      : findStyleElement(styleName, "table-cell", pkg);
-  const { background, borders } = readCellStyleDecoration(
-    styleElement === undefined ? [] : [styleElement],
-  );
+  const { background, borders } = readTableCellDecoration(cellElement, pkg);
   return {
     blocks,
     colSpan:
@@ -298,10 +307,11 @@ function readTableRow(
       continue;
     }
     if (child.tag === "table:covered-table-cell") {
-      // A merged-away continuation cell -- the anchor cell's own colSpan/rowSpan already communicates the merge; ContentTableCell has no "covered by a preceding span" concept of its own, mirroring ooxml.js's own readTableCell treatment of hMerge/vMerge continuation cells.
+      // A position a merged region covers: ContentTable's grid rule (ContentTableCell in document-schema.js) keeps a real entry at every such position so that a row's array index is its grid column. The entry holds no blocks, since the region's content belongs to the anchor and ODF ignores whatever a covered element contains, and no span, since coverage is derived from the anchor's spans. It does carry the fill and borders the element's own table:style-name states, which is why the rule is dense rather than sparse.
+      const decoration = readTableCellDecoration(child, pkg);
       const repeat = readRepeatCount(child, "table:number-columns-repeated");
       for (let i = 0; i < repeat; i++) {
-        cells.push({ blocks: [] });
+        cells.push({ blocks: [], ...decoration });
       }
     } else if (child.tag === "table:table-cell") {
       const cell = readTableCell(child, pkg, listIdState);
@@ -467,10 +477,6 @@ function writeCellBlocks(
   return out;
 }
 
-function coverageKey(row: number, column: number): string {
-  return `${row},${column}`;
-}
-
 // Writes one ContentTable as the table:table element readOdfTable reads back. Its own table:name is minted by context.mintTableName() -- the caller's document-wide counter, shared with every nested table this call's own cells may recurse into (see writeCellBlocks), so uniqueness holds across the whole document regardless of nesting depth.
 export function writeOdfTable(
   table: ContentTable,
@@ -488,26 +494,19 @@ export function writeOdfTable(
     );
   });
 
-  // Which grid positions a preceding cell's own span already occupies: ODF spells those out as table:covered-table-cell elements, and readOdfTable reads each back as the empty cell a covered position is in the pivot. The set is built from the spans actually written, never from the input's own placeholder cells, so a colSpan and its covered neighbours can never disagree.
-  const covered = new Set<string>();
+  // Which entries are covered is walkTableGrid's derivation from the anchors' spans, never a flag on the entry: a covered entry is written as the table:covered-table-cell ODF spells a merged-away position as, carrying only its own fill and borders since its content belongs to the anchor. readOdfTable reads each back as the block-less entry the grid rule keeps at that position.
+  const gridPositions = walkTableGrid(table);
   const rows = table.rows.map((row, rowIndex) => {
-    const cells = row.cells.map((cell, columnIndex) => {
-      if (covered.has(coverageKey(rowIndex, columnIndex))) {
-        return el("table:covered-table-cell");
-      }
-      const colSpan = cell.colSpan ?? 1;
-      const rowSpan = cell.rowSpan ?? 1;
-      for (let r = rowIndex; r < rowIndex + rowSpan; r += 1) {
-        for (let c = columnIndex; c < columnIndex + colSpan; c += 1) {
-          if (r !== rowIndex || c !== columnIndex) {
-            covered.add(coverageKey(r, c));
-          }
-        }
-      }
+    // walkTableGrid returns one array per table row, in row order, so this index is always in range.
+    const cells = gridPositions[rowIndex]!.map((position) => {
+      const { cell } = position;
       const attributes: Record<string, string> = {};
       const styleName = tableCellStyle(cell, registry);
       if (styleName !== undefined) {
         attributes["table:style-name"] = encodeXmlText(styleName);
+      }
+      if (position.anchorRowIndex !== undefined) {
+        return el("table:covered-table-cell", attributes);
       }
       if (cell.colSpan !== undefined) {
         attributes["table:number-columns-spanned"] = String(cell.colSpan);

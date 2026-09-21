@@ -529,6 +529,57 @@ describe("writeSlideDrawing: table cell spans and content", () => {
     ).toBe(true);
   });
 
+  it("writes one shape at its own grid position for every entry of a merged region, so a covered entry neither obscures the anchor nor removes a row from the grid", () => {
+    // A 2x2 region anchored at (0,0) in a 3-row, 2-column grid. The dense grid rule keeps a block-less entry at each covered position; the format has no merge records, so each entry, covered ones included, is a plain shape at the position its array index names, and the anchor stays one cell wide and one row tall. Row 1 holds only covered entries, so skipping them would erase that row on the way back in.
+    const diagnostics: PptDiagnostic[] = [];
+    const written = writeSlideDrawing(
+      [
+        {
+          shape: tableShape(
+            [
+              {
+                cells: [{ blocks: [], colSpan: 2, rowSpan: 2 }, { blocks: [] }],
+              },
+              { cells: [{ blocks: [] }, { blocks: [] }] },
+              { cells: [{ blocks: [] }, { blocks: [] }] },
+            ],
+            [50, 50],
+          ),
+          clientData: undefined,
+        },
+      ],
+      { ...CONTEXT, sink: (diagnostic) => diagnostics.push(diagnostic) },
+    );
+    const [entry] = readDrawingShapes(readRecordAt(written.bytes, 0));
+    if (entry === undefined || !("cells" in entry)) {
+      throw new Error("expected a table entry");
+    }
+    expect(entry.cells).toHaveLength(6);
+    const anchors = entry.cells.map((cell) => {
+      if (!("anchor" in cell) || cell.anchor === undefined) {
+        throw new Error("expected every cell to be anchored");
+      }
+      return cell.anchor;
+    });
+    const [anchor, rightNeighbour, below] = anchors;
+    if (
+      anchor === undefined ||
+      rightNeighbour === undefined ||
+      below === undefined
+    ) {
+      throw new Error("expected the anchor and its two neighbours");
+    }
+    expect(anchor.right).toBe(rightNeighbour.left);
+    expect(anchor.bottom).toBe(below.top);
+    expect(new Set(anchors.map((a) => a.top)).size).toBe(3);
+    expect(new Set(anchors.map((a) => a.left)).size).toBe(2);
+    expect(
+      diagnostics.filter(
+        (d) => d.code === PptDiagnosticCodes.TABLE_SPAN_DROPPED,
+      ),
+    ).toHaveLength(2);
+  });
+
   it("reports neither span diagnostic for a colSpan/rowSpan of exactly 1", () => {
     const diagnostics = collectDiagnostics([
       {
