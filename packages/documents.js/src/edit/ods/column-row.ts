@@ -5,16 +5,18 @@ import { directChildElement, removeAttr, setAttr } from "../../xml/edit";
 import { el } from "../../xml/fragment";
 import { ensureAutomaticStyles, nextStyleName } from "../odt/automatic-styles";
 import {
-  COLUMN_REPEAT_ATTR,
   COLUMN_TAG,
+  ensureColumnCoverage,
   HEADER_COLUMNS_TAG,
   HEADER_ROWS_TAG,
-  ROW_REPEAT_ATTR,
-  ROW_TAG,
-  ensureColumnCoverage,
+} from "./address";
+import {
+  COLUMN_REPEAT_ATTR,
   isElementWithTag,
   replaceRun,
-} from "./address";
+  ROW_REPEAT_ATTR,
+  ROW_TAG,
+} from "../odf-repeated-runs";
 
 const VISIBILITY_ATTR = "table:visibility";
 const VISIBILITY_COLLAPSE = "collapse";

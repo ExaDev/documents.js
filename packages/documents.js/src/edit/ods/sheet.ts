@@ -7,7 +7,8 @@ import type {
   ContentSheetPrintSettings,
 } from "document-schema.js";
 import { removeChild, setAttr } from "../../xml/edit";
-import { COVERED_CELL_TAG, resolveCellNode } from "./address";
+import { resolveCellNode } from "./address";
+import { COVERED_CELL_TAG } from "../odf-repeated-runs";
 import { OdsCell } from "./cell";
 import {
   ensureColumnDefaultWidth,

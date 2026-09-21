@@ -18,17 +18,15 @@ import { PAGE_SIZE_A4 } from "document-schema.js";
 import { setAttr } from "../../xml/edit";
 import { el } from "../../xml/fragment";
 import { nextStyleName } from "../odt/automatic-styles";
+import { COLUMN_TAG, HEADER_COLUMNS_TAG, HEADER_ROWS_TAG } from "./address";
 import {
   COLUMN_REPEAT_ATTR,
-  COLUMN_TAG,
-  HEADER_COLUMNS_TAG,
-  HEADER_ROWS_TAG,
-  ROW_REPEAT_ATTR,
-  ROW_TAG,
   isElementWithTag,
   readRunRepeatCount,
   replaceRun,
-} from "./address";
+  ROW_REPEAT_ATTR,
+  ROW_TAG,
+} from "../odf-repeated-runs";
 import {
   ensureColumnElementDefaultWidth,
   ensureRowElementDefaultHeight,
