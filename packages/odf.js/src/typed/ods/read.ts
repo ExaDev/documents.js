@@ -491,7 +491,7 @@ function readTable(tableElement: XmlElement, pkg: Package): TableWalkResult {
         continue;
       }
       if (child.tag === "table:covered-table-cell") {
-        // A merged-away continuation cell -- the anchor cell's own colSpan/rowSpan already communicates the merge; nothing to emit, matching table.ts's own established treatment of the identical table:covered-table-cell convention.
+        // A merged-away continuation cell. ContentSheetCell is sparse and addressed by explicit row/column, so unlike a ContentTable row (whose dense grid rule keeps an entry at every covered position, see table.ts) nothing is emitted here: the anchor cell's own colSpan/rowSpan already communicates the merge, and only the cursor advances.
         cursor.nextCell(
           readRepeatCount(child, "table:number-columns-repeated"),
         );

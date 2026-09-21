@@ -291,6 +291,29 @@ function freshListState(): ListPlanState {
 }
 
 describe("canonicalCell", () => {
+  it("a covered cell keeps its own background and borders, in the canonical form an anchor's take, but drops its blocks and spans", () => {
+    const cell: ContentTableCell = {
+      blocks: [paragraph()],
+      colSpan: 3,
+      rowSpan: 2,
+      background: { kind: "solid", color: { r: 1, g: 0, b: 0 } },
+      borders: { left: { color: { r: 0, g: 0, b: 1 }, widthPt: 2 } },
+    };
+    expect(canonicalCell(cell, true, freshListState())).toStrictEqual({
+      blocks: [],
+      background: { kind: "solid", color: { r: 1, g: 0, b: 0 } },
+      borders: {
+        left: { color: { r: 0, g: 0, b: 1 }, widthPt: 2, style: "solid" },
+      },
+    });
+  });
+
+  it("a covered cell stating neither background nor borders canonicalises to bare blocks, with no undefined-valued keys", () => {
+    expect(
+      canonicalCell({ blocks: [], colSpan: 1 }, true, freshListState()),
+    ).toStrictEqual({ blocks: [] });
+  });
+
   it("a covered cell is always an empty cell, whatever its own placeholder content", () => {
     const cell: ContentTableCell = {
       blocks: [paragraph()],
@@ -441,6 +464,18 @@ describe("canonicalTable", () => {
     expect(result.rows[0]!.cells[0]).toMatchObject({ colSpan: 1, rowSpan: 1 });
     expect(result.rows[0]!.cells[1]).toEqual({ blocks: [], colSpan: 1 });
     expect(result.rows[1]!.cells[0]).toEqual({ blocks: [], colSpan: 1 });
+  });
+
+  it("a covered position's own background survives while its span marker is stripped, at a position the rows above cover vertically", () => {
+    const table = tableWithSpan(1, 2);
+    const fill = { kind: "solid", color: { r: 0, g: 1, b: 0 } } as const;
+    const covered = table.rows[1]!.cells[0]!;
+    covered.background = fill;
+    const result = canonicalTable(table, freshListState());
+    expect(result.rows[1]!.cells[0]).toStrictEqual({
+      blocks: [],
+      background: fill,
+    });
   });
 
   it("rowSpan=2 covers exactly one row beyond the anchor, never two (< not <=)", () => {

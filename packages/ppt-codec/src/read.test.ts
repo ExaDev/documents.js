@@ -4,6 +4,7 @@ import {
   ContentDocumentSchema,
   DocumentTreeSchema,
   flattenTree,
+  walkTableGrid,
 } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { PptEncryptedError } from "./errors";
@@ -366,6 +367,34 @@ describe("readPptStreams", () => {
           },
         ],
       });
+    });
+
+    it("reads a dense grid with no spans, since the format has no merge records: every row is as wide as the columns and every position is an anchor", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({
+          table: { rows: [["A1", "B1"], ["A2"]] },
+        });
+      const [slide] = readPptStreams(
+        currentUserStream,
+        powerPointDocumentStream,
+      ).slides;
+      const table = slide?.shapes[2]?.blocks[0];
+      if (table?.kind !== "table") {
+        throw new Error("expected a table block");
+      }
+      expect(table.columnWidthsPt).toHaveLength(2);
+      for (const row of table.rows) {
+        expect(row.cells).toHaveLength(table.columnWidthsPt.length);
+        for (const cell of row.cells) {
+          expect(cell.colSpan).toBeUndefined();
+          expect(cell.rowSpan).toBeUndefined();
+        }
+      }
+      expect(
+        walkTableGrid(table)
+          .flat()
+          .every((position) => position.anchorRowIndex === undefined),
+      ).toBe(true);
     });
 
     it("states no rotationDeg at all for an unrotated table, rather than an explicit undefined", () => {
