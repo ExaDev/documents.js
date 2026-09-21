@@ -3,10 +3,13 @@ import type {
   ContentDocument,
   ContentParagraph,
   ContentSection,
+  ContentTable,
 } from "document-schema.js";
 import {
   RtfDiagnosticCodes,
+  RtfTableGridFaultError,
   RtfUnsupportedDocumentKindError,
+  RtfWriteError,
 } from "./diagnostics";
 import { readRtfContent } from "./read";
 import { text } from "./test-support/bytes";
@@ -4044,7 +4047,7 @@ describe("round trip through this package's own reader", () => {
     expect(secondRow).toContain("\\clvmrg\\cellx1440\\clvmrg\\cellx2880");
   });
 
-  it("writes a covered position's own borders and shading, and none of its blocks", () => {
+  it("writes a covered position's own borders and shading", () => {
     const out = write(
       wordprocessing([
         {
@@ -4058,7 +4061,7 @@ describe("round trip through this package's own reader", () => {
                   colSpan: 2,
                 },
                 {
-                  blocks: [{ kind: "paragraph", runs: [{ text: "STRAY" }] }],
+                  blocks: [],
                   verticalAlign: "bottom",
                   borders: {
                     top: { color: { r: 1, g: 0, b: 0 }, widthPt: 1.5 },
@@ -4071,7 +4074,67 @@ describe("round trip through this package's own reader", () => {
       ]),
     );
     expect(out).toContain("\\clmrg\\clvertalb\\clbrdrt\\brdrs\\brdrw30");
-    expect(out).not.toContain("STRAY");
+  });
+
+  describe("a table breaking the grid rule", () => {
+    const paragraphBlocks = (label: string): ContentParagraph[] => [
+      { kind: "paragraph", runs: [{ text: label }] },
+    ];
+    // A merged header whose covered position carries a second copy of the anchor's content, which an RTF cell slot for a covered position does not hold.
+    const coveredContentTable: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [72, 72],
+      rows: [
+        {
+          cells: [
+            { blocks: paragraphBlocks("A"), colSpan: 2 },
+            { blocks: paragraphBlocks("STRAY") },
+          ],
+        },
+      ],
+    };
+
+    function thrownBy(table: ContentTable): unknown {
+      try {
+        write(wordprocessing([table]));
+      } catch (error) {
+        return error;
+      }
+      return expect.unreachable("writeRtfContent should have thrown");
+    }
+
+    it("throws RtfTableGridFaultError naming the fault, rather than dropping the covered content", () => {
+      const error = thrownBy(coveredContentTable);
+      expect(error).toBeInstanceOf(RtfTableGridFaultError);
+      expect(error).toBeInstanceOf(RtfWriteError);
+      if (!(error instanceof RtfTableGridFaultError)) {
+        throw new Error("unreachable");
+      }
+      expect(error.fault).toEqual({
+        kind: "coveredContent",
+        rowIndex: 0,
+        columnIndex: 1,
+        anchorRowIndex: 0,
+        anchorColumnIndex: 0,
+      });
+    });
+
+    it("throws for rows of differing lengths", () => {
+      const error = thrownBy({
+        kind: "table",
+        columnWidthsPt: [72, 72],
+        rows: [
+          {
+            cells: [
+              { blocks: paragraphBlocks("a") },
+              { blocks: paragraphBlocks("b") },
+            ],
+          },
+          { cells: [{ blocks: paragraphBlocks("c") }] },
+        ],
+      });
+      expect(error).toBeInstanceOf(RtfTableGridFaultError);
+    });
   });
 
   it("round-trips a 2x2 merge through the dense grid", () => {
