@@ -573,13 +573,13 @@ function tableAt(
   return doc.editor.tables()[tableIndex];
 }
 
-// The universal cell lookup every table kind supports, used in place of DocxTable/OdtTable's own `.cell(row, column)` shortcut -- MarkdownTable has no such shortcut (only `rows()`/`appendRow()`/`remove()`), so SET_TABLE_CELL_TEXT resolves a cell through the one traversal all three genuinely share.
+// The universal cell lookup every table kind supports, used in place of DocxTable/OdtTable's own `.cell(row, column)` shortcut -- MarkdownTable has no such shortcut (only `rows()`/`appendRow()`/`remove()`), so SET_TABLE_CELL_TEXT resolves a cell through the one traversal all four genuinely share: the grid view. The column is a GRID column, the same one MERGE_TABLE_CELLS takes, so a position a merged region covers resolves to the region's anchor cell rather than to whichever physical cell happens to sit at that index.
 function tableCellAt(
   table: DocxTable | OdtTable | MarkdownTable | DocTable,
   row: number,
   column: number,
 ): DocxTableCell | OdtTableCell | MarkdownTableCell | DocTableCell | undefined {
-  return table.rows()[row]?.cells()[column];
+  return table.gridRows()[row]?.[column]?.cell;
 }
 
 function shapeAt(
