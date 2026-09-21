@@ -10,7 +10,12 @@ import {
   SvgPageNotFoundError,
   SvgUnsupportedDocumentKindError,
 } from "./write";
-import { decodeSvgText, encodeSvgText, SvgInvalidUtf8Error } from "./text";
+import {
+  decodeSvgText,
+  encodeSvgText,
+  SvgUndecodableTextError,
+  SvgUnsupportedEncodingError,
+} from "./text";
 
 // The read tests below want an identity root map -- width/height in pt equal to the viewBox extents -- so every user-unit coordinate lands in the page-point space unchanged and assertions read the SVG's own numbers back.
 const IDENTITY_ROOT =
@@ -732,8 +737,21 @@ describe("readSvgContent -> buildSvgText round trip", () => {
   });
 });
 
+// Latin-1 (0x00-0xFF) byte values for a string holding only characters in that range: JS's own charCodeAt already gives the exact byte value for every character both ISO-8859-1 and windows-1252 assign to that same code point, which is every character these fixtures use: accented Latin letters, never one of the five bytes (0x81/0x8D/0x8F/0x90/0x9D) the two encodings disagree on.
+function latin1Bytes(text: string): number[] {
+  return Array.from(text, (character) => character.charCodeAt(0));
+}
+
+// UTF-16LE bytes for a string holding only BMP characters (no surrogate pairs), with no byte order mark of its own; callers prepend one where the test wants it present.
+function utf16leBytes(text: string): number[] {
+  return Array.from(text, (character) => {
+    const unit = character.charCodeAt(0);
+    return [unit & 0xff, unit >> 8];
+  }).flat();
+}
+
 describe("decodeSvgText / encodeSvgText", () => {
-  it("round-trips text through the byte boundary", () => {
+  it("round-trips text through the byte boundary, decoding as UTF-8 by default when the bytes carry no declaration or byte order mark", () => {
     expect(
       decodeSvgText(
         encodeSvgText('<svg xmlns="http://www.w3.org/2000/svg">café — ☃</svg>'),
@@ -741,19 +759,70 @@ describe("decodeSvgText / encodeSvgText", () => {
     ).toBe('<svg xmlns="http://www.w3.org/2000/svg">café — ☃</svg>');
   });
 
-  it("throws SvgInvalidUtf8Error on malformed UTF-8 rather than producing U+FFFD replacement characters", () => {
-    expect(() => decodeSvgText(new Uint8Array([0xff, 0xfe, 0x00]))).toThrow(
-      SvgInvalidUtf8Error,
-    );
+  it("throws SvgUndecodableTextError on malformed UTF-8 rather than producing U+FFFD replacement characters", () => {
+    const malformed = new Uint8Array([0xff, 0x00]);
+    expect(() => decodeSvgText(malformed)).toThrow(SvgUndecodableTextError);
     let caught: unknown;
     try {
-      decodeSvgText(new Uint8Array([0xff, 0xfe, 0x00]));
+      decodeSvgText(malformed);
     } catch (error) {
       caught = error;
     }
-    expect((caught as Error).name).toBe("SvgInvalidUtf8Error");
-    expect((caught as Error).message).toBe(
-      "svg text must be well-formed UTF-8",
+    expect((caught as Error).name).toBe("SvgUndecodableTextError");
+    expect((caught as SvgUndecodableTextError).encoding).toBe("utf-8");
+    expect((caught as Error).message).toContain("not well-formed utf-8");
+  });
+
+  it("reads a non-UTF-8 encoding the XML prolog declares and decodes accordingly", () => {
+    const text =
+      '<?xml version="1.0" encoding="ISO-8859-1"?><svg xmlns="http://www.w3.org/2000/svg"><title>café</title></svg>';
+    const bytes = Uint8Array.from(latin1Bytes(text));
+    expect(decodeSvgText(bytes)).toBe(text);
+  });
+
+  it("decodes bytes behind a byte order mark even with no XML declaration naming an encoding", () => {
+    const text =
+      '<svg xmlns="http://www.w3.org/2000/svg"><title>hello</title></svg>';
+    const bytes = Uint8Array.from([0xff, 0xfe, ...utf16leBytes(text)]);
+    expect(decodeSvgText(bytes)).toBe(text);
+  });
+
+  it("throws SvgUnsupportedEncodingError when the XML prolog declares an encoding outside decodeText's own bounded set", () => {
+    const bytes = Uint8Array.from(
+      latin1Bytes(
+        '<?xml version="1.0" encoding="Shift_JIS"?><svg xmlns="http://www.w3.org/2000/svg"/>',
+      ),
     );
+    expect(() => decodeSvgText(bytes)).toThrow(SvgUnsupportedEncodingError);
+    let caught: unknown;
+    try {
+      decodeSvgText(bytes);
+    } catch (error) {
+      caught = error;
+    }
+    expect((caught as SvgUnsupportedEncodingError).name).toBe(
+      "SvgUnsupportedEncodingError",
+    );
+    expect((caught as SvgUnsupportedEncodingError).label).toBe("Shift_JIS");
+    expect((caught as Error).message).toContain("Shift_JIS");
+  });
+
+  it("throws SvgUndecodableTextError, naming the declared encoding, when bytes contradict it", () => {
+    // Declares UTF-16LE, then pads to an odd total byte length, whatever the declaration's own length happens to be, which cannot hold a whole number of 16-bit code units.
+    const declarationBytes = latin1Bytes(
+      '<?xml version="1.0" encoding="UTF-16LE"?>',
+    );
+    const padding = declarationBytes.length % 2 === 0 ? [0x00] : [0x00, 0x00];
+    const bytes = Uint8Array.from([...declarationBytes, ...padding]);
+    let caught: unknown;
+    try {
+      decodeSvgText(bytes);
+    } catch (error) {
+      caught = error;
+    }
+    expect((caught as SvgUndecodableTextError).name).toBe(
+      "SvgUndecodableTextError",
+    );
+    expect((caught as SvgUndecodableTextError).encoding).toBe("utf-16le");
   });
 });

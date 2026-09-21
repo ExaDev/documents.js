@@ -16,6 +16,7 @@ import {
   PdfBytesSchema,
   PptBytesSchema,
   PptxBytesSchema,
+  SvgBytesSchema,
   XlsBytesSchema,
 } from "./bytes";
 
@@ -318,5 +319,44 @@ describe("bytes", () => {
   it("CsvBytesSchema rejects bytes that are not text", () => {
     const png = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
     expect(CsvBytesSchema.safeParse(png).success).toBe(false);
+  });
+
+  // SvgBytesSchema calls decodeSvgText directly (src/svg/text.ts), so its own acceptance follows XML's encoding rules rather than the plain-text detection MarkdownBytesSchema/CsvBytesSchema use: a declared or byte-order-marked encoding is honoured, and UTF-8 is the strict default with no windows-1252 guess.
+  it("SvgBytesSchema accepts a plain UTF-8 svg with no declaration", () => {
+    const svgBytes = new TextEncoder().encode(
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>',
+    );
+    expect(SvgBytesSchema.parse(svgBytes)).toBe(svgBytes);
+  });
+
+  it("SvgBytesSchema accepts a non-UTF-8 encoding the XML prolog declares", () => {
+    // "café" in ISO-8859-1: identical bytes to windows-1252 for this character, the encoding SvgBytesSchema's own decodeSvgText call maps the declaration onto.
+    const svgBytes = Uint8Array.from(
+      Array.from(
+        '<?xml version="1.0" encoding="ISO-8859-1"?><svg xmlns="http://www.w3.org/2000/svg"><title>café</title></svg>',
+        (character) => character.charCodeAt(0),
+      ),
+    );
+    expect(SvgBytesSchema.safeParse(svgBytes).success).toBe(true);
+  });
+
+  it("SvgBytesSchema rejects an svg whose XML prolog declares an encoding decodeText's own bounded set doesn't support", () => {
+    const svgBytes = Uint8Array.from(
+      Array.from(
+        '<?xml version="1.0" encoding="Shift_JIS"?><svg xmlns="http://www.w3.org/2000/svg"/>',
+        (character) => character.charCodeAt(0),
+      ),
+    );
+    expect(SvgBytesSchema.safeParse(svgBytes).success).toBe(false);
+  });
+
+  it("SvgBytesSchema rejects text with no <svg root element", () => {
+    const notSvg = new TextEncoder().encode("<html><body/></html>");
+    expect(SvgBytesSchema.safeParse(notSvg).success).toBe(false);
+  });
+
+  it("SvgBytesSchema rejects bytes that are not text", () => {
+    const png = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
+    expect(SvgBytesSchema.safeParse(png).success).toBe(false);
   });
 });
