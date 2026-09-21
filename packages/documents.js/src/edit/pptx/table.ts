@@ -2,6 +2,7 @@ import type {
   Color,
   ContentBorder,
   ContentCellBorders,
+  ContentTableCell,
 } from "document-schema.js";
 import { rgbHexToColor } from "document-schema.js";
 import type { XmlElement } from "ooxml.js";
@@ -27,6 +28,26 @@ const DEFAULT_ROW_HEIGHT_PT = 20;
 
 const TABLE_GRAPHIC_URI =
   "http://schemas.openxmlformats.org/drawingml/2006/table";
+
+// ContentTableCell.verticalAlign's own top/center/bottom vocabulary written as a:tcPr/@anchor's t/ctr/b -- the pptx-side counterpart to odf.js's own ODF_VERTICAL_ALIGN_BY_PIVOT (typed/shared/table.ts) for the identical concept.
+const PPTX_TABLE_CELL_VERTICAL_ALIGN_ANCHOR = {
+  top: "t",
+  center: "ctr",
+  bottom: "b",
+} as const satisfies Record<
+  NonNullable<ContentTableCell["verticalAlign"]>,
+  string
+>;
+
+// The read-side inverse of PPTX_TABLE_CELL_VERTICAL_ALIGN_ANCHOR above, for PptxTableCell.verticalAlign's own getter.
+const ANCHOR_TABLE_CELL_VERTICAL_ALIGN: ReadonlyMap<
+  string,
+  NonNullable<ContentTableCell["verticalAlign"]>
+> = new Map([
+  ["t", "top"],
+  ["ctr", "center"],
+  ["b", "bottom"],
+]);
 
 // A live view over a DrawingML table cell (a:tc) -- the ContentTable-cell-shaped counterpart to DocxTableCell/OdtTableCell (src/edit/docx/table.ts, src/edit/odt/table.ts), but for a table living inside a slide's own p:graphicFrame rather than a document body. Unlike docx's gridSpan-collapses-the-row model, and matching ODF's covered-table-cell model in spirit, a DrawingML table's own a:tr always carries exactly `columns` a:tc elements regardless of merges (ooxml.js's own readTable confirms this: every row is `childrenWithTag(tr, "a:tc").map(readTableCell)` with no gridSpan-based skipping) -- a merge is expressed purely via attributes on the covered cell's own a:tc (hMerge/vMerge, boolean "1"), never by omitting or replacing the element the way docx/ODF each do in their own way.
 export class PptxTableCell {
@@ -191,6 +212,30 @@ export class PptxTableCell {
         ]),
       );
     }
+  }
+
+  // a:tcPr/@anchor (ECMA-376 21.1.3.8, ST_TextAnchoringType) -- read back by ooxml.js's own readTableCellVerticalAlign (typed/pptx/read.ts), which this setter's vocabulary mirrors exactly. ST_TextAnchoringType's other two members, just/dist, describe how multiple lines fill the cell rather than a position among three discrete slots and have no member in ContentTableCell.verticalAlign's own three-value vocabulary to write from, matching odf.js's own PIVOT_VERTICAL_ALIGN_BY_ODF/ODF_VERTICAL_ALIGN_BY_PIVOT pair (typed/shared/table.ts) for the identical top/center/bottom concept.
+  get verticalAlign(): ContentTableCell["verticalAlign"] {
+    const tcPr = this.tcPrElement(false);
+    if (tcPr === undefined) {
+      return undefined;
+    }
+    const anchor = attr(tcPr, "anchor");
+    return anchor === undefined
+      ? undefined
+      : ANCHOR_TABLE_CELL_VERTICAL_ALIGN.get(anchor);
+  }
+
+  set verticalAlign(value: ContentTableCell["verticalAlign"]) {
+    if (value === undefined) {
+      const tcPr = this.tcPrElement(false);
+      if (tcPr !== undefined) {
+        removeAttr(tcPr, "anchor");
+      }
+      return;
+    }
+    const tcPr = this.tcPrElement(true);
+    setAttr(tcPr, "anchor", PPTX_TABLE_CELL_VERTICAL_ALIGN_ANCHOR[value]);
   }
 
   // Mirrors ooxml.js's own readTableCellBorderEdge (typed/pptx/read.ts) guard: @w missing, non-numeric, zero, or negative all leave no valid ContentBorder to construct, since ContentBorderSchema's widthPt is positive().

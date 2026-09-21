@@ -569,6 +569,56 @@ describe("buildPptxPackage: table merges follow the dense grid", () => {
         ),
     ).toEqual(["0,1", "1,0", "1,1"]);
   });
+
+  // ExaDev/documents.js#1376: verticalAlign never wrote or read back at all -- writing it here onto both an anchor cell and a covered entry, then reading the built package back through readPptxContent, exercises the write path (applyCellDecoration -> PptxTableCell.verticalAlign -> a:tcPr/@anchor) and the read path (readTableCell -> readTableCellVerticalAlign) together, the same full round trip builtCells' own narrower a:tc-inspecting helper above does not cover.
+  it("round-trips a cell's verticalAlign, on both an anchor and a covered entry, through a real build-then-read cycle", () => {
+    const pkg = buildPptxPackage(
+      presentationDoc([
+        {
+          size: SLIDE_SIZE,
+          notes: "",
+          shapes: [
+            {
+              frame: { xPt: 10, yPt: 10, widthPt: 300, heightPt: 100 },
+              ...ZERO_INSETS,
+              blocks: [
+                {
+                  kind: "table",
+                  columnWidthsPt: [100, 100],
+                  rows: [
+                    {
+                      cells: [
+                        textCell("A", { colSpan: 2, verticalAlign: "center" }),
+                        { blocks: [], verticalAlign: "bottom" },
+                      ],
+                    },
+                    {
+                      cells: [
+                        textCell("B", { verticalAlign: "top" }),
+                        textCell("C"),
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    const reread = readPptxContent(pkg);
+    if (reread.kind !== "presentation") {
+      throw new Error("expected a presentation ContentDocument");
+    }
+    const block = reread.slides[0]!.shapes[0]!.blocks[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    expect(block.rows[0]?.cells[0]?.verticalAlign).toBe("center");
+    expect(block.rows[0]?.cells[1]?.verticalAlign).toBe("bottom");
+    expect(block.rows[1]?.cells[0]?.verticalAlign).toBe("top");
+    expect(block.rows[1]?.cells[1]?.verticalAlign).toBeUndefined();
+  });
 });
 
 describe("buildPptxPackage: a slide table breaking the grid rule", () => {

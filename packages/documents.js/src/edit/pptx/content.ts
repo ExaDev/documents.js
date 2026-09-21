@@ -257,6 +257,7 @@ function applyCellDecoration(
   if (cell.background !== undefined) {
     target.background = resolveCellFillColor(cell.background);
   }
-  // PptxTableCell.borders clears the edges when handed undefined and mints nothing, so an absent value needs no guard of its own.
+  // PptxTableCell.borders and .verticalAlign both clear their own a:tcPr state when handed undefined and mint nothing, so an absent value needs no guard of its own.
   target.borders = cell.borders;
+  target.verticalAlign = cell.verticalAlign;
 }
