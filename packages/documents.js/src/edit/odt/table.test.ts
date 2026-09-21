@@ -13,7 +13,7 @@ import { findDescendantElement, walkElements } from "../../xml/query";
 import { createOdt } from "./editor";
 import type { OdtTable } from "./table";
 
-// Finds styleName's own style:table-row-properties inside automaticStyles, throwing rather than returning undefined -- every caller below already knows the style must exist by this point.
+// Finds styleName's own style:table-row-properties inside automaticStyles, throwing rather than returning undefined — every caller below already knows the style must exist by this point.
 function findRowStyleProperties(
   automaticStyles: XmlElement,
   styleName: string,
@@ -86,7 +86,7 @@ describe("OdtTable", () => {
     const cell = table.cell(0, 0);
     cell.paragraphs()[0]!.appendRun({ text: "Cell heading" });
     cell.paragraphs()[0]!.headingLevel = 2;
-    // The headingLevel setter retagged the cell's own first paragraph element to text:h in place -- the cell read view must still see it, or a heading written into a cell (buildOdtPackage's own populateCellBlocks now does exactly that) would be invisible to the editor surface and cell.text would silently drop its words.
+    // The headingLevel setter retagged the cell's own first paragraph element to text:h in place — the cell read view must still see it, or a heading written into a cell (buildOdtPackage's own populateCellBlocks now does exactly that) would be invisible to the editor surface and cell.text would silently drop its words.
     expect(cell.paragraphs()).toHaveLength(1);
     expect(cell.paragraphs()[0]!.headingLevel).toBe(2);
     expect(cell.paragraphs()[0]!.text).toBe("Cell heading");
@@ -101,7 +101,7 @@ describe("OdtTable", () => {
     cell.paragraphs()[0]!.appendRun({ text: "A1" });
     row.appendCoveredCell();
     expect(table.rows()).toHaveLength(1);
-    // cells() only surfaces table:table-cell, not table:covered-table-cell, so the covered placeholder is invisible to it -- matching odf.js's own readTableRow, which reads a covered-table-cell as a distinct, contentless entry.
+    // cells() only surfaces table:table-cell, not table:covered-table-cell, so the covered placeholder is invisible to it — matching odf.js's own readTableRow, which reads a covered-table-cell as a distinct, contentless entry.
     expect(table.rows()[0]!.cells()).toHaveLength(1);
     expect(table.rows()[0]!.cells()[0]!.text).toBe("A1");
   });
@@ -161,7 +161,7 @@ describe("OdtTable", () => {
               ),
           )
         : [];
-    // Two distinct widths (100pt, 200pt) across the first table, plus the second table's 100pt column reusing the first table's own 100pt style -- so exactly two table-column styles total, not three.
+    // Two distinct widths (100pt, 200pt) across the first table, plus the second table's 100pt column reusing the first table's own 100pt style — so exactly two table-column styles total, not three.
     expect(columnStyles).toHaveLength(2);
   });
 });
@@ -213,7 +213,7 @@ describe("OdtTableRow.heightPt", () => {
     if (automaticStyles?.type !== "element") {
       throw new Error("expected office:automatic-styles");
     }
-    // Simulates a table-row style a real external producer wrote (a document opened via openOdt()) -- fo:break-before stands in for style:use-optimal-row-height/fo:keep-together/fo:background-color, the other properties the review names: the hazard (silently dropped on set, silently imported on reuse) is identical regardless of which property it is.
+    // Simulates a table-row style a real external producer wrote (a document opened via openOdt()) — fo:break-before stands in for style:use-optimal-row-height/fo:keep-together/fo:background-color, the other properties the review names: the hazard (silently dropped on set, silently imported on reuse) is identical regardless of which property it is.
     automaticStyles.children.push(
       el(
         "style:style",
@@ -240,7 +240,7 @@ describe("OdtTableRow.heightPt", () => {
       value: "ExternalRowStyle",
     });
 
-    // The reuse loop must not hand ExternalRowStyle to a row that only asked for the matching height -- doing so would silently import fo:break-before onto a row that never had it.
+    // The reuse loop must not hand ExternalRowStyle to a row that only asked for the matching height — doing so would silently import fo:break-before onto a row that never had it.
     plainRow.heightPt = 20;
     expect(attr(secondRowElement, "table:style-name")).not.toBe(
       "ExternalRowStyle",
@@ -295,7 +295,7 @@ describe("OdtTableRow.heightPt", () => {
     if (automaticStyles?.type !== "element") {
       throw new Error("expected office:automatic-styles");
     }
-    // style:background-image is the one child OASIS ODF 1.3's RelaxNG schema permits on style:table-row-properties -- simulating a table-row style a real external producer (openOdt()) wrote, carrying it alongside a matching row-height.
+    // style:background-image is the one child OASIS ODF 1.3's RelaxNG schema permits on style:table-row-properties — simulating a table-row style a real external producer (openOdt()) wrote, carrying it alongside a matching row-height.
     automaticStyles.children.push(
       el(
         "style:style",
@@ -321,7 +321,7 @@ describe("OdtTableRow.heightPt", () => {
       value: "ImageRowStyle",
     });
 
-    // A plain row asking for the same 20pt height must NOT reuse ImageRowStyle -- doing so would silently import a background image onto a row that never had one.
+    // A plain row asking for the same 20pt height must NOT reuse ImageRowStyle — doing so would silently import a background image onto a row that never had one.
     plainRow.heightPt = 20;
     expect(attr(secondRowElement, "table:style-name")).not.toBe(
       "ImageRowStyle",
@@ -413,7 +413,7 @@ describe("OdtTableRow.heightPt", () => {
       value: "AutoFitRowStyle",
     });
 
-    // Writing a new explicit height on a row whose style says "auto-fit to content" must turn that flag off -- left at "true", a real consumer would keep auto-fitting and ignore the height this setter just wrote, even though the getter reports it back.
+    // Writing a new explicit height on a row whose style says "auto-fit to content" must turn that flag off — left at "true", a real consumer would keep auto-fitting and ignore the height this setter just wrote, even though the getter reports it back.
     autoFitRow.heightPt = 30;
     const autoFitStyleName = attr(firstRowElement, "table:style-name");
     if (autoFitStyleName === undefined) {
@@ -497,7 +497,7 @@ describe("OdtTableRow.mergeCellsHorizontally", () => {
     const anchor = table.rows()[0]!.mergeCellsHorizontally(1, 2);
     anchor.appendParagraph({ text: "anchor content" });
 
-    // 4 grid positions still exist: 1 unmerged real cell (col 0), 1 anchor real cell with colSpan=2 (col 1), 1 table:covered-table-cell (col 2), and 1 unmerged real cell (col 3) -- 3 real cells total
+    // 4 grid positions still exist: 1 unmerged real cell (col 0), 1 anchor real cell with colSpan=2 (col 1), 1 table:covered-table-cell (col 2), and 1 unmerged real cell (col 3) — 3 real cells total
     expect(table.rows()[0]!.cells()).toHaveLength(3);
     expect(table.cell(0, 1).colSpan).toBe(2);
     expect(table.cell(0, 1).text).toContain("anchor content");
@@ -772,7 +772,7 @@ describe("OdtTable grid view", () => {
   });
 });
 
-// table:number-columns-repeated (ExaDev/documents.js#1374): a real table:table-cell/table:covered-table-cell or table:table-column element can carry this attribute to stand for that many identical adjacent grid positions rather than one -- confirmed by odf.js's own pivot reader (typed/shared/table.ts's readTableRow/readOdfTable) to be something real ODF producers emit routinely for a short run of identically-styled columns or empty cells, not just a spreadsheet-scale hazard. This editor's own write paths (buildTable, appendCell, appendCoveredCell) never emit the attribute themselves, so every case below authors it directly on the raw XML the way an external producer's file would arrive already carrying it.
+// table:number-columns-repeated (ExaDev/documents.js#1374): a real table:table-cell/table:covered-table-cell or table:table-column element can carry this attribute to stand for that many identical adjacent grid positions rather than one — confirmed by odf.js's own pivot reader (typed/shared/table.ts's readTableRow/readOdfTable) to be something real ODF producers emit routinely for a short run of identically-styled columns or empty cells, not just a spreadsheet-scale hazard. This editor's own write paths (buildTable, appendCell, appendCoveredCell) never emit the attribute themselves, so every case below authors it directly on the raw XML the way an external producer's file would arrive already carrying it.
 describe("table:number-columns-repeated", () => {
   it("expands a repeated cell into that many grid columns, agreeing with the content pivot's own column count", () => {
     const editor = createOdt();
@@ -785,7 +785,7 @@ describe("table:number-columns-repeated", () => {
       value: "3",
     });
 
-    // cellA now stands for grid columns 0-2 (all reading "A"), cellB for column 3 -- 4 grid columns from 2 physical table:table-cell elements.
+    // cellA now stands for grid columns 0-2 (all reading "A"), cellB for column 3 — 4 grid columns from 2 physical table:table-cell elements.
     expect(table.gridColumnCount()).toBe(4);
     expect(odtGridLabels(table)).toEqual([["A", "A", "A", "B"]]);
 
@@ -835,7 +835,7 @@ describe("table:number-columns-repeated", () => {
       value: "3",
     });
 
-    // Grid columns 0-2 are cellA's repeat, column 3 is cellB -- but only 2 physical table:table-cell elements exist, so a physical-array lookup (this row's old gridCellElements) would say column 3 "does not exist" even though it plainly does.
+    // Grid columns 0-2 are cellA's repeat, column 3 is cellB — but only 2 physical table:table-cell elements exist, so a physical-array lookup (this row's old gridCellElements) would say column 3 "does not exist" even though it plainly does.
     const anchor = table.rows()[0]!.mergeCellsHorizontally(3, 1);
     expect(anchor.text).toContain("B");
     expect(anchor.colSpan).toBe(1);
@@ -850,7 +850,7 @@ describe("table:number-columns-repeated", () => {
       value: "2",
     });
 
-    // One physical element, two real grid columns (0 and 1) -- column 2 genuinely does not exist.
+    // One physical element, two real grid columns (0 and 1) — column 2 genuinely does not exist.
     expect(() => table.rows()[0]!.mergeCellsHorizontally(2, 1)).toThrow(
       /column 2 does not exist/,
     );
@@ -975,10 +975,10 @@ describe("OdtTable.mergeCells", () => {
     const editor = createOdt();
     const table = editor.body.appendTable({ rows: 2, columns: 4 });
 
-    // First, horizontally merge row 0's columns 1-2 -- this changes row 0's own shape (3 real cells instead of 4).
+    // First, horizontally merge row 0's columns 1-2 — this changes row 0's own shape (3 real cells instead of 4).
     table.rows()[0]!.mergeCellsHorizontally(1, 2);
 
-    // Now merge a rowSpan=2 rectangle starting at grid column 1, spanning 2 columns, over BOTH rows -- this must correctly find grid column 1 in row 0 (now the already-merged anchor) and mark row 1's TRUE grid columns 1 and 2 as covered, despite row 0's own different real-cell-count shape.
+    // Now merge a rowSpan=2 rectangle starting at grid column 1, spanning 2 columns, over BOTH rows — this must correctly find grid column 1 in row 0 (now the already-merged anchor) and mark row 1's TRUE grid columns 1 and 2 as covered, despite row 0's own different real-cell-count shape.
     const anchor = table.mergeCells(0, 1, 2, 2);
     anchor.appendParagraph({ text: "block" });
 
