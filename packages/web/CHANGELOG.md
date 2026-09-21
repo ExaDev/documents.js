@@ -1,3 +1,15 @@
+## [2.11.52](https://github.com/ExaDev/documents.js/compare/web%402.11.51...web%402.11.52) (2026-09-21)
+
+### Bug Fixes
+
+* **web:** read markdown, csv and svg through their own text boundaries ([c81bef4](https://github.com/ExaDev/documents.js/commit/c81bef43592788790403c59b839cc3daa7a1ea32))
+
+
+### Dependencies
+
+- Updated markdown-codec to 10.0.0
+- Updated documents.js to 11.0.0
+
 ## [2.11.51](https://github.com/ExaDev/documents.js/compare/web%402.11.50...web%402.11.51) (2026-09-21)
 
 

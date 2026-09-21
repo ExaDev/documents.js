@@ -1,3 +1,32 @@
+## [11.0.0](https://github.com/ExaDev/documents.js/compare/documents.js%4010.0.0...documents.js%4011.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **documents.js:** CsvInvalidUtf8Error is now CsvUndecodableTextError.
+  decodeCsvText and decodeMarkdownText decode bytes in any encoding
+  byte-codec's decodeText recognises rather than throwing for anything
+  but UTF-8, and CsvBytesSchema and MarkdownBytesSchema follow; all four
+  refuse bytes carrying a NUL or a density of other C0 control bytes even
+  where those bytes are well-formed UTF-8.
+
+### Features
+
+* **documents.js:** decode csv and markdown in whatever encoding they arrive in ([e31442f](https://github.com/ExaDev/documents.js/commit/e31442f53a92ca9bab0235c084c63fd3b0c1efca))
+
+### Documentation
+
+* **documents.js:** correct the svg boundary's claim about its csv and markdown siblings ([40d5758](https://github.com/ExaDev/documents.js/commit/40d5758b3ebe750ba75057634c1bf0f22008f9a8))
+* **documents.js:** say that csv and markdown now detect their encoding ([729836b](https://github.com/ExaDev/documents.js/commit/729836bc2db3898d9e04b91502c4888d8e909e28))
+
+### Tests
+
+* **documents.js:** pin that text acceptance overlaps no structural schema ([c654453](https://github.com/ExaDev/documents.js/commit/c654453210dcd3140693089f39720414c92130ff))
+
+
+### Dependencies
+
+- Updated markdown-codec to 10.0.0
+
 ## [10.0.0](https://github.com/ExaDev/documents.js/compare/documents.js%409.0.0...documents.js%4010.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES
