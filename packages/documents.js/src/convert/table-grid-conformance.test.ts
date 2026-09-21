@@ -158,6 +158,8 @@ type Envelope = "wordprocessing" | "presentation";
 interface FormatCase {
   // Whether this format's own writer can state a merge at all. A format that cannot still has to hold the grid's shape: it writes the region's content once and keeps every grid position, so the table stays the right width and the anchor's text is not duplicated across the positions it covered.
   readonly spans: "stated" | "dropped";
+  // Whether this format can state THE HEADER RULE's own fact (ContentTableRow.isHeader in document-schema.js): this row is a header row, at whatever position it sits. "stated" round-trips the flags exactly as given, wherever the header rows sit. "dropped" has no header concept at all: its writer writes the rows unflagged (reporting it, where the writer has a diagnostic sink to report through) and its reader reads them back unflagged.
+  readonly headerRows: "stated" | "dropped";
   readonly envelope: Envelope;
   // What this format's writer does with a table whose covered position carries blocks of its own, which the grid rule forbids because a region's content belongs to its anchor. "refuses" throws rather than write a file that has lost the content; "keeps" is a format with no merge record at all, whose writer places every entry at its own grid position and so loses nothing, reporting the fault through its own diagnostic sink instead.
   readonly coveredContent: "refuses" | "keeps";
@@ -179,46 +181,59 @@ const EXCLUDED: Readonly<Partial<Record<DocumentFormat, string>>> = {
 const FORMATS: Readonly<Partial<Record<DocumentFormat, FormatCase>>> = {
   docx: {
     spans: "stated",
+    headerRows: "stated",
     envelope: "wordprocessing",
     coveredContent: "refuses",
   },
   odt: {
     spans: "stated",
+    headerRows: "stated",
     envelope: "wordprocessing",
     coveredContent: "refuses",
   },
   rtf: {
     spans: "stated",
+    headerRows: "stated",
     envelope: "wordprocessing",
     coveredContent: "refuses",
   },
   doc: {
     spans: "stated",
+    headerRows: "stated",
     envelope: "wordprocessing",
     coveredContent: "refuses",
   },
   epub: {
     spans: "stated",
+    headerRows: "stated",
     envelope: "wordprocessing",
     coveredContent: "refuses",
   },
   markdown: {
     spans: "stated",
+    headerRows: "stated",
     envelope: "wordprocessing",
     coveredContent: "refuses",
   },
   pptx: {
     spans: "stated",
+    headerRows: "dropped",
     envelope: "presentation",
     coveredContent: "refuses",
   },
   odp: {
     spans: "stated",
+    headerRows: "stated",
     envelope: "presentation",
     coveredContent: "refuses",
   },
   // The legacy binary presentation format has no merge record of any kind, so its writer reports a dropped span rather than inventing one; the grid itself still survives.
-  ppt: { spans: "dropped", envelope: "presentation", coveredContent: "keeps" },
+  ppt: {
+    spans: "dropped",
+    headerRows: "dropped",
+    envelope: "presentation",
+    coveredContent: "keeps",
+  },
 };
 
 function writeThrough(
@@ -329,6 +344,80 @@ describe("every format reads back a merged table on the same grid", () => {
 function coveredContentTable(): ContentTable {
   return tableOf([[textCell("Region", { colSpan: 2 }), textCell("stray")]]);
 }
+
+// A table whose header rows are neither only-leading nor contiguous: row 0 is a header, row 1 is not, row 2 is a header again. Nothing in THE HEADER RULE (ContentTableRow in document-schema.js) constrains where a flag may sit, and this is the shape that separates a format genuinely carrying the fact per row from one that only ever treats its first row as a header -- docx and RTF state it directly on the row, ODF derives one table:table-header-rows wrapper per run of them, and GFM, which can state only a single leading header row, renders the whole table through its own HTML fallback rather than dropping the flag.
+function headerTable(): ContentTable {
+  const table = tableOf([
+    [textCell("Region"), textCell("Revenue")],
+    [textCell("North"), textCell("10")],
+    [textCell("Quarter"), textCell("Total")],
+  ]);
+  return {
+    ...table,
+    rows: table.rows.map((row, index) =>
+      index === 1 ? row : { ...row, isHeader: true },
+    ),
+  };
+}
+
+function headerFlags(table: ContentTable): (boolean | undefined)[] {
+  return table.rows.map((row) => row.isHeader);
+}
+
+describe("every format reads back the header rows it was given", () => {
+  const HEADER_STATING = CASES.filter(
+    ([, entry]) => entry.headerRows === "stated",
+  );
+
+  it.each(HEADER_STATING)(
+    "%s reads back a header row that is neither leading nor contiguous",
+    (format) => {
+      expect(headerFlags(roundTrip(format, headerTable()))).toEqual(
+        headerFlags(headerTable()),
+      );
+    },
+  );
+
+  it.each(HEADER_STATING)(
+    "%s keeps the grid and the cell text while carrying the header rows",
+    (format) => {
+      expect(gridText(roundTrip(format, headerTable()))).toEqual(
+        gridText(headerTable()),
+      );
+    },
+  );
+
+  it.each(CASES)("%s leaves an unflagged table unflagged", (format) => {
+    expect(
+      roundTrip(format, mergedTable()).rows.some(
+        (row) => row.isHeader !== undefined,
+      ),
+    ).toBe(false);
+  });
+
+  // A format with no header concept still has to hold everything else: the flag goes, the table does not.
+  it.each(CASES.filter(([, entry]) => entry.headerRows === "dropped"))(
+    "%s drops the flags and keeps the grid",
+    (format) => {
+      const read = roundTrip(format, headerTable());
+      expect(headerFlags(read)).toEqual([undefined, undefined, undefined]);
+      expect(gridText(read)).toEqual(gridText(headerTable()));
+    },
+  );
+
+  it("reads one set of header rows from every format that states them", () => {
+    const shapes = HEADER_STATING.map(([format]) => ({
+      format,
+      flags: headerFlags(roundTrip(format, headerTable())),
+    }));
+    for (const shape of shapes) {
+      expect(shape).toEqual({
+        format: shape.format,
+        flags: headerFlags(headerTable()),
+      });
+    }
+  });
+});
 
 describe("every format refuses or reports a table whose covered position carries content", () => {
   it.each(CASES.filter(([, entry]) => entry.coveredContent === "refuses"))(
