@@ -810,6 +810,50 @@ describe("readPptxContent: tables", () => {
       right: { color: { r: 1, g: 0, b: 1 }, widthPt: 1 },
     });
   });
+
+  // ExaDev/documents.js#1376: a:tcPr/@anchor never used to be read at all.
+  it("reads a:tcPr/@anchor's three mapped values (t/ctr/b) as verticalAlign", () => {
+    const table = tableFromRows([
+      [
+        el("a:tc", {}, [
+          el("a:txBody", {}, [el("a:p")]),
+          el("a:tcPr", { anchor: "t" }),
+        ]),
+        el("a:tc", {}, [
+          el("a:txBody", {}, [el("a:p")]),
+          el("a:tcPr", { anchor: "ctr" }),
+        ]),
+        el("a:tc", {}, [
+          el("a:txBody", {}, [el("a:p")]),
+          el("a:tcPr", { anchor: "b" }),
+        ]),
+      ],
+    ]);
+    expect(table.rows[0]?.cells[0]?.verticalAlign).toBe("top");
+    expect(table.rows[0]?.cells[1]?.verticalAlign).toBe("center");
+    expect(table.rows[0]?.cells[2]?.verticalAlign).toBe("bottom");
+  });
+
+  it("leaves verticalAlign undefined when a:tcPr carries no @anchor, and for @anchor values with no pivot equivalent (just/dist)", () => {
+    const table = tableFromRows([
+      [
+        textCell("No tcPr"),
+        el("a:tc", {}, [el("a:txBody", {}, [el("a:p")]), el("a:tcPr", {})]),
+        el("a:tc", {}, [
+          el("a:txBody", {}, [el("a:p")]),
+          el("a:tcPr", { anchor: "just" }),
+        ]),
+        el("a:tc", {}, [
+          el("a:txBody", {}, [el("a:p")]),
+          el("a:tcPr", { anchor: "dist" }),
+        ]),
+      ],
+    ]);
+    expect(table.rows[0]?.cells[0]?.verticalAlign).toBeUndefined();
+    expect(table.rows[0]?.cells[1]?.verticalAlign).toBeUndefined();
+    expect(table.rows[0]?.cells[2]?.verticalAlign).toBeUndefined();
+    expect(table.rows[0]?.cells[3]?.verticalAlign).toBeUndefined();
+  });
 });
 
 // A depth-first search for the first element with the given tag, the untargeted counterpart of findElementByTagAndAttr.
@@ -919,6 +963,21 @@ describe("readPptxContent: a covered table position's own decoration", () => {
     expect(covered?.background).toEqual({ kind: "solid", color: FILL_BLUE });
     expect(covered?.colSpan).toBeUndefined();
     expect(covered?.rowSpan).toBeUndefined();
+  });
+
+  it("reads a covered position's own a:tcPr/@anchor as verticalAlign", () => {
+    const table = tableFromRows([
+      [
+        textCell("Anchor", { gridSpan: "2" }),
+        el("a:tc", { hMerge: "1" }, [
+          el("a:txBody", {}, [el("a:p")]),
+          el("a:tcPr", { anchor: "ctr" }),
+        ]),
+      ],
+    ]);
+    const covered = table.rows[0]?.cells[1];
+    expect(covered?.blocks).toEqual([]);
+    expect(covered?.verticalAlign).toBe("center");
   });
 
   it("reads a covered position's own borders", () => {
