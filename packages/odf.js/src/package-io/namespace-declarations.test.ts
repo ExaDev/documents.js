@@ -141,6 +141,7 @@ const TABLE_BLOCK = {
             },
           },
         },
+        { blocks: [] },
       ],
     },
     {

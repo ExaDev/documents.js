@@ -435,8 +435,7 @@ describe("canonicalTable", () => {
     expect(result.rows[1]).toStrictEqual({ cells: [] });
   });
 
-  it("a cell that is itself covered never marks further cells covered from its own stated span", () => {
-    // (0,0) spans two columns, covering (0,1). (0,1) is itself covered, but its OWN source cell states colSpan: 3 (as a real document's covered-position placeholder legitimately might) -- that stated span must never be consulted, because the covering pass is skipped entirely once a cell is already known covered. If it were consulted, (0,1)'s own colSpan: 3 would reach through (0,2) and (0,3), incorrectly marking both covered too.
+  it("refuses a covered cell that states a span of its own, rather than ignoring the span it states", () => {
     const table: ContentTable = {
       kind: "table",
       columnWidthsPt: [10, 10, 10, 10],
@@ -451,10 +450,22 @@ describe("canonicalTable", () => {
         },
       ],
     };
-    const result = canonicalTable(table, freshListState());
-    expect(result.rows[0]!.cells[1]).toEqual({ blocks: [] });
-    expect(result.rows[0]!.cells[2]).toEqual({ blocks: [], colSpan: 1 });
-    expect(result.rows[0]!.cells[3]).toEqual({ blocks: [], colSpan: 1 });
+    expect(() => canonicalTable(table, freshListState())).toThrow(
+      "canonicalTable: table breaks the grid rule (the cell at row 0, column 1 lies inside the merged region anchored at row 0, column 0 but states a span of its own, and only a region's anchor carries a span)",
+    );
+  });
+
+  it("refuses a covered cell that carries blocks, rather than dropping them", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [10, 10],
+      rows: [
+        { cells: [{ blocks: [], colSpan: 2 }, { blocks: [paragraph()] }] },
+      ],
+    };
+    expect(() => canonicalTable(table, freshListState())).toThrow(
+      /^canonicalTable: table breaks the grid rule \(the cell at row 0, column 1 lies inside the merged region anchored at row 0, column 0 but carries content/,
+    );
   });
 
   it("a colSpan=1,rowSpan=1 cell (the default) covers no other grid position at all", () => {

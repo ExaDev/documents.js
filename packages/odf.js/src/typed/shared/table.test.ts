@@ -599,6 +599,51 @@ describe("writeOdfTable", () => {
     );
   }
 
+  describe("a table breaking the grid rule", () => {
+    // A merged header whose covered position carries a second copy of the anchor's content, which a table:covered-table-cell has no room for.
+    const coveredContentTable: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100, 100],
+      rows: [
+        {
+          cells: [
+            { ...paragraphCell("anchor"), colSpan: 2 },
+            paragraphCell("copy"),
+          ],
+        },
+      ],
+    };
+
+    it("is refused, naming the entry point and the fault, rather than dropping the covered content", () => {
+      const { context } = writeContext();
+      expect(() => writeOdfTable(coveredContentTable, context)).toThrow(
+        "writeOdfTable: table breaks the grid rule (the cell at row 0, column 1 lies inside the merged region anchored at row 0, column 0 but carries content of its own, and a merged region's content belongs to its anchor)",
+      );
+    });
+
+    it("is refused before a table name is minted", () => {
+      const { context } = writeContext();
+      expect(() => writeOdfTable(coveredContentTable, context)).toThrow();
+      const clean = writeOdfTable(
+        { kind: "table", rows: [], columnWidthsPt: [] },
+        context,
+      );
+      expect(attrValue(clean, "table:name")).toBe("Table1");
+    });
+
+    it("is refused when it is the whole content of another table's cell", () => {
+      const { context } = writeContext();
+      const outer: ContentTable = {
+        kind: "table",
+        columnWidthsPt: [100],
+        rows: [{ cells: [{ blocks: [coveredContentTable] }] }],
+      };
+      expect(() => writeOdfTable(outer, context)).toThrow(
+        /^writeOdfTable: table breaks the grid rule/,
+      );
+    });
+  });
+
   it("mints a document-unique table:name from the context on every call", () => {
     const { context } = writeContext();
     const table: ContentTable = {
@@ -676,7 +721,7 @@ describe("writeOdfTable", () => {
     expect(attr(propsWithout, "style:width")).toBeUndefined();
   });
 
-  it("marks a colSpan'd cell's own covered neighbour, writing it as table:covered-table-cell rather than repeating the anchor's content", () => {
+  it("marks a colSpan'd cell's own covered neighbour, writing it as table:covered-table-cell", () => {
     const table: ContentTable = {
       kind: "table",
       rows: [
@@ -686,7 +731,7 @@ describe("writeOdfTable", () => {
               blocks: [{ kind: "paragraph", runs: [{ text: "anchor" }] }],
               colSpan: 2,
             },
-            paragraphCell("skipped"),
+            { blocks: [] },
           ],
         },
       ],
@@ -717,7 +762,7 @@ describe("writeOdfTable", () => {
             paragraphCell("sibling"),
           ],
         },
-        { cells: [paragraphCell("covered"), paragraphCell("plain")] },
+        { cells: [{ blocks: [] }, paragraphCell("plain")] },
       ],
       columnWidthsPt: [],
     };
