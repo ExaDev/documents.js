@@ -570,12 +570,9 @@ function individuateGridColumn(
   );
 }
 
-// The table:table-row children of a table:table element, in document order.
+// Every table:table-row of a table:table element, in document order, found through the row wrappers as well as among the table's own direct children (tableRowEntries below states the wrapper rule and which of them mark a header row).
 function tableRowElements(table: XmlElement): XmlElement[] {
-  return table.children.filter(
-    (child): child is XmlElement =>
-      child.type === "element" && child.tag === "table:table-row",
-  );
+  return tableRowEntries(table).map((entry) => entry.element);
 }
 
 // The real cells of one row, each with the grid column its element sits at. A covered position has no cell of its own to place: the anchor that covers it owns it. A cell carrying its own table:number-columns-repeated (ExaDev/documents.js#1374) places once per logical column it stands for (gridColumnElements above), each entry wrapping the SAME underlying element -- reading any of those positions reads the same live content, exactly as ODF's repeat semantics say they are the same cell repeated, until an edit that touches one of them individuates it (OdtTableRow.mergeCellsHorizontally/markCellCovered, OdtTable.mergeCells).
@@ -607,9 +604,11 @@ function resolveOdtGrid(
     }
     if (child.tag === "table:table-column") {
       declaredColumns += readRunRepeatCount(child, COLUMN_REPEAT_ATTR);
-    } else if (child.tag === "table:table-row") {
-      placedRows.push(placedCells(child, pkg));
     }
+  }
+  // Rows are collected through the wrappers rather than from the table's own direct children, so a table whose rows sit inside a table:table-header-rows (or any other row wrapper) still states its whole grid here.
+  for (const row of tableRowElements(table)) {
+    placedRows.push(placedCells(row, pkg));
   }
   return resolveLiveTableGrid(placedRows, declaredColumns);
 }
@@ -804,6 +803,42 @@ function applyMerge(
   return anchor;
 }
 
+// The row wrappers ODF's table grammar allows between a table:table and its table:table-row children (OASIS ODF 1.3 part 1, 9.1.2 to 9.1.9), the same set odf.js's own readOdfTable descends through: a row inside one is a real row of this table, in its own document-order position, and a table:table-header-rows additionally says the rows it holds are header rows.
+const ROW_WRAPPER_TAGS: ReadonlySet<string> = new Set([
+  "table:table-rows",
+  "table:table-header-rows",
+  "table:table-row-group",
+]);
+
+interface TableRowEntry {
+  readonly element: XmlElement;
+  readonly insideHeader: boolean;
+}
+
+// Every table:table-row under `parent` in document order, descending through the row wrappers and through nothing else, each carrying whether it sits anywhere inside a table:table-header-rows. Nesting does not dilute that: once inside a header wrapper every row below it is a header row however many groups sit in between.
+function tableRowEntries(
+  parent: XmlElement,
+  insideHeader = false,
+): TableRowEntry[] {
+  const entries: TableRowEntry[] = [];
+  for (const child of parent.children) {
+    if (child.type !== "element") {
+      continue;
+    }
+    if (child.tag === "table:table-row") {
+      entries.push({ element: child, insideHeader });
+    } else if (ROW_WRAPPER_TAGS.has(child.tag)) {
+      entries.push(
+        ...tableRowEntries(
+          child,
+          insideHeader || child.tag === "table:table-header-rows",
+        ),
+      );
+    }
+  }
+  return entries;
+}
+
 export class OdtTableRow {
   private readonly node: XmlElement;
   private readonly pkg: Package;
@@ -953,13 +988,56 @@ export class OdtTable {
   }
 
   rows(): OdtTableRow[] {
-    const out: OdtTableRow[] = [];
-    for (const child of this.live().children) {
-      if (child.type === "element" && child.tag === "table:table-row") {
-        out.push(new OdtTableRow(child, this.pkg, this.node));
+    return tableRowElements(this.live()).map(
+      (row) => new OdtTableRow(row, this.pkg, this.node),
+    );
+  }
+
+  // Which rows sit inside a table:table-header-rows wrapper, in row order: ODF's own spelling of ContentTableRow.isHeader, which odf.js's readOdfTable reads back onto each row the wrapper covers.
+  headerRows(): boolean[] {
+    return tableRowEntries(this.live()).map((entry) => entry.insideHeader);
+  }
+
+  // Restates the wrappers so that exactly the rows `flags` names are header rows: each maximal run of them is wrapped in its own table:table-header-rows and every other row becomes a direct child of the table again. Several wrappers in one table is valid ODF (OpenDocument-v1.3-schema.rng's table-rows-and-groups is one-or-more of table-table-row-group or table-rows-no-group, and table-rows-no-group admits a header block with body rows either side), which is what lets a header row that is neither leading nor contiguous be stated rather than dropped. `flags` shorter than the table's own row count leaves the rows past its end as body rows.
+  setHeaderRows(flags: readonly boolean[]): void {
+    const table = this.live();
+    const rows = tableRowElements(table);
+    const regrouped: XmlElement[] = [];
+    let run: XmlElement[] = [];
+    const closeRun = (): void => {
+      if (run.length > 0) {
+        regrouped.push(el("table:table-header-rows", {}, run));
+        run = [];
+      }
+    };
+    rows.forEach((row, index) => {
+      if (flags[index] === true) {
+        run.push(row);
+        return;
+      }
+      closeRun();
+      regrouped.push(row);
+    });
+    closeRun();
+    const rest: XmlNode[] = [];
+    let placed = false;
+    for (const child of table.children) {
+      const isRowish =
+        child.type === "element" &&
+        (child.tag === "table:table-row" || ROW_WRAPPER_TAGS.has(child.tag));
+      if (!isRowish) {
+        rest.push(child);
+        continue;
+      }
+      if (!placed) {
+        rest.push(...regrouped);
+        placed = true;
       }
     }
-    return out;
+    if (!placed) {
+      rest.push(...regrouped);
+    }
+    table.children = rest;
   }
 
   // The grid's own view of the table: gridRows()[r][c] is the position at grid row r and grid column c, and every row is gridColumnCount() wide. A position a merged region covers resolves to the region's anchor cell, with isAnchor false, whether the region reaches it along its own row or from a row above; that is the cell to read or edit for any position inside the region. Unlike rows()[r].cells(), which omits every covered position so that its index is a physical position, the column here is the same grid column OdtTableRow.mergeCellsHorizontally and OdtTable.mergeCells take.

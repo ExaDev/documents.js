@@ -400,6 +400,7 @@ function appendTable(body: DocxBody, block: ContentTable): void {
     const rowCells = docxRowCells(positionsByRow[rowIndex]!, positionsByRow);
     const tableRow = table.appendRow(rowCells.length);
     tableRow.heightPt = row.heightPt;
+    tableRow.isHeader = row.isHeader === true;
     const domCells = tableRow.cells();
     rowCells.forEach(({ cell, colSpan, verticalMerge }, cellIndex) => {
       const tableCell = domCells[cellIndex];
