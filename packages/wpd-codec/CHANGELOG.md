@@ -1,3 +1,10 @@
+## [5.0.1](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.0.0...wpd-codec%405.0.1) (2026-09-21)
+
+
+### Dependencies
+
+- Updated byte-codec to 1.7.0
+
 ## [5.0.0](https://github.com/ExaDev/documents.js/compare/wpd-codec%404.0.1...wpd-codec%405.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES

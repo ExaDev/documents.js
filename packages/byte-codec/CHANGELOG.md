@@ -1,3 +1,26 @@
+## [1.7.0](https://github.com/ExaDev/documents.js/compare/byte-codec%401.6.3...byte-codec%401.7.0) (2026-09-21)
+
+### Features
+
+* **byte-codec:** decode text by detecting its character encoding ([1bca454](https://github.com/ExaDev/documents.js/commit/1bca4547101e11f8c4c1c3aec1a3f81c224e1a77))
+
+### Bug Fixes
+
+* **byte-codec:** judge a UTF-16 reading on the characters it produced ([06fa519](https://github.com/ExaDev/documents.js/commit/06fa5197ea8d146b582a1ab0da9f899570d6a7b2))
+
+### Code Refactoring
+
+* **byte-codec:** state the ASCII and unit-parity checks in observable terms ([b82c0c5](https://github.com/ExaDev/documents.js/commit/b82c0c54b24ed987b099a25291050c56c220073d))
+
+### Documentation
+
+* **byte-codec:** describe how decodeText settles an encoding ([2f6afa2](https://github.com/ExaDev/documents.js/commit/2f6afa22cdb07e713c6761deb4904f72724d1f9f))
+* **byte-codec:** note that the supported set also bounds what can be declared ([1cd08a5](https://github.com/ExaDev/documents.js/commit/1cd08a56a7d9c8d0beefca1e056bdfb708ed0250))
+
+### Tests
+
+* **byte-codec:** decode windows-1252, UTF-16 and UTF-32 inside a workerd isolate ([5a730c8](https://github.com/ExaDev/documents.js/commit/5a730c8a53d772708267e02fd393bb654ed63848))
+
 ## [1.6.3](https://github.com/ExaDev/documents.js/compare/byte-codec%401.6.2...byte-codec%401.6.3) (2026-09-20)
 
 ### Documentation
