@@ -108,6 +108,181 @@ export function walkTableGrid(table: ContentTable): TableGridPosition[][] {
   );
 }
 
+/** The span of a cell that occupies its own grid position only, which is what an absent `colSpan` or `rowSpan` means. */
+const UNMERGED_SPAN = 1;
+
+/**
+ * Where a table stops obeying the grid rule (ContentTableCell in src/content.ts states the rule; walkTableGrid derives the classification every check here is made against). Every variant names a position in the table's own row and column indices.
+ *
+ * - `raggedRow`: the row holds `cellCount` entries where the table's widest row holds `gridColumnCount`, so the rows do not all cover the same grid.
+ * - `coveredContent`: the position is covered by the region anchored at `anchorRowIndex`, `anchorColumnIndex` yet carries blocks of its own; the region's content belongs to its anchor, so a second copy has nowhere to go.
+ * - `coveredSpan`: the position is covered by the region anchored at `anchorRowIndex`, `anchorColumnIndex` yet carries a `colSpan` or `rowSpan` of its own. Spans are set on the anchor only and walkTableGrid never consults a covered entry's, so this is how a second anchor starting inside another's footprint shows up: the walk assigns each position to the first anchor covering it, which leaves the second entry classified as covered and its span ignored.
+ * - `anchorOverrunsColumns`: the anchor at this position has a `colSpan` reaching past the last grid column.
+ * - `anchorOverrunsRows`: the anchor at this position has a `rowSpan` reaching past the last row of the table.
+ * - `overlappingAnchors`: the anchor at this position starts outside every other region but its footprint reaches a position already covered by the region anchored at `earlierAnchorRowIndex`, `earlierAnchorColumnIndex`, so two regions claim one position.
+ *
+ * A `kind` tag discriminates rather than property presence, because the variants' required fields are not mutually exclusive: several variants' fields include another's.
+ */
+export type TableGridFault =
+  | {
+      readonly kind: "raggedRow";
+      readonly rowIndex: number;
+      readonly cellCount: number;
+      readonly gridColumnCount: number;
+    }
+  | {
+      readonly kind: "coveredContent" | "coveredSpan";
+      readonly rowIndex: number;
+      readonly columnIndex: number;
+      readonly anchorRowIndex: number;
+      readonly anchorColumnIndex: number;
+    }
+  | {
+      readonly kind: "anchorOverrunsColumns" | "anchorOverrunsRows";
+      readonly rowIndex: number;
+      readonly columnIndex: number;
+    }
+  | {
+      readonly kind: "overlappingAnchors";
+      readonly rowIndex: number;
+      readonly columnIndex: number;
+      readonly earlierAnchorRowIndex: number;
+      readonly earlierAnchorColumnIndex: number;
+    };
+
+function widestRowLength(table: ContentTable): number {
+  let width = 0;
+  for (const row of table.rows) {
+    width = Math.max(width, row.cells.length);
+  }
+  return width;
+}
+
+function coveredFault(position: TableGridCovered): TableGridFault | undefined {
+  const { rowIndex, columnIndex, anchorRowIndex, anchorColumnIndex, cell } =
+    position;
+  if (cell.blocks.length > 0) {
+    return {
+      kind: "coveredContent",
+      rowIndex,
+      columnIndex,
+      anchorRowIndex,
+      anchorColumnIndex,
+    };
+  }
+  if (
+    tableCellColumnSpan(cell) > UNMERGED_SPAN ||
+    tableCellRowSpan(cell) > UNMERGED_SPAN
+  ) {
+    return {
+      kind: "coveredSpan",
+      rowIndex,
+      columnIndex,
+      anchorRowIndex,
+      anchorColumnIndex,
+    };
+  }
+  return undefined;
+}
+
+// A region anchored on an earlier row that shares a position with this anchor's footprint necessarily reaches this anchor's own row within its column range: regions are rectangles, so a rectangle that reaches a lower row of the footprint also covers every row between its own top and there, this anchor's row included. Checking this anchor's own row is therefore enough, and its positions to the right of the anchor are covered either by this anchor or by such a region. A region anchored on this same row cannot be the other party: it would start left of this anchor and cover its start (making this entry covered rather than an anchor) or start right of it and be covered by this anchor.
+function overlappedRegion(
+  anchor: TableGridAnchor,
+  row: readonly TableGridPosition[],
+): TableGridCovered | undefined {
+  const footprintEnd = anchor.columnIndex + tableCellColumnSpan(anchor.cell);
+  for (const position of row.slice(anchor.columnIndex + 1, footprintEnd)) {
+    if (
+      position.anchorRowIndex !== undefined &&
+      position.anchorRowIndex < anchor.rowIndex
+    ) {
+      return position;
+    }
+  }
+  return undefined;
+}
+
+function anchorFault(
+  anchor: TableGridAnchor,
+  row: readonly TableGridPosition[],
+  rowCount: number,
+): TableGridFault | undefined {
+  const { rowIndex, columnIndex, cell } = anchor;
+  if (columnIndex + tableCellColumnSpan(cell) > row.length) {
+    return { kind: "anchorOverrunsColumns", rowIndex, columnIndex };
+  }
+  if (rowIndex + tableCellRowSpan(cell) > rowCount) {
+    return { kind: "anchorOverrunsRows", rowIndex, columnIndex };
+  }
+  const overlapped = overlappedRegion(anchor, row);
+  if (overlapped !== undefined) {
+    return {
+      kind: "overlappingAnchors",
+      rowIndex,
+      columnIndex,
+      earlierAnchorRowIndex: overlapped.anchorRowIndex,
+      earlierAnchorColumnIndex: overlapped.anchorColumnIndex,
+    };
+  }
+  return undefined;
+}
+
+/**
+ * The first place `table` contradicts the grid rule, or `undefined` when it obeys it. It never throws: a caller decides what a fault means for it, the way findConstructMarkerImbalance leaves that decision to each consumer of a block list.
+ *
+ * Rows are compared with each other before any position is classified, since an anchor's footprint can only be measured against a grid every row shares; the positions are then checked in row-major order, so the fault returned is the earliest one in reading order.
+ *
+ * The check states the whole of the rule and nothing beyond it: a table with no rows, or whose rows are all empty, has no fault, and neither `columnWidthsPt` nor a cell's own properties other than its blocks and spans are consulted.
+ */
+export function findTableGridFault(
+  table: ContentTable,
+): TableGridFault | undefined {
+  const gridColumnCount = widestRowLength(table);
+  for (const [rowIndex, row] of table.rows.entries()) {
+    if (row.cells.length !== gridColumnCount) {
+      return {
+        kind: "raggedRow",
+        rowIndex,
+        cellCount: row.cells.length,
+        gridColumnCount,
+      };
+    }
+  }
+  const grid = walkTableGrid(table);
+  for (const row of grid) {
+    for (const position of row) {
+      const fault =
+        position.anchorRowIndex === undefined
+          ? anchorFault(position, row, grid.length)
+          : coveredFault(position);
+      if (fault !== undefined) {
+        return fault;
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * One sentence stating a fault in words, for a writer that refuses or reports a table the grid rule does not admit: it names the fault by its position and, where the fault involves a second region, by that region's anchor. Indices are 0-based, matching every index in the descriptor. The sentence carries no entry point or format of its own, so each caller prefixes whatever names its own operation.
+ */
+export function describeTableGridFault(fault: TableGridFault): string {
+  switch (fault.kind) {
+    case "raggedRow":
+      return `row ${String(fault.rowIndex)} holds ${String(fault.cellCount)} cells where the widest row holds ${String(fault.gridColumnCount)}, but every row of a table covers the same grid`;
+    case "coveredContent":
+      return `the cell at row ${String(fault.rowIndex)}, column ${String(fault.columnIndex)} lies inside the merged region anchored at row ${String(fault.anchorRowIndex)}, column ${String(fault.anchorColumnIndex)} but carries content of its own, and a merged region's content belongs to its anchor`;
+    case "coveredSpan":
+      return `the cell at row ${String(fault.rowIndex)}, column ${String(fault.columnIndex)} lies inside the merged region anchored at row ${String(fault.anchorRowIndex)}, column ${String(fault.anchorColumnIndex)} but states a span of its own, and only a region's anchor carries a span`;
+    case "anchorOverrunsColumns":
+      return `the merged region anchored at row ${String(fault.rowIndex)}, column ${String(fault.columnIndex)} spans past the last column of the grid`;
+    case "anchorOverrunsRows":
+      return `the merged region anchored at row ${String(fault.rowIndex)}, column ${String(fault.columnIndex)} spans past the last row of the table`;
+    case "overlappingAnchors":
+      return `the merged region anchored at row ${String(fault.rowIndex)}, column ${String(fault.columnIndex)} overlaps the region anchored at row ${String(fault.earlierAnchorRowIndex)}, column ${String(fault.earlierAnchorColumnIndex)}, but a grid position belongs to one region only`;
+  }
+}
+
 /** A cell together with the grid column it starts at, for a reader whose source format states that column directly. */
 export interface PositionedTableCell {
   readonly columnIndex: number;
