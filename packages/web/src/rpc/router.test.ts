@@ -291,6 +291,47 @@ describe("normalizeContentForSource", () => {
     ).toBe("heading-1");
   });
 
+  it("keeps a merged region's covered entries as real block-less cells when normalizing a table", () => {
+    const content: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 595, heightPt: 842 },
+          margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+          blocks: [
+            {
+              kind: "table",
+              columnWidthsPt: [100, 100],
+              rows: [
+                {
+                  cells: [
+                    {
+                      colSpan: 2,
+                      blocks: [
+                        { kind: "paragraph", runs: [], styleId: "Heading1" },
+                      ],
+                    },
+                    { blocks: [] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = normalizeContentForSource(content, "docx");
+    const block =
+      result.kind === "wordprocessing"
+        ? result.sections[0]?.blocks[0]
+        : undefined;
+    const cells = block?.kind === "table" ? block.rows[0]?.cells : undefined;
+    expect(cells).toHaveLength(2);
+    expect(cells?.[0]?.colSpan).toBe(2);
+    expect(cells?.[1]).toEqual({ blocks: [] });
+  });
+
   it("recurses into a table's cells when normalizing markdown styling too", () => {
     const content: ContentDocument = {
       kind: "wordprocessing",
