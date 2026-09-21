@@ -478,7 +478,7 @@ describe("what the canonical form restates, and why", () => {
     expectRoundTrip(document);
   });
 
-  it("empties a covered cell and states an absent border style, because that is all ODF's own spellings carry", () => {
+  it("states an absent border style, because that is all ODF's own spellings carry, and leaves a covered cell empty", () => {
     const document = documentOf([
       {
         kind: "table",
@@ -491,10 +491,7 @@ describe("what the canonical form restates, and why", () => {
                 borders: { top: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 } },
                 blocks: [{ kind: "paragraph", runs: [{ text: "wide" }] }],
               },
-              // A covered position carrying content the source never rendered: table:covered-table-cell has nowhere to put it.
-              {
-                blocks: [{ kind: "paragraph", runs: [{ text: "ignored" }] }],
-              },
+              { blocks: [] },
             ],
           },
         ],
@@ -509,7 +506,7 @@ describe("what the canonical form restates, and why", () => {
     expectRoundTrip(document);
   });
 
-  it("keeps a covered cell's own background and borders across a write and a read, while dropping its content", () => {
+  it("refuses a covered position carrying content the source never rendered, because table:covered-table-cell has nowhere to put it", () => {
     const document = documentOf([
       {
         kind: "table",
@@ -523,6 +520,34 @@ describe("what the canonical form restates, and why", () => {
               },
               {
                 blocks: [{ kind: "paragraph", runs: [{ text: "ignored" }] }],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(() => normaliseOdtContent(document)).toThrow(
+      /^canonicalTable: table breaks the grid rule/,
+    );
+    expect(() => writeOdtContent(document)).toThrow(
+      /^canonicalTable: table breaks the grid rule/,
+    );
+  });
+
+  it("keeps a covered cell's own background and borders across a write and a read", () => {
+    const document = documentOf([
+      {
+        kind: "table",
+        columnWidthsPt: [40, 40],
+        rows: [
+          {
+            cells: [
+              {
+                colSpan: 2,
+                blocks: [{ kind: "paragraph", runs: [{ text: "wide" }] }],
+              },
+              {
+                blocks: [],
                 background: { kind: "solid", color: { r: 1, g: 0, b: 0 } },
                 borders: { left: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 } },
               },

@@ -21,6 +21,7 @@ import { attrValue, childrenWithTag } from "../../xml/query";
 import { formatOdfLength, parseOdfLength } from "./units";
 import { formatOdfColor, parseOdfColor } from "./color";
 import { findStyleElement } from "./cascade";
+import { assertTableObeysGridRule } from "./table-grid";
 import {
   BORDER_EDGE_ATTRS,
   BORDER_EDGE_KEYS,
@@ -511,6 +512,7 @@ export function writeOdfTable(
   table: ContentTable,
   context: OdfTableWriteContext,
 ): XmlElement {
+  assertTableObeysGridRule(table, "writeOdfTable");
   const { registry } = context;
   const tableName = context.mintTableName();
   const columns = table.columnWidthsPt.map((widthPt) => {
