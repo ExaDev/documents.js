@@ -26,6 +26,7 @@ import type { ClockPort } from "../../ports/clock";
 import { systemClock } from "../../ports/clock";
 import type { OdtBody } from "./editor";
 import { OdtEditor } from "./editor";
+import { assertTableObeysGridRule } from "../table-grid";
 import { createEmptyOdtPackage } from "./scaffold";
 import type { OdtList, OdtListItem } from "./list";
 import type { OdtParagraph } from "./paragraph";
@@ -278,6 +279,7 @@ function populateCellBlocks(
 
 // ODF needs a real table:covered-table-cell element for EVERY grid position a merge consumes, horizontal or vertical, and ContentTable's grid rule (ContentTableCell in document-schema.js) supplies exactly that: each row's `cells` holds one entry per grid column, anchors and the block-less entries at covered positions alike, so walkTableGrid's own classification maps each entry straight to the element ODF spells it as, with no span accounting here. An anchor becomes a table:table-cell carrying its spans; a covered entry becomes a table:covered-table-cell carrying only its own background and borders, since its content belongs to the anchor. Exported so src/edit/odp/content.ts's own buildOdpPackage can reuse this exact population logic for a slide shape's own table:table content (a draw:frame's table:table is byte-for-byte the same content model a document-level one is -- see odf.js's own readDrawFrameContent) -- the table.ts primitives it walks (OdtTable.appendEmptyRow/OdtTableRow.appendCell/appendCoveredCell) are already format-neutral over WHERE the table:table element lives.
 export function populateOdtTable(table: OdtTable, block: ContentTable): void {
+  assertTableObeysGridRule(block, "populateOdtTable");
   const gridPositions = walkTableGrid(block);
   block.rows.forEach((row, rowIndex) => {
     const tableRow = table.appendEmptyRow();

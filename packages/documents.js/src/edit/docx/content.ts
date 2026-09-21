@@ -26,6 +26,7 @@ import { assertDocxWritableImageFormat } from "./image";
 import type { ClockPort } from "../../ports/clock";
 import { systemClock } from "../../ports/clock";
 import { ptToTwips } from "../../model/units";
+import { assertTableObeysGridRule } from "../table-grid";
 import type { OmmlDiagnostic } from "../../omml/shared";
 import type { DocxBody } from "./editor";
 import { DocxEditor } from "./editor";
@@ -380,6 +381,7 @@ function docxRowCells(
 }
 
 function appendTable(body: DocxBody, block: ContentTable): void {
+  assertTableObeysGridRule(block, "buildDocxPackage");
   const columns = block.columnWidthsPt.length;
   if (block.rows.length === 0 || columns === 0) {
     return;

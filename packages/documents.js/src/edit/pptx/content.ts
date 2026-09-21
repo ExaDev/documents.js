@@ -26,6 +26,7 @@ import type { ClockPort } from "../../ports/clock";
 import { systemClock } from "../../ports/clock";
 import type { DrawingParagraphInit } from "./shape";
 import { PptxEditor } from "./editor";
+import { assertTableObeysGridRule } from "../table-grid";
 import { createEmptyPptxPackage } from "./scaffold";
 import type { PptxSlide } from "./slide";
 import type { PptxTable, PptxTableCell } from "./table";
@@ -215,6 +216,7 @@ function populatePptxTable(
   block: ContentTable,
   resolveHyperlinkRId?: (url: string) => string,
 ): void {
+  assertTableObeysGridRule(block, "buildPptxPackage");
   walkTableGrid(block).forEach((positions, rowIndex) => {
     positions.forEach((position) => {
       const { cell, columnIndex } = position;

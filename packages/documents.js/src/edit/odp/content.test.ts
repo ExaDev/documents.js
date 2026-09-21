@@ -434,3 +434,49 @@ describe("buildOdpPackage: a slide table's own rows", () => {
     ]);
   });
 });
+
+describe("buildOdpPackage: a slide table breaking the grid rule", () => {
+  it("refuses the table, naming the fault, rather than dropping the covered content", () => {
+    expect(() =>
+      buildOdpPackage(
+        presentationDoc([
+          {
+            size: { widthPt: 720, heightPt: 540 },
+            notes: "",
+            shapes: [
+              {
+                frame: { xPt: 36, yPt: 36, widthPt: 480, heightPt: 240 },
+                ...ZERO_INSETS,
+                blocks: [
+                  {
+                    kind: "table",
+                    columnWidthsPt: [100, 100],
+                    rows: [
+                      {
+                        cells: [
+                          {
+                            blocks: [
+                              { kind: "paragraph", runs: [{ text: "anchor" }] },
+                            ],
+                            colSpan: 2,
+                          },
+                          {
+                            blocks: [
+                              { kind: "paragraph", runs: [{ text: "copy" }] },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ]),
+      ),
+    ).toThrow(
+      "populateOdtTable: table breaks the grid rule (the cell at row 0, column 1 lies inside the merged region anchored at row 0, column 0 but carries content of its own, and a merged region's content belongs to its anchor)",
+    );
+  });
+});
