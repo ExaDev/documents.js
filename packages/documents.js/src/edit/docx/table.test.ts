@@ -172,6 +172,44 @@ describe("DocxTable cell access and mutation", () => {
     expect(roundTrippedTable.rows[0]?.heightPt).toBeCloseTo(34, 5);
   });
 
+  it("isHeader is false for a row with no w:tblHeader, and a header row written through the live editor survives a real docx read/build round trip", () => {
+    const editor = createDocx();
+    const table = editor.body.appendTable({ rows: 2, columns: 1 });
+    const row = table.rows()[0]!;
+    expect(row.isHeader).toBe(false);
+    row.isHeader = true;
+    expect(row.isHeader).toBe(true);
+
+    const pkg = decodePackage(encodePackage(editor.toPackage()));
+    const content = readDocxContent(pkg);
+    if (content.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing content");
+    }
+    const roundTrippedTable = content.sections[0]?.blocks.find(
+      (b) => b.kind === "table",
+    );
+    if (roundTrippedTable?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    expect(roundTrippedTable.rows.map((r) => r.isHeader)).toEqual([
+      true,
+      undefined,
+    ]);
+  });
+
+  it("isHeader can be set back to false on a row that already carries the flag, alongside a height", () => {
+    const tableElement = buildTable({ rows: 1, columns: 1 });
+    const table = new DocxTable([tableElement], tableElement);
+    const row = table.rows()[0]!;
+    row.isHeader = true;
+    row.heightPt = 20;
+    expect(row.isHeader).toBe(true);
+    expect(row.heightPt).toBeCloseTo(20, 5);
+    row.isHeader = false;
+    expect(row.isHeader).toBe(false);
+    expect(row.heightPt).toBeCloseTo(20, 5);
+  });
+
   it("heightPt can be updated to a new value and cleared back to undefined on a row that already has one", () => {
     const tableElement = buildTable({ rows: 1, columns: 1 });
     const table = new DocxTable([tableElement], tableElement);

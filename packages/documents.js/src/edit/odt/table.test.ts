@@ -166,6 +166,46 @@ describe("OdtTable", () => {
   });
 });
 
+describe("OdtTable header rows", () => {
+  function tableOfRows(rowCount: number): OdtTable {
+    const editor = createOdt();
+    return editor.body.appendTable({ rows: rowCount, columns: 1 });
+  }
+
+  it("states no header row until one is asked for", () => {
+    const table = tableOfRows(2);
+    expect(table.headerRows()).toEqual([false, false]);
+  });
+
+  it("wraps each run of header rows in its own table:table-header-rows, keeping every row in order", () => {
+    const table = tableOfRows(4);
+    ["a", "b", "c", "d"].forEach((text, index) => {
+      table.rows()[index]!.cells()[0]!.appendParagraph({ text });
+    });
+    table.setHeaderRows([true, false, true, true]);
+    expect(table.headerRows()).toEqual([true, false, true, true]);
+    expect(table.rows()).toHaveLength(4);
+    expect(
+      table.rows().map((row) => row.cells()[0]?.paragraphs().at(-1)?.text),
+    ).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("restates the wrappers rather than nesting them when the flags change", () => {
+    const table = tableOfRows(3);
+    table.setHeaderRows([true, true, false]);
+    table.setHeaderRows([false, true, false]);
+    expect(table.headerRows()).toEqual([false, true, false]);
+    expect(table.rows()).toHaveLength(3);
+  });
+
+  it("reads a row's cells and the grid through the wrappers, not just the table's own direct children", () => {
+    const table = tableOfRows(2);
+    table.setHeaderRows([true, false]);
+    expect(table.gridRows()).toHaveLength(2);
+    expect(table.gridColumnCount()).toBe(1);
+  });
+});
+
 describe("OdtTableRow.heightPt", () => {
   it("is undefined for a row with no style, and round-trips a value written through the setter", () => {
     const editor = createOdt();
