@@ -1,4 +1,9 @@
-import type { ContentBlock, ContentRun } from "document-schema.js";
+import { walkTableGrid } from "document-schema.js";
+import type {
+  ContentBlock,
+  ContentRun,
+  ContentTable,
+} from "document-schema.js";
 import { isOutlineNode } from "./node";
 import type { OutlineChild, OutlineLeaf } from "./node";
 import { stableContentHash } from "./hash";
@@ -23,14 +28,23 @@ export function outlineLeafText(leaf: OutlineLeaf): string {
   if ("runs" in leaf)
     return leaf.runs.map((run: ContentRun) => run.text).join("");
   if ("rows" in leaf)
-    return leaf.rows
-      .map((row) =>
-        row.cells.map((cell) => blockTexts(cell.blocks).join(" ")).join(" "),
-      )
+    return anchorCellTexts(leaf)
+      .map((rowTexts) => rowTexts.join(" "))
       .join("\n");
   if ("base64" in leaf) return leaf.altText ?? "";
   if ("mathml" in leaf) return leaf.presentation?.latex ?? "";
   return "";
+}
+
+// One entry per table row, each holding one text per ANCHOR cell in column order. A ContentTable's rows are dense, so a merged region's covered positions are real entries that hold no blocks; the region's text belongs to its anchor and appears once, and visiting a covered entry would add a separator around an empty string.
+function anchorCellTexts(table: ContentTable): string[][] {
+  return walkTableGrid(table).map((positions) =>
+    positions.flatMap((position) =>
+      position.anchorRowIndex === undefined
+        ? [blockTexts(position.cell.blocks).join(" ")]
+        : [],
+    ),
+  );
 }
 
 function blockTexts(blocks: readonly ContentBlock[]): string[] {
@@ -39,12 +53,7 @@ function blockTexts(blocks: readonly ContentBlock[]): string[] {
     if (block.kind === "paragraph")
       parts.push(block.runs.map((run) => run.text).join(""));
     // Only paragraphs and tables carry text inside a block list; images, page breaks, and embedded objects contribute nothing here (an image's altText belongs to the image leaf itself, and this walk never encounters one as a cell block).
-    if (block.kind === "table")
-      parts.push(
-        ...block.rows.flatMap((row) =>
-          row.cells.map((cell) => blockTexts(cell.blocks).join(" ")),
-        ),
-      );
+    if (block.kind === "table") parts.push(...anchorCellTexts(block).flat());
   }
   return parts;
 }
