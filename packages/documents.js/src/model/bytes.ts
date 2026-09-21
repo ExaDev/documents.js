@@ -5,6 +5,7 @@ import { isDocBytes } from "doc-codec";
 import { isXlsFile } from "xls-codec";
 import { CURRENT_USER_STREAM, POWERPOINT_DOCUMENT_STREAM } from "ppt-codec";
 import { isCompoundFile, readCompoundFile } from "archive-codec";
+import { decodeSvgText } from "../svg/text";
 
 // 'PK\x03\x04' -- the ZIP local-file-header signature (ISO/IEC 21320-1 / APPNOTE 4.3.7). Both docx and pptx are OPC packages, i.e. ZIP archives, so this is the fastest and most reliable way to reject a non-package input before any XML parsing is attempted.
 const ZIP_LOCAL_FILE_HEADER = [0x50, 0x4b, 0x03, 0x04];
@@ -225,29 +226,25 @@ export const CsvBytesSchema = z.instanceof(Uint8Array).refine(isDecodableText, {
   message: "not text in any supported character encoding",
 });
 
-// SvgBytesSchema deliberately keeps the stricter fatal-mode UTF-8 decode the two schemas above have moved off. SVG is XML, and XML carries its own authoritative encoding declaration in its prolog; a general-purpose text detector that ignored that declaration would be a worse answer than refusing, not a better one, so widening this one needs the declaration read first (ExaDev/documents.js#1359).
-function isWellFormedUtf8Text(bytes: Uint8Array): boolean {
+// SvgBytesSchema no longer assumes UTF-8 the way it once did: SVG is XML, and XML carries its own authoritative encoding declaration in its prolog, so this calls decodeSvgText directly rather than decoding UTF-8 itself. That is the identical function src/codecs/read.ts and src/convert/composition.ts call to actually read the bytes, so a file this schema accepts is guaranteed to be one decodeSvgText can also read, and neither can silently drift out of step with the other the way two independent decode implementations could.
+function trySvgText(bytes: Uint8Array): string | undefined {
   try {
-    new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    return true;
+    return decodeSvgText(bytes);
   } catch {
-    return false;
+    return undefined;
   }
 }
 
-// SvgBytesSchema shares the plain-text architecture above but can honestly check one step more structure: SVG, unlike csv/markdown, HAS a recognisable root, an XML document whose outermost element is <svg>. The check is deliberately loose (a case-insensitive substring, not an XML parse, so a DOCTYPE, XML declaration, or comment ahead of the root still passes and trailing junk is left to the reader), because this schema's job is pre-flight rejection of obviously-wrong bytes, not validation. A fatal decode already proved well-formed UTF-8 by the time the substring is tested, so decoding it again here cannot mangle.
-export const SvgBytesSchema = z.instanceof(Uint8Array).refine(
-  (bytes) => {
-    if (!isWellFormedUtf8Text(bytes)) {
-      return false;
-    }
-    return new TextDecoder().decode(bytes).toLowerCase().includes("<svg");
-  },
-  {
-    message:
-      "not a valid SVG file: not well-formed UTF-8 text containing an <svg root element",
-  },
-);
+// SvgBytesSchema shares the plain-text architecture above but can honestly check one step more structure: SVG, unlike csv/markdown, HAS a recognisable root, an XML document whose outermost element is <svg>. The check is deliberately loose (a case-insensitive substring, not an XML parse, so a DOCTYPE, XML declaration, or comment ahead of the root still passes and trailing junk is left to the reader), because this schema's job is pre-flight rejection of obviously-wrong bytes, not validation. decodeSvgText already proved the bytes decodable, under whatever encoding they declared or defaulted to, by the time the substring is tested, so decoding it again here cannot mangle.
+export const SvgBytesSchema = z
+  .instanceof(Uint8Array)
+  .refine(
+    (bytes) => trySvgText(bytes)?.toLowerCase().includes("<svg") ?? false,
+    {
+      message:
+        "not a valid SVG file: not decodable text (per its own declared encoding, or UTF-8 by XML's default) containing an <svg root element",
+    },
+  );
 
 // TypeScript's default Uint8Array generic admits a SharedArrayBuffer-backed view, one step broader than this package's own Uint8Array<ArrayBuffer> convention that decodeDocumentPackage/readPdf/every public entry point in src/index.ts requires. A real, narrow runtime check (not an assertion) proves the narrowing at each byte boundary that needs it, rather than casting past it. Lives here, in the bytes-boundary module, because both directions reach for it: the read-side codec dispatch (src/codecs/read.ts) narrows before decodeDocumentPackage/readPdf, and the write-side callers (src/metadata/write.ts, src/convert/from-package.ts) narrow their builders' returned bytes the same way.
 function isArrayBufferBacked(
