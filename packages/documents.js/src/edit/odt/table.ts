@@ -409,12 +409,7 @@ export class OdtTableCell {
   }
 
   set background(value: Color | undefined) {
-    const current = readCellDecoration(this.pkg, this.node);
-    const name = buildCellStyle(this.pkg, {
-      background: value,
-      borders: current.borders,
-    });
-    setAttr(this.node, "table:style-name", name);
+    writeCellBackground(this.pkg, this.node, value);
   }
 
   get borders(): ContentCellBorders | undefined {
@@ -422,12 +417,60 @@ export class OdtTableCell {
   }
 
   set borders(value: ContentCellBorders | undefined) {
-    const current = readCellDecoration(this.pkg, this.node);
-    const name = buildCellStyle(this.pkg, {
-      background: current.background,
-      borders: value,
-    });
-    setAttr(this.node, "table:style-name", name);
+    writeCellBorders(this.pkg, this.node, value);
+  }
+}
+
+function writeCellBackground(
+  pkg: Package,
+  node: XmlElement,
+  value: Color | undefined,
+): void {
+  const current = readCellDecoration(pkg, node);
+  const name = buildCellStyle(pkg, {
+    background: value,
+    borders: current.borders,
+  });
+  setAttr(node, "table:style-name", name);
+}
+
+function writeCellBorders(
+  pkg: Package,
+  node: XmlElement,
+  value: ContentCellBorders | undefined,
+): void {
+  const current = readCellDecoration(pkg, node);
+  const name = buildCellStyle(pkg, {
+    background: current.background,
+    borders: value,
+  });
+  setAttr(node, "table:style-name", name);
+}
+
+// A live view over a table:covered-table-cell -- the grid position a merge anchored elsewhere covers. It carries no content and no span of its own, but ODF gives the element its own table:style-name like any cell, so it holds its own background and borders through the same style mint OdtTableCell uses; that is what lets a ContentTable's covered entry, which may carry them, round-trip.
+export class OdtCoveredTableCell {
+  private readonly node: XmlElement;
+  private readonly pkg: Package;
+
+  constructor(node: XmlElement, pkg: Package) {
+    this.node = node;
+    this.pkg = pkg;
+  }
+
+  get background(): Color | undefined {
+    return readCellDecoration(this.pkg, this.node).background;
+  }
+
+  set background(value: Color | undefined) {
+    writeCellBackground(this.pkg, this.node, value);
+  }
+
+  get borders(): ContentCellBorders | undefined {
+    return readCellDecoration(this.pkg, this.node).borders;
+  }
+
+  set borders(value: ContentCellBorders | undefined) {
+    writeCellBorders(this.pkg, this.node, value);
   }
 }
 
@@ -487,9 +530,11 @@ export class OdtTableRow {
     return new OdtTableCell(cellElement, this.pkg);
   }
 
-  // Appends a table:covered-table-cell -- ODF's own placeholder for a grid position consumed by a horizontal (table:number-columns-spanned) or vertical (table:number-rows-spanned) merge starting elsewhere. Carries no content at all, matching odf.js's own readTableRow, which reads one back as a bare `{ blocks: [] }` regardless of what (if anything) real-world producers ever put inside one.
-  appendCoveredCell(): void {
-    this.node.children.push(el("table:covered-table-cell"));
+  // Appends a table:covered-table-cell -- ODF's own placeholder for a grid position consumed by a horizontal (table:number-columns-spanned) or vertical (table:number-rows-spanned) merge starting elsewhere. Carries no content at all, matching odf.js's own readTableRow, which reads one back as a block-less entry regardless of what (if anything) real-world producers ever put inside one; the returned view is for stating the position's own background and borders, which readTableRow reads back onto that entry.
+  appendCoveredCell(): OdtCoveredTableCell {
+    const coveredElement = el("table:covered-table-cell");
+    this.node.children.push(coveredElement);
+    return new OdtCoveredTableCell(coveredElement, this.pkg);
   }
 
   // This row's own true grid-column list -- BOTH real table:table-cell and placeholder table:covered-table-cell children, in document order. ODF's grid model guarantees exactly one child element (of either tag) per grid position in every row, which is why walking both tags (rather than cells()' own real-cell-only filter) gives a startColumnIndex that is correct even for a row a prior vertical merge already covered.

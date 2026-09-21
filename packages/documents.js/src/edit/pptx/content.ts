@@ -4,8 +4,14 @@ import type {
   ContentParagraph,
   ContentShape,
   ContentTable,
+  ContentTableCell,
 } from "document-schema.js";
-import { resolveCellFillColor } from "document-schema.js";
+import {
+  resolveCellFillColor,
+  tableCellColumnSpan,
+  tableCellRowSpan,
+  walkTableGrid,
+} from "document-schema.js";
 import type { Package } from "ooxml.js";
 import type { EmbeddedPresentationSerialiser } from "ooxml.js";
 import { base64ToBytes, encodePackage } from "ooxml.js";
@@ -203,51 +209,44 @@ function populateCellParagraphs(
   cell.setParagraphs(paragraphs);
 }
 
-// Unlike docx's gridSpan-collapses-the-row model, ooxml.js's own readTable (typed/pptx/read.ts) always reads exactly `columns` cells per row regardless of merges -- a covered position is a real a:tc marked hMerge/vMerge="1" (see table.ts's own PptxTableCell), never an omitted or replaced element -- so ContentTable.rows[].cells already has one entry per grid column, in grid-column order, for a pptx-sourced table. That means colIndex === cellIndex directly, with no running-offset bookkeeping needed the way docx's own gridSpan-aware writer (src/edit/docx/content.ts) or ODF's own covered-table-cell writer (src/edit/odt/content.ts) each require.
+// A DrawingML table's own a:tr always carries exactly `columns` a:tc elements regardless of merges -- a covered position is a real a:tc marked hMerge/vMerge="1" (see table.ts's own PptxTableCell), never an omitted or replaced element -- and ContentTable's grid rule (ContentTableCell in document-schema.js) gives every row exactly one entry per grid column too, so an entry's array index is its a:tc's own column with no running-offset bookkeeping. walkTableGrid classifies each entry: an anchor carries its spans and its content, while a covered entry states which side of its region it lies on and carries only its own background and borders, since its content belongs to the anchor. A position the region reaches along its own row is marked hMerge and one it reaches from an earlier row is marked vMerge, both at once for the interior of a region wider and taller than one cell, as real PowerPoint output states it.
 function populatePptxTable(
   table: PptxTable,
   block: ContentTable,
   resolveHyperlinkRId?: (url: string) => string,
 ): void {
-  const verticalMerges = new Map<number, number>();
-  block.rows.forEach((row, rowIndex) => {
-    let horizontalCoverRemaining = 0;
-    row.cells.forEach((cell, colIndex) => {
-      const tableCell = table.cell(rowIndex, colIndex);
-      const verticalRemaining = verticalMerges.get(colIndex);
-      const isVerticallyCovered =
-        verticalRemaining !== undefined && verticalRemaining > 0;
-      const isHorizontallyCovered = horizontalCoverRemaining > 0;
-      if (isVerticallyCovered || isHorizontallyCovered) {
-        if (isHorizontallyCovered) {
-          tableCell.horizontalMerge = true;
-          horizontalCoverRemaining -= 1;
-        }
-        if (isVerticallyCovered) {
-          tableCell.verticalMerge = true;
-          verticalMerges.set(colIndex, verticalRemaining - 1);
-        }
+  walkTableGrid(block).forEach((positions, rowIndex) => {
+    positions.forEach((position) => {
+      const { cell, columnIndex } = position;
+      const tableCell = table.cell(rowIndex, columnIndex);
+      if (position.anchorRowIndex !== undefined) {
+        tableCell.horizontalMerge = columnIndex > position.anchorColumnIndex;
+        tableCell.verticalMerge = rowIndex > position.anchorRowIndex;
+        applyCellDecoration(tableCell, cell);
         return;
       }
-      const span = cell.colSpan ?? 1;
-      if (span > 1) {
-        tableCell.colSpan = span;
-        horizontalCoverRemaining = span - 1;
+      const colSpan = tableCellColumnSpan(cell);
+      if (colSpan > 1) {
+        tableCell.colSpan = colSpan;
       }
-      if (cell.rowSpan !== undefined && cell.rowSpan > 1) {
-        tableCell.rowSpan = cell.rowSpan;
-        for (let c = 0; c < span; c++) {
-          verticalMerges.set(colIndex + c, cell.rowSpan - 1);
-        }
+      const rowSpan = tableCellRowSpan(cell);
+      if (rowSpan > 1) {
+        tableCell.rowSpan = rowSpan;
       }
-      // PptxTableCell.background models one flat colour (DrawingML's own <a:solidFill>, the only fill kind this editor's table-cell writer states), so a 'pattern' fill (ExaDev/documents.js#951) writes through resolveCellFillColor's own single representative colour.
-      if (cell.background !== undefined) {
-        tableCell.background = resolveCellFillColor(cell.background);
-      }
-      if (cell.borders !== undefined) {
-        tableCell.borders = cell.borders;
-      }
+      applyCellDecoration(tableCell, cell);
       populateCellParagraphs(tableCell, cell.blocks, resolveHyperlinkRId);
     });
   });
+}
+
+// PptxTableCell.background models one flat colour (DrawingML's own <a:solidFill>, the only fill kind this editor's table-cell writer states), so a 'pattern' fill (ExaDev/documents.js#951) writes through resolveCellFillColor's own single representative colour. Shared by an anchor and a covered entry, since the a:tc each becomes carries its own a:tcPr.
+function applyCellDecoration(
+  target: PptxTableCell,
+  cell: ContentTableCell,
+): void {
+  if (cell.background !== undefined) {
+    target.background = resolveCellFillColor(cell.background);
+  }
+  // PptxTableCell.borders clears the edges when handed undefined and mints nothing, so an absent value needs no guard of its own.
+  target.borders = cell.borders;
 }
