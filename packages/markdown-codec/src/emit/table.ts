@@ -12,7 +12,11 @@ import type {
 import type { MarkdownTableAlignment } from "../ast/ast";
 import type { MarkdownDiagnosticSink } from "../diagnostics/diagnostics";
 import { MarkdownDiagnosticCodes } from "../diagnostics/diagnostics";
-import { emitHtmlTable, tableNeedsHtmlFallback } from "./html-table";
+import {
+  assertTableObeysGridRule,
+  emitHtmlTable,
+  tableNeedsHtmlFallback,
+} from "./html-table";
 import { emitImage } from "./image";
 import type { InlineEmitContext } from "./inline";
 import { emitRunsSingleLine } from "./inline";
@@ -115,6 +119,7 @@ export function emitTable(
     });
     return emitHtmlTable(table, context);
   }
+  assertTableObeysGridRule(table);
   const [header, ...body] = table.rows;
   if (header === undefined) {
     return "";

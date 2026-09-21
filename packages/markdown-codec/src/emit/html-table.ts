@@ -11,9 +11,16 @@ import type {
   ContentTable,
   ContentTableCell,
 } from "document-schema.js";
-import { colorToRgbHex, walkTableGrid } from "document-schema.js";
+import {
+  colorToRgbHex,
+  findTableGridFault,
+  walkTableGrid,
+} from "document-schema.js";
 import type { MarkdownDiagnosticSink } from "../diagnostics/diagnostics";
-import { MarkdownDiagnosticCodes } from "../diagnostics/diagnostics";
+import {
+  MarkdownDiagnosticCodes,
+  MarkdownTableGridFaultError,
+} from "../diagnostics/diagnostics";
 import { MONOSPACE_FONT_FAMILY } from "../shared/style-constants";
 import type { TableEmitContext } from "./table";
 
@@ -176,11 +183,22 @@ function emitCellTag(
   return `<${tag}${attrText}>${emitCellHtml(cell, context)}</${tag}>`;
 }
 
+/**
+ * Throws MarkdownTableGridFaultError when `table` breaks the grid rule. Both table renderers run it before writing anything: a pipe row and an HTML row alike state one cell per anchor, so a table whose covered positions hold content or whose rows disagree about the grid has no faithful rendering in either.
+ */
+export function assertTableObeysGridRule(table: ContentTable): void {
+  const fault = findTableGridFault(table);
+  if (fault !== undefined) {
+    throw new MarkdownTableGridFaultError(fault);
+  }
+}
+
 // Renders `table` as a raw HTML block, unconditionally -- the caller (src/emit/table.ts's emitTable for a top-level table, or emitCellHtml above for a cell whose entire content is one nested table) is what decides WHETHER to reach for this at all; this function itself never re-checks tableNeedsHtmlFallback, since a nested table has no plain-pipe alternative in the first place regardless of its own cells' own needs.
 export function emitHtmlTable(
   table: ContentTable,
   context: TableEmitContext,
 ): string {
+  assertTableObeysGridRule(table);
   // HTML states anchors only: a covered position of a merged region has no cell tag of its own, its extent being carried by the anchor's colspan/rowspan, so emitting one would widen the row past the grid. The first row is the header row, whichever of its positions are anchors.
   const rowTags = walkTableGrid(table).map((positions, rowIndex) => {
     const cellTags = positions.flatMap((position) =>

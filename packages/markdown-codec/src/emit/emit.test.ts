@@ -5,6 +5,7 @@ import type {
   ContentDocument,
   ContentImageBlock,
   ContentTable,
+  ContentTableCell,
 } from "document-schema.js";
 import { PAGE_SIZE_A4 } from "document-schema.js";
 import { describe, expect, it } from "vitest";
@@ -12,6 +13,8 @@ import { DEFAULT_MARGINS } from "../defaults/defaults";
 import {
   MarkdownDiagnosticCodes,
   MarkdownInvalidRunConstructExtentError,
+  MarkdownTableGridFaultError,
+  MarkdownWriteError,
 } from "../diagnostics/diagnostics";
 import { lowerMarkdown } from "../lower/lower";
 import { createDiagnosticCollector } from "../test-support/diagnostics";
@@ -3554,6 +3557,71 @@ describe("tables", () => {
       expect(emitMarkdown(doc([table]))).toBe("| foo bar |\n| --- |");
     },
   );
+});
+
+describe("a table breaking the grid rule", () => {
+  const textCell = (text: string): ContentTableCell => ({
+    blocks: [{ kind: "paragraph", runs: [{ text }] }],
+  });
+  // A merged header whose covered position carries a second copy of the anchor's content, which neither a pipe row nor an HTML row has a cell to hold.
+  const coveredContentTable: ContentTable = {
+    kind: "table",
+    columnWidthsPt: [100, 100],
+    rows: [
+      { cells: [{ ...textCell("anchor"), colSpan: 2 }, textCell("copy")] },
+    ],
+  };
+
+  function thrownBy(table: ContentTable): unknown {
+    try {
+      emitMarkdown(doc([table]));
+    } catch (error) {
+      return error;
+    }
+    return expect.unreachable("emitMarkdown should have thrown");
+  }
+
+  it("throws MarkdownTableGridFaultError from the HTML fallback, rather than dropping the covered content", () => {
+    const error = thrownBy(coveredContentTable);
+    expect(error).toBeInstanceOf(MarkdownTableGridFaultError);
+    expect(error).toBeInstanceOf(MarkdownWriteError);
+    if (!(error instanceof MarkdownTableGridFaultError)) {
+      throw new Error("unreachable");
+    }
+    expect(error.name).toBe("MarkdownTableGridFaultError");
+    expect(error.code).toBe("md/table-grid-fault");
+    expect(error.fault).toEqual({
+      kind: "coveredContent",
+      rowIndex: 0,
+      columnIndex: 1,
+      anchorRowIndex: 0,
+      anchorColumnIndex: 0,
+    });
+    expect(error.message).toBe(
+      "a table breaks the grid rule: the cell at row 0, column 1 lies inside the merged region anchored at row 0, column 0 but carries content of its own, and a merged region's content belongs to its anchor",
+    );
+  });
+
+  it("throws from the plain pipe renderer for rows of differing lengths", () => {
+    const error = thrownBy({
+      kind: "table",
+      columnWidthsPt: [100, 100],
+      rows: [
+        { cells: [textCell("a"), textCell("b")] },
+        { cells: [textCell("c")] },
+      ],
+    });
+    expect(error).toBeInstanceOf(MarkdownTableGridFaultError);
+  });
+
+  it("throws for a faulty table that is the whole content of another table's cell", () => {
+    const error = thrownBy({
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [{ cells: [{ blocks: [coveredContentTable] }] }],
+    });
+    expect(error).toBeInstanceOf(MarkdownTableGridFaultError);
+  });
 });
 
 describe("images", () => {
