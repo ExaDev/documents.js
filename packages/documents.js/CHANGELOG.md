@@ -1,3 +1,17 @@
+## [12.0.0](https://github.com/ExaDev/documents.js/compare/documents.js%4011.0.0...documents.js%4012.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **documents.js:** a ContentTable with no rows previously wrote nothing and
+  returned silently for docx, odp, odt and pptx; it now throws, since ODF
+  and OOXML both require a table element to hold at least one row and there
+  is no faithful way to spell one with none.
+
+### Bug Fixes
+
+* **documents.js:** derive a written table's column count from its grid, not columnWidthsPt ([5cbaee9](https://github.com/ExaDev/documents.js/commit/5cbaee9495a20a74b8266d4fa78dd39dfb5451d4))
+* **documents.js:** refuse an ODT table merge that would orphan a covered cell ([5a4adcb](https://github.com/ExaDev/documents.js/commit/5a4adcbaf1d4f60b0dae2f8cd1e72a4b0e1a770f))
+
 ## [11.0.0](https://github.com/ExaDev/documents.js/compare/documents.js%4010.0.0...documents.js%4011.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES
