@@ -1,3 +1,9 @@
+## [6.0.1](https://github.com/ExaDev/documents.js/compare/doc-codec%406.0.0...doc-codec%406.0.1) (2026-09-21)
+
+### Tests
+
+* **doc-codec:** pin a table row's header flag through a write/read round trip ([74717a3](https://github.com/ExaDev/documents.js/commit/74717a38a14ddba3aad48571f762396da34432da))
+
 ## [6.0.0](https://github.com/ExaDev/documents.js/compare/doc-codec%405.0.0...doc-codec%406.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES
