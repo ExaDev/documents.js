@@ -1,3 +1,16 @@
+## [5.1.0](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.0.2...wpd-codec%405.1.0) (2026-09-21)
+
+### Features
+
+* **wpd-codec:** carry a table row's header flag through to isHeader ([39034d9](https://github.com/ExaDev/documents.js/commit/39034d9b96757430bd586c8c6945fa6736ac3dc8)), references [#1377](https://github.com/ExaDev/documents.js/issues/1377)
+
+
+### Dependencies
+
+- Updated byte-codec to 1.8.0
+- Updated document-schema.js to 7.14.0
+- Updated archive-codec to 1.11.10
+
 ## [5.0.2](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.0.1...wpd-codec%405.0.2) (2026-09-21)
 
 

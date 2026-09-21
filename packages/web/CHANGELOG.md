@@ -1,3 +1,13 @@
+## [2.11.56](https://github.com/ExaDev/documents.js/compare/web%402.11.55...web%402.11.56) (2026-09-21)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.14.0
+- Updated markdown-codec to 11.0.0
+- Updated ooxml.js to 12.0.0
+- Updated documents.js to 14.0.0
+
 ## [2.11.55](https://github.com/ExaDev/documents.js/compare/web%402.11.54...web%402.11.55) (2026-09-21)
 
 

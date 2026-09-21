@@ -1,3 +1,23 @@
+## [6.0.0](https://github.com/ExaDev/documents.js/compare/doc-codec%405.0.0...doc-codec%406.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **doc-codec:** a doc row carrying isHeader now writes a
+  sprmTTableHeader into its row-ending mark's own grpprl, where nothing
+  was written before. A table whose rows state no header flag writes
+  byte identically to before.
+
+### Features
+
+* **doc-codec:** read and write a table row's sprmTTableHeader ([7f1a6af](https://github.com/ExaDev/documents.js/commit/7f1a6af72473a53057896cd696345fabdff7992c)), references [#1377](https://github.com/ExaDev/documents.js/issues/1377)
+
+
+### Dependencies
+
+- Updated byte-codec to 1.8.0
+- Updated document-schema.js to 7.14.0
+- Updated archive-codec to 1.11.10
+
 ## [5.0.0](https://github.com/ExaDev/documents.js/compare/doc-codec%404.0.1...doc-codec%405.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES

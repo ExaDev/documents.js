@@ -1,3 +1,27 @@
+## [12.0.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%4011.1.0...ooxml.js%4012.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **ooxml.js:** a docx row carrying isHeader now writes a w:trPr
+  holding w:tblHeader, where a row carrying no heightPt previously wrote
+  no w:trPr at all. A table whose rows state no header flag writes byte
+  identically to before.
+
+### Features
+
+* **ooxml.js:** read and write a docx row's w:tblHeader ([b81c56b](https://github.com/ExaDev/documents.js/commit/b81c56beb0d557fb74a14ec94ec8d0036f686c79)), references [#1377](https://github.com/ExaDev/documents.js/issues/1377)
+
+### Tests
+
+* **ooxml.js:** type a table fixture row's own header flag ([9ca72f5](https://github.com/ExaDev/documents.js/commit/9ca72f55b95d81c00b3c38c78082ef3020e17f5a)), references [#1377](https://github.com/ExaDev/documents.js/issues/1377)
+
+
+### Dependencies
+
+- Updated byte-codec to 1.8.0
+- Updated document-schema.js to 7.14.0
+- Updated archive-codec to 1.11.10
+
 ## [11.1.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%4011.0.0...ooxml.js%4011.1.0) (2026-09-21)
 
 ### Features
