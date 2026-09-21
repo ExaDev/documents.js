@@ -25,4 +25,6 @@ export const PptDiagnosticCodes = {
   BLOCK_DROPPED: "ppt/block-dropped",
   // Write side: a table cell's colSpan or rowSpan, which the binary format's tables cannot state at all -- a PowerPoint 97-2003 table is a strict grid of shapes with no merge records (PowerPoint itself gained merged cells only in the 2010 XML format), so the cell's text is kept, sized to its single grid position, and the span is reported rather than silently narrowed.
   TABLE_SPAN_DROPPED: "ppt/table-span-dropped",
+  // Write side: a table that breaks the grid rule (ContentTableCell in document-schema.js) -- rows of differing lengths, content or a span on a position a merged region covers, or a region running past the grid or into another. Reported rather than thrown because this writer states no merge at all: every entry of every row is written at its own grid position with its own text, so nothing a covered position held is lost, only the merged region the producer meant is not what the format can show.
+  TABLE_GRID_FAULT: "ppt/table-grid-fault",
 } as const;
