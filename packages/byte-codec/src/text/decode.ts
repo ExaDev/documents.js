@@ -155,6 +155,30 @@ function findBom(
   );
 }
 
+/** A byte order mark's own encoding, and how many leading bytes it occupies. */
+export interface ByteOrderMark {
+  /** The encoding the mark identifies. */
+  readonly encoding: TextEncodingLabel;
+  /** The mark's own length in bytes, ahead of whatever it precedes. */
+  readonly length: number;
+}
+
+/**
+ * Detects a byte order mark at the start of `bytes`, without decoding anything past it.
+ *
+ * {@link decodeText} already checks for a mark as part of its own detection order; this exists for a caller that has to settle the encoding before it can safely read anything else, an XML document's own encoding declaration being the case that occurs: the declaration lives inside the document, in whichever encoding the document turns out to be, so a mark has to be ruled out (or read) before that declaration can even be located.
+ * @param bytes - The bytes to check.
+ * @returns The mark's encoding and length, or `undefined` when the bytes carry none of the five marks {@link decodeText} itself recognises.
+ */
+export function detectByteOrderMark(
+  bytes: Uint8Array,
+): ByteOrderMark | undefined {
+  const bom = findBom(bytes);
+  return bom === undefined
+    ? undefined
+    : { encoding: bom.encoding, length: bom.bytes.length };
+}
+
 /** The bytes past a byte order mark for `encoding`, or the bytes unchanged when they carry no such mark. A mark for a different encoding is left alone: under a declared encoding it is content, not a mark. */
 function stripBom(bytes: Uint8Array, encoding: TextEncodingLabel): Uint8Array {
   const bom = findBom(bytes);
