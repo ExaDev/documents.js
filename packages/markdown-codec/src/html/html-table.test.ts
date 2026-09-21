@@ -44,6 +44,28 @@ describe("parseHtmlTable", () => {
     ]);
   });
 
+  it("reads a row whose cells are all th as a header row, and one of td as an ordinary row", () => {
+    const table = parse(
+      "<table>\n<tr><th>h</th><th>i</th></tr>\n<tr><td>a</td><td>b</td></tr>\n</table>",
+    );
+    expect(table?.rows.map((row) => row.isHeader)).toEqual([true, undefined]);
+  });
+
+  // <th scope="row"> is a row LABEL rather than a header row, so a row mixing the two tags stays an ordinary row: reading it as a header row would turn a body row into one on every read.
+  it("leaves a row mixing th and td cells unflagged", () => {
+    const table = parse(
+      "<table>\n<tr><th>label</th><td>value</td></tr>\n</table>",
+    );
+    expect(table?.rows[0]?.isHeader).toBeUndefined();
+  });
+
+  it("reads a header row that is not the first row", () => {
+    const table = parse(
+      "<table>\n<tr><td>a</td></tr>\n<tr><th>h</th></tr>\n</table>",
+    );
+    expect(table?.rows.map((row) => row.isHeader)).toEqual([undefined, true]);
+  });
+
   it("reads colspan/rowspan as positive integers, and omits them when absent", () => {
     const table = parse(
       '<table>\n<tr><td colspan="2" rowspan="3">x</td><td>y</td></tr>\n</table>',

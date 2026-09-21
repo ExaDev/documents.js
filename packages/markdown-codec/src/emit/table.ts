@@ -124,6 +124,15 @@ export function emitTable(
   if (header === undefined) {
     return "";
   }
+  // GFM has no table without a header row: the delimiter row is part of the grammar, so the first row is rendered as the header whether or not the table says it is one. A table that states no header row at all therefore gains one here, which is a real difference from what it stated and is reported rather than left for a reader to discover by round-tripping it. The other direction (a header row somewhere the pipe grammar cannot state it) never reaches this renderer at all, since tableNeedsHtmlFallback sends it to the HTML fallback, which can.
+  if (header.isHeader !== true) {
+    context.sink({
+      code: MarkdownDiagnosticCodes.TABLE_HEADER_ROW_SYNTHESISED,
+      severity: "info",
+      message:
+        'this table states no header row, and GFM\'s own table extension has no syntax for a table without one (github.github.com/gfm, "Tables (extension)"), so its first row is rendered as the header row and will read back as one',
+    });
+  }
   const alignments = header.cells.map((cell) =>
     toMarkdownAlignment(
       cell.blocks[0]?.kind === "paragraph"
