@@ -1,3 +1,21 @@
+## [6.0.0](https://github.com/ExaDev/documents.js/compare/rtf-codec%405.0.1...rtf-codec%406.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **rtf-codec:** an RTF table read by this package now has one ContentTableCell per
+  grid column in every row. A consumer that padded colSpan - 1 placeholders of its own
+  must stop padding and read the array directly.
+
+### Bug Fixes
+
+* **rtf-codec:** give an RTF table one cell per grid column in both directions ([c420617](https://github.com/ExaDev/documents.js/commit/c4206172db669ac444b5ef0bf7ac599a3d4ff667))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.12.0
+- Updated archive-codec to 1.11.8
+
 ## [5.0.1](https://github.com/ExaDev/documents.js/compare/rtf-codec%405.0.0...rtf-codec%405.0.1) (2026-09-20)
 
 ### Documentation

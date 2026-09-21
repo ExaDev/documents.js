@@ -1,3 +1,19 @@
+## [8.0.0](https://github.com/ExaDev/documents.js/compare/markdown-codec%407.0.1...markdown-codec%408.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **markdown-codec:** an HTML table read by this package now has one ContentTableCell per
+  grid column in every row.
+
+### Bug Fixes
+
+* **markdown-codec:** place HTML table cells on the grid their spans imply ([ad4933d](https://github.com/ExaDev/documents.js/commit/ad4933d1f6d03d9f631537289bfdb475d58d28db))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.12.0
+
 ## [7.0.1](https://github.com/ExaDev/documents.js/compare/markdown-codec%407.0.0...markdown-codec%407.0.1) (2026-09-20)
 
 ### Documentation

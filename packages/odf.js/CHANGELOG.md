@@ -1,3 +1,14 @@
+## [8.0.2](https://github.com/ExaDev/documents.js/compare/odf.js%408.0.1...odf.js%408.0.2) (2026-09-21)
+
+### Bug Fixes
+
+* **odf.js:** derive a table's covered positions from the anchors' spans and keep their decoration ([dd2796e](https://github.com/ExaDev/documents.js/commit/dd2796eff88262df05533c5267b4871dea8cf36e))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.12.0
+
 ## [8.0.1](https://github.com/ExaDev/documents.js/compare/odf.js%408.0.0...odf.js%408.0.1) (2026-09-20)
 
 ### Documentation

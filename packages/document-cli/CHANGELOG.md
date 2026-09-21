@@ -1,3 +1,17 @@
+## [5.11.39](https://github.com/ExaDev/documents.js/compare/document-cli%405.11.38...document-cli%405.11.39) (2026-09-21)
+
+### Bug Fixes
+
+* **document-cli:** clear a merged pptx region's covered cells and count a slide table's real grid ([77c3a21](https://github.com/ExaDev/documents.js/commit/77c3a21af0b00b03d08c6bbfefbf3d2f6449bbc6))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.12.0
+- Updated odf.js to 8.0.2
+- Updated document-outline.js to 3.9.19
+- Updated documents.js to 8.0.0
+
 ## [5.11.38](https://github.com/ExaDev/documents.js/compare/document-cli%405.11.37...document-cli%405.11.38) (2026-09-20)
 
 

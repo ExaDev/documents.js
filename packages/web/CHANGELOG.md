@@ -1,3 +1,17 @@
+## [2.11.48](https://github.com/ExaDev/documents.js/compare/web%402.11.47...web%402.11.48) (2026-09-21)
+
+### Bug Fixes
+
+* **web:** render a merged table's anchors rather than one cell per grid position ([17cb9c0](https://github.com/ExaDev/documents.js/commit/17cb9c0671737e241199b29d8bd47ca56a44da4b))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.12.0
+- Updated markdown-codec to 8.0.0
+- Updated ooxml.js to 10.0.0
+- Updated documents.js to 8.0.0
+
 ## [2.11.47](https://github.com/ExaDev/documents.js/compare/web%402.11.46...web%402.11.47) (2026-09-20)
 
 

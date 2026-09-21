@@ -1,3 +1,16 @@
+## [1.5.40](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.5.39...document-compute.js%401.5.40) (2026-09-21)
+
+### Bug Fixes
+
+* **document-outline.js:** join a merged table's anchor text without the covered positions ([133ec93](https://github.com/ExaDev/documents.js/commit/133ec9347ed3bc064dd68ada7d965feee6671856))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.12.0
+- Updated markdown-codec to 8.0.0
+- Updated documents.js to 8.0.0
+
 ## [1.5.39](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.5.38...document-compute.js%401.5.39) (2026-09-20)
 
 
