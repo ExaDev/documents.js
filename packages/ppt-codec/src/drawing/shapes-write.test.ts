@@ -529,6 +529,26 @@ describe("writeSlideDrawing: table cell spans and content", () => {
     ).toBe(true);
   });
 
+  it("reports a header row, naming the row it dropped the flag from, and stays silent for an ordinary one", () => {
+    const diagnostics = collectDiagnostics([
+      {
+        shape: tableShape(
+          [
+            { cells: [{ blocks: [] }] },
+            { cells: [{ blocks: [] }], isHeader: true },
+          ],
+          [50],
+        ),
+        clientData: undefined,
+      },
+    ]);
+    const reported = diagnostics.filter(
+      (d) => d.code === PptDiagnosticCodes.TABLE_HEADER_ROW_DROPPED,
+    );
+    expect(reported).toHaveLength(1);
+    expect(reported[0]?.message).toContain("table row 1");
+  });
+
   it("writes one shape at its own grid position for every entry of a merged region, so a covered entry neither obscures the anchor nor removes a row from the grid", () => {
     // A 2x2 region anchored at (0,0) in a 3-row, 2-column grid. The dense grid rule keeps a block-less entry at each covered position; the format has no merge records, so each entry, covered ones included, is a plain shape at the position its array index names, and the anchor stays one cell wide and one row tall. Row 1 holds only covered entries, so skipping them would erase that row on the way back in.
     const diagnostics: PptDiagnostic[] = [];
