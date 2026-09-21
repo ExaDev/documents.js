@@ -261,6 +261,8 @@ async function main(): Promise<void> {
     writeFileSync(
       resultFile,
       JSON.stringify({
+        // Every package this run's gate actually evaluated, pass or fail: report-mutation-outcome.ts needs this to tell a package it re-checked and found passing from one it simply never touched, since only the covered ones may be dropped from a previously open tracking issue's failing list.
+        covered: outcomes.map((outcome) => outcome.package),
         failing: failed.map((outcome) => ({
           package: outcome.package,
           reason: failureReason(outcome),

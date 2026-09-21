@@ -1,4 +1,4 @@
-// Keeps one tracking issue in step with the outcome of a scheduled or dispatched mutation run, so a red run cannot go unnoticed. When the run failed, the issue is opened if there is none and otherwise updated in place with the failing packages and the run that found them; it is never opened twice. When a later run passes and the issue is open, the issue gets a comment naming that run and is closed.
+// Keeps one tracking issue in step with the outcome of a scheduled or dispatched mutation run, so a red run cannot go unnoticed. A scheduled run covers the whole workspace, but a dispatched one may cover as little as a single named package, so the issue's per-package failing list is merged rather than replaced on every run: a package the run covered is updated to that run's own result (dropped if it now passes), and a package the run did not cover keeps whatever the issue already said about it, recovered from the issue's own prior body. The issue is opened if none is open and the merged list is non-empty, updated in place while it stays non-empty, and closed, with a comment naming the run, once it empties and the run itself did not break outright.
 //
 // The decision and the wording are pure functions; the `gh` calls sit behind the small GhClient interface, so the whole flow is tested against a fake and only the thin wrapper at the bottom touches the network.
 import { execFileSync } from "node:child_process";
@@ -36,6 +36,8 @@ export const WORKFLOW_ACTOR = "app/github-actions";
 
 export interface TrackedIssue {
   readonly number: number;
+  /** The issue's own current body, so a run that covers only some packages can tell which of the issue's already-listed failures it actually re-checked. */
+  readonly body: string;
 }
 
 export interface GhClient {
@@ -58,13 +60,15 @@ export interface RunOutcome {
     readonly package: string;
     readonly reason: string | undefined;
   }[];
+  /** Every package this run's gate actually evaluated, pass or fail: a scheduled run covers the whole workspace, a dispatched one may cover as little as a single named package. Empty when the gate never ran (a plan or slice failure with no result file). Package-scoped failure merging needs this: a package this run did not cover must keep whatever the tracking issue already said about it rather than being read as newly passing. */
+  readonly coveredPackages: readonly string[];
   readonly runUrl: string;
 }
 
 export type Action = "open" | "update" | "close" | "none";
 
-/** The lines that say why the run is failing, empty when it is passing. A skipped slice job is not a failure, since a run with nothing to mutate skips it. */
-export function failureLines(outcome: RunOutcome): readonly string[] {
+/** The lines that say the run itself broke outright, empty when it did not. A skipped slice job is not a failure, since a run with nothing to mutate skips it. Distinct from a package's own gate failure: these describe the run, not a package, so they are never carried forward from an earlier run the way a package's failure is. */
+export function runFailureLines(outcome: RunOutcome): readonly string[] {
   const lines: string[] = [];
   if (outcome.planResult !== "success") {
     lines.push(`The plan job ended as ${outcome.planResult}.`);
@@ -75,15 +79,57 @@ export function failureLines(outcome: RunOutcome): readonly string[] {
   ) {
     lines.push(`The slice jobs ended as ${outcome.sliceResult}.`);
   }
-  for (const failure of outcome.gateFailures) {
-    lines.push(
-      `${failure.package}: ${failure.reason ?? "failed the merged gate"}`,
-    );
-  }
   return lines;
 }
 
-/** What to do with the tracking issue given whether one is open and whether the run is failing. */
+/** A run-failure bullet line, exactly as runFailureLines renders it and failingBody writes it. Recognising this shape is what lets parseFailingPackages tell a run-level failure line apart from a package one when it reads a prior issue body back. */
+const RUN_FAILURE_LINE = /^The (plan job|slice jobs) ended as \S+\.$/;
+
+/** A package failing the gate, rendered as failingBody's own bullet line: the package name, then its reason with the same fallback failingBody's line-building already applies when the gate reported none. */
+function packageFailureLine(failure: {
+  readonly package: string;
+  readonly reason: string | undefined;
+}): string {
+  return `${failure.package}: ${failure.reason ?? "failed the merged gate"}`;
+}
+
+/** The package names and reasons a previously opened tracking issue's body lists as failing, recovered from its own bullet lines. A bullet line names a package unless it matches RUN_FAILURE_LINE, since a run-level failure sentence carries no package name to recover; the package name is the text before the first ": ", and the reason is everything after it, the same split packageFailureLine's own rendering used to produce the line in the first place, so recovering it is exact. */
+export function parseFailingPackages(
+  body: string,
+): ReadonlyMap<string, string> {
+  const packages = new Map<string, string>();
+  for (const line of body.split("\n")) {
+    const bulletMatch = /^- (.+)$/.exec(line);
+    if (!bulletMatch) continue;
+    const bullet = bulletMatch[1] ?? "";
+    if (RUN_FAILURE_LINE.test(bullet)) continue;
+    const separator = bullet.indexOf(": ");
+    if (separator === -1) continue;
+    packages.set(bullet.slice(0, separator), bullet.slice(separator + 2));
+  }
+  return packages;
+}
+
+/** The packages to report failing: a previously open issue's own unresolved packages, merged with this run's own gate result. A package this run did not cover keeps its prior listing untouched, since this run said nothing about it either way; a package this run did cover is dropped when it now passes and kept, with a fresh reason, when it still fails; a package this run newly fails is added. Reasons recovered from a prior issue body are already fully rendered text (parseFailingPackages reads packageFailureLine's own output back), so they carry through as-is rather than being re-defaulted. */
+export function mergedFailingPackages(
+  previouslyFailing: ReadonlyMap<string, string>,
+  outcome: RunOutcome,
+): readonly { readonly package: string; readonly reason: string }[] {
+  const covered = new Set(outcome.coveredPackages);
+  const merged = new Map<string, string>();
+  for (const [name, reason] of previouslyFailing) {
+    if (!covered.has(name)) merged.set(name, reason);
+  }
+  for (const failure of outcome.gateFailures) {
+    merged.set(failure.package, failure.reason ?? "failed the merged gate");
+  }
+  return [...merged.entries()].map(([name, reason]) => ({
+    package: name,
+    reason,
+  }));
+}
+
+/** What to do with the tracking issue given whether one is open and whether the run, or the merged set of still-failing packages, is failing. */
 export function nextAction(
   existing: TrackedIssue | undefined,
   failing: boolean,
@@ -92,14 +138,18 @@ export function nextAction(
   return existing === undefined ? "none" : "close";
 }
 
-/** The issue body for a failing run: what failed and the run that found it, and nothing per file, so it stays small however large the workspace grows. */
-export function failingBody(lines: readonly string[], runUrl: string): string {
+/** The issue body for a failing run: what is failing and the run that reported it, and nothing per file, so it stays small however large the workspace grows. runLines describes this run itself; packageLines is the already-merged per-package list (mergedFailingPackages), which may include packages an earlier, different run found and this one never touched. */
+export function failingBody(
+  runLines: readonly string[],
+  packageLines: readonly string[],
+  runUrl: string,
+): string {
   return [
-    `The latest scheduled or dispatched mutation run failed: ${runUrl}`,
+    `The latest scheduled or dispatched mutation run: ${runUrl}`,
     "",
-    ...lines.map((line) => `- ${line}`),
+    ...[...runLines, ...packageLines].map((line) => `- ${line}`),
     "",
-    "This issue is kept up to date by the workflow. It closes itself when a later run passes.",
+    "This issue is kept up to date by the workflow. A package stays listed until a run that actually covers it passes; it closes itself once none remain and the run itself did not break.",
   ].join("\n");
 }
 
@@ -114,10 +164,17 @@ export function reportOutcome(
   outcome: RunOutcome,
   title: string,
 ): Action {
-  const lines = failureLines(outcome);
+  const runLines = runFailureLines(outcome);
   const existing = client.findOpenIssue(title);
-  const action = nextAction(existing, lines.length > 0);
-  const body = failingBody(lines, outcome.runUrl);
+  const previouslyFailing =
+    existing === undefined
+      ? new Map<string, string>()
+      : parseFailingPackages(existing.body);
+  const merged = mergedFailingPackages(previouslyFailing, outcome);
+  const packageLines = merged.map((failure) => packageFailureLine(failure));
+  const failing = runLines.length > 0 || merged.length > 0;
+  const action = nextAction(existing, failing);
+  const body = failingBody(runLines, packageLines, outcome.runUrl);
   switch (action) {
     case "open":
       {
@@ -168,6 +225,26 @@ export function readGateFailures(
       package: entry.package,
       reason: typeof entry.reason === "string" ? entry.reason : undefined,
     };
+  });
+}
+
+/** The gate's result file's covered list: every package this run's gate actually evaluated, empty when the gate did not run. */
+export function readCoveredPackages(
+  text: string | undefined,
+): readonly string[] {
+  if (text === undefined) return [];
+  const parsed: unknown = JSON.parse(text);
+  const covered = isRecord(parsed) ? parsed.covered : undefined;
+  if (!Array.isArray(covered)) {
+    throw new Error("the gate result has no covered list");
+  }
+  return covered.map((entry: unknown, index: number) => {
+    if (typeof entry !== "string") {
+      throw new Error(
+        `the gate result's covered list has a non-string entry at index ${String(index)}`,
+      );
+    }
+    return entry;
   });
 }
 
@@ -230,7 +307,7 @@ function ghClient(repository: string): GhClient {
           "--search",
           `in:title "${title}"`,
           "--json",
-          "number,title,author",
+          "number,title,author,body",
           "--limit",
           "20",
         ]),
@@ -242,9 +319,10 @@ function ghClient(repository: string): GhClient {
           entry.title === title &&
           isRecord(entry.author) &&
           entry.author.login === WORKFLOW_ACTOR &&
-          typeof entry.number === "number"
+          typeof entry.number === "number" &&
+          typeof entry.body === "string"
         ) {
-          return { number: entry.number };
+          return { number: entry.number, body: entry.body };
         }
       }
       return undefined;
@@ -257,7 +335,7 @@ function ghClient(repository: string): GhClient {
       if (!Number.isInteger(number)) {
         throw new Error(`gh issue create printed no issue URL: ${url}`);
       }
-      return { number };
+      return { number, body };
     },
     setIssueType(issue, typeName) {
       // The workflow's own token may not be allowed to read the organisation's issue types or to set one; that is reported to the caller, which logs it and leaves the issue untyped rather than labelled wrongly.
@@ -334,6 +412,7 @@ function main(): void {
       planResult,
       sliceResult,
       gateFailures: readGateFailures(gateText),
+      coveredPackages: readCoveredPackages(gateText),
       runUrl,
     },
     title,
