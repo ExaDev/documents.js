@@ -17,6 +17,8 @@ import {
   removeChild,
 } from "../../xml/edit";
 import { el } from "../../xml/fragment";
+import type { PlacedLiveCell, TableGridRows } from "../table-grid";
+import { resolveLiveTableGrid } from "../table-grid";
 import type { ParagraphInit } from "./paragraph";
 import { buildParagraph, DocxParagraph } from "./paragraph";
 
@@ -303,6 +305,7 @@ export class DocxTableRow {
     return created;
   }
 
+  // The row's PHYSICAL cells: one view per w:tc element. A horizontally merged region is one w:tc carrying w:gridSpan, so after a merge this holds fewer cells than the table has grid columns and an index into it is not a grid column. DocxTable.gridRows is the grid-addressed view; DocxTableRow.mergeCellsHorizontally takes a grid column, not an index into this list.
   cells(): DocxTableCell[] {
     const out: DocxTableCell[] = [];
     for (const child of this.node.children) {
@@ -341,7 +344,9 @@ export class DocxTableRow {
     );
   }
 
-  // Merges colSpan grid columns of THIS row into one cell (ECMA-376 w:tcPr/w:gridSpan on the surviving anchor cell) -- the horizontal-merge primitive docx genuinely lacks today, unlike vertical merge, which is already a pure attribute setter on an existing w:tc (DocxTableCell.verticalMerge above). Docx omits a w:tc entirely for a column consumed by a merge (no covered-cell placeholder the way ODF has), so making this cell span colSpan columns means REMOVING the consumed cells' own w:tc elements from the row outright. Consumed cells' own content is discarded silently and unconditionally -- no check, no guard -- matching OdsSheet.mergeCells' own established precedent (src/edit/ods/sheet.ts) exactly: this is documented, intentional behaviour, not a silent trap.
+  // Merges colSpan grid columns of THIS row into one cell (ECMA-376 w:tcPr/w:gridSpan on the surviving anchor cell), the horizontal-merge primitive docx lacks as an attribute: unlike vertical merge, which is a pure attribute setter on an existing w:tc (DocxTableCell.verticalMerge above), docx omits a w:tc entirely for a column a merge consumes, so the consumed cells' own w:tc elements are REMOVED from the row. Their content is discarded silently and unconditionally, matching OdsSheet.mergeCells' own established precedent (src/edit/ods/sheet.ts): documented, intentional behaviour, not a silent trap.
+  //
+  // startColumnIndex is a GRID column: the position a w:tc starts at is the sum of the w:gridSpan of the cells before it, so it is not an index into cells(). The merged region is grid columns startColumnIndex up to startColumnIndex + colSpan, and every w:tc that starts inside it is consumed. The merge is refused, with an error naming the grid column, when it cannot be carried out without leaving the table in a state the grid rule forbids: the start column lies inside a cell that started earlier, the region would cut through a cell reaching past its last column, or a cell it would consume (or widen) takes part in a vertical merge. The last case is a refusal rather than an extension because a vertical merge is a chain of w:tc elements across rows that must line up in start column and span, so widening one row's cell correctly means rewriting every row of the chain and swallowing whatever those rows hold in the widened columns, which may belong to other vertical merges; that is a rectangle merge, and DocxTable.mergeCells is where it is decided, after the vertical merge has been unmerged. A merge that would change nothing is never refused.
   mergeCellsHorizontally(
     startColumnIndex: number,
     colSpan: number,
@@ -351,37 +356,201 @@ export class DocxTableRow {
         `mergeCellsHorizontally: colSpan must be a positive integer, got ${colSpan}`,
       );
     }
-    const cellElements: XmlElement[] = [];
-    for (const child of this.node.children) {
-      if (child.type === "element" && child.tag === "w:tc") {
-        cellElements.push(child);
-      }
+    const plan = planHorizontalMerge(
+      this.node,
+      startColumnIndex,
+      colSpan,
+      false,
+    );
+    if ("refusal" in plan) {
+      throw new Error(`mergeCellsHorizontally: ${plan.refusal}`);
     }
-    const anchorElement = cellElements[startColumnIndex];
-    if (anchorElement === undefined) {
-      throw new Error(
-        `mergeCellsHorizontally: column ${startColumnIndex} does not exist in this row`,
-      );
-    }
-    if (startColumnIndex + colSpan > cellElements.length) {
-      throw new Error(
-        `mergeCellsHorizontally: colSpan ${colSpan} starting at column ${startColumnIndex} exceeds this row's own ${cellElements.length} columns`,
-      );
-    }
-    for (let i = 1; i < colSpan; i++) {
-      const consumedElement = cellElements[startColumnIndex + i];
-      if (consumedElement !== undefined) {
-        removeChild(this.node.children, consumedElement);
-      }
-    }
-    const anchor = new DocxTableCell(anchorElement);
-    anchor.colSpan = colSpan;
-    return anchor;
+    return applyHorizontalMerge(plan, colSpan);
   }
+}
+
+// A w:tc together with the grid columns it occupies: the columns from startColumn up to startColumn + span.
+interface RowCell {
+  readonly element: XmlElement;
+  readonly startColumn: number;
+  readonly span: number;
+  readonly takesPartInVerticalMerge: boolean;
+}
+
+function rowCells(row: XmlElement): RowCell[] {
+  const out: RowCell[] = [];
+  let column = 0;
+  for (const child of row.children) {
+    if (child.type === "element" && child.tag === "w:tc") {
+      const cell = new DocxTableCell(child);
+      const span = cell.colSpan ?? 1;
+      out.push({
+        element: child,
+        startColumn: column,
+        span,
+        takesPartInVerticalMerge: cell.verticalMerge !== undefined,
+      });
+      column += span;
+    }
+  }
+  return out;
+}
+
+// A merge the row allows: the w:tc that survives as the merged cell and the w:tc elements the merge removes.
+interface HorizontalMergeAllowed {
+  readonly row: XmlElement;
+  readonly anchor: XmlElement;
+  readonly consumed: readonly XmlElement[];
+  readonly refusal?: never;
+}
+
+// A merge the row refuses, and why, phrased to follow the name of the operation that refused it.
+interface HorizontalMergeRefused {
+  readonly refusal: string;
+  readonly row?: never;
+  readonly anchor?: never;
+  readonly consumed?: never;
+}
+
+type HorizontalMergePlan = HorizontalMergeAllowed | HorizontalMergeRefused;
+
+function refuse(refusal: string): HorizontalMergeRefused {
+  return { refusal };
+}
+
+// Decides a horizontal merge without changing anything, so a caller merging several rows can find out that a later row refuses before any earlier row has changed. `joinsVerticalMerge` says the caller is about to attach a vertical merge to the anchor: the region must then be free of vertical merges outright, whereas otherwise a cell that takes part in one is only a problem when the merge would consume another cell beside it.
+function planHorizontalMerge(
+  row: XmlElement,
+  startColumn: number,
+  colSpan: number,
+  joinsVerticalMerge: boolean,
+): HorizontalMergePlan {
+  const cells = rowCells(row);
+  const last = cells[cells.length - 1];
+  const width = last === undefined ? 0 : last.startColumn + last.span;
+  const anchor = cells.find(
+    (cell) =>
+      cell.startColumn <= startColumn &&
+      startColumn < cell.startColumn + cell.span,
+  );
+  if (anchor === undefined) {
+    return refuse(`column ${startColumn} does not exist in this row`);
+  }
+  if (anchor.startColumn !== startColumn) {
+    return refuse(
+      `column ${startColumn} is covered by the cell starting at column ${anchor.startColumn}`,
+    );
+  }
+  const endColumn = startColumn + colSpan;
+  if (endColumn > width) {
+    return refuse(
+      `colSpan ${colSpan} starting at column ${startColumn} exceeds this row's own ${width} grid columns`,
+    );
+  }
+  const region = cells.filter(
+    (cell) => cell.startColumn >= startColumn && cell.startColumn < endColumn,
+  );
+  const straddling = region.find(
+    (cell) => cell.startColumn + cell.span > endColumn,
+  );
+  if (straddling !== undefined) {
+    return refuse(
+      `the cell at column ${straddling.startColumn} spans columns ${straddling.startColumn} to ${straddling.startColumn + straddling.span - 1}, past the last merged column ${endColumn - 1}`,
+    );
+  }
+  const consumed = region.filter((cell) => cell !== anchor);
+  const verticallyMerged =
+    joinsVerticalMerge || consumed.length > 0
+      ? region.find((cell) => cell.takesPartInVerticalMerge)
+      : undefined;
+  if (verticallyMerged !== undefined) {
+    return refuse(
+      `column ${verticallyMerged.startColumn} takes part in a vertical merge and cannot be merged over`,
+    );
+  }
+  return {
+    row,
+    anchor: anchor.element,
+    consumed: consumed.map((cell) => cell.element),
+  };
+}
+
+function applyHorizontalMerge(
+  plan: HorizontalMergeAllowed,
+  colSpan: number,
+): DocxTableCell {
+  for (const consumed of plan.consumed) {
+    removeChild(plan.row.children, consumed);
+  }
+  const anchor = new DocxTableCell(plan.anchor);
+  anchor.colSpan = colSpan;
+  return anchor;
+}
+
+// One w:tc with the grid column it starts at and whether it continues the vertical merge above it.
+interface PhysicalCell {
+  readonly cell: DocxTableCell;
+  readonly columnIndex: number;
+  readonly continuesVerticalMerge: boolean;
+}
+
+function physicalCells(cells: readonly DocxTableCell[]): PhysicalCell[] {
+  let column = 0;
+  return cells.map((cell) => {
+    const columnIndex = column;
+    column += cell.colSpan ?? 1;
+    return {
+      cell,
+      columnIndex,
+      continuesVerticalMerge: cell.verticalMerge === "continue",
+    };
+  });
+}
+
+// The number of rows a cell starting at columnIndex covers, counting the cell's own: the run of rows directly below it whose cell at the same start column continues a vertical merge. ECMA-376 stores no row count, only a continuation marker per row, so the span is derived the way ooxml.js's own reader derives it.
+function verticalSpan(
+  rowsBelow: readonly (readonly PhysicalCell[])[],
+  columnIndex: number,
+): number {
+  let span = 1;
+  for (const row of rowsBelow) {
+    const below = row.find((cell) => cell.columnIndex === columnIndex);
+    if (!below?.continuesVerticalMerge) {
+      break;
+    }
+    span++;
+  }
+  return span;
+}
+
+function placeCells(
+  rows: readonly (readonly DocxTableCell[])[],
+): PlacedLiveCell<DocxTableCell>[][] {
+  const physical = rows.map(physicalCells);
+  return physical.map((row, rowIndex) =>
+    row.map(({ cell, columnIndex, continuesVerticalMerge }) => ({
+      cell,
+      columnIndex,
+      colSpan: continuesVerticalMerge ? undefined : cell.colSpan,
+      rowSpan: continuesVerticalMerge
+        ? undefined
+        : verticalSpan(physical.slice(rowIndex + 1), columnIndex),
+    })),
+  );
 }
 
 function buildCell(): XmlElement {
   return el("w:tc", {}, [buildParagraph()]);
+}
+
+// The number of w:gridCol the table's own w:tblGrid declares.
+function declaredGridColumnCount(table: XmlElement): number {
+  const tblGrid = directChildElement(table, "w:tblGrid");
+  return tblGrid === undefined
+    ? 0
+    : tblGrid.children.filter(
+        (child) => child.type === "element" && child.tag === "w:gridCol",
+      ).length;
 }
 
 export class DocxTable {
@@ -403,16 +572,39 @@ export class DocxTable {
     return this.node;
   }
 
-  rows(): DocxTableRow[] {
-    const out: DocxTableRow[] = [];
+  private rowElements(): XmlElement[] {
+    const out: XmlElement[] = [];
     for (const child of this.live().children) {
       if (child.type === "element" && child.tag === "w:tr") {
-        out.push(new DocxTableRow(child));
+        out.push(child);
       }
     }
     return out;
   }
 
+  rows(): DocxTableRow[] {
+    return this.rowElements().map((row) => new DocxTableRow(row));
+  }
+
+  // The grid's own view of the table, resolved from the cells' w:gridSpan and w:vMerge the way the content pivot resolves it: gridRows()[r][c] is the position at grid row r and grid column c, and every row is gridColumnCount() wide however many w:tc elements it physically holds. A position a merged region covers resolves to the region's anchor cell, with isAnchor false; that is the cell to read or edit for any position inside the region. An entry is undefined only where a row has no w:tc for a position and no merge covers it. Unlike rows()[r].cells(), whose index is a physical position, the column here is the same grid column DocxTableRow.mergeCellsHorizontally and DocxTable.mergeCells take.
+  gridRows(): TableGridRows<DocxTableCell> {
+    return this.grid().rows;
+  }
+
+  // The table's width in grid columns: the larger of the w:tblGrid's own w:gridCol count and the widest row's sum of w:gridSpan, which is what a horizontal merge leaves unchanged and what rows()[r].cells().length under-reports once a row holds a merge.
+  gridColumnCount(): number {
+    return this.grid().columnCount;
+  }
+
+  private grid() {
+    const table = this.live();
+    return resolveLiveTableGrid(
+      placeCells(this.rows().map((row) => row.cells())),
+      declaredGridColumnCount(table),
+    );
+  }
+
+  // The PHYSICAL cell at columnIndex of row rowIndex: an index into DocxTableRow.cells(), not a grid column, so once a row holds a horizontal merge it is not the cell at that grid column. gridRows() is the grid-addressed lookup.
   cell(rowIndex: number, columnIndex: number): DocxTableCell {
     const row = this.rows()[rowIndex];
     if (row === undefined) {
@@ -438,7 +630,9 @@ export class DocxTable {
     return new DocxTableRow(row);
   }
 
-  // Merges the rowSpan x colSpan rectangle anchored at (startRow, startColumn): pure sugar over DocxTableRow.mergeCellsHorizontally plus the already-existing verticalMerge attribute setter, not a new primitive of its own. Scoped to a table where every row still has one w:tc per grid column up to this point (no pre-existing narrower merge already consumed a cell this rectangle needs) -- docx's own per-row gridSpan means every covered row, not just the anchor row, needs its own horizontal merge to consume the same columns before vMerge marks it as a continuation.
+  // Merges the rowSpan x colSpan rectangle anchored at (startRow, startColumn), both columns being grid columns: DocxTableRow.mergeCellsHorizontally on every covered row, then a w:vMerge restart on the anchor and a continuation on the cell each covered row keeps, so a covered row carries the same w:gridSpan as the anchor. Docx's own per-row gridSpan means every covered row, not just the anchor row, needs its own horizontal merge before its cell can continue the vertical one.
+  //
+  // Every row is checked before any row changes, so a refusal leaves the table exactly as it was. A rectangle is refused, naming the row and the grid column, wherever DocxTableRow.mergeCellsHorizontally would refuse, and also when it covers a cell that already takes part in a vertical merge, since attaching a second vertical merge to that cell would leave the first without the rows it spans.
   mergeCells(
     startRow: number,
     startColumn: number,
@@ -455,28 +649,37 @@ export class DocxTable {
         `mergeCells: rowSpan and colSpan must be positive integers, got rowSpan=${rowSpan}, colSpan=${colSpan}`,
       );
     }
-    const rows = this.rows();
+    const rows = this.rowElements();
     const anchorRow = rows[startRow];
     if (anchorRow === undefined) {
       throw new Error(
         `mergeCells: row ${startRow} does not exist in this table`,
       );
     }
-    const anchor = anchorRow.mergeCellsHorizontally(startColumn, colSpan);
+    if (startRow + rowSpan > rows.length) {
+      throw new Error(
+        `mergeCells: rowSpan ${rowSpan} starting at row ${startRow} exceeds this table's own ${rows.length} rows`,
+      );
+    }
+    const planRow = (row: XmlElement, rowIndex: number) => {
+      const plan = planHorizontalMerge(row, startColumn, colSpan, rowSpan > 1);
+      if ("refusal" in plan) {
+        throw new Error(`mergeCells: row ${rowIndex}: ${plan.refusal}`);
+      }
+      return plan;
+    };
+    const anchorPlan = planRow(anchorRow, startRow);
+    const coveredPlans = rows
+      .slice(startRow + 1, startRow + rowSpan)
+      .map((row, offset) => planRow(row, startRow + 1 + offset));
+    const anchor = applyHorizontalMerge(anchorPlan, colSpan);
+    const coveredCells = coveredPlans.map((plan) =>
+      applyHorizontalMerge(plan, colSpan),
+    );
     if (rowSpan > 1) {
       anchor.verticalMerge = "restart";
-      for (let r = 1; r < rowSpan; r++) {
-        const coveredRow = rows[startRow + r];
-        if (coveredRow === undefined) {
-          throw new Error(
-            `mergeCells: rowSpan ${rowSpan} starting at row ${startRow} exceeds this table's own ${rows.length} rows`,
-          );
-        }
-        const coveredAnchor = coveredRow.mergeCellsHorizontally(
-          startColumn,
-          colSpan,
-        );
-        coveredAnchor.verticalMerge = "continue";
+      for (const covered of coveredCells) {
+        covered.verticalMerge = "continue";
       }
     }
     return anchor;

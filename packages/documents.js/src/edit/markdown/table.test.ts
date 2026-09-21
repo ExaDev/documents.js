@@ -90,3 +90,26 @@ describe("MarkdownTable.remove", () => {
     expect(container).toEqual([other]);
   });
 });
+
+describe("MarkdownTable grid view", () => {
+  it("reports the column count and resolves every position to its own cell, as an anchor", () => {
+    const editor = openMarkdown("");
+    const table = editor.body.appendTable({ rows: 2, columns: 3 });
+    table.rows()[1]!.cells()[2]!.text = "corner";
+
+    expect(table.gridColumnCount()).toBe(3);
+    const grid = table.gridRows();
+    expect(grid).toHaveLength(2);
+    expect(grid.every((row) => row.length === 3)).toBe(true);
+    expect(grid[1]![2]!.cell.text).toBe("corner");
+    expect(
+      grid.every((row) => row.every((position) => position?.isAnchor === true)),
+    ).toBe(true);
+  });
+
+  it("is empty for a table with no rows and no columns", () => {
+    const table = openMarkdown("").body.appendTable({ rows: 0, columns: 0 });
+    expect(table.gridColumnCount()).toBe(0);
+    expect(table.gridRows()).toEqual([]);
+  });
+});

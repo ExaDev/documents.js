@@ -225,6 +225,8 @@ export type { CreateDocxOptions } from "./edit/docx/editor";
 export { createDocx, DocxEditor, openDocx } from "./edit/docx/editor";
 export { DocxParagraph } from "./edit/docx/paragraph";
 export { DocxRun } from "./edit/docx/run";
+// The grid-addressed view every editable table (DocxTable, OdtTable, MarkdownTable, DocTable) offers through gridRows(): a position resolved to the live cell that owns it, so a caller counts and addresses grid columns without going through the content pivot.
+export type { TableGridCell, TableGridRows } from "./edit/table-grid";
 export type { DocxVerticalMerge } from "./edit/docx/table";
 export { DocxTable, DocxTableCell, DocxTableRow } from "./edit/docx/table";
 export type { BuildDocxPackageOptions } from "./edit/docx/content";

@@ -1,5 +1,6 @@
 import type { XmlElement, XmlNode } from "ooxml.js";
 import { buildXml, decodePackage, el, encodePackage } from "ooxml.js";
+import { tableGridColumnCount, walkTableGrid } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { readDocxContent } from "../../ooxml/docx/read";
 import { createDocx } from "./editor";
@@ -478,6 +479,370 @@ describe("DocxTableRow.mergeCellsHorizontally", () => {
     expect(roundTrippedTable.rows[0]?.cells).toHaveLength(4);
     expect(roundTrippedTable.rows[0]?.cells[1]?.colSpan).toBe(2);
     expect(roundTrippedTable.rows[0]?.cells[2]).toEqual({ blocks: [] });
+  });
+});
+
+// Builds a one-row table of `count` cells whose text is a, b, c, ... so an assertion can tell which cells a merge kept.
+function labelledRowTable(count: number): DocxTable {
+  const tableElement = buildTable({ rows: 1, columns: count });
+  const table = new DocxTable([tableElement], tableElement);
+  for (let column = 0; column < count; column++) {
+    table
+      .cell(0, column)
+      .appendParagraph({ text: String.fromCharCode(97 + column) });
+  }
+  return table;
+}
+
+describe("DocxTableRow.mergeCellsHorizontally addresses grid columns", () => {
+  it("finds the start column by accumulating the gridSpan of the cells before it, not by counting w:tc elements", () => {
+    const table = labelledRowTable(5);
+    const row = table.rows()[0]!;
+    row.mergeCellsHorizontally(0, 2);
+    // The row now reads a (grid columns 0-1), c (2), d (3), e (4). Grid column 2 is c, whose physical index is 1.
+    row.mergeCellsHorizontally(2, 2);
+
+    const cells = row.cells();
+    expect(cells.map((cell) => cell.text.replace(/^\n/, ""))).toEqual([
+      "a",
+      "c",
+      "e",
+    ]);
+    expect(cells.map((cell) => cell.colSpan)).toEqual([2, 2, undefined]);
+  });
+
+  it("refuses a start column that lies inside a cell spanning several grid columns, naming the column", () => {
+    const table = labelledRowTable(4);
+    const row = table.rows()[0]!;
+    row.mergeCellsHorizontally(0, 3);
+    expect(() => row.mergeCellsHorizontally(1, 2)).toThrow(
+      /column 1 is covered by the cell starting at column 0/,
+    );
+    expect(row.cells()).toHaveLength(2);
+  });
+
+  it("refuses a merge that would cut through a cell spanning past the region's last column, naming both columns", () => {
+    const table = labelledRowTable(4);
+    const row = table.rows()[0]!;
+    row.mergeCellsHorizontally(1, 3);
+    expect(() => row.mergeCellsHorizontally(0, 2)).toThrow(
+      /column 1 spans columns 1 to 3, past the last merged column 1/,
+    );
+    expect(row.cells().map((cell) => cell.colSpan)).toEqual([undefined, 3]);
+  });
+
+  it("reports a colSpan reaching past the row's grid width in grid columns", () => {
+    const table = labelledRowTable(4);
+    const row = table.rows()[0]!;
+    row.mergeCellsHorizontally(0, 2);
+    // Three w:tc remain but four grid columns: counting w:tc elements would allow colSpan 3 from column 3 and refuse colSpan 4 from column 0.
+    expect(() => row.mergeCellsHorizontally(2, 3)).toThrow(
+      /exceeds this row's own 4 grid columns/,
+    );
+    expect(() => row.mergeCellsHorizontally(0, 5)).toThrow(
+      /exceeds this row's own 4 grid columns/,
+    );
+    expect(() => row.mergeCellsHorizontally(1, 1)).toThrow(/covered by/);
+    expect(() => row.mergeCellsHorizontally(0, 4)).not.toThrow();
+    expect(row.cells()).toHaveLength(1);
+  });
+
+  it("widens a spanning cell over the plain cells beside it, and treats a merge that changes nothing as allowed", () => {
+    const table = labelledRowTable(4);
+    const row = table.rows()[0]!;
+    row.mergeCellsHorizontally(0, 2);
+    row.mergeCellsHorizontally(0, 3);
+    expect(row.cells().map((cell) => cell.colSpan)).toEqual([3, undefined]);
+    expect(() => row.mergeCellsHorizontally(0, 3)).not.toThrow();
+    expect(row.cells().map((cell) => cell.colSpan)).toEqual([3, undefined]);
+  });
+});
+
+describe("DocxTableRow.mergeCellsHorizontally row shape", () => {
+  it("does not treat a column before the first as existing", () => {
+    const row = labelledRowTable(3).rows()[0]!;
+    expect(() => row.mergeCellsHorizontally(-1, 2)).toThrow(/does not exist/);
+    expect(row.cells()).toHaveLength(3);
+  });
+
+  it("counts only w:tc elements when a row also holds row properties", () => {
+    const row = labelledRowTable(4).rows()[0]!;
+    row.heightPt = 20;
+    row.mergeCellsHorizontally(1, 2);
+    expect(row.cells().map((cell) => cell.colSpan)).toEqual([
+      undefined,
+      2,
+      undefined,
+    ]);
+    expect(row.cells().map((cell) => cell.text.trim())).toEqual([
+      "a",
+      "b",
+      "d",
+    ]);
+  });
+});
+
+describe("DocxTableRow.mergeCellsHorizontally and vertical merges", () => {
+  // A 3x3 table whose grid column 1 is merged over rows 0 and 1.
+  function verticallyMergedTable(): DocxTable {
+    const tableElement = buildTable({ rows: 3, columns: 3 });
+    const table = new DocxTable([tableElement], tableElement);
+    table.mergeCells(0, 1, 2, 1);
+    return table;
+  }
+
+  it("refuses to swallow the cell that restarts a vertical merge, leaving the merge intact", () => {
+    const table = verticallyMergedTable();
+    expect(() => table.rows()[0]!.mergeCellsHorizontally(0, 2)).toThrow(
+      /column 1 takes part in a vertical merge/,
+    );
+    expect(table.rows()[0]!.cells()).toHaveLength(3);
+    expect(table.cell(0, 1).verticalMerge).toBe("restart");
+    expect(table.cell(1, 1).verticalMerge).toBe("continue");
+  });
+
+  it("refuses to swallow a continuation cell, so the merge it belongs to is never left without a row", () => {
+    const table = verticallyMergedTable();
+    expect(() => table.rows()[1]!.mergeCellsHorizontally(1, 2)).toThrow(
+      /column 1 takes part in a vertical merge/,
+    );
+    expect(table.rows()[1]!.cells()).toHaveLength(3);
+  });
+
+  it("refuses to widen a cell that already takes part in a vertical merge", () => {
+    const table = verticallyMergedTable();
+    expect(() => table.rows()[0]!.mergeCellsHorizontally(1, 2)).toThrow(
+      /column 1 takes part in a vertical merge/,
+    );
+  });
+
+  it("names the row when a rectangle merge is refused, and leaves every row untouched", () => {
+    const table = verticallyMergedTable();
+    expect(() => table.mergeCells(0, 0, 3, 2)).toThrow(
+      /mergeCells: row 0: .*column 1 takes part in a vertical merge/,
+    );
+    expect(table.rows().map((row) => row.cells().length)).toEqual([3, 3, 3]);
+    expect(table.cell(0, 0).colSpan).toBeUndefined();
+    expect(table.cell(0, 0).verticalMerge).toBeUndefined();
+  });
+
+  it("refuses a rectangle whose later row is the one that cannot merge, before touching the earlier rows", () => {
+    const tableElement = buildTable({ rows: 3, columns: 3 });
+    const table = new DocxTable([tableElement], tableElement);
+    table.rows()[2]!.mergeCellsHorizontally(0, 2);
+    expect(() => table.mergeCells(0, 1, 3, 1)).toThrow(
+      /mergeCells: row 2: .*column 1 is covered by the cell starting at column 0/,
+    );
+    expect(table.rows().map((row) => row.cells().length)).toEqual([3, 3, 2]);
+    expect(table.cell(0, 1).verticalMerge).toBeUndefined();
+  });
+
+  it("refuses a vertical-only rectangle over a cell that is already part of a vertical merge", () => {
+    const table = verticallyMergedTable();
+    expect(() => table.mergeCells(1, 1, 2, 1)).toThrow(
+      /mergeCells: row 1: .*column 1 takes part in a vertical merge/,
+    );
+    expect(table.cell(1, 1).verticalMerge).toBe("continue");
+    expect(table.cell(2, 1).verticalMerge).toBeUndefined();
+  });
+
+  it("allows a merge that changes nothing on a cell that takes part in a vertical merge", () => {
+    const table = verticallyMergedTable();
+    expect(() => table.rows()[0]!.mergeCellsHorizontally(1, 1)).not.toThrow();
+    expect(() => table.rows()[1]!.mergeCellsHorizontally(1, 1)).not.toThrow();
+    expect(() => table.mergeCells(0, 1, 1, 1)).not.toThrow();
+    expect(table.cell(0, 1).verticalMerge).toBe("restart");
+    expect(table.cell(1, 1).verticalMerge).toBe("continue");
+  });
+
+  it("does not start a vertical merge for a rectangle one row high", () => {
+    const tableElement = buildTable({ rows: 2, columns: 3 });
+    const table = new DocxTable([tableElement], tableElement);
+    const anchor = table.mergeCells(0, 0, 1, 2);
+    expect(anchor.colSpan).toBe(2);
+    expect(anchor.verticalMerge).toBeUndefined();
+    expect(table.cell(1, 0).verticalMerge).toBeUndefined();
+  });
+
+  it("rejects a colSpan below one for a rectangle", () => {
+    const table = verticallyMergedTable();
+    expect(() => table.mergeCells(0, 0, 1, 0)).toThrow(/positive integer/);
+  });
+
+  it("still merges a rectangle beside an existing vertical merge", () => {
+    const table = verticallyMergedTable();
+    table.mergeCells(0, 2, 2, 1);
+    expect(table.cell(0, 2).verticalMerge).toBe("restart");
+    expect(table.cell(1, 2).verticalMerge).toBe("continue");
+  });
+});
+
+// Builds a table of rows x columns whose cells hold the text "<row>,<column>", so a grid position can be traced to the live cell that owns it.
+function labelledTable(rows: number, columns: number): DocxTable {
+  const tableElement = buildTable({ rows, columns });
+  const table = new DocxTable([tableElement], tableElement);
+  for (let row = 0; row < rows; row++) {
+    for (let column = 0; column < columns; column++) {
+      table.cell(row, column).appendParagraph({ text: `${row},${column}` });
+    }
+  }
+  return table;
+}
+
+// The grid as text: each position's owning cell's label, with a trailing "*" on the positions that are not the owner's own.
+function gridLabels(table: DocxTable): string[][] {
+  return table
+    .gridRows()
+    .map((row) =>
+      row.map((position) =>
+        position === undefined
+          ? "-"
+          : `${position.cell.text.trim()}${position.isAnchor ? "" : "*"}`,
+      ),
+    );
+}
+
+describe("DocxTable grid view", () => {
+  it("reports the grid width and resolves every position of a table with no merges to its own cell", () => {
+    const table = labelledTable(2, 3);
+    expect(table.gridColumnCount()).toBe(3);
+    expect(gridLabels(table)).toEqual([
+      ["0,0", "0,1", "0,2"],
+      ["1,0", "1,1", "1,2"],
+    ]);
+  });
+
+  it("keeps the grid width after a 2x2 merge, where the row's own w:tc count under-reports it", () => {
+    const table = labelledTable(3, 3);
+    table.mergeCells(0, 0, 2, 2);
+    expect(table.rows()[0]!.cells()).toHaveLength(2);
+    expect(table.gridColumnCount()).toBe(3);
+    expect(gridLabels(table)).toEqual([
+      ["0,0", "0,0*", "0,2"],
+      ["0,0*", "0,0*", "1,2"],
+      ["2,0", "2,1", "2,2"],
+    ]);
+  });
+
+  it("resolves a position covered by a horizontal merge to the anchor, and marks only the anchor's own position", () => {
+    const table = labelledTable(1, 4);
+    table.rows()[0]!.mergeCellsHorizontally(1, 2);
+    expect(gridLabels(table)).toEqual([["0,0", "0,1", "0,1*", "0,3"]]);
+    expect(table.gridRows()[0]![1]!.isAnchor).toBe(true);
+    expect(table.gridRows()[0]![2]!.isAnchor).toBe(false);
+  });
+
+  it("derives a vertical merge's height from the run of continuation cells directly below it", () => {
+    const table = labelledTable(4, 1);
+    table.cell(0, 0).verticalMerge = "restart";
+    table.cell(1, 0).verticalMerge = "continue";
+    table.cell(2, 0).verticalMerge = "continue";
+    // A restart below the run begins a region of its own.
+    table.cell(3, 0).verticalMerge = "restart";
+    expect(gridLabels(table)).toEqual([["0,0"], ["0,0*"], ["0,0*"], ["3,0"]]);
+  });
+
+  it("ends a vertical merge at a row that does not continue it, and attaches a later continuation to the cell directly above it", () => {
+    const table = labelledTable(4, 1);
+    table.cell(0, 0).verticalMerge = "restart";
+    table.cell(1, 0).verticalMerge = "continue";
+    table.cell(3, 0).verticalMerge = "continue";
+    // The pivot's reader gives a continuation to the nearest cell above it at its own column, whether or not that cell restarted a merge.
+    expect(gridLabels(table)).toEqual([["0,0"], ["0,0*"], ["2,0"], ["2,0*"]]);
+  });
+
+  it("matches a continuation to the cell starting at its own grid column, not to a cell at the same physical index", () => {
+    const table = labelledTable(2, 3);
+    table.rows()[0]!.mergeCellsHorizontally(0, 2);
+    table.rows()[1]!.cells()[1]!.verticalMerge = "continue";
+    table.rows()[0]!.cells()[1]!.verticalMerge = "restart";
+    // Row 0 reads [0,0 spanning 0-1] [0,2]; row 1 reads [1,0] [1,1] [1,2], with its physical cell 1 (grid column 1) continuing. Physical index 1 of row 0 starts at grid column 2, so the continuation at grid column 1 has nothing above it and stands alone, empty.
+    expect(gridLabels(table)).toEqual([
+      ["0,0", "0,0*", "0,2"],
+      ["1,0", "", "1,2"],
+    ]);
+  });
+
+  it("widens the grid to the table's own w:tblGrid when a row holds fewer cells, leaving the missing positions undefined", () => {
+    const table = labelledTable(1, 4);
+    table.appendRow(2);
+    expect(table.gridColumnCount()).toBe(4);
+    const shortRow = table.gridRows()[1]!;
+    expect(shortRow).toHaveLength(4);
+    expect(shortRow.map((position) => position === undefined)).toEqual([
+      false,
+      false,
+      true,
+      true,
+    ]);
+  });
+
+  it("widens the grid past the w:tblGrid when a row places a cell beyond it", () => {
+    const table = labelledTable(1, 2);
+    table.appendRow(4);
+    expect(table.gridColumnCount()).toBe(4);
+    expect(table.gridRows()[0]).toHaveLength(4);
+  });
+
+  it("reads a table with no w:tblGrid as as wide as its widest row", () => {
+    const tableElement = buildTable({ rows: 1, columns: 3 });
+    tableElement.children = tableElement.children.filter(
+      (child) => !(child.type === "element" && child.tag === "w:tblGrid"),
+    );
+    const table = new DocxTable([tableElement], tableElement);
+    expect(table.gridColumnCount()).toBe(3);
+  });
+
+  it("takes the w:tblGrid's own column count as the width of a table with no rows", () => {
+    const tableElement = buildTable({ rows: 0, columns: 3 });
+    const table = new DocxTable([tableElement], tableElement);
+    expect(table.gridColumnCount()).toBe(3);
+    expect(table.gridRows()).toEqual([]);
+  });
+
+  it("counts only w:gridCol children of the w:tblGrid", () => {
+    const tableElement = buildTable({ rows: 0, columns: 2 });
+    const tblGrid = tableElement.children.find(
+      (child): child is XmlElement =>
+        child.type === "element" && child.tag === "w:tblGrid",
+    );
+    tblGrid?.children.push(el("w:tblGridChange"), { type: "text", value: " " });
+    const table = new DocxTable([tableElement], tableElement);
+    expect(table.gridColumnCount()).toBe(2);
+  });
+
+  it("is empty for a table with no rows and no grid columns", () => {
+    const tableElement = buildTable({ rows: 0, columns: 0 });
+    const table = new DocxTable([tableElement], tableElement);
+    expect(table.gridColumnCount()).toBe(0);
+    expect(table.gridRows()).toEqual([]);
+  });
+
+  it("agrees with the content pivot on the grid width and on which positions a merge covers", () => {
+    const editor = createDocx();
+    const table = editor.body.appendTable({ rows: 3, columns: 4 });
+    table.mergeCells(0, 1, 2, 2);
+    table.rows()[2]!.mergeCellsHorizontally(2, 2);
+
+    const content = readDocxContent(
+      decodePackage(encodePackage(editor.toPackage())),
+    );
+    if (content.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing content");
+    }
+    const pivot = content.sections[0]?.blocks.find((b) => b.kind === "table");
+    if (pivot?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    const walked = walkTableGrid(pivot);
+    expect(table.gridColumnCount()).toBe(tableGridColumnCount(pivot));
+    expect(
+      table.gridRows().map((row) => row.map((entry) => entry?.isAnchor)),
+    ).toEqual(
+      walked.map((row) =>
+        row.map((position) => position.anchorRowIndex === undefined),
+      ),
+    );
   });
 });
 
