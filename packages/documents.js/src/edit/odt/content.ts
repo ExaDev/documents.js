@@ -5,8 +5,14 @@ import type {
   ContentImageBlock,
   ContentParagraph,
   ContentTable,
+  ContentTableCell,
 } from "document-schema.js";
-import { resolveCellFillColor } from "document-schema.js";
+import {
+  resolveCellFillColor,
+  tableCellColumnSpan,
+  tableCellRowSpan,
+  walkTableGrid,
+} from "document-schema.js";
 import type { Package } from "odf.js";
 import { base64ToBytes } from "odf.js";
 import {
@@ -270,53 +276,46 @@ function populateCellBlocks(
   }
 }
 
-// Unlike docx's gridSpan (see the identically-named function in src/edit/docx/content.ts), ODF needs a real table:covered-table-cell element for EVERY grid position a merge consumes, horizontal or vertical -- odf.js's own readTableRow pushes one `{ blocks: [] }` array entry per covered-table-cell it finds (see typed/shared/table.ts), so ContentTable.rows[].cells already has exactly one entry per grid column in every row, master cells and covered placeholders alike. This walks each row left to right, consuming those placeholder entries as it goes: horizontalCoverRemaining accounts for the REST OF THIS ROW'S OWN entries a colSpan>1 master cell just consumed, and verticalMerges (keyed by grid column index) accounts for a rowSpan>1 master's entries in EVERY row below it, across the full width of its own colSpan. Exported so src/edit/odp/content.ts's own buildOdpPackage can reuse this exact merge-aware population logic for a slide shape's own table:table content (a draw:frame's table:table is byte-for-byte the same content model a document-level one is -- see odf.js's own readDrawFrameContent) -- the table.ts primitives it walks (OdtTable.appendEmptyRow/OdtTableRow.appendCell/appendCoveredCell) are already format-neutral over WHERE the table:table element lives.
+// ODF needs a real table:covered-table-cell element for EVERY grid position a merge consumes, horizontal or vertical, and ContentTable's grid rule (ContentTableCell in document-schema.js) supplies exactly that: each row's `cells` holds one entry per grid column, anchors and the block-less entries at covered positions alike, so walkTableGrid's own classification maps each entry straight to the element ODF spells it as, with no span accounting here. An anchor becomes a table:table-cell carrying its spans; a covered entry becomes a table:covered-table-cell carrying only its own background and borders, since its content belongs to the anchor. Exported so src/edit/odp/content.ts's own buildOdpPackage can reuse this exact population logic for a slide shape's own table:table content (a draw:frame's table:table is byte-for-byte the same content model a document-level one is -- see odf.js's own readDrawFrameContent) -- the table.ts primitives it walks (OdtTable.appendEmptyRow/OdtTableRow.appendCell/appendCoveredCell) are already format-neutral over WHERE the table:table element lives.
 export function populateOdtTable(table: OdtTable, block: ContentTable): void {
-  const verticalMerges = new Map<number, number>();
-  block.rows.forEach((row) => {
+  const gridPositions = walkTableGrid(block);
+  block.rows.forEach((row, rowIndex) => {
     const tableRow = table.appendEmptyRow();
-    if (row.heightPt !== undefined) {
-      tableRow.heightPt = row.heightPt;
-    }
-    let colIndex = 0;
-    let horizontalCoverRemaining = 0;
-    row.cells.forEach((cell) => {
-      if (horizontalCoverRemaining > 0) {
-        tableRow.appendCoveredCell();
-        horizontalCoverRemaining -= 1;
-        colIndex += 1;
-        return;
-      }
-      const verticalRemaining = verticalMerges.get(colIndex);
-      if (verticalRemaining !== undefined && verticalRemaining > 0) {
-        tableRow.appendCoveredCell();
-        verticalMerges.set(colIndex, verticalRemaining - 1);
-        colIndex += 1;
+    // OdtTableRow.heightPt clears the height when handed undefined and mints nothing, so an absent value needs no guard of its own.
+    tableRow.heightPt = row.heightPt;
+    // walkTableGrid returns one array per table row, in row order, so this index is always in range.
+    gridPositions[rowIndex]!.forEach((position) => {
+      const { cell } = position;
+      if (position.anchorRowIndex !== undefined) {
+        applyCellDecoration(tableRow.appendCoveredCell(), cell);
         return;
       }
       const tableCell = tableRow.appendCell();
-      const span = cell.colSpan ?? 1;
-      if (span > 1) {
-        tableCell.colSpan = span;
-        horizontalCoverRemaining = span - 1;
+      const colSpan = tableCellColumnSpan(cell);
+      if (colSpan > 1) {
+        tableCell.colSpan = colSpan;
       }
-      if (cell.rowSpan !== undefined && cell.rowSpan > 1) {
-        tableCell.rowSpan = cell.rowSpan;
-        for (let c = 0; c < span; c++) {
-          verticalMerges.set(colIndex + c, cell.rowSpan - 1);
-        }
+      const rowSpan = tableCellRowSpan(cell);
+      if (rowSpan > 1) {
+        tableCell.rowSpan = rowSpan;
       }
-      // OdtTableCell.background models one flat colour (ODF's own style:table-cell-properties/@fo:background-color has no two-colour pattern-fill vocabulary), so a 'pattern' fill (ExaDev/documents.js#951) writes through resolveCellFillColor's own single representative colour.
-      if (cell.background !== undefined) {
-        tableCell.background = resolveCellFillColor(cell.background);
-      }
-      if (cell.borders !== undefined) {
-        tableCell.borders = cell.borders;
-      }
+      applyCellDecoration(tableCell, cell);
       populateCellBlocks(tableCell, cell.blocks);
-      colIndex += 1;
     });
   });
+}
+
+// OdtTableCell.background models one flat colour (ODF's own style:table-cell-properties/@fo:background-color has no two-colour pattern-fill vocabulary), so a 'pattern' fill (ExaDev/documents.js#951) writes through resolveCellFillColor's own single representative colour. Shared by an anchor and a covered entry, since the element each becomes carries its own table:style-name.
+function applyCellDecoration(
+  target: Pick<OdtTableCell, "background" | "borders">,
+  cell: ContentTableCell,
+): void {
+  if (cell.background !== undefined) {
+    target.background = resolveCellFillColor(cell.background);
+  }
+  if (cell.borders !== undefined) {
+    target.borders = cell.borders;
+  }
 }
 
 function appendTable(body: OdtBody, block: ContentTable): void {

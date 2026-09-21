@@ -1,4 +1,9 @@
-import type { ContentDocument, ContentVector } from "document-schema.js";
+import type {
+  ContentDocument,
+  ContentTable,
+  ContentVector,
+} from "document-schema.js";
+import { walkTableGrid } from "document-schema.js";
 import type { Package } from "odf.js";
 import {
   bytesToBase64,
@@ -675,6 +680,183 @@ describe("buildOdtPackage", () => {
       runs: [{ text: "A1" }],
     });
     expect(tableBlock.rows[0]?.cells[1]?.blocks).toEqual([]);
+  });
+
+  // The table block a built package reads back as, for asserting on the grid the ODF reader hands back.
+  function roundTrippedTable(table: ContentTable): ContentTable {
+    const roundTripped = readOdtContent(
+      buildOdtPackage(
+        wordDoc([
+          {
+            pageSize: { widthPt: 612, heightPt: 792 },
+            margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+            blocks: [table],
+          },
+        ]),
+      ),
+    );
+    if (roundTripped.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const block = roundTripped.sections[0]!.blocks[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    return block;
+  }
+
+  function coveredPositions(table: ContentTable): string[] {
+    return walkTableGrid(table)
+      .flat()
+      .filter((position) => position.anchorRowIndex !== undefined)
+      .map(
+        (position) =>
+          `${String(position.rowIndex)},${String(position.columnIndex)}<-${String(position.anchorRowIndex)},${String(position.anchorColumnIndex)}`,
+      );
+  }
+
+  function textCell(text: string, extra: object = {}) {
+    return {
+      blocks: [{ kind: "paragraph" as const, runs: [{ text }] }],
+      ...extra,
+    };
+  }
+
+  it("a 2x2 merge in a dense grid is written as one anchor plus a covered element at every other position, and reads back with one entry per grid column", () => {
+    const written = roundTrippedTable({
+      kind: "table",
+      columnWidthsPt: [50, 50, 50],
+      rows: [
+        {
+          cells: [
+            textCell("A", { colSpan: 2, rowSpan: 2 }),
+            { blocks: [] },
+            textCell("C"),
+          ],
+        },
+        { cells: [{ blocks: [] }, { blocks: [] }, textCell("F")] },
+        { cells: [textCell("G"), textCell("H"), textCell("I")] },
+      ],
+    });
+    for (const row of written.rows) {
+      expect(row.cells).toHaveLength(written.columnWidthsPt.length);
+    }
+    expect(written.rows[0]?.cells[0]).toMatchObject({ colSpan: 2, rowSpan: 2 });
+    expect(coveredPositions(written)).toEqual([
+      "0,1<-0,0",
+      "1,0<-0,0",
+      "1,1<-0,0",
+    ]);
+  });
+
+  it("states no span attribute, and mints no cell style, for cells that merge nothing and carry no decoration", () => {
+    const pkg = buildOdtPackage(
+      wordDoc([
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+          blocks: [
+            {
+              kind: "table",
+              columnWidthsPt: [50, 50],
+              rows: [
+                {
+                  cells: [
+                    textCell("A"),
+                    textCell("B", { colSpan: 1, rowSpan: 1 }),
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    const cells = elementsWithTag(
+      contentRoot(pkg).children,
+      "table:table-cell",
+    );
+    expect(cells).toHaveLength(2);
+    for (const cell of cells) {
+      expect(attr(cell, "table:number-columns-spanned")).toBeUndefined();
+      expect(attr(cell, "table:number-rows-spanned")).toBeUndefined();
+      expect(attr(cell, "table:style-name")).toBeUndefined();
+    }
+  });
+
+  it("mints one cell style, carrying only the decoration the cell states, for a cell with a background and no borders", () => {
+    const pkg = buildOdtPackage(
+      wordDoc([
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+          blocks: [
+            {
+              kind: "table",
+              columnWidthsPt: [50],
+              rows: [
+                {
+                  cells: [
+                    textCell("A", {
+                      background: {
+                        kind: "solid",
+                        color: { r: 1, g: 0, b: 0 },
+                      },
+                    }),
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    const cellStyles = elementsWithTag(
+      contentRoot(pkg).children,
+      "style:style",
+    ).filter((style) => attr(style, "style:family") === "table-cell");
+    expect(cellStyles).toHaveLength(1);
+  });
+
+  it("a covered entry's own background and borders are written onto its table:covered-table-cell and read back", () => {
+    const fill = { kind: "solid", color: { r: 1, g: 0, b: 0 } } as const;
+    const borders = {
+      left: { color: { r: 0, g: 0, b: 1 }, widthPt: 2, style: "solid" },
+    } as const;
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [50, 50],
+      rows: [
+        {
+          cells: [
+            textCell("A", { colSpan: 2 }),
+            { blocks: [], background: fill, borders },
+          ],
+        },
+      ],
+    };
+    const pkg = buildOdtPackage(
+      wordDoc([
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+          blocks: [table],
+        },
+      ]),
+    );
+    const covered = elementsWithTag(
+      contentRoot(pkg).children,
+      "table:covered-table-cell",
+    )[0];
+    expect(covered).toBeDefined();
+    expect(attr(covered!, "table:style-name")).toBeDefined();
+
+    const reread = roundTrippedTable(table);
+    expect(reread.rows[0]?.cells[1]).toMatchObject({
+      blocks: [],
+      background: fill,
+      borders,
+    });
   });
 
   it("inserts an image block as media, referenced from its own paragraph, and reads back through readOdtContent", () => {
