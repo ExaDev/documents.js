@@ -17,6 +17,7 @@ import {
 import { segmentOdfParagraphRunsMapped } from "./paragraph";
 import { canonicalOdfConstructDescriptor } from "./constructs";
 import { closeListPlan, planListMembership, type ListPlanState } from "./list";
+import { assertTableObeysGridRule } from "./table-grid";
 
 // The write-side canonical form every ODF content writer in this package states its own round-trip law against: what reading a WRITTEN document back actually produces, for the pieces of the content model this package's writers already share verbatim (a paragraph's runs and formatting, a table's cells, an image block) -- factored out once typed/odt/write.ts's own normaliseOdtContent first stated it, now reused by typed/odp/write.ts (a shape's own text paragraphs, and a table nested inside a shape) rather than restated per format. See typed/odt/write.ts's own top-of-file note for the fuller philosophy this canonical-form discipline follows; this module owns only the pieces genuinely identical across every writer, not a format's own section/slide-level structure.
 
@@ -178,7 +179,7 @@ function canonicalCellDecoration(
   return canonical;
 }
 
-// A covered grid position is a table:covered-table-cell in ODF. It keeps its own fill and borders, which the writer states through the element's table:style-name and the reader reads back, but no content and no span: the region's content belongs to the anchor and coverage is derived from the anchor's spans, so whatever blocks or spans an incoming covered entry held are not written and read back as absent. A cell's own blocks mirror readTableCell's own recursive scope (typed/shared/table.ts): a paragraph's list membership is renumbered onto `listState` exactly as a body-level paragraph's is (planListMembership, threaded by the caller across the whole document so a list minted inside a cell gets as unique an identity as one minted anywhere else), and a nested table recurses back into canonicalTable itself. Any other block kind is refused by name, matching every writer's own fidelity-construct stance.
+// A covered grid position is a table:covered-table-cell in ODF. It keeps its own fill and borders, which the writer states through the element's table:style-name and the reader reads back, but no content and no span: the region's content belongs to the anchor and coverage is derived from the anchor's spans. canonicalTable refuses a covered entry carrying blocks or a span beyond one, so what this branch drops is the `colSpan: 1`/`rowSpan: 1` marker a covered entry may state, which the reader never reads back. A cell's own blocks mirror readTableCell's own recursive scope (typed/shared/table.ts): a paragraph's list membership is renumbered onto `listState` exactly as a body-level paragraph's is (planListMembership, threaded by the caller across the whole document so a list minted inside a cell gets as unique an identity as one minted anywhere else), and a nested table recurses back into canonicalTable itself. Any other block kind is refused by name, matching every writer's own fidelity-construct stance.
 export function canonicalCell(
   cell: ContentTableCell,
   covered: boolean,
@@ -213,6 +214,7 @@ export function canonicalTable(
   table: ContentTable,
   listState: ListPlanState,
 ): ContentTable {
+  assertTableObeysGridRule(table, "canonicalTable");
   const gridPositions = walkTableGrid(table);
   const canonical: ContentTable = {
     kind: "table",
