@@ -259,7 +259,12 @@ export type { RunInit as OdtRunInit } from "./edit/odt/run";
 export { OdtRun } from "./edit/odt/run";
 export { OdtList, OdtListItem } from "./edit/odt/list";
 export type { TableInit as OdtTableInit } from "./edit/odt/table";
-export { OdtTable, OdtTableCell, OdtTableRow } from "./edit/odt/table";
+export {
+  OdtCoveredTableCell,
+  OdtTable,
+  OdtTableCell,
+  OdtTableRow,
+} from "./edit/odt/table";
 export type { BuildOdtPackageOptions } from "./edit/odt/content";
 export { buildOdtPackage } from "./edit/odt/content";
 

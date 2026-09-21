@@ -1,5 +1,5 @@
 import type { XmlElement, XmlNode } from "ooxml.js";
-import { decodePackage, el, encodePackage } from "ooxml.js";
+import { buildXml, decodePackage, el, encodePackage } from "ooxml.js";
 import { describe, expect, it } from "vitest";
 import { readDocxContent } from "../../ooxml/docx/read";
 import { createDocx } from "./editor";
@@ -504,5 +504,105 @@ describe("DocxTable.mergeCells", () => {
     expect(() => table.mergeCells(5, 0, 1, 1)).toThrow(/does not exist/);
     expect(() => table.mergeCells(0, 0, 5, 1)).toThrow(/exceeds/);
     expect(() => table.mergeCells(0, 0, 0, 1)).toThrow(/positive integer/);
+  });
+});
+
+// The bytes a docx editor would write, re-decoded and serialised back to the document part's own XML text: what a consumer reading the part directly (not through readDocxContent, which hides a continuation cell's content) would find.
+function writtenDocumentXml(editor: ReturnType<typeof createDocx>): string {
+  const part = decodePackage(encodePackage(editor.toPackage())).parts[
+    "word/document.xml"
+  ];
+  if (part?.kind !== "xml") {
+    throw new Error("expected word/document.xml to be an XML part");
+  }
+  return buildXml(part.nodes);
+}
+
+describe("a vertical-merge continuation cell holds no content", () => {
+  it("DocxTable.mergeCells leaves none of the covered cells' text in the written document part", () => {
+    const editor = createDocx();
+    const table = editor.body.appendTable({ rows: 3, columns: 2 });
+    table.cell(0, 0).appendParagraph({ text: "anchor text" });
+    table.cell(1, 0).appendParagraph({ text: "covered text one" });
+    table.cell(2, 0).appendParagraph({ text: "covered text two" });
+    table.cell(1, 1).appendParagraph({ text: "neighbour text" });
+
+    table.mergeCells(0, 0, 3, 1);
+
+    const xml = writtenDocumentXml(editor);
+    expect(xml).toContain("anchor text");
+    expect(xml).toContain("neighbour text");
+    expect(xml).not.toContain("covered text one");
+    expect(xml).not.toContain("covered text two");
+  });
+
+  it("a rectangle merge clears the continuation cell it keeps in each covered row, and only that", () => {
+    const editor = createDocx();
+    const table = editor.body.appendTable({ rows: 2, columns: 3 });
+    table.cell(0, 0).appendParagraph({ text: "left" });
+    table.cell(0, 1).appendParagraph({ text: "anchor" });
+    table.cell(0, 2).appendParagraph({ text: "consumed by colSpan" });
+    table.cell(1, 1).appendParagraph({ text: "covered below" });
+    table.cell(1, 2).appendParagraph({ text: "consumed below" });
+
+    table.mergeCells(0, 1, 2, 2);
+
+    const xml = writtenDocumentXml(editor);
+    expect(xml).toContain("left");
+    expect(xml).toContain("anchor");
+    expect(xml).not.toContain("consumed by colSpan");
+    expect(xml).not.toContain("covered below");
+    expect(xml).not.toContain("consumed below");
+  });
+
+  it("setting 'continue' by hand also discards the text, leaving exactly one empty w:p after w:tcPr", () => {
+    const editor = createDocx();
+    const table = editor.body.appendTable({ rows: 2, columns: 1 });
+    table.cell(0, 0).verticalMerge = "restart";
+    table.cell(0, 0).appendParagraph({ text: "top" });
+    const covered = table.cell(1, 0);
+    covered.appendParagraph({ text: "first hidden paragraph" });
+    covered.appendParagraph({ text: "second hidden paragraph" });
+
+    covered.verticalMerge = "continue";
+
+    const xml = writtenDocumentXml(editor);
+    expect(xml).not.toContain("hidden paragraph");
+    expect(covered.paragraphs()).toHaveLength(1);
+    expect(covered.text).toBe("");
+    expect(covered.verticalMerge).toBe("continue");
+  });
+
+  it("keeps w:tcPr as the first child of a cleared cell, ahead of its one w:p", () => {
+    const tableElement = buildTable({ rows: 2, columns: 1 });
+    const table = new DocxTable([tableElement], tableElement);
+    const covered = table.cell(1, 0);
+    covered.colSpan = 1;
+    covered.appendParagraph({ text: "gone" });
+
+    covered.verticalMerge = "continue";
+
+    const rows = tableElement.children.filter(
+      (c): c is XmlElement => c.type === "element" && c.tag === "w:tr",
+    );
+    const tc = rows[1]?.children.find(
+      (c): c is XmlElement => c.type === "element" && c.tag === "w:tc",
+    );
+    expect(
+      tc?.children.map((c) => (c.type === "element" ? c.tag : c.type)),
+    ).toEqual(["w:tcPr", "w:p"]);
+  });
+
+  it("does not clear a cell that restarts a merge, nor one whose merge is removed", () => {
+    const editor = createDocx();
+    const table = editor.body.appendTable({ rows: 1, columns: 1 });
+    const cell = table.cell(0, 0);
+    cell.appendParagraph({ text: "kept text" });
+
+    cell.verticalMerge = "restart";
+    expect(cell.text).toContain("kept text");
+    cell.verticalMerge = undefined;
+    expect(cell.text).toContain("kept text");
+    expect(writtenDocumentXml(editor)).toContain("kept text");
   });
 });

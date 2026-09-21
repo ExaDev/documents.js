@@ -101,16 +101,15 @@ describe("DocEditor paragraph and run round trips", () => {
 });
 
 describe("DocEditor tables", () => {
-  it("round-trips a table with cell text and a horizontal merge", () => {
+  it("round-trips a table with cell text and a horizontal merge, reading back one entry per grid column", () => {
     const editor = createDoc();
     const table = editor.appendTable({ rows: 2, columns: 2 });
     table.rows()[0]!.cells()[0]!.text = "top-left";
     table.rows()[0]!.cells()[1]!.text = "top-right";
     const bottomRow = table.rows()[1]!;
     bottomRow.cells()[0]!.text = "bottom";
-    bottomRow.cells()[0]!.colSpan = 2;
-    // A horizontal merge is the anchor's own colSpan covering a grid position the row no longer carries a cell for -- the covered cell leaves the row (see DocTableCell.remove's own note).
-    bottomRow.cells()[1]!.remove();
+    bottomRow.cells()[1]!.text = "discarded by the merge";
+    table.mergeCells(1, 0, 1, 2);
 
     const reread = openDoc(editor.toBytes());
     const rereadTable = reread.tables()[0]!;
@@ -118,9 +117,12 @@ describe("DocEditor tables", () => {
     expect(rereadTable.rows()[0]!.cells()[0]!.text).toBe("top-left");
     expect(rereadTable.rows()[0]!.cells()[1]!.text).toBe("top-right");
     const mergedRow = rereadTable.rows()[1]!;
-    expect(mergedRow.cells()).toHaveLength(1);
+    // The covered grid column is still an entry of the row: cells() is indexed by grid column, not by physical cell.
+    expect(mergedRow.cells()).toHaveLength(2);
     expect(mergedRow.cells()[0]!.text).toBe("bottom");
     expect(mergedRow.cells()[0]!.colSpan).toBe(2);
+    expect(mergedRow.cells()[1]!.text).toBe("");
+    expect(mergedRow.cells()[1]!.colSpan).toBeUndefined();
   });
 
   it("round-trips a multi-paragraph cell as multiple paragraphs", () => {

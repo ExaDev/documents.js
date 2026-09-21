@@ -107,6 +107,19 @@ export class DocxTableCell {
     );
   }
 
+  // Replaces every block-level child of the w:tc with one empty paragraph, keeping w:tcPr. ECMA-376 CT_Tc is `tcPr?` followed by one or more block-level elements, so an empty w:p is the minimal valid body. The children array is edited in place so views holding it (DocxParagraph's container) never see a detached copy.
+  private clearBlockContent(): void {
+    const properties = this.node.children.filter(
+      (child) => child.type === "element" && child.tag === "w:tcPr",
+    );
+    this.node.children.splice(
+      0,
+      this.node.children.length,
+      ...properties,
+      buildParagraph(),
+    );
+  }
+
   get verticalMerge(): DocxVerticalMerge | undefined {
     const tcPr = this.tcPrElement(false);
     const vMerge =
@@ -117,8 +130,11 @@ export class DocxTableCell {
     return attr(vMerge, "w:val") === "restart" ? "restart" : "continue";
   }
 
-  // Marks this cell as the start ('restart') or a covered continuation ('continue') of a vertical merge (ECMA-376 w:tcPr/w:vMerge) -- unlike colSpan, a vertically-merged region DOES need one real w:tc per covered row (Word's own reader has nowhere else to hang that row's own row-height/content), so a caller building a merged table writes 'restart' on the top cell and 'continue' on the corresponding cell in every row it covers.
+  // Marks this cell as the start ('restart') or a covered continuation ('continue') of a vertical merge (ECMA-376 w:tcPr/w:vMerge) -- unlike colSpan, a vertically-merged region DOES need one real w:tc per covered row (Word's own reader has nowhere else to hang that row's own row-height/content), so a caller building a merged table writes 'restart' on the top cell and 'continue' on the corresponding cell in every row it covers. A continuation cell holds no content of its own, because the merged region's content belongs to the cell that restarts it and readDocxContent drops whatever a continuation cell carries: text left in one would stay in the part while being invisible to every view built from it. Setting 'continue' therefore discards the cell's block content, leaving the single empty w:p that ECMA-376 CT_Tc requires of every w:tc.
   set verticalMerge(value: DocxVerticalMerge | undefined) {
+    if (value === "continue") {
+      this.clearBlockContent();
+    }
     if (value === undefined) {
       const tcPr = this.tcPrElement(false);
       if (tcPr !== undefined) {
