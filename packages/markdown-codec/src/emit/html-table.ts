@@ -40,16 +40,24 @@ function blockNeedsHtmlFallback(block: ContentBlock): boolean {
   return block.kind !== "paragraph" && block.kind !== "image";
 }
 
-// Whether ANY cell anywhere in `table` needs colSpan/rowSpan/background, or holds a block a plain GFM cell cannot represent at all -- the single trigger src/emit/table.ts's own emitTable checks before choosing between the plain pipe writer and this module.
+// GFM's pipe syntax can state exactly one header arrangement: the first row is the header row and no other row is one (github.github.com/gfm, "Tables (extension)" -- the delimiter row separates a single leading header row from the body, and there is no syntax for a second one or for one further down). A table stating any other arrangement renders through this module instead, where a header row is its own row of th cells at whatever position it sits (ExaDev/documents.js#1377), rather than having the flag dropped to fit the pipe grammar.
+function headerRowsNeedHtmlFallback(table: ContentTable): boolean {
+  return table.rows.some((row, index) => row.isHeader === true && index > 0);
+}
+
+// Whether ANY cell anywhere in `table` needs colSpan/rowSpan/background, or holds a block a plain GFM cell cannot represent at all, or the table's header rows sit somewhere the pipe grammar cannot state -- the single trigger src/emit/table.ts's own emitTable checks before choosing between the plain pipe writer and this module.
 export function tableNeedsHtmlFallback(table: ContentTable): boolean {
-  return table.rows.some((row) =>
-    row.cells.some(
-      (cell) =>
-        cell.colSpan !== undefined ||
-        cell.rowSpan !== undefined ||
-        cell.background !== undefined ||
-        cell.blocks.some(blockNeedsHtmlFallback),
-    ),
+  return (
+    headerRowsNeedHtmlFallback(table) ||
+    table.rows.some((row) =>
+      row.cells.some(
+        (cell) =>
+          cell.colSpan !== undefined ||
+          cell.rowSpan !== undefined ||
+          cell.background !== undefined ||
+          cell.blocks.some(blockNeedsHtmlFallback),
+      ),
+    )
   );
 }
 
@@ -199,11 +207,13 @@ export function emitHtmlTable(
   context: TableEmitContext,
 ): string {
   assertTableObeysGridRule(table);
-  // HTML states anchors only: a covered position of a merged region has no cell tag of its own, its extent being carried by the anchor's colspan/rowspan, so emitting one would widen the row past the grid. The first row is the header row, whichever of its positions are anchors.
+  // HTML states anchors only: a covered position of a merged region has no cell tag of its own, its extent being carried by the anchor's colspan/rowspan, so emitting one would widen the row past the grid. A row carrying isHeader writes its cells as th, and every other row writes td: the header row is whichever row says it is one, not whichever row happens to come first (ExaDev/documents.js#1377). A table whose rows state no header at all therefore writes no th, which is the honest rendering of a table that has no header row.
   const rowTags = walkTableGrid(table).map((positions, rowIndex) => {
+    // walkTableGrid returns one array per table row, in row order, so this index is always in range.
+    const isHeader = table.rows[rowIndex]!.isHeader === true;
     const cellTags = positions.flatMap((position) =>
       position.anchorRowIndex === undefined
-        ? [emitCellTag(position.cell, rowIndex === 0, context)]
+        ? [emitCellTag(position.cell, isHeader, context)]
         : [],
     );
     return `<tr>${cellTags.join("")}</tr>`;

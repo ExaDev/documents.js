@@ -1,4 +1,4 @@
-// A GFM table -> ContentTable: evenly-distributed column widths across the section's own content width, and a delimiter row's own per-column alignment carried onto each cell's ContentParagraph.alignment. A cell's own header-ness is NOT also encoded as literal bold ContentRun styling -- it is already fully recoverable from position alone (rows[0] is always the header row, per src/emit/table.ts's own top-of-file note), and GFM's `<th>` rendering bold is a browser default-stylesheet convention, not something the markdown source itself ever spells out with `**`; forcing bold here would round-trip a plain `| Header |` cell back out as `| **Header** |` once written and reparsed, a real fidelity regression rather than a faithful mapping. A markdown table cell holds inline content only (MarkdownTableCellNode.children, src/ast/ast.ts) -- there is no nested table, no colSpan/rowSpan, no cell background, and never more than one paragraph's worth of content, so none of ContentTableCell's own colSpan/rowSpan/background fields are ever set here; those only become relevant on the WRITE side, when a ContentTable arriving from some OTHER format's own richer table model has to be flattened down to fit GFM's table grammar -- see src/emit/table.ts's own top-of-file note and MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED/TABLE_CELL_MULTI_PARAGRAPH_JOINED.
+// A GFM table -> ContentTable: evenly-distributed column widths across the section's own content width, and a delimiter row's own per-column alignment carried onto each cell's ContentParagraph.alignment. A cell's own header-ness is NOT also encoded as literal bold ContentRun styling -- the row itself states it through ContentTableRow.isHeader, which rows[0] alone carries (GFM has exactly one header row and it is always the first), and GFM's `<th>` rendering bold is a browser default-stylesheet convention, not something the markdown source itself ever spells out with `**`; forcing bold here would round-trip a plain `| Header |` cell back out as `| **Header** |` once written and reparsed, a real fidelity regression rather than a faithful mapping. A markdown table cell holds inline content only (MarkdownTableCellNode.children, src/ast/ast.ts) -- there is no nested table, no colSpan/rowSpan, no cell background, and never more than one paragraph's worth of content, so none of ContentTableCell's own colSpan/rowSpan/background fields are ever set here; those only become relevant on the WRITE side, when a ContentTable arriving from some OTHER format's own richer table model has to be flattened down to fit GFM's table grammar -- see src/emit/table.ts's own top-of-file note and MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED/TABLE_CELL_MULTI_PARAGRAPH_JOINED.
 
 import type {
   Alignment,
@@ -56,10 +56,12 @@ export function lowerTable(
     () => contentWidthPt / columnCount,
   );
 
-  const rows: ContentTableRow[] = node.children.map((row) => ({
+  // GFM's own grammar makes the first row a header row and every later row a body row, so row 0 carries isHeader and no other row can (github.github.com/gfm, "Tables (extension)": the delimiter row separates the single header row from the body). Stating it rather than leaving it to position is what lets a table read from markdown be written back out to a format that spells header-ness on the row itself (ExaDev/documents.js#1377).
+  const rows: ContentTableRow[] = node.children.map((row, rowIndex) => ({
     cells: row.children.map((cell, index) =>
       lowerTableCell(cell, node.alignments[index], context),
     ),
+    ...(rowIndex === 0 ? { isHeader: true } : {}),
   }));
 
   return { kind: "table", rows, columnWidthsPt };

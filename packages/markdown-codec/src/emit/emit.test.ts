@@ -3406,6 +3406,38 @@ describe("tables", () => {
     expect(emitMarkdown(doc([table]))).toBe("");
   });
 
+  it("renders a table whose header row is not the first through the HTML fallback, where the flag can be stated", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] }] },
+        {
+          cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }],
+          isHeader: true,
+        },
+      ],
+    };
+    const out = emitMarkdown(doc([table]));
+    expect(out).toContain("<tr><td>a</td></tr>");
+    expect(out).toContain("<tr><th>h</th></tr>");
+  });
+
+  it("renders a table whose only header row is the first as an ordinary pipe table", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        {
+          cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }],
+          isHeader: true,
+        },
+        { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] }] },
+      ],
+    };
+    expect(emitMarkdown(doc([table]))).toContain("| h |");
+  });
+
   it("emits alignment markers read from the header row's own cell alignment", () => {
     const table: ContentTable = {
       kind: "table",

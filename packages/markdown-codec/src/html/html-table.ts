@@ -21,6 +21,8 @@ import { MONOSPACE_FONT_FAMILY } from "../shared/style-constants";
 // --- Bounded balanced-tag scanning -- the one primitive every level of this parser (table -> tr -> td/th -> nested table) shares. ---
 
 interface HtmlElement {
+  // The tag this element was opened with, lowercased. td and th share one extraction pass, and which of the two a cell was written as is the only thing that says the row is a header row, so the pass records it rather than discarding it.
+  readonly tag: string;
   readonly attrs: string;
   readonly inner: string;
 }
@@ -57,12 +59,12 @@ function findBalancedClose(
   }
 }
 
-// Every top-level (not nested inside another same-class element) <tagName ...>...</tagName> in `text`, tolerating only whitespace between and around them -- any other stray content refuses the whole parse rather than guessing which parts to keep. `tagNames` lets td/th share one pass: a table cell is one or the other, and ContentTableRow never itself distinguishes them -- row position alone marks the header row (src/lower/table.ts's own top comment, mirrored on the write side by src/emit/html-table.ts).
+// Every top-level (not nested inside another same-class element) <tagName ...>...</tagName> in `text`, tolerating only whitespace between and around them -- any other stray content refuses the whole parse rather than guessing which parts to keep. `tagNames` lets td/th share one pass, and each element carries back the tag it was opened with, which is what lets parseTableRows recognise a header row (ExaDev/documents.js#1377) rather than assuming row position states it.
 function extractTopLevelElements(
   text: string,
   tagNames: readonly string[],
 ): HtmlElement[] | undefined {
-  const openPattern = new RegExp(`<(?:${tagNames.join("|")})\\b([^>]*)>`, "gi");
+  const openPattern = new RegExp(`<(${tagNames.join("|")})\\b([^>]*)>`, "gi");
   const elements: HtmlElement[] = [];
   let pos = 0;
   for (;;) {
@@ -74,14 +76,15 @@ function extractTopLevelElements(
     if (text.slice(pos, match.index).trim().length > 0) {
       return undefined;
     }
-    // The attribute capture group is `([^>]*)`, an unconditional part of the pattern that can match empty but can never fail, so a successful match always carries it as a string.
-    const attrs = match[1]!;
+    // Both capture groups are unconditional parts of the pattern (the tag alternation, and `([^>]*)`, which can match empty but can never fail), so a successful match always carries both as strings.
+    const tag = match[1]!.toLowerCase();
+    const attrs = match[2]!;
     const openEnd = match.index + match[0].length;
     const close = findBalancedClose(text, openEnd, tagNames);
     if (close === undefined) {
       return undefined;
     }
-    elements.push({ attrs, inner: text.slice(openEnd, close.start) });
+    elements.push({ tag, attrs, inner: text.slice(openEnd, close.start) });
     pos = close.end;
   }
   if (text.slice(pos).trim().length > 0) {
@@ -343,8 +346,11 @@ function parseTableRows(
     if (cellElements === undefined || cellElements.length === 0) {
       return undefined;
     }
+    // A row is a header row when every one of its cells is a th, which is what this module's own writer emits for a row carrying isHeader. A row mixing th and td is not one: <th scope="row"> is a real HTML shape stating a row LABEL rather than a header row, and reading it as a header row would turn an ordinary body row into one on every read.
+    const isHeader = cellElements.every((cell) => cell.tag === "th");
     anchorRows.push({
       cells: cellElements.map((cell) => buildCell(cell, contentWidthPt)),
+      ...(isHeader ? { isHeader: true } : {}),
     });
   }
   return placeAnchorTableRows(anchorRows, NO_DECLARED_COLUMN_COUNT);
