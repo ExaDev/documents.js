@@ -1,3 +1,9 @@
+import {
+  tableCellColumnSpan,
+  tableCellRowSpan,
+  tableGridColumnCount,
+  walkTableGrid,
+} from "document-schema.js";
 import type {
   ContentBlock,
   ContentParagraph as ContentParagraphNode,
@@ -16,47 +22,26 @@ export interface TableInit {
   readonly columns: number;
 }
 
-// Cells carry colSpan/rowSpan setters, unlike markdown's own text-only MarkdownTableCell: doc-codec's writer encodes both merge directions for real (a horizontal merge as the row's own narrower physical-cell layout, a vertical merge as tracked continuation cells -- see doc-codec's table/write.ts top comment) and its reader reads both back, so a merge set through this editor genuinely round-trips.
+// A live view over one entry of a ContentTableRow's dense `cells` array (ContentTableCell's grid rule): the entry at index n is the cell at grid column n, so a merged region is its anchor plus a block-less entry at every other position it covers, and a row always has one entry per grid column. Reading a merged table therefore yields covered entries too, and DocTable.mergeCells is how a merge is built without breaking that rule. The colSpan and rowSpan setters state the anchor's own span only; they neither create nor clear the covered entries, which mergeCells does.
 export class DocTableCell {
-  private readonly container: ContentTableCellNode[];
   private readonly node: ContentTableCellNode;
-  private removed = false;
 
-  constructor(container: ContentTableCellNode[], node: ContentTableCellNode) {
-    this.container = container;
+  constructor(node: ContentTableCellNode) {
     this.node = node;
   }
 
-  private live(): ContentTableCellNode {
-    if (this.removed) {
-      throw new Error(
-        "this DocTableCell has been removed from its row and can no longer be used",
-      );
-    }
-    return this.node;
-  }
-
-  // Removing a cell is how a horizontal merge is BUILT in this model: the shared pivot states a merge as the anchor cell's own colSpan covering grid positions the row no longer carries cells for (a covered position exists as a cell only for a VERTICAL continuation, as a bare {blocks: []} -- see doc-codec's table/write.ts top comment), so widening an anchor's colSpan past a live neighbour without removing that neighbour leaves the row claiming more columns than the grid has, which writeDocContent refuses outright. remove() is that removal.
-  remove(): void {
-    const index = this.container.indexOf(this.node);
-    if (index !== -1) {
-      this.container.splice(index, 1);
-    }
-    this.removed = true;
-  }
-
   paragraphs(): DocParagraph[] {
-    return this.live()
-      .blocks.filter(
+    return this.node.blocks
+      .filter(
         (block): block is ContentParagraphNode => block.kind === "paragraph",
       )
-      .map((block) => new DocParagraph(this.live().blocks, block));
+      .map((block) => new DocParagraph(this.node.blocks, block));
   }
 
   appendParagraph(init?: ParagraphInit): DocParagraph {
     const paragraph = buildParagraph(init);
-    this.live().blocks.push(paragraph);
-    return new DocParagraph(this.live().blocks, paragraph);
+    this.node.blocks.push(paragraph);
+    return new DocParagraph(this.node.blocks, paragraph);
   }
 
   // Newline-joined across this cell's own paragraphs, matching MarkdownTableCell.text/OdtTableCell.text's own convention. Unlike markdown (whose writer space-joins a multi-paragraph cell back down to one line), a multi-paragraph doc cell round-trips as multiple paragraphs -- the getter reports both what the cell holds and what the writer will keep.
@@ -68,30 +53,30 @@ export class DocTableCell {
 
   // Clears this cell's existing blocks and replaces them with a single paragraph carrying a single run -- the same clear-and-replace convention MarkdownTableCell.text's own setter uses.
   set text(value: string) {
-    this.live().blocks = [buildParagraph({ text: value })];
+    this.node.blocks = [buildParagraph({ text: value })];
   }
 
   get colSpan(): number | undefined {
-    return this.live().colSpan;
+    return this.node.colSpan;
   }
 
   set colSpan(value: number | undefined) {
     if (value === undefined) {
-      delete this.live().colSpan;
+      delete this.node.colSpan;
     } else {
-      this.live().colSpan = value;
+      this.node.colSpan = value;
     }
   }
 
   get rowSpan(): number | undefined {
-    return this.live().rowSpan;
+    return this.node.rowSpan;
   }
 
   set rowSpan(value: number | undefined) {
     if (value === undefined) {
-      delete this.live().rowSpan;
+      delete this.node.rowSpan;
     } else {
-      this.live().rowSpan = value;
+      this.node.rowSpan = value;
     }
   }
 }
@@ -103,10 +88,9 @@ export class DocTableRow {
     this.node = node;
   }
 
+  // One view per grid column, covered positions included: the row is dense, so the index is the grid column outright.
   cells(): DocTableCell[] {
-    return this.node.cells.map(
-      (cell) => new DocTableCell(this.node.cells, cell),
-    );
+    return this.node.cells.map((cell) => new DocTableCell(cell));
   }
 }
 
@@ -154,6 +138,82 @@ export class DocTable {
     const row = buildRow(node.columnWidthsPt.length);
     node.rows.push(row);
     return new DocTableRow(row);
+  }
+
+  // Merges the rowSpan x colSpan rectangle anchored at (startRow, startColumn). The anchor keeps its own content and takes the span; every other position in the rectangle stays in its row as a real entry (the grid rule keeps rows dense) and has its blocks discarded, since a covered entry holds no content of its own. Discarding is unconditional, matching OdtTable.mergeCells and OdsSheet.mergeCells. Only positions that are unmerged today can be merged: a rectangle touching an existing merged region, as anchor or as covered position, throws rather than producing regions whose footprints overlap.
+  mergeCells(
+    startRow: number,
+    startColumn: number,
+    rowSpan: number,
+    colSpan: number,
+  ): DocTableCell {
+    if (
+      !Number.isInteger(rowSpan) ||
+      rowSpan < 1 ||
+      !Number.isInteger(colSpan) ||
+      colSpan < 1
+    ) {
+      throw new Error(
+        `mergeCells: rowSpan and colSpan must be positive integers, got rowSpan=${rowSpan}, colSpan=${colSpan}`,
+      );
+    }
+    const node = this.live();
+    const grid = walkTableGrid(node);
+    const anchorPosition = grid[startRow]?.[startColumn];
+    if (anchorPosition === undefined) {
+      throw new Error(
+        `mergeCells: row ${startRow}, column ${startColumn} does not exist in this table`,
+      );
+    }
+    if (startRow + rowSpan > grid.length) {
+      throw new Error(
+        `mergeCells: rowSpan ${rowSpan} starting at row ${startRow} exceeds this table's own ${grid.length} rows`,
+      );
+    }
+    const columnCount = tableGridColumnCount(node);
+    if (startColumn + colSpan > columnCount) {
+      throw new Error(
+        `mergeCells: colSpan ${colSpan} starting at column ${startColumn} exceeds this table's own ${columnCount} columns`,
+      );
+    }
+    const covered: ContentTableCellNode[] = [];
+    for (let rowIndex = startRow; rowIndex < startRow + rowSpan; rowIndex++) {
+      for (
+        let columnIndex = startColumn;
+        columnIndex < startColumn + colSpan;
+        columnIndex++
+      ) {
+        const position = grid[rowIndex]?.[columnIndex];
+        if (position === undefined) {
+          throw new Error(
+            `mergeCells: column ${columnIndex} does not exist in row ${rowIndex}`,
+          );
+        }
+        if (
+          position.anchorRowIndex !== undefined ||
+          tableCellColumnSpan(position.cell) !== 1 ||
+          tableCellRowSpan(position.cell) !== 1
+        ) {
+          throw new Error(
+            `mergeCells: row ${rowIndex}, column ${columnIndex} already belongs to a merged region`,
+          );
+        }
+        if (rowIndex !== startRow || columnIndex !== startColumn) {
+          covered.push(position.cell);
+        }
+      }
+    }
+    const anchorCell = new DocTableCell(anchorPosition.cell);
+    if (colSpan > 1) {
+      anchorCell.colSpan = colSpan;
+    }
+    if (rowSpan > 1) {
+      anchorCell.rowSpan = rowSpan;
+    }
+    for (const cell of covered) {
+      cell.blocks = [];
+    }
+    return anchorCell;
   }
 
   remove(): void {
