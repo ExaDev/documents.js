@@ -8,9 +8,11 @@ import {
   MUTATION_SHARE_OF_RUNNER_LIMIT,
   affectedMutationPackages,
   estimateColdSeconds,
+  matchesMutateGlobs,
   maxParallelFor,
   packageMatrixEntries,
   partitionForEvent,
+  resolveMutateGlobs,
   selectRequested,
   planSlices,
   sliceBudgetSeconds,
@@ -269,6 +271,78 @@ describe("strykerConfigHash", () => {
   it("does not collide across the boundary between the two texts", () => {
     // Without a separator, ("ab", "c") and ("a", "bc") would hash identically.
     expect(strykerConfigHash("ab", "c")).not.toBe(strykerConfigHash("a", "bc"));
+  });
+});
+
+describe("matchesMutateGlobs", () => {
+  it("matches a file against a single positive glob", () => {
+    expect(matchesMutateGlobs("src/a.ts", ["src/**/*.ts"])).toBe(true);
+    expect(matchesMutateGlobs("src/a.test.ts", ["src/**/*.ts"])).toBe(true);
+    expect(matchesMutateGlobs("README.md", ["src/**/*.ts"])).toBe(false);
+  });
+
+  it("excludes a file a later negated pattern matches", () => {
+    const globs = ["src/**/*.ts", "!src/**/*.test.ts"];
+    expect(matchesMutateGlobs("src/a.ts", globs)).toBe(true);
+    expect(matchesMutateGlobs("src/a.test.ts", globs)).toBe(false);
+  });
+
+  it("re-includes a file a later positive pattern matches again", () => {
+    const globs = ["src/**/*.ts", "!src/**/*.css.ts", "src/ui/keep.css.ts"];
+    expect(matchesMutateGlobs("src/ui/other.css.ts", globs)).toBe(false);
+    expect(matchesMutateGlobs("src/ui/keep.css.ts", globs)).toBe(true);
+  });
+
+  it("never includes a path no positive pattern ever matched", () => {
+    expect(matchesMutateGlobs("src/a.ts", ["!src/**/*.ts"])).toBe(false);
+  });
+
+  it("reproduces the confirmed packages/web bug: an explicit css.ts exclusion applies", () => {
+    const webGlobs = [
+      "src/**/*.ts",
+      "src/**/*.tsx",
+      "!src/**/*.test.ts",
+      "!src/**/*.test.tsx",
+      "!src/**/*.css.ts",
+    ];
+    expect(matchesMutateGlobs("src/ui/contentBlocks.css.ts", webGlobs)).toBe(
+      false,
+    );
+    expect(matchesMutateGlobs("src/app.tsx", webGlobs)).toBe(true);
+  });
+});
+
+describe("resolveMutateGlobs", () => {
+  it("returns the package's own resolved mutate array", () => {
+    expect(resolveMutateGlobs({ mutate: ["src/**/*.ts"] })).toEqual([
+      "src/**/*.ts",
+    ]);
+  });
+
+  it("falls back to the shared default when the config has no mutate field", () => {
+    expect(resolveMutateGlobs({})).toEqual([
+      "src/**/*.ts",
+      "!src/**/*.test.ts",
+      "!src/**/*.test.tsx",
+    ]);
+  });
+
+  it("falls back to the shared default for a malformed mutate value", () => {
+    expect(resolveMutateGlobs({ mutate: "src/**/*.ts" })).toEqual([
+      "src/**/*.ts",
+      "!src/**/*.test.ts",
+      "!src/**/*.test.tsx",
+    ]);
+    expect(resolveMutateGlobs({ mutate: [1, 2] })).toEqual([
+      "src/**/*.ts",
+      "!src/**/*.test.ts",
+      "!src/**/*.test.tsx",
+    ]);
+    expect(resolveMutateGlobs(undefined)).toEqual([
+      "src/**/*.ts",
+      "!src/**/*.test.ts",
+      "!src/**/*.test.tsx",
+    ]);
   });
 });
 

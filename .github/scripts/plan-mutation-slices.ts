@@ -4,8 +4,9 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFileSync, readdirSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { minimatch } from "minimatch";
 import {
   LOCKFILE_PATH,
   changedFilesSince,
@@ -43,8 +44,6 @@ export const JOB_SETUP_MINUTES = 10;
 
 /** How many times over a slice's own cold estimate its job may run before the timeout kills it. */
 export const TIMEOUT_MARGIN = 2;
-
-const TEST_FILE_PATTERN = /\.test\.tsx?$/;
 
 /** Characters that would change what a `--mutate` entry means: the comma separates entries, and the rest are glob syntax, so a path containing one would select something other than its own file. */
 const UNSAFE_MUTATE_PATH_CHARACTERS = /[,*?[\]{}()!]/;
@@ -104,6 +103,35 @@ export function strykerConfigHash(
     .slice(0, 12);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** stryker.shared.ts's own default `mutate` array, used when a package's own config resolves no `mutate` field at all (packageStrykerConfig itself falls back to this same default, so a package that never sets `mutate` is covered identically here). */
+const DEFAULT_MUTATE_GLOBS: readonly string[] = [
+  "src/**/*.ts",
+  "!src/**/*.test.ts",
+  "!src/**/*.test.tsx",
+];
+
+/** The `mutate` glob array a package's own stryker.config.ts default-exports, read the same way gate-mutation-scores.ts reads that package's recordedBreak: a real dynamic import of the resolved config object, not a text parse, since the config is TypeScript that calls packageStrykerConfig rather than a plain data file. */
+/** The `mutate` glob array `config` (a stryker.config.ts default export) resolves, or DEFAULT_MUTATE_GLOBS when it resolves none, mirroring packageStrykerConfig's own fallback exactly. */
+export function resolveMutateGlobs(config: unknown): readonly string[] {
+  const mutate = isRecord(config) ? config.mutate : undefined;
+  return Array.isArray(mutate) && mutate.every((g) => typeof g === "string")
+    ? mutate
+    : DEFAULT_MUTATE_GLOBS;
+}
+
+export async function loadMutateGlobs(
+  directory: string,
+): Promise<readonly string[]> {
+  const module: unknown = await import(
+    pathToFileURL(resolve(directory, "stryker.config.ts")).href
+  );
+  return resolveMutateGlobs(isRecord(module) ? module.default : undefined);
+}
+
 /** Extracts the `_test:mutation` task's own package list from a `turbo run ... --dry-run=json` plan, rather than re-deriving affectedness independently, since this is the exact computation the real run uses and the slice plan cannot disagree with the run it plans for. */
 export function affectedMutationPackages(
   dryRunOutput: string,
@@ -114,14 +142,36 @@ export function affectedMutationPackages(
     .map((task) => ({ name: task.package, directory: task.directory }));
 }
 
-/** Every `.ts`/`.tsx` file under a package's `src/` minus its unit tests, with its line count: the same scope stryker.shared.ts's default `mutate` glob covers. A package the turbo plan lists is a real workspace package with a `src/` directory. */
-export function packageSourceFiles(directory: string): readonly SourceFile[] {
+/**
+ * Whether `path` (relative to the package root, matching what a `mutate` glob is written against) is a file Stryker would actually mutate under `globs`, the same array `stryker.config.ts` exports as its own `mutate` option. Applies the array the way Stryker and minimatch both do: later entries override earlier ones for the same path, and a leading `!` negates a pattern, so a file matches only when the last pattern in the array that matches it at all is a positive one. A `mutate` array with nothing but negations excludes every path, since no positive pattern ever included it in the first place.
+ *
+ * Sharing this exact matcher with plan-mutation-slices.ts's own file discovery is the whole point: a package's `--mutate` glob and its planned slice's own explicit `--mutate` file list must agree on which files exist, or a slice hands Stryker an explicit list the config's own glob would have excluded, and an explicit `--mutate` list on the CLI replaces the config's array outright rather than narrowing it, so the exclusion is silently lost the moment the package is sliced. Confirmed against packages/web (ExaDev/documents.js#1348): its `.css.ts`-file exclusion never took effect while the package needed slicing, because packageSourceFiles discovered every `.ts`/`.tsx` file under `src/` with no awareness of the config's own glob at all.
+ */
+export function matchesMutateGlobs(
+  path: string,
+  globs: readonly string[],
+): boolean {
+  let included = false;
+  for (const glob of globs) {
+    const negated = glob.startsWith("!");
+    const pattern = negated ? glob.slice(1) : glob;
+    if (minimatch(path, pattern)) included = !negated;
+  }
+  return included;
+}
+
+/** Every file under a package's `src/` that its own `stryker.config.ts` `mutate` option would actually mutate, with its line count. A package the turbo plan lists is a real workspace package with a `src/` directory. */
+export function packageSourceFiles(
+  directory: string,
+  mutateGlobs: readonly string[],
+): readonly SourceFile[] {
   return readdirSync(join(directory, "src"), { recursive: true })
     .filter((entry): entry is string => typeof entry === "string")
-    .filter((entry) => /\.tsx?$/.test(entry) && !TEST_FILE_PATTERN.test(entry))
+    .map((entry) => join("src", entry))
+    .filter((entry) => matchesMutateGlobs(entry, mutateGlobs))
     .sort()
     .map((entry) => {
-      const file = join(directory, "src", entry);
+      const file = join(directory, entry);
       return {
         path: relative(directory, file),
         lines: readFileSync(file, "utf8").split("\n").length,
@@ -327,7 +377,7 @@ function pullRequestPackages(
   return affected.filter((pkg) => inScope.has(pkg.name));
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const event = process.env.MUTATION_EVENT;
   if (!isMutationEvent(event)) {
     throw new Error(`unsupported MUTATION_EVENT: ${String(event)}`);
@@ -353,17 +403,19 @@ function main(): void {
       ? pullRequestPackages(affected)
       : selectRequested(affected, requested);
   const sharedConfigText = readFileSync("stryker.shared.ts", "utf8");
-  const plans = candidates.map((pkg) => ({
-    package: pkg.name,
-    entries: packageMatrixEntries(
-      pkg,
-      packageSourceFiles(pkg.directory),
-      strykerConfigHash(
-        readFileSync(`${pkg.directory}/stryker.config.ts`, "utf8"),
-        sharedConfigText,
+  const plans = await Promise.all(
+    candidates.map(async (pkg) => ({
+      package: pkg.name,
+      entries: packageMatrixEntries(
+        pkg,
+        packageSourceFiles(pkg.directory, await loadMutateGlobs(pkg.directory)),
+        strykerConfigHash(
+          readFileSync(`${pkg.directory}/stryker.config.ts`, "utf8"),
+          sharedConfigText,
+        ),
       ),
-    ),
-  }));
+    })),
+  );
   const { run, deferred } = partitionForEvent(plans, event);
   const include = run.flatMap((plan) => plan.entries);
   console.log(
@@ -384,5 +436,5 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  main();
+  await main();
 }
