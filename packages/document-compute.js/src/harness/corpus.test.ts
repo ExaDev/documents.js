@@ -138,6 +138,32 @@ describe("collectFormulas: table and embedded-object traversal", () => {
     expect(formulas[0]?.content).toEqual(num1);
   });
 
+  it("collects a merged region's formula once, at its anchor, since the covered entries hold no blocks", () => {
+    const num2: MathExpression = {
+      kind: "num",
+      numerator: "2",
+      denominator: "1",
+    };
+    const document = wordDoc([
+      {
+        kind: "table",
+        columnWidthsPt: [50, 50, 50],
+        rows: [
+          {
+            cells: [
+              { colSpan: 2, rowSpan: 2, blocks: [formulaEmbed(num1)] },
+              { blocks: [] },
+              { blocks: [formulaEmbed(num2)] },
+            ],
+          },
+          { cells: [{ blocks: [] }, { blocks: [] }, { blocks: [] }] },
+        ],
+      },
+    ]);
+    const formulas = collectFormulas(document);
+    expect(formulas.map((formula) => formula.content)).toEqual([num1, num2]);
+  });
+
   it("recurses through a table cell containing a nested table, not just one level deep", () => {
     const document = wordDoc([
       {
