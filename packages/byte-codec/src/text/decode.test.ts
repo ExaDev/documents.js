@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DecodeTextOptions } from "./decode";
+import type { DecodeTextOptions, TextEncodingLabel } from "./decode";
 import {
   decodeText,
   detectByteOrderMark,
@@ -604,6 +604,197 @@ describe("decodeText round trip across every supported encoding", () => {
       }
     },
   );
+});
+
+describe("decodeText legacy single-byte encodings", () => {
+  const LEGACY_SINGLE_BYTE_LABELS: readonly TextEncodingLabel[] = [
+    "ibm866",
+    "iso-8859-2",
+    "iso-8859-3",
+    "iso-8859-4",
+    "iso-8859-5",
+    "iso-8859-6",
+    "iso-8859-7",
+    "iso-8859-8",
+    "iso-8859-8-i",
+    "iso-8859-10",
+    "iso-8859-13",
+    "iso-8859-14",
+    "iso-8859-15",
+    "iso-8859-16",
+    "koi8-r",
+    "koi8-u",
+    "macintosh",
+    "windows-874",
+    "windows-1250",
+    "windows-1251",
+    "windows-1253",
+    "windows-1254",
+    "windows-1255",
+    "windows-1256",
+    "windows-1257",
+    "windows-1258",
+    "x-mac-cyrillic",
+  ];
+
+  it.each(LEGACY_SINGLE_BYTE_LABELS)(
+    "decodes every byte exactly as a platform %s decoder does",
+    (label) => {
+      // A byte the encoding leaves without a character throws here rather than decoding, unlike a non-fatal platform TextDecoder, which reports it as U+FFFD instead of failing; that replacement character is exactly how a gap in the platform decoder's own table shows up, so it is what this asserts for a byte decodeText refuses.
+      const platform = new TextDecoder(label);
+      for (let byte = 0x00; byte <= 0xff; byte += 1) {
+        const bytes = Uint8Array.of(byte);
+        const expected = platform.decode(bytes);
+        if (expected === "�") {
+          expect(
+            () => decodeText(bytes, { encoding: label }),
+            `byte 0x${byte.toString(16)}`,
+          ).toThrow(UndecodableTextError);
+          continue;
+        }
+        expect(
+          decodeText(bytes, { encoding: label }).text,
+          `byte 0x${byte.toString(16)}`,
+        ).toBe(expected);
+      }
+    },
+  );
+
+  const LEGACY_SINGLE_BYTE_WORDS: readonly {
+    readonly label: TextEncodingLabel;
+    readonly word: string;
+    readonly bytes: readonly number[];
+  }[] = [
+    {
+      label: "ibm866",
+      word: "привет",
+      bytes: [0xaf, 0xe0, 0xa8, 0xa2, 0xa5, 0xe2],
+    }, // Russian for hello
+    {
+      label: "iso-8859-2",
+      word: "Dvořák",
+      bytes: [0x44, 0x76, 0x6f, 0xf8, 0xe1, 0x6b],
+    }, // the Czech surname
+    { label: "iso-8859-3", word: "ĉiu", bytes: [0xe6, 0x69, 0x75] }, // Esperanto for everyone
+    { label: "iso-8859-4", word: "Rīga", bytes: [0x52, 0xef, 0x67, 0x61] }, // the Latvian capital
+    {
+      label: "iso-8859-5",
+      word: "привет",
+      bytes: [0xdf, 0xe0, 0xd8, 0xd2, 0xd5, 0xe2],
+    }, // Russian for hello
+    { label: "iso-8859-6", word: "شكرا", bytes: [0xd4, 0xe3, 0xd1, 0xc7] }, // Arabic for thank you
+    {
+      label: "iso-8859-7",
+      word: "καλημέρα",
+      bytes: [0xea, 0xe1, 0xeb, 0xe7, 0xec, 0xdd, 0xf1, 0xe1],
+    }, // Greek for good morning
+    { label: "iso-8859-8", word: "שלום", bytes: [0xf9, 0xec, 0xe5, 0xed] }, // Hebrew for hello
+    { label: "iso-8859-8-i", word: "שלום", bytes: [0xf9, 0xec, 0xe5, 0xed] }, // Hebrew for hello
+    {
+      label: "iso-8859-10",
+      word: "Tromsø",
+      bytes: [0x54, 0x72, 0x6f, 0x6d, 0x73, 0xf8],
+    }, // the Norwegian city
+    {
+      label: "iso-8859-13",
+      word: "Šiauliai",
+      bytes: [0xd0, 0x69, 0x61, 0x75, 0x6c, 0x69, 0x61, 0x69],
+    }, // the Lithuanian city
+    { label: "iso-8859-14", word: "tŵr", bytes: [0x74, 0xf0, 0x72] }, // Welsh for tower
+    {
+      label: "iso-8859-15",
+      word: "größer",
+      bytes: [0x67, 0x72, 0xf6, 0xdf, 0x65, 0x72],
+    }, // German for bigger
+    {
+      label: "iso-8859-16",
+      word: "mulțumesc",
+      bytes: [0x6d, 0x75, 0x6c, 0xfe, 0x75, 0x6d, 0x65, 0x73, 0x63],
+    }, // Romanian for thank you
+    {
+      label: "koi8-r",
+      word: "привет",
+      bytes: [0xd0, 0xd2, 0xc9, 0xd7, 0xc5, 0xd4],
+    }, // Russian for hello
+    {
+      label: "koi8-u",
+      word: "привіт",
+      bytes: [0xd0, 0xd2, 0xc9, 0xd7, 0xa6, 0xd4],
+    }, // Ukrainian for hello
+    { label: "macintosh", word: "café", bytes: [0x63, 0x61, 0x66, 0x8e] }, // coffee, the same word the windows-1252 tests above use
+    { label: "windows-874", word: "ไทย", bytes: [0xe4, 0xb7, 0xc2] }, // Thai for Thailand
+    {
+      label: "windows-1250",
+      word: "Dvořák",
+      bytes: [0x44, 0x76, 0x6f, 0xf8, 0xe1, 0x6b],
+    }, // the Czech surname
+    {
+      label: "windows-1251",
+      word: "привет",
+      bytes: [0xef, 0xf0, 0xe8, 0xe2, 0xe5, 0xf2],
+    }, // Russian for hello
+    {
+      label: "windows-1253",
+      word: "καλημέρα",
+      bytes: [0xea, 0xe1, 0xeb, 0xe7, 0xec, 0xdd, 0xf1, 0xe1],
+    }, // Greek for good morning
+    {
+      label: "windows-1254",
+      word: "Türkçe",
+      bytes: [0x54, 0xfc, 0x72, 0x6b, 0xe7, 0x65],
+    }, // Turkish for the Turkish language
+    { label: "windows-1255", word: "שלום", bytes: [0xf9, 0xec, 0xe5, 0xed] }, // Hebrew for hello
+    { label: "windows-1256", word: "شكرا", bytes: [0xd4, 0xdf, 0xd1, 0xc7] }, // Arabic for thank you
+    { label: "windows-1257", word: "õun", bytes: [0xf5, 0x75, 0x6e] }, // Estonian for apple
+    {
+      label: "windows-1258",
+      word: "cà phê",
+      bytes: [0x63, 0xe0, 0x20, 0x70, 0x68, 0xea],
+    }, // Vietnamese for coffee
+    {
+      label: "x-mac-cyrillic",
+      word: "привет",
+      bytes: [0xef, 0xf0, 0xe8, 0xe2, 0xe5, 0xf2],
+    }, // Russian for hello
+  ];
+
+  it.each(LEGACY_SINGLE_BYTE_WORDS)(
+    "round-trips a real $label word through decodeText",
+    ({ label, word, bytes }) => {
+      const result = decodeText(bytesOf(bytes), { encoding: label });
+      expect(result).toEqual({
+        text: word,
+        encoding: label,
+        source: "declared",
+        confidence: "certain",
+        warnings: [],
+      });
+    },
+  );
+
+  it("decodes iso-8859-8-i identically to iso-8859-8, since the Encoding Standard gives the two the same index", () => {
+    const bytes = bytesOf([0xf9, 0xec, 0xe5, 0xed]);
+    expect(decodeText(bytes, { encoding: "iso-8859-8" }).text).toBe(
+      decodeText(bytes, { encoding: "iso-8859-8-i" }).text,
+    );
+  });
+
+  it("refuses a byte windows-1257 leaves without a character", () => {
+    const error = refusal(bytesOf([0x41, 0xa1, 0x42]), {
+      encoding: "windows-1257",
+    });
+    expect(error.reason).toBe("malformed");
+    expect(error.message).toBe("windows-1257 has no character for byte 0xa1");
+  });
+
+  it("decodes ASCII bytes identically under every legacy single-byte encoding", () => {
+    const ascii = bytesOf(utf8("plain ascii, 123"));
+    for (const label of LEGACY_SINGLE_BYTE_LABELS) {
+      expect(decodeText(ascii, { encoding: label }).text).toBe(
+        "plain ascii, 123",
+      );
+    }
+  });
 });
 
 describe("isProbablyText", () => {

@@ -1,18 +1,31 @@
 // decodeText: the bytes to text boundary for the plain-text formats in this family (csv, markdown, and anything else whose bytes are just characters), deciding which character encoding a byte sequence actually holds rather than assuming UTF-8 and refusing everything else. Excel's own "CSV (Comma delimited)" export writes the Windows ANSI code page, and Notepad's "Unicode" save and PowerShell 5.1's redirection operator write UTF-16 with a byte order mark, so a decoder that accepts only UTF-8 turns away two of the most common ways an ordinary person produces a text file.
 //
-// Detection is deliberately bounded and ordered, never a general statistical classifier: a caller-supplied encoding wins, then a byte order mark, then the NUL interleave a mark-less UTF-16 file in a Latin script produces, then well-formed UTF-8, then windows-1252 as a last resort behind a check that the bytes read as Western text. windows-1252 maps nearly every byte to some character, so it can never be tested by trying it and seeing whether it fails; the plausibility check stands in for that, and its result is reported as a guess (confidence "low", plus a warning) rather than presented as fact. The caller can always override the whole decision with an explicit encoding.
+// Detection is deliberately bounded and ordered, never a general statistical classifier: a caller-supplied encoding wins, then a byte order mark, then the NUL interleave a mark-less UTF-16 file in a Latin script produces, then well-formed UTF-8, then windows-1252 as a last resort behind a check that the bytes read as Western text. windows-1252 maps nearly every byte to some character, so it can never be tested by trying it and seeing whether it fails; the plausibility check stands in for that, and its result is reported as a guess (confidence "low", plus a warning) rather than presented as fact. The caller can always override the whole decision with an explicit encoding, and since ExaDev/documents.js#1361 that override can also name a legacy single-byte code page detection itself will never guess (see {@link TextEncodingLabel}).
 //
 // The text versus binary judgement is made on the bytes alone, before any encoding is guessed, precisely because windows-1252 would otherwise turn a PNG into a page of mojibake instead of refusing it. That ordering is what lets markdown's own bytes-level format detection stay a real check: markdown has no magic number, so "are these bytes text" is the only structural thing there is to ask about them.
 //
-// Every encoding here is decoded by this module rather than delegated to TextDecoder, with UTF-8 the one exception. TextDecoder's legacy single-byte and UTF-16 support comes from the host's ICU build, which a Node binary compiled with small-icu or with ICU disabled does not carry, and the Encoding Standard has no UTF-32 at all (https://encoding.spec.whatwg.org/#names-and-labels, https://web.archive.org/web/2026/https://encoding.spec.whatwg.org/#names-and-labels), so delegating would make the same bytes decode differently, or not at all, depending on where the code runs. The windows-1252 table has to exist here in any case, because the plausibility check is defined in terms of which byte positions that code page leaves without a character of their own. UTF-8 stays with TextDecoder because its fatal mode is exactly the validity check wanted, and UTF-8 is the one encoding every runtime supports without ICU.
+// Every encoding here is decoded by this module rather than delegated to TextDecoder, with UTF-8 the one exception. TextDecoder's legacy single-byte and UTF-16 support comes from the host's ICU build, which a Node binary compiled with small-icu or with ICU disabled does not carry, and the Encoding Standard has no UTF-32 at all (https://encoding.spec.whatwg.org/#names-and-labels, https://web.archive.org/web/2026/https://encoding.spec.whatwg.org/#names-and-labels), so delegating would make the same bytes decode differently, or not at all, depending on where the code runs. The windows-1252 table has to exist here in any case, because the plausibility check is defined in terms of which byte positions that code page leaves without a character of their own. UTF-8 stays with TextDecoder because its fatal mode is exactly the validity check wanted, and UTF-8 is the one encoding every runtime supports without ICU. The legacy single-byte code pages in legacy-single-byte-tables.ts keep the same rule for the same reason: a caller who explicitly names koi8-r wants koi8-r everywhere this code runs, not koi8-r on a full-icu host and a thrown error on a small-icu one.
+
+import {
+  LEGACY_SINGLE_BYTE_TABLES,
+  type LegacySingleByteEncodingLabel,
+} from "./legacy-single-byte-tables";
 
 /**
  * The character encodings {@link decodeText} can produce text from.
  *
- * Deliberately bounded: each is either self-identifying through a byte order mark, structurally checkable through its own validity rules, or guessable behind a stated plausibility test. Legacy CJK and Cyrillic code pages are outside the set on purpose, since nothing tells them apart from one another without the statistical model this module does not carry; bytes that look like one are refused rather than guessed at. That boundary also limits what {@link DecodeTextOptions.encoding} can name, which is a narrower restriction than detection itself needs (ExaDev/documents.js#1361).
+ * Detection stays deliberately bounded to `"utf-8"`, `"utf-16le"`, `"utf-16be"`, `"utf-32le"`, `"utf-32be"` and `"windows-1252"`: each of those is either self-identifying through a byte order mark, structurally checkable through its own validity rules, or guessable behind a stated plausibility test, and nothing distinguishes one legacy code page from another, or from windows-1252, without the statistical model this module does not carry. Bytes that look like an undetected legacy encoding are refused rather than guessed at.
+ *
+ * {@link DecodeTextOptions.encoding} can name more than detection can reach, though: every {@link LegacySingleByteEncodingLabel} the WHATWG Encoding Standard defines is also accepted, for a caller who already knows their file's code page rather than asking this module to guess it (ExaDev/documents.js#1361). Legacy multi-byte and double-byte CJK encodings (Shift_JIS, EUC-JP, ISO-2022-JP, GBK, gb18030, Big5, EUC-KR) remain outside what either detection or a declared `encoding` can reach; see legacy-single-byte-tables.ts for why that is a different kind of change, tracked separately as ExaDev/documents.js#1388.
  */
 export type TextEncodingLabel =
-  "utf-8" | "utf-16le" | "utf-16be" | "utf-32le" | "utf-32be" | "windows-1252";
+  | "utf-8"
+  | "utf-16le"
+  | "utf-16be"
+  | "utf-32le"
+  | "utf-32be"
+  | "windows-1252"
+  | LegacySingleByteEncodingLabel;
 
 /**
  * How {@link decodeText} arrived at the encoding it used.
@@ -295,6 +308,41 @@ function decodeUtf8(bytes: Uint8Array): string {
   return text;
 }
 
+/** The code unit {@link LEGACY_SINGLE_BYTE_TABLES} holds for a byte its encoding leaves without a character of its own. No legacy single-byte encoding maps a real byte to the replacement character, which is what makes it safe to use as that table's own gap marker. */
+const LEGACY_SINGLE_BYTE_GAP_CODE = 0xfffd;
+
+/** Decodes bytes under a {@link LegacySingleByteEncodingLabel}, using `table` (128 code units, one per byte from {@link FIRST_HIGH_BYTE} to 0xFF) for the high half and ASCII identity for the low half, exactly as {@link decodeWindows1252} already does with its own hand-picked table. Unlike windows-1252, a byte these encodings leave without a character throws rather than decoding to a C1 control: windows-1252's own gaps are given C1 controls by the Encoding Standard itself so that its decoder is total, but the standard leaves every other legacy single-byte encoding's gaps genuinely undefined, so a caller naming one of these for bytes that hit a gap gets a loud, actionable refusal instead of a silently wrong character. */
+function decodeLegacySingleByte(
+  bytes: Uint8Array,
+  table: string,
+  label: TextEncodingLabel,
+): string {
+  const units: number[] = [];
+  for (const byte of bytes) {
+    if (byte < FIRST_HIGH_BYTE) {
+      units.push(byte);
+      continue;
+    }
+    const unit = table.charCodeAt(byte - FIRST_HIGH_BYTE);
+    if (unit === LEGACY_SINGLE_BYTE_GAP_CODE) {
+      throw new UndecodableTextError(
+        "malformed",
+        `${label} has no character for byte 0x${byte.toString(16)}`,
+      );
+    }
+    units.push(unit);
+  }
+  return fromCodeUnits(units);
+}
+
+/** One {@link decodeLegacySingleByte} decoder per {@link LegacySingleByteEncodingLabel}, built from {@link LEGACY_SINGLE_BYTE_TABLES} rather than listed by hand so that every table entry gets exactly one decoder and neither list can drift from the other. */
+function legacySingleByteDecoder(
+  label: LegacySingleByteEncodingLabel,
+): (bytes: Uint8Array) => string {
+  const table = LEGACY_SINGLE_BYTE_TABLES[label];
+  return (bytes) => decodeLegacySingleByte(bytes, table, label);
+}
+
 /** One decoder per supported encoding, as a record keyed by the encoding union itself so that adding an encoding to {@link TextEncodingLabel} without a decoder for it is a compile error rather than a run-time gap. */
 const DECODERS: Readonly<
   Record<TextEncodingLabel, (bytes: Uint8Array) => string>
@@ -305,6 +353,33 @@ const DECODERS: Readonly<
   "utf-32le": (bytes) => decodeUtf32(bytes, true),
   "utf-32be": (bytes) => decodeUtf32(bytes, false),
   "windows-1252": decodeWindows1252,
+  ibm866: legacySingleByteDecoder("ibm866"),
+  "iso-8859-2": legacySingleByteDecoder("iso-8859-2"),
+  "iso-8859-3": legacySingleByteDecoder("iso-8859-3"),
+  "iso-8859-4": legacySingleByteDecoder("iso-8859-4"),
+  "iso-8859-5": legacySingleByteDecoder("iso-8859-5"),
+  "iso-8859-6": legacySingleByteDecoder("iso-8859-6"),
+  "iso-8859-7": legacySingleByteDecoder("iso-8859-7"),
+  "iso-8859-8": legacySingleByteDecoder("iso-8859-8"),
+  "iso-8859-8-i": legacySingleByteDecoder("iso-8859-8-i"),
+  "iso-8859-10": legacySingleByteDecoder("iso-8859-10"),
+  "iso-8859-13": legacySingleByteDecoder("iso-8859-13"),
+  "iso-8859-14": legacySingleByteDecoder("iso-8859-14"),
+  "iso-8859-15": legacySingleByteDecoder("iso-8859-15"),
+  "iso-8859-16": legacySingleByteDecoder("iso-8859-16"),
+  "koi8-r": legacySingleByteDecoder("koi8-r"),
+  "koi8-u": legacySingleByteDecoder("koi8-u"),
+  macintosh: legacySingleByteDecoder("macintosh"),
+  "windows-874": legacySingleByteDecoder("windows-874"),
+  "windows-1250": legacySingleByteDecoder("windows-1250"),
+  "windows-1251": legacySingleByteDecoder("windows-1251"),
+  "windows-1253": legacySingleByteDecoder("windows-1253"),
+  "windows-1254": legacySingleByteDecoder("windows-1254"),
+  "windows-1255": legacySingleByteDecoder("windows-1255"),
+  "windows-1256": legacySingleByteDecoder("windows-1256"),
+  "windows-1257": legacySingleByteDecoder("windows-1257"),
+  "windows-1258": legacySingleByteDecoder("windows-1258"),
+  "x-mac-cyrillic": legacySingleByteDecoder("x-mac-cyrillic"),
 };
 
 /** The text-versus-binary rule itself, over character codes: a NUL settles it outright, and every other C0 control outside {@link TEXTUAL_CONTROL_CODES} is allowed only up to one per {@link CODES_PER_PERMITTED_CONTROL}. Reading codes through an accessor rather than taking an array lets the identical rule run over a Uint8Array's bytes and over a decoded string's code units without copying either into one. */
