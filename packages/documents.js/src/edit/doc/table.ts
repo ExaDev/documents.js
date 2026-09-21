@@ -11,6 +11,8 @@ import type {
   ContentTableCell as ContentTableCellNode,
   ContentTableRow as ContentTableRowNode,
 } from "document-schema.js";
+import type { TableGridRows } from "../table-grid";
+import { resolvePivotTableGrid } from "../table-grid";
 import type { ParagraphInit } from "./paragraph";
 import { buildParagraph, DocParagraph } from "./paragraph";
 
@@ -130,6 +132,20 @@ export class DocTable {
 
   rows(): DocTableRow[] {
     return this.live().rows.map((row) => new DocTableRow(row));
+  }
+
+  // The grid's own view of the table: gridRows()[r][c] is the position at grid row r and grid column c. This table's rows are already dense, so it is the same positions rows()[r].cells() lists, resolved so that a position a merged region covers yields the region's anchor cell, with isAnchor false.
+  gridRows(): TableGridRows<DocTableCell> {
+    return this.grid().rows;
+  }
+
+  // The table's width in grid columns: the larger of the declared column count and the widest row.
+  gridColumnCount(): number {
+    return this.grid().columnCount;
+  }
+
+  private grid() {
+    return resolvePivotTableGrid(this.live(), (cell) => new DocTableCell(cell));
   }
 
   // Appends a row with the same column count as this table's own columnWidthsPt -- the table-wide column grid those widths define is what doc-codec's writer derives every physical cell's boundaries from, so the grid and the row cell counts must stay in agreement exactly as they are kept here.

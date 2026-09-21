@@ -14,6 +14,8 @@ import {
 import { attr } from "ooxml.js";
 import { removeAttr, removeChild, setAttr } from "../../xml/edit";
 import { el } from "../../xml/fragment";
+import type { PlacedLiveCell, TableGridRows } from "../table-grid";
+import { resolveLiveTableGrid } from "../table-grid";
 import { ensureAutomaticStyles, nextStyleName } from "./automatic-styles";
 import type { ParagraphInit } from "./paragraph";
 import { buildParagraph, OdtParagraph } from "./paragraph";
@@ -474,6 +476,33 @@ export class OdtCoveredTableCell {
   }
 }
 
+// The one attribute a table:covered-table-cell keeps when a cell is retagged into one: its own table:style-name, which is what states the covered position's background and borders (the build path in content.ts writes exactly that). Everything else the cell carried is the anchor's or the position's content, not the position's own, and is dropped with it: the spans that made it an anchor, and the value, type and formula attributes that described its content.
+const COVERED_CELL_KEPT_ATTRIBUTE = "table:style-name";
+
+// Retags a cell in place to table:covered-table-cell, clearing its content and every attribute but its own style. The element is never removed and reinserted, since ODF's grid model requires one child element per grid position whatever the merge state.
+function retagAsCovered(element: XmlElement): void {
+  element.tag = "table:covered-table-cell";
+  element.attributes = element.attributes.filter(
+    (attribute) => attribute.name === COVERED_CELL_KEPT_ATTRIBUTE,
+  );
+  element.children = [];
+}
+
+// A row's own true grid-column list: BOTH real table:table-cell and placeholder table:covered-table-cell children, in document order. ODF's grid model guarantees exactly one child element (of either tag) per grid position in every row, so an element's index in this list is its grid column, which is not true of the real cells alone once a row holds a merge.
+function gridCellElements(row: XmlElement): XmlElement[] {
+  const out: XmlElement[] = [];
+  for (const child of row.children) {
+    if (
+      child.type === "element" &&
+      (child.tag === "table:table-cell" ||
+        child.tag === "table:covered-table-cell")
+    ) {
+      out.push(child);
+    }
+  }
+  return out;
+}
+
 export class OdtTableRow {
   private readonly node: XmlElement;
   private readonly pkg: Package;
@@ -483,6 +512,7 @@ export class OdtTableRow {
     this.pkg = pkg;
   }
 
+  // The row's PHYSICAL real cells: one view per table:table-cell, with every table:covered-table-cell omitted. A merged region's covered positions are elements of their own in ODF, so after a merge this holds fewer cells than the table has grid columns and an index into it is not a grid column. OdtTable.gridRows is the grid-addressed view; OdtTableRow.mergeCellsHorizontally takes a grid column, not an index into this list.
   cells(): OdtTableCell[] {
     const out: OdtTableCell[] = [];
     for (const child of this.node.children) {
@@ -537,22 +567,7 @@ export class OdtTableRow {
     return new OdtCoveredTableCell(coveredElement, this.pkg);
   }
 
-  // This row's own true grid-column list -- BOTH real table:table-cell and placeholder table:covered-table-cell children, in document order. ODF's grid model guarantees exactly one child element (of either tag) per grid position in every row, which is why walking both tags (rather than cells()' own real-cell-only filter) gives a startColumnIndex that is correct even for a row a prior vertical merge already covered.
-  private gridCells(): XmlElement[] {
-    const out: XmlElement[] = [];
-    for (const child of this.node.children) {
-      if (
-        child.type === "element" &&
-        (child.tag === "table:table-cell" ||
-          child.tag === "table:covered-table-cell")
-      ) {
-        out.push(child);
-      }
-    }
-    return out;
-  }
-
-  // Merges colSpan grid columns of THIS row into one cell: the anchor at startColumnIndex gets table:number-columns-spanned (via OdtTableCell.colSpan), and every OTHER covered position is RETAGGED in place to table:covered-table-cell -- exactly OdsSheet.mergeCells' own technique (src/edit/ods/sheet.ts: `element.tag = ...; element.attributes = []; element.children = [];`), never removed and reinserted, since ODF's grid model requires one child element per grid position regardless of merge state. Consumed cells' own content is discarded silently and unconditionally -- no check, no guard -- matching that same precedent exactly: documented, intentional behaviour, not a silent trap.
+  // Merges colSpan grid columns of THIS row into one cell: the anchor at startColumnIndex gets table:number-columns-spanned (via OdtTableCell.colSpan), and every OTHER covered position is RETAGGED in place to table:covered-table-cell (see retagAsCovered: the cell keeps its own table:style-name and loses its content and spans), never removed and reinserted, since ODF's grid model requires one child element per grid position regardless of merge state. Consumed cells' own content is discarded silently and unconditionally -- no check, no guard -- matching that same precedent exactly: documented, intentional behaviour, not a silent trap.
   mergeCellsHorizontally(
     startColumnIndex: number,
     colSpan: number,
@@ -562,7 +577,7 @@ export class OdtTableRow {
         `mergeCellsHorizontally: colSpan must be a positive integer, got ${colSpan}`,
       );
     }
-    const gridCells = this.gridCells();
+    const gridCells = gridCellElements(this.node);
     const anchorElement = gridCells[startColumnIndex];
     if (anchorElement === undefined) {
       throw new Error(
@@ -582,9 +597,7 @@ export class OdtTableRow {
     for (let i = 1; i < colSpan; i++) {
       const consumedElement = gridCells[startColumnIndex + i];
       if (consumedElement !== undefined) {
-        consumedElement.tag = "table:covered-table-cell";
-        consumedElement.attributes = [];
-        consumedElement.children = [];
+        retagAsCovered(consumedElement);
       }
     }
     const anchor = new OdtTableCell(anchorElement, this.pkg);
@@ -592,18 +605,16 @@ export class OdtTableRow {
     return anchor;
   }
 
-  // Marks the grid position at columnIndex as covered by a merge anchored elsewhere (typically a different row, in a vertical merge's own covered rows) -- the single-position primitive OdtTable.mergeCells uses to stamp every covered position in a rowSpan x colSpan rectangle below the anchor row. Retags in place, exactly like mergeCellsHorizontally's own consumed-cell handling above.
+  // Marks the grid position at columnIndex as covered by a merge anchored elsewhere (typically a different row, in a vertical merge's own covered rows) -- the single-position primitive OdtTable.mergeCells uses to stamp every covered position in a rowSpan x colSpan rectangle below the anchor row. Retags in place through retagAsCovered, exactly like mergeCellsHorizontally's own consumed-cell handling above.
   markCellCovered(columnIndex: number): void {
-    const gridCells = this.gridCells();
+    const gridCells = gridCellElements(this.node);
     const element = gridCells[columnIndex];
     if (element === undefined) {
       throw new Error(
         `markCellCovered: column ${columnIndex} does not exist in this row`,
       );
     }
-    element.tag = "table:covered-table-cell";
-    element.attributes = [];
-    element.children = [];
+    retagAsCovered(element);
   }
 }
 
@@ -650,6 +661,47 @@ export class OdtTable {
     return out;
   }
 
+  // The grid's own view of the table: gridRows()[r][c] is the position at grid row r and grid column c, and every row is gridColumnCount() wide. A position a merged region covers resolves to the region's anchor cell, with isAnchor false, whether the region reaches it along its own row or from a row above; that is the cell to read or edit for any position inside the region. Unlike rows()[r].cells(), which omits every covered position so that its index is a physical position, the column here is the same grid column OdtTableRow.mergeCellsHorizontally and OdtTable.mergeCells take.
+  gridRows(): TableGridRows<OdtTableCell> {
+    return this.grid().rows;
+  }
+
+  // The table's width in grid columns: the number of table:table-column elements or the widest row's count of grid positions, whichever is larger, which is what a merge leaves unchanged and what rows()[r].cells().length under-reports once a row holds a merge.
+  gridColumnCount(): number {
+    return this.grid().columnCount;
+  }
+
+  private grid() {
+    const table = this.live();
+    const placedRows: PlacedLiveCell<OdtTableCell>[][] = [];
+    let declaredColumns = 0;
+    for (const child of table.children) {
+      if (child.type !== "element") {
+        continue;
+      }
+      if (child.tag === "table:table-column") {
+        declaredColumns++;
+      } else if (child.tag === "table:table-row") {
+        placedRows.push(this.placedCells(child));
+      }
+    }
+    return resolveLiveTableGrid(placedRows, declaredColumns);
+  }
+
+  // The real cells of one row, each with the grid column its element sits at. A covered position has no cell of its own to place: the anchor that covers it owns it.
+  private placedCells(row: XmlElement): PlacedLiveCell<OdtTableCell>[] {
+    return gridCellElements(row).flatMap((element, columnIndex) => {
+      if (element.tag !== "table:table-cell") {
+        return [];
+      }
+      const cell = new OdtTableCell(element, this.pkg);
+      return [
+        { columnIndex, cell, colSpan: cell.colSpan, rowSpan: cell.rowSpan },
+      ];
+    });
+  }
+
+  // The PHYSICAL real cell at columnIndex of row rowIndex: an index into OdtTableRow.cells(), which omits covered positions, not a grid column, so once a row holds a merge it is not the cell at that grid column. gridRows() is the grid-addressed lookup.
   cell(rowIndex: number, columnIndex: number): OdtTableCell {
     const row = this.rows()[rowIndex];
     if (row === undefined) {
