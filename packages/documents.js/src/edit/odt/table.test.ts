@@ -8,7 +8,7 @@ import {
 import { attr } from "ooxml.js";
 import { describe, expect, it } from "vitest";
 import { readOdtContent } from "../../odf/odt/read";
-import { el } from "../../xml/fragment";
+import { el, txt } from "../../xml/fragment";
 import { findDescendantElement, walkElements } from "../../xml/query";
 import { createOdt } from "./editor";
 import type { OdtTable } from "./table";
@@ -769,6 +769,183 @@ describe("OdtTable grid view", () => {
         row.map((position) => position.anchorRowIndex === undefined),
       ),
     );
+  });
+});
+
+// table:number-columns-repeated (ExaDev/documents.js#1374): a real table:table-cell/table:covered-table-cell or table:table-column element can carry this attribute to stand for that many identical adjacent grid positions rather than one -- confirmed by odf.js's own pivot reader (typed/shared/table.ts's readTableRow/readOdfTable) to be something real ODF producers emit routinely for a short run of identically-styled columns or empty cells, not just a spreadsheet-scale hazard. This editor's own write paths (buildTable, appendCell, appendCoveredCell) never emit the attribute themselves, so every case below authors it directly on the raw XML the way an external producer's file would arrive already carrying it.
+describe("table:number-columns-repeated", () => {
+  it("expands a repeated cell into that many grid columns, agreeing with the content pivot's own column count", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 2 });
+    table.cell(0, 0).appendParagraph({ text: "A" });
+    table.cell(0, 1).appendParagraph({ text: "B" });
+    const [cellA] = contentElements(editor, "table:table-cell");
+    cellA?.attributes.push({
+      name: "table:number-columns-repeated",
+      value: "3",
+    });
+
+    // cellA now stands for grid columns 0-2 (all reading "A"), cellB for column 3 -- 4 grid columns from 2 physical table:table-cell elements.
+    expect(table.gridColumnCount()).toBe(4);
+    expect(odtGridLabels(table)).toEqual([["A", "A", "A", "B"]]);
+
+    const content = readOdtContent(editor.toPackage());
+    if (content.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing content");
+    }
+    const pivot = content.sections[0]?.blocks.find((b) => b.kind === "table");
+    if (pivot?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    expect(table.gridColumnCount()).toBe(tableGridColumnCount(pivot));
+    expect(pivot.rows[0]?.cells).toHaveLength(4);
+  });
+
+  it("widens the grid via a declared table:table-column's own repeat, agreeing with the content pivot's own columnWidthsPt length", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 0, columns: 2 });
+    const [firstColumn] = contentElements(editor, "table:table-column");
+    firstColumn?.attributes.push({
+      name: "table:number-columns-repeated",
+      value: "4",
+    });
+
+    // 4 (the first column's repeat) + 1 (the second, un-repeated column) = 5 declared grid columns, from 2 physical table:table-column elements.
+    expect(table.gridColumnCount()).toBe(5);
+
+    const content = readOdtContent(editor.toPackage());
+    if (content.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing content");
+    }
+    const pivot = content.sections[0]?.blocks.find((b) => b.kind === "table");
+    if (pivot?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    expect(table.gridColumnCount()).toBe(pivot.columnWidthsPt.length);
+  });
+
+  it("mergeCellsHorizontally reaches a column after a repeated cell, which physical-child-index addressing could not", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 2 });
+    table.cell(0, 0).appendParagraph({ text: "A" });
+    table.cell(0, 1).appendParagraph({ text: "B" });
+    const [cellA] = contentElements(editor, "table:table-cell");
+    cellA?.attributes.push({
+      name: "table:number-columns-repeated",
+      value: "3",
+    });
+
+    // Grid columns 0-2 are cellA's repeat, column 3 is cellB -- but only 2 physical table:table-cell elements exist, so a physical-array lookup (this row's old gridCellElements) would say column 3 "does not exist" even though it plainly does.
+    const anchor = table.rows()[0]!.mergeCellsHorizontally(3, 1);
+    expect(anchor.text).toContain("B");
+    expect(anchor.colSpan).toBe(1);
+  });
+
+  it("throws for a column beyond a repeated cell's own true grid width, not beyond its physical element count", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 1 });
+    const [cellA] = contentElements(editor, "table:table-cell");
+    cellA?.attributes.push({
+      name: "table:number-columns-repeated",
+      value: "2",
+    });
+
+    // One physical element, two real grid columns (0 and 1) -- column 2 genuinely does not exist.
+    expect(() => table.rows()[0]!.mergeCellsHorizontally(2, 1)).toThrow(
+      /column 2 does not exist/,
+    );
+    expect(() => table.rows()[0]!.mergeCellsHorizontally(0, 3)).toThrow(
+      /exceeds this row's own 2 grid columns/,
+    );
+  });
+
+  it("splits a repeated cell's run when a merge targets a column inside it, leaving the untouched part of the run with its own original content intact", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 2 });
+    table.cell(0, 0).appendParagraph({ text: "A" });
+    table.cell(0, 1).appendParagraph({ text: "B" });
+    const [cellA] = contentElements(editor, "table:table-cell");
+    cellA?.attributes.push({
+      name: "table:number-columns-repeated",
+      value: "3",
+    });
+
+    // Grid columns 0-2 are cellA's repeat (all reading "A"), column 3 is cellB. Merging columns 1-2 (both inside the repeat) must un-repeat exactly those two columns, leaving column 0's own copy of the run untouched.
+    const anchor = table.rows()[0]!.mergeCellsHorizontally(1, 2);
+    anchor.appendParagraph({ text: "merged" });
+
+    const gridRow = table.gridRows()[0]!;
+    expect(gridRow[0]!.cell.text.trim()).toBe("A");
+    expect(gridRow[0]!.isAnchor).toBe(true);
+    expect(gridRow[1]!.cell.text).toContain("merged");
+    expect(gridRow[1]!.isAnchor).toBe(true);
+    expect(gridRow[2]!.cell.text).toContain("merged");
+    expect(gridRow[2]!.isAnchor).toBe(false);
+    expect(gridRow[3]!.cell.text.trim()).toBe("B");
+
+    // No table:number-columns-repeated survives anywhere: the run that used to cover the merged columns was split into individually-addressable elements, none of which stands for more than one column any longer.
+    const stillRepeated = contentElements(editor, "table:table-cell").filter(
+      (element) => attr(element, "table:number-columns-repeated") !== undefined,
+    );
+    expect(stillRepeated).toHaveLength(0);
+
+    // The XML this produced is well-formed ODF that reads back through odf.js's own pivot reader identically to what the live grid view reports.
+    const pkg = decodePackage(encodePackage(editor.toPackage()));
+    const content = readOdtContent(pkg);
+    if (content.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing content");
+    }
+    const roundTrippedTable = content.sections[0]?.blocks.find(
+      (b) => b.kind === "table",
+    );
+    if (roundTrippedTable?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    expect(roundTrippedTable.rows[0]?.cells).toHaveLength(4);
+    expect(roundTrippedTable.rows[0]?.cells[0]?.blocks[0]).toMatchObject({
+      kind: "paragraph",
+    });
+    expect(roundTrippedTable.rows[0]?.cells[1]?.colSpan).toBe(2);
+  });
+
+  it("markCellCovered individuates a column inside an already-covered repeated run", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 1 });
+    const row = table.rows()[0]!;
+    const rowElement = contentElements(editor, "table:table-row")[0]!;
+    // Directly authoring the shape an external producer compressing a run of covered positions might leave: one real anchor cell, followed by a covered run standing for 2 more grid columns.
+    rowElement.children = [
+      el("table:table-cell", {}, [el("text:p", {}, [txt("anchor")])]),
+      el("table:covered-table-cell", {
+        "table:number-columns-repeated": "2",
+      }),
+    ];
+
+    row.markCellCovered(2);
+
+    const covered = coveredCellElements(editor);
+    expect(covered).toHaveLength(2);
+    expect(
+      covered.map((element) => attr(element, "table:number-columns-repeated")),
+    ).toEqual([undefined, undefined]);
+  });
+
+  it("markCellCovered throws for a column beyond the row's true grid width, honouring a covered run's own repeat", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 1 });
+    const row = table.rows()[0]!;
+    const rowElement = contentElements(editor, "table:table-row")[0]!;
+    rowElement.children = [
+      el("table:table-cell", {}, [el("text:p", {}, [txt("anchor")])]),
+      el("table:covered-table-cell", {
+        "table:number-columns-repeated": "2",
+      }),
+    ];
+
+    // 1 real column + 2 covered columns = 3 grid columns total; column 3 does not exist.
+    expect(() => {
+      row.markCellCovered(3);
+    }).toThrow(/markCellCovered: column 3 does not exist in this row/);
   });
 });
 
