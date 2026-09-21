@@ -164,6 +164,40 @@ describe("formatDocxExtrasLines", () => {
     expect(formatDocxExtrasLines(extras)).toContain("  [1] Cell oneCell two");
   });
 
+  it("reads a merged region's text once, since its covered entries hold no blocks", () => {
+    const extras: DocxExtras = {
+      ...EMPTY_EXTRAS,
+      headerFooterParts: [
+        {
+          path: "word/header1.xml",
+          kind: "header",
+          blocks: [
+            {
+              kind: "table",
+              columnWidthsPt: [100, 100],
+              rows: [
+                {
+                  cells: [
+                    {
+                      colSpan: 2,
+                      rowSpan: 2,
+                      blocks: [
+                        { kind: "paragraph", runs: [{ text: "Merged" }] },
+                      ],
+                    },
+                    { blocks: [] },
+                  ],
+                },
+                { cells: [{ blocks: [] }, { blocks: [] }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    expect(formatDocxExtrasLines(extras)).toContain("  [1] Merged");
+  });
+
   it("names the restart level in a numbering level's own line when it has one", () => {
     const extras: DocxExtras = {
       ...EMPTY_EXTRAS,
