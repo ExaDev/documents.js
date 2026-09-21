@@ -646,6 +646,22 @@ describe("tables", () => {
     ]);
   });
 
+  // \trowd's own startRowDefinition is what resets isHeader to false between rows, so every test above states \trowd for every row and never actually observes the field's own starting value before any \trowd has run. A row can still close via \cell/\row with no \trowd at all, since both are handled independently of it, so a malformed producer that omits \trowd entirely still reaches ContentBuilder's own unreset default, and that default must itself be "not a header", not just the post-\trowd reset.
+  it("leaves a row's own isHeader unset when it closes with no \\trowd ever seen to reset it explicitly", () => {
+    const table = firstTable(
+      `${HEADER}\\trleft0\\cellx4320\\cellx8640\\pard\\intbl A\\cell\\pard\\intbl B\\cell\\row\\pard After.\\par}`,
+    );
+    expect(table.rows[0]?.isHeader).toBeUndefined();
+  });
+
+  // The same starting-value gap as above, but for the isolated scratch accumulator \result's own fallback content renders into (ContentBuilder's own beginResultScratch/freshAccumulatorState): a table row built inside \result, with no \trowd of its own, must default to unheadered from that scratch's own fresh state rather than carrying over anything from the document \object sits in.
+  it("leaves a row built inside \\result's own scratch content unset when it closes with no \\trowd ever seen there either", () => {
+    const table = firstTable(
+      `${HEADER}\\pard{\\object\\objemb{\\*\\objdata 68656c6c6f}{\\result\\trleft0\\cellx4320\\cellx8640\\pard\\intbl A\\cell\\pard\\intbl B\\cell\\row}}\\par}`,
+    );
+    expect(table.rows[0]?.isHeader).toBeUndefined();
+  });
+
   it("closes the table when an ordinary paragraph follows it", () => {
     const kinds = blocksOf(`${HEADER}${ROW}\\pard After.\\par}`).map(
       (block) => block.kind,
