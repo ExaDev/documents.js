@@ -12,6 +12,7 @@ import {
   colorToRgbHex,
   resolveCellFillColor,
   rgbHexToColor,
+  walkTableGrid,
 } from "document-schema.js";
 import { segmentOdfParagraphRunsMapped } from "./paragraph";
 import { canonicalOdfConstructDescriptor } from "./constructs";
@@ -151,33 +152,11 @@ export function canonicalParagraph(
   return canonical;
 }
 
-// A covered grid position is a table:covered-table-cell in ODF, which carries no content, no span and no style of its own -- so whatever an incoming placeholder happened to hold, reading one back yields exactly an empty cell. A cell's own blocks mirror readTableCell's own recursive scope (typed/shared/table.ts): a paragraph's list membership is renumbered onto `listState` exactly as a body-level paragraph's is (planListMembership, threaded by the caller across the whole document so a list minted inside a cell gets as unique an identity as one minted anywhere else), and a nested table recurses back into canonicalTable itself. Any other block kind is refused by name, matching every writer's own fidelity-construct stance.
-export function canonicalCell(
+// The fill and borders a cell states, canonicalised to the form writing them and reading them back yields. Shared by an anchor and by a covered entry, since ODF's table:table-cell and table:covered-table-cell both carry them through a table:style-name.
+function canonicalCellDecoration(
   cell: ContentTableCell,
-  covered: boolean,
-  listState: ListPlanState,
-): ContentTableCell {
-  if (covered) {
-    return { blocks: [] };
-  }
-  const canonical: ContentTableCell = {
-    blocks: cell.blocks.map((block) => {
-      if (block.kind === "table") {
-        return canonicalTable(block, listState);
-      }
-      if (block.kind !== "paragraph") {
-        throw unsupportedContent(`a "${block.kind}" block`, "a table cell");
-      }
-      const canonicalId = planListMembership(block.list, listState);
-      return canonicalParagraph(block, canonicalId, true);
-    }),
-  };
-  if (cell.colSpan !== undefined) {
-    canonical.colSpan = cell.colSpan;
-  }
-  if (cell.rowSpan !== undefined) {
-    canonical.rowSpan = cell.rowSpan;
-  }
+): Pick<ContentTableCell, "background" | "borders"> {
+  const canonical: Pick<ContentTableCell, "background" | "borders"> = {};
   if (cell.background !== undefined) {
     canonical.background = canonicalCellFill(cell.background);
   }
@@ -199,36 +178,54 @@ export function canonicalCell(
   return canonical;
 }
 
+// A covered grid position is a table:covered-table-cell in ODF. It keeps its own fill and borders, which the writer states through the element's table:style-name and the reader reads back, but no content and no span: the region's content belongs to the anchor and coverage is derived from the anchor's spans, so whatever blocks or spans an incoming covered entry held are not written and read back as absent. A cell's own blocks mirror readTableCell's own recursive scope (typed/shared/table.ts): a paragraph's list membership is renumbered onto `listState` exactly as a body-level paragraph's is (planListMembership, threaded by the caller across the whole document so a list minted inside a cell gets as unique an identity as one minted anywhere else), and a nested table recurses back into canonicalTable itself. Any other block kind is refused by name, matching every writer's own fidelity-construct stance.
+export function canonicalCell(
+  cell: ContentTableCell,
+  covered: boolean,
+  listState: ListPlanState,
+): ContentTableCell {
+  if (covered) {
+    return { blocks: [], ...canonicalCellDecoration(cell) };
+  }
+  const canonical: ContentTableCell = {
+    blocks: cell.blocks.map((block) => {
+      if (block.kind === "table") {
+        return canonicalTable(block, listState);
+      }
+      if (block.kind !== "paragraph") {
+        throw unsupportedContent(`a "${block.kind}" block`, "a table cell");
+      }
+      const canonicalId = planListMembership(block.list, listState);
+      return canonicalParagraph(block, canonicalId, true);
+    }),
+  };
+  if (cell.colSpan !== undefined) {
+    canonical.colSpan = cell.colSpan;
+  }
+  if (cell.rowSpan !== undefined) {
+    canonical.rowSpan = cell.rowSpan;
+  }
+  return { ...canonical, ...canonicalCellDecoration(cell) };
+}
+
 // The one canonical ContentTable a written-and-reread table equals, wherever writeOdfTable places it (odt's own top-level tables, or one nested inside an odp/odg shape's draw:frame) -- every mapping forced by ODF's own table:table content model rather than chosen here, matching typed/shared/table.ts's own writeOdfTable/readOdfTable as the single writer/reader pair every caller shares. `listState` is the caller's own document-wide ListPlanState (typed/odt/write.ts's planDocument, typed/odp/write.ts's own presentation-wide state -- see each caller's own top-of-file note), threaded through every cell so a list minted inside this table -- including one nested inside a cell of a table nested inside one of THIS table's own cells -- is numbered in the identical document-encounter order readOdfTable's own listIdState mints it in on the way back in. Closed before every cell's own canonicalCell call (each cell is its own list-run scope, so two adjacent cells can never canonicalise to the same numId even when both carry an identical incoming one) and once more after the whole table, for whatever sibling block follows this table in the caller's own block list -- a close between cells or immediately after canonicalCell's own return would only ever be overwritten by one of those two before anything could observe it, so only these two calls do real work.
 export function canonicalTable(
   table: ContentTable,
   listState: ListPlanState,
 ): ContentTable {
-  const covered = new Set<string>();
+  const gridPositions = walkTableGrid(table);
   const canonical: ContentTable = {
     kind: "table",
     columnWidthsPt: [...table.columnWidthsPt],
     rows: table.rows.map((row, rowIndex) => {
-      const cells = row.cells.map((cell, columnIndex) => {
-        const key = `${rowIndex},${columnIndex}`;
-        const isCovered = covered.has(key);
-        if (!isCovered) {
-          const colSpan = cell.colSpan ?? 1;
-          const rowSpan = cell.rowSpan ?? 1;
-          // The anchor's own position (rowIndex, columnIndex) is never marked covered -- excluded structurally by starting each loop one past it, rather than by a runtime check every OTHER iteration would also have to pay for and a mutation of which is unobservable (the anchor's own key is never looked up again once this cell's own isCovered above has already been read).
-          //
-          // Genuinely irreducible equivalent mutant on either "+ 1" start bound below (mutated to "- 1"): row/columnIndex are always the non-negative position a real .map() callback supplies, so a "- 1" start only ever adds two extra covered.add() calls -- one for a fictional negative-index key no real cell position can ever equal, and one for the anchor's own key, already established above as never looked up again. Both are unobservable for any real table, regardless of the anchor's own row/column position, because cells are visited once each in a single left-to-right, top-to-bottom pass and never revisited.
-          for (let c = columnIndex + 1; c < columnIndex + colSpan; c += 1) {
-            covered.add(`${rowIndex},${c}`);
-          }
-          for (let r = rowIndex + 1; r < rowIndex + rowSpan; r += 1) {
-            for (let c = columnIndex; c < columnIndex + colSpan; c += 1) {
-              covered.add(`${r},${c}`);
-            }
-          }
-        }
+      // walkTableGrid returns one array per table row, in row order, so this index is always in range.
+      const cells = gridPositions[rowIndex]!.map((position) => {
         closeListPlan(listState);
-        return canonicalCell(cell, isCovered, listState);
+        return canonicalCell(
+          position.cell,
+          position.anchorRowIndex !== undefined,
+          listState,
+        );
       });
       return row.heightPt === undefined
         ? { cells }
