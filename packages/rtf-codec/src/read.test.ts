@@ -619,6 +619,33 @@ describe("tables", () => {
     ]);
   });
 
+  it("reads \\trhdr onto ContentTableRow.isHeader, for whichever rows state it", () => {
+    // Each row's own \trowd opens a fresh row definition, so \trhdr reaches the row it was stated in and no other: the flag is neither carried forward to the rows below it nor pulled back to the rows above.
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\trhdr\\cellx4320\\cellx8640" +
+        "\\pard\\intbl A\\cell\\pard\\intbl B\\cell\\row" +
+        "\\trowd\\trleft0\\cellx4320\\cellx8640" +
+        "\\pard\\intbl C\\cell\\pard\\intbl D\\cell\\row" +
+        "\\trowd\\trleft0\\trhdr\\cellx4320\\cellx8640" +
+        "\\pard\\intbl E\\cell\\pard\\intbl F\\cell\\row" +
+        "\\pard After.\\par",
+    );
+    expect(table.rows.map((row) => row.isHeader)).toEqual([
+      true,
+      undefined,
+      true,
+    ]);
+  });
+
+  it("leaves every row of a table that states no \\trhdr unflagged", () => {
+    const table = firstTable(`${HEADER}${ROW}${ROW}\\pard After.\\par}`);
+    expect(table.rows.map((row) => row.isHeader)).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
   it("closes the table when an ordinary paragraph follows it", () => {
     const kinds = blocksOf(`${HEADER}${ROW}\\pard After.\\par}`).map(
       (block) => block.kind,
