@@ -687,6 +687,100 @@ describe("writeOdfTable", () => {
     expect(attr(rows[1], "table:style-name")).toBeDefined();
   });
 
+  it("wraps a leading run of header rows in one table:table-header-rows and leaves the body rows as direct children", () => {
+    const table: ContentTable = {
+      kind: "table",
+      rows: [
+        { cells: [paragraphCell("H1")], isHeader: true },
+        { cells: [paragraphCell("H2")], isHeader: true },
+        { cells: [paragraphCell("B")] },
+      ],
+      columnWidthsPt: [],
+    };
+    const { context } = writeContext();
+    const written = writeOdfTable(table, context);
+    const wrappers = elementsWithTag(
+      written.children,
+      "table:table-header-rows",
+    );
+    expect(wrappers).toHaveLength(1);
+    expect(
+      elementsWithTag(wrappers[0]!.children, "table:table-row"),
+    ).toHaveLength(2);
+    expect(elementsWithTag(written.children, "table:table-row")).toHaveLength(
+      1,
+    );
+  });
+
+  it("writes no wrapper at all for a table whose rows state no header", () => {
+    const table: ContentTable = {
+      kind: "table",
+      rows: [{ cells: [paragraphCell("a")] }, { cells: [paragraphCell("b")] }],
+      columnWidthsPt: [],
+    };
+    const { context } = writeContext();
+    const written = writeOdfTable(table, context);
+    expect(
+      elementsWithTag(written.children, "table:table-header-rows"),
+    ).toHaveLength(0);
+    expect(elementsWithTag(written.children, "table:table-row")).toHaveLength(
+      2,
+    );
+  });
+
+  // A header row that is neither leading nor contiguous with the leading block is stated as its own wrapper rather than dropped or folded into the first one: ODF's own content model allows several table:table-header-rows blocks in one table, so nothing has to be lost to write it.
+  it("gives each run of header rows its own wrapper, keeping every row in document order", () => {
+    const table: ContentTable = {
+      kind: "table",
+      rows: [
+        { cells: [paragraphCell("b1")] },
+        { cells: [paragraphCell("h1")], isHeader: true },
+        { cells: [paragraphCell("b2")] },
+        { cells: [paragraphCell("h2")], isHeader: true },
+        { cells: [paragraphCell("h3")], isHeader: true },
+      ],
+      columnWidthsPt: [],
+    };
+    const { context } = writeContext();
+    const written = writeOdfTable(table, context);
+    expect(
+      written.children
+        .filter((child): child is XmlElement => child.type === "element")
+        .map((child) => child.tag),
+    ).toEqual([
+      "table:table-row",
+      "table:table-header-rows",
+      "table:table-row",
+      "table:table-header-rows",
+    ]);
+    const reread = readOdfTable(written, { parts: {} });
+    expect(rowTexts(reread)).toEqual([["b1"], ["h1"], ["b2"], ["h2"], ["h3"]]);
+    expect(reread.rows.map((row) => row.isHeader)).toEqual([
+      undefined,
+      true,
+      undefined,
+      true,
+      true,
+    ]);
+  });
+
+  it("writes a row's own height style onto a header row as well, since the wrapper changes nothing about the row itself", () => {
+    const table: ContentTable = {
+      kind: "table",
+      rows: [{ cells: [paragraphCell("h")], isHeader: true, heightPt: 20 }],
+      columnWidthsPt: [],
+    };
+    const { context } = writeContext();
+    const written = writeOdfTable(table, context);
+    const wrapper = elementsWithTag(
+      written.children,
+      "table:table-header-rows",
+    )[0];
+    const row = elementsWithTag(wrapper!.children, "table:table-row")[0];
+    expect(attr(row, "table:style-name")).toBeDefined();
+    expect(readOdfTable(written, { parts: {} }).rows[0]?.isHeader).toBe(true);
+  });
+
   it("writes a style:width on the table's own style only when the columns state a positive total width", () => {
     const withWidth: ContentTable = {
       kind: "table",
@@ -1371,6 +1465,90 @@ describe("readOdfTable: row wrappers (table:table-header-rows, table:table-rows,
       { parts: {} },
     );
     expect(rowTexts(table)).toEqual([["first"], ["header"], ["last"]]);
+  });
+
+  it("marks every row inside table:table-header-rows as a header row, and leaves the body rows unmarked", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-header-rows", {}, [
+          el("table:table-row", {}, [cell("H1")]),
+          el("table:table-row", {}, [cell("H2")]),
+        ]),
+        el("table:table-row", {}, [cell("B")]),
+      ]),
+      { parts: {} },
+    );
+    expect(table.rows.map((row) => row.isHeader)).toEqual([
+      true,
+      true,
+      undefined,
+    ]);
+  });
+
+  it("marks a repeated header row's every copy, since table:number-rows-repeated stands for identical rows inside the same wrapper", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-header-rows", {}, [
+          el("table:table-row", { "table:number-rows-repeated": "3" }, [
+            cell("H"),
+          ]),
+        ]),
+      ]),
+      { parts: {} },
+    );
+    expect(table.rows.map((row) => row.isHeader)).toEqual([true, true, true]);
+  });
+
+  it("marks the rows of a table:table-header-rows nested inside a table:table-row-group, however deep the groups go", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-row-group", {}, [
+          el("table:table-row", {}, [cell("before")]),
+          el("table:table-row-group", {}, [
+            el("table:table-header-rows", {}, [
+              el("table:table-row", {}, [cell("deep-header")]),
+            ]),
+            el("table:table-row", {}, [cell("after")]),
+          ]),
+        ]),
+      ]),
+      { parts: {} },
+    );
+    expect(rowTexts(table)).toEqual([["before"], ["deep-header"], ["after"]]);
+    expect(table.rows.map((row) => row.isHeader)).toEqual([
+      undefined,
+      true,
+      undefined,
+    ]);
+  });
+
+  it("marks a header wrapper that does not lead the table, rather than only a leading one", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-row", {}, [cell("body")]),
+        el("table:table-header-rows", {}, [
+          el("table:table-row", {}, [cell("late-header")]),
+        ]),
+      ]),
+      { parts: {} },
+    );
+    expect(table.rows.map((row) => row.isHeader)).toEqual([undefined, true]);
+  });
+
+  it("leaves a row inside table:table-rows or a plain row group unmarked, since neither states a header", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-rows", {}, [el("table:table-row", {}, [cell("a")])]),
+        el("table:table-row-group", {}, [
+          el("table:table-row", {}, [cell("b")]),
+        ]),
+      ]),
+      { parts: {} },
+    );
+    expect(table.rows.map((row) => row.isHeader)).toEqual([
+      undefined,
+      undefined,
+    ]);
   });
 
   it("reads the rows inside table:table-rows", () => {

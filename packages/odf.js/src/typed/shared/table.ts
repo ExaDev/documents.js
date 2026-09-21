@@ -578,8 +578,37 @@ export function writeOdfTable(
       "table:name": encodeXmlText(tableName),
       "table:style-name": encodeXmlText(tableStyleName),
     },
-    [...columns, ...rows],
+    [...columns, ...groupHeaderRows(table.rows, rows)],
   );
+}
+
+// ODF spells header-ness as a wrapper around a block of rows while ContentTableRow states it per row (THE HEADER RULE, document-schema.js's ContentTableRow), so the wrappers are derived here: each MAXIMAL RUN of consecutive rows carrying isHeader gets its own table:table-header-rows, and every other row stays a direct table:table-row child exactly as before.
+//
+// Several wrappers in one table is valid ODF, not a liberty taken to avoid refusing the input: table:table's content model is `table-rows-and-groups`, one-or-more of (table-table-row-group | table-rows-no-group), and table-rows-no-group is `(rows, [header-rows, [rows]]) | (header-rows, [rows])` (OASIS ODF 1.3, OpenDocument-v1.3-schema.rng), so any alternation of header runs and body runs decomposes into a sequence of those units. That is what makes a non-leading or non-contiguous header row writable rather than silently flattened into the leading block or refused outright: the flags survive the round trip as they were stated, and a consumer that repeats only the first block degrades exactly as ECMA-376 17.4.78 already says a mid-table w:tblHeader should.
+function groupHeaderRows(
+  rows: readonly ContentTableRow[],
+  elements: readonly XmlElement[],
+): XmlElement[] {
+  const out: XmlElement[] = [];
+  let run: XmlElement[] = [];
+  const closeRun = (): void => {
+    if (run.length > 0) {
+      out.push(el("table:table-header-rows", {}, run));
+      run = [];
+    }
+  };
+  rows.forEach((row, index) => {
+    // One element per row, built by the caller's own map over these same rows, so this index is always in range.
+    const element = elements[index]!;
+    if (row.isHeader === true) {
+      run.push(element);
+      return;
+    }
+    closeRun();
+    out.push(element);
+  });
+  closeRun();
+  return out;
 }
 
 // The elements ODF's table grammar (OASIS ODF 1.3 part 1, 9.1.2 to 9.1.9) allows between a table:table and its table:table-column or table:table-row children. The header and plain wrappers hold leaves only, and the group wrappers hold leaves, header wrappers and further groups, so one recursion that treats every listed tag as transparent covers the whole grammar. Columns and rows are kept as separate lists because a row wrapper never legitimately holds a column, nor a column wrapper a row: a stray one is not part of the grid this reader states.
@@ -595,21 +624,37 @@ const ROW_WRAPPER_TAGS: ReadonlySet<string> = new Set([
   "table:table-row-group",
 ]);
 
-// Every `leafTag` element under `parent` in document order, descending through the wrapper elements in `wrapperTags` and through nothing else, so a table nested inside a cell (which is a child of a cell, never of a wrapper) is never mistaken for part of this table's own grid.
+interface FlattenedTablePart {
+  readonly element: XmlElement;
+  // Whether this leaf sits anywhere inside its axis's own header wrapper. Nesting does not dilute it: a table:table-header-rows inside a table:table-row-group marks the rows it holds exactly as one directly under the table:table does, and once inside a header wrapper every leaf below it is a header leaf however many groups sit in between.
+  readonly insideHeader: boolean;
+}
+
+// Every `leafTag` element under `parent` in document order, descending through the wrapper elements in `wrapperTags` and through nothing else, so a table nested inside a cell (which is a child of a cell, never of a wrapper) is never mistaken for part of this table's own grid. `headerWrapperTag` is the one wrapper of that set whose contents this axis calls headers, which is what lets the flattening state per leaf what the wrapper structure said before the structure was flattened away.
 function flattenTableParts(
   parent: XmlElement,
   leafTag: string,
   wrapperTags: ReadonlySet<string>,
-): XmlElement[] {
-  const leaves: XmlElement[] = [];
+  headerWrapperTag: string,
+  insideHeader = false,
+): FlattenedTablePart[] {
+  const leaves: FlattenedTablePart[] = [];
   for (const child of parent.children) {
     if (child.type !== "element") {
       continue;
     }
     if (child.tag === leafTag) {
-      leaves.push(child);
+      leaves.push({ element: child, insideHeader });
     } else if (wrapperTags.has(child.tag)) {
-      leaves.push(...flattenTableParts(child, leafTag, wrapperTags));
+      leaves.push(
+        ...flattenTableParts(
+          child,
+          leafTag,
+          wrapperTags,
+          headerWrapperTag,
+          insideHeader || child.tag === headerWrapperTag,
+        ),
+      );
     }
   }
   return leaves;
@@ -622,10 +667,12 @@ export function readOdfTable(
   listIdState: OdfListIdState = { next: 1 },
 ): ContentTable {
   const columnWidthsPt: number[] = [];
-  for (const column of flattenTableParts(
+  // A column's own insideHeader is read and dropped here: ContentTable states a column as a width alone, with no per-column object for a header-column flag to live on, so table:table-header-columns has nowhere to land (ExaDev/documents.js#1381). Nothing else in this function is affected, since the wrapper was already transparent to the flattening.
+  for (const { element: column } of flattenTableParts(
     tableElement,
     "table:table-column",
     COLUMN_WRAPPER_TAGS,
+    "table:table-header-columns",
   )) {
     const widthPt = resolveColumnWidthPt(column, pkg);
     const repeat = readRepeatCount(column, "table:number-columns-repeated");
@@ -635,15 +682,18 @@ export function readOdfTable(
   }
 
   const rows: ContentTableRow[] = [];
-  for (const rowElement of flattenTableParts(
+  for (const { element: rowElement, insideHeader } of flattenTableParts(
     tableElement,
     "table:table-row",
     ROW_WRAPPER_TAGS,
+    "table:table-header-rows",
   )) {
     const row = readTableRow(rowElement, pkg, listIdState);
+    // A repeated header row repeats as a header row: table:number-rows-repeated states how many identical rows the one element stands for, and every one of them sits inside the same wrapper.
+    const headerRow = insideHeader ? { ...row, isHeader: true } : row;
     const repeat = readRepeatCount(rowElement, "table:number-rows-repeated");
     for (let i = 0; i < repeat; i++) {
-      rows.push(row);
+      rows.push(headerRow);
     }
   }
 
