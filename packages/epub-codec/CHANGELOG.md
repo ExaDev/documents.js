@@ -1,3 +1,9 @@
+## [5.0.1](https://github.com/ExaDev/documents.js/compare/epub-codec%405.0.0...epub-codec%405.0.1) (2026-09-21)
+
+### Tests
+
+* **epub-codec:** pin each clause of a table row's header-ness separately ([6cb19a1](https://github.com/ExaDev/documents.js/commit/6cb19a1ecd2f9d52759aa102f35f78b6041adc58))
+
 ## [5.0.0](https://github.com/ExaDev/documents.js/compare/epub-codec%404.0.0...epub-codec%405.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES

@@ -1,3 +1,10 @@
+## [14.0.1](https://github.com/ExaDev/documents.js/compare/documents.js%4014.0.0...documents.js%4014.0.1) (2026-09-21)
+
+
+### Dependencies
+
+- Updated epub-codec to 5.0.1
+
 ## [14.0.0](https://github.com/ExaDev/documents.js/compare/documents.js%4013.0.0...documents.js%4014.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES
