@@ -16,6 +16,13 @@ import {
 import { attr } from "ooxml.js";
 import { removeAttr, removeChild, setAttr } from "../../xml/edit";
 import { el } from "../../xml/fragment";
+import {
+  COLUMN_REPEAT_ATTR,
+  collectRunMembers,
+  isCellOrCoveredCell,
+  readRunRepeatCount,
+  replaceRun,
+} from "../odf-repeated-runs";
 import type {
   LiveTableGrid,
   PlacedLiveCell,
@@ -494,19 +501,73 @@ function retagAsCovered(element: XmlElement): void {
   element.children = [];
 }
 
-// A row's own true grid-column list: BOTH real table:table-cell and placeholder table:covered-table-cell children, in document order. ODF's grid model guarantees exactly one child element (of either tag) per grid position in every row, so an element's index in this list is its grid column, which is not true of the real cells alone once a row holds a merge.
-function gridCellElements(row: XmlElement): XmlElement[] {
-  const out: XmlElement[] = [];
-  for (const child of row.children) {
-    if (
-      child.type === "element" &&
-      (child.tag === "table:table-cell" ||
-        child.tag === "table:covered-table-cell")
-    ) {
-      out.push(child);
+// A row's own true grid columns, one entry per logical position, in document order: BOTH real table:table-cell and placeholder table:covered-table-cell children, each expanded by its own table:number-columns-repeated (ExaDev/documents.js#1374) -- a repeated element stands for that many IDENTICAL adjacent grid columns (ODF's own repeat semantics, matching odf.js's read-side expansion in typed/shared/table.ts's readTableRow), not one, so this is the count every grid-addressed read or write in this file must reckon against, never a row's own physical child count. Every entry past the first for a given element shares that SAME element: the row genuinely has fewer physical children than grid columns until something individuates one of them (individuateGridColumn below).
+function gridColumnElements(
+  row: XmlElement,
+): { readonly columnIndex: number; readonly element: XmlElement }[] {
+  const out: { columnIndex: number; element: XmlElement }[] = [];
+  let columnIndex = 0;
+  for (const member of collectRunMembers(
+    row.children,
+    isCellOrCoveredCell,
+    undefined,
+  )) {
+    const repeat = readRunRepeatCount(member.node, COLUMN_REPEAT_ATTR);
+    for (let offset = 0; offset < repeat; offset++) {
+      out.push({ columnIndex: columnIndex + offset, element: member.node });
     }
+    columnIndex += repeat;
   }
   return out;
+}
+
+// The row's own grid width: the count of logical positions its real and covered cells together stand for, honouring repeats -- the bound every grid-column-addressed read or write in this file validates against, never the row's own physical child count.
+function rowGridColumnCount(row: XmlElement): number {
+  return collectRunMembers(row.children, isCellOrCoveredCell, undefined).reduce(
+    (sum, member) => sum + readRunRepeatCount(member.node, COLUMN_REPEAT_ATTR),
+    0,
+  );
+}
+
+// Reads the element at grid column `columnIndex` of `row` without mutating anything, even when that column falls inside a repeated run -- used for a check (planMerge's anchor lookup) that must inspect a position's tag before deciding whether the operation is even valid, so that a refusal leaves the table exactly as it found it. Returns undefined for a negative or out-of-range columnIndex, matching this file's own established "does not exist" error wording at every call site.
+function locateGridColumnElement(
+  row: XmlElement,
+  columnIndex: number,
+): XmlElement | undefined {
+  if (columnIndex < 0) {
+    return undefined;
+  }
+  let cursor = 0;
+  for (const member of collectRunMembers(
+    row.children,
+    isCellOrCoveredCell,
+    undefined,
+  )) {
+    const count = readRunRepeatCount(member.node, COLUMN_REPEAT_ATTR);
+    if (columnIndex < cursor + count) {
+      return member.node;
+    }
+    cursor += count;
+  }
+  return undefined;
+}
+
+// Individuates grid column `columnIndex` of `row`: when it falls inside a repeated run, splits that run in place (odf-repeated-runs.ts's replaceRun) into an optional shortened "before" run, a single un-repeated element at exactly this column, and an optional shortened "after" run -- the un-repeat an edit to one repeated column needs, applied only to the column the edit actually touches, so the rest of the run (and whatever content it carries) survives untouched. Callers must bounds-check columnIndex against rowGridColumnCount first: replaceRun's own gap-filling fallback (its third case, for ODS's sparse-sheet addressing) would otherwise silently grow this row with a placeholder cell it was never asked to have, which is never correct for an ODT table -- every grid column an odt row states already has a real backing element, repeated or not, so an out-of-range column is always a caller error, not a gap to fill.
+function individuateGridColumn(
+  row: XmlElement,
+  columnIndex: number,
+): XmlElement {
+  return replaceRun(
+    row.children,
+    isCellOrCoveredCell,
+    columnIndex,
+    COLUMN_REPEAT_ATTR,
+    () => {
+      throw new Error(
+        `individuateGridColumn: column ${columnIndex} has no existing element to individuate in this row -- callers must bounds-check against rowGridColumnCount first`,
+      );
+    },
+  );
 }
 
 // The table:table-row children of a table:table element, in document order.
@@ -517,12 +578,12 @@ function tableRowElements(table: XmlElement): XmlElement[] {
   );
 }
 
-// The real cells of one row, each with the grid column its element sits at. A covered position has no cell of its own to place: the anchor that covers it owns it.
+// The real cells of one row, each with the grid column its element sits at. A covered position has no cell of its own to place: the anchor that covers it owns it. A cell carrying its own table:number-columns-repeated (ExaDev/documents.js#1374) places once per logical column it stands for (gridColumnElements above), each entry wrapping the SAME underlying element -- reading any of those positions reads the same live content, exactly as ODF's repeat semantics say they are the same cell repeated, until an edit that touches one of them individuates it (OdtTableRow.mergeCellsHorizontally/markCellCovered, OdtTable.mergeCells).
 function placedCells(
   row: XmlElement,
   pkg: Package,
 ): PlacedLiveCell<OdtTableCell>[] {
-  return gridCellElements(row).flatMap((element, columnIndex) => {
+  return gridColumnElements(row).flatMap(({ columnIndex, element }) => {
     if (element.tag !== "table:table-cell") {
       return [];
     }
@@ -533,7 +594,7 @@ function placedCells(
   });
 }
 
-// The grid of one table:table element: its declared table:table-column count and every table:table-row's real cells, resolved through the same walkTableGrid classification the content pivot uses.
+// The grid of one table:table element: its declared table:table-column count (honouring a column's own table:number-columns-repeated, exactly like a row's cells) and every table:table-row's real cells, resolved through the same walkTableGrid classification the content pivot uses.
 function resolveOdtGrid(
   table: XmlElement,
   pkg: Package,
@@ -545,7 +606,7 @@ function resolveOdtGrid(
       continue;
     }
     if (child.tag === "table:table-column") {
-      declaredColumns++;
+      declaredColumns += readRunRepeatCount(child, COLUMN_REPEAT_ATTR);
     } else if (child.tag === "table:table-row") {
       placedRows.push(placedCells(child, pkg));
     }
@@ -630,10 +691,16 @@ function describeRegionAnchor(region: GridRegion): string {
   return `the merge anchored at row ${region.row}, column ${region.column}`;
 }
 
-// A merge the table allows: the table:table-cell that becomes the merged region's anchor and the elements the merge retags to table:covered-table-cell.
+// A single grid position: the table:table-row element it belongs to and its grid column within that row. planMerge below resolves a merge's anchor and every consumed position to positions rather than to elements, since a position inside a repeated run (ExaDev/documents.js#1374) has no element of its own until applyMerge's own individuateGridColumn call gives it one -- resolving straight to an element here, the way this used to, would mutate whichever OTHER grid columns happened to share that element's repeat run at the time planMerge ran.
+interface GridPosition {
+  readonly row: XmlElement;
+  readonly column: number;
+}
+
+// A merge the table allows: the grid position that becomes the merged region's anchor and the positions the merge retags to table:covered-table-cell.
 interface MergeAllowed {
-  readonly anchor: XmlElement;
-  readonly consumed: readonly XmlElement[];
+  readonly anchor: GridPosition;
+  readonly consumed: readonly GridPosition[];
   readonly refusal?: never;
 }
 
@@ -654,7 +721,7 @@ function refuseMerge(rowIndex: number, reason: string): MergeRefused {
 //
 // A merge is refused when it would leave the grid rule broken, which is when its rectangle cuts through a merged region: a region the rectangle reaches that is not wholly inside it would either keep positions the new merge takes while losing its anchor, or lose positions to the new merge while keeping its anchor. A merged region wholly inside the rectangle is swallowed whole, as any unmerged cell in it is, so it leaves no orphan behind. The one merge that reaches a region without being wholly around it is one that changes nothing: a rectangle one row high over an anchor that already spans exactly its columns.
 //
-// The refusal names the row of the rectangle it was found in, the grid column, and the anchor of the region in the way.
+// The refusal names the row of the rectangle it was found in, the grid column, and the anchor of the region in the way. Every column this reads is a GRID column (locateGridColumnElement/rowGridColumnCount, honouring table:number-columns-repeated -- ExaDev/documents.js#1374): a position an earlier repeated cell stands for is reached the same way any other position is. Nothing here mutates the row: the anchor and every consumed position are resolved to plain (row, column) pairs, never to an element, so a refusal leaves the table exactly as it found it and a later individuation (applyMerge) is the only thing that ever splits a repeated run.
 function planMerge(
   table: XmlElement,
   pkg: Package,
@@ -662,26 +729,25 @@ function planMerge(
   rows: readonly [XmlElement, ...XmlElement[]],
 ): MergePlan {
   const [anchorRow, ...coveredRows] = rows;
-  const anchorCells = gridCellElements(anchorRow);
-  const coveredCells = coveredRows.map(gridCellElements);
-  const anchor = anchorCells[target.column];
-  if (anchor === undefined) {
+  const anchorElement = locateGridColumnElement(anchorRow, target.column);
+  if (anchorElement === undefined) {
     return refuseMerge(
       target.row,
       `column ${target.column} does not exist in this row`,
     );
   }
   const endColumn = target.column + target.columnSpan;
-  for (const [offset, cells] of [anchorCells, ...coveredCells].entries()) {
-    if (endColumn > cells.length) {
+  for (const [offset, row] of rows.entries()) {
+    const totalColumns = rowGridColumnCount(row);
+    if (endColumn > totalColumns) {
       return refuseMerge(
         target.row + offset,
-        `colSpan ${target.columnSpan} starting at column ${target.column} exceeds this row's own ${cells.length} grid columns`,
+        `colSpan ${target.columnSpan} starting at column ${target.column} exceeds this row's own ${totalColumns} grid columns`,
       );
     }
   }
   const regions = anchorRegions(resolveOdtGrid(table, pkg));
-  if (anchor.tag === "table:covered-table-cell") {
+  if (anchorElement.tag === "table:covered-table-cell") {
     const covering = regions.find((region) =>
       regionCovers(region, target.row, target.column),
     );
@@ -705,25 +771,32 @@ function planMerge(
       `column ${column} belongs to ${describeRegionAnchor(cutting)}, which reaches outside the region being merged and cannot be merged over`,
     );
   }
-  return {
-    anchor,
-    consumed: [
-      ...anchorCells.slice(target.column + 1, endColumn),
-      ...coveredCells.flatMap((cells) => cells.slice(target.column, endColumn)),
-    ],
-  };
+  const consumed: GridPosition[] = [];
+  for (let column = target.column + 1; column < endColumn; column++) {
+    consumed.push({ row: anchorRow, column });
+  }
+  for (const row of coveredRows) {
+    for (let column = target.column; column < endColumn; column++) {
+      consumed.push({ row, column });
+    }
+  }
+  return { anchor: { row: anchorRow, column: target.column }, consumed };
 }
 
-// Carries out a merge planMerge allowed: retags every consumed element and states the region's spans on its anchor. A rectangle one row high leaves the anchor's row span alone, since it is either unstated or a vertical merge the rectangle leaves as it is.
+// Carries out a merge planMerge allowed: individuates and retags every consumed position (individuateGridColumn, un-repeating exactly the columns this merge touches -- ExaDev/documents.js#1374 -- and leaving the rest of any repeated run, and whatever content it carries, untouched) and states the region's spans on its own individuated anchor. A rectangle one row high leaves the anchor's row span alone, since it is either unstated or a vertical merge the rectangle leaves as it is.
 function applyMerge(
   plan: MergeAllowed,
   target: GridRegion,
   pkg: Package,
 ): OdtTableCell {
-  for (const element of plan.consumed) {
-    retagAsCovered(element);
+  for (const position of plan.consumed) {
+    retagAsCovered(individuateGridColumn(position.row, position.column));
   }
-  const anchor = new OdtTableCell(plan.anchor, pkg);
+  const anchorElement = individuateGridColumn(
+    plan.anchor.row,
+    plan.anchor.column,
+  );
+  const anchor = new OdtTableCell(anchorElement, pkg);
   anchor.colSpan = target.columnSpan;
   if (target.rowSpan > 1) {
     anchor.rowSpan = target.rowSpan;
@@ -822,10 +895,10 @@ export class OdtTableRow {
     return applyMerge(plan, target, this.pkg);
   }
 
-  // Marks the grid position at columnIndex as covered by a merge anchored elsewhere, retagging it in place through retagAsCovered. It is refused, naming the position, when the position is itself the anchor of a merged region: covering it would leave the rest of that region covered with nothing anchoring it, so a merge over an anchor is made through OdtTable.mergeCells, which swallows the whole region or refuses. A position another merge already covers, and an unmerged cell, are retagged.
+  // Marks the grid position at columnIndex as covered by a merge anchored elsewhere, retagging it in place through retagAsCovered. It is refused, naming the position, when the position is itself the anchor of a merged region: covering it would leave the rest of that region covered with nothing anchoring it, so a merge over an anchor is made through OdtTable.mergeCells, which swallows the whole region or refuses. A position another merge already covers, and an unmerged cell, are retagged. columnIndex is a grid column (rowGridColumnCount, honouring table:number-columns-repeated -- ExaDev/documents.js#1374): the bounds and anchor-orphan checks read the row without mutating it, and only once both pass does individuateGridColumn split whatever repeated run columnIndex falls inside before retagAsCovered retags the one resulting element.
   markCellCovered(columnIndex: number): void {
-    const element = gridCellElements(this.node)[columnIndex];
-    if (element === undefined) {
+    const totalColumns = rowGridColumnCount(this.node);
+    if (columnIndex < 0 || columnIndex >= totalColumns) {
       throw new Error(
         `markCellCovered: column ${columnIndex} does not exist in this row`,
       );
@@ -842,7 +915,7 @@ export class OdtTableRow {
         `markCellCovered: column ${columnIndex} anchors a merge with rowSpan ${anchored.rowSpan} and colSpan ${anchored.columnSpan}, so covering it would leave the rest of that merge without an anchor`,
       );
     }
-    retagAsCovered(element);
+    retagAsCovered(individuateGridColumn(this.node, columnIndex));
   }
 }
 
