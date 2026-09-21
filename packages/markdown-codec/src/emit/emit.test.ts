@@ -3438,6 +3438,43 @@ describe("tables", () => {
     expect(emitMarkdown(doc([table]))).toContain("| h |");
   });
 
+  it("does NOT fire TABLE_HEADER_ROW_SYNTHESISED when the first row states isHeader: true", () => {
+    const collector = createDiagnosticCollector();
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        {
+          cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }],
+          isHeader: true,
+        },
+        { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] }] },
+      ],
+    };
+    emitMarkdown(doc([table]), { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.TABLE_HEADER_ROW_SYNTHESISED),
+    ).toBe(false);
+  });
+
+  it("fires TABLE_HEADER_ROW_SYNTHESISED with a message naming the synthesis when the first row states no header at all", () => {
+    const collector = createDiagnosticCollector();
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }] },
+        { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] }] },
+      ],
+    };
+    emitMarkdown(doc([table]), { sink: collector.sink });
+    const [diagnostic] = collector.diagnostics.filter(
+      (entry) =>
+        entry.code === MarkdownDiagnosticCodes.TABLE_HEADER_ROW_SYNTHESISED,
+    );
+    expect(diagnostic?.message).toContain("states no header row");
+  });
+
   it("emits alignment markers read from the header row's own cell alignment", () => {
     const table: ContentTable = {
       kind: "table",
