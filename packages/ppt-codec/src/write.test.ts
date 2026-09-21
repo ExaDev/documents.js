@@ -1310,6 +1310,8 @@ describe("writePptContent / readPptContent round trip", () => {
                             { blocks: [] },
                           ],
                         },
+                        { cells: [{ blocks: [] }, { blocks: [] }] },
+                        { cells: [{ blocks: [] }, { blocks: [] }] },
                       ],
                       columnWidthsPt: [120, 120],
                     },
@@ -1324,7 +1326,11 @@ describe("writePptContent / readPptContent round trip", () => {
       // The spanning cell is written one column wide and one row tall, and reads back as a plain cell.
       expect(slides[0]?.shapes[0]?.blocks[0]).toMatchObject({
         kind: "table",
-        rows: [{ cells: [{ blocks: [] }, { blocks: [] }] }],
+        rows: [
+          { cells: [{ blocks: [] }, { blocks: [] }] },
+          { cells: [{ blocks: [] }, { blocks: [] }] },
+          { cells: [{ blocks: [] }, { blocks: [] }] },
+        ],
       });
       expect(diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
         PptDiagnosticCodes.TABLE_SPAN_DROPPED,
