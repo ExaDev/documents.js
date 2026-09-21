@@ -565,8 +565,10 @@ function writeTable(
   }
   // HTML states anchors only: a covered position of a merged region has no <td> of its own, its extent being carried by the anchor's colspan/rowspan, so emitting one would widen the row past the grid.
   const gridPositions = walkTableGrid(table);
-  const rows = gridPositions.map((rowPositions) =>
-    element(
+  const rows = gridPositions.map((rowPositions, rowIndex) => {
+    // A row carrying isHeader writes its cells as <th>, at whatever position the row sits, and every other row writes <td>. The rows are not regrouped into a <thead>: this package's own reader reads a row of <th> cells back as a header row wherever it sits, whereas a <thead> would have to hold a leading block and could not state a header row further down at all.
+    const cellTag = table.rows[rowIndex]?.isHeader === true ? "th" : "td";
+    return element(
       "tr",
       {},
       rowPositions.flatMap((position) => {
@@ -592,10 +594,10 @@ function writeTable(
         const cellChildren = cell.blocks
           .filter(isTreeBlockLeaf)
           .flatMap((block) => writeLeafBlock(block, context));
-        return [element("td", attrs, cellChildren)];
+        return [element(cellTag, attrs, cellChildren)];
       }),
-    ),
-  );
+    );
+  });
   return element("table", {}, rows);
 }
 

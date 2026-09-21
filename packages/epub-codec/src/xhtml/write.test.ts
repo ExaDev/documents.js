@@ -363,6 +363,42 @@ describe("writeXhtmlBody", () => {
     expect(xml).toContain('rowspan="2"');
   });
 
+  it("writes a header row's cells as th and every other row's as td", () => {
+    const xml = write([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }],
+            isHeader: true,
+          },
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] }],
+          },
+        ],
+        columnWidthsPt: [100],
+      },
+    ]);
+    expect(xml).toContain("<th><p>h</p></th>");
+    expect(xml).toContain("<td><p>a</p></td>");
+  });
+
+  it("round-trips a header row that is not the first row, since th states the row rather than a thead block", () => {
+    const source = "<table><tr><td>a</td></tr><tr><th>h</th></tr></table>";
+    const blocks = readXhtmlBody(xhtmlDocument(source), {
+      resolveImage: () => undefined,
+      sink: () => undefined,
+      sourceHref: "chapter1.xhtml",
+      contentWidthPt: CONTENT_WIDTH_PT,
+    }).blocks;
+    const table = blocks[0];
+    if (table?.kind !== "table") throw new Error("expected a table block");
+    expect(table.rows.map((row) => row.isHeader)).toEqual([undefined, true]);
+    const xml = write(blocks);
+    expect(xml).toContain("<tr><td><p>a</p></td></tr>");
+    expect(xml).toContain("<tr><th><p>h</p></th></tr>");
+  });
+
   it("writes one cell tag for a 2x2 merge, carrying both spans", () => {
     const xml = write([
       {

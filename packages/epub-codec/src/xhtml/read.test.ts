@@ -1129,7 +1129,7 @@ describe("definition lists", () => {
 });
 
 describe("tables", () => {
-  it("maps rows/cells, with th cells bold and colspan/rowspan honoured", () => {
+  it("maps rows/cells, marking a row of th cells as the header row rather than styling its text, with colspan/rowspan honoured", () => {
     const blocks = read(
       body(
         '<table><tr><th>H1</th><th>H2</th></tr><tr><td colspan="2">wide</td></tr></table>',
@@ -1142,16 +1142,13 @@ describe("tables", () => {
           {
             cells: [
               {
-                blocks: [
-                  { kind: "paragraph", runs: [{ text: "H1", bold: true }] },
-                ],
+                blocks: [{ kind: "paragraph", runs: [{ text: "H1" }] }],
               },
               {
-                blocks: [
-                  { kind: "paragraph", runs: [{ text: "H2", bold: true }] },
-                ],
+                blocks: [{ kind: "paragraph", runs: [{ text: "H2" }] }],
               },
             ],
+            isHeader: true,
           },
           {
             cells: [
@@ -1310,11 +1307,10 @@ describe("tables", () => {
           {
             cells: [
               {
-                blocks: [
-                  { kind: "paragraph", runs: [{ text: "H", bold: true }] },
-                ],
+                blocks: [{ kind: "paragraph", runs: [{ text: "H" }] }],
               },
             ],
+            isHeader: true,
           },
           {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "d" }] }] }],
@@ -1437,11 +1433,10 @@ describe("tables", () => {
           {
             cells: [
               {
-                blocks: [
-                  { kind: "paragraph", runs: [{ text: "H", bold: true }] },
-                ],
+                blocks: [{ kind: "paragraph", runs: [{ text: "H" }] }],
               },
             ],
+            isHeader: true,
           },
         ],
         columnWidthsPt: [CONTENT_WIDTH_PT],
