@@ -282,6 +282,8 @@ function populateCellBlocks(
 export function populateOdtTable(table: OdtTable, block: ContentTable): void {
   assertTableObeysGridRule(block, "populateOdtTable");
   const gridPositions = walkTableGrid(block);
+  // Stated once, after every row exists: ODF spells header-ness as a wrapper around a run of rows rather than as a property of one, so it cannot be set row by row as the rows are appended (OdtTable.setHeaderRows, src/edit/odt/table.ts).
+  const headerFlags = block.rows.map((row) => row.isHeader === true);
   block.rows.forEach((row, rowIndex) => {
     const tableRow = table.appendEmptyRow();
     // OdtTableRow.heightPt clears the height when handed undefined and mints nothing, so an absent value needs no guard of its own.
@@ -306,6 +308,7 @@ export function populateOdtTable(table: OdtTable, block: ContentTable): void {
       populateCellBlocks(tableCell, cell.blocks);
     });
   });
+  table.setHeaderRows(headerFlags);
 }
 
 // OdtTableCell.background models one flat colour (ODF's own style:table-cell-properties/@fo:background-color has no two-colour pattern-fill vocabulary), so a 'pattern' fill (ExaDev/documents.js#951) writes through resolveCellFillColor's own single representative colour. Shared by an anchor and a covered entry, since the element each becomes carries its own table:style-name.

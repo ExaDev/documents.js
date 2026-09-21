@@ -344,6 +344,32 @@ export class DocxTableRow {
     );
   }
 
+  // Whether this row is a header row (ECMA-376 17.4.78 w:trPr/w:tblHeader): the row repeats at the top of each page the table continues onto. An on/off property, so a present element with no w:val is on and an explicit w:val of 0, false or off is off, which is what ooxml.js's own reader reads back into ContentTableRow.isHeader.
+  get isHeader(): boolean {
+    const trPr = this.trPrElement(false);
+    const tblHeader =
+      trPr === undefined ? undefined : directChildElement(trPr, "w:tblHeader");
+    if (tblHeader === undefined) {
+      return false;
+    }
+    const val = attr(tblHeader, "w:val");
+    return val !== "0" && val !== "false" && val !== "off";
+  }
+
+  set isHeader(value: boolean) {
+    const trPr = this.trPrElement(value);
+    if (trPr === undefined) {
+      return;
+    }
+    trPr.children = trPr.children.filter(
+      (c) => !(c.type === "element" && c.tag === "w:tblHeader"),
+    );
+    if (!value) {
+      return;
+    }
+    trPr.children.push(el("w:tblHeader", {}));
+  }
+
   // Merges colSpan grid columns of THIS row into one cell (ECMA-376 w:tcPr/w:gridSpan on the surviving anchor cell), the horizontal-merge primitive docx lacks as an attribute: unlike vertical merge, which is a pure attribute setter on an existing w:tc (DocxTableCell.verticalMerge above), docx omits a w:tc entirely for a column a merge consumes, so the consumed cells' own w:tc elements are REMOVED from the row. Their content is discarded silently and unconditionally, matching OdsSheet.mergeCells' own established precedent (src/edit/ods/sheet.ts): documented, intentional behaviour, not a silent trap.
   //
   // startColumnIndex is a GRID column: the position a w:tc starts at is the sum of the w:gridSpan of the cells before it, so it is not an index into cells(). The merged region is grid columns startColumnIndex up to startColumnIndex + colSpan, and every w:tc that starts inside it is consumed. The merge is refused, with an error naming the grid column, when it cannot be carried out without leaving the table in a state the grid rule forbids: the start column lies inside a cell that started earlier, the region would cut through a cell reaching past its last column, or a cell it would consume (or widen) takes part in a vertical merge. The last case is a refusal rather than an extension because a vertical merge is a chain of w:tc elements across rows that must line up in start column and span, so widening one row's cell correctly means rewriting every row of the chain and swallowing whatever those rows hold in the widened columns, which may belong to other vertical merges; that is a rectangle merge, and DocxTable.mergeCells is where it is decided, after the vertical merge has been unmerged. A merge that would change nothing is never refused.
