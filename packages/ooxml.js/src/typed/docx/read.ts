@@ -1182,6 +1182,16 @@ function readRowHeightPt(tr: XmlElement): number | undefined {
   return val === undefined ? undefined : twipsToPt(Number(val));
 }
 
+// w:tblHeader (ECMA-376 17.4.78) is the docx spelling of ContentTableRow.isHeader: this row repeats at the top of each page the table continues onto. It is an on/off property, so a present element with no w:val is on, and w:val="0"/"false" turns it off again -- the standard ST_OnOff reading every other w:trPr toggle takes, not a bare presence check that would read an explicitly-disabled toggle as enabled.
+//
+// The flag is read for the row it sits on whatever the rows above it say. Word itself honours a mid-table w:tblHeader only when every row above is also marked, but that is a rendering rule rather than a reading one, and flattening the shape on the way in would lose what the file actually states before any writer could act on it.
+function readRowIsHeader(tr: XmlElement): boolean {
+  const trPr = childrenWithTag(tr, "w:trPr")[0];
+  return readToggle(
+    trPr === undefined ? undefined : childrenWithTag(trPr, "w:tblHeader")[0],
+  );
+}
+
 // Column indices account for preceding cells' own gridSpan (a spanned cell occupies multiple grid columns); a vMerge-restart anchor's rowSpan is computed by scanning subsequent rows for a "continue" cell at the same column index, matching the anchor's own gridSpan -- ECMA-376 doesn't store the span count directly the way pptx's a:tc/@rowSpan does, so it must be derived.
 //
 // ECMA-376 spells a horizontal merge as ONE w:tc carrying w:gridSpan, with no element at all for the columns it covers, so those columns have no w:tc to read and are supplied by denseTableRows instead -- the grid rule (document-schema.js's ContentTableCell) wants one cell per grid column whatever the source format stores. A w:vMerge continuation does have its own w:tc, and it becomes the cell at its own column rather than being dropped, which is what lets its shading and borders survive the read; the further columns its own w:gridSpan reaches are filled the same way the anchor's are.
@@ -1216,6 +1226,8 @@ function readTable(
 
   const positioned = rawRows.map((row, rowIndex) => ({
     heightPt: readRowHeightPt(trs[rowIndex]!),
+    // Absent rather than false when the row states no w:tblHeader, so a table with no header row reads back as the object a producer that has never heard of the flag would build.
+    isHeader: readRowIsHeader(trs[rowIndex]!) ? true : undefined,
     cells: row.map((cell, cellIndex): PositionedTableCell => {
       const colIndex = rowColumnIndices[rowIndex]![cellIndex]!;
       if (cell.isVMergeContinuation) {

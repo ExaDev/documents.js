@@ -4532,6 +4532,56 @@ describe("buildDocxPackageFromContent: table grid and vertical-merge arithmetic"
       elementsWithTag([grid], "w:gridCol").map((col) => attr(col, "w:w")),
     ).toEqual(["1440", "2880"]);
   });
+
+  it("writes a header row as a bare w:tblHeader, after the row's own w:trHeight", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            tableOf(
+              [
+                { cells: [{ blocks: [] }], heightPt: 30, isHeader: true },
+                { cells: [{ blocks: [] }] },
+              ],
+              [72],
+            ),
+          ],
+        },
+      ],
+    });
+    const rows = elementsWithTag([writtenTable(written)], "w:tr");
+    const headerTrPr = childrenWithTag(rows[0]!, "w:trPr")[0]!;
+    expect(
+      headerTrPr.children
+        .filter((child): child is XmlElement => child.type === "element")
+        .map((child) => child.tag),
+    ).toEqual(["w:trHeight", "w:tblHeader"]);
+    expect(
+      attr(childrenWithTag(headerTrPr, "w:tblHeader")[0]!, "w:val"),
+    ).toBeUndefined();
+    expect(childrenWithTag(rows[1]!, "w:trPr")).toHaveLength(0);
+  });
+
+  it("writes a header row carrying no height as a w:trPr holding w:tblHeader alone", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            tableOf([{ cells: [{ blocks: [] }], isHeader: true }], [72]),
+          ],
+        },
+      ],
+    });
+    const row = elementsWithTag([writtenTable(written)], "w:tr")[0]!;
+    const trPr = childrenWithTag(row, "w:trPr")[0]!;
+    expect(
+      trPr.children
+        .filter((child): child is XmlElement => child.type === "element")
+        .map((child) => child.tag),
+    ).toEqual(["w:tblHeader"]);
+  });
 });
 
 describe("buildDocxPackageFromContent: tracked-change paragraph marks and ids", () => {
