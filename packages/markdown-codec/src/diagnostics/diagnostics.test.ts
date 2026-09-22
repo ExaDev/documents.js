@@ -306,7 +306,7 @@ describe("every MarkdownDiagnosticCodes entry is reachable from real input", () 
     const collector = createDiagnosticCollector();
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100, 100],
+      columns: [{ widthPt: 100 }, { widthPt: 100 }],
       rows: [
         {
           cells: [
@@ -331,7 +331,7 @@ describe("every MarkdownDiagnosticCodes entry is reachable from real input", () 
     const collector = createDiagnosticCollector();
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100, 100],
+      columns: [{ widthPt: 100 }, { widthPt: 100 }],
       rows: [
         {
           cells: [
@@ -355,7 +355,7 @@ describe("every MarkdownDiagnosticCodes entry is reachable from real input", () 
     const collector = createDiagnosticCollector();
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] }] },
       ],
@@ -371,7 +371,7 @@ describe("every MarkdownDiagnosticCodes entry is reachable from real input", () 
     const collector = createDiagnosticCollector();
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         {
           cells: [
@@ -396,7 +396,7 @@ describe("every MarkdownDiagnosticCodes entry is reachable from real input", () 
     const collector = createDiagnosticCollector();
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         {
           cells: [
@@ -464,6 +464,25 @@ describe("every MarkdownDiagnosticCodes entry is reachable from real input", () 
       true,
     );
     reached.add(MarkdownDiagnosticCodes.PACKAGE_TABLE_DROPPED);
+  });
+
+  it("TABLE_HEADER_COLUMN_DROPPED: a table stating a header column", () => {
+    const collector = createDiagnosticCollector();
+    const table: ContentTable = {
+      kind: "table",
+      columns: [{ widthPt: 100, isHeader: true }],
+      rows: [
+        {
+          cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] }],
+          isHeader: true,
+        },
+      ],
+    };
+    emitMarkdown(minimalDocument([table]), { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED),
+    ).toBe(true);
+    reached.add(MarkdownDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED);
   });
 
   it("has no dead code: every value in MarkdownDiagnosticCodes was proven reachable above", () => {

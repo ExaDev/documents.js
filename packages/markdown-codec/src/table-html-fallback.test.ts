@@ -10,11 +10,10 @@ import { writeMarkdownContent } from "./write";
 const CONTENT_WIDTH_PT =
   PAGE_SIZE_A4.widthPt - DEFAULT_MARGINS.leftPt - DEFAULT_MARGINS.rightPt;
 
-function evenWidths(columnCount: number): number[] {
-  return Array.from(
-    { length: columnCount },
-    () => CONTENT_WIDTH_PT / columnCount,
-  );
+function evenColumns(columnCount: number): { widthPt: number }[] {
+  return Array.from({ length: columnCount }, () => ({
+    widthPt: CONTENT_WIDTH_PT / columnCount,
+  }));
 }
 
 function doc(table: ContentTable): ContentDocument {
@@ -57,7 +56,7 @@ describe("HTML-table fallback round trip", () => {
   it("colSpan survives write -> read as an equal ContentTable", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: evenWidths(2),
+      columns: evenColumns(2),
       rows: [
         {
           cells: [
@@ -84,7 +83,7 @@ describe("HTML-table fallback round trip", () => {
   it("rowSpan survives write -> read as an equal ContentTable", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: evenWidths(2),
+      columns: evenColumns(2),
       rows: [
         {
           cells: [
@@ -117,7 +116,7 @@ describe("HTML-table fallback round trip", () => {
   it("a solid cell background survives write -> read as an equal ContentTable", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: evenWidths(1),
+      columns: evenColumns(1),
       rows: [
         { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }] },
         {
@@ -138,7 +137,7 @@ describe("HTML-table fallback round trip", () => {
   it("a nested table as a cell's entire content survives write -> read as an equal ContentTable", () => {
     const nested: ContentTable = {
       kind: "table",
-      columnWidthsPt: evenWidths(2),
+      columns: evenColumns(2),
       rows: [
         {
           cells: [
@@ -150,7 +149,7 @@ describe("HTML-table fallback round trip", () => {
     };
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: evenWidths(2),
+      columns: evenColumns(2),
       rows: [
         {
           cells: [
@@ -169,14 +168,14 @@ describe("HTML-table fallback round trip", () => {
   it("a nested table forces the fallback even when no cell anywhere needs colSpan/rowSpan/background", () => {
     const nested: ContentTable = {
       kind: "table",
-      columnWidthsPt: evenWidths(1),
+      columns: evenColumns(1),
       rows: [
         { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "n" }] }] }] },
       ],
     };
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: evenWidths(1),
+      columns: evenColumns(1),
       rows: [{ cells: [{ blocks: [nested] }] }],
     };
     const { markdown, table: read } = roundTrip(table);
@@ -187,7 +186,7 @@ describe("HTML-table fallback round trip", () => {
   it("multi-paragraph cell content joins with <br> and survives write -> read once the table is already using the HTML fallback for another reason", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: evenWidths(1),
+      columns: evenColumns(1),
       rows: [
         { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }] },
         {
@@ -211,7 +210,7 @@ describe("HTML-table fallback round trip", () => {
   it("bold/italic/strike/hyperlink run formatting round-trips through real HTML tags rather than markdown syntax", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: evenWidths(2),
+      columns: evenColumns(2),
       rows: [
         {
           cells: [
@@ -274,7 +273,7 @@ describe("HTML-table fallback round trip", () => {
   it("a table with none of these needs still writes as plain GFM pipe syntax, unaffected by this fallback", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: evenWidths(1),
+      columns: evenColumns(1),
       rows: [
         { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] }] },
       ],

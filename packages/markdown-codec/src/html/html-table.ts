@@ -356,17 +356,16 @@ function parseTableRows(
   return placeAnchorTableRows(anchorRows, NO_DECLARED_COLUMN_COUNT);
 }
 
-// Column count and evenly-distributed columnWidthsPt read from the dense grid width: every row of a dense table has one cell per grid column, so the first row's own length is the column count whichever rows carry spans, including a later row wider than the header or a header rowspan consuming a column below it. Absolute widths were never something either grammar carries, so this is the same even distribution src/lower/table.ts's own lowerTable uses for a plain GFM table.
+// Column count and evenly-distributed column widths read from the dense grid width: every row of a dense table has one cell per grid column, so the first row's own length is the column count whichever rows carry spans, including a later row wider than the header or a header rowspan consuming a column below it. Absolute widths were never something either grammar carries, so this is the same even distribution src/lower/table.ts's own lowerTable uses for a plain GFM table. No column ever reads as a header column: neither GFM nor this reader's own HTML subset states table:table-header-columns' page-repetition concept at all (ExaDev/documents.js#1381), so every column here states a width alone.
 function buildContentTable(
   rows: ContentTableRow[],
   contentWidthPt: number,
 ): ContentTable {
   const columnCount = rows[0]!.cells.length;
-  const columnWidthsPt = Array.from(
-    { length: columnCount },
-    () => contentWidthPt / columnCount,
-  );
-  return { kind: "table", rows, columnWidthsPt };
+  const columns = Array.from({ length: columnCount }, () => ({
+    widthPt: contentWidthPt / columnCount,
+  }));
+  return { kind: "table", rows, columns };
 }
 
 // Whether `text`, in its ENTIRETY (only surrounding whitespace tolerated), is exactly one <table>...</table> element — shared by parseHtmlTable's own top-level entry point and parseCellBlocks' "is this cell's whole content one nested table" check above, since both ask the identical question.
