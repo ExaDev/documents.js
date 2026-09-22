@@ -89,7 +89,7 @@ describe.each([
     );
     expect(table.rows).toHaveLength(1);
     expect(table.rows[0].cells).toHaveLength(2);
-    expect(table.columnWidthsPt).toEqual([216, 216]);
+    expect(table.columns.map((column) => column.widthPt)).toEqual([216, 216]);
   });
 
   it("writes the document back to RTF bytes that begin with the file header", () => {
