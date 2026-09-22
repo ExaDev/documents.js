@@ -720,7 +720,7 @@ describe("readPptxContent: tables", () => {
     const doc = readPptxContent(buildFixturePackage());
     const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
     const table = asTable(tableShape?.blocks[0]);
-    expect(table.columnWidthsPt).toEqual([100, 150]);
+    expect(table.columns.map((c) => c.widthPt)).toEqual([100, 150]);
     expect(table.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(asParagraph(table.rows[0]?.cells[0]?.blocks[0]).runs[0]?.text).toBe(
       "Merged",
@@ -1681,9 +1681,9 @@ describe("readPptxContent: chart graphic frames", () => {
   it("splits the frame's own width evenly across the category and series columns", () => {
     const doc = readPptxContent(chartFixturePackage());
     const chartShape = doc.slides[0]?.shapes.find((s) => s.name === "Chart 1");
-    expect(asTable(chartShape?.blocks[0]).columnWidthsPt).toEqual([
-      120, 120, 120,
-    ]);
+    expect(
+      asTable(chartShape?.blocks[0]).columns.map((c) => c.widthPt),
+    ).toEqual([120, 120, 120]);
   });
 
   it("keeps the frame's geometry with empty content when the chart reference resolves to no readable chart", () => {
