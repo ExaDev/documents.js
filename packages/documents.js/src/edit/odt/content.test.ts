@@ -478,7 +478,7 @@ describe("buildOdtPackage", () => {
         blocks: [
           {
             kind: "table",
-            columnWidthsPt: [100],
+            columns: [{ widthPt: 100 }],
             rows: [
               {
                 cells: [
@@ -551,7 +551,7 @@ describe("buildOdtPackage", () => {
         blocks: [
           {
             kind: "table",
-            columnWidthsPt: [100, 100],
+            columns: [{ widthPt: 100 }, { widthPt: 100 }],
             rows: [
               {
                 cells: [
@@ -587,7 +587,7 @@ describe("buildOdtPackage", () => {
         blocks: [
           {
             kind: "table",
-            columnWidthsPt: [100, 100],
+            columns: [{ widthPt: 100 }, { widthPt: 100 }],
             rows: [
               {
                 cells: [
@@ -647,7 +647,7 @@ describe("buildOdtPackage", () => {
         blocks: [
           {
             kind: "table",
-            columnWidthsPt: [100, 100],
+            columns: [{ widthPt: 100 }, { widthPt: 100 }],
             rows: [
               {
                 cells: [
@@ -726,7 +726,7 @@ describe("buildOdtPackage", () => {
   it("a 2x2 merge in a dense grid is written as one anchor plus a covered element at every other position, and reads back with one entry per grid column", () => {
     const written = roundTrippedTable({
       kind: "table",
-      columnWidthsPt: [50, 50, 50],
+      columns: [{ widthPt: 50 }, { widthPt: 50 }, { widthPt: 50 }],
       rows: [
         {
           cells: [
@@ -740,7 +740,7 @@ describe("buildOdtPackage", () => {
       ],
     });
     for (const row of written.rows) {
-      expect(row.cells).toHaveLength(written.columnWidthsPt.length);
+      expect(row.cells).toHaveLength(written.columns.length);
     }
     expect(written.rows[0]?.cells[0]).toMatchObject({ colSpan: 2, rowSpan: 2 });
     expect(coveredPositions(written)).toEqual([
@@ -759,7 +759,7 @@ describe("buildOdtPackage", () => {
           blocks: [
             {
               kind: "table",
-              columnWidthsPt: [50, 50],
+              columns: [{ widthPt: 50 }, { widthPt: 50 }],
               rows: [
                 {
                   cells: [
@@ -794,7 +794,7 @@ describe("buildOdtPackage", () => {
           blocks: [
             {
               kind: "table",
-              columnWidthsPt: [50],
+              columns: [{ widthPt: 50 }],
               rows: [
                 {
                   cells: [
@@ -826,7 +826,7 @@ describe("buildOdtPackage", () => {
     } as const;
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [50, 50],
+      columns: [{ widthPt: 50 }, { widthPt: 50 }],
       rows: [
         {
           cells: [
@@ -950,7 +950,7 @@ describe("buildOdtPackage", () => {
         blocks: [
           {
             kind: "table",
-            columnWidthsPt: [200, 200],
+            columns: [{ widthPt: 200 }, { widthPt: 200 }],
             rows: [
               {
                 cells: [
@@ -1211,7 +1211,7 @@ describe("buildOdtPackage: a table breaking the grid rule", () => {
   // A merged header whose covered position carries a second copy of the anchor's content, which a table:covered-table-cell has no room for.
   const coveredContentTable: ContentTable = {
     kind: "table",
-    columnWidthsPt: [100, 100],
+    columns: [{ widthPt: 100 }, { widthPt: 100 }],
     rows: [
       {
         cells: [
@@ -1284,13 +1284,13 @@ describe("buildOdtPackage: a table that states no column widths", () => {
   it("is written with one column per grid column the rows state, rather than dropped", () => {
     const written = writtenTable({
       kind: "table",
-      columnWidthsPt: [],
+      columns: [],
       rows: [
         { cells: [cellOf("a"), cellOf("b")] },
         { cells: [cellOf("c"), cellOf("d")] },
       ],
     });
-    expect(written.columnWidthsPt).toHaveLength(2);
+    expect(written.columns).toHaveLength(2);
     expect(cellTexts(written)).toEqual([
       ["a", "b"],
       ["c", "d"],
@@ -1300,10 +1300,10 @@ describe("buildOdtPackage: a table that states no column widths", () => {
   it("gives each column with no stated width a positive width", () => {
     const written = writtenTable({
       kind: "table",
-      columnWidthsPt: [],
+      columns: [],
       rows: [{ cells: [cellOf("a"), cellOf("b")] }],
     });
-    for (const widthPt of written.columnWidthsPt) {
+    for (const { widthPt } of written.columns) {
       expect(widthPt).toBeGreaterThan(0);
     }
   });
@@ -1311,13 +1311,13 @@ describe("buildOdtPackage: a table that states no column widths", () => {
   it("writes a merged region across columns the rows state and the widths do not", () => {
     const written = writtenTable({
       kind: "table",
-      columnWidthsPt: [],
+      columns: [],
       rows: [
         { cells: [{ ...cellOf("wide"), colSpan: 2 }, { blocks: [] }] },
         { cells: [cellOf("c"), cellOf("d")] },
       ],
     });
-    expect(written.columnWidthsPt).toHaveLength(2);
+    expect(written.columns).toHaveLength(2);
     expect(written.rows[0]?.cells[0]).toMatchObject({ colSpan: 2 });
     expect(cellTexts(written)[1]).toEqual(["c", "d"]);
   });
@@ -1325,20 +1325,20 @@ describe("buildOdtPackage: a table that states no column widths", () => {
   it("widens a grid whose stated widths are fewer than the columns the rows occupy, keeping the widths it does state", () => {
     const written = writtenTable({
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [{ cells: [cellOf("a"), cellOf("b")] }],
     });
-    expect(written.columnWidthsPt).toHaveLength(2);
-    expect(written.columnWidthsPt[0]).toBe(100);
+    expect(written.columns).toHaveLength(2);
+    expect(written.columns[0]?.widthPt).toBe(100);
   });
 
   it("writes the stated widths unchanged when the table states one per column", () => {
     const written = writtenTable({
       kind: "table",
-      columnWidthsPt: [50, 70],
+      columns: [{ widthPt: 50 }, { widthPt: 70 }],
       rows: [{ cells: [cellOf("a"), cellOf("b")] }],
     });
-    expect(written.columnWidthsPt).toEqual([50, 70]);
+    expect(written.columns.map((c) => c.widthPt)).toEqual([50, 70]);
   });
 
   it("still reports a grid fault in a table with no widths, rather than dropping it", () => {
@@ -1346,7 +1346,7 @@ describe("buildOdtPackage: a table that states no column widths", () => {
       buildOdtPackage(
         documentOf({
           kind: "table",
-          columnWidthsPt: [],
+          columns: [],
           rows: [
             { cells: [cellOf("a"), cellOf("b")] },
             { cells: [cellOf("c")] },
@@ -1359,10 +1359,14 @@ describe("buildOdtPackage: a table that states no column widths", () => {
   });
 
   it("refuses a table with no rows, with or without stated widths, rather than dropping it", () => {
-    for (const columnWidthsPt of [[], [100, 100]]) {
+    for (const columnWidthsPt of [[] as number[], [100, 100]]) {
       expect(() =>
         buildOdtPackage(
-          documentOf({ kind: "table", columnWidthsPt, rows: [] }),
+          documentOf({
+            kind: "table",
+            columns: columnWidthsPt.map((widthPt) => ({ widthPt })),
+            rows: [],
+          }),
         ),
       ).toThrow(
         "buildOdtPackage: table has no rows, and ODF requires a table:table to hold at least one table:table-row",

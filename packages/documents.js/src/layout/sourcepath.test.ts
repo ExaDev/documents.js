@@ -246,7 +246,7 @@ describe("sourcePath propagation: docx flow (engine.ts)", () => {
   it("attributes a table cell's background rect to the table's own sourcePath, since ContentTableCell has none of its own", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       sourcePath: "sections[0].blocks[0]",
       rows: [
         {
@@ -271,7 +271,7 @@ describe("sourcePath propagation: docx flow (engine.ts)", () => {
   it("gives a paragraph-in-cell run its own sourcePath, distinct from the table's", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       sourcePath: "sections[0].blocks[0]",
       rows: [
         {
@@ -338,7 +338,7 @@ describe("sourcePath propagation: pptx direct placement (slides.ts)", () => {
   it("attributes a table cell's background rect to the table's own sourcePath, since ContentTableCell has none of its own", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       sourcePath: "slides[0].shapes[0].blocks[0]",
       rows: [
         {

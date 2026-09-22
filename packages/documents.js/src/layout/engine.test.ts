@@ -261,7 +261,7 @@ describe("convertWordprocessingToLayout: tables", () => {
   function tableWithRowHeights(...heights: number[]): ContentTable {
     return {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: heights.map((h, i) => ({
         heightPt: h,
         cells: [{ blocks: [paragraph([run(`Row${i}`, { sizePt: 10 })])] }],
@@ -289,7 +289,7 @@ describe("convertWordprocessingToLayout: tables", () => {
   it("emits a background rect for a cell with a fill colour", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         {
           heightPt: 20,
@@ -314,7 +314,7 @@ describe("convertWordprocessingToLayout: tables", () => {
     // A 'pattern' fill stating neither foregroundColor nor backgroundColor (the reserved gray125 scaffolding pattern, or a theme/indexed colour this reader could not resolve) is exactly the case resolveCellFillColor's own doc comment names as returning undefined — genuinely no fill, not a reason to still push a rect item that would render invisibly.
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         {
           heightPt: 20,
@@ -338,7 +338,7 @@ describe("convertWordprocessingToLayout: tables", () => {
     const red = { r: 1, g: 0, b: 0 };
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         {
           heightPt: 20,
@@ -386,7 +386,7 @@ describe("convertWordprocessingToLayout: tables", () => {
     const red = { r: 1, g: 0, b: 0 };
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         {
           heightPt: 20,
@@ -411,7 +411,7 @@ describe("convertWordprocessingToLayout: tables", () => {
     const table: ContentTable = {
       kind: "table",
       sourcePath: "sections[0].blocks[0]",
-      columnWidthsPt: [50, 50],
+      columns: [{ widthPt: 50 }, { widthPt: 50 }],
       rows: [
         {
           heightPt: 20,
@@ -461,7 +461,7 @@ describe("convertWordprocessingToLayout: tables", () => {
     };
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [40, 30, 30],
+      columns: [{ widthPt: 40 }, { widthPt: 30 }, { widthPt: 30 }],
       rows: [{ heightPt: 20, cells: [anchor, covered, after] }],
     };
     const layout = convert([section([table])]);
@@ -497,7 +497,7 @@ describe("convertWordprocessingToLayout: tables", () => {
     };
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [50, 50],
+      columns: [{ widthPt: 50 }, { widthPt: 50 }],
       rows: [
         {
           heightPt: 20,
@@ -536,7 +536,7 @@ describe("convertWordprocessingToLayout: tables", () => {
     };
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [50, 50],
+      columns: [{ widthPt: 50 }, { widthPt: 50 }],
       rows: [{ cells: [anchor, covered] }],
     };
     convert([section([table])]);
@@ -550,7 +550,7 @@ describe("convertWordprocessingToLayout: tables", () => {
       section([
         {
           kind: "table",
-          columnWidthsPt: [0],
+          columns: [{ widthPt: 0 }],
           rows: [{ heightPt: 10, cells: [cell] }],
         },
       ]),
@@ -561,7 +561,7 @@ describe("convertWordprocessingToLayout: tables", () => {
   it("scales column widths proportionally to fit the content width", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [50, 50],
+      columns: [{ widthPt: 50 }, { widthPt: 50 }],
       rows: [
         {
           heightPt: 10,

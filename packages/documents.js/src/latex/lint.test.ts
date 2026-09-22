@@ -170,7 +170,7 @@ describe("lintMathCoherence", () => {
     const pkg = packageOf([
       {
         kind: "table",
-        columnWidthsPt: [100],
+        columns: [{ widthPt: 100 }],
         rows: [{ cells: [{ blocks: [nested] }] }],
       },
       topLevel,
@@ -323,7 +323,7 @@ describe("lintMathCoherence", () => {
     const pkg = packageOf([
       {
         kind: "table",
-        columnWidthsPt: [100],
+        columns: [{ widthPt: 100 }],
         rows: [{ cells: [{ blocks: [mathBlockOf("a + b")] }] }],
       },
       presentationOnly,

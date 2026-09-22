@@ -597,14 +597,10 @@ function resolveOdtGrid(
   pkg: Package,
 ): LiveTableGrid<OdtTableCell> {
   const placedRows: PlacedLiveCell<OdtTableCell>[][] = [];
+  // Columns are collected through the wrappers rather than from the table's own direct children, so a table whose columns sit inside a table:table-header-columns (or any other column wrapper) still states its whole declared width here. This is the identical reasoning the row collection immediately below already applies.
   let declaredColumns = 0;
-  for (const child of table.children) {
-    if (child.type !== "element") {
-      continue;
-    }
-    if (child.tag === "table:table-column") {
-      declaredColumns += readRunRepeatCount(child, COLUMN_REPEAT_ATTR);
-    }
+  for (const column of tableColumnElements(table)) {
+    declaredColumns += readRunRepeatCount(column, COLUMN_REPEAT_ATTR);
   }
   // Rows are collected through the wrappers rather than from the table's own direct children, so a table whose rows sit inside a table:table-header-rows (or any other row wrapper) still states its whole grid here.
   for (const row of tableRowElements(table)) {
@@ -839,6 +835,47 @@ function tableRowEntries(
   return entries;
 }
 
+// The column-axis mirror of ROW_WRAPPER_TAGS/tableRowEntries immediately above (ExaDev/documents.js#1381): the column wrappers ODF's table grammar allows between a table:table and its table:table-column children, the same set odf.js's own readOdfTable descends through for columns.
+const COLUMN_WRAPPER_TAGS: ReadonlySet<string> = new Set([
+  "table:table-columns",
+  "table:table-header-columns",
+  "table:table-column-group",
+]);
+
+interface TableColumnEntry {
+  readonly element: XmlElement;
+  readonly insideHeader: boolean;
+}
+
+// Every table:table-column under `parent` in document order, descending through the column wrappers and through nothing else, each carrying whether it sits anywhere inside a table:table-header-columns. Nesting does not dilute that, for the identical reason tableRowEntries states for rows.
+function tableColumnEntries(
+  parent: XmlElement,
+  insideHeader = false,
+): TableColumnEntry[] {
+  const entries: TableColumnEntry[] = [];
+  for (const child of parent.children) {
+    if (child.type !== "element") {
+      continue;
+    }
+    if (child.tag === "table:table-column") {
+      entries.push({ element: child, insideHeader });
+    } else if (COLUMN_WRAPPER_TAGS.has(child.tag)) {
+      entries.push(
+        ...tableColumnEntries(
+          child,
+          insideHeader || child.tag === "table:table-header-columns",
+        ),
+      );
+    }
+  }
+  return entries;
+}
+
+// Every table:table-column of a table:table element, in document order, found through the column wrappers as well as among the table's own direct children (tableColumnEntries above states the wrapper rule and which of them mark a header column). The column-axis mirror of tableRowElements.
+function tableColumnElements(table: XmlElement): XmlElement[] {
+  return tableColumnEntries(table).map((entry) => entry.element);
+}
+
 export class OdtTableRow {
   private readonly node: XmlElement;
   private readonly pkg: Package;
@@ -1026,6 +1063,54 @@ export class OdtTable {
         child.type === "element" &&
         (child.tag === "table:table-row" || ROW_WRAPPER_TAGS.has(child.tag));
       if (!isRowish) {
+        rest.push(child);
+        continue;
+      }
+      if (!placed) {
+        rest.push(...regrouped);
+        placed = true;
+      }
+    }
+    if (!placed) {
+      rest.push(...regrouped);
+    }
+    table.children = rest;
+  }
+
+  // Which columns sit inside a table:table-header-columns wrapper, in column order: ODF's own spelling of ContentTableColumn.isHeader, which odf.js's readOdfTable reads back onto each column the wrapper covers. The column-axis mirror of headerRows immediately above.
+  headerColumns(): boolean[] {
+    return tableColumnEntries(this.live()).map((entry) => entry.insideHeader);
+  }
+
+  // Restates the wrappers so that exactly the columns `flags` names are header columns: each maximal run of them is wrapped in its own table:table-header-columns and every other column becomes a direct child of the table again. The column-axis mirror of setHeaderRows immediately above, and valid ODF for the identical reason: OpenDocument-v1.3-schema.rng's table-columns-and-groups is one-or-more of table-table-column-group or table-columns-no-group, and table-columns-no-group admits a header block with plain columns either side, so a header column that is neither leading nor contiguous is stated rather than dropped. `flags` shorter than the table's own column count leaves the columns past its end as plain columns.
+  setHeaderColumns(flags: readonly boolean[]): void {
+    const table = this.live();
+    const columns = tableColumnElements(table);
+    const regrouped: XmlElement[] = [];
+    let run: XmlElement[] = [];
+    const closeRun = (): void => {
+      if (run.length > 0) {
+        regrouped.push(el("table:table-header-columns", {}, run));
+        run = [];
+      }
+    };
+    columns.forEach((column, index) => {
+      if (flags[index] === true) {
+        run.push(column);
+        return;
+      }
+      closeRun();
+      regrouped.push(column);
+    });
+    closeRun();
+    const rest: XmlNode[] = [];
+    let placed = false;
+    for (const child of table.children) {
+      const isColumnish =
+        child.type === "element" &&
+        (child.tag === "table:table-column" ||
+          COLUMN_WRAPPER_TAGS.has(child.tag));
+      if (!isColumnish) {
         rest.push(child);
         continue;
       }

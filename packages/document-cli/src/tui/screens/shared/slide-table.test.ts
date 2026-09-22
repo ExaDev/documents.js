@@ -172,7 +172,7 @@ describe("slideTableRowSegments", () => {
     rows: readonly (readonly ContentTable["rows"][number]["cells"][number][])[],
   ): ContentTable => ({
     kind: "table",
-    columnWidthsPt: rows[0]?.map(() => 10) ?? [],
+    columns: rows[0]?.map(() => ({ widthPt: 10 })) ?? [],
     rows: rows.map((cells) => ({ cells: [...cells] })),
   });
   const shape = (table: ContentTable) =>
@@ -306,7 +306,7 @@ describe("slideTableRowSegments row indices", () => {
   it("stamps each box with the grid row it is drawn in", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [10, 10],
+      columns: [{ widthPt: 10 }, { widthPt: 10 }],
       rows: [
         { cells: [{ blocks: [], rowSpan: 2 }, { blocks: [] }] },
         { cells: [{ blocks: [] }, { blocks: [] }] },

@@ -64,7 +64,7 @@ export interface RenderMarkdownOptions extends WriteMarkdownOptions {
 // A synthesised A4/1in section, exactly like markdown-codec's own INVENTED_PAGE_GEOMETRY default (ReadMarkdownOptions.pageSize/margins falling back to PAGE_SIZE_A4/its own DEFAULT_MARGINS) — writeMarkdownContent never reads a section's pageSize/margins at all (markdown has no page-geometry construct), so these values are here purely to satisfy ContentSection's own schema shape, not because they affect the rendered text.
 const SYNTHETIC_MARGINS = { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 };
 
-// A column with no width of its own (a spreadsheet cell reader that never individuated it) falls back to this — again cosmetic: no markdown table renderer reads ContentTable.columnWidthsPt.
+// A column with no width of its own (a spreadsheet cell reader that never individuated it) falls back to this, again cosmetic: no markdown table renderer reads ContentTable.columns' widthPt values.
 const DEFAULT_COLUMN_WIDTH_PT = 72;
 
 function headingParagraph(level: number, text: string): ContentParagraph {
@@ -215,9 +215,9 @@ function sheetToTable(
   const columnWidthByIndex = new Map(
     sheet.columns.map((column) => [column.index, column.widthPt] as const),
   );
-  const columnWidthsPt = visibleColumns.map(
-    (column) => columnWidthByIndex.get(column) ?? DEFAULT_COLUMN_WIDTH_PT,
-  );
+  const columns = visibleColumns.map((column) => ({
+    widthPt: columnWidthByIndex.get(column) ?? DEFAULT_COLUMN_WIDTH_PT,
+  }));
   const rows: ContentTableRow[] = visibleRows.map((row) => ({
     cells: visibleColumns.map((column) =>
       spreadsheetCellToTableCell(
@@ -229,10 +229,10 @@ function sheetToTable(
   sink({
     severity: "info",
     code: MarkdownRenderDiagnosticCodes.SPREADSHEET_SHEET_AS_TABLE,
-    message: `sheet "${sheet.name}" flattened to a ${String(rows.length)}x${String(columnWidthsPt.length)} GFM table; its first row is rendered as the table header (a GFM table always has one, and a spreadsheet has no header/body distinction of its own)`,
+    message: `sheet "${sheet.name}" flattened to a ${String(rows.length)}x${String(columns.length)} GFM table; its first row is rendered as the table header (a GFM table always has one, and a spreadsheet has no header/body distinction of its own)`,
   });
 
-  return { kind: "table", rows, columnWidthsPt };
+  return { kind: "table", rows, columns };
 }
 
 function spreadsheetBlocks(

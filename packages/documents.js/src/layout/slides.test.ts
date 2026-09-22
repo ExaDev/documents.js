@@ -228,7 +228,7 @@ describe("convertPresentationToLayout: alignment", () => {
       blocks: [
         {
           kind: "table",
-          columnWidthsPt: [7],
+          columns: [{ widthPt: 7 }],
           rows: [
             {
               heightPt: 20,
@@ -360,7 +360,7 @@ describe("convertPresentationToLayout: tables", () => {
   function tableShape(): ContentShape {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [50, 50],
+      columns: [{ widthPt: 50 }, { widthPt: 50 }],
       rows: [
         {
           heightPt: 20,
@@ -419,7 +419,7 @@ describe("convertPresentationToLayout: tables", () => {
     };
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [40, 30, 30],
+      columns: [{ widthPt: 40 }, { widthPt: 30 }, { widthPt: 30 }],
       rows: [{ heightPt: 20, cells: [anchor, covered, after] }],
     };
     const layout = convert([
@@ -463,7 +463,7 @@ describe("convertPresentationToLayout: tables", () => {
     };
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [50, 50],
+      columns: [{ widthPt: 50 }, { widthPt: 50 }],
       rows: [
         {
           heightPt: 20,
@@ -506,7 +506,7 @@ describe("convertPresentationToLayout: tables", () => {
     // A 'pattern' fill stating neither foregroundColor nor backgroundColor (the reserved gray125 scaffolding pattern, or a theme/indexed colour this reader could not resolve) is exactly the case resolveCellFillColor's own doc comment names as returning undefined — genuinely no fill, not a reason to still push a rect item that would render invisibly.
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [50],
+      columns: [{ widthPt: 50 }],
       rows: [
         {
           heightPt: 20,
@@ -589,7 +589,7 @@ describe("convertPresentationToLayout: rotation", () => {
   it("skips table cell background rects for a rotated shape rather than positioning them unrotated", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [50],
+      columns: [{ widthPt: 50 }],
       rows: [
         { cells: [{ blocks: [], background: { kind: "solid", color: RED } }] },
       ],
@@ -612,7 +612,7 @@ describe("convertPresentationToLayout: rotation", () => {
     };
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [50, 50],
+      columns: [{ widthPt: 50 }, { widthPt: 50 }],
       rows: [{ heightPt: 20, cells: [{ blocks: [] }, scaled] }],
     };
     convert([
@@ -637,7 +637,7 @@ describe("convertPresentationToLayout: rotation", () => {
             blocks: [
               {
                 kind: "table",
-                columnWidthsPt: [0],
+                columns: [{ widthPt: 0 }],
                 rows: [{ heightPt: 20, cells: [flat] }],
               },
             ],
@@ -660,7 +660,7 @@ describe("convertPresentationToLayout: rotation", () => {
             blocks: [
               {
                 kind: "table",
-                columnWidthsPt: [50],
+                columns: [{ widthPt: 50 }],
                 rows: [
                   { heightPt: 20, cells: [first] },
                   { heightPt: 30, cells: [second] },

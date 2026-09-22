@@ -197,9 +197,9 @@ function sheetToTableBlock(sheet: ContentSheet): ContentBlock | undefined {
   const columnWidthByIndex = new Map(
     sheet.columns.map((column) => [column.index, column.widthPt] as const),
   );
-  const columnWidthsPt = visibleColumns.map(
-    (column) => columnWidthByIndex.get(column) ?? 72,
-  );
+  const columns = visibleColumns.map((column) => ({
+    widthPt: columnWidthByIndex.get(column) ?? 72,
+  }));
   const rows: ContentTableRow[] = visibleRows.map((row) => ({
     cells: visibleColumns.map((column) =>
       spreadsheetCellToTableCell(
@@ -208,7 +208,7 @@ function sheetToTableBlock(sheet: ContentSheet): ContentBlock | undefined {
     ),
   }));
 
-  return { kind: "table", rows, columnWidthsPt };
+  return { kind: "table", rows, columns };
 }
 
 // spreadsheet → wordprocessing: each sheet becomes its own H2-headed section flow, plus (when it has any visible cells) one table — a sheet's own formulas, print settings, comments, and anchored images/embedded objects have no wordprocessing counterpart and are silently out of scope, the same "structural mismatch, not a bug" framing this file's other three directions already use for their own dropped fields. headingLevel (not a producer-specific styleId) marks each sheet-name heading, so every wordprocessing-family builder recognises it as a heading on its own terms. All sheets land in a single A4 section, matching presentationToWordprocessing's own one-section convention for a source variant with no wordprocessing section boundary of its own.

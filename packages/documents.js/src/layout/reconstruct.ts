@@ -1983,7 +1983,7 @@ function recoverTaggedTables(
       row.cells.sort((a, b) => a.cell.order - b.cell.order);
     }
     const columnCount = Math.max(...rows.map((row) => row.cells.length));
-    const columnWidthsPt: number[] = [];
+    const columns: ContentTable["columns"] = [];
     for (let j = 0; j < columnCount; j++) {
       let minX = Number.POSITIVE_INFINITY;
       let maxX = Number.NEGATIVE_INFINITY;
@@ -1999,7 +1999,9 @@ function recoverTaggedTables(
       }
       const width = maxX - minX;
       // The same nominal fallback the spreadsheet direction's last-column measurement takes: only reached when no item in the column reports a width at all.
-      columnWidthsPt.push(width > 0 ? width : DEFAULT_COLUMN_WIDTH_FALLBACK_PT);
+      columns.push({
+        widthPt: width > 0 ? width : DEFAULT_COLUMN_WIDTH_FALLBACK_PT,
+      });
     }
     const allItems = cells.flatMap((cellEntry) => cellEntry.items);
     const contentRows: ContentTableRow[] = rows.map((row) => {
@@ -2020,7 +2022,7 @@ function recoverTaggedTables(
     const table: ContentTable = {
       kind: "table",
       rows: contentRows,
-      columnWidthsPt,
+      columns,
     };
     stampFrame(table, pageIndex, box);
     recovered.push({
@@ -2120,11 +2122,13 @@ function recoverTable(
     return undefined; // an empty lattice is decoration, not a table — see this section's own note
   }
 
-  const columnWidthsPt: number[] = [];
+  const columns: ContentTable["columns"] = [];
   for (let j = 0; j < columnCount; j++) {
-    columnWidthsPt.push(
-      lattice.columnBoundariesAscPt[j + 1]! - lattice.columnBoundariesAscPt[j]!,
-    );
+    columns.push({
+      widthPt:
+        lattice.columnBoundariesAscPt[j + 1]! -
+        lattice.columnBoundariesAscPt[j]!,
+    });
   }
   // Each region contributes one anchor at its top-left atomic position, and denseTableRows fills every other position the region covers (further columns of its first row, and every column of its later rows) with an empty covered cell, so each row holds one entry per grid column as ContentTable's own grid rule requires.
   const positionedRows: PositionedTableRow[] = [];
@@ -2173,7 +2177,7 @@ function recoverTable(
     heightPt: topYPt - bottomYPt,
   };
   const frame = flipY(pdfBox, page.heightPt);
-  const table: ContentTable = { kind: "table", rows, columnWidthsPt };
+  const table: ContentTable = { kind: "table", rows, columns };
   stampFrame(table, pageIndex, pdfBox);
   return {
     table,

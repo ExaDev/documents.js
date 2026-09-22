@@ -283,7 +283,12 @@ describe("tableAnchorBoxes", () => {
   it("places each anchor at the summed width of the columns to its left and gives it the summed width of the columns it spans, scaled", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [10, 20, 30, 40],
+      columns: [
+        { widthPt: 10 },
+        { widthPt: 20 },
+        { widthPt: 30 },
+        { widthPt: 40 },
+      ],
       rows: [
         {
           cells: [
@@ -309,7 +314,7 @@ describe("tableAnchorBoxes", () => {
     const anchor: ContentTableCell = { blocks: [], colSpan: 2 };
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [10, 20, 30],
+      columns: [{ widthPt: 10 }, { widthPt: 20 }, { widthPt: 30 }],
       rows: [{ cells: [{ blocks: [] }, anchor, { blocks: [] }] }],
     };
     const [first] = tableAnchorBoxes(table, 1);
@@ -325,7 +330,7 @@ describe("tableAnchorBoxes", () => {
     const anchor: ContentTableCell = { blocks: [], rowSpan: 3 };
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [10, 20],
+      columns: [{ widthPt: 10 }, { widthPt: 20 }],
       rows: [
         { cells: [anchor, { blocks: [] }] },
         { cells: [{ blocks: [] }, { blocks: [] }] },
@@ -341,7 +346,7 @@ describe("tableAnchorBoxes", () => {
   it("pairs each box list with the table row it came from", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [10],
+      columns: [{ widthPt: 10 }],
       rows: [{ cells: [{ blocks: [] }] }, { cells: [{ blocks: [] }] }],
     };
     expect(tableAnchorBoxes(table, 1).map(({ row }) => row)).toEqual(

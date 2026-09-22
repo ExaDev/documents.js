@@ -288,7 +288,7 @@ describe("reconstructWordprocessing: tagged table recovery (#760)", () => {
     const table = blocks(tableDoc()).find(
       (b): b is Extract<ContentBlock, { kind: "table" }> => b.kind === "table",
     );
-    expect(table!.columnWidthsPt).toEqual([44, 40]);
+    expect(table!.columns).toEqual([{ widthPt: 44 }, { widthPt: 40 }]);
   });
 
   it("removes the claimed text from the paragraph flow", () => {

@@ -389,11 +389,11 @@ function appendTable(body: DocxBody, block: ContentTable): void {
       "buildDocxPackage: table has no rows, and a table with no rows cannot be written in every word-processing format (ODF requires at least one table:table-row)",
     );
   }
-  // The grid is as wide as the rows and columnWidthsPt together state, so a table that states no column widths still gets one w:gridCol per grid column; a column with no stated width takes an equal share of the default table width, the same as any column created without one.
+  // The grid is as wide as the rows and columns together state, so a table that states no column widths still gets one w:gridCol per grid column; a column with no stated width takes an equal share of the default table width, the same as any column created without one.
   const table = body.appendTable({
     rows: 0,
     columns: tableGridColumnCount(block),
-    columnWidthsTwips: block.columnWidthsPt.map(ptToTwips),
+    columnWidthsTwips: block.columns.map((c) => ptToTwips(c.widthPt)),
   });
   const positionsByRow = walkTableGrid(block);
   block.rows.forEach((row, rowIndex) => {

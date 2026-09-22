@@ -236,7 +236,7 @@ describe("the real SalesByRegion report rendered end to end from form-and-report
         );
       }
       expect(
-        block.columnWidthsPt.reduce((total, width) => total + width, 0),
+        block.columns.reduce((total, column) => total + column.widthPt, 0),
       ).toBeCloseTo(contentWidthPt, 10);
     }
   });

@@ -1569,7 +1569,7 @@ describe("reconstructWordprocessing: gridline-gated table recovery", () => {
     if (table?.kind !== "table") {
       throw new Error("expected a recovered table block");
     }
-    expect(table.columnWidthsPt).toEqual([120, 180]);
+    expect(table.columns).toEqual([{ widthPt: 120 }, { widthPt: 180 }]);
     expect(table.rows.map((r) => r.heightPt)).toEqual([50, 50]);
     expect(
       table.rows.map((r) =>
@@ -1745,7 +1745,7 @@ describe("reconstructWordprocessing: gridline-gated table recovery", () => {
     if (table?.kind !== "table") {
       throw new Error("expected a recovered table block");
     }
-    expect(table.columnWidthsPt).toEqual([120, 180]);
+    expect(table.columns).toEqual([{ widthPt: 120 }, { widthPt: 180 }]);
     expect(table.rows.map((r) => r.heightPt)).toEqual([50, 50]);
     expect(
       table.rows.map((r) =>
@@ -1781,7 +1781,7 @@ describe("reconstructWordprocessing: gridline-gated table recovery", () => {
     if (table?.kind !== "table") {
       throw new Error("expected a recovered table block");
     }
-    expect(table.columnWidthsPt).toEqual([120, 180]);
+    expect(table.columns).toEqual([{ widthPt: 120 }, { widthPt: 180 }]);
     expect(table.rows.map((r) => r.heightPt)).toEqual([50, 50]);
   });
 
@@ -1803,7 +1803,7 @@ describe("reconstructWordprocessing: gridline-gated table recovery", () => {
     if (table?.kind !== "table") {
       throw new Error("expected a recovered table block");
     }
-    expect(table.columnWidthsPt).toEqual([120, 180]);
+    expect(table.columns).toEqual([{ widthPt: 120 }, { widthPt: 180 }]);
     expect(table.rows.map((r) => r.heightPt)).toEqual([50, 50]);
   });
 
@@ -1829,7 +1829,7 @@ describe("reconstructWordprocessing: gridline-gated table recovery", () => {
     if (table?.kind !== "table") {
       throw new Error("expected a recovered table block");
     }
-    expect(table.columnWidthsPt).toEqual([150, 150]);
+    expect(table.columns).toEqual([{ widthPt: 150 }, { widthPt: 150 }]);
     expect(table.rows.map((r) => r.heightPt)).toEqual([100, 100]);
   });
 });
@@ -1952,7 +1952,11 @@ describe("reconstructWordprocessing: irregular gridlines recover colSpan/rowSpan
           b.kind === "paragraph" ? b.runs.map((r) => r.text) : [],
         )
         .join("");
-    expect(table.columnWidthsPt).toEqual([100, 100, 100]);
+    expect(table.columns).toEqual([
+      { widthPt: 100 },
+      { widthPt: 100 },
+      { widthPt: 100 },
+    ]);
     expect(table.rows.map((row) => row.cells.length)).toEqual([3, 3, 3]);
     const anchor = table.rows[0]!.cells[0]!;
     expect(anchor.colSpan).toBe(2);
