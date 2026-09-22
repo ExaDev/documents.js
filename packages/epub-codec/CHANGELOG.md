@@ -1,3 +1,14 @@
+## [5.1.0](https://github.com/ExaDev/documents.js/compare/epub-codec%405.0.2...epub-codec%405.1.0) (2026-09-22)
+
+### Features
+
+* **epub-codec:** report a dropped header column via a diagnostic ([a2b1bf6](https://github.com/ExaDev/documents.js/commit/a2b1bf6f93c04c6d1b88db0afb687315601a667f))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.0
+
 ## [5.0.2](https://github.com/ExaDev/documents.js/compare/epub-codec%405.0.1...epub-codec%405.0.2) (2026-09-22)
 
 ### Bug Fixes

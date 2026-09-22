@@ -1,3 +1,15 @@
+## [12.0.2](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.0.1...ooxml.js%4012.0.2) (2026-09-22)
+
+### Code Refactoring
+
+* **ooxml.js:** migrate docx and pptx tables to ContentTable.columns ([b14fb74](https://github.com/ExaDev/documents.js/commit/b14fb743f0c66538be24eb28f31c9426da1d12c0))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.0
+- Updated archive-codec to 1.11.12
+
 ## [12.0.1](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.0.0...ooxml.js%4012.0.1) (2026-09-22)
 
 ### Bug Fixes

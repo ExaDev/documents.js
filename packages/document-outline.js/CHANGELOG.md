@@ -1,3 +1,15 @@
+## [3.10.0](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.9.23...document-outline.js%403.10.0) (2026-09-22)
+
+### Features
+
+* **documents.js:** give the odt table editor real header-column support ([afd1c5a](https://github.com/ExaDev/documents.js/commit/afd1c5a5c7b8b2c1322c1d976c5b1aa61de10de3))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.0
+- Updated pdf-codec to 5.2.6
+
 ## [3.9.23](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.9.22...document-outline.js%403.9.23) (2026-09-22)
 
 ### Bug Fixes

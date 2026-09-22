@@ -1,3 +1,16 @@
+## [1.6.0](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.5.53...document-compute.js%401.6.0) (2026-09-22)
+
+### Features
+
+* **documents.js:** give the odt table editor real header-column support ([afd1c5a](https://github.com/ExaDev/documents.js/commit/afd1c5a5c7b8b2c1322c1d976c5b1aa61de10de3))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.0
+- Updated markdown-codec to 11.1.0
+- Updated documents.js to 14.2.0
+
 ## [1.5.53](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.5.52...document-compute.js%401.5.53) (2026-09-22)
 
 ### Bug Fixes

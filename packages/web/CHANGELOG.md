@@ -1,3 +1,17 @@
+## [2.12.0](https://github.com/ExaDev/documents.js/compare/web%402.11.61...web%402.12.0) (2026-09-22)
+
+### Features
+
+* **documents.js:** give the odt table editor real header-column support ([afd1c5a](https://github.com/ExaDev/documents.js/commit/afd1c5a5c7b8b2c1322c1d976c5b1aa61de10de3))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.0
+- Updated markdown-codec to 11.1.0
+- Updated ooxml.js to 12.0.2
+- Updated documents.js to 14.2.0
+
 ## [2.11.61](https://github.com/ExaDev/documents.js/compare/web%402.11.60...web%402.11.61) (2026-09-22)
 
 ### Bug Fixes

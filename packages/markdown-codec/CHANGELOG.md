@@ -1,3 +1,14 @@
+## [11.1.0](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.0.2...markdown-codec%4011.1.0) (2026-09-22)
+
+### Features
+
+* **markdown-codec:** report a dropped header column via a diagnostic ([8d216db](https://github.com/ExaDev/documents.js/commit/8d216db61d189de3fa626d83122abc313c26a34a))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.0
+
 ## [11.0.2](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.0.1...markdown-codec%4011.0.2) (2026-09-22)
 
 ### Bug Fixes
