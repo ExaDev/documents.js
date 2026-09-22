@@ -300,7 +300,7 @@ describe("readPptStreams", () => {
               heightPt: 60,
             },
           ],
-          columnWidthsPt: [216, 216],
+          columns: [{ widthPt: 216 }, { widthPt: 216 }],
         },
       ]);
     });
@@ -341,7 +341,7 @@ describe("readPptStreams", () => {
             heightPt: 60,
           },
         ],
-        columnWidthsPt: [216, 216],
+        columns: [{ widthPt: 216 }, { widthPt: 216 }],
       });
     });
 
@@ -382,9 +382,9 @@ describe("readPptStreams", () => {
       if (table?.kind !== "table") {
         throw new Error("expected a table block");
       }
-      expect(table.columnWidthsPt).toHaveLength(2);
+      expect(table.columns).toHaveLength(2);
       for (const row of table.rows) {
-        expect(row.cells).toHaveLength(table.columnWidthsPt.length);
+        expect(row.cells).toHaveLength(table.columns.length);
         for (const cell of row.cells) {
           expect(cell.colSpan).toBeUndefined();
           expect(cell.rowSpan).toBeUndefined();

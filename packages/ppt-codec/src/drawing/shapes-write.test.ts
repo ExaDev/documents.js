@@ -250,7 +250,7 @@ function tableShape(
   const table: ContentTable = {
     kind: "table",
     rows: [...rows],
-    columnWidthsPt: [...columnWidthsPt],
+    columns: columnWidthsPt.map((widthPt) => ({ widthPt })),
   };
   return textShape({ blocks: [table], ...overrides });
 }
@@ -549,6 +549,36 @@ describe("writeSlideDrawing: table cell spans and content", () => {
     expect(reported[0]?.message).toContain("table row 1");
   });
 
+  it("reports a header column, naming the column it dropped the flag from, and stays silent for an ordinary one", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columns: [{ widthPt: 50 }, { widthPt: 50, isHeader: true }],
+      rows: [{ cells: [{ blocks: [] }, { blocks: [] }] }],
+    };
+    const diagnostics = collectDiagnostics([
+      { shape: textShape({ blocks: [table] }), clientData: undefined },
+    ]);
+    const reported = diagnostics.filter(
+      (d) => d.code === PptDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED,
+    );
+    expect(reported).toHaveLength(1);
+    expect(reported[0]?.message).toContain("table column 1");
+  });
+
+  it("reports no header column at all for a table whose columns state none", () => {
+    const diagnostics = collectDiagnostics([
+      {
+        shape: tableShape([{ cells: [{ blocks: [] }] }], [50]),
+        clientData: undefined,
+      },
+    ]);
+    expect(
+      diagnostics.some(
+        (d) => d.code === PptDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED,
+      ),
+    ).toBe(false);
+  });
+
   it("writes one shape at its own grid position for every entry of a merged region, so a covered entry neither obscures the anchor nor removes a row from the grid", () => {
     // A 2x2 region anchored at (0,0) in a 3-row, 2-column grid. The dense grid rule keeps a block-less entry at each covered position; the format has no merge records, so each entry, covered ones included, is a plain shape at the position its array index names, and the anchor stays one cell wide and one row tall. Row 1 holds only covered entries, so skipping them would erase that row on the way back in.
     const diagnostics: PptDiagnostic[] = [];
@@ -818,7 +848,7 @@ describe("writeSlideDrawing: block planning", () => {
               widthPt: 10,
               heightPt: 10,
             },
-            { kind: "table", rows: [], columnWidthsPt: [] },
+            { kind: "table", rows: [], columns: [] },
           ],
         }),
         clientData: undefined,
