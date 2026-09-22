@@ -803,7 +803,7 @@ describe("buildPptxPackage: a table row's own isHeader has no DrawingML spelling
   it("reports a warning naming the row, and does not throw, when no onDiagnostic is supplied", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100, 100],
+      columns: [{ widthPt: 100 }, { widthPt: 100 }],
       rows: [
         { isHeader: true, cells: [cellOf("Name"), cellOf("Score")] },
         { cells: [cellOf("Ada"), cellOf("10")] },
@@ -816,7 +816,7 @@ describe("buildPptxPackage: a table row's own isHeader has no DrawingML spelling
     const table: ContentTable = {
       kind: "table",
       sourcePath: "slides/slide1.xml#/shapes/0",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [{ isHeader: true, cells: [cellOf("Name")] }],
     };
     const contexts: { readonly sourcePath?: string }[] = [];
@@ -829,7 +829,7 @@ describe("buildPptxPackage: a table row's own isHeader has no DrawingML spelling
   it("passes an undefined sourcePath when the table itself carries none", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [{ isHeader: true, cells: [cellOf("Name")] }],
     };
     const contexts: { readonly sourcePath?: string }[] = [];
@@ -842,7 +842,7 @@ describe("buildPptxPackage: a table row's own isHeader has no DrawingML spelling
   it("calls onDiagnostic once, with TABLE_HEADER_ROW_DROPPED, naming the row's own index", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100, 100],
+      columns: [{ widthPt: 100 }, { widthPt: 100 }],
       rows: [
         { isHeader: true, cells: [cellOf("Name"), cellOf("Score")] },
         { cells: [cellOf("Ada"), cellOf("10")] },
@@ -864,7 +864,7 @@ describe("buildPptxPackage: a table row's own isHeader has no DrawingML spelling
   it("still writes the header row's own content, exactly like any other row", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100, 100],
+      columns: [{ widthPt: 100 }, { widthPt: 100 }],
       rows: [
         { isHeader: true, cells: [cellOf("Name"), cellOf("Score")] },
         { cells: [cellOf("Ada"), cellOf("10")] },
@@ -894,7 +894,7 @@ describe("buildPptxPackage: a table row's own isHeader has no DrawingML spelling
   it("reports a diagnostic per flagged row, naming each one's own index, for non-contiguous header rows", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         { isHeader: true, cells: [cellOf("a")] },
         { cells: [cellOf("b")] },
@@ -914,7 +914,86 @@ describe("buildPptxPackage: a table row's own isHeader has no DrawingML spelling
   it("reports nothing at all for a table whose rows state no header flag", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
+      rows: [{ cells: [cellOf("a")] }, { cells: [cellOf("b")] }],
+    };
+    const diagnostics: PptxWriteDiagnostic[] = [];
+    buildPptxPackage(documentOf(table), {
+      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+    });
+    expect(diagnostics).toEqual([]);
+  });
+
+  it("calls onDiagnostic once, with TABLE_HEADER_COLUMN_DROPPED, naming the column's own index", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columns: [{ widthPt: 100, isHeader: true }, { widthPt: 100 }],
+      rows: [{ cells: [cellOf("Name"), cellOf("Score")] }],
+    };
+    const diagnostics: PptxWriteDiagnostic[] = [];
+    buildPptxPackage(documentOf(table), {
+      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+    });
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toEqual({
+      code: PptxWriteDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED,
+      severity: "warning",
+      message:
+        "buildPptxPackage: table column 0 is a header column, and that is dropped; DrawingML has no header-column marker, so the column is written exactly as any other",
+    });
+  });
+
+  it("still writes the header column's own cell content, exactly like any other column", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columns: [{ widthPt: 100, isHeader: true }, { widthPt: 100 }],
+      rows: [{ cells: [cellOf("Name"), cellOf("Score")] }],
+    };
+    const reread = readPptxContent(buildPptxPackage(documentOf(table)));
+    if (reread.kind !== "presentation") {
+      throw new Error("expected a presentation ContentDocument");
+    }
+    const block = reread.slides[0]?.shapes[0]?.blocks[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected the slide's shape to hold a table");
+    }
+    // The flag itself does not round-trip (DrawingML has no header-column marker to read it back from), but the column's own cell text survives untouched.
+    expect(block.columns[0]?.isHeader).toBeUndefined();
+    expect(
+      block.rows[0]?.cells.map((cell) =>
+        cell.blocks.flatMap((cellBlock) =>
+          cellBlock.kind === "paragraph"
+            ? cellBlock.runs.map((run) => run.text)
+            : [],
+        ),
+      ),
+    ).toEqual([["Name"], ["Score"]]);
+  });
+
+  it("reports a diagnostic per flagged column, naming each one's own index, for non-contiguous header columns", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columns: [
+        { widthPt: 100, isHeader: true },
+        { widthPt: 100 },
+        { widthPt: 100, isHeader: true },
+      ],
+      rows: [{ cells: [cellOf("a"), cellOf("b"), cellOf("c")] }],
+    };
+    const diagnostics: PptxWriteDiagnostic[] = [];
+    buildPptxPackage(documentOf(table), {
+      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+    });
+    expect(diagnostics.map((d) => d.message)).toEqual([
+      expect.stringContaining("table column 0 is a header column"),
+      expect.stringContaining("table column 2 is a header column"),
+    ]);
+  });
+
+  it("reports nothing at all for a table whose columns state no header flag", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columns: [{ widthPt: 100 }],
       rows: [{ cells: [cellOf("a")] }, { cells: [cellOf("b")] }],
     };
     const diagnostics: PptxWriteDiagnostic[] = [];
