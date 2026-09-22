@@ -563,6 +563,16 @@ function writeTable(
   if (fault !== undefined) {
     throw new EpubTableGridFaultError(fault);
   }
+  // This writer emits no <colgroup>/<col> at all, so there is nowhere a header column's own state could land even if standard HTML gave <col> an attribute for it, which it does not (ExaDev/documents.js#1381). Reported once per table rather than once per flagged column.
+  if (table.columns.some((column) => column.isHeader === true)) {
+    context.sink({
+      code: EpubDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED,
+      severity: "info",
+      message:
+        "this table states one or more header columns, and this writer has no XHTML construct for a column repeating at the left of each printed page, so the flag is dropped and will not read back",
+      href: context.sourceHref,
+    });
+  }
   // HTML states anchors only: a covered position of a merged region has no <td> of its own, its extent being carried by the anchor's colspan/rowspan, so emitting one would widen the row past the grid.
   const gridPositions = walkTableGrid(table);
   const rows = gridPositions.map((rowPositions, rowIndex) => {

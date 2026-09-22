@@ -215,7 +215,7 @@ describe("writeEpubContent: a table breaking the grid rule", () => {
       section([
         {
           kind: "table",
-          columnWidthsPt: [100, 100],
+          columns: [{ widthPt: 100 }, { widthPt: 100 }],
           rows: [
             {
               cells: [

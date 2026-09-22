@@ -92,7 +92,7 @@ describe("writeEpubContent -> readEpubContent round trip", () => {
                   ],
                 },
               ],
-              columnWidthsPt: [451.28],
+              columns: [{ widthPt: 451.28 }],
             },
             {
               kind: "image",

@@ -56,6 +56,7 @@ export const EpubDiagnosticCodes = {
   NOSCRIPT_CONTENT_SKIPPED: "epub/noscript-content-skipped",
   // src/xhtml (write side: ContentDocument -> XHTML)
   CONSTRUCT_UNREPRESENTED: "epub/construct-unrepresented",
+  TABLE_HEADER_COLUMN_DROPPED: "epub/table-header-column-dropped",
   // src/read.ts (package-level: invented page geometry, matching markdown-codec's own precedent)
   INVENTED_PAGE_GEOMETRY: "epub/invented-page-geometry",
 } as const;
