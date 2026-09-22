@@ -1035,13 +1035,24 @@ class RtfWriter {
     if (fault !== undefined) {
       throw new RtfTableGridFaultError(fault);
     }
+    // RTF has no header-column concept at all: unlike a row's own \trhdr, no control word scoped to a single \cellxN column states that it repeats at the left of each printed page (ExaDev/documents.js#1381). Reported once per table rather than once per flagged column, matching PACKAGE_TABLE_DROPPED's own once-per-table shape immediately below.
+    if (table.columns.some((column) => column.isHeader === true)) {
+      this.sink({
+        code: RtfDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED,
+        severity: "info",
+        message:
+          "this table states one or more header columns, and RTF has no control word for a column repeating at the left of each printed page, so the flag is dropped and will not read back",
+      });
+    }
     // ContentTable's rows are dense (one entry per grid column) and RTF's are too (one \cellxN and one \cell per grid column), so each grid position maps to exactly one RTF cell slot. The walk classifies each as an anchor or as covered by a merged region.
     for (const [rowIndex, positions] of walkTableGrid(table).entries()) {
       // "\cellxN Defines the right boundary of a cell", cumulative from the row's own left edge, so the boundaries are a running total of the column widths.
       let right = 0;
       const definitions: string[] = [];
       for (const position of positions) {
-        right += pointsToTwips(table.columnWidthsPt[position.columnIndex] ?? 0);
+        right += pointsToTwips(
+          table.columns[position.columnIndex]?.widthPt ?? 0,
+        );
         definitions.push(this.cellDefinition(position, right));
       }
       // The row's own <rowwrite> member inside its <tbldef>, where the spec's production places it — after \trowd's own leading members and before the <celldef>+ run each \cellxN closes. \ltrrow is the default the spec states ("Cells in this table row will have left-to-right precedence (the default)"), so it is written only for a stated `direction: "ltr"`, never as a restated default.

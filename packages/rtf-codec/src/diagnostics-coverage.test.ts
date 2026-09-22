@@ -175,6 +175,48 @@ describe("every write-side diagnostic code is reachable", () => {
     ).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
   });
 
+  it("rtf/table-header-column-dropped", () => {
+    expect(
+      writeCodes(
+        wordprocessing([
+          {
+            kind: "table",
+            columns: [{ widthPt: 72, isHeader: true }, { widthPt: 144 }],
+            rows: [
+              {
+                cells: [
+                  { blocks: [{ kind: "paragraph", runs: [{ text: "A" }] }] },
+                  { blocks: [{ kind: "paragraph", runs: [{ text: "B" }] }] },
+                ],
+              },
+            ],
+          },
+        ]),
+      ),
+    ).toContain(RtfDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED);
+  });
+
+  it("writes no rtf/table-header-column-dropped diagnostic when no column states isHeader", () => {
+    expect(
+      writeCodes(
+        wordprocessing([
+          {
+            kind: "table",
+            columns: [{ widthPt: 72 }, { widthPt: 144 }],
+            rows: [
+              {
+                cells: [
+                  { blocks: [{ kind: "paragraph", runs: [{ text: "A" }] }] },
+                  { blocks: [{ kind: "paragraph", runs: [{ text: "B" }] }] },
+                ],
+              },
+            ],
+          },
+        ]),
+      ),
+    ).not.toContain(RtfDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED);
+  });
+
   it("rtf/package-table-dropped", () => {
     const table = {
       n1: {

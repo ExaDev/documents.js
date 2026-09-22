@@ -2290,7 +2290,7 @@ describe("body constructs", () => {
       wordprocessing([
         {
           kind: "table",
-          columnWidthsPt: [72, 144],
+          columns: [{ widthPt: 72 }, { widthPt: 144 }],
           rows: [
             {
               cells: [
@@ -2311,12 +2311,46 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  it("reports a header column's own drop with a message naming why RTF cannot state it", () => {
+    const diagnostics: { code: string; message: string }[] = [];
+    writeRtfContent(
+      wordprocessing([
+        {
+          kind: "table",
+          columns: [{ widthPt: 72, isHeader: true }, { widthPt: 144 }],
+          rows: [
+            {
+              cells: [
+                { blocks: [{ kind: "paragraph", runs: [{ text: "A" }] }] },
+                { blocks: [{ kind: "paragraph", runs: [{ text: "B" }] }] },
+              ],
+            },
+          ],
+        },
+      ]),
+      {
+        sink: (diagnostic) =>
+          diagnostics.push({
+            code: diagnostic.code,
+            message: diagnostic.message,
+          }),
+      },
+    );
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED,
+        message:
+          "this table states one or more header columns, and RTF has no control word for a column repeating at the left of each printed page, so the flag is dropped and will not read back",
+      },
+    ]);
+  });
+
   it("resets to \\pard after the table, before whatever follows, so a paragraph after it does not inherit \\intbl", () => {
     const out = write(
       wordprocessing([
         {
           kind: "table",
-          columnWidthsPt: [72],
+          columns: [{ widthPt: 72 }],
           rows: [{ cells: [{ blocks: [] }] }],
         },
         { kind: "paragraph", runs: [{ text: "after" }] },
@@ -2334,7 +2368,7 @@ describe("body constructs", () => {
       wordprocessing([
         {
           kind: "table",
-          columnWidthsPt: [72],
+          columns: [{ widthPt: 72 }],
           rows: [
             {
               cells: [
@@ -2360,7 +2394,7 @@ describe("body constructs", () => {
       wordprocessing([
         {
           kind: "table",
-          columnWidthsPt: [72],
+          columns: [{ widthPt: 72 }],
           rows: [
             {
               isHeader: true,
@@ -2386,7 +2420,7 @@ describe("body constructs", () => {
       wordprocessing([
         {
           kind: "table",
-          columnWidthsPt: [72],
+          columns: [{ widthPt: 72 }],
           rows: [
             {
               isHeader: true,
@@ -2407,7 +2441,7 @@ describe("body constructs", () => {
       wordprocessing([
         {
           kind: "table",
-          columnWidthsPt: [72],
+          columns: [{ widthPt: 72 }],
           rows: [
             {
               direction: "rtl",
@@ -2432,7 +2466,7 @@ describe("body constructs", () => {
       wordprocessing([
         {
           kind: "table",
-          columnWidthsPt: [72],
+          columns: [{ widthPt: 72 }],
           rows: [
             {
               cells: [
@@ -2451,7 +2485,7 @@ describe("body constructs", () => {
       wordprocessing([
         {
           kind: "table",
-          columnWidthsPt: [72, 72],
+          columns: [{ widthPt: 72 }, { widthPt: 72 }],
           rows: [
             {
               cells: [
@@ -2477,7 +2511,7 @@ describe("body constructs", () => {
       wordprocessing([
         {
           kind: "table",
-          columnWidthsPt: [72],
+          columns: [{ widthPt: 72 }],
           rows: [
             {
               cells: [
@@ -2502,7 +2536,7 @@ describe("body constructs", () => {
         wordprocessing([
           {
             kind: "table",
-            columnWidthsPt: [72],
+            columns: [{ widthPt: 72 }],
             rows: [
               {
                 cells: [
@@ -2945,7 +2979,7 @@ describe("round trip through this package's own reader", () => {
             },
             {
               kind: "table",
-              columnWidthsPt: [72],
+              columns: [{ widthPt: 72 }],
               rows: [
                 {
                   direction: "rtl",
@@ -2989,7 +3023,7 @@ describe("round trip through this package's own reader", () => {
           blocks: [
             {
               kind: "table",
-              columnWidthsPt: [72, 72, 72],
+              columns: [{ widthPt: 72 }, { widthPt: 72 }, { widthPt: 72 }],
               rows: [
                 {
                   cells: [
@@ -3113,7 +3147,7 @@ describe("round trip through this package's own reader", () => {
       wordprocessing([
         {
           kind: "table",
-          columnWidthsPt: [72, 144],
+          columns: [{ widthPt: 72 }, { widthPt: 144 }],
           rows: [
             {
               cells: [
@@ -3136,9 +3170,9 @@ describe("round trip through this package's own reader", () => {
     const blocks =
       back.kind === "wordprocessing" ? (back.sections[0]?.blocks ?? []) : [];
     const table = blocks.find((block) => block.kind === "table");
-    expect(table?.kind === "table" ? table.columnWidthsPt : undefined).toEqual([
-      72, 144,
-    ]);
+    expect(
+      table?.kind === "table" ? table.columns.map((c) => c.widthPt) : undefined,
+    ).toEqual([72, 144]);
     expect(
       table?.kind === "table" ? table.rows[0]?.cells.length : undefined,
     ).toBe(2);
@@ -3953,7 +3987,7 @@ describe("round trip through this package's own reader", () => {
     const document = wordprocessing([
       {
         kind: "table",
-        columnWidthsPt: [72, 72, 72],
+        columns: [{ widthPt: 72 }, { widthPt: 72 }, { widthPt: 72 }],
         rows: [
           {
             cells: [
@@ -4003,7 +4037,7 @@ describe("round trip through this package's own reader", () => {
       wordprocessing([
         {
           kind: "table",
-          columnWidthsPt: [72],
+          columns: [{ widthPt: 72 }],
           rows: [
             { cells: [{ blocks: [], rowSpan: 2 }] },
             { cells: [{ blocks: [] }] },
@@ -4045,7 +4079,7 @@ describe("round trip through this package's own reader", () => {
       wordprocessing([
         {
           kind: "table",
-          columnWidthsPt: [72, 72, 72],
+          columns: [{ widthPt: 72 }, { widthPt: 72 }, { widthPt: 72 }],
           rows: [
             {
               cells: [
@@ -4077,7 +4111,7 @@ describe("round trip through this package's own reader", () => {
       wordprocessing([
         {
           kind: "table",
-          columnWidthsPt: [72, 72],
+          columns: [{ widthPt: 72 }, { widthPt: 72 }],
           rows: [
             {
               cells: [{ blocks: [], colSpan: 2, rowSpan: 2 }, { blocks: [] }],
@@ -4099,7 +4133,7 @@ describe("round trip through this package's own reader", () => {
       wordprocessing([
         {
           kind: "table",
-          columnWidthsPt: [72, 72],
+          columns: [{ widthPt: 72 }, { widthPt: 72 }],
           rows: [
             {
               cells: [
@@ -4130,7 +4164,7 @@ describe("round trip through this package's own reader", () => {
     // A merged header whose covered position carries a second copy of the anchor's content, which an RTF cell slot for a covered position does not hold.
     const coveredContentTable: ContentTable = {
       kind: "table",
-      columnWidthsPt: [72, 72],
+      columns: [{ widthPt: 72 }, { widthPt: 72 }],
       rows: [
         {
           cells: [
@@ -4169,7 +4203,7 @@ describe("round trip through this package's own reader", () => {
     it("throws for rows of differing lengths", () => {
       const error = thrownBy({
         kind: "table",
-        columnWidthsPt: [72, 72],
+        columns: [{ widthPt: 72 }, { widthPt: 72 }],
         rows: [
           {
             cells: [
@@ -4188,7 +4222,7 @@ describe("round trip through this package's own reader", () => {
     const document = wordprocessing([
       {
         kind: "table",
-        columnWidthsPt: [72, 72, 72],
+        columns: [{ widthPt: 72 }, { widthPt: 72 }, { widthPt: 72 }],
         rows: [
           {
             cells: [
@@ -4229,7 +4263,7 @@ describe("round trip through this package's own reader", () => {
     const document = wordprocessing([
       {
         kind: "table",
-        columnWidthsPt: [72],
+        columns: [{ widthPt: 72 }],
         rows: [
           {
             cells: [
@@ -4269,7 +4303,7 @@ describe("round trip through this package's own reader", () => {
     const document = wordprocessing([
       {
         kind: "table",
-        columnWidthsPt: [72],
+        columns: [{ widthPt: 72 }],
         rows: [
           {
             cells: [
@@ -4293,7 +4327,7 @@ describe("round trip through this package's own reader", () => {
     const document = wordprocessing([
       {
         kind: "table",
-        columnWidthsPt: [72],
+        columns: [{ widthPt: 72 }],
         rows: [
           {
             cells: [
@@ -4347,7 +4381,7 @@ describe("round trip through this package's own reader", () => {
       wordprocessing([
         {
           kind: "table",
-          columnWidthsPt: [72],
+          columns: [{ widthPt: 72 }],
           rows: [
             {
               cells: [
@@ -4380,7 +4414,7 @@ describe("round trip through this package's own reader", () => {
     const document = wordprocessing([
       {
         kind: "table",
-        columnWidthsPt: [72],
+        columns: [{ widthPt: 72 }],
         rows: [
           {
             cells: [
@@ -4538,7 +4572,7 @@ describe("round trip through this package's own reader", () => {
       wordprocessing([
         {
           kind: "table",
-          columnWidthsPt: [72],
+          columns: [{ widthPt: 72 }],
           rows: [
             {
               cells: [
@@ -4587,7 +4621,7 @@ describe("round trip through this package's own reader", () => {
       wordprocessing([
         {
           kind: "table",
-          columnWidthsPt: [72],
+          columns: [{ widthPt: 72 }],
           rows: [
             {
               cells: [
@@ -4626,7 +4660,7 @@ describe("round trip through this package's own reader", () => {
       wordprocessing([
         {
           kind: "table",
-          columnWidthsPt: [72],
+          columns: [{ widthPt: 72 }],
           rows: [
             {
               cells: [
