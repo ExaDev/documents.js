@@ -517,7 +517,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["kind"],
     additionalProperties: false,
   },
-  // ContentTableCellSchema/ContentTableRowSchema/ContentTableSchema are real, exported z.object() schemas, and ContentTableCellSchema.blocks reaches the now-real, self-recursive ContentBlockSchema through z.lazy() (ExaDev/documents.js#1009) rather than an opaque z.custom() node — transcribed by hand here regardless, alongside ContentBlock itself, since content-json-schema-defs.test.ts's own REGISTERED_SCHEMAS registry holds all three (ContentBlockSchema included) to a live z.toJSONSchema() comparison together, the same registry-based $ref-reproducing construction every other cross-referencing fragment in this file already relies on.
+  // ContentTableCellSchema/ContentTableColumnSchema/ContentTableRowSchema/ContentTableSchema are real, exported z.object() schemas, and ContentTableCellSchema.blocks reaches the now-real, self-recursive ContentBlockSchema through z.lazy() (ExaDev/documents.js#1009) rather than an opaque z.custom() node. Transcribed by hand here regardless, alongside ContentBlock itself, since content-json-schema-defs.test.ts's own REGISTERED_SCHEMAS registry holds all four (ContentBlockSchema included) to a live z.toJSONSchema() comparison together, the same registry-based $ref-reproducing construction every other cross-referencing fragment in this file already relies on.
   ContentTableCell: {
     type: "object",
     properties: {
@@ -557,23 +557,29 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["cells"],
     additionalProperties: false,
   },
+  // ContentTableColumnSchema (src/content.ts): nonnegative, not positive on widthPt, since both ooxml.js and odf.js's table readers deliberately default an unresolvable column's own width to 0 rather than omitting it, a real shape ExaDev/documents.js#1009's own real-corpus bijection gate confirmed live documents actually produce. isHeader is ODF's table:table-header-columns state (ExaDev/documents.js#1381); see ContentTable's own field comment (src/content.ts) for why only ODF ever states it.
+  ContentTableColumn: {
+    type: "object",
+    properties: {
+      widthPt: { type: "number", minimum: 0 },
+      isHeader: { type: "boolean" },
+    },
+    required: ["widthPt"],
+    additionalProperties: false,
+  },
   ContentTable: {
     type: "object",
     properties: {
       kind: { type: "string", const: "table" },
       rows: { type: "array", items: { $ref: "#/$defs/ContentTableRow" } },
-      // nonnegative, not positive — see ContentTableSchema's own field comment (src/content.ts): both ooxml.js and odf.js's table readers deliberately default an unresolvable column's own width to 0 rather than omitting it, a real shape ExaDev/documents.js#1009's own real-corpus bijection gate confirmed live documents actually produce.
-      columnWidthsPt: {
-        type: "array",
-        items: { type: "number", minimum: 0 },
-      },
+      columns: { type: "array", items: { $ref: "#/$defs/ContentTableColumn" } },
       sourcePath: { type: "string" },
       source: { $ref: "#/$defs/SourceResidue" },
       frames: { type: "array", items: { $ref: "#/$defs/LayoutFrame" } },
       origin: { $ref: "#/$defs/ContentOrigin" },
       interpretation: { $ref: "#/$defs/ContentInterpretation" },
     },
-    required: ["kind", "rows", "columnWidthsPt"],
+    required: ["kind", "rows", "columns"],
     additionalProperties: false,
   },
   // ContentEmbeddedObjectBlock extends ContentEmbeddedObject (src/content.ts): both are real, exported z.object() schemas now (ExaDev/documents.js#1009), transcribed by hand from CONTENT_EMBEDDED_OBJECT_FIELDS/ContentEmbeddedObjectBlockSchema. Deliberately excluded from content-json-schema-defs.test.ts's own live comparison, unlike every other fragment reachable through ContentBlockSchema: their `document` field's cross-file cycle back to ContentDocumentSchema produced an anonymous `#/$defs/__shared#/$defs/schemaN`-shaped ref rather than the CONTENT_DOCUMENT_URI stated below, once ContentDocumentSchema was registered alongside that test's other ~90 entries — confirmed empirically to work correctly in isolation (just these two schemas plus ContentDocumentSchema registered together), so this is a narrow, real interaction between Zod's own cyclic-schema handling and a large multi-schema registry, not the opacity that used to justify hand-transcribing everything below. See that test file's own top comment.

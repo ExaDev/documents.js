@@ -31,7 +31,7 @@ function table(
   return {
     kind: "table",
     rows: rows.map((cells) => ({ cells: [...cells] })),
-    columnWidthsPt: [...columnWidthsPt],
+    columns: columnWidthsPt.map((widthPt) => ({ widthPt })),
   };
 }
 
@@ -365,7 +365,11 @@ describe("placeAnchorTableRows", () => {
       3,
     );
     expect(
-      classifyGrid({ kind: "table", rows, columnWidthsPt: [10, 10, 10] }),
+      classifyGrid({
+        kind: "table",
+        rows,
+        columns: [{ widthPt: 10 }, { widthPt: 10 }, { widthPt: 10 }],
+      }),
     ).toEqual([
       ["anchor", "covered by 0,0", "anchor"],
       ["covered by 0,0", "covered by 0,0", "anchor"],
@@ -402,7 +406,7 @@ describe("findTableGridFault", () => {
     expect(findTableGridFault(table([[], []], []))).toBeUndefined();
   });
 
-  it("does not consult columnWidthsPt", () => {
+  it("does not consult columns", () => {
     const grid = table([[cell("a"), cell("b")]], [10]);
     expect(findTableGridFault(grid)).toBeUndefined();
   });

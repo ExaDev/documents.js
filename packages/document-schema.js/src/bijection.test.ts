@@ -226,7 +226,7 @@ function corpus(): readonly CorpusEntry[] {
         ],
       },
     ],
-    columnWidthsPt: [80, 120],
+    columns: [{ widthPt: 80 }, { widthPt: 120 }],
   };
 
   const entries: CorpusEntry[] = [
@@ -418,7 +418,7 @@ function corpus(): readonly CorpusEntry[] {
                     ],
                   },
                 ],
-                columnWidthsPt: [100],
+                columns: [{ widthPt: 100 }],
               },
             ],
           },
@@ -997,7 +997,7 @@ function runExtentCorpus(): readonly CorpusEntry[] {
         ],
       },
     ],
-    columnWidthsPt: [120],
+    columns: [{ widthPt: 120 }],
   };
   // Two paragraphs sharing an indent tuple AND carrying run extents, so minting actually strips-and-copies them (rebuildParagraph's spread must carry the constructs field through the copy, or law (i) fails here while passing the styles-free entries above).
   const mintingExtentParagraph = (
