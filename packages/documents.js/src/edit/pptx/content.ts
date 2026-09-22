@@ -29,13 +29,19 @@ import type { DrawingParagraphInit } from "./shape";
 import { PptxEditor } from "./editor";
 import { assertTableObeysGridRule } from "../table-grid";
 import { createEmptyPptxPackage } from "./scaffold";
+import {
+  NOOP_PPTX_WRITE_DIAGNOSTIC_SINK,
+  PptxWriteDiagnosticCodes,
+  type PptxWriteDiagnosticSink,
+} from "./diagnostics";
 import type { PptxSlide } from "./slide";
 import type { PptxTable, PptxTableCell } from "./table";
 
-// clock resolves content.metadata's own createdIso/modifiedIso the same way createPptx does (src/model/metadata.ts's resolveMetadataTimestamps) -- systemClock by default, never overwriting a createdIso/modifiedIso the source content already carried. onMathDiagnostic mirrors BuildDocxPackageOptions's own field exactly (src/edit/docx/content.ts) -- ExaDev/documents.js#563's write side now has the identical MathML -> OMML degrade-diagnostic channel docx already exposes.
+// clock resolves content.metadata's own createdIso/modifiedIso the same way createPptx does (src/model/metadata.ts's resolveMetadataTimestamps) -- systemClock by default, never overwriting a createdIso/modifiedIso the source content already carried. onMathDiagnostic mirrors BuildDocxPackageOptions's own field exactly (src/edit/docx/content.ts) -- ExaDev/documents.js#563's write side now has the identical MathML -> OMML degrade-diagnostic channel docx already exposes. onDiagnostic (ExaDev/documents.js#1389) is this write path's own general degrade channel, kept separate from onMathDiagnostic's shared OMML-specific one; see diagnostics.ts's own module comment for why the two stay apart. It defaults to NOOP_PPTX_WRITE_DIAGNOSTIC_SINK, the same discard-everything default every sink in this family uses when a caller supplies none.
 export interface BuildPptxPackageOptions {
   readonly clock?: ClockPort;
   readonly onMathDiagnostic?: OmmlDiagnosticSink;
+  readonly onDiagnostic?: PptxWriteDiagnosticSink;
 }
 
 // ContentDocument -> a fresh pptx Package, the write-side counterpart to src/ooxml/pptx/read.ts's readPptxContent. Used by the PDF->pptx conversion path. Constructs its own package directly (createEmptyPptxPackage + PptxEditor) rather than calling createPptx(), mirroring buildDocxPackage's own identical reasoning (src/edit/docx/content.ts): createPptx() always starts metadata from {}, but this function needs the SOURCE content's own metadata to reach resolveMetadataTimestamps.
@@ -147,7 +153,12 @@ function appendShape(
         columnWidthsPt: onlyBlock.columnWidthsPt,
       },
     });
-    populatePptxTable(table, onlyBlock, (url) => slide.registerHyperlink(url));
+    populatePptxTable(
+      table,
+      onlyBlock,
+      options?.onDiagnostic ?? NOOP_PPTX_WRITE_DIAGNOSTIC_SINK,
+      (url) => slide.registerHyperlink(url),
+    );
     return;
   }
   const paragraphs: DrawingParagraphInit[] = [];
@@ -219,13 +230,27 @@ function populateCellParagraphs(
 }
 
 // A DrawingML table's own a:tr always carries exactly `columns` a:tc elements regardless of merges -- a covered position is a real a:tc marked hMerge/vMerge="1" (see table.ts's own PptxTableCell), never an omitted or replaced element -- and ContentTable's grid rule (ContentTableCell in document-schema.js) gives every row exactly one entry per grid column too, so an entry's array index is its a:tc's own column with no running-offset bookkeeping. walkTableGrid classifies each entry: an anchor carries its spans and its content, while a covered entry states which side of its region it lies on and carries only its own background and borders, since its content belongs to the anchor. A position the region reaches along its own row is marked hMerge and one it reaches from an earlier row is marked vMerge, both at once for the interior of a region wider and taller than one cell, as real PowerPoint output states it.
+//
+// A row's own isHeader (ContentTableRow, ExaDev/documents.js#1390) is reported through onDiagnostic rather than written: DrawingML has no per-row header marker at all (see diagnostics.ts's own TABLE_HEADER_ROW_DROPPED comment), so the row's cells are written exactly like any other row and only the flag is dropped. Reported once per flagged row, before its cells are populated, matching ppt-codec's own writeIMsoArray precedent (src/drawing/shapes-write.ts) for the identical field.
 function populatePptxTable(
   table: PptxTable,
   block: ContentTable,
+  onDiagnostic: PptxWriteDiagnosticSink,
   resolveHyperlinkRId?: (url: string) => string,
 ): void {
   assertTableObeysGridRule(block, "buildPptxPackage");
   walkTableGrid(block).forEach((positions, rowIndex) => {
+    const row = block.rows[rowIndex];
+    if (row?.isHeader === true) {
+      onDiagnostic(
+        {
+          code: PptxWriteDiagnosticCodes.TABLE_HEADER_ROW_DROPPED,
+          severity: "warning",
+          message: `buildPptxPackage: table row ${String(rowIndex)} is a header row, and that is dropped; DrawingML has no per-row header marker, so the row is written exactly as any other`,
+        },
+        { sourcePath: block.sourcePath },
+      );
+    }
     positions.forEach((position) => {
       const { cell, columnIndex } = position;
       const tableCell = table.cell(rowIndex, columnIndex);
