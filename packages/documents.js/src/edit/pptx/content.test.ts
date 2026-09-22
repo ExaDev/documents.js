@@ -23,6 +23,8 @@ import { collectDrawingMlVectors } from "../../test-support/drawingml-vector";
 import { VECTOR_FIXTURE, vectorDrawingBlock } from "../../test-support/vectors";
 import { walkElements } from "../../xml/query";
 import { buildPptxPackage, embeddedPresentationSerialiser } from "./content";
+import type { PptxWriteDiagnostic } from "./diagnostics";
+import { PptxWriteDiagnosticCodes } from "./diagnostics";
 import { PptxEditor } from "./editor";
 
 function presentationDoc(
@@ -772,5 +774,151 @@ describe("buildPptxPackage: a slide table that states no column widths", () => {
         "buildPptxPackage: table has no rows, and a table with no rows cannot be written in every presentation format (ODF requires at least one table:table-row)",
       );
     }
+  });
+});
+
+describe("buildPptxPackage: a table row's own isHeader has no DrawingML spelling", () => {
+  function cellOf(text: string): ContentTableCell {
+    return { blocks: [{ kind: "paragraph", runs: [{ text }] }] };
+  }
+
+  function documentOf(table: ContentTable): ContentDocument {
+    return presentationDoc([
+      {
+        size: SLIDE_SIZE,
+        notes: "",
+        shapes: [
+          {
+            frame: { xPt: 10, yPt: 10, widthPt: 300, heightPt: 100 },
+            ...ZERO_INSETS,
+            blocks: [table],
+          },
+        ],
+      },
+    ]);
+  }
+
+  it("reports a warning naming the row, and does not throw, when no onDiagnostic is supplied", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100, 100],
+      rows: [
+        { isHeader: true, cells: [cellOf("Name"), cellOf("Score")] },
+        { cells: [cellOf("Ada"), cellOf("10")] },
+      ],
+    };
+    expect(() => buildPptxPackage(documentOf(table))).not.toThrow();
+  });
+
+  it("passes the table's own sourcePath as the diagnostic's context", () => {
+    const table: ContentTable = {
+      kind: "table",
+      sourcePath: "slides/slide1.xml#/shapes/0",
+      columnWidthsPt: [100],
+      rows: [{ isHeader: true, cells: [cellOf("Name")] }],
+    };
+    const contexts: { readonly sourcePath?: string }[] = [];
+    buildPptxPackage(documentOf(table), {
+      onDiagnostic: (_diagnostic, context) => contexts.push(context),
+    });
+    expect(contexts).toEqual([{ sourcePath: "slides/slide1.xml#/shapes/0" }]);
+  });
+
+  it("passes an undefined sourcePath when the table itself carries none", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [{ isHeader: true, cells: [cellOf("Name")] }],
+    };
+    const contexts: { readonly sourcePath?: string }[] = [];
+    buildPptxPackage(documentOf(table), {
+      onDiagnostic: (_diagnostic, context) => contexts.push(context),
+    });
+    expect(contexts).toEqual([{ sourcePath: undefined }]);
+  });
+
+  it("calls onDiagnostic once, with TABLE_HEADER_ROW_DROPPED, naming the row's own index", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100, 100],
+      rows: [
+        { isHeader: true, cells: [cellOf("Name"), cellOf("Score")] },
+        { cells: [cellOf("Ada"), cellOf("10")] },
+      ],
+    };
+    const diagnostics: PptxWriteDiagnostic[] = [];
+    buildPptxPackage(documentOf(table), {
+      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+    });
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toEqual({
+      code: PptxWriteDiagnosticCodes.TABLE_HEADER_ROW_DROPPED,
+      severity: "warning",
+      message:
+        "buildPptxPackage: table row 0 is a header row, and that is dropped; DrawingML has no per-row header marker, so the row is written exactly as any other",
+    });
+  });
+
+  it("still writes the header row's own content, exactly like any other row", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100, 100],
+      rows: [
+        { isHeader: true, cells: [cellOf("Name"), cellOf("Score")] },
+        { cells: [cellOf("Ada"), cellOf("10")] },
+      ],
+    };
+    const reread = readPptxContent(buildPptxPackage(documentOf(table)));
+    if (reread.kind !== "presentation") {
+      throw new Error("expected a presentation ContentDocument");
+    }
+    const block = reread.slides[0]?.shapes[0]?.blocks[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected the slide's shape to hold a table");
+    }
+    // The flag itself does not round-trip (DrawingML has no per-row header marker to read it back from), but the row's own cell text survives untouched.
+    expect(block.rows[0]?.isHeader).toBeUndefined();
+    expect(
+      block.rows[0]?.cells.map((cell) =>
+        cell.blocks.flatMap((cellBlock) =>
+          cellBlock.kind === "paragraph"
+            ? cellBlock.runs.map((run) => run.text)
+            : [],
+        ),
+      ),
+    ).toEqual([["Name"], ["Score"]]);
+  });
+
+  it("reports a diagnostic per flagged row, naming each one's own index, for non-contiguous header rows", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        { isHeader: true, cells: [cellOf("a")] },
+        { cells: [cellOf("b")] },
+        { isHeader: true, cells: [cellOf("c")] },
+      ],
+    };
+    const diagnostics: PptxWriteDiagnostic[] = [];
+    buildPptxPackage(documentOf(table), {
+      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+    });
+    expect(diagnostics.map((d) => d.message)).toEqual([
+      expect.stringContaining("table row 0 is a header row"),
+      expect.stringContaining("table row 2 is a header row"),
+    ]);
+  });
+
+  it("reports nothing at all for a table whose rows state no header flag", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [{ cells: [cellOf("a")] }, { cells: [cellOf("b")] }],
+    };
+    const diagnostics: PptxWriteDiagnostic[] = [];
+    buildPptxPackage(documentOf(table), {
+      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+    });
+    expect(diagnostics).toEqual([]);
   });
 });
