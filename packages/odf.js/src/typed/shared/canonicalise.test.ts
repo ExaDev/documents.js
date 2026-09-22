@@ -372,7 +372,7 @@ describe("canonicalCell", () => {
   it("a nested table block recurses through canonicalTable", () => {
     const nested: ContentTable = {
       kind: "table",
-      columnWidthsPt: [10],
+      columns: [{ widthPt: 10 }],
       rows: [{ cells: [{ blocks: [] }] }],
     };
     const cell: ContentTableCell = { blocks: [nested] };
@@ -380,7 +380,7 @@ describe("canonicalCell", () => {
     expect(result.blocks).toEqual([
       {
         kind: "table",
-        columnWidthsPt: [10],
+        columns: [{ widthPt: 10 }],
         rows: [{ cells: [{ blocks: [] }] }],
       },
     ]);
@@ -392,7 +392,7 @@ describe("canonicalTable", () => {
   function tableWithSpan(colSpan: number, rowSpan: number): ContentTable {
     return {
       kind: "table",
-      columnWidthsPt: [10, 10, 10],
+      columns: [{ widthPt: 10 }, { widthPt: 10 }, { widthPt: 10 }],
       rows: [
         {
           cells: [
@@ -412,21 +412,31 @@ describe("canonicalTable", () => {
     };
   }
 
-  it("columnWidthsPt is copied, not aliased", () => {
+  it("columns is copied, not aliased", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [12, 34],
+      columns: [{ widthPt: 12 }, { widthPt: 34 }],
       rows: [],
     };
     const result = canonicalTable(table, freshListState());
-    expect(result.columnWidthsPt).toEqual([12, 34]);
-    expect(result.columnWidthsPt).not.toBe(table.columnWidthsPt);
+    expect(result.columns.map((c) => c.widthPt)).toEqual([12, 34]);
+    expect(result.columns).not.toBe(table.columns);
+  });
+
+  it("a column's own isHeader survives canonicalisation, and only when stated", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columns: [{ widthPt: 12, isHeader: true }, { widthPt: 34 }],
+      rows: [],
+    };
+    const result = canonicalTable(table, freshListState());
+    expect(result.columns.map((c) => c.isHeader)).toEqual([true, undefined]);
   });
 
   it("a row's own heightPt survives only when stated", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [],
+      columns: [],
       rows: [{ cells: [], heightPt: 20 }, { cells: [] }],
     };
     const result = canonicalTable(table, freshListState());
@@ -435,10 +445,27 @@ describe("canonicalTable", () => {
     expect(result.rows[1]).toStrictEqual({ cells: [] });
   });
 
+  it("a row's own isHeader survives canonicalisation only when stated true", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columns: [],
+      rows: [{ cells: [], isHeader: true }, { cells: [] }],
+    };
+    const result = canonicalTable(table, freshListState());
+    expect(result.rows[0]).toEqual({ cells: [], isHeader: true });
+    // toStrictEqual, not toEqual, for the identical reason the heightPt case immediately above states: a mutant that always takes the "state isHeader" branch for a row with none would set isHeader: undefined and still read as equal to { cells } under toEqual.
+    expect(result.rows[1]).toStrictEqual({ cells: [] });
+  });
+
   it("refuses a covered cell that states a span of its own, rather than ignoring the span it states", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [10, 10, 10, 10],
+      columns: [
+        { widthPt: 10 },
+        { widthPt: 10 },
+        { widthPt: 10 },
+        { widthPt: 10 },
+      ],
       rows: [
         {
           cells: [
@@ -458,7 +485,7 @@ describe("canonicalTable", () => {
   it("refuses a covered cell that carries blocks, rather than dropping them", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [10, 10],
+      columns: [{ widthPt: 10 }, { widthPt: 10 }],
       rows: [
         { cells: [{ blocks: [], colSpan: 2 }, { blocks: [paragraph()] }] },
       ],
@@ -513,7 +540,7 @@ describe("canonicalTable", () => {
   it("each cell is its own list-run scope: two adjacent cells sharing one incoming numId still canonicalise to different numIds", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [10, 10],
+      columns: [{ widthPt: 10 }, { widthPt: 10 }],
       rows: [
         {
           cells: [
@@ -548,7 +575,7 @@ describe("canonicalTable", () => {
     const listState = freshListState();
     const nested: ContentTable = {
       kind: "table",
-      columnWidthsPt: [10],
+      columns: [{ widthPt: 10 }],
       rows: [
         {
           cells: [
