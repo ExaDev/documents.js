@@ -1,3 +1,15 @@
+## [5.1.2](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.1...wpd-codec%405.1.2) (2026-09-22)
+
+### Code Refactoring
+
+* **doc-codec,wpd-codec:** migrate tables to ContentTable.columns ([8505d87](https://github.com/ExaDev/documents.js/commit/8505d87af5710c70b5780b3842e06140c9ceb46c))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.0
+- Updated archive-codec to 1.11.12
+
 ## [5.1.1](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.0...wpd-codec%405.1.1) (2026-09-22)
 
 ### Bug Fixes

@@ -1,3 +1,26 @@
+## [14.2.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.1.1...documents.js%4014.2.0) (2026-09-22)
+
+### Features
+
+* **documents.js:** give the odt table editor real header-column support ([afd1c5a](https://github.com/ExaDev/documents.js/commit/afd1c5a5c7b8b2c1322c1d976c5b1aa61de10de3))
+* **documents.js:** report a dropped pptx header column via onDiagnostic ([bae66a6](https://github.com/ExaDev/documents.js/commit/bae66a613939f05fb402247bbf7ef24c6a2ecf41))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.0
+- Updated archive-codec to 1.11.12
+- Updated epub-codec to 5.1.0
+- Updated markdown-codec to 11.1.0
+- Updated odf.js to 11.1.0
+- Updated pdf-codec to 5.2.6
+- Updated doc-codec to 6.0.3
+- Updated ooxml.js to 12.0.2
+- Updated ppt-codec to 2.2.0
+- Updated rtf-codec to 8.1.0
+- Updated wpd-codec to 5.1.2
+- Updated xls-codec to 4.15.18
+
 ## [14.1.1](https://github.com/ExaDev/documents.js/compare/documents.js%4014.1.0...documents.js%4014.1.1) (2026-09-22)
 
 ### Bug Fixes

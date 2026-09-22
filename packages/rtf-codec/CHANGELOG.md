@@ -1,3 +1,15 @@
+## [8.1.0](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.0.2...rtf-codec%408.1.0) (2026-09-22)
+
+### Features
+
+* **rtf-codec:** report a dropped header column via a diagnostic ([2af1e5a](https://github.com/ExaDev/documents.js/commit/2af1e5abd8c4b82694dfc708570735ba8e523344))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.0
+- Updated archive-codec to 1.11.12
+
 ## [8.0.2](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.0.1...rtf-codec%408.0.2) (2026-09-22)
 
 ### Bug Fixes

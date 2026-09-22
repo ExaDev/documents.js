@@ -1,3 +1,9 @@
+## [7.15.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.14.1...document-schema.js%407.15.0) (2026-09-22)
+
+### Features
+
+* **document-schema.js:** give ContentTable a per-column object so a header column is representable ([7486cd2](https://github.com/ExaDev/documents.js/commit/7486cd214fb821210e9877532f669f09858bb3b2))
+
 ## [7.14.1](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.14.0...document-schema.js%407.14.1) (2026-09-22)
 
 ### Bug Fixes

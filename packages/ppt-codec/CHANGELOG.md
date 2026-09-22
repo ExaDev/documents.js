@@ -1,3 +1,15 @@
+## [2.2.0](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.1.1...ppt-codec%402.2.0) (2026-09-22)
+
+### Features
+
+* **ppt-codec:** report a dropped header column via a diagnostic ([b705aed](https://github.com/ExaDev/documents.js/commit/b705aed2faf3adc5d4de8c5ee1c3447609efbaad))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.0
+- Updated archive-codec to 1.11.12
+
 ## [2.1.1](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.1.0...ppt-codec%402.1.1) (2026-09-22)
 
 ### Bug Fixes

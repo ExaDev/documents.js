@@ -1,3 +1,18 @@
+## [11.1.0](https://github.com/ExaDev/documents.js/compare/odf.js%4011.0.1...odf.js%4011.1.0) (2026-09-22)
+
+### Features
+
+* **odf.js:** read and write table:table-header-columns onto ContentTableColumn.isHeader ([88aa649](https://github.com/ExaDev/documents.js/commit/88aa649937633e0d9e2edfb477d8068612955e03))
+
+### Tests
+
+* **odf.js:** finish migrating remaining table fixtures to ContentTable.columns ([828222d](https://github.com/ExaDev/documents.js/commit/828222de862e8fe0b81e8d2ee1da9d2cd4eb5a76))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.0
+
 ## [11.0.1](https://github.com/ExaDev/documents.js/compare/odf.js%4011.0.0...odf.js%4011.0.1) (2026-09-22)
 
 ### Bug Fixes
