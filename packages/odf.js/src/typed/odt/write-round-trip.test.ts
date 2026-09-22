@@ -146,7 +146,7 @@ const KITCHEN_SINK: WordprocessingDocument = {
         },
         {
           kind: "table",
-          columnWidthsPt: [120, 120, 120],
+          columns: [{ widthPt: 120 }, { widthPt: 120 }, { widthPt: 120 }],
           rows: [
             {
               heightPt: 20,
@@ -277,7 +277,7 @@ describe("the odt round-trip law", () => {
       documentOf([
         {
           kind: "table",
-          columnWidthsPt: [200],
+          columns: [{ widthPt: 200 }],
           rows: [
             {
               cells: [
@@ -296,7 +296,7 @@ describe("the odt round-trip law", () => {
                     },
                     {
                       kind: "table",
-                      columnWidthsPt: [80, 80],
+                      columns: [{ widthPt: 80 }, { widthPt: 80 }],
                       rows: [
                         {
                           cells: [
@@ -482,7 +482,7 @@ describe("what the canonical form restates, and why", () => {
     const document = documentOf([
       {
         kind: "table",
-        columnWidthsPt: [40, 40],
+        columns: [{ widthPt: 40 }, { widthPt: 40 }],
         rows: [
           {
             cells: [
@@ -510,7 +510,7 @@ describe("what the canonical form restates, and why", () => {
     const document = documentOf([
       {
         kind: "table",
-        columnWidthsPt: [40, 40],
+        columns: [{ widthPt: 40 }, { widthPt: 40 }],
         rows: [
           {
             cells: [
@@ -538,7 +538,7 @@ describe("what the canonical form restates, and why", () => {
     const document = documentOf([
       {
         kind: "table",
-        columnWidthsPt: [40, 40],
+        columns: [{ widthPt: 40 }, { widthPt: 40 }],
         rows: [
           {
             cells: [
@@ -757,7 +757,7 @@ describe("fidelity constructs inside a table cell (#969)", () => {
       documentOf([
         {
           kind: "table",
-          columnWidthsPt: [240],
+          columns: [{ widthPt: 240 }],
           rows: [
             {
               cells: [
@@ -1016,7 +1016,7 @@ describe("fidelity constructs written (#969)", () => {
         { kind: "paragraph", runs: [{ text: "first" }] },
         {
           kind: "table",
-          columnWidthsPt: [100],
+          columns: [{ widthPt: 100 }],
           rows: [
             {
               cells: [
@@ -1174,7 +1174,7 @@ describe("fidelity constructs written (#969)", () => {
         { kind: "paragraph", runs: [{ text: "before the table" }] },
         {
           kind: "table",
-          columnWidthsPt: [100],
+          columns: [{ widthPt: 100 }],
           rows: [
             {
               cells: [
@@ -1218,7 +1218,7 @@ describe("fidelity constructs written (#969)", () => {
           },
           {
             kind: "table",
-            columnWidthsPt: [100],
+            columns: [{ widthPt: 100 }],
             rows: [
               {
                 cells: [
@@ -1488,7 +1488,7 @@ describe("fidelity constructs written (#969)", () => {
           },
           {
             kind: "table",
-            columnWidthsPt: [100],
+            columns: [{ widthPt: 100 }],
             rows: [
               {
                 cells: [

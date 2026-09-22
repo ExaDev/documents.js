@@ -530,7 +530,7 @@ describe("writeOdtContent: tables", () => {
     documentOf([
       {
         kind: "table",
-        columnWidthsPt: [60, 90],
+        columns: [{ widthPt: 60 }, { widthPt: 90 }],
         rows: [
           {
             heightPt: 24,
@@ -865,7 +865,7 @@ describe("writeOdtContent: page geometry and section boundaries", () => {
           blocks: [
             {
               kind: "table",
-              columnWidthsPt: [40],
+              columns: [{ widthPt: 40 }],
               rows: [{ cells: [{ blocks: [] }] }],
             },
           ],
@@ -1038,7 +1038,7 @@ describe("writeOdtContent: what it refuses rather than dropping", () => {
         documentOf([
           {
             kind: "table",
-            columnWidthsPt: [40],
+            columns: [{ widthPt: 40 }],
             rows: [
               {
                 cells: [

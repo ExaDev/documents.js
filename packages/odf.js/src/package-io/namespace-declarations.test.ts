@@ -124,7 +124,7 @@ const IMAGE_BLOCK = {
 
 const TABLE_BLOCK = {
   kind: "table",
-  columnWidthsPt: [80, 120],
+  columns: [{ widthPt: 80 }, { widthPt: 120 }],
   rows: [
     {
       heightPt: 18,

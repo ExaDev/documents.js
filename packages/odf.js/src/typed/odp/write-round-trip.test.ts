@@ -192,7 +192,7 @@ describe("writeOdpContent: the round-trip law", () => {
           shape({}, [
             {
               kind: "table",
-              columnWidthsPt: [120, 120],
+              columns: [{ widthPt: 120 }, { widthPt: 120 }],
               rows: [
                 {
                   cells: [
@@ -237,7 +237,7 @@ describe("writeOdpContent: the round-trip law", () => {
           shape({}, [
             {
               kind: "table",
-              columnWidthsPt: [240],
+              columns: [{ widthPt: 240 }],
               rows: [
                 {
                   cells: [
@@ -255,7 +255,7 @@ describe("writeOdpContent: the round-trip law", () => {
                         },
                         {
                           kind: "table",
-                          columnWidthsPt: [100, 100],
+                          columns: [{ widthPt: 100 }, { widthPt: 100 }],
                           rows: [
                             {
                               cells: [
@@ -492,7 +492,7 @@ describe("writeOdpContent: refusals", () => {
               { kind: "paragraph", runs: [{ text: "x" }] },
               {
                 kind: "table",
-                columnWidthsPt: [10],
+                columns: [{ widthPt: 10 }],
                 rows: [{ cells: [{ blocks: [] }] }],
               },
             ]),
