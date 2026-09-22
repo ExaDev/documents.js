@@ -1,3 +1,9 @@
+## [14.1.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.0.3...documents.js%4014.1.0) (2026-09-22)
+
+### Features
+
+* **documents.js:** add a pptx write-side diagnostic sink for a header row DrawingML can't carry ([9c4e6a0](https://github.com/ExaDev/documents.js/commit/9c4e6a051b57a553a5b7112e5a4abe43fcedd635)), closes [#1389](https://github.com/ExaDev/documents.js/issues/1389), references [#1390](https://github.com/ExaDev/documents.js/issues/1390)
+
 ## [14.0.3](https://github.com/ExaDev/documents.js/compare/documents.js%4014.0.2...documents.js%4014.0.3) (2026-09-21)
 
 
