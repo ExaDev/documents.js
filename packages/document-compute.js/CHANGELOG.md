@@ -1,3 +1,16 @@
+## [1.5.53](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.5.52...document-compute.js%401.5.53) (2026-09-22)
+
+### Bug Fixes
+
+* **workspace:** replace the spaced double-hyphen dash substitute with a real em-dash workspace-wide ([c42a9c7](https://github.com/ExaDev/documents.js/commit/c42a9c7e0bc7cd87456ca72204a5ac423a7ca341))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.14.1
+- Updated markdown-codec to 11.0.2
+- Updated documents.js to 14.1.1
+
 ## [1.5.52](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.5.51...document-compute.js%401.5.52) (2026-09-22)
 
 

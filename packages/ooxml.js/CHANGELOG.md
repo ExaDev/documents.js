@@ -1,3 +1,17 @@
+## [12.0.1](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.0.0...ooxml.js%4012.0.1) (2026-09-22)
+
+### Bug Fixes
+
+* **workspace:** replace the spaced double-hyphen dash substitute with a real em-dash workspace-wide ([c42a9c7](https://github.com/ExaDev/documents.js/commit/c42a9c7e0bc7cd87456ca72204a5ac423a7ca341))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.8.1
+- Updated document-schema.js to 7.14.1
+- Updated excel-number-format to 1.2.6
+- Updated archive-codec to 1.11.11
+
 ## [12.0.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%4011.1.0...ooxml.js%4012.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES

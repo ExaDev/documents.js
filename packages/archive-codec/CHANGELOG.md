@@ -1,3 +1,14 @@
+## [1.11.11](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.10...archive-codec%401.11.11) (2026-09-22)
+
+### Bug Fixes
+
+* **workspace:** replace the spaced double-hyphen dash substitute with a real em-dash workspace-wide ([c42a9c7](https://github.com/ExaDev/documents.js/commit/c42a9c7e0bc7cd87456ca72204a5ac423a7ca341))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.14.1
+
 ## [1.11.10](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.9...archive-codec%401.11.10) (2026-09-21)
 
 

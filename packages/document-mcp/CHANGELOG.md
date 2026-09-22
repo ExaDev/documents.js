@@ -1,3 +1,18 @@
+## [4.14.52](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.51...document-mcp%404.14.52) (2026-09-22)
+
+### Bug Fixes
+
+* **workspace:** replace the spaced double-hyphen dash substitute with a real em-dash workspace-wide ([c42a9c7](https://github.com/ExaDev/documents.js/commit/c42a9c7e0bc7cd87456ca72204a5ac423a7ca341))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.14.1
+- Updated odf.js to 11.0.1
+- Updated wpd-codec to 5.1.1
+- Updated documents.js to 14.1.1
+- Updated document-operations to 1.1.51
+
 ## [4.14.51](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.50...document-mcp%404.14.51) (2026-09-22)
 
 

@@ -1,3 +1,15 @@
+## [5.2.5](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.4...pdf-codec%405.2.5) (2026-09-22)
+
+### Bug Fixes
+
+* **workspace:** replace the spaced double-hyphen dash substitute with a real em-dash workspace-wide ([c42a9c7](https://github.com/ExaDev/documents.js/commit/c42a9c7e0bc7cd87456ca72204a5ac423a7ca341))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.8.1
+- Updated document-schema.js to 7.14.1
+
 ## [5.2.4](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.3...pdf-codec%405.2.4) (2026-09-21)
 
 
