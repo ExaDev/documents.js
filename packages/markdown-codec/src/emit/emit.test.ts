@@ -3400,7 +3400,7 @@ describe("tables", () => {
   it("emits an empty string for a table with no rows at all, rather than a header/delimiter line of nothing", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [],
+      columns: [],
       rows: [],
     };
     expect(emitMarkdown(doc([table]))).toBe("");
@@ -3409,7 +3409,7 @@ describe("tables", () => {
   it("renders a table whose header row is not the first through the HTML fallback, where the flag can be stated", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] }] },
         {
@@ -3426,7 +3426,7 @@ describe("tables", () => {
   it("renders a table whose only header row is the first as an ordinary pipe table", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         {
           cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }],
@@ -3442,7 +3442,7 @@ describe("tables", () => {
     const collector = createDiagnosticCollector();
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         {
           cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }],
@@ -3461,7 +3461,7 @@ describe("tables", () => {
     const collector = createDiagnosticCollector();
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }] },
         { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] }] },
@@ -3475,10 +3475,81 @@ describe("tables", () => {
     expect(diagnostic?.message).toContain("states no header row");
   });
 
+  it("does NOT fire TABLE_HEADER_COLUMN_DROPPED when no column states isHeader", () => {
+    const collector = createDiagnosticCollector();
+    const table: ContentTable = {
+      kind: "table",
+      columns: [{ widthPt: 100 }, { widthPt: 100 }],
+      rows: [
+        {
+          cells: [
+            { blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] },
+            { blocks: [{ kind: "paragraph", runs: [{ text: "i" }] }] },
+          ],
+          isHeader: true,
+        },
+      ],
+    };
+    emitMarkdown(doc([table]), { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED),
+    ).toBe(false);
+  });
+
+  it("fires TABLE_HEADER_COLUMN_DROPPED with a message naming the drop when even one column states isHeader", () => {
+    const collector = createDiagnosticCollector();
+    const table: ContentTable = {
+      kind: "table",
+      columns: [{ widthPt: 100 }, { widthPt: 100, isHeader: true }],
+      rows: [
+        {
+          cells: [
+            { blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] },
+            { blocks: [{ kind: "paragraph", runs: [{ text: "i" }] }] },
+          ],
+          isHeader: true,
+        },
+      ],
+    };
+    emitMarkdown(doc([table]), { sink: collector.sink });
+    const [diagnostic] = collector.diagnostics.filter(
+      (entry) =>
+        entry.code === MarkdownDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED,
+    );
+    expect(diagnostic?.message).toContain("header column");
+  });
+
+  it("fires TABLE_HEADER_COLUMN_DROPPED through the HTML fallback path too, since that grammar cannot state a header column either", () => {
+    const collector = createDiagnosticCollector();
+    const table: ContentTable = {
+      kind: "table",
+      columns: [{ widthPt: 100, isHeader: true }, { widthPt: 100 }],
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }],
+              colSpan: 2,
+            },
+            { blocks: [] },
+          ],
+          isHeader: true,
+        },
+      ],
+    };
+    emitMarkdown(doc([table]), { sink: collector.sink });
+    expect(collector.has(MarkdownDiagnosticCodes.TABLE_HTML_FALLBACK)).toBe(
+      true,
+    );
+    expect(
+      collector.has(MarkdownDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED),
+    ).toBe(true);
+  });
+
   it("emits alignment markers read from the header row's own cell alignment", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100, 100],
+      columns: [{ widthPt: 100 }, { widthPt: 100 }],
       rows: [
         {
           cells: [
@@ -3514,7 +3585,7 @@ describe("tables", () => {
   it("collapses a soft-break residue run to a space rather than a literal newline that would corrupt the row", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         {
           cells: [
@@ -3548,7 +3619,7 @@ describe("tables", () => {
       // CommonMark's own line-ending grammar (spec 0.31.2, "Lines") is LF, CRLF, or a lone CR — not LF alone. renderParagraphBody's own ATX-heading collapse already treats all three as a genuine line ending (LINE_ENDING_PATTERN); emitRunsSingleLine has to as well, since a foreign producer's own markdown residue (re-emitted verbatim, unescaped, by src/emit/inline.ts's renderLeaf) can carry a bare CR or CRLF just as legitimately as the LF the existing soft-break test above already covers, and an LF-only collapse would leak either one, un-collapsed, into what must be a single GFM table-row physical line. The residue channel (rather than embedding the CR/CRLF in a run's own plain text field) keeps this test scoped to emitRunsSingleLine's own collapse alone — a literal CR/CRLF inside a PLAIN text run instead goes through escapeMarkdownText first, which normalises it to the same backslash-LF hard-break spelling a literal '\n' gets (see the plain-text-run describe block below for that path's own coverage).
       const table: ContentTable = {
         kind: "table",
-        columnWidthsPt: [100],
+        columns: [{ widthPt: 100 }],
         rows: [
           {
             cells: [
@@ -3583,7 +3654,7 @@ describe("tables", () => {
       // This package's own escapeMarkdownText always spells an escaped hard break with a trailing LF ('\\\n'), but a foreign producer's own markdown residue can carry the identical backslash-escape spelling against a CRLF or lone CR just as legitimately, re-emitted verbatim (unescaped) by src/emit/inline.ts's renderLeaf. Stripping only the LF-spelled escape (a bare /\\\n/ regex) leaves this backslash unmatched — the LINE_ENDING_PATTERN split that follows then removes the CRLF/CR line ending out from under it, leaving the backslash behind as a spurious literal character in the row.
       const table: ContentTable = {
         kind: "table",
-        columnWidthsPt: [100],
+        columns: [{ widthPt: 100 }],
         rows: [
           {
             cells: [
@@ -3618,7 +3689,7 @@ describe("tables", () => {
       // Unlike the residue-run cases above, this hard break lives in the run's own `text` field and goes through escapeMarkdownText first. That function used to recognise only a bare '\n' as a hard break, leaving a preceding lone CR (from a bare CR, or from the first half of a CRLF) to fall through unescaped as a literal character; ESCAPED_HARD_BREAK_PATTERN then collapsed the backslash-LF pair it produced for the second half into one space, and the LINE_ENDING_PATTERN split immediately after collapsed the still-unescaped, un-consumed CR into a SECOND space — doubling a single hard break into two spaces in this single-physical-line table-cell context. escapeMarkdownText now recognises a bare CR as a hard break in its own right (and consumes both halves of a CRLF together), so it always spells the break as a single backslash-LF pair regardless of which of the three line-ending forms the source used, leaving nothing for the LINE_ENDING_PATTERN split to double-collapse.
       const table: ContentTable = {
         kind: "table",
-        columnWidthsPt: [100],
+        columns: [{ widthPt: 100 }],
         rows: [
           { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text }] }] }] },
         ],
@@ -3635,7 +3706,7 @@ describe("a table breaking the grid rule", () => {
   // A merged header whose covered position carries a second copy of the anchor's content, which neither a pipe row nor an HTML row has a cell to hold.
   const coveredContentTable: ContentTable = {
     kind: "table",
-    columnWidthsPt: [100, 100],
+    columns: [{ widthPt: 100 }, { widthPt: 100 }],
     rows: [
       { cells: [{ ...textCell("anchor"), colSpan: 2 }, textCell("copy")] },
     ],
@@ -3674,7 +3745,7 @@ describe("a table breaking the grid rule", () => {
   it("throws from the plain pipe renderer for rows of differing lengths", () => {
     const error = thrownBy({
       kind: "table",
-      columnWidthsPt: [100, 100],
+      columns: [{ widthPt: 100 }, { widthPt: 100 }],
       rows: [
         { cells: [textCell("a"), textCell("b")] },
         { cells: [textCell("c")] },
@@ -3686,7 +3757,7 @@ describe("a table breaking the grid rule", () => {
   it("throws for a faulty table that is the whole content of another table's cell", () => {
     const error = thrownBy({
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [{ cells: [{ blocks: [coveredContentTable] }] }],
     });
     expect(error).toBeInstanceOf(MarkdownTableGridFaultError);
@@ -4136,7 +4207,7 @@ describe("link and image titles (the `link` construct annotation)", () => {
   it("also throws for an invalid run-level construct extent buried inside a TABLE CELL's own paragraph, not just a top-level one — validateRunConstructExtents must actually recurse into every row's every cell", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         {
           cells: [
@@ -4423,7 +4494,7 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     const collector = createDiagnosticCollector();
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100, 100],
+      columns: [{ widthPt: 100 }, { widthPt: 100 }],
       rows: [
         {
           cells: [
@@ -4467,7 +4538,7 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     const collector = createDiagnosticCollector();
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }] },
         {
@@ -4502,7 +4573,7 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     const collector = createDiagnosticCollector();
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }] },
         {
@@ -4520,7 +4591,7 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     const collector = createDiagnosticCollector();
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }] },
         {
@@ -4564,7 +4635,7 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
   it("joins a cell's own paragraphs skipping any that render to empty text, without an extra <br>", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }] },
         {
@@ -4585,7 +4656,7 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
   it("round-trips a table cell image as a run carrying the alt text with the image's own data as that run's hyperlink, the same shape a nested image inside emphasis/a link already degrades to", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }] },
         {
@@ -4627,7 +4698,7 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
   it("round-trips a <br>-joined multi-paragraph cell as one run whose text contains a literal <br>, quarantined as raw-HTML residue rather than corrupting the surrounding text", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }] },
         {

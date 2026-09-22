@@ -51,10 +51,10 @@ export function lowerTable(
   context: InlineLowerContext,
 ): ContentTable {
   const columnCount = Math.max(MIN_COLUMN_COUNT, node.alignments.length);
-  const columnWidthsPt = Array.from(
-    { length: columnCount },
-    () => contentWidthPt / columnCount,
-  );
+  // No column ever reads as a header column: GFM's table extension has no syntax stating a column repeats at the left of each printed page (ExaDev/documents.js#1381), so every column here states a width alone.
+  const columns = Array.from({ length: columnCount }, () => ({
+    widthPt: contentWidthPt / columnCount,
+  }));
 
   // GFM's own grammar makes the first row a header row and every later row a body row, so row 0 carries isHeader and no other row can (github.github.com/gfm, "Tables (extension)": the delimiter row separates the single header row from the body). Stating it rather than leaving it to position is what lets a table read from markdown be written back out to a format that spells header-ness on the row itself (ExaDev/documents.js#1377).
   const rows: ContentTableRow[] = node.children.map((row, rowIndex) => ({
@@ -64,5 +64,5 @@ export function lowerTable(
     ...(rowIndex === 0 ? { isHeader: true } : {}),
   }));
 
-  return { kind: "table", rows, columnWidthsPt };
+  return { kind: "table", rows, columns };
 }

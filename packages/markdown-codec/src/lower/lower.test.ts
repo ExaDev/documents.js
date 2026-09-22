@@ -429,7 +429,9 @@ describe("GFM tables", () => {
   it("distributes column widths evenly and reads alignment from the delimiter row, without forcing the header row bold", () => {
     const [table] = blocks("| a | bb |\n| :- | -: |\n| 1 | 2 |");
     if (table?.kind !== "table") throw new Error("expected a table block");
-    expect(table.columnWidthsPt[0]).toBeCloseTo(table.columnWidthsPt[1] ?? 0);
+    expect(table.columns[0]?.widthPt).toBeCloseTo(
+      table.columns[1]?.widthPt ?? 0,
+    );
     expect(table.rows[0]?.cells[0]?.blocks[0]).toMatchObject({
       runs: [{ text: "a" }],
       alignment: "left",
@@ -458,7 +460,7 @@ describe("GFM tables", () => {
       margins: { topPt: 72, rightPt: 10, bottomPt: 72, leftPt: 10 },
     });
     if (table?.kind !== "table") throw new Error("expected a table block");
-    expect(table.columnWidthsPt).toEqual([100, 100]);
+    expect(table.columns.map((c) => c.widthPt)).toEqual([100, 100]);
   });
 
   it("carries no constructs key on a cell with no run-level constructs of its own", () => {
