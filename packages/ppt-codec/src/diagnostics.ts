@@ -29,4 +29,6 @@ export const PptDiagnosticCodes = {
   TABLE_GRID_FAULT: "ppt/table-grid-fault",
   // Write side: a row's own isHeader (document-schema.js's ContentTableRow), which this format cannot state at all — a PowerPoint 97-2003 table is a strict grid of anchored shapes with no row record of any kind, let alone one naming a row as a header, so the row's text is written exactly as any other row's and the flag is reported rather than silently dropped.
   TABLE_HEADER_ROW_DROPPED: "ppt/table-header-row-dropped",
+  // Write side: a column's own isHeader (document-schema.js's ContentTableColumn), the column-axis mirror of TABLE_HEADER_ROW_DROPPED immediately above. The identical grid of anchored shapes has no per-column record either, so the column's cells are written exactly as any other column's and the flag is reported rather than silently dropped.
+  TABLE_HEADER_COLUMN_DROPPED: "ppt/table-header-column-dropped",
 } as const;

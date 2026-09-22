@@ -331,10 +331,11 @@ function tableBlockFor(table: PptTable, context: DrawingContext): ContentTable {
     ...placed.map((entry) => entry.anchor.right),
     ...columnLefts,
   );
-  const columnWidthsPt = columnLefts.map((left, index) => {
+  // No column ever reads as a header column: a PowerPoint 97-2003 table is a strict grid of anchored shapes with no per-column record of any kind, let alone one naming a column as a header (ExaDev/documents.js#1381), so every column here states a width alone.
+  const columns = columnLefts.map((left, index) => {
     // The next column's own left is this column's right edge; the last column (the only one .at() has no next left for) runs to the rightmost cell edge the table states.
     const right = columnLefts.at(index + 1) ?? rightmost;
-    return masterUnitsToPoints(right - left);
+    return { widthPt: masterUnitsToPoints(right - left) };
   });
   const rows = rowTops.map((top) => {
     // Unsorted: every consumer below finds or reduces over `inRow` by its own anchor property (`.find` by exact left, `Math.max` over bottom), neither of which depends on array order, so sorting it first has no observable effect on `cells` or `bottom`.
@@ -350,7 +351,7 @@ function tableBlockFor(table: PptTable, context: DrawingContext): ContentTable {
     const heightPt = masterUnitsToPoints(bottom - top);
     return { cells, heightPt };
   });
-  return { kind: "table", rows, columnWidthsPt };
+  return { kind: "table", rows, columns };
 }
 
 // Every notes slide's text, keyed by the slideId of the presentation slide it belongs to. [MS-PPT] 3.5.3 makes this the association: "A notes slide is associated with its presentation slide by means of the slideIdRef field in the NotesContainer record", and it explicitly warns that the notes list's own order is not meaningful, so the mapping has to be built from each container's own atom rather than by pairing the two lists positionally. A NotesContainer naming the notes master states slideIdRef 0x00000000, which no presentation slide's own slideId can be, so such an entry simply matches nothing.

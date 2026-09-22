@@ -378,8 +378,22 @@ function writeTableGroup(
     table,
     pointsToMasterUnits(frame.heightPt),
   );
+  // A PowerPoint 97-2003 table is a strict grid of anchored shapes with no column record of any kind, let alone one naming a column as a header (the identical reasoning TABLE_HEADER_ROW_DROPPED below already states for rows), so a header column is written exactly as any other and the flag is reported rather than silently dropped.
+  table.columns.forEach((column, columnIndex) => {
+    if (column.isHeader === true) {
+      context.sink({
+        code: PptDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED,
+        severity: "warning",
+        message: context.describeMessage(
+          `table column ${String(columnIndex)} is a header column, and that is dropped; a PowerPoint 97-2003 table is a strict grid of shapes with no column record at all, so the column is written exactly as any other`,
+        ),
+      });
+    }
+  });
   // The grid's column widths in master units: the declared widths, extended past the declared count by repeating the last one so a ragged row's extra cells continue the grid rightward rather than collapsing onto earlier columns (which would silently overwrite them on read, since the reader places a cell by its left edge). A table declaring no widths at all divides its own frame equally.
-  const declaredWidths = table.columnWidthsPt.map(pointsToMasterUnits);
+  const declaredWidths = table.columns.map((column) =>
+    pointsToMasterUnits(column.widthPt),
+  );
   // Seeded at 1 so even a table with no rows and no declared widths derives a one-column grid rather than an empty one.
   const cellCount = Math.max(
     1,
