@@ -764,7 +764,7 @@ describe("buildDocxPackageFromContent: content round trip", () => {
       { kind: "pageBreak" },
       {
         kind: "table",
-        columnWidthsPt: [72],
+        columns: [{ widthPt: 72 }],
         rows: [
           {
             cells: [
@@ -878,7 +878,7 @@ describe("buildDocxPackageFromContent: content round trip", () => {
     // A merged header whose covered position carries a second copy of the anchor's content, which a w:tc with a gridSpan has no cell to hold.
     const coveredContentTable: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100, 100],
+      columns: [{ widthPt: 100 }, { widthPt: 100 }],
       rows: [
         {
           cells: [
@@ -911,7 +911,7 @@ describe("buildDocxPackageFromContent: content round trip", () => {
       expect(() =>
         buildWith({
           kind: "table",
-          columnWidthsPt: [100, 100],
+          columns: [{ widthPt: 100 }, { widthPt: 100 }],
           rows: [
             { cells: [{ blocks: [paragraphOf("a")] }, { blocks: [] }] },
             { cells: [{ blocks: [paragraphOf("b")] }] },
@@ -926,7 +926,7 @@ describe("buildDocxPackageFromContent: content round trip", () => {
       expect(() =>
         buildWith({
           kind: "table",
-          columnWidthsPt: [100],
+          columns: [{ widthPt: 100 }],
           rows: [{ cells: [{ blocks: [coveredContentTable] }] }],
         }),
       ).toThrow(/^buildDocxPackageFromContent: table breaks the grid rule/);
@@ -943,7 +943,7 @@ describe("buildDocxPackageFromContent: content round trip", () => {
           blocks: [
             {
               kind: "table" as const,
-              columnWidthsPt: [100, 50],
+              columns: [{ widthPt: 100 }, { widthPt: 50 }],
               rows: [
                 {
                   heightPt: 30,
@@ -4334,7 +4334,11 @@ describe("buildDocxPackageFromContent: table grid and vertical-merge arithmetic"
     rows: TableFixtureRow[],
     columnWidthsPt: number[] = [100, 100],
   ): Extract<ContentBlock, { kind: "table" }> {
-    return { kind: "table", rows, columnWidthsPt };
+    return {
+      kind: "table",
+      rows,
+      columns: columnWidthsPt.map((widthPt) => ({ widthPt })),
+    };
   }
 
   function writtenTable(written: Package): XmlElement {
@@ -5047,7 +5051,7 @@ describe("buildDocxPackageFromContent: flow assembly and section breaks", () => 
             {
               kind: "table",
               rows: [{ cells: [{ blocks: [] }] }],
-              columnWidthsPt: [100],
+              columns: [{ widthPt: 100 }],
             },
             { kind: "paragraph", runs: [{ text: "after" }] },
           ],
@@ -5162,7 +5166,7 @@ describe("buildDocxPackageFromContent: flow assembly and section breaks", () => 
                   ],
                 },
               ],
-              columnWidthsPt: [100],
+              columns: [{ widthPt: 100 }],
             },
           ],
         },
@@ -5306,7 +5310,7 @@ describe("buildDocxPackageFromContent: flow assembly and section breaks", () => 
             {
               kind: "table",
               rows: [{ cells: [{ blocks: [] }] }],
-              columnWidthsPt: [100],
+              columns: [{ widthPt: 100 }],
             },
           ],
         },
@@ -5423,7 +5427,7 @@ describe("buildDocxPackageFromContent: flow assembly and section breaks", () => 
             {
               kind: "table",
               rows: [{ cells: [{ blocks: [] }] }],
-              columnWidthsPt: [100],
+              columns: [{ widthPt: 100 }],
             },
           ],
         },

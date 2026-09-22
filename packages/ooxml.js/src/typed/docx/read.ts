@@ -1201,12 +1201,12 @@ function readTable(
   carryDeletions: boolean,
 ): ContentTable {
   const tblGrid = childrenWithTag(tbl, "w:tblGrid")[0];
-  const columnWidthsPt =
+  const columns =
     tblGrid === undefined
       ? []
-      : childrenWithTag(tblGrid, "w:gridCol").map((col) =>
-          twipsToPt(Number(attr(col, "w:w") ?? 0)),
-        );
+      : childrenWithTag(tblGrid, "w:gridCol").map((col) => ({
+          widthPt: twipsToPt(Number(attr(col, "w:w") ?? 0)),
+        }));
 
   const trs = childrenWithTag(tbl, "w:tr");
   const rawRows: RawCell[][] = trs.map((tr) =>
@@ -1265,8 +1265,8 @@ function readTable(
 
   return {
     kind: "table",
-    columnWidthsPt,
-    rows: denseTableRows(positioned, columnWidthsPt.length),
+    columns,
+    rows: denseTableRows(positioned, columns.length),
   };
 }
 

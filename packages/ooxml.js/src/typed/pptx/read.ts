@@ -764,12 +764,12 @@ function readTable(
   slideRels: ReadonlyMap<string, Relationship>,
 ): ContentTable {
   const tblGrid = childrenWithTag(tbl, "a:tblGrid")[0];
-  const columnWidthsPt =
+  const columns =
     tblGrid === undefined
       ? []
-      : childrenWithTag(tblGrid, "a:gridCol").map((col) =>
-          emuToPt(Number(attr(col, "w") ?? "0")),
-        );
+      : childrenWithTag(tblGrid, "a:gridCol").map((col) => ({
+          widthPt: emuToPt(Number(attr(col, "w") ?? "0")),
+        }));
   const rows = childrenWithTag(tbl, "a:tr").map((tr) => {
     const h = attr(tr, "h");
     return {
@@ -779,7 +779,7 @@ function readTable(
       heightPt: h === undefined ? undefined : emuToPt(Number(h)),
     };
   });
-  return { kind: "table", rows, columnWidthsPt };
+  return { kind: "table", rows, columns };
 }
 
 // Resolves an r:id found inside a graphic frame's a:graphicData child element (a chart reference's part, a diagram's data model, ...) through the slide's own relationships to the target part's root element — undefined when the id, relationship, part, or XML root is missing anywhere along the chain, leaving the frame's geometry with empty content.

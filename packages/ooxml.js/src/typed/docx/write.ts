@@ -864,11 +864,12 @@ function buildTable(
       `buildDocxPackageFromContent: table breaks the grid rule (${describeTableGridFault(gridFault)})`,
     );
   }
+  // w:tblGrid has no element for a column repeating at the left of each printed page (docx has no header-column concept at all), so column.isHeader is never written here; tracked as a known gap in #1398.
   const grid = el(
     "w:tblGrid",
     {},
-    table.columnWidthsPt.map((widthPt) =>
-      el("w:gridCol", { "w:w": String(ptToTwips(widthPt)) }),
+    table.columns.map((column) =>
+      el("w:gridCol", { "w:w": String(ptToTwips(column.widthPt)) }),
     ),
   );
   const gridPositions = walkTableGrid(table);

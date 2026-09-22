@@ -60,7 +60,7 @@ describe("assignSourcePaths", () => {
   it("recurses into a table's own rows and cells, nesting the grammar one level deeper", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100, 100],
+      columns: [{ widthPt: 100 }, { widthPt: 100 }],
       rows: [
         {
           cells: [

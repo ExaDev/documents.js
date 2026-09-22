@@ -735,7 +735,7 @@ describe("readDocxContent: tables", () => {
   it("reads column widths and a horizontally-merged cell's colSpan and background", () => {
     const doc = readDocxContent(buildFixturePackage());
     const table = asTable(doc.sections[0]?.blocks[19]);
-    expect(table.columnWidthsPt).toEqual([144, 144]);
+    expect(table.columns.map((c) => c.widthPt)).toEqual([144, 144]);
     expect(table.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(table.rows[0]?.cells[0]?.background).toEqual({
       kind: "solid",
@@ -4395,7 +4395,9 @@ describe("readDocxContent: table column and merge arithmetic", () => {
       ]),
     ]);
     const doc = readDocxContent(paragraphPackage(table));
-    expect(asTable(doc.sections[0]?.blocks[0]).columnWidthsPt).toEqual([72, 0]);
+    expect(
+      asTable(doc.sections[0]?.blocks[0]).columns.map((c) => c.widthPt),
+    ).toEqual([72, 0]);
   });
 });
 
