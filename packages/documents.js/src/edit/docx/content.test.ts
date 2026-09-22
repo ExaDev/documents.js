@@ -151,7 +151,7 @@ describe("buildDocxPackage", () => {
         blocks: [
           {
             kind: "table",
-            columnWidthsPt: [100, 100],
+            columns: [{ widthPt: 100 }, { widthPt: 100 }],
             rows: [
               {
                 cells: [
@@ -187,7 +187,7 @@ describe("buildDocxPackage", () => {
         blocks: [
           {
             kind: "table",
-            columnWidthsPt: [100, 100],
+            columns: [{ widthPt: 100 }, { widthPt: 100 }],
             rows: [
               {
                 cells: [
@@ -244,7 +244,7 @@ describe("buildDocxPackage", () => {
         blocks: [
           {
             kind: "table",
-            columnWidthsPt: [100, 100],
+            columns: [{ widthPt: 100 }, { widthPt: 100 }],
             rows: [
               {
                 cells: [
@@ -288,7 +288,7 @@ describe("buildDocxPackage", () => {
         blocks: [
           {
             kind: "table",
-            columnWidthsPt: [100, 100, 100],
+            columns: [{ widthPt: 100 }, { widthPt: 100 }, { widthPt: 100 }],
             rows: [
               {
                 cells: [
@@ -329,7 +329,7 @@ describe("buildDocxPackage", () => {
         blocks: [
           {
             kind: "table",
-            columnWidthsPt: [100, 100, 100],
+            columns: [{ widthPt: 100 }, { widthPt: 100 }, { widthPt: 100 }],
             rows: [
               {
                 cells: [
@@ -413,7 +413,7 @@ describe("buildDocxPackage", () => {
         blocks: [
           {
             kind: "table",
-            columnWidthsPt: [100],
+            columns: [{ widthPt: 100 }],
             rows: [
               { heightPt: 30, cells: [{ blocks: [] }] },
               { cells: [{ blocks: [] }] },
@@ -443,7 +443,7 @@ describe("buildDocxPackage", () => {
         blocks: [
           {
             kind: "table",
-            columnWidthsPt: [100, 100],
+            columns: [{ widthPt: 100 }, { widthPt: 100 }],
             rows: [
               {
                 cells: [
@@ -478,7 +478,7 @@ describe("buildDocxPackage", () => {
         blocks: [
           {
             kind: "table",
-            columnWidthsPt: [100],
+            columns: [{ widthPt: 100 }],
             rows: [
               {
                 cells: [
@@ -998,7 +998,7 @@ describe("buildDocxPackage: a table breaking the grid rule", () => {
   // A merged header whose covered position carries a second copy of the anchor's content, which a docx horizontal merge has no cell to hold.
   const coveredContentTable: ContentTable = {
     kind: "table",
-    columnWidthsPt: [100, 100],
+    columns: [{ widthPt: 100 }, { widthPt: 100 }],
     rows: [
       {
         cells: [
@@ -1035,7 +1035,7 @@ describe("buildDocxPackage: a table breaking the grid rule", () => {
           {
             pageSize: { widthPt: 612, heightPt: 792 },
             margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
-            blocks: [{ ...coveredContentTable, columnWidthsPt: [] }],
+            blocks: [{ ...coveredContentTable, columns: [] }],
           },
         ]),
       ),
@@ -1083,7 +1083,7 @@ describe("buildDocxPackage: a table that states no column widths", () => {
   it("is written with one w:gridCol per grid column the rows state, rather than dropped", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [],
+      columns: [],
       rows: [
         { cells: [cellOf("a"), cellOf("b")] },
         { cells: [cellOf("c"), cellOf("d")] },
@@ -1091,9 +1091,9 @@ describe("buildDocxPackage: a table that states no column widths", () => {
     };
     expect(gridColumns(table)).toBe(2);
     const written = writtenTable(table);
-    expect(written.columnWidthsPt).toHaveLength(2);
-    for (const widthPt of written.columnWidthsPt) {
-      expect(widthPt).toBeGreaterThan(0);
+    expect(written.columns).toHaveLength(2);
+    for (const column of written.columns) {
+      expect(column.widthPt).toBeGreaterThan(0);
     }
     expect(written.rows.map((row) => row.cells.length)).toEqual([2, 2]);
   });
@@ -1101,33 +1101,33 @@ describe("buildDocxPackage: a table that states no column widths", () => {
   it("writes a merged region across columns the rows state and the widths do not", () => {
     const written = writtenTable({
       kind: "table",
-      columnWidthsPt: [],
+      columns: [],
       rows: [
         { cells: [{ ...cellOf("wide"), colSpan: 2 }, { blocks: [] }] },
         { cells: [cellOf("c"), cellOf("d")] },
       ],
     });
-    expect(written.columnWidthsPt).toHaveLength(2);
+    expect(written.columns).toHaveLength(2);
     expect(written.rows[0]?.cells[0]).toMatchObject({ colSpan: 2 });
   });
 
   it("widens a grid whose stated widths are fewer than the columns the rows occupy, keeping the widths it does state", () => {
     const written = writtenTable({
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [{ cells: [cellOf("a"), cellOf("b")] }],
     });
-    expect(written.columnWidthsPt).toHaveLength(2);
-    expect(written.columnWidthsPt[0]).toBe(100);
+    expect(written.columns).toHaveLength(2);
+    expect(written.columns[0]?.widthPt).toBe(100);
   });
 
   it("writes the stated widths unchanged when the table states one per column", () => {
     const written = writtenTable({
       kind: "table",
-      columnWidthsPt: [50, 70],
+      columns: [{ widthPt: 50 }, { widthPt: 70 }],
       rows: [{ cells: [cellOf("a"), cellOf("b")] }],
     });
-    expect(written.columnWidthsPt).toEqual([50, 70]);
+    expect(written.columns).toEqual([{ widthPt: 50 }, { widthPt: 70 }]);
   });
 
   it("still reports a grid fault in a table with no widths, rather than dropping it", () => {
@@ -1135,7 +1135,7 @@ describe("buildDocxPackage: a table that states no column widths", () => {
       buildDocxPackage(
         documentOf({
           kind: "table",
-          columnWidthsPt: [],
+          columns: [],
           rows: [
             { cells: [cellOf("a"), cellOf("b")] },
             { cells: [cellOf("c")] },
@@ -1148,11 +1148,9 @@ describe("buildDocxPackage: a table that states no column widths", () => {
   });
 
   it("refuses a table with no rows, with or without stated widths, rather than dropping it", () => {
-    for (const columnWidthsPt of [[], [100, 100]]) {
+    for (const columns of [[], [{ widthPt: 100 }, { widthPt: 100 }]]) {
       expect(() =>
-        buildDocxPackage(
-          documentOf({ kind: "table", columnWidthsPt, rows: [] }),
-        ),
+        buildDocxPackage(documentOf({ kind: "table", columns, rows: [] })),
       ).toThrow(
         "buildDocxPackage: table has no rows, and a table with no rows cannot be written in every word-processing format (ODF requires at least one table:table-row)",
       );

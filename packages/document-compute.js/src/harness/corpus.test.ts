@@ -129,7 +129,7 @@ describe("collectFormulas: table and embedded-object traversal", () => {
     const document = wordDoc([
       {
         kind: "table",
-        columnWidthsPt: [100],
+        columns: [{ widthPt: 100 }],
         rows: [{ cells: [{ blocks: [formulaEmbed(num1)] }] }],
       },
     ]);
@@ -147,7 +147,7 @@ describe("collectFormulas: table and embedded-object traversal", () => {
     const document = wordDoc([
       {
         kind: "table",
-        columnWidthsPt: [50, 50, 50],
+        columns: [{ widthPt: 50 }, { widthPt: 50 }, { widthPt: 50 }],
         rows: [
           {
             cells: [
@@ -168,7 +168,7 @@ describe("collectFormulas: table and embedded-object traversal", () => {
     const document = wordDoc([
       {
         kind: "table",
-        columnWidthsPt: [100],
+        columns: [{ widthPt: 100 }],
         rows: [
           {
             cells: [
@@ -176,7 +176,7 @@ describe("collectFormulas: table and embedded-object traversal", () => {
                 blocks: [
                   {
                     kind: "table",
-                    columnWidthsPt: [50],
+                    columns: [{ widthPt: 50 }],
                     rows: [{ cells: [{ blocks: [formulaEmbed(num1)] }] }],
                   },
                 ],

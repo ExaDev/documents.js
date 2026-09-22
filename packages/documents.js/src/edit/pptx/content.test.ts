@@ -429,7 +429,7 @@ describe("buildPptxPackage: table merges follow the dense grid", () => {
   it("marks the position a horizontal merge covers hMerge and leaves its neighbours plain", () => {
     const cells = builtCells({
       kind: "table",
-      columnWidthsPt: [100, 100, 100],
+      columns: [{ widthPt: 100 }, { widthPt: 100 }, { widthPt: 100 }],
       rows: [
         { cells: [textCell("A", { colSpan: 2 }), empty, textCell("C")] },
         { cells: [textCell("D"), textCell("E"), textCell("F")] },
@@ -446,7 +446,7 @@ describe("buildPptxPackage: table merges follow the dense grid", () => {
   it("marks the position a vertical merge covers in the rows below vMerge", () => {
     const cells = builtCells({
       kind: "table",
-      columnWidthsPt: [100, 100],
+      columns: [{ widthPt: 100 }, { widthPt: 100 }],
       rows: [
         { cells: [textCell("A", { rowSpan: 3 }), textCell("B")] },
         { cells: [empty, textCell("D")] },
@@ -464,7 +464,7 @@ describe("buildPptxPackage: table merges follow the dense grid", () => {
   it("marks a 2x2 merge's covered positions by the side of the region they lie on, the interior one on both", () => {
     const cells = builtCells({
       kind: "table",
-      columnWidthsPt: [100, 100, 100],
+      columns: [{ widthPt: 100 }, { widthPt: 100 }, { widthPt: 100 }],
       rows: [
         {
           cells: [
@@ -495,7 +495,7 @@ describe("buildPptxPackage: table merges follow the dense grid", () => {
     } as const;
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100, 100],
+      columns: [{ widthPt: 100 }, { widthPt: 100 }],
       rows: [
         {
           cells: [
@@ -531,7 +531,11 @@ describe("buildPptxPackage: table merges follow the dense grid", () => {
               blocks: [
                 {
                   kind: "table",
-                  columnWidthsPt: [100, 100, 100],
+                  columns: [
+                    { widthPt: 100 },
+                    { widthPt: 100 },
+                    { widthPt: 100 },
+                  ],
                   rows: [
                     {
                       cells: [
@@ -558,7 +562,7 @@ describe("buildPptxPackage: table merges follow the dense grid", () => {
       throw new Error("expected a table block");
     }
     for (const row of block.rows) {
-      expect(row.cells).toHaveLength(block.columnWidthsPt.length);
+      expect(row.cells).toHaveLength(block.columns.length);
     }
     expect(block.rows[0]?.cells[0]).toMatchObject({ colSpan: 2, rowSpan: 2 });
     expect(
@@ -586,7 +590,7 @@ describe("buildPptxPackage: table merges follow the dense grid", () => {
               blocks: [
                 {
                   kind: "table",
-                  columnWidthsPt: [100, 100],
+                  columns: [{ widthPt: 100 }, { widthPt: 100 }],
                   rows: [
                     {
                       cells: [
@@ -638,7 +642,7 @@ describe("buildPptxPackage: a slide table breaking the grid rule", () => {
                 blocks: [
                   {
                     kind: "table",
-                    columnWidthsPt: [100, 100],
+                    columns: [{ widthPt: 100 }, { widthPt: 100 }],
                     rows: [
                       {
                         cells: [
@@ -713,7 +717,7 @@ describe("buildPptxPackage: a slide table that states no column widths", () => {
   it("is written with one a:gridCol per grid column the rows state", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [],
+      columns: [],
       rows: [
         { cells: [cellOf("a"), cellOf("b")] },
         { cells: [cellOf("c"), cellOf("d")] },
@@ -721,9 +725,9 @@ describe("buildPptxPackage: a slide table that states no column widths", () => {
     };
     expect(gridColumns(table)).toBe(2);
     const written = writtenTable(table);
-    expect(written.columnWidthsPt).toHaveLength(2);
-    for (const widthPt of written.columnWidthsPt) {
-      expect(widthPt).toBeGreaterThan(0);
+    expect(written.columns).toHaveLength(2);
+    for (const column of written.columns) {
+      expect(column.widthPt).toBeGreaterThan(0);
     }
     expect(written.rows.map((row) => row.cells.length)).toEqual([2, 2]);
   });
@@ -731,20 +735,20 @@ describe("buildPptxPackage: a slide table that states no column widths", () => {
   it("widens a grid whose stated widths are fewer than the columns the rows occupy, keeping the widths it does state", () => {
     const written = writtenTable({
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [{ cells: [cellOf("a"), cellOf("b")] }],
     });
-    expect(written.columnWidthsPt).toHaveLength(2);
-    expect(written.columnWidthsPt[0]).toBe(100);
+    expect(written.columns).toHaveLength(2);
+    expect(written.columns[0]?.widthPt).toBe(100);
   });
 
   it("writes the stated widths unchanged when the table states one per column", () => {
     const written = writtenTable({
       kind: "table",
-      columnWidthsPt: [50, 70],
+      columns: [{ widthPt: 50 }, { widthPt: 70 }],
       rows: [{ cells: [cellOf("a"), cellOf("b")] }],
     });
-    expect(written.columnWidthsPt).toEqual([50, 70]);
+    expect(written.columns).toEqual([{ widthPt: 50 }, { widthPt: 70 }]);
   });
 
   it("still reports a grid fault in a table with no widths, naming the fault rather than a missing cell", () => {
@@ -752,7 +756,7 @@ describe("buildPptxPackage: a slide table that states no column widths", () => {
       buildPptxPackage(
         documentOf({
           kind: "table",
-          columnWidthsPt: [],
+          columns: [],
           rows: [
             { cells: [cellOf("a"), cellOf("b")] },
             { cells: [cellOf("c")] },
@@ -765,11 +769,9 @@ describe("buildPptxPackage: a slide table that states no column widths", () => {
   });
 
   it("refuses a table with no rows, with or without stated widths, rather than writing a grid with nothing in it", () => {
-    for (const columnWidthsPt of [[], [100, 100]]) {
+    for (const columns of [[], [{ widthPt: 100 }, { widthPt: 100 }]]) {
       expect(() =>
-        buildPptxPackage(
-          documentOf({ kind: "table", columnWidthsPt, rows: [] }),
-        ),
+        buildPptxPackage(documentOf({ kind: "table", columns, rows: [] })),
       ).toThrow(
         "buildPptxPackage: table has no rows, and a table with no rows cannot be written in every presentation format (ODF requires at least one table:table-row)",
       );

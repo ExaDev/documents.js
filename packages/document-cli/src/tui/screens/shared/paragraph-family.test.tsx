@@ -210,7 +210,7 @@ function TableProbe({
   const anchor = tableBlock.rows[0]?.cells[0];
   return (
     <Text>
-      probe:table={tableBlock.rows.length}x{tableBlock.columnWidthsPt.length}{" "}
+      probe:table={tableBlock.rows.length}x{tableBlock.columns.length}{" "}
       anchorColSpan={anchor?.colSpan ?? 1} anchorRowSpan={anchor?.rowSpan ?? 1}
     </Text>
   );

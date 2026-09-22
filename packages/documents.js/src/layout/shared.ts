@@ -449,6 +449,7 @@ export function tableAnchorBoxes(
   scale: number,
 ): TableRowAnchorBoxes[] {
   const positionsByRow = walkTableGrid(table);
+  const columnWidthsPt = table.columns.map((column) => column.widthPt);
   return table.rows.map((row, rowIndex) => ({
     row,
     anchors: positionsByRow[rowIndex]!.flatMap((position) =>
@@ -457,14 +458,11 @@ export function tableAnchorBoxes(
             {
               cell: position.cell,
               xOffsetPt:
-                sumColumnWidthsPt(
-                  table.columnWidthsPt,
-                  0,
-                  position.columnIndex,
-                ) * scale,
+                sumColumnWidthsPt(columnWidthsPt, 0, position.columnIndex) *
+                scale,
               widthPt:
                 sumColumnWidthsPt(
-                  table.columnWidthsPt,
+                  columnWidthsPt,
                   position.columnIndex,
                   tableCellColumnSpan(position.cell),
                 ) * scale,

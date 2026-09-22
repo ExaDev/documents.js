@@ -185,7 +185,7 @@ describe("docx/odt decoration bridge", () => {
                   heightPt: 28,
                 },
               ],
-              columnWidthsPt: [468],
+              columns: [{ widthPt: 468 }],
             },
           ],
         },

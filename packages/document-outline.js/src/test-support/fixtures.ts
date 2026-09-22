@@ -82,7 +82,7 @@ export function table(rows: string[][]): ContentTable {
     rows: rows.map((cells) => ({
       cells: cells.map((text) => ({ blocks: [paragraph(text)] })),
     })),
-    columnWidthsPt: rows[0]?.map(() => 80) ?? [],
+    columns: rows[0]?.map(() => ({ widthPt: 80 })) ?? [],
   };
 }
 

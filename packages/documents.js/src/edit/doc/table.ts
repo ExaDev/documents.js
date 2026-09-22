@@ -16,7 +16,7 @@ import { resolvePivotTableGrid } from "../table-grid";
 import type { ParagraphInit } from "./paragraph";
 import { buildParagraph, DocParagraph } from "./paragraph";
 
-// 468pt (6.5in) — matches OdtTable's own DEFAULT_TABLE_WIDTH_PT (src/edit/odt/table.ts) and markdown's table.ts: the content width a new table defaults to when no explicit widths are given. Unlike markdown (whose own writer never reads columnWidthsPt at all), doc-codec's writer genuinely consumes the table-wide column grid these widths define — each physical cell's boundaries are computed from it — so this default is real input to the written rgdxaCenter, not just schema validity.
+// 468pt (6.5in), matching OdtTable's own DEFAULT_TABLE_WIDTH_PT (src/edit/odt/table.ts) and markdown's table.ts: the content width a new table defaults to when no explicit widths are given. Unlike markdown (whose own writer never reads the column widths at all), doc-codec's writer genuinely consumes the table-wide column grid these widths define, since each physical cell's boundaries are computed from it, so this default is real input to the written rgdxaCenter, not just schema validity.
 const DEFAULT_TABLE_WIDTH_PT = 468;
 
 export interface TableInit {
@@ -148,10 +148,10 @@ export class DocTable {
     return resolvePivotTableGrid(this.live(), (cell) => new DocTableCell(cell));
   }
 
-  // Appends a row with the same column count as this table's own columnWidthsPt — the table-wide column grid those widths define is what doc-codec's writer derives every physical cell's boundaries from, so the grid and the row cell counts must stay in agreement exactly as they are kept here.
+  // Appends a row with the same column count as this table's own columns, since the table-wide column grid those widths define is what doc-codec's writer derives every physical cell's boundaries from, so the grid and the row cell counts must stay in agreement exactly as they are kept here.
   appendRow(): DocTableRow {
     const node = this.live();
-    const row = buildRow(node.columnWidthsPt.length);
+    const row = buildRow(node.columns.length);
     node.rows.push(row);
     return new DocTableRow(row);
   }
@@ -244,13 +244,12 @@ export class DocTable {
 
 // Builds a fresh ContentTable from scratch (not a live view), with an even column split of the default content width — the identical defaulting MarkdownTable.buildTable applies, except here the widths are genuine writer input rather than schema ballast.
 export function buildTable(init: TableInit): ContentTableNode {
-  const columnWidthsPt = Array.from(
-    { length: init.columns },
-    () => DEFAULT_TABLE_WIDTH_PT / init.columns,
-  );
+  const columns = Array.from({ length: init.columns }, () => ({
+    widthPt: DEFAULT_TABLE_WIDTH_PT / init.columns,
+  }));
   const rows: ContentTableRowNode[] = [];
   for (let r = 0; r < init.rows; r++) {
     rows.push(buildRow(init.columns));
   }
-  return { kind: "table", rows, columnWidthsPt };
+  return { kind: "table", rows, columns };
 }

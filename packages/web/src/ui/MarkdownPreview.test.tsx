@@ -202,7 +202,7 @@ describe("MarkdownPreview", () => {
       content: wordprocessingDocument([
         {
           kind: "table",
-          columnWidthsPt: [200],
+          columns: [{ widthPt: 200 }],
           rows: [
             {
               cells: [

@@ -274,7 +274,7 @@ describe("renderBlocksNeutral", () => {
   it("renders a table block with its rows, cells, and column span/row span", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [50, 50],
+      columns: [{ widthPt: 50 }, { widthPt: 50 }],
       rows: [
         {
           cells: [
@@ -497,7 +497,7 @@ describe("renderTable", () => {
   it("passes each cell's own blocks to the given renderBlocks callback", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [10],
+      columns: [{ widthPt: 10 }],
       rows: [{ cells: [{ blocks: [paragraph()] }] }],
     };
     const seen: (readonly ContentBlock[])[] = [];
@@ -528,7 +528,7 @@ describe("renderTable", () => {
   it("renders a horizontally merged region as one td, omitting its covered positions", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [10, 10, 10],
+      columns: [{ widthPt: 10 }, { widthPt: 10 }, { widthPt: 10 }],
       rows: [
         {
           cells: [textCell("a", { colSpan: 2 }), { blocks: [] }, textCell("b")],
@@ -545,7 +545,7 @@ describe("renderTable", () => {
   it("renders a vertically merged region as one td, omitting its covered positions in the rows below", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [10, 10],
+      columns: [{ widthPt: 10 }, { widthPt: 10 }],
       rows: [
         { cells: [textCell("a", { rowSpan: 3 }), textCell("b")] },
         { cells: [{ blocks: [] }, textCell("c")] },
@@ -561,7 +561,7 @@ describe("renderTable", () => {
   it("renders a two by two merged region as a single td", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [10, 10, 10],
+      columns: [{ widthPt: 10 }, { widthPt: 10 }, { widthPt: 10 }],
       rows: [
         {
           cells: [
@@ -584,7 +584,7 @@ describe("renderTable", () => {
   it("renders every entry of an unmerged table as a td", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [10, 10],
+      columns: [{ widthPt: 10 }, { widthPt: 10 }],
       rows: [{ cells: [textCell("a"), textCell("b")] }],
     };
     expect(cellsOfRows(table).map((row) => row.length)).toEqual([2]);

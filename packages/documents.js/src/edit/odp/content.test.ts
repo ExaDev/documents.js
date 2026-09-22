@@ -382,7 +382,7 @@ describe("buildOdpPackage: a slide table's own rows", () => {
             blocks: [
               {
                 kind: "table",
-                columnWidthsPt: [120, 120],
+                columns: [{ widthPt: 120 }, { widthPt: 120 }],
                 rows: [
                   {
                     cells: [
@@ -455,7 +455,7 @@ describe("buildOdpPackage: a slide table breaking the grid rule", () => {
                 blocks: [
                   {
                     kind: "table",
-                    columnWidthsPt: [100, 100],
+                    columns: [{ widthPt: 100 }, { widthPt: 100 }],
                     rows: [
                       {
                         cells: [
@@ -534,7 +534,7 @@ describe("buildOdpPackage: a slide table that states no column widths", () => {
   it("is written with one table:table-column per grid column the rows state", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [],
+      columns: [],
       rows: [
         { cells: [cellOf("a"), cellOf("b")] },
         { cells: [cellOf("c"), cellOf("d")] },
@@ -542,8 +542,8 @@ describe("buildOdpPackage: a slide table that states no column widths", () => {
     };
     expect(columnCount(table)).toBe(2);
     const written = writtenTable(table);
-    expect(written.columnWidthsPt).toHaveLength(2);
-    for (const widthPt of written.columnWidthsPt) {
+    expect(written.columns).toHaveLength(2);
+    for (const { widthPt } of written.columns) {
       expect(widthPt).toBeGreaterThan(0);
     }
     expect(written.rows.map((row) => row.cells.length)).toEqual([2, 2]);
@@ -552,20 +552,20 @@ describe("buildOdpPackage: a slide table that states no column widths", () => {
   it("widens a grid whose stated widths are fewer than the columns the rows occupy, keeping the widths it does state", () => {
     const written = writtenTable({
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [{ cells: [cellOf("a"), cellOf("b")] }],
     });
-    expect(written.columnWidthsPt).toHaveLength(2);
-    expect(written.columnWidthsPt[0]).toBe(100);
+    expect(written.columns).toHaveLength(2);
+    expect(written.columns[0]?.widthPt).toBe(100);
   });
 
   it("writes the stated widths unchanged when the table states one per column", () => {
     const written = writtenTable({
       kind: "table",
-      columnWidthsPt: [50, 70],
+      columns: [{ widthPt: 50 }, { widthPt: 70 }],
       rows: [{ cells: [cellOf("a"), cellOf("b")] }],
     });
-    expect(written.columnWidthsPt).toEqual([50, 70]);
+    expect(written.columns.map((c) => c.widthPt)).toEqual([50, 70]);
   });
 
   it("still reports a grid fault in a table with no widths, rather than writing past it", () => {
@@ -573,7 +573,7 @@ describe("buildOdpPackage: a slide table that states no column widths", () => {
       buildOdpPackage(
         documentOf({
           kind: "table",
-          columnWidthsPt: [],
+          columns: [],
           rows: [
             { cells: [cellOf("a"), cellOf("b")] },
             { cells: [cellOf("c")] },
@@ -586,11 +586,9 @@ describe("buildOdpPackage: a slide table that states no column widths", () => {
   });
 
   it("refuses a table with no rows, with or without stated widths, rather than writing one ODF forbids", () => {
-    for (const columnWidthsPt of [[], [100, 100]]) {
+    for (const columns of [[], [{ widthPt: 100 }, { widthPt: 100 }]]) {
       expect(() =>
-        buildOdpPackage(
-          documentOf({ kind: "table", columnWidthsPt, rows: [] }),
-        ),
+        buildOdpPackage(documentOf({ kind: "table", columns, rows: [] })),
       ).toThrow(
         "buildOdpPackage: table has no rows, and ODF requires a table:table to hold at least one table:table-row",
       );

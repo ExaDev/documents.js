@@ -398,7 +398,7 @@ function layoutTableFlow(
   measurer: TextMeasurer,
   listCounters: ListCounters,
 ): void {
-  const gridWidthPt = table.columnWidthsPt.reduce((sum, w) => sum + w, 0);
+  const gridWidthPt = table.columns.reduce((sum, c) => sum + c.widthPt, 0);
   const scale = gridWidthPt > 0 ? contentWidthPt / gridWidthPt : 1;
 
   for (const { row, anchors } of tableAnchorBoxes(table, scale)) {

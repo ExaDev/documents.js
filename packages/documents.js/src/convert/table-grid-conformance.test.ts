@@ -34,7 +34,9 @@ function tableOf(rows: readonly (readonly ContentTableCell[])[]): ContentTable {
   return {
     kind: "table",
     rows: rows.map((cells) => ({ cells: [...cells] })),
-    columnWidthsPt: Array.from({ length: columnCount }, () => COLUMN_WIDTH_PT),
+    columns: Array.from({ length: columnCount }, () => ({
+      widthPt: COLUMN_WIDTH_PT,
+    })),
   };
 }
 
@@ -160,6 +162,8 @@ interface FormatCase {
   readonly spans: "stated" | "dropped";
   // Whether this format can state THE HEADER RULE's own fact (ContentTableRow.isHeader in document-schema.js): this row is a header row, at whatever position it sits. "stated" round-trips the flags exactly as given, wherever the header rows sit. "dropped" has no header concept at all: its writer writes the rows unflagged (reporting it, where the writer has a diagnostic sink to report through) and its reader reads them back unflagged.
   readonly headerRows: "stated" | "dropped";
+  // The column-axis mirror of headerRows: whether this format can state THE HEADER COLUMN RULE's own fact (ContentTableColumn.isHeader in document-schema.js, ExaDev/documents.js#1381), a column repeated at the left of each printed page. Only ODF states it at all (table:table-header-columns); every other format this suite covers has no header-column concept whatsoever, unlike headerRows where several formats state rows natively.
+  readonly headerColumns: "stated" | "dropped";
   readonly envelope: Envelope;
   // What this format's writer does with a table whose covered position carries blocks of its own, which the grid rule forbids because a region's content belongs to its anchor. "refuses" throws rather than write a file that has lost the content; "keeps" is a format with no merge record at all, whose writer places every entry at its own grid position and so loses nothing, reporting the fault through its own diagnostic sink instead.
   readonly coveredContent: "refuses" | "keeps";
@@ -182,48 +186,56 @@ const FORMATS: Readonly<Partial<Record<DocumentFormat, FormatCase>>> = {
   docx: {
     spans: "stated",
     headerRows: "stated",
+    headerColumns: "dropped",
     envelope: "wordprocessing",
     coveredContent: "refuses",
   },
   odt: {
     spans: "stated",
     headerRows: "stated",
+    headerColumns: "stated",
     envelope: "wordprocessing",
     coveredContent: "refuses",
   },
   rtf: {
     spans: "stated",
     headerRows: "stated",
+    headerColumns: "dropped",
     envelope: "wordprocessing",
     coveredContent: "refuses",
   },
   doc: {
     spans: "stated",
     headerRows: "stated",
+    headerColumns: "dropped",
     envelope: "wordprocessing",
     coveredContent: "refuses",
   },
   epub: {
     spans: "stated",
     headerRows: "stated",
+    headerColumns: "dropped",
     envelope: "wordprocessing",
     coveredContent: "refuses",
   },
   markdown: {
     spans: "stated",
     headerRows: "stated",
+    headerColumns: "dropped",
     envelope: "wordprocessing",
     coveredContent: "refuses",
   },
   pptx: {
     spans: "stated",
     headerRows: "dropped",
+    headerColumns: "dropped",
     envelope: "presentation",
     coveredContent: "refuses",
   },
   odp: {
     spans: "stated",
     headerRows: "stated",
+    headerColumns: "stated",
     envelope: "presentation",
     coveredContent: "refuses",
   },
@@ -231,6 +243,7 @@ const FORMATS: Readonly<Partial<Record<DocumentFormat, FormatCase>>> = {
   ppt: {
     spans: "dropped",
     headerRows: "dropped",
+    headerColumns: "dropped",
     envelope: "presentation",
     coveredContent: "keeps",
   },
@@ -363,6 +376,86 @@ function headerTable(): ContentTable {
 function headerFlags(table: ContentTable): (boolean | undefined)[] {
   return table.rows.map((row) => row.isHeader);
 }
+
+// The column-axis mirror of headerTable() immediately above: a table whose header columns are neither only-leading nor contiguous (column 0 is a header, column 1 is not, column 2 is a header again), the shape that separates a format genuinely carrying the fact per column from one that only ever treats its first column as a header. Only ODF states this at all (odt/odp, table:table-header-columns); every other format drops it.
+function headerColumnTable(): ContentTable {
+  const table = tableOf([
+    [textCell("Region"), textCell("Q1"), textCell("Q2")],
+    [textCell("North"), textCell("10"), textCell("20")],
+  ]);
+  return {
+    ...table,
+    columns: table.columns.map((column, index) =>
+      index === 1 ? column : { ...column, isHeader: true },
+    ),
+  };
+}
+
+function columnHeaderFlags(table: ContentTable): (boolean | undefined)[] {
+  return table.columns.map((column) => column.isHeader);
+}
+
+describe("every format reads back the header columns it was given", () => {
+  const HEADER_COLUMN_STATING = CASES.filter(
+    ([, entry]) => entry.headerColumns === "stated",
+  );
+
+  it.each(HEADER_COLUMN_STATING)(
+    "%s reads back a header column that is neither leading nor contiguous",
+    (format) => {
+      expect(columnHeaderFlags(roundTrip(format, headerColumnTable()))).toEqual(
+        columnHeaderFlags(headerColumnTable()),
+      );
+    },
+  );
+
+  it.each(HEADER_COLUMN_STATING)(
+    "%s keeps the grid and the cell text while carrying the header columns",
+    (format) => {
+      expect(gridText(roundTrip(format, headerColumnTable()))).toEqual(
+        gridText(headerColumnTable()),
+      );
+    },
+  );
+
+  it.each(CASES)(
+    "%s leaves an unflagged table's columns unflagged",
+    (format) => {
+      expect(
+        roundTrip(format, mergedTable()).columns.some(
+          (column) => column.isHeader !== undefined,
+        ),
+      ).toBe(false);
+    },
+  );
+
+  // A format with no header-column concept still has to hold everything else: the flag goes, the table does not.
+  it.each(CASES.filter(([, entry]) => entry.headerColumns === "dropped"))(
+    "%s drops the column flags and keeps the grid",
+    (format) => {
+      const read = roundTrip(format, headerColumnTable());
+      expect(columnHeaderFlags(read)).toEqual([
+        undefined,
+        undefined,
+        undefined,
+      ]);
+      expect(gridText(read)).toEqual(gridText(headerColumnTable()));
+    },
+  );
+
+  it("reads one set of header columns from every format that states them", () => {
+    const shapes = HEADER_COLUMN_STATING.map(([format]) => ({
+      format,
+      flags: columnHeaderFlags(roundTrip(format, headerColumnTable())),
+    }));
+    for (const shape of shapes) {
+      expect(shape).toEqual({
+        format: shape.format,
+        flags: columnHeaderFlags(headerColumnTable()),
+      });
+    }
+  });
+});
 
 describe("every format reads back the header rows it was given", () => {
   const HEADER_STATING = CASES.filter(
