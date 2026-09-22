@@ -447,7 +447,7 @@ describe("writeDocContent", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [50],
+        columns: [{ widthPt: 50 }],
         rows: [
           {
             cells: [
@@ -455,7 +455,7 @@ describe("writeDocContent", () => {
                 blocks: [
                   {
                     kind: "table",
-                    columnWidthsPt: [10],
+                    columns: [{ widthPt: 10 }],
                     rows: [{ cells: [{ blocks: [] }] }],
                   },
                 ],
@@ -550,7 +550,7 @@ describe("writeDocContent page breaks", () => {
               ],
             },
           ],
-          columnWidthsPt: [100, 100],
+          columns: [{ widthPt: 100 }, { widthPt: 100 }],
         },
         { kind: "pageBreak" },
         paragraph([{ text: "after the table" }]),
@@ -701,7 +701,7 @@ describe("writeDocContent multiple sections", () => {
   it("ends a non-final section on an ordinary paragraph mark even when its own last block is a table", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [{ cells: [{ blocks: [paragraph([{ text: "cell" }])] }] }],
     };
     const input: ContentDocument = {
@@ -871,7 +871,7 @@ describe("writeDocContent stories", () => {
                   ],
                 },
               ],
-              columnWidthsPt: [100, 100],
+              columns: [{ widthPt: 100 }, { widthPt: 100 }],
             },
           ],
         },
@@ -892,7 +892,7 @@ describe("writeDocContent stories", () => {
             ],
           },
         ],
-        columnWidthsPt: [100, 100],
+        columns: [{ widthPt: 100 }, { widthPt: 100 }],
       },
     ]);
   });
@@ -1229,7 +1229,7 @@ describe("writeDocContent numbering", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [200],
+        columns: [{ widthPt: 200 }],
         rows: [
           {
             cells: [
@@ -1266,7 +1266,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [100, 150],
+        columns: [{ widthPt: 100 }, { widthPt: 150 }],
         rows: [
           {
             cells: [
@@ -1288,7 +1288,7 @@ describe("writeDocContent tables", () => {
     if (block?.kind !== "table") {
       throw new Error("expected a table block");
     }
-    expect(block.columnWidthsPt).toEqual([100, 150]);
+    expect(block.columns.map((c) => c.widthPt)).toEqual([100, 150]);
     expect(block.rows).toHaveLength(2);
     expect(block.rows[0]?.cells.map((cell) => cellText(cell))).toEqual([
       "A1",
@@ -1304,7 +1304,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [200],
+        columns: [{ widthPt: 200 }],
         rows: [
           {
             cells: [
@@ -1334,7 +1334,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [100],
+        columns: [{ widthPt: 100 }],
         rows: [
           {
             cells: [{ blocks: [paragraph([{ text: "tall" }])] }],
@@ -1355,7 +1355,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [100],
+        columns: [{ widthPt: 100 }],
         rows: [
           {
             cells: [{ blocks: [paragraph([{ text: "head" }])] }],
@@ -1379,11 +1379,11 @@ describe("writeDocContent tables", () => {
   });
 
   it("round-trips a horizontally merged cell's colSpan via the merged row's own narrower, wider physical cells", () => {
-    // A real, independent [MS-DOC] implementation (LibreOffice 26.2.5.2) was confirmed not to read TCGRF.horzMerge/sprmTMerge at all for a horizontal merge — it states one purely through a merged row's own physical cell layout: fewer, wider cells than an unmerged row in the same table (ExaDev/documents.js#895). This writer matches that encoding whenever some other row in the table would otherwise reveal the merged boundary anyway, so the merged row genuinely has 2 physical cells here, not 3 — the reader recovers colSpan by comparing this row's own boundaries against the second, unmerged row's, which is what reveals that the table has 3 conceptual columns at all (see the dedicated "recovers colSpan and columnWidthsPt" test below for the fallback this writer uses instead when no row ever reveals that boundary on its own).
+    // A real, independent [MS-DOC] implementation (LibreOffice 26.2.5.2) was confirmed not to read TCGRF.horzMerge/sprmTMerge at all for a horizontal merge — it states one purely through a merged row's own physical cell layout: fewer, wider cells than an unmerged row in the same table (ExaDev/documents.js#895). This writer matches that encoding whenever some other row in the table would otherwise reveal the merged boundary anyway, so the merged row genuinely has 2 physical cells here, not 3 — the reader recovers colSpan by comparing this row's own boundaries against the second, unmerged row's, which is what reveals that the table has 3 conceptual columns at all (see the dedicated "recovers colSpan and columns" test below for the fallback this writer uses instead when no row ever reveals that boundary on its own).
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [50, 50, 50],
+        columns: [{ widthPt: 50 }, { widthPt: 50 }, { widthPt: 50 }],
         rows: [
           {
             cells: [
@@ -1407,7 +1407,7 @@ describe("writeDocContent tables", () => {
     if (block?.kind !== "table") {
       throw new Error("expected a table block");
     }
-    expect(block.columnWidthsPt).toEqual([50, 50, 50]);
+    expect(block.columns.map((c) => c.widthPt)).toEqual([50, 50, 50]);
     expect(block.rows[0]?.cells).toHaveLength(3);
     expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(cellText(block.rows[0]?.cells[0])).toBe("wide");
@@ -1421,12 +1421,12 @@ describe("writeDocContent tables", () => {
     ]);
   });
 
-  it("recovers colSpan and columnWidthsPt via a horizontal-merge continuation cell when no row in the table ever states the boundary a merge crosses (ExaDev/documents.js#992)", () => {
+  it("recovers colSpan and columns via a horizontal-merge continuation cell when no row in the table ever states the boundary a merge crosses (ExaDev/documents.js#992)", () => {
     // [MS-DOC]'s own physical model (see the previous test's note) states a table's column grid entirely through the boundaries each row's own TDefTableOperand declares. When literally every row merges across the identical span — as a single-row table with one merged cell necessarily does, having no other row to compare against — the merged-pair boundary is never stated by the ordinary narrower/wider physical-cell encoding at all. table/write.ts's own lost-boundary fallback detects exactly this and keeps the boundary physically present instead: the merged cell is written as 2 physical cells, the first carrying the real content, the second an empty TCGRF.horzMerge continuation — so the row's own rgdxaCenter states all 3 of the table's columns after all.
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [50, 50, 50],
+        columns: [{ widthPt: 50 }, { widthPt: 50 }, { widthPt: 50 }],
         rows: [
           {
             cells: [
@@ -1443,7 +1443,7 @@ describe("writeDocContent tables", () => {
     if (block?.kind !== "table") {
       throw new Error("expected a table block");
     }
-    expect(block.columnWidthsPt).toEqual([50, 50, 50]);
+    expect(block.columns.map((c) => c.widthPt)).toEqual([50, 50, 50]);
     expect(block.rows[0]?.cells).toHaveLength(3);
     expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(cellText(block.rows[0]?.cells[0])).toBe("wide");
@@ -1452,12 +1452,12 @@ describe("writeDocContent tables", () => {
     expect(cellText(block.rows[0]?.cells[2])).toBe("narrow");
   });
 
-  it("recovers colSpan and columnWidthsPt when every row of a multi-row table merges across the identical boundary (ExaDev/documents.js#992)", () => {
+  it("recovers colSpan and columns when every row of a multi-row table merges across the identical boundary (ExaDev/documents.js#992)", () => {
     // The previous test's single row is the simplest case of this gap; the issue itself names the general one — a boundary every row merges across identically, however many rows the table has. Both rows here merge columns 0-1 into one cell, so neither row's own rgdxaCenter would ever state that boundary under the ordinary narrower/wider encoding: the fallback must apply to both rows, not just one, since either row on its own is a table with no other row to compare against.
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [50, 50, 50],
+        columns: [{ widthPt: 50 }, { widthPt: 50 }, { widthPt: 50 }],
         rows: [
           {
             cells: [
@@ -1481,7 +1481,7 @@ describe("writeDocContent tables", () => {
     if (block?.kind !== "table") {
       throw new Error("expected a table block");
     }
-    expect(block.columnWidthsPt).toEqual([50, 50, 50]);
+    expect(block.columns.map((c) => c.widthPt)).toEqual([50, 50, 50]);
     expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(cellText(block.rows[0]?.cells[0])).toBe("R1-wide");
     expect(cellText(block.rows[0]?.cells[2])).toBe("R1-narrow");
@@ -1495,7 +1495,12 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [50, 50, 50, 50],
+        columns: [
+          { widthPt: 50 },
+          { widthPt: 50 },
+          { widthPt: 50 },
+          { widthPt: 50 },
+        ],
         rows: [
           {
             cells: [
@@ -1509,7 +1514,7 @@ describe("writeDocContent tables", () => {
     ]);
     const result = roundTrip(input);
     const block = tableAt(result, 0);
-    expect(block.columnWidthsPt).toEqual([50, 50, 50, 50]);
+    expect(block.columns.map((c) => c.widthPt)).toEqual([50, 50, 50, 50]);
     expect(block.rows[0]?.cells[0]?.colSpan).toBe(3);
     expect(cellText(block.rows[0]?.cells[0])).toBe("wide");
     expect(block.rows[0]?.cells[3]?.colSpan).toBeUndefined();
@@ -1521,7 +1526,13 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [20, 20, 20, 20, 20],
+        columns: [
+          { widthPt: 20 },
+          { widthPt: 20 },
+          { widthPt: 20 },
+          { widthPt: 20 },
+          { widthPt: 20 },
+        ],
         rows: [
           {
             cells: [
@@ -1551,7 +1562,7 @@ describe("writeDocContent tables", () => {
     ]);
     const result = roundTrip(input);
     const block = tableAt(result, 0);
-    expect(block.columnWidthsPt).toEqual([20, 20, 20, 20, 20]);
+    expect(block.columns.map((c) => c.widthPt)).toEqual([20, 20, 20, 20, 20]);
     expect(block.rows[0]?.cells[0]?.colSpan).toBe(4);
     expect(cellText(block.rows[0]?.cells[0])).toBe("A-wide");
     expect(block.rows[1]?.cells[0]?.colSpan).toBe(4);
@@ -1567,7 +1578,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [50, 50, 50],
+        columns: [{ widthPt: 50 }, { widthPt: 50 }, { widthPt: 50 }],
         rows: [
           {
             cells: [
@@ -1608,7 +1619,12 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [20, 20, 20, 20],
+        columns: [
+          { widthPt: 20 },
+          { widthPt: 20 },
+          { widthPt: 20 },
+          { widthPt: 20 },
+        ],
         rows: [
           {
             cells: [
@@ -1632,7 +1648,7 @@ describe("writeDocContent tables", () => {
     ]);
     const result = roundTrip(input);
     const block = tableAt(result, 0);
-    expect(block.columnWidthsPt).toEqual([20, 20, 20, 20]);
+    expect(block.columns.map((c) => c.widthPt)).toEqual([20, 20, 20, 20]);
     expect(block.rows[0]?.cells[0]?.colSpan).toBe(3);
     expect(block.rows[0]?.cells[0]?.rowSpan).toBe(2);
     expect(cellText(block.rows[0]?.cells[0])).toBe("anchor");
@@ -1648,7 +1664,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: Array.from({ length: columnCount }, () => 30),
+        columns: Array.from({ length: columnCount }, () => ({ widthPt: 30 })),
         rows: [
           {
             cells: Array.from({ length: columnCount }, (_unused, index) => ({
@@ -1665,7 +1681,7 @@ describe("writeDocContent tables", () => {
     const result = readDocContent(bytes);
     expect(warnings).toEqual([]);
     const block = tableAt(result, 0);
-    expect(block.columnWidthsPt).toHaveLength(columnCount);
+    expect(block.columns).toHaveLength(columnCount);
     expect(block.rows[0]?.cells).toHaveLength(columnCount);
     for (let index = 0; index < columnCount; index += 1) {
       expect(cellText(block.rows[0]?.cells[index])).toBe(`c${index}`);
@@ -1676,7 +1692,9 @@ describe("writeDocContent tables", () => {
     // Every row here has exactly one cell spanning the whole grid, so none of the table's 23 internal boundaries is ever stated by any row — all 23 are lost. Splitting every row at every lost boundary (this writer's own pre-fix behaviour) would make each of the 3 rows state all 24 columns physically, which alone exceeds a PapxInFkp's own 510-byte GrpPrlAndIstd ceiling (see the README's own 15 + 22 × columns <= 487 arithmetic, which gives 21 columns as the exact per-row ceiling) even though the table has rows enough to share the work; the fix must spread the 23 boundaries across the 3 rows instead of restating every one of them in every row.
     const columnCount = 24;
     const rowCount = 3;
-    const columnWidthsPt = Array.from({ length: columnCount }, () => 20);
+    const columns = Array.from({ length: columnCount }, () => ({
+      widthPt: 20,
+    }));
     const rows = Array.from({ length: rowCount }, (_unused, rowIndex) => ({
       cells: [
         {
@@ -1686,10 +1704,10 @@ describe("writeDocContent tables", () => {
         ...coveredCells(columnCount - 1),
       ],
     }));
-    const input = document([{ kind: "table", columnWidthsPt, rows }]);
+    const input = document([{ kind: "table", columns, rows }]);
     const result = roundTrip(input);
     const block = tableAt(result, 0);
-    expect(block.columnWidthsPt).toHaveLength(columnCount);
+    expect(block.columns).toHaveLength(columnCount);
     for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
       expect(block.rows[rowIndex]?.cells).toHaveLength(columnCount);
       expect(block.rows[rowIndex]?.cells[0]?.colSpan).toBe(columnCount);
@@ -1701,7 +1719,9 @@ describe("writeDocContent tables", () => {
     // 41 columns, 2 rows, every row merging across the whole grid: 40 internal boundaries are lost and distributed round-robin, 20 to each row. A row assigned 20 boundaries splits into 21 physical TC80 cells — exactly the ceiling an undecorated row's own row-mark grpprl can still fit alone on a PapxFkp page (15 fixed bytes — sprmPFInTable and sprmPFTtp at 3 bytes each, sprmTDefTable's own opcode and cb at 2 bytes each with no istd field of its own, TDefTableOperand's own NumberOfColumns byte and the extra (n+1)th rgdxaCenter boundary every row's TAP carries beyond the per-cell figure, and GrpPrlAndIstd's own istd prefix that buildPapxPage adds ahead of the grpprl — plus 22 bytes per physical cell+boundary pair, must stay at or under the 487-byte grpPrlAndIstd a lone paragraph can actually claim once a page's own front-reserved rgfc/BxPap bytes are subtracted from the raw 510-byte MAX_GRP_PRL_AND_ISTD ceiling — see fkp-write.ts's own fitsAloneOnPapxPage). Neither row here needs the new per-row fallback, so both keep #992's own fix intact: no warning, and the full 41-column grid recovers on read.
     const columnCount = 41;
     const rowCount = 2;
-    const columnWidthsPt = Array.from({ length: columnCount }, () => 20);
+    const columns = Array.from({ length: columnCount }, () => ({
+      widthPt: 20,
+    }));
     const rows = Array.from({ length: rowCount }, (_unused, rowIndex) => ({
       cells: [
         {
@@ -1711,7 +1731,7 @@ describe("writeDocContent tables", () => {
         ...coveredCells(columnCount - 1),
       ],
     }));
-    const input = document([{ kind: "table", columnWidthsPt, rows }]);
+    const input = document([{ kind: "table", columns, rows }]);
     const warnings: string[] = [];
     const bytes = writeDocContent(input, {
       onWarning: (message) => warnings.push(message),
@@ -1719,7 +1739,7 @@ describe("writeDocContent tables", () => {
     expect(isDocBytes(bytes)).toBe(true);
     const block = tableAt(readDocContent(bytes), 0);
     expect(warnings).toEqual([]);
-    expect(block.columnWidthsPt).toHaveLength(columnCount);
+    expect(block.columns).toHaveLength(columnCount);
     for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
       expect(block.rows[rowIndex]?.cells[0]?.colSpan).toBe(columnCount);
     }
@@ -1729,7 +1749,9 @@ describe("writeDocContent tables", () => {
     // One column wider than the previous test: 41 internal boundaries now, round-robin distribution gives row 0 the extra one (21 boundaries, the odd remainder always lands on row 0) and row 1 the other 20. Row 0's own full 21-boundary split would produce 22 physical cells — one past the 21-cell ceiling the previous test sits exactly at — so flattenTable's own per-row budget check (table/write.ts) rejects it, but rather than dropping every one of row 0's assigned boundaries (this fallback's own original, all-or-nothing behaviour), it trims from the end until what remains fits: 20 of row 0's 21 boundaries survive, only the single highest-valued one is dropped. Row 1 is untouched and still states its own 20 boundaries. Combined, the two rows' own boundaries cover all but one of the table's 41 internal boundaries — 41 of 42 columns recover, not the 21 an all-or-nothing fallback would leave — and both rows' colSpan correctly reflects that near-complete, honestly-recovered grid.
     const columnCount = 42;
     const rowCount = 2;
-    const columnWidthsPt = Array.from({ length: columnCount }, () => 20);
+    const columns = Array.from({ length: columnCount }, () => ({
+      widthPt: 20,
+    }));
     const rows = Array.from({ length: rowCount }, (_unused, rowIndex) => ({
       cells: [
         {
@@ -1739,7 +1761,7 @@ describe("writeDocContent tables", () => {
         ...coveredCells(columnCount - 1),
       ],
     }));
-    const input = document([{ kind: "table", columnWidthsPt, rows }]);
+    const input = document([{ kind: "table", columns, rows }]);
     const warnings: string[] = [];
     const bytes = writeDocContent(input, {
       onWarning: (message) => warnings.push(message),
@@ -1756,7 +1778,7 @@ describe("writeDocContent tables", () => {
     );
     expect(warnings[0]).toMatch(/dropping the other 1 \(narrowing/);
     const recoveredColumnCount = columnCount - 1;
-    expect(block.columnWidthsPt).toHaveLength(recoveredColumnCount);
+    expect(block.columns).toHaveLength(recoveredColumnCount);
     expect(block.rows[0]?.cells[0]?.colSpan).toBe(recoveredColumnCount);
     expect(block.rows[1]?.cells[0]?.colSpan).toBe(recoveredColumnCount);
     expect(cellText(block.rows[0]?.cells[0])).toBe("row 0");
@@ -1772,7 +1794,7 @@ describe("writeDocContent tables", () => {
       document([
         {
           kind: "table",
-          columnWidthsPt: Array.from({ length: columnCount }, () => 20),
+          columns: Array.from({ length: columnCount }, () => ({ widthPt: 20 })),
           rows: [
             {
               cells: [
@@ -1793,7 +1815,7 @@ describe("writeDocContent tables", () => {
     });
     const fittingBlock = tableAt(readDocContent(fittingBytes), 0);
     expect(fittingWarnings).toEqual([]);
-    expect(fittingBlock.columnWidthsPt).toHaveLength(withinBudget);
+    expect(fittingBlock.columns).toHaveLength(withinBudget);
     expect(fittingBlock.rows[0]?.cells[0]?.colSpan).toBe(withinBudget);
 
     const overflowingWarnings: string[] = [];
@@ -1808,7 +1830,7 @@ describe("writeDocContent tables", () => {
       /could only state 20 of its 21 assigned lost column boundaries/,
     );
     const recoveredColumnCount = overBudget - 1;
-    expect(overflowingBlock.columnWidthsPt).toHaveLength(recoveredColumnCount);
+    expect(overflowingBlock.columns).toHaveLength(recoveredColumnCount);
     expect(overflowingBlock.rows[0]?.cells[0]?.colSpan).toBe(
       recoveredColumnCount,
     );
@@ -1821,7 +1843,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: Array.from({ length: columnCount }, () => 20),
+        columns: Array.from({ length: columnCount }, () => ({ widthPt: 20 })),
         rows: [
           {
             cells: [
@@ -1848,7 +1870,7 @@ describe("writeDocContent tables", () => {
     );
     expect(warnings[0]).toMatch(/63-cell-per-row ceiling/);
     const recoveredColumnCount = 21;
-    expect(block.columnWidthsPt).toHaveLength(recoveredColumnCount);
+    expect(block.columns).toHaveLength(recoveredColumnCount);
     expect(block.rows[0]?.cells[0]?.colSpan).toBe(recoveredColumnCount);
     expect(cellText(block.rows[0]?.cells[0])).toBe("wide");
   });
@@ -1859,7 +1881,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: Array.from({ length: columnCount }, () => 20),
+        columns: Array.from({ length: columnCount }, () => ({ widthPt: 20 })),
         rows: [
           {
             cells: [
@@ -1878,7 +1900,7 @@ describe("writeDocContent tables", () => {
     const columnCount = 22;
     const overBudgetTable: ContentTable = {
       kind: "table",
-      columnWidthsPt: Array.from({ length: columnCount }, () => 20),
+      columns: Array.from({ length: columnCount }, () => ({ widthPt: 20 })),
       rows: [
         {
           cells: [
@@ -1908,7 +1930,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [80, 80],
+        columns: [{ widthPt: 80 }, { widthPt: 80 }],
         rows: [
           {
             cells: [
@@ -1941,7 +1963,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [80, 80],
+        columns: [{ widthPt: 80 }, { widthPt: 80 }],
         rows: [
           {
             cells: [
@@ -1988,7 +2010,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [80, 80],
+        columns: [{ widthPt: 80 }, { widthPt: 80 }],
         rows: [
           {
             cells: [
@@ -2014,7 +2036,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [50, 50, 50],
+        columns: [{ widthPt: 50 }, { widthPt: 50 }, { widthPt: 50 }],
         rows: [
           {
             cells: [
@@ -2035,7 +2057,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [50, 50],
+        columns: [{ widthPt: 50 }, { widthPt: 50 }],
         rows: [
           {
             cells: [
@@ -2054,7 +2076,7 @@ describe("writeDocContent tables", () => {
       paragraph([{ text: "before" }]),
       {
         kind: "table",
-        columnWidthsPt: [50, 50],
+        columns: [{ widthPt: 50 }, { widthPt: 50 }],
         rows: [
           { cells: [{ blocks: [] }, { blocks: [] }] },
           { cells: [{ blocks: [] }] },
@@ -2078,7 +2100,7 @@ describe("writeDocContent tables", () => {
           ],
         },
       ],
-      columnWidthsPt: [50, 50, 50],
+      columns: [{ widthPt: 50 }, { widthPt: 50 }, { widthPt: 50 }],
     },
     {
       name: "a region running past the last column",
@@ -2090,12 +2112,12 @@ describe("writeDocContent tables", () => {
           ],
         },
       ],
-      columnWidthsPt: [50, 50],
+      columns: [{ widthPt: 50 }, { widthPt: 50 }],
     },
     {
       name: "a region running past the last row",
       rows: [{ cells: [{ blocks: [paragraph([{ text: "a" }])], rowSpan: 2 }] }],
-      columnWidthsPt: [50],
+      columns: [{ widthPt: 50 }],
     },
     {
       name: "two regions sharing a position",
@@ -2113,10 +2135,10 @@ describe("writeDocContent tables", () => {
           ],
         },
       ],
-      columnWidthsPt: [50, 50],
+      columns: [{ widthPt: 50 }, { widthPt: 50 }],
     },
-  ])("throws for $name", ({ rows, columnWidthsPt }) => {
-    const input = document([{ kind: "table", columnWidthsPt, rows }]);
+  ])("throws for $name", ({ rows, columns }) => {
+    const input = document([{ kind: "table", columns, rows }]);
     expect(() => writeDocContent(input)).toThrow(
       /^doc-codec: table at block 0 breaks the grid rule: /,
     );
@@ -2127,7 +2149,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [50, 50, 50],
+        columns: [{ widthPt: 50 }, { widthPt: 50 }, { widthPt: 50 }],
         rows: [
           {
             cells: [
@@ -2147,7 +2169,7 @@ describe("writeDocContent tables", () => {
       },
     ]);
     const block = tableAt(roundTrip(input), 0);
-    expect(block.columnWidthsPt).toEqual([50, 50, 50]);
+    expect(block.columns.map((c) => c.widthPt)).toEqual([50, 50, 50]);
     expect(block.rows.map((row) => row.cells.length)).toEqual([3, 3]);
     expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(block.rows[0]?.cells[2]?.rowSpan).toBe(2);
@@ -2165,7 +2187,7 @@ describe("writeDocContent tables", () => {
     const input: readonly ContentBlock[] = [
       {
         kind: "table",
-        columnWidthsPt: [20, 20, 20],
+        columns: [{ widthPt: 20 }, { widthPt: 20 }, { widthPt: 20 }],
         rows: [
           {
             cells: [
@@ -2208,7 +2230,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [80, 80],
+        columns: [{ widthPt: 80 }, { widthPt: 80 }],
         rows: [
           {
             cells: [
@@ -2238,7 +2260,7 @@ describe("writeDocContent tables", () => {
     const input: readonly ContentBlock[] = [
       {
         kind: "table",
-        columnWidthsPt: [80],
+        columns: [{ widthPt: 80 }],
         rows: [
           {
             cells: [{ blocks: [paragraph([{ text: "anchor" }])], rowSpan: 2 }],
@@ -2274,7 +2296,7 @@ describe("writeDocContent tables", () => {
     const input: readonly ContentBlock[] = [
       {
         kind: "table",
-        columnWidthsPt: [20, 20, 20],
+        columns: [{ widthPt: 20 }, { widthPt: 20 }, { widthPt: 20 }],
         rows: [
           {
             cells: [
@@ -2316,7 +2338,7 @@ describe("writeDocContent tables", () => {
     const input: readonly ContentBlock[] = [
       {
         kind: "table",
-        columnWidthsPt: [40, 40],
+        columns: [{ widthPt: 40 }, { widthPt: 40 }],
         rows: [
           {
             cells: [
@@ -2346,7 +2368,7 @@ describe("writeDocContent tables", () => {
     const input: readonly ContentBlock[] = [
       {
         kind: "table",
-        columnWidthsPt: [80],
+        columns: [{ widthPt: 80 }],
         rows: [
           {
             cells: [{ blocks: [paragraph([{ text: "anchor" }])], rowSpan: 2 }],
@@ -2375,7 +2397,12 @@ describe("writeDocContent tables", () => {
     const input: readonly ContentBlock[] = [
       {
         kind: "table",
-        columnWidthsPt: [50, 50, 50, 50],
+        columns: [
+          { widthPt: 50 },
+          { widthPt: 50 },
+          { widthPt: 50 },
+          { widthPt: 50 },
+        ],
         rows: [
           {
             cells: [
@@ -2400,7 +2427,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [50, 50],
+        columns: [{ widthPt: 50 }, { widthPt: 50 }],
         rows: [
           {
             cells: [
@@ -2421,7 +2448,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [50, 50, 50],
+        columns: [{ widthPt: 50 }, { widthPt: 50 }, { widthPt: 50 }],
         rows: [
           {
             cells: [{ blocks: [paragraph([{ text: "narrow" }])] }],
@@ -2430,13 +2457,13 @@ describe("writeDocContent tables", () => {
       },
     ]);
     expect(() => writeDocContent(input)).toThrow(
-      /a table row's own cells cover 1 columns \(via colSpan\), but the table declares 3 in columnWidthsPt/,
+      /a table row's own cells cover 1 columns \(via colSpan\), but the table declares 3 columns/,
     );
   });
 
   it("throws naming the exact requirement when a table declares no columns at all", () => {
     const input = document([
-      { kind: "table", columnWidthsPt: [], rows: [{ cells: [] }] },
+      { kind: "table", columns: [], rows: [{ cells: [] }] },
     ]);
     expect(() => writeDocContent(input)).toThrow(
       /a table must have at least one column and one row to write/,
@@ -2444,7 +2471,9 @@ describe("writeDocContent tables", () => {
   });
 
   it("throws naming the exact requirement when a table declares no rows at all", () => {
-    const input = document([{ kind: "table", columnWidthsPt: [50], rows: [] }]);
+    const input = document([
+      { kind: "table", columns: [{ widthPt: 50 }], rows: [] },
+    ]);
     expect(() => writeDocContent(input)).toThrow(
       /a table must have at least one column and one row to write/,
     );
@@ -2453,15 +2482,15 @@ describe("writeDocContent tables", () => {
   it("falls all the way back to writing a row wholly unsplit when even its single most valuable assigned boundary cannot fit, warning with the singular wording (ExaDev/documents.js#1013)", () => {
     // 20 ordinary, undecorated single-column cells plus one further 2-wide merged cell (21 columns, 1 row): the 20 plain cells' own boundaries are all recoverable on their own, leaving exactly the merge's own single internal boundary lost — and, being a single row, assigned entirely to this one row. Splitting it would raise the row from 21 to 22 physical cells, which — entirely from the 20 plain cells' own fixed 22-bytes-per-cell cost plus the row's own fixed 15-byte overhead — already sits close enough to the 487-byte PapxInFkp ceiling that the extra cell tips it over, while the unsplit 21-cell form still fits. rowSplitFits therefore rejects the only candidate this row could ever try (kept.length reaches 0), which is the "could not state ... at all" wording this describe block's other trimming tests never reach, since each of them still keeps at least one boundary.
     const plainColumnCount = 20;
-    const columnWidthsPt = [
-      ...Array.from({ length: plainColumnCount }, () => 20),
-      20,
-      20,
+    const columns = [
+      ...Array.from({ length: plainColumnCount }, () => ({ widthPt: 20 })),
+      { widthPt: 20 },
+      { widthPt: 20 },
     ];
     const input = document([
       {
         kind: "table",
-        columnWidthsPt,
+        columns,
         rows: [
           {
             cells: [
@@ -2491,9 +2520,9 @@ describe("writeDocContent tables", () => {
     );
     expect(warnings[0]).toMatch(/attempting to write it unsplit instead/);
     // Unsplit: the merged cell's own internal boundary never made it into rgdxaCenter, so it reads back as one ordinary column, narrowing the table by exactly one.
-    expect(block.columnWidthsPt).toHaveLength(plainColumnCount + 1);
+    expect(block.columns).toHaveLength(plainColumnCount + 1);
     // Derived from the round-tripped table's own column count, not restated as the plainColumnCount literal: a bare literal index here trips a confirmed @typescript-eslint/no-unnecessary-condition false positive against noUncheckedIndexedAccess (it does not account for a `const`-literal-typed index into an array, even though tsc itself still reports the access as possibly undefined without its own `?.`).
-    const mergedIndex = block.columnWidthsPt.length - 1;
+    const mergedIndex = block.columns.length - 1;
     expect(block.rows[0]?.cells[mergedIndex]?.colSpan).toBeUndefined();
     expect(cellText(block.rows[0]?.cells[mergedIndex])).toBe("merged");
   });
@@ -2504,7 +2533,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: Array.from({ length: columnCount }, () => 20),
+        columns: Array.from({ length: columnCount }, () => ({ widthPt: 20 })),
         rows: [
           {
             cells: Array.from({ length: columnCount }, (_unused, index) => ({
@@ -2529,7 +2558,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: Array.from({ length: pairCount * 2 }, () => 20),
+        columns: Array.from({ length: pairCount * 2 }, () => ({ widthPt: 20 })),
         rows: [
           {
             cells: Array.from({ length: pairCount }, (_unused, index) => [
@@ -2560,7 +2589,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [80, 80],
+        columns: [{ widthPt: 80 }, { widthPt: 80 }],
         rows: [
           {
             cells: [
@@ -2594,7 +2623,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [50, 50, 50],
+        columns: [{ widthPt: 50 }, { widthPt: 50 }, { widthPt: 50 }],
         rows: [
           {
             cells: [
@@ -2613,7 +2642,7 @@ describe("writeDocContent tables", () => {
               { blocks: [paragraph([{ text: "C2" }])] },
             ],
           },
-          // Neither row above ever states the boundary between the anchor's own 2 merged columns, since both merge across it identically — a third, wholly unmerged row is what reveals the table genuinely has 3 columns here, so the lost-boundary fallback never triggers for this particular table (see this describe block's own "recovers colSpan and columnWidthsPt" tests for what the fallback does when no row reveals it at all).
+          // Neither row above ever states the boundary between the anchor's own 2 merged columns, since both merge across it identically — a third, wholly unmerged row is what reveals the table genuinely has 3 columns here, so the lost-boundary fallback never triggers for this particular table (see this describe block's own "recovers colSpan and columns" tests for what the fallback does when no row reveals it at all).
           {
             cells: [
               { blocks: [paragraph([{ text: "A3" }])] },
@@ -2629,7 +2658,7 @@ describe("writeDocContent tables", () => {
     if (block?.kind !== "table") {
       throw new Error("expected a table block");
     }
-    expect(block.columnWidthsPt).toEqual([50, 50, 50]);
+    expect(block.columns.map((c) => c.widthPt)).toEqual([50, 50, 50]);
     expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(block.rows[0]?.cells[0]?.rowSpan).toBe(2);
     expect(cellText(block.rows[0]?.cells[0])).toBe("anchor");
@@ -2650,7 +2679,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [100],
+        columns: [{ widthPt: 100 }],
         rows: [{ cells: [{ blocks: [paragraph([{ text: "only cell" }])] }] }],
       },
     ]);
@@ -2665,7 +2694,7 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [100],
+        columns: [{ widthPt: 100 }],
         rows: [{ cells: [{ blocks: [paragraph([{ text: "cell" }])] }] }],
       },
       paragraph([{ text: "after the table" }]),
@@ -2680,12 +2709,12 @@ describe("writeDocContent tables", () => {
     const input = document([
       {
         kind: "table",
-        columnWidthsPt: [100],
+        columns: [{ widthPt: 100 }],
         rows: [
           {
             cells: [
               {
-                blocks: [{ kind: "table", rows: [], columnWidthsPt: [] }],
+                blocks: [{ kind: "table", rows: [], columns: [] }],
               },
             ],
           },
@@ -2702,7 +2731,7 @@ describe("writeDocContent tables", () => {
       document([
         {
           kind: "table",
-          columnWidthsPt: [120],
+          columns: [{ widthPt: 120 }],
           rows: [
             { cells: [{ blocks: [paragraph([{ text: "x" }])], ...cell }] },
           ],
@@ -2839,7 +2868,7 @@ describe("writeDocContent tables", () => {
       const input = document([
         {
           kind: "table",
-          columnWidthsPt: [80, 80],
+          columns: [{ widthPt: 80 }, { widthPt: 80 }],
           rows: [
             {
               cells: [
@@ -2879,7 +2908,7 @@ describe("writeDocContent tables", () => {
       const input = document([
         {
           kind: "table",
-          columnWidthsPt: [60, 60, 60],
+          columns: [{ widthPt: 60 }, { widthPt: 60 }, { widthPt: 60 }],
           rows: [
             {
               cells: [

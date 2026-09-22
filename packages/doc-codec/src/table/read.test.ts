@@ -221,7 +221,7 @@ describe("readDocContent tables, from hand-assembled bytes", () => {
       }),
     );
     const block = tableBlock(document);
-    expect(block.columnWidthsPt).toEqual([50, 50, 50]);
+    expect(block.columns.map((c) => c.widthPt)).toEqual([50, 50, 50]);
     expect(block.rows).toHaveLength(1);
     const cells = block.rows[0]?.cells ?? [];
     expect(cells).toHaveLength(3);
@@ -407,7 +407,7 @@ describe("readDocContent tables, from hand-assembled bytes", () => {
     if (nested?.kind !== "table") {
       throw new Error(`expected a nested table, got '${nested?.kind}'`);
     }
-    expect(nested.columnWidthsPt).toEqual([50, 50]);
+    expect(nested.columns.map((c) => c.widthPt)).toEqual([50, 50]);
     expect(nested.rows).toHaveLength(1);
     expect(cellText(nested.rows[0]?.cells[0])).toBe("N1");
     expect(cellText(nested.rows[0]?.cells[1])).toBe("N2");
@@ -528,7 +528,7 @@ describe("readDocContent tables, from hand-assembled bytes", () => {
       }),
     );
     const block = tableBlock(document);
-    expect(block.columnWidthsPt).toEqual([50, 50, 50]);
+    expect(block.columns.map((c) => c.widthPt)).toEqual([50, 50, 50]);
     expect(block.rows).toHaveLength(2);
     const rowOneCells = block.rows[0]?.cells ?? [];
     expect(rowOneCells).toHaveLength(3);
@@ -1165,7 +1165,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
     const block = tableBlock(document);
     expect(block.rows).toHaveLength(2);
     // The shared grid still reconstructs three columns even though row 1's own array only ever states two — the merged cell's own boundaries cover two of the canonical grid's segments at once.
-    expect(block.columnWidthsPt).toHaveLength(3);
+    expect(block.columns).toHaveLength(3);
     expect(block.rows[0]?.cells).toHaveLength(3);
     expect(block.rows[1]?.cells).toHaveLength(3);
     const mergedCell = block.rows[1]?.cells[0];
@@ -1536,7 +1536,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
   });
 });
 
-// The tolerance the reconstruction snaps boundaries within is one point, and ContentTable.columnWidthsPt is stated in points, so every expectation below is written in points and every drift is written as a fraction of one — restated here from the point's own definition rather than imported from table/read.ts, so the two agree only if both are right.
+// The tolerance the reconstruction snaps boundaries within is one point, and ContentTableColumn.widthPt is stated in points, so every expectation below is written in points and every drift is written as a fraction of one — restated here from the point's own definition rather than imported from table/read.ts, so the two agree only if both are right.
 const TWIPS_PER_POINT = 20;
 
 // The exact rgdxaCenter a real LibreOffice 26.2.5.2-authored three-column table states, taken from a 2.5cm/3.1cm/4.7cm .fodt converted with `soffice --headless --convert-to doc` — widths deliberately chosen not to land on whole twips, and still byte-identical in every one of that table's rows. That is why no LibreOffice-derived fixture in this package ever exercises per-row drift: LibreOffice rounds a table's columns to twips once for the whole table, not once per row (ExaDev/documents.js#898).
@@ -1623,7 +1623,9 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
         cells: ["a3", "b3", "c3"],
       },
     ]);
-    expect(block.columnWidthsPt).toEqual(LIBREOFFICE_COLUMN_WIDTHS_PT);
+    expect(block.columns.map((c) => c.widthPt)).toEqual(
+      LIBREOFFICE_COLUMN_WIDTHS_PT,
+    );
     expect(colSpansPerRow(block)).toEqual([
       [undefined, undefined, undefined],
       [undefined, undefined, undefined],
@@ -1646,7 +1648,9 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
         cells: ["a2", "b2", "c2"],
       },
     ]);
-    expect(block.columnWidthsPt).toEqual(LIBREOFFICE_COLUMN_WIDTHS_PT);
+    expect(block.columns.map((c) => c.widthPt)).toEqual(
+      LIBREOFFICE_COLUMN_WIDTHS_PT,
+    );
     expect(colSpansPerRow(block)).toEqual([
       [undefined, undefined, undefined],
       [undefined, undefined, undefined],
@@ -1674,7 +1678,9 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
         cells: ["a2", "b2", "c2"],
       },
     ]);
-    expect(block.columnWidthsPt).toEqual(LIBREOFFICE_COLUMN_WIDTHS_PT);
+    expect(block.columns.map((c) => c.widthPt)).toEqual(
+      LIBREOFFICE_COLUMN_WIDTHS_PT,
+    );
     expect(colSpansPerRow(block)).toEqual([
       [undefined, undefined, undefined],
       [undefined, undefined, undefined],
@@ -1697,14 +1703,16 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
         cells: ["a2", "b2", "c2"],
       },
     ]);
-    expect(block.columnWidthsPt).toEqual([116.9, 1.05, 143.95, 220]);
+    expect(block.columns.map((c) => c.widthPt)).toEqual([
+      116.9, 1.05, 143.95, 220,
+    ]);
     expect(colSpansPerRow(block)).toEqual([
       [undefined, 2, undefined, undefined],
       [2, undefined, undefined, undefined],
     ]);
   });
 
-  // Word writes -108 rather than 0 as an unindented table's first rgdxaCenter entry (LibreOffice's own WW8 importer carries the fact as a named comment in ww8par2.cxx's CalcDefaults), compensating for [MS-DOC]'s own 108-twip default cell margin. Every row states it, so the rows still describe one grid — and the indent itself has nowhere to land, since ContentTable carries only rows and columnWidthsPt (see the README's own note).
+  // Word writes -108 rather than 0 as an unindented table's first rgdxaCenter entry (LibreOffice's own WW8 importer carries the fact as a named comment in ww8par2.cxx's CalcDefaults), compensating for [MS-DOC]'s own 108-twip default cell margin. Every row states it, so the rows still describe one grid — and the indent itself has nowhere to land, since ContentTable carries only rows and columns (see the README's own note).
   it("reads rows sharing Word's own -108 leading offset as one grid, carrying the column widths and dropping the offset", () => {
     const wordUnindented = LIBREOFFICE_ROW_BOUNDARIES.map(
       (boundary) => boundary - WORD_DEFAULT_CELL_MARGIN_TWIPS,
@@ -1713,7 +1721,9 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
       { boundariesTwips: wordUnindented, cells: ["a1", "b1", "c1"] },
       { boundariesTwips: wordUnindented, cells: ["a2", "b2", "c2"] },
     ]);
-    expect(block.columnWidthsPt).toEqual(LIBREOFFICE_COLUMN_WIDTHS_PT);
+    expect(block.columns.map((c) => c.widthPt)).toEqual(
+      LIBREOFFICE_COLUMN_WIDTHS_PT,
+    );
     expect(colSpansPerRow(block)).toEqual([
       [undefined, undefined, undefined],
       [undefined, undefined, undefined],
@@ -1740,7 +1750,7 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
         cells: ["a3", "b3", "c3"],
       },
     ]);
-    expect(block.columnWidthsPt).toEqual([5.4, 111.5, 145, 220]);
+    expect(block.columns.map((c) => c.widthPt)).toEqual([5.4, 111.5, 145, 220]);
     expect(colSpansPerRow(block)).toEqual([
       [2, undefined, undefined, undefined],
       [undefined, undefined, undefined, undefined],
@@ -1764,7 +1774,9 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
         cells: ["a3", "b3", "c3"],
       },
     ]);
-    expect(block.columnWidthsPt).toEqual(LIBREOFFICE_COLUMN_WIDTHS_PT);
+    expect(block.columns.map((c) => c.widthPt)).toEqual(
+      LIBREOFFICE_COLUMN_WIDTHS_PT,
+    );
     expect(colSpansPerRow(block)).toEqual([
       [2, undefined, undefined],
       [undefined, undefined, undefined],
@@ -1786,7 +1798,7 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
         cells: ["a", "b", "c"],
       },
     ]);
-    expect(block.columnWidthsPt).toEqual([116.9, 365]);
+    expect(block.columns.map((c) => c.widthPt)).toEqual([116.9, 365]);
     expect(colSpansPerRow(block)).toEqual([[undefined, undefined]]);
     expect(block.rows[0]?.cells.map((cell) => cellText(cell))).toEqual([
       "a,b",
@@ -1798,7 +1810,7 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
     const block = readTableFromRowBoundaries([
       { boundariesTwips: [0, 1000, 1000], cells: ["a", "z"] },
     ]);
-    expect(block.columnWidthsPt).toEqual([50]);
+    expect(block.columns.map((c) => c.widthPt)).toEqual([50]);
     expect(block.rows[0]?.cells.map((cell) => cellText(cell))).toEqual(["a,z"]);
   });
 
@@ -1806,7 +1818,7 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
     const block = readTableFromRowBoundaries([
       { boundariesTwips: [0, 0, 1000, 2000], cells: ["z", "x", "y"] },
     ]);
-    expect(block.columnWidthsPt).toEqual([50, 50]);
+    expect(block.columns.map((c) => c.widthPt)).toEqual([50, 50]);
     expect(block.rows[0]?.cells.map((cell) => cellText(cell))).toEqual([
       "z,x",
       "y",
@@ -1828,7 +1840,7 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
         cells: ["a", "b", "c"],
       },
     ]);
-    expect(block.columnWidthsPt).toEqual([50, 0.5, 99.5]);
+    expect(block.columns.map((c) => c.widthPt)).toEqual([50, 0.5, 99.5]);
     expect(colSpansPerRow(block)).toEqual([[undefined, undefined, undefined]]);
   });
 
@@ -1837,7 +1849,7 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
       { boundariesTwips: [0, 2000, 3000], cells: ["a", "b"] },
       { boundariesTwips: [0, 2001, 3000], cells: ["a", "b"] },
     ]);
-    expect(block.columnWidthsPt).toEqual([100, 50]);
+    expect(block.columns.map((c) => c.widthPt)).toEqual([100, 50]);
     expect(colSpansPerRow(block)).toEqual([
       [undefined, undefined],
       [undefined, undefined],
@@ -1850,7 +1862,7 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
       { boundariesTwips: [0, 1000, 1010, 3000], cells: ["a", "b", "c"] },
       { boundariesTwips: [0, 1025, 3000], cells: ["a", "b"] },
     ]);
-    expect(block.columnWidthsPt).toEqual([50, 0.5, 0.75, 98.75]);
+    expect(block.columns.map((c) => c.widthPt)).toEqual([50, 0.5, 0.75, 98.75]);
   });
 });
 
@@ -1926,7 +1938,7 @@ describe("readDocContent tables state one entry per grid column (ExaDev/document
         }),
       ),
     );
-    expect(block.columnWidthsPt).toEqual([50, 50, 50]);
+    expect(block.columns.map((c) => c.widthPt)).toEqual([50, 50, 50]);
     expect(block.rows.map((row) => row.cells.length)).toEqual([3, 3]);
     expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(block.rows[0]?.cells[1]).toEqual({ blocks: [] });
@@ -2015,7 +2027,7 @@ describe("readDocContent tables state one entry per grid column (ExaDev/document
     ]);
   });
 
-  it("fills a row narrower than the table's shared grid with block-less entries so every row is as long as columnWidthsPt", () => {
+  it("fills a row narrower than the table's shared grid with block-less entries so every row is as long as the table's own columns array", () => {
     const block = readTableFromRowBoundaries([
       { boundariesTwips: [0, 1000, 2000, 3000], cells: ["a", "b", "c"] },
       { boundariesTwips: [0, 1000, 2000], cells: ["d", "e"] },
