@@ -85,7 +85,7 @@ describe("parseHtmlTable", () => {
       ["a", "b", "c"],
     ]);
     expect(table?.rows[0]?.cells[1]).toEqual({ blocks: [] });
-    expect(table?.columnWidthsPt).toEqual([
+    expect(table?.columns.map((c) => c.widthPt)).toEqual([
       CONTENT_WIDTH_PT / 3,
       CONTENT_WIDTH_PT / 3,
       CONTENT_WIDTH_PT / 3,
@@ -121,7 +121,7 @@ describe("parseHtmlTable", () => {
       ["h|r2", "", ""],
       ["", "a", "b"],
     ]);
-    expect(table?.columnWidthsPt).toHaveLength(3);
+    expect(table?.columns).toHaveLength(3);
   });
 
   it("sizes the columns from a header whose own colspan already exceeds every later row", () => {
@@ -132,7 +132,7 @@ describe("parseHtmlTable", () => {
       ["h|c3", "", ""],
       ["a", "", ""],
     ]);
-    expect(table?.columnWidthsPt).toHaveLength(3);
+    expect(table?.columns).toHaveLength(3);
   });
 
   it("ignores a non-positive or non-numeric colspan/rowspan rather than guessing", () => {

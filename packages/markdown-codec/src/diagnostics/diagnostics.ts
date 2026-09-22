@@ -66,6 +66,7 @@ export const MarkdownDiagnosticCodes = {
   TABLE_CELL_IMAGE_DEGRADED: "md/table-cell-image-degraded",
   TABLE_HTML_FALLBACK: "md/table-html-fallback",
   TABLE_HEADER_ROW_SYNTHESISED: "md/table-header-row-synthesised",
+  TABLE_HEADER_COLUMN_DROPPED: "md/table-header-column-dropped",
 } as const;
 
 // The throw tier: input this package cannot meaningfully process at all, regardless of what a diagnostic sink could report about it. Carries the same `code` vocabulary as MarkdownDiagnostic so a caller can distinguish failure reasons programmatically, not just by message text.

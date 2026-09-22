@@ -12,7 +12,7 @@ import type { DiagnosticCollector } from "../test-support/diagnostics";
 import { createDiagnosticCollector } from "../test-support/diagnostics";
 import { emitHtmlTable, tableNeedsHtmlFallback } from "./html-table";
 
-// This writer never reads a table's own columnWidthsPt (an HTML table carries no absolute column widths it attempts to write), so every fixture here shares one arbitrary but schema-valid width.
+// This writer never reads a table's own column widths (an HTML table carries no absolute column widths it attempts to write), so every fixture here shares one arbitrary but schema-valid width.
 const COLUMN_WIDTH_PT = 100;
 
 // The emphasis marker belongs to the shared InlineEmitContext this module's own context extends, but nothing in the HTML writer consults it: a cell's inline formatting is written as real HTML tags, never markdown punctuation.
@@ -43,7 +43,11 @@ function cellTagCountsPerRow(markup: string): number[] {
 }
 
 function tableOfRows(rows: readonly ContentTableRow[]): ContentTable {
-  return { kind: "table", columnWidthsPt: [COLUMN_WIDTH_PT], rows: [...rows] };
+  return {
+    kind: "table",
+    columns: [{ widthPt: COLUMN_WIDTH_PT }],
+    rows: [...rows],
+  };
 }
 
 function tableWithBodyCell(cell: ContentTableCell): ContentTable {
