@@ -952,7 +952,10 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
   const table: ContentBlock = {
     kind: "table",
     rows,
-    columnWidthsPt: new Array<number>(Math.max(columnCount, 1)).fill(width),
+    // No column ever reads as a header column: HTML's <colgroup>/<col> carries no per-column state this reader's own vocabulary recognises, let alone one for a column repeating at the left of each printed page (ExaDev/documents.js#1381), so every column here states a width alone. Array.from, not fill: each column gets its own object rather than every slot aliasing one shared instance.
+    columns: Array.from({ length: Math.max(columnCount, 1) }, () => ({
+      widthPt: width,
+    })),
   };
   const captionBlocks = captionElements.flatMap((captionElement, index) =>
     readTableCaption(
@@ -981,7 +984,7 @@ function collectRowGroupRows(
   return trs;
 }
 
-// The <colgroup> twin of collectRowGroupRows immediately above: a <colgroup>'s own content model per the HTML Standard is "zero or more <col> and <template> elements" (nothing at all when the <colgroup> itself carries a span attribute) — narrower than the "script-supporting elements" category (<script> and <template>) this file's other content-model comments cite, since a <colgroup> admits <template> alone, not <script>. Conforming content here carries nothing document-schema.js's own vocabulary can represent either way (a column's own width/span belongs on ContentTable.columnWidthsPt, not a per-column node), so a <col> is silently skipped here exactly like an inert element is; a stray <script>, though non-conformant in this position, is skipped by the same isInertElement guard as any other inert element, so the narrower spec model has no behavioural consequence here. Anything else — a stray <p>, stray text, a stray <img> — is not valid HTML5 but shares the identical malformed shape and identical most-likely producer intent as content sitting directly inside the <table> one level up, so it feeds the caller's own shared strayNodes accumulator directly, mirroring collectRowGroupRows' own reasoning: recovered and reported exactly once, via readTable's own TABLE_CONTENT_UNRECOGNIZED diagnostic and readContainerChildren call, rather than a separate recovery path that would misrepresent it as belonging to a particular column.
+// The <colgroup> twin of collectRowGroupRows immediately above: a <colgroup>'s own content model per the HTML Standard is "zero or more <col> and <template> elements" (nothing at all when the <colgroup> itself carries a span attribute), narrower than the "script-supporting elements" category (<script> and <template>) this file's other content-model comments cite, since a <colgroup> admits <template> alone, not <script>. Conforming content here carries nothing document-schema.js's own vocabulary can represent either way (a column's own width/span/header state belongs on ContentTable.columns[n], not a per-column node, and standard HTML has no attribute on <col> stating a header column in the first place), so a <col> is silently skipped here exactly like an inert element is; a stray <script>, though non-conformant in this position, is skipped by the same isInertElement guard as any other inert element, so the narrower spec model has no behavioural consequence here. Anything else, a stray <p>, stray text, a stray <img>, is not valid HTML5 but shares the identical malformed shape and identical most-likely producer intent as content sitting directly inside the <table> one level up, so it feeds the caller's own shared strayNodes accumulator directly, mirroring collectRowGroupRows' own reasoning: recovered and reported exactly once, via readTable's own TABLE_CONTENT_UNRECOGNIZED diagnostic and readContainerChildren call, rather than a separate recovery path that would misrepresent it as belonging to a particular column.
 function collectColgroupStrayContent(
   section: XmlElement,
   strayNodes: XmlNode[],
