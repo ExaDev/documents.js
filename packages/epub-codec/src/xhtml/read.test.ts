@@ -32,7 +32,7 @@ function readTableGrid(html: string): {
   }
   return {
     grid: table.rows.map((row) => row.cells.map(describeCell)),
-    columnWidthsPt: table.columnWidthsPt,
+    columnWidthsPt: table.columns.map((column) => column.widthPt),
     rows: table.rows,
   };
 }
@@ -812,7 +812,7 @@ describe("inert elements outside lists (script/template/style/noscript)", () => 
             ],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
     ]);
   });
@@ -1160,7 +1160,10 @@ describe("tables", () => {
             ],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT / 2, CONTENT_WIDTH_PT / 2],
+        columns: [
+          { widthPt: CONTENT_WIDTH_PT / 2 },
+          { widthPt: CONTENT_WIDTH_PT / 2 },
+        ],
       },
     ]);
   });
@@ -1279,7 +1282,9 @@ describe("tables", () => {
       throw new Error("expected a table block");
     }
     expect(table.rows).toEqual([]);
-    expect(table.columnWidthsPt).toEqual([CONTENT_WIDTH_PT]);
+    expect(table.columns.map((column) => column.widthPt)).toEqual([
+      CONTENT_WIDTH_PT,
+    ]);
   });
 
   it("recovers a stray <ul> sitting directly inside a <table> (not inside any row group) as a genuinely nested list, not as if it were itself a row group", () => {
@@ -1316,7 +1321,7 @@ describe("tables", () => {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "d" }] }] }],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
     ]);
   });
@@ -1339,7 +1344,7 @@ describe("tables", () => {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "d" }] }] }],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
     ]);
   });
@@ -1358,7 +1363,7 @@ describe("tables", () => {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "d" }] }] }],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
     ]);
   });
@@ -1378,7 +1383,10 @@ describe("tables", () => {
             ],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT / 2, CONTENT_WIDTH_PT / 2],
+        columns: [
+          { widthPt: CONTENT_WIDTH_PT / 2 },
+          { widthPt: CONTENT_WIDTH_PT / 2 },
+        ],
       },
     ]);
   });
@@ -1401,7 +1409,7 @@ describe("tables", () => {
             ],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
     ]);
   });
@@ -1423,7 +1431,7 @@ describe("tables", () => {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
     ]);
     expect(sink).toHaveBeenCalledWith(
@@ -1451,7 +1459,7 @@ describe("tables", () => {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
     ]);
     expect(diagnostic?.code).toBe("epub/table-content-unrecognized");
@@ -1473,7 +1481,7 @@ describe("tables", () => {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
     ]);
     expect(sink).toHaveBeenCalledWith(
@@ -1501,7 +1509,7 @@ describe("tables", () => {
             isHeader: true,
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
     ]);
     expect(sink).toHaveBeenCalledWith(
@@ -1552,7 +1560,7 @@ describe("tables", () => {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
     ]);
     expect(sink).toHaveBeenCalledWith(
@@ -1608,7 +1616,7 @@ describe("tables", () => {
           ],
         },
       ],
-      columnWidthsPt: [CONTENT_WIDTH_PT],
+      columns: [{ widthPt: CONTENT_WIDTH_PT }],
     });
     expect(sink).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1633,7 +1641,7 @@ describe("tables", () => {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
     ]);
     expect(sink).not.toHaveBeenCalledWith(
@@ -1655,7 +1663,7 @@ describe("tables", () => {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
     ]);
     expect(sink).not.toHaveBeenCalledWith(
@@ -1759,7 +1767,10 @@ describe("tables", () => {
             ],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT / 2, CONTENT_WIDTH_PT / 2],
+        columns: [
+          { widthPt: CONTENT_WIDTH_PT / 2 },
+          { widthPt: CONTENT_WIDTH_PT / 2 },
+        ],
       },
     ]);
     expect(sink).toHaveBeenCalledWith(
@@ -1785,7 +1796,10 @@ describe("tables", () => {
             ],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT / 2, CONTENT_WIDTH_PT / 2],
+        columns: [
+          { widthPt: CONTENT_WIDTH_PT / 2 },
+          { widthPt: CONTENT_WIDTH_PT / 2 },
+        ],
       },
     ]);
     expect(sink).toHaveBeenCalledWith(
@@ -1807,7 +1821,7 @@ describe("tables", () => {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
     ]);
     expect(sink).not.toHaveBeenCalledWith(
@@ -1829,7 +1843,7 @@ describe("tables", () => {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
     ]);
     expect(sink).not.toHaveBeenCalledWith(
@@ -1855,7 +1869,7 @@ describe("tables", () => {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
     ]);
     expect(sink).toHaveBeenCalledWith(
@@ -1875,7 +1889,7 @@ describe("tables", () => {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
     ]);
     expect(sink).toHaveBeenCalledWith(
@@ -1923,7 +1937,10 @@ describe("tables", () => {
             ],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT / 2, CONTENT_WIDTH_PT / 2],
+        columns: [
+          { widthPt: CONTENT_WIDTH_PT / 2 },
+          { widthPt: CONTENT_WIDTH_PT / 2 },
+        ],
       },
     ]);
     expect(sink).not.toHaveBeenCalledWith(
@@ -1949,7 +1966,7 @@ describe("tables", () => {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] }],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
     ]);
     const noscriptCalls = sink.mock.calls.filter(
@@ -1981,7 +1998,7 @@ describe("tables", () => {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] }],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
     ]);
     const noscriptCalls = sink.mock.calls.filter(
@@ -2011,7 +2028,7 @@ describe("tables", () => {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] }],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
     ]);
     const noscriptCalls = sink.mock.calls.filter(
@@ -2042,7 +2059,7 @@ describe("tables", () => {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
     ]);
     const duplicateCalls = sink.mock.calls.filter(

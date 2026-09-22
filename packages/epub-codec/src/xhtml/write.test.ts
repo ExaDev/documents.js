@@ -266,7 +266,7 @@ describe("writeXhtmlBody", () => {
             ],
           },
         ],
-        columnWidthsPt: [100, 100],
+        columns: [{ widthPt: 100 }, { widthPt: 100 }],
       },
     ];
     const result = roundTrip(blocks);
@@ -284,9 +284,36 @@ describe("writeXhtmlBody", () => {
             ],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT / 2, CONTENT_WIDTH_PT / 2],
+        columns: [
+          { widthPt: CONTENT_WIDTH_PT / 2 },
+          { widthPt: CONTENT_WIDTH_PT / 2 },
+        ],
       },
     ]);
+  });
+
+  it("reports TABLE_HEADER_COLUMN_DROPPED with the exact message when a column states isHeader", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "table",
+        columns: [{ widthPt: 100, isHeader: true }, { widthPt: 100 }],
+        rows: [
+          {
+            cells: [
+              { blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] },
+              { blocks: [{ kind: "paragraph", runs: [{ text: "b" }] }] },
+            ],
+          },
+        ],
+      },
+    ];
+    const { diagnostics } = writeWithSink(blocks, () => undefined);
+    const diagnostic = diagnostics.find(
+      (d) => d.code === EpubDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED,
+    );
+    expect(diagnostic?.message).toBe(
+      "this table states one or more header columns, and this writer has no XHTML construct for a column repeating at the left of each printed page, so the flag is dropped and will not read back",
+    );
   });
 
   it("writes and re-reads a table cell's own rowspan attribute", () => {
@@ -305,7 +332,7 @@ describe("writeXhtmlBody", () => {
           { cells: [{ blocks: [] }] },
           { cells: [{ blocks: [] }] },
         ],
-        columnWidthsPt: [100],
+        columns: [{ widthPt: 100 }],
       },
     ];
     const xml = write(blocks);
@@ -328,7 +355,7 @@ describe("writeXhtmlBody", () => {
             ],
           },
         ],
-        columnWidthsPt: [100, 100, 100],
+        columns: [{ widthPt: 100 }, { widthPt: 100 }, { widthPt: 100 }],
       },
     ]);
     expect(cellTagCountsPerRow(xml)).toEqual([2]);
@@ -356,7 +383,7 @@ describe("writeXhtmlBody", () => {
             ],
           },
         ],
-        columnWidthsPt: [100, 100],
+        columns: [{ widthPt: 100 }, { widthPt: 100 }],
       },
     ]);
     expect(cellTagCountsPerRow(xml)).toEqual([2, 1]);
@@ -376,7 +403,7 @@ describe("writeXhtmlBody", () => {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] }],
           },
         ],
-        columnWidthsPt: [100],
+        columns: [{ widthPt: 100 }],
       },
     ]);
     expect(xml).toContain("<th><p>h</p></th>");
@@ -416,7 +443,7 @@ describe("writeXhtmlBody", () => {
           },
           { cells: [{ blocks: [] }, { blocks: [] }] },
         ],
-        columnWidthsPt: [100, 100],
+        columns: [{ widthPt: 100 }, { widthPt: 100 }],
       },
     ]);
     expect(cellTagCountsPerRow(xml)).toEqual([1, 0]);
@@ -447,7 +474,7 @@ describe("writeXhtmlBody", () => {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
           },
         ],
-        columnWidthsPt: [100],
+        columns: [{ widthPt: 100 }],
       },
     ];
     const { diagnostics } = writeWithSink(blocks, () => undefined);
@@ -952,7 +979,7 @@ describe("writeXhtmlBody", () => {
             cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
           },
         ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        columns: [{ widthPt: CONTENT_WIDTH_PT }],
       },
       {
         kind: "constructStart",
@@ -1377,7 +1404,7 @@ describe("writeXhtmlBody: a table breaking the grid rule", () => {
   // A merged header whose covered position carries a second copy of the anchor's content, which an HTML table has no cell to hold.
   const coveredContentTable: ContentBlock = {
     kind: "table",
-    columnWidthsPt: [100, 100],
+    columns: [{ widthPt: 100 }, { widthPt: 100 }],
     rows: [
       {
         cells: [
@@ -1422,7 +1449,7 @@ describe("writeXhtmlBody: a table breaking the grid rule", () => {
     const error = thrownBy([
       {
         kind: "table",
-        columnWidthsPt: [100, 100],
+        columns: [{ widthPt: 100 }, { widthPt: 100 }],
         rows: [
           {
             cells: [{ blocks: [paragraph("a")] }, { blocks: [paragraph("b")] }],
@@ -1438,7 +1465,7 @@ describe("writeXhtmlBody: a table breaking the grid rule", () => {
     const error = thrownBy([
       {
         kind: "table",
-        columnWidthsPt: [100],
+        columns: [{ widthPt: 100 }],
         rows: [{ cells: [{ blocks: [coveredContentTable] }] }],
       },
     ]);

@@ -535,6 +535,82 @@ describe("every EpubDiagnosticCodes entry is reachable from real input", () => {
     expect(codes.has(EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(true);
   });
 
+  it("TABLE_HEADER_COLUMN_DROPPED fires for a table stating a header column, which this writer has no XHTML construct for", () => {
+    const { sink, codes } = collect();
+    writeEpubContent(
+      {
+        kind: "wordprocessing",
+        metadata: {},
+        sections: [
+          {
+            pageSize: { widthPt: 595.28, heightPt: 841.89 },
+            margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+            blocks: [
+              {
+                kind: "table",
+                columns: [{ widthPt: 100, isHeader: true }, { widthPt: 100 }],
+                rows: [
+                  {
+                    cells: [
+                      {
+                        blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }],
+                      },
+                      {
+                        blocks: [{ kind: "paragraph", runs: [{ text: "b" }] }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      { sink },
+    );
+    expect(codes.has(EpubDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED)).toBe(
+      true,
+    );
+  });
+
+  it("does not fire TABLE_HEADER_COLUMN_DROPPED for a table whose columns state no header", () => {
+    const { sink, codes } = collect();
+    writeEpubContent(
+      {
+        kind: "wordprocessing",
+        metadata: {},
+        sections: [
+          {
+            pageSize: { widthPt: 595.28, heightPt: 841.89 },
+            margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+            blocks: [
+              {
+                kind: "table",
+                columns: [{ widthPt: 100 }, { widthPt: 100 }],
+                rows: [
+                  {
+                    cells: [
+                      {
+                        blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }],
+                      },
+                      {
+                        blocks: [{ kind: "paragraph", runs: [{ text: "b" }] }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      { sink },
+    );
+    expect(codes.has(EpubDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED)).toBe(
+      false,
+    );
+  });
+
   it("covers the whole EpubDiagnosticCodes table — no entry is left unreachable", () => {
     const allCodes = Object.values(EpubDiagnosticCodes);
     for (const code of allCodes) {
