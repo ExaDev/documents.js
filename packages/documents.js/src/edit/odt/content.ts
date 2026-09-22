@@ -284,6 +284,10 @@ export function populateOdtTable(table: OdtTable, block: ContentTable): void {
   const gridPositions = walkTableGrid(block);
   // Stated once, after every row exists: ODF spells header-ness as a wrapper around a run of rows rather than as a property of one, so it cannot be set row by row as the rows are appended (OdtTable.setHeaderRows, src/edit/odt/table.ts).
   const headerFlags = block.rows.map((row) => row.isHeader === true);
+  // The column-axis mirror, stated the same way and for the same reason (OdtTable.setHeaderColumns): odtTableInit already gave the table one table:table-column per grid column, in grid order, so this array lines up with them positionally.
+  const columnHeaderFlags = block.columns.map(
+    (column) => column.isHeader === true,
+  );
   block.rows.forEach((row, rowIndex) => {
     const tableRow = table.appendEmptyRow();
     // OdtTableRow.heightPt clears the height when handed undefined and mints nothing, so an absent value needs no guard of its own.
@@ -309,6 +313,7 @@ export function populateOdtTable(table: OdtTable, block: ContentTable): void {
     });
   });
   table.setHeaderRows(headerFlags);
+  table.setHeaderColumns(columnHeaderFlags);
 }
 
 // OdtTableCell.background models one flat colour (ODF's own style:table-cell-properties/@fo:background-color has no two-colour pattern-fill vocabulary), so a 'pattern' fill (ExaDev/documents.js#951) writes through resolveCellFillColor's own single representative colour. Shared by an anchor and a covered entry, since the element each becomes carries its own table:style-name.
@@ -327,7 +332,7 @@ function applyCellDecoration(
 /**
  * The arguments that create the empty `table:table` a ContentTable is written into: no rows, since populateOdtTable appends one per ContentTableRow, and as many columns as the table's grid is wide.
  *
- * The grid width is what the rows and `columnWidthsPt` together state (tableGridColumnCount), so a table whose rows carry cells but which states no column widths still gets one `table:table-column` per grid column; a column with no stated width takes an equal share of the default table width, the same as any column created without one. `columnWidthsPt` is passed through untouched, so a width the table does state is always written.
+ * The grid width is what the rows and `columns` together state (tableGridColumnCount), so a table whose rows carry cells but which states no column widths still gets one `table:table-column` per grid column; a column with no stated width takes an equal share of the default table width, the same as any column created without one. Each column's own `widthPt` is passed through untouched, so a width the table does state is always written; `isHeader` is not part of this init at all, since populateOdtTable states it afterwards via OdtTable.setHeaderColumns, the identical two-step `setHeaderRows` already needs for the same reason on the row axis.
  *
  * Throws when the table has no rows: ODF requires a `table:table` to hold at least one `table:table-row`, so no faithful spelling exists, and dropping the table would lose it without a trace. `entryPoint` names the caller in the message. A table that breaks the grid rule is refused by populateOdtTable before it writes anything, and a table with no rows has no grid fault to report, so the two checks never compete.
  */
@@ -343,7 +348,7 @@ export function odtTableInit(
   return {
     rows: 0,
     columns: tableGridColumnCount(block),
-    columnWidthsPt: block.columnWidthsPt,
+    columnWidthsPt: block.columns.map((column) => column.widthPt),
   };
 }
 

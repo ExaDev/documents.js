@@ -82,7 +82,7 @@ describe("readDocxContent", () => {
       throw new Error("expected a paragraph followed by a table");
     }
     expect(paragraph.runs[0]?.text).toBe("Hello, world!");
-    expect(table.columnWidthsPt).toEqual([225, 225]);
+    expect(table.columns).toEqual([{ widthPt: 225 }, { widthPt: 225 }]);
     const firstCellBlock = table.rows[0]?.cells[0]?.blocks[0];
     expect(
       firstCellBlock?.kind === "paragraph"

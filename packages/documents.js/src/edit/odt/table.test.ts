@@ -141,7 +141,11 @@ describe("OdtTable", () => {
       columns: 2,
       columnWidthsPt: [100, 200],
     });
-    editor.body.appendTable({ rows: 1, columns: 1, columnWidthsPt: [100] });
+    editor.body.appendTable({
+      rows: 1,
+      columns: 1,
+      columnWidthsPt: [100],
+    });
 
     const contentPart = editor.toPackage().parts["content.xml"];
     const root = rootElement(
@@ -203,6 +207,53 @@ describe("OdtTable header rows", () => {
     table.setHeaderRows([true, false]);
     expect(table.gridRows()).toHaveLength(2);
     expect(table.gridColumnCount()).toBe(1);
+  });
+});
+
+describe("OdtTable header columns", () => {
+  function tableOfColumns(columnCount: number): OdtTable {
+    const editor = createOdt();
+    return editor.body.appendTable({ rows: 1, columns: columnCount });
+  }
+
+  it("states no header column until one is asked for", () => {
+    const table = tableOfColumns(2);
+    expect(table.headerColumns()).toEqual([false, false]);
+  });
+
+  it("wraps each run of header columns in its own table:table-header-columns, keeping every column in order", () => {
+    const table = tableOfColumns(4);
+    table.setHeaderColumns([true, false, true, true]);
+    expect(table.headerColumns()).toEqual([true, false, true, true]);
+    expect(table.gridColumnCount()).toBe(4);
+  });
+
+  it("restates the wrappers rather than nesting them when the flags change", () => {
+    const table = tableOfColumns(3);
+    table.setHeaderColumns([true, true, false]);
+    table.setHeaderColumns([false, true, false]);
+    expect(table.headerColumns()).toEqual([false, true, false]);
+    expect(table.gridColumnCount()).toBe(3);
+  });
+
+  it("reads a row's cells and the grid through the wrappers, not just the table's own direct children", () => {
+    const table = tableOfColumns(2);
+    table.setHeaderColumns([true, false]);
+    expect(table.gridRows()).toHaveLength(1);
+    expect(table.gridColumnCount()).toBe(2);
+  });
+
+  it("keeps every cell's own content when the columns it sits under are wrapped", () => {
+    const table = tableOfColumns(2);
+    table.rows()[0]!.cells()[0]!.appendParagraph({ text: "a" });
+    table.rows()[0]!.cells()[1]!.appendParagraph({ text: "b" });
+    table.setHeaderColumns([true, false]);
+    expect(
+      table
+        .rows()[0]!
+        .cells()
+        .map((cell) => cell.paragraphs().at(-1)?.text),
+    ).toEqual(["a", "b"]);
   });
 });
 
@@ -841,7 +892,7 @@ describe("table:number-columns-repeated", () => {
     expect(pivot.rows[0]?.cells).toHaveLength(4);
   });
 
-  it("widens the grid via a declared table:table-column's own repeat, agreeing with the content pivot's own columnWidthsPt length", () => {
+  it("widens the grid via a declared table:table-column's own repeat, agreeing with the content pivot's own columns length", () => {
     const editor = createOdt();
     const table = editor.body.appendTable({ rows: 0, columns: 2 });
     const [firstColumn] = contentElements(editor, "table:table-column");
@@ -861,7 +912,7 @@ describe("table:number-columns-repeated", () => {
     if (pivot?.kind !== "table") {
       throw new Error("expected a table block");
     }
-    expect(table.gridColumnCount()).toBe(pivot.columnWidthsPt.length);
+    expect(table.gridColumnCount()).toBe(pivot.columns.length);
   });
 
   it("mergeCellsHorizontally reaches a column after a repeated cell, which physical-child-index addressing could not", () => {

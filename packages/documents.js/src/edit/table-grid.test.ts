@@ -6,7 +6,7 @@ describe("assertTableObeysGridRule", () => {
   it("accepts a table whose merged region has block-less covered entries", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [10, 10],
+      columns: [{ widthPt: 10 }, { widthPt: 10 }],
       rows: [{ cells: [{ blocks: [], colSpan: 2 }, { blocks: [] }] }],
     };
     expect(() => {
@@ -17,7 +17,7 @@ describe("assertTableObeysGridRule", () => {
   it("names the entry point and states the fault when the table breaks the rule", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [10, 10],
+      columns: [{ widthPt: 10 }, { widthPt: 10 }],
       rows: [
         {
           cells: [

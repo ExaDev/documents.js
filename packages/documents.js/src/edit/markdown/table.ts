@@ -10,7 +10,7 @@ import { resolvePivotTableGrid } from "../table-grid";
 import type { ParagraphInit } from "./paragraph";
 import { buildParagraph, MarkdownParagraph } from "./paragraph";
 
-// 468pt (6.5in) — matches OdtTable's own DEFAULT_TABLE_WIDTH_PT (src/edit/odt/table.ts): the content width a new table defaults to when no explicit widths are given. columnWidthsPt is a required ContentTable field but is never actually read by markdown-codec's own dist/emit/table.js emitTable — a GFM table has no column-width concept at all, only a column count (derived from the header row's own cell count) — so this is carried purely for schema validity, the same "markdown cannot express this, but the shared pivot still needs a value" accommodation ContentParagraph's own unused fields get elsewhere in this editor.
+// 468pt (6.5in), matching OdtTable's own DEFAULT_TABLE_WIDTH_PT (src/edit/odt/table.ts): the content width a new table defaults to when no explicit widths are given. columns is a required ContentTable field but its widthPt values are never actually read by markdown-codec's own dist/emit/table.js emitTable, since a GFM table has no column-width concept at all, only a column count (derived from the header row's own cell count), so this is carried purely for schema validity, the same "markdown cannot express this, but the shared pivot still needs a value" accommodation ContentParagraph's own unused fields get elsewhere in this editor.
 const DEFAULT_TABLE_WIDTH_PT = 468;
 
 export interface TableInit {
@@ -118,10 +118,10 @@ export class MarkdownTable {
     );
   }
 
-  // Appends a row with the same column count as this table's own columnWidthsPt. rows()[0] is always treated as the GFM header row on write (markdown-codec's own dist/emit/table.js emitTable destructures `const [header, ...body] = table.rows`, deriving the delimiter row's per-column alignment from the header row alone and never re-emitting it as a body row) — appendRow does not distinguish header from body itself, so the FIRST row appended (or the first row TableInit built) is the one that becomes the header on write.
+  // Appends a row with the same column count as this table's own columns. rows()[0] is always treated as the GFM header row on write (markdown-codec's own dist/emit/table.js emitTable destructures `const [header, ...body] = table.rows`, deriving the delimiter row's per-column alignment from the header row alone and never re-emitting it as a body row); appendRow does not distinguish header from body itself, so the FIRST row appended (or the first row TableInit built) is the one that becomes the header on write.
   appendRow(): MarkdownTableRow {
     const node = this.live();
-    const row = buildRow(node.columnWidthsPt.length);
+    const row = buildRow(node.columns.length);
     node.rows.push(row);
     return new MarkdownTableRow(row);
   }
@@ -138,13 +138,12 @@ export class MarkdownTable {
 
 // Builds a fresh ContentTable from scratch (not a live view). rows[0] is always the GFM header row on write — see MarkdownTable.appendRow's own note.
 export function buildTable(init: TableInit): ContentTableNode {
-  const columnWidthsPt = Array.from(
-    { length: init.columns },
-    () => DEFAULT_TABLE_WIDTH_PT / init.columns,
-  );
+  const columns = Array.from({ length: init.columns }, () => ({
+    widthPt: DEFAULT_TABLE_WIDTH_PT / init.columns,
+  }));
   const rows: ContentTableRowNode[] = [];
   for (let r = 0; r < init.rows; r++) {
     rows.push(buildRow(init.columns));
   }
-  return { kind: "table", rows, columnWidthsPt };
+  return { kind: "table", rows, columns };
 }

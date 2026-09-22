@@ -69,7 +69,7 @@ export function resolveLiveTableGrid<C>(
   }));
   const skeleton: ContentTable = {
     kind: "table",
-    columnWidthsPt: [],
+    columns: [],
     rows: denseTableRows(positioned, declaredColumnCount),
   };
   const liveCells = new Map<string, C>();
@@ -114,7 +114,7 @@ export function resolvePivotTableGrid<C>(
         rowSpan: cell.rowSpan,
       })),
     ),
-    table.columnWidthsPt.length,
+    table.columns.length,
   );
 }
 

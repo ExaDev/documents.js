@@ -133,7 +133,7 @@ describe("formatDocxExtrasLines", () => {
           blocks: [
             {
               kind: "table",
-              columnWidthsPt: [100, 100],
+              columns: [{ widthPt: 100 }, { widthPt: 100 }],
               rows: [
                 {
                   cells: [
@@ -174,7 +174,7 @@ describe("formatDocxExtrasLines", () => {
           blocks: [
             {
               kind: "table",
-              columnWidthsPt: [100, 100],
+              columns: [{ widthPt: 100 }, { widthPt: 100 }],
               rows: [
                 {
                   cells: [

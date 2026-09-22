@@ -202,7 +202,7 @@ describe("content.read / content.restore", () => {
               blocks: [
                 {
                   kind: "table",
-                  columnWidthsPt: [100],
+                  columns: [{ widthPt: 100 }],
                   rows: [
                     {
                       cells: [

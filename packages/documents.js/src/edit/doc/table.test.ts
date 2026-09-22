@@ -125,7 +125,7 @@ describe("DocTable.mergeCells", () => {
         { cells: [{ blocks: [] }, { blocks: [] }] },
         { cells: [{ blocks: [] }] },
       ],
-      columnWidthsPt: [10, 10],
+      columns: [{ widthPt: 10 }, { widthPt: 10 }],
     });
 
     expect(() => shortRowTable.mergeCells(1, 0, 1, 2)).toThrow(
@@ -174,7 +174,7 @@ describe("DocTable.mergeCells", () => {
 });
 
 function emptyNodeTable(): ContentTable {
-  return { kind: "table", rows: [], columnWidthsPt: [] };
+  return { kind: "table", rows: [], columns: [] };
 }
 
 describe("DocTableCell", () => {

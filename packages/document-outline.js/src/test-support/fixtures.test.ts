@@ -87,7 +87,7 @@ describe("paragraph", () => {
 });
 
 describe("table", () => {
-  it("maps each row's cells through paragraph() and sizes columnWidthsPt from the first row's own length", () => {
+  it("maps each row's cells through paragraph() and sizes columns from the first row's own length", () => {
     const result = table([
       ["a", "b"],
       ["c", "d"],
@@ -101,13 +101,13 @@ describe("table", () => {
       { blocks: [paragraph("c")] },
       { blocks: [paragraph("d")] },
     ]);
-    expect(result.columnWidthsPt).toStrictEqual([80, 80]);
+    expect(result.columns).toStrictEqual([{ widthPt: 80 }, { widthPt: 80 }]);
   });
 
-  it("falls back to an empty columnWidthsPt (not the map's own result, since there is no first row to map)", () => {
+  it("falls back to an empty columns (not the map's own result, since there is no first row to map)", () => {
     const result = table([]);
     expect(result.rows).toStrictEqual([]);
-    expect(result.columnWidthsPt).toStrictEqual([]);
+    expect(result.columns).toStrictEqual([]);
   });
 });
 

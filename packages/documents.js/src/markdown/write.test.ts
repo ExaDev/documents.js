@@ -141,7 +141,7 @@ describe("buildMarkdownText", () => {
             ],
           },
         ],
-        columnWidthsPt: [80],
+        columns: [{ widthPt: 80 }],
       },
     ]);
     expect(buildMarkdownText(document)).toContain("cell");
@@ -156,7 +156,7 @@ describe("buildMarkdownText", () => {
             cells: [{ blocks: [{ kind: "pageBreak" }] }],
           },
         ],
-        columnWidthsPt: [80],
+        columns: [{ widthPt: 80 }],
       },
     ]);
     // If the table branch did not recurse markdownBlock into the cell, this cell's own pageBreak block would reach the writer unconverted — a table cell backslash-escapes the marker's own punctuation (unlike the top-level HTMLPreformatted paragraph the same marker gets outside a table), but "page break" surviving into the cell text either way is still proof the marker text — not the untransformed pageBreak block — is what reached the writer.

@@ -29,9 +29,9 @@
         },
         {
           "kind": "table",
-          "columnWidthsPt": [
-            225,
-            225
+          "columns": [
+            { "widthPt": 225 },
+            { "widthPt": 225 }
           ],
           "rows": [
             {

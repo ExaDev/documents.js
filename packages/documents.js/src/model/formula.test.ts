@@ -72,7 +72,7 @@ describe("collectDocumentFormulas", () => {
           blocks: [
             {
               kind: "table",
-              columnWidthsPt: [100],
+              columns: [{ widthPt: 100 }],
               rows: [{ cells: [{ blocks: [nested] }] }],
             } satisfies ContentBlock,
             topLevel,

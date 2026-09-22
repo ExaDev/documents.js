@@ -62,8 +62,13 @@ describe("MarkdownTable appendTable / appendRow / cell.text", () => {
 describe("buildTable", () => {
   it("divides the default table width evenly across the requested column count", () => {
     const table = buildTable({ rows: 1, columns: 4 });
-    expect(table.columnWidthsPt).toEqual([117, 117, 117, 117]);
-    expect(table.columnWidthsPt.reduce((sum, w) => sum + w, 0)).toBe(468);
+    expect(table.columns).toEqual([
+      { widthPt: 117 },
+      { widthPt: 117 },
+      { widthPt: 117 },
+      { widthPt: 117 },
+    ]);
+    expect(table.columns.reduce((sum, c) => sum + c.widthPt, 0)).toBe(468);
   });
 });
 

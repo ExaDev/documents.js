@@ -198,7 +198,7 @@ describe("engine frames: wordprocessing (engine.ts)", () => {
   it("stamps the cell node's frame and each in-cell run's own frames for a table", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       rows: [
         {
           heightPt: 20,

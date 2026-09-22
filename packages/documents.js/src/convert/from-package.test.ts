@@ -184,7 +184,7 @@ describe("layoutDocumentFromPackage: cell background rects", () => {
   it("emits no rect for a table cell whose pattern fill resolves to no colour (emitTableCell)", () => {
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [50],
+      columns: [{ widthPt: 50 }],
       rows: [
         {
           cells: [

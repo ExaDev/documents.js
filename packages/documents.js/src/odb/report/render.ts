@@ -164,7 +164,7 @@ function bandTable(band: PrintedBand): ContentTable | undefined {
   const columnWidthPt = CONTENT_WIDTH_PT / band.elements.length;
   return {
     kind: "table",
-    columnWidthsPt: band.elements.map(() => columnWidthPt),
+    columns: band.elements.map(() => ({ widthPt: columnWidthPt })),
     rows: [
       {
         cells: band.elements.map((element, index) => ({
