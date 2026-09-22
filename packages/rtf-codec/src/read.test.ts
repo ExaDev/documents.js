@@ -592,7 +592,7 @@ describe("tables", () => {
 
   it("derives column widths from the differences between consecutive \\cellxN boundaries", () => {
     const table = firstTable(`${HEADER}${ROW}\\pard After.\\par}`);
-    expect(table.columnWidthsPt).toEqual([216, 216]);
+    expect(table.columns.map((c) => c.widthPt)).toEqual([216, 216]);
   });
 
   it("accumulates several rows into one table", () => {
@@ -2983,7 +2983,7 @@ describe("table merges read into the dense grid", () => {
         "\\trowd\\trleft0\\cellx1440\\cellx2880\\cellx4320\\cellx5760" +
         "\\pard\\intbl 1\\cell\\pard\\intbl 2\\cell\\pard\\intbl 3\\cell\\pard\\intbl 4\\cell\\row\\pard z\\par}",
     );
-    expect(table.columnWidthsPt).toHaveLength(4);
+    expect(table.columns).toHaveLength(4);
     expect(table.rows.map((row) => row.cells.length)).toEqual([4, 4]);
     const [first] = table.rows;
     expect(first?.cells.map((cell) => cell.colSpan)).toEqual([
@@ -3374,7 +3374,7 @@ describe("table row and column derivation", () => {
       `${HEADER}\\trowd\\trleft0\\cellx1000\\cellx2000\\pard\\intbl A\\cell\\pard\\intbl B\\cell\\row` +
         "\\trowd\\trleft0\\cellx5000\\cellx9000\\pard\\intbl C\\cell\\pard\\intbl D\\cell\\row\\pard x\\par}",
     );
-    expect(table.columnWidthsPt).toEqual([50, 50]);
+    expect(table.columns.map((c) => c.widthPt)).toEqual([50, 50]);
   });
 
   it("counts grid columns from a row's own cell spans when they exceed the \\cellxN boundary count", () => {
@@ -3383,7 +3383,7 @@ describe("table row and column derivation", () => {
       `${HEADER}\\trowd\\trleft0\\clmgf\\cellx2160\\clmrg\\cellx4320\\pard\\intbl wide\\cell\\pard\\intbl\\cell\\row` +
         "\\trowd\\trleft0\\cellx1440\\cellx2880\\cellx4320\\pard\\intbl a\\cell\\pard\\intbl b\\cell\\pard\\intbl c\\cell\\row\\pard x\\par}",
     );
-    expect(table.columnWidthsPt.length).toBeGreaterThanOrEqual(3);
+    expect(table.columns.length).toBeGreaterThanOrEqual(3);
     // Every row is as wide as the grid, the first row being padded with an empty entry to reach the wider second row's width.
     expect(table.rows.map((row) => row.cells.length)).toEqual([3, 3]);
   });
@@ -3524,7 +3524,7 @@ describe("table row and column derivation", () => {
         "\\trowd\\trleft0\\cellx1440\\cellx1440\\pard\\intbl A\\cell\\pard\\intbl B\\cell\\row\\pard x\\par}",
     );
     // Usable width is 8.5in - 2in = 6.5in = 468pt, split across 2 columns.
-    expect(table.columnWidthsPt).toEqual([234, 234]);
+    expect(table.columns.map((c) => c.widthPt)).toEqual([234, 234]);
   });
 });
 
@@ -4352,7 +4352,7 @@ describe("structure control word edge cases", () => {
       `${HEADER}\\trowd\\trleft720\\cellx1440\\pard\\intbl A\\cell\\row\\pard x\\par}`,
     );
     // 1440 - 720 = 720 twips = 36pt for the one column.
-    expect(table.columnWidthsPt).toEqual([36]);
+    expect(table.columns.map((c) => c.widthPt)).toEqual([36]);
   });
 
   it("reports the exact nested-table-flattened message text for \\nestrow, distinct from \\nestcell's own trigger", () => {

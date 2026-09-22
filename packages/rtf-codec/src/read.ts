@@ -1187,7 +1187,8 @@ class ContentBuilder {
     this.blocks.push({
       kind: "table",
       rows,
-      columnWidthsPt: this.columnWidths(columnCount),
+      // RTF states no header-column concept at all (no \trhdr-style control word scoped to a column rather than a row), so every column here states a width alone.
+      columns: this.columnWidths(columnCount).map((widthPt) => ({ widthPt })),
     } satisfies ContentTable);
     this.tableRows = [];
     this.tableColumnRights = [];

@@ -48,6 +48,7 @@ export const RtfDiagnosticCodes = {
   // Write side: a ContentDocument fact RTF's own vocabulary cannot state, or that this writer does not yet state.
   CONSTRUCT_UNREPRESENTED: "rtf/construct-unrepresented",
   PACKAGE_TABLE_DROPPED: "rtf/package-table-dropped",
+  TABLE_HEADER_COLUMN_DROPPED: "rtf/table-header-column-dropped",
 } as const;
 
 // The throw tier: input this package cannot meaningfully process at all, regardless of what a diagnostic sink could report about it. Carries the same `code` vocabulary as RtfDiagnostic so a caller can distinguish failure reasons programmatically, not just by message text.
