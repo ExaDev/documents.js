@@ -319,7 +319,7 @@ export type ContentConstructEnd = z.infer<typeof ContentConstructEndSchema>;
 
 // ContentTable is mutually recursive with ContentBlock (a cell contains blocks, which may themselves be tables) — hand-written, mirroring ooxml.js's own XmlElement/isXmlNode pattern, since z.lazy() collapses to `unknown` for recursive children in the pinned Zod version.
 //
-// THE GRID RULE, binding on every producer and consumer of a ContentTable (ExaDev/documents.js#1316): a row's `cells` array is DENSE. It holds exactly one entry per grid column, so `row.cells[n]` is the cell occupying grid column n and ContentTable.columnWidthsPt[n] is that same column's width, and every row of one table has the same length. A merged region is one ANCHOR entry at its top-left position carrying colSpan and/or rowSpan, plus one entry at each remaining position the region covers. Array index is therefore grid column outright: no consumer accumulates preceding spans to recover a column, and no consumer pads a row it is handed.
+// THE GRID RULE, binding on every producer and consumer of a ContentTable (ExaDev/documents.js#1316): a row's `cells` array is DENSE. It holds exactly one entry per grid column, so `row.cells[n]` is the cell occupying grid column n and ContentTable.columns[n] is that same column's own width and header state, and every row of one table has the same length. A merged region is one ANCHOR entry at its top-left position carrying colSpan and/or rowSpan, plus one entry at each remaining position the region covers. Array index is therefore grid column outright: no consumer accumulates preceding spans to recover a column, and no consumer pads a row it is handed.
 //
 // A COVERED ENTRY IS A REAL CELL, not a hole. It carries no blocks of its own — the region's content belongs to the anchor and appears there exactly once, so a consumer extracting text or counting content visits it once whichever position it reads — but it may carry that position's own background, borders, verticalAlign, sourcePath and source residue. That is the entire reason the rule is dense rather than sparse: a format that models covered positions explicitly (ODF's table:covered-table-cell, a pptx a:tc with hMerge/vMerge="1", each with its own tcPr) has per-covered-position properties with nowhere else to live, while a format that models only anchors (a docx w:tc with w:gridSpan, an HTML td with colspan) loses nothing by having empty placeholders synthesised on read and dropped again on write. Dense is also the form that degrades safely: a consumer oblivious to spans renders a merged table as an unmerged grid of the correct width, where the sparse alternative would silently shift every later column left.
 //
@@ -350,10 +350,16 @@ export interface ContentTableRow {
   isHeader?: boolean; // this row is a header row: a heading band over the columns below it, which a paginating consumer repeats at the top of each page the table continues onto. Absent means it is not, the same absent-means-false optional-boolean convention ContentRun.bold and ContentParagraph.preformatted already follow — so a row a format states nothing about reads back byte-identically rather than gaining an `isHeader: false` no producer wrote. See THE HEADER RULE above for why this is per-row.
 }
 
+// THE HEADER COLUMN RULE (ExaDev/documents.js#1381): a mirror of THE HEADER RULE above, one axis over. Header-column-ness is a fact about ONE column, stated on that column's own object, never a parallel boolean array indexed alongside columns: a parallel array would be a second source of truth able to disagree with columns.length, exactly what THE GRID RULE's "which positions are covered is derived, never stored" note already argues against for row/cell coverage. A bare `columnWidthsPt: number[]` had no per-column object for the flag to live on at all, which is why this field is `columns: ContentTableColumn[]` rather than a width array. Only ODF ever states it (table:table-header-columns, OASIS ODF 1.3 part 3, 9.1.8): which columns repeat at the left of each page a wide table is split across when printed, the column-axis mirror of table:table-header-rows repeating rows at the top of each page a tall table is split across. docx states no header-column concept on w:tblGrid at all, and no other format this package reads states one either. This is deliberately not HTML's `<th scope="row">`, which states that a cell semantically labels the row it sits in, a fact about ONE cell rather than about the whole column, and belongs on ContentTableCell if it is ever modelled; conflating the two would state a print-pagination fact using a semantic-labelling vocabulary that does not carry it.
+export interface ContentTableColumn {
+  widthPt: number;
+  isHeader?: boolean; // this column is a header column: repeated at the left of each page a wide table is split across when printed. Absent means it is not, the same absent-means-false optional-boolean convention ContentTableRow.isHeader already follows. See THE HEADER COLUMN RULE above for why only ODF ever sets this.
+}
+
 export interface ContentTable {
   kind: "table";
   rows: ContentTableRow[];
-  columnWidthsPt: number[];
+  columns: ContentTableColumn[];
   sourcePath?: string; // deterministic, document-order-derived path assigned by the format reader
   source?: SourceResidue; // quarantined residue — opaque text this format carries and no other format interprets (src/source.ts)
   frames?: LayoutFrame[]; // this table's own rendered position(s), once a layout pass has fused one in — see FusedNode above
@@ -423,6 +429,14 @@ function isContentTableRow(value: unknown): value is ContentTableRow {
     Array.isArray(value.cells) &&
     value.cells.every(isContentTableCell) &&
     (value.heightPt === undefined || typeof value.heightPt === "number") &&
+    (value.isHeader === undefined || typeof value.isHeader === "boolean")
+  );
+}
+
+function isContentTableColumn(value: unknown): value is ContentTableColumn {
+  return (
+    isRecord(value) &&
+    typeof value.widthPt === "number" &&
     (value.isHeader === undefined || typeof value.isHeader === "boolean")
   );
 }
@@ -523,8 +537,8 @@ export function isContentBlock(value: unknown): value is ContentBlock {
     return (
       Array.isArray(value.rows) &&
       value.rows.every(isContentTableRow) &&
-      Array.isArray(value.columnWidthsPt) &&
-      value.columnWidthsPt.every((w) => typeof w === "number")
+      Array.isArray(value.columns) &&
+      value.columns.every(isContentTableColumn)
     );
   }
   if (kind === "embeddedObject") {
@@ -740,11 +754,16 @@ export const ContentTableRowSchema = z.object({
   isHeader: z.boolean().optional(), // this row is a header row — see THE HEADER RULE on the ContentTableRow interface above for why it is stated per row rather than as a count or range on the table
 });
 
+export const ContentTableColumnSchema = z.object({
+  // nonnegative, not positive: both ooxml.js's docx reader (a w:gridCol with no w:w attribute) and odf.js's table reader (a table:table-column resolving no style-column-width) deliberately default an unresolvable column's own width to 0 rather than omitting it or guessing, a real, common shape in real-world documents, not a defect this constraint should reject. Confirmed against this package's own real-corpus bijection gate (ExaDev/documents.js#1009: ContentBlockSchema's z.lazy() rewrite was the first time this field was ever actually validated at runtime, since the opaque z.custom() guard it replaced never checked column-width positivity at all).
+  widthPt: z.number().nonnegative(),
+  isHeader: z.boolean().optional(), // this column is a header column; see THE HEADER COLUMN RULE on the ContentTable interface above for why only ODF ever states it
+});
+
 export const ContentTableSchema = z.object({
   kind: z.literal("table"),
   rows: z.array(ContentTableRowSchema),
-  // nonnegative, not positive: both ooxml.js's docx reader (a w:gridCol with no w:w attribute) and odf.js's table reader (a table:table-column resolving no style-column-width) deliberately default an unresolvable column's own width to 0 rather than omitting it or guessing — a real, common shape in real-world documents, not a defect this constraint should reject. Confirmed against this package's own real-corpus bijection gate (ExaDev/documents.js#1009 — ContentBlockSchema's z.lazy() rewrite was the first time this field was ever actually validated at runtime, since the opaque z.custom() guard it replaced never checked column-width positivity at all).
-  columnWidthsPt: z.array(z.number().nonnegative()),
+  columns: z.array(ContentTableColumnSchema),
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue — opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this table's own rendered position(s), once a layout pass has fused one in — see FusedNode above

@@ -1,6 +1,6 @@
 // The one shared definition of a ContentTable's grid: which grid position each entry of a row's `cells` array occupies, and how a merged region's covered positions are expressed. ContentTableCell (src/content.ts) states the rule itself normatively; this module is the code every producer and consumer runs so that no reader or writer re-derives it, the same "one canonical, format-agnostic model-level module" role src/a1.ts plays for A1 references. Row and column indices throughout are 0-based, matching ContentTableRow's own array order.
 //
-// THE RULE, restated here because the algorithms below only make sense against it: a row's `cells` array is DENSE. It holds exactly one entry per grid column, so `row.cells[n]` is the cell at grid column n and `columnWidthsPt[n]` is that column's width — array index IS grid column, with no accumulation of preceding spans needed to recover it. A merged region is one anchor entry carrying `colSpan`/`rowSpan` at its top-left position, plus one entry per remaining position the region covers. A covered entry is a real cell: it holds no blocks of its own (its content belongs to the anchor) but may carry the covered position's own background, borders, and residue, which is how a format that models covered cells explicitly (ODF's `table:covered-table-cell`, a pptx `a:tc` with `hMerge`/`vMerge`) round-trips their properties at all.
+// THE RULE, restated here because the algorithms below only make sense against it: a row's `cells` array is DENSE. It holds exactly one entry per grid column, so `row.cells[n]` is the cell at grid column n and `columns[n]` is that column's own width and header state; array index IS grid column, with no accumulation of preceding spans needed to recover it. A merged region is one anchor entry carrying `colSpan`/`rowSpan` at its top-left position, plus one entry per remaining position the region covers. A covered entry is a real cell: it holds no blocks of its own (its content belongs to the anchor) but may carry the covered position's own background, borders, and residue, which is how a format that models covered cells explicitly (ODF's `table:covered-table-cell`, a pptx `a:tc` with `hMerge`/`vMerge`) round-trips their properties at all.
 //
 // A covered position is not marked by a field of its own: whether a position is covered follows entirely from the anchors' spans, which walkTableGrid derives. Adding a flag would be a second source of truth for a fact the spans already determine completely, and one that can contradict them.
 
@@ -22,10 +22,10 @@ export function tableCellRowSpan(cell: ContentTableCell): number {
 }
 
 /**
- * The table's grid width. For a table obeying the dense rule this is `columnWidthsPt.length` and every row's `cells.length` alike; taking the largest of them is what lets a reader mid-construction, or a table whose source declared a grid narrower than a row actually uses, still be walked without the walk inventing a narrower grid than the rows occupy.
+ * The table's grid width. For a table obeying the dense rule this is `columns.length` and every row's `cells.length` alike; taking the largest of them is what lets a reader mid-construction, or a table whose source declared a grid narrower than a row actually uses, still be walked without the walk inventing a narrower grid than the rows occupy.
  */
 export function tableGridColumnCount(table: ContentTable): number {
-  let count = table.columnWidthsPt.length;
+  let count = table.columns.length;
   for (const row of table.rows) {
     count = Math.max(count, row.cells.length);
   }
@@ -232,7 +232,7 @@ function anchorFault(
  *
  * Rows are compared with each other before any position is classified, since an anchor's footprint can only be measured against a grid every row shares; the positions are then checked in row-major order, so the fault returned is the earliest one in reading order.
  *
- * The check states the whole of the rule and nothing beyond it: a table with no rows, or whose rows are all empty, has no fault, and neither `columnWidthsPt` nor a cell's own properties other than its blocks and spans are consulted.
+ * The check states the whole of the rule and nothing beyond it: a table with no rows, or whose rows are all empty, has no fault, and neither `columns` nor a cell's own properties other than its blocks and spans are consulted.
  */
 export function findTableGridFault(
   table: ContentTable,

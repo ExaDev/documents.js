@@ -75,7 +75,7 @@ function sectionGroup(): SectionGroupNode {
         rows: [
           { cells: [{ blocks: [{ kind: "paragraph", runs: [run("Cell")] }] }] },
         ],
-        columnWidthsPt: [100],
+        columns: [{ widthPt: 100 }],
       },
       {
         kind: "image",
@@ -665,7 +665,7 @@ describe("construct boundary markers are not tree leaves", () => {
           ],
         },
       ],
-      columnWidthsPt: [200],
+      columns: [{ widthPt: 200 }],
     };
     expect(isTreeBlockLeaf(tableLeaf)).toBe(true);
     expect(

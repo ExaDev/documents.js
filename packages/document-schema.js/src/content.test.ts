@@ -93,24 +93,24 @@ const table: ContentBlock = {
     },
     { cells: [{ blocks: [pageBreak] }], heightPt: 20 },
   ],
-  columnWidthsPt: [150, 150],
+  columns: [{ widthPt: 150 }, { widthPt: 150 }],
 };
 
 // Deliberately deep nesting: a table whose cell contains a table whose cell contains a table — the highest-risk case for the hand-written recursive isContentBlock guard. Typed as ContentTable (not the broader ContentBlock union) at each level so the nested `.rows`/`.cells` access below needs no narrowing or assertion.
 const level3Table: ContentTable = {
   kind: "table",
   rows: [{ cells: [{ blocks: [paragraph] }] }],
-  columnWidthsPt: [100],
+  columns: [{ widthPt: 100 }],
 };
 const level2Table: ContentTable = {
   kind: "table",
   rows: [{ cells: [{ blocks: [level3Table, paragraph] }] }],
-  columnWidthsPt: [200],
+  columns: [{ widthPt: 200 }],
 };
 const level1Table: ContentTable = {
   kind: "table",
   rows: [{ cells: [{ blocks: [level2Table] }] }],
-  columnWidthsPt: [300],
+  columns: [{ widthPt: 300 }],
 };
 
 describe("isContentBlock", () => {
@@ -198,14 +198,14 @@ describe("isContentBlock", () => {
                         ],
                       },
                     ],
-                    columnWidthsPt: [10],
+                    columns: [{ widthPt: 10 }],
                   },
                 ],
               },
             ],
           },
         ],
-        columnWidthsPt: [20],
+        columns: [{ widthPt: 20 }],
       }),
     ).toBe(false);
     expect(isContentBlock(null)).toBe(false);
@@ -807,7 +807,7 @@ describe("sourcePath", () => {
     const tableWithSourcePath: ContentTable = {
       kind: "table",
       rows: [{ cells: [{ blocks: [paragraph] }] }],
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       sourcePath: "sections[0].blocks[3]",
     };
 
@@ -891,7 +891,7 @@ describe("source (the quarantined residue channel)", () => {
     const tableWithResidue: ContentTable = {
       kind: "table",
       rows: [{ cells: [{ blocks: [paragraph], source: docxResidue }] }],
-      columnWidthsPt: [100],
+      columns: [{ widthPt: 100 }],
       source: docxResidue,
     };
     const embeddedWithResidue: ContentBlock = {
@@ -1689,7 +1689,7 @@ describe("ContentTableRow isHeader", () => {
         { cells: [] },
         { cells: [], isHeader: true },
       ],
-      columnWidthsPt: [],
+      columns: [],
     });
     expect(table.rows.map((row) => row.isHeader)).toEqual([
       undefined,
@@ -1704,14 +1704,14 @@ describe("ContentTableRow isHeader", () => {
       isContentBlock({
         kind: "table",
         rows: [{ cells: [], isHeader: true }],
-        columnWidthsPt: [],
+        columns: [],
       }),
     ).toBe(true);
     expect(
       isContentBlock({
         kind: "table",
         rows: [{ cells: [], isHeader: "yes" }],
-        columnWidthsPt: [],
+        columns: [],
       }),
     ).toBe(false);
   });
@@ -2461,7 +2461,7 @@ describe("construct boundary markers", () => {
           ],
         },
       ],
-      columnWidthsPt: [200],
+      columns: [{ widthPt: 200 }],
     };
     expect(isContentBlock(cellTable)).toBe(true);
     expect(ContentBlockSchema.safeParse(cellTable).success).toBe(true);
@@ -2927,19 +2927,39 @@ describe("isContentBlock's per-kind guards reject a partly-invalid array, not ju
           { cells: [{ blocks: [] }] },
           { cells: [{ blocks: [{ kind: "bogus" }] }] },
         ],
-        columnWidthsPt: [10],
+        columns: [{ widthPt: 10 }],
       }),
     ).toBe(false);
   });
 
-  it("rejects a table whose columnWidthsPt array has even one non-number entry", () => {
+  it("rejects a table whose columns array has even one entry with a non-number widthPt", () => {
     expect(
       isContentBlock({
         kind: "table",
         rows: [{ cells: [{ blocks: [] }] }],
-        columnWidthsPt: [10, "20"],
+        columns: [{ widthPt: 10 }, { widthPt: "20" }],
       }),
     ).toBe(false);
+  });
+
+  it("rejects a table whose columns array has even one entry with a non-boolean isHeader", () => {
+    expect(
+      isContentBlock({
+        kind: "table",
+        rows: [{ cells: [{ blocks: [] }] }],
+        columns: [{ widthPt: 10, isHeader: "yes" }],
+      }),
+    ).toBe(false);
+  });
+
+  it("accepts a table column stating isHeader true, and one stating no isHeader at all", () => {
+    expect(
+      isContentBlock({
+        kind: "table",
+        rows: [{ cells: [{ blocks: [] }, { blocks: [] }] }],
+        columns: [{ widthPt: 10, isHeader: true }, { widthPt: 20 }],
+      }),
+    ).toBe(true);
   });
 
   it("rejects a table row whose cells array has even one invalid cell", () => {
@@ -2951,7 +2971,7 @@ describe("isContentBlock's per-kind guards reject a partly-invalid array, not ju
             cells: [{ blocks: [] }, { blocks: [{ kind: "bogus" }] }],
           },
         ],
-        columnWidthsPt: [10, 20],
+        columns: [{ widthPt: 10 }, { widthPt: 20 }],
       }),
     ).toBe(false);
   });
@@ -2969,7 +2989,7 @@ describe("isContentBlock's per-kind guards reject a partly-invalid array, not ju
             ],
           },
         ],
-        columnWidthsPt: [10],
+        columns: [{ widthPt: 10 }],
       }),
     ).toBe(false);
   });
@@ -3000,7 +3020,7 @@ describe("isContentBlock's per-kind guards reject a partly-invalid array, not ju
       isContentBlock({
         kind: "table",
         rows: [{ cells: [{ blocks: [] }], heightPt: "10" }],
-        columnWidthsPt: [],
+        columns: [],
       }),
     ).toBe(false);
   });
