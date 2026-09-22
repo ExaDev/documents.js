@@ -34,6 +34,7 @@ import {
   ContentPathSegmentSchema,
   ContentRunSchema,
   ContentTableCellSchema,
+  ContentTableColumnSchema,
   ContentTableRowSchema,
   ContentTableSchema,
   RunConstructExtentSchema,
@@ -231,6 +232,7 @@ const REGISTERED_SCHEMAS = {
   MathMlNode: MathMlNodeSchema,
   // Real, self-recursive schemas since ExaDev/documents.js#1009 (ContentBlockSchema/ContentEmbeddedObjectSchema/MathExpressionSchema left the z.custom() set #937 already moved MathMlNodeSchema out of) — registered alongside their own already-registered sibling fragments above (ContentParagraph, ContentImageBlock, MathNum, ...) so this registry's own cross-references resolve to the identical named $refs CONTENT_DEFS's hand-transcribed fragments already use, exactly like every other entry in this map. ContentEmbeddedObject/ContentEmbeddedObjectBlock are registered too — ContentBlock's own union needs the latter registered for ITS OWN $ref to resolve correctly — but excluded from the comparison loop below (CONTENT_EMBEDDED_OBJECT_CYCLE_IDS); see this file's own top comment for why comparing either of them directly, on its own, does not currently work.
   ContentTableCell: ContentTableCellSchema,
+  ContentTableColumn: ContentTableColumnSchema,
   ContentTableRow: ContentTableRowSchema,
   ContentTable: ContentTableSchema,
   ContentEmbeddedObject: ContentEmbeddedObjectSchema,

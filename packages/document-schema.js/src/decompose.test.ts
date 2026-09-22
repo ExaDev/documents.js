@@ -61,7 +61,7 @@ function table(text: string): ContentBlock {
   return {
     kind: "table",
     rows: [{ cells: [{ blocks: [paragraph(text)] }] }],
-    columnWidthsPt: [80],
+    columns: [{ widthPt: 80 }],
   };
 }
 
