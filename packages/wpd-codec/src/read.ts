@@ -600,7 +600,7 @@ function closeTable(state: ReaderState): void {
   }
   targetBlocks(state).push({
     kind: "table",
-    // Every cell the stream states holds its own grid position, in order, so a row's cell index is its grid column; a row the stream leaves short of the defined grid is filled out with block-less entries, since the shared schema's grid rule requires every row to be as long as columnWidthsPt.
+    // Every cell the stream states holds its own grid position, in order, so a row's cell index is its grid column; a row the stream leaves short of the defined grid is filled out with block-less entries, since the shared schema's grid rule requires every row to be as long as the table's own columns array.
     rows: denseTableRows(
       table.rows.map((row) => ({
         ...row,
@@ -608,7 +608,7 @@ function closeTable(state: ReaderState): void {
       })),
       table.columnWidthsPt.length,
     ),
-    columnWidthsPt: table.columnWidthsPt,
+    columns: table.columnWidthsPt.map((widthPt) => ({ widthPt })),
   });
 }
 

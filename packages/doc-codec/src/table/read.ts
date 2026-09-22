@@ -285,7 +285,9 @@ function tryAssembleTable(
       rowHeaderFlags,
       toleranceTwips,
     ),
-    columnWidthsPt: columnWidthsFromBoundaries(columnBoundariesTwips),
+    columns: columnWidthsFromBoundaries(columnBoundariesTwips).map(
+      (widthPt) => ({ widthPt }),
+    ),
   };
 }
 
@@ -615,7 +617,7 @@ function anchorEntryFor(
   };
 }
 
-// Folds each row's LogicalCell list into the shared schema's dense-row convention (ContentTableCell's grid rule): one entry per grid column, an anchor carrying colSpan/rowSpan at its top-left position and a block-less entry at every other position its region covers, horizontally and vertically alike. A horizontal merge is one wider physical cell in [MS-DOC], and a ragged row can be narrower than the table's shared grid: every position no physical cell states is a block-less entry that denseTableRows fills in, so every row has exactly one entry per column of columnWidthsPt.
+// Folds each row's LogicalCell list into the shared schema's dense-row convention (ContentTableCell's grid rule): one entry per grid column, an anchor carrying colSpan/rowSpan at its top-left position and a block-less entry at every other position its region covers, horizontally and vertically alike. A horizontal merge is one wider physical cell in [MS-DOC], and a ragged row can be narrower than the table's shared grid: every position no physical cell states is a block-less entry that denseTableRows fills in, so every row has exactly one entry per column of the table's own columns array.
 function buildRows(
   rawRows: readonly RawCell[][],
   rowDefinitions: readonly TableRowDefinition[],

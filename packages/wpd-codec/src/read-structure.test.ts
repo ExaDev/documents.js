@@ -345,7 +345,7 @@ describe("tables", () => {
     ]);
     const tables = tablesOf(document);
     expect(tables).toHaveLength(1);
-    expect(tables[0]?.columnWidthsPt).toEqual([144, 216]);
+    expect(tables[0]?.columns.map((c) => c.widthPt)).toEqual([144, 216]);
     expect(tables[0]?.rows.map((row) => row.cells.map(cellText))).toEqual([
       ["A", "B"],
       ["C", "D"],
@@ -832,7 +832,7 @@ describe("tables", () => {
       ...eolFunction({ subgroup: EOL_TABLE_ROW }),
       ...eolFunction({ subgroup: EOL_TABLE_OFF }),
     ]);
-    expect(tablesOf(document)[0]?.columnWidthsPt).toEqual([72]);
+    expect(tablesOf(document)[0]?.columns.map((c) => c.widthPt)).toEqual([72]);
   });
 
   it("reads a fixed row height", () => {
